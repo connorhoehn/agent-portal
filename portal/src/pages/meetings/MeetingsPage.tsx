@@ -3,7 +3,7 @@
 // follow the server's `next` cursor with "Load older meetings" under the table (the library table pages only on the client).
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AvatarGroup, Button, Chip, DataTable, Inline, Stack, T, Tooltip, VisuallyHidden, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { AvatarGroup, Button, Chip, DataTable, Inline, T, Tooltip, VisuallyHidden, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { useFetch } from '../../hooks/useFetch';
 import { responseFailure } from '../../lib/apiFailure';
@@ -36,12 +36,13 @@ export default function MeetingsPage() {
   // "N waiting on you" chip. Every count comes from the server, for this viewer.
   const columns: DataTableColumn<MeetingListRow>[] = [
     { key: 'name', header: 'Meeting', render: (r) => {
+      // One line: the name, then the summary's lead, quieter and cut to the cell (its whole text on hover).
       const lead = listLead(r);
       return (
-        <Stack gap="none" className="min-w-0">
-          <T size="sm" weight="medium" truncate title={r.callName}>{r.callName}</T>
-          {lead && <T size="sm" tone="secondary" truncate title={lead} data-testid="iq-meetings-lead">{lead}</T>}
-        </Stack>
+        <Inline gap="sm" wrap={false} className="min-w-0">
+          <T size="sm" weight="medium" truncate className="shrink-0 max-w-[16rem]" title={r.callName}>{r.callName}</T>
+          {lead && <T size="sm" tone="secondary" truncate className="min-w-0" title={lead} data-testid="iq-meetings-lead">{lead}</T>}
+        </Inline>
       );
     } },
     { key: 'when', header: 'When', width: '112px', render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },

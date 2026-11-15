@@ -1269,8 +1269,13 @@ async function main() {
     const fitsWidth = async (page, label, width) => {
       await page.setViewportSize({ width, height: 900 });
       await sleep(600);
-      const out = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
-      check(out.over <= 1, `${label} scrolls sideways at ${width} by ${out.over}px`);
+      const out = await page.evaluate(() => {
+        const w = document.documentElement.clientWidth;
+        // On a failure, name the outermost elements that reach past the right edge, so the cause is in the message.
+        const past = [...document.querySelectorAll('body *')].filter((el) => el.getBoundingClientRect().right > w + 1 && !(el.parentElement && el.parentElement.getBoundingClientRect().right > w + 1));
+        return { over: document.documentElement.scrollWidth - w, past: past.slice(0, 4).map((el) => `${el.tagName.toLowerCase()}${el.getAttribute('data-testid') ? `[${el.getAttribute('data-testid')}]` : ''}.${String(el.className).slice(0, 60)}`) };
+      });
+      check(out.over <= 1, `${label} scrolls sideways at ${width} by ${out.over}px: ${out.past.join(' | ')}`);
     };
     let layla;
 
@@ -1287,7 +1292,8 @@ async function main() {
       check(counts.actionItems === minutes.actionItems.length && counts.proposals === (minutes.proposals ?? []).length, `the counts ${JSON.stringify(counts)} differ from the minutes`);
       check(!msg.message.includes('/iq/meetings'), `the text still carries a path: "${msg.message}"`);
       check(msg.metadata?.meetingCallId === callId, `the message carries meetingCallId ${msg.metadata?.meetingCallId}, not ${callId}`);
-      check(/ said: /.test(msg.message), `no summary in "${msg.message}"`);
+      // The text is the summary's lead sentence (never a "<name> said: …" echo of the lines, never the bullets).
+      check(msg.message.trim().length > 10 && !/ said: /.test(msg.message) && !msg.message.includes('\n- '), `the minutes text is not the summary's lead: "${msg.message}"`);
       const all = (await chatMessages(vera)).filter((m) => m.metadata?.minutes);
       check(all.length === 1, `${all.length} minutes messages were posted`);
       const card = vera.page.getByTestId('assistant-minutes-card').last();
@@ -1326,14 +1332,27 @@ async function main() {
       await seen(veraM.page, 'meeting-page', 30000);
       await seen(veraM.page, 'meeting-summary');
       await seen(veraM.page, 'meeting-action-items');
+      // The transcript is last and collapsed: "Transcript · N lines"; it opens in place.
+      const transcriptBox = veraM.page.getByTestId('meeting-transcript');
+      check(!(await transcriptBox.evaluate((el) => el.open === true)), 'the transcript is open before anyone asked for it');
+      check(/^Transcript · \d+ lines?$/.test((await transcriptBox.locator('summary').innerText()).trim()), `the transcript reads "${(await transcriptBox.locator('summary').innerText()).trim()}"`);
+      await transcriptBox.locator('summary').click();
       const out = [];
       for (const width of [1440, 1280]) {
         await fitsWidth(veraM.page, 'the meeting page', width);
         const text = await bodyText(veraM.page);
-        check(/Nova invited by /.test(text), 'the header does not say who invited Nova');
+        check(/invited by Vera/.test(text), 'the header does not say who invited Nova');
         check(/summary/i.test(text) && /decisions/i.test(text) && /action items/i.test(text) && /transcript/i.test(text), `a section is missing at ${width}: ${text.slice(0, 300)}`);
         const summary = (await veraM.page.getByTestId('meeting-summary').innerText()).trim();
         check(summary.length > 10, 'the summary is empty');
+        // A short summary: a lead and at most four bullets, never a "<name> said: …" echo of the transcript.
+        check(!/said:/.test(summary), `the summary echoes the transcript: "${summary.slice(0, 200)}"`);
+        check(await veraM.page.getByTestId('meeting-summary').locator('li').count() <= 4, 'the summary has more than four bullets');
+        // No red Delete at the top: it lives in the header's menu, and only for the inviter.
+        check(await veraM.page.getByRole('button', { name: /Delete this meeting/ }).count() === 0, 'a Delete button shows at the top of the page');
+        check(await veraM.page.getByTestId('meeting-actions').count() === 1, 'the inviter has no header menu');
+        // The people as faces in the meta line.
+        check(await veraM.page.getByTestId('meeting-meta').getByTestId('meeting-people').count() === 1, 'the meta line does not show the people as avatars');
         const items = (await veraM.page.getByTestId('meeting-action-items').innerText()).replace(/\s+/g, ' ');
         check(/login cookie bug/i.test(items), `the action items do not hold the work item created in the call (by its title): "${items}"`);
         check((await itemsTitled(vera, 'login cookie bug')).length === 1, 'the work item the action item names does not exist exactly once');
@@ -1341,12 +1360,35 @@ async function main() {
         check(/Nora/.test(text), 'Nora is not named in the transcript');
         check(!/\bu-nora\b|\bu-vera\b/.test(text), 'a raw user id shows on the page');
         check(text.includes('After resume: kept again.'), 'a transcript line is missing');
-        out.push(`${width}: ok`);
+        // The proposals are table rows, one per proposal, and the page stays bounded: eight proposals are eight rows, not eight cards.
+        const api = await (await vera.api.get(asApi(vera, 'proposals'))).json();
+        const rows = await veraM.page.getByTestId('meeting-proposals').locator('tbody tr').count();
+        check(rows === api.proposals.length && await veraM.page.getByTestId('meeting-proposal-row').count() === api.proposals.length, `${rows} proposal rows for ${api.proposals.length} proposals`);
+        check(await veraM.page.getByTestId('assistant-proposal-card').count() === 0, 'the meeting page still draws proposal cards');
+        await transcriptBox.locator('summary').click(); // closed again, to measure the page without the transcript
+        // The page scrolls inside the shell's column: measure that scroller (the nearest scrolling ancestor), not the document.
+        const tall = await veraM.page.getByTestId('meeting-page').evaluate((el) => {
+          let n = el; while (n && n !== document.body && !(n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY))) n = n.parentElement;
+          return (n && n !== document.body ? n : document.documentElement).scrollHeight;
+        });
+        check(tall <= 2200, `the page is ${tall}px tall with ${api.proposals.length} proposals (eight rows should fit in about two screens)`);
+        await transcriptBox.locator('summary').click();
+        out.push(`${width}: ${rows} proposal rows, ${tall}px`);
       }
-      await veraM.page.setViewportSize({ width: 1280, height: 900 });
-      await veraM.page.evaluate(() => window.scrollTo(0, 0));
-      await sleep(400);
-      await veraM.page.screenshot({ path: path.join(SHOTS, '13-meeting-page-1280.png'), fullPage: false });
+      await transcriptBox.locator('summary').click();
+      for (const width of [1440, 1280]) {
+        await veraM.page.setViewportSize({ width, height: 900 });
+        // Back to the top of the page's own scroller, then a second shot one screen further down.
+        const toTop = (by) => veraM.page.getByTestId('meeting-page').evaluate((el, dy) => {
+          let n = el; while (n && n !== document.body && !(n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY))) n = n.parentElement;
+          (n && n !== document.body ? n : document.scrollingElement).scrollTop = dy;
+        }, by);
+        await toTop(0); await sleep(400);
+        await veraM.page.screenshot({ path: path.join(SHOTS, `13-meeting-page-${width}.png`), fullPage: false });
+        await toTop(700); await sleep(400);
+        await veraM.page.screenshot({ path: path.join(SHOTS, `13-meeting-page-${width}-lower.png`), fullPage: false });
+        await toTop(0);
+      }
       return out.join(', ');
     });
 
@@ -1354,15 +1396,17 @@ async function main() {
       const api = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       check(api.coverage && typeof api.coverage.listenedSeconds === 'number', `the minutes carry no coverage: ${JSON.stringify(api.coverage)}`);
       const meta = (await veraM.page.getByTestId('meeting-meta').innerText()).replace(/\s+/g, ' ');
-      check(/Nova listened for (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Nova listened: "${meta}"`);
-      if (api.coverage.pausedSeconds >= 60) check(/paused for \d/.test(meta), `Nova paused ${api.coverage.pausedSeconds}s but the meta line says "${meta}"`);
+      check(/Nova listened (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Nova listened: "${meta}"`);
+      const quiet = (await veraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ');
+      if (api.coverage.pausedSeconds >= 60) check(/Nova paused for \d/.test(quiet), `Nova paused ${api.coverage.pausedSeconds}s but the quiet line says "${quiet}"`);
       const n = api.coverage.untranscribed;
-      check(n > 0 ? meta.includes(n === 1 ? '1 person was not transcribed' : `${n} people were not transcribed`) : !/not transcribed/.test(meta), `${n} not transcribed, the meta line says "${meta}"`);
-      check(!/\bu-[a-z]+\b/.test(meta), 'an id shows in the meta line');
+      check(n > 0 ? quiet.includes(n === 1 ? '1 person was not transcribed' : `${n} people were not transcribed`) : !/not transcribed/.test(quiet), `${n} not transcribed, the quiet line says "${quiet}"`);
+      check(!/not transcribed/.test(meta), 'the coverage count is on the main meta line, not the quiet one');
+      check(!/\bu-[a-z]+\b/.test(meta + quiet), 'an id shows in the meta lines');
       // The retention the server knows, from the end time; the inviter reads "You can delete it sooner".
       check(typeof api.keptUntil === 'number' && api.keptUntil > api.endedAt + 86_400_000, `keptUntil is ${api.keptUntil} for a meeting that ended ${api.endedAt}`);
-      const kept = (await veraM.page.getByTestId('meeting-kept').innerText()).trim();
-      check(/^Kept until \d{1,2} [A-Z][a-z]{2,3} \d{4}\. You can delete it sooner\.$/.test(kept), `the inviter reads "${kept}"`);
+      const kept = (await veraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ').trim();
+      check(/^Kept until \d{1,2} [A-Z][a-z]{2,3} \d{4} · You can delete it sooner\b/.test(kept), `the inviter reads "${kept}"`);
       return `"${meta}"; "${kept}"`;
     });
 
@@ -1403,10 +1447,13 @@ async function main() {
 
     await step('13b: the meeting page lists the proposals with the call\'s card; the executor is asked there, consents (1), it runs in her browser on that page and the card ends recorded with its link', async () => {
       await seen(veraM.page, 'meeting-proposals', 20000);
-      const cardM = card(veraM, p3);
-      await cardM.waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure('no card for the open proposal on the meeting page'); });
-      check((await cardM.getAttribute('data-state')) === 'open', `the card is ${await cardM.getAttribute('data-state')}`);
-      check(await card(veraM, p1).getAttribute('data-state') === 'done', 'the recorded proposal is not listed as done');
+      const rowOf = (id) => veraM.page.locator(`[data-testid="meeting-proposal-row"][data-proposal-id="${id}"]`);
+      const cardM = rowOf(p3);
+      await cardM.waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure('no row for the open proposal on the meeting page'); });
+      check((await cardM.getAttribute('data-state')) === 'open', `the row is ${await cardM.getAttribute('data-state')}`);
+      check(await rowOf(p1).getAttribute('data-state') === 'done', 'the recorded proposal is not listed as done');
+      // The open proposal waits on Vera, so it heads "Needs you" with its one action.
+      check((await veraM.page.getByTestId('meeting-needs-you').innerText()).includes(PROPOSAL_3), 'the open proposal is not under "Needs you"');
       // The meeting page asks in its own composer's deck (the page's command host), with the call's own prompt.
       const deckM = veraM.page.getByTestId('collection-command-host');
       await deckM.filter({ hasText: PROPOSAL_3 }).waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the meeting page does not ask about the open proposal'); });
@@ -1414,14 +1461,18 @@ async function main() {
       check(ask.includes('Consent and record') && !ask.includes('Not a decision'), `the meeting page's prompt: ${ask.replace(/\s+/g, ' ')}`);
       await shot(veraM.page, '13b-meeting-proposal-ask', 1280);
       await digit(veraM, '1', deckM);
-      await cardState(veraM, p3, 'done');
-      await waitFor(async () => recorded(PROPOSAL_3).test(await cardM.innerText()), 20000, 'the closing line on the meeting page');
-      await cardM.getByTestId('assistant-proposal-result-link').waitFor({ timeout: 15000 });
+      await waitFor(async () => (await cardM.getAttribute('data-state').catch(() => null)) === 'done', 20000, 'the row reading done');
+      // The row opens its detail: how it ended, with its link.
+      await cardM.click();
+      const detail = veraM.page.getByTestId('meeting-proposal-detail');
+      await waitFor(async () => recorded(PROPOSAL_3).test(await detail.innerText().catch(() => '')), 20000, 'the closing line in the proposal detail');
+      await detail.getByTestId('meeting-proposal-result-link').waitFor({ timeout: 15000 });
       check(results_.some((r) => r.by === 'vera#m' && r.ok), 'the meeting page posted no result');
       const minutes = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       const listed = (minutes.proposals ?? []).find((p) => p.id === p3);
       check(listed?.state === 'done' && listed.consentedBy.length === 2, `the minutes list it as ${JSON.stringify(listed)}`);
-      await cardM.scrollIntoViewIfNeeded(); await shot(veraM.page, '13b-meeting-proposal-recorded', 1280);
+      await shot(veraM.page, '13b-meeting-proposal-recorded', 1280);
+      await veraM.page.getByTestId('meeting-proposal-detail-close').click();
       return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}`;
     });
 
@@ -1456,9 +1507,18 @@ async function main() {
       }
       const text = await bodyText(veraM.page);
       check(/Nora/.test(text), 'the list does not name the people');
-      await veraM.page.setViewportSize({ width: 1280, height: 900 });
-      await sleep(400);
-      await veraM.page.screenshot({ path: path.join(SHOTS, '15-meetings-list-1280.png'), fullPage: false });
+      // Faces, length and outcomes on the row; the second line is the summary's lead, never a "said:" echo.
+      const table = veraM.page.getByTestId('iq-meetings-table');
+      check(await table.getByTestId('iq-meetings-people').count() >= 1, 'the list shows no avatars for the people');
+      const outcomes = (await table.getByTestId('iq-meetings-outcomes').first().innerText().catch(() => '')).trim();
+      check(/^(\d+ decisions?|\d+ actions?|\d+ open|Nothing recorded)( · .+)*$/.test(outcomes), `the outcomes cell reads "${outcomes}"`);
+      check(own.outcomes && Number.isInteger(own.outcomes.decisions) && typeof own.listenedSeconds === 'number', `the API row has no outcomes or length: ${JSON.stringify(own).slice(0, 300)}`);
+      check(!/said:/.test(await table.innerText()), 'the list echoes the transcript');
+      for (const width of [1440, 1280]) {
+        await veraM.page.setViewportSize({ width, height: 900 });
+        await sleep(400);
+        await veraM.page.screenshot({ path: path.join(SHOTS, `15-meetings-list-${width}.png`), fullPage: false });
+      }
       const mine = await (await vera.api.get(`${PORTAL}/api/meetings`)).json();
       check(mine.meetings.some((m) => m.callId === callId && m.actionItemCount >= 1), `the API list lacks the meeting: ${JSON.stringify(mine).slice(0, 200)}`);
       const theirs = await (await layla.api.get(`${PORTAL}/api/meetings`)).json();
@@ -1484,13 +1544,15 @@ async function main() {
       peopleBeforeDelete = (await chatMessages(vera)).filter((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true).map((m) => m.id);
       await noraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(noraM.page, 'meeting-page', 30000);
-      check(await noraM.page.getByTestId('meeting-delete').count() === 0, 'a person who did not invite Nova is offered Delete');
-      const keptForNora = (await noraM.page.getByTestId('meeting-kept').innerText()).trim();
-      check(/^Kept until .+\. .+ can delete it sooner\.$/.test(keptForNora) && !keptForNora.includes('You can'), `an attendee who did not invite Nova reads "${keptForNora}"`);
+      check(await noraM.page.getByTestId('meeting-delete').count() === 0 && await noraM.page.getByTestId('meeting-actions').count() === 0, 'a person who did not invite Nova is offered Delete');
+      const keptForNora = (await noraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ').trim();
+      check(/^Kept until .+ · .+ can delete it sooner\b/.test(keptForNora) && !keptForNora.includes('You can'), `an attendee who did not invite Nova reads "${keptForNora}"`);
       const refused = await nora.api.delete(asApi(nora, 'minutes'));
       check(refused.status() === 403, `a non-inviter deleting answered ${refused.status()}`);
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
-      await seen(veraM.page, 'meeting-delete', 30000);
+      await seen(veraM.page, 'meeting-actions', 30000);
+      await veraM.page.getByTestId('meeting-actions').click();
+      await seen(veraM.page, 'meeting-delete', 10000);
       await veraM.page.getByTestId('meeting-delete').click();
       await shot(veraM.page, '17-delete-prompt');
       await veraM.page.getByRole('button', { name: /Delete the meeting/ }).click();

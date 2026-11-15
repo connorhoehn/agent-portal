@@ -10,8 +10,8 @@
 import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  AvatarGroup, Button, DataTable, DetailPage, DetailSection, Disclosure, Drawer, DropdownMenu, EmptyState, Inline, Link, LoadingState, MetaLine,
-  MoreIcon, Prose, Stack, StatusPill, T, Tooltip, UserChip, VisuallyHidden,
+  AvatarGroup, Button, ChevronIcon, DataTable, DetailPage, DetailSection, Disclosure, Drawer, DropdownMenu, EmptyState, Inline, Link, LoadingState, MetaLine,
+  IconButton, MoreIcon, Prose, Stack, StatusPill, T, Tooltip, UserChip, VisuallyHidden,
   type DataTableColumn, type DropdownMenuItem,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -68,7 +68,7 @@ function InitiativeName({ id }: { id: string | null }) {
 function OutcomeWords({ p }: { p: ProposalView }) {
   const id = p.outcome.kind === 'decision' ? p.outcome.initiativeId : null;
   const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
-  return <T size="sm" tone="secondary" clamp={2}>{outcomeLine(p.outcome, named.data?.name?.trim() || null)}</T>;
+  return <T size="sm" tone="secondary">{outcomeLine(p.outcome, named.data?.name?.trim() || null)}</T>;
 }
 
 /** The empty line of an outcome table: "No … were recorded.", or for failed minutes the rule that they are not available. */
@@ -155,19 +155,22 @@ export default function MeetingPage() {
 
   // The proposals table: statement · what it does · status · people with their answers · the row's one action. Open ones first.
   const proposalColumns: DataTableColumn<ProposalView>[] = [
-    { key: 'statement', header: 'Proposal', render: (p) => (
-      <T size="sm" clamp={2} tone={proposalClosed(p.state) ? 'secondary' : 'primary'} data-testid="meeting-proposal-row" data-proposal-id={p.id} data-state={p.state}>{p.statement}</T>
-    ) },
-    { key: 'does', header: 'What it does', width: '30%', priority: 2, render: (p) => <OutcomeWords p={p} /> },
+    { key: 'statement', header: 'Proposal', truncate: true, wrap: 'two-lines', getFilterText: (p) => p.statement,
+      render: (p) => <T size="sm" tone={proposalClosed(p.state) ? 'secondary' : 'primary'}>{p.statement}</T> },
+    { key: 'does', header: 'What it does', width: '28%', priority: 2, truncate: true, wrap: 'two-lines', render: (p) => <OutcomeWords p={p} /> },
     { key: 'status', header: 'Status', width: '168px', render: (p) => { const pill = proposalPill(p); return <StatusPill tone={pill.tone} label={pill.label} size="sm" data-testid="meeting-proposal-status" />; } },
     { key: 'people', header: 'People', width: '120px', priority: 1, render: (p) => {
       const chips = personChips(p);
       return <People names={chips.map((c) => c.name)} label={chips.map((c) => (c.runsIt ? `${c.label} · runs it` : c.label)).join(', ')} />;
     } },
-    { key: 'act', header: '', width: '120px', render: (p) => <ProposalRowAction p={p} onAsk={ask} onOpen={() => setDetailId(p.id)} /> },
+    // The row opens its detail (Answer, Run it now, Undo and Raise it again are there and under "Needs you"): a cell holds one icon control.
+    { key: 'act', header: '', width: '56px', align: 'right', render: (p) => (
+      <IconButton size="sm" variant="ghost" icon={<ChevronIcon dir="right" />} aria-label={`Open the proposal "${p.statement}"`} title="Open"
+        onClick={(e: MouseEvent) => { e.stopPropagation(); setDetailId(p.id); }} data-testid="meeting-proposal-row" data-proposal-id={p.id} data-state={p.state} />
+    ) },
   ];
   const proposalTable = (testId: string) => (
-    <DataTable data={orderProposals(proposals)} columns={proposalColumns} keyField={(p) => p.id} narrow size="sm" pageSize={1000}
+    <DataTable data={orderProposals(proposals)} columns={proposalColumns} keyField={(p) => p.id} narrow pageSize={1000}
       onRowClick={(p) => setDetailId(p.id)} data-testid={testId} aria-label="Proposals" />
   );
 
@@ -214,13 +217,13 @@ export default function MeetingPage() {
   ];
 
   const decisionColumns: DataTableColumn<DecisionRow>[] = [
-    { key: 'text', header: 'Decision', render: (d) => <T size="sm" clamp={2}>{d.text}</T> },
+    { key: 'text', header: 'Decision', truncate: true, wrap: 'two-lines', render: (d) => <T size="sm">{d.text}</T> },
     { key: 'initiative', header: 'Initiative', width: '200px', priority: 2, render: (d) => <InitiativeName id={d.initiativeId} /> },
     { key: 'agreed', header: 'Agreed by', width: '120px', priority: 1, render: (d) => (d.agreedBy.length ? <People names={d.agreedBy} label={`Agreed by ${d.agreedBy.join(', ')}`} /> : null) },
     { key: 'open', header: '', width: '120px', render: (d) => (d.href ? <PortalLink href={d.href} testId="meeting-decision-link">Open</PortalLink> : null) },
   ];
   const actionColumns: DataTableColumn<MinutesActionItem>[] = [
-    { key: 'text', header: 'Action', render: (i) => <T size="sm" clamp={2}>{i.text}</T> },
+    { key: 'text', header: 'Action', truncate: true, wrap: 'two-lines', render: (i) => <T size="sm">{i.text}</T> },
     { key: 'owner', header: 'Owner', width: '200px', render: (i) => (i.ownerName ? <UserChip name={i.ownerName} avatarSize={22} /> : <T size="sm" tone="secondary">Nobody named</T>) },
     { key: 'status', header: 'Status', width: '168px', render: (i) => { const s = actionStatus(i); return <StatusPill tone={s.tone} label={s.label} size="sm" data-testid="meeting-action-status" />; } },
     { key: 'create', header: '', width: '160px', render: (i) => (m.initiativeId && canCreateFor(i, viewer) && !i.workItemCreated
@@ -252,13 +255,13 @@ export default function MeetingPage() {
               <Stack gap="xs" data-testid="meeting-needs-you">
                 {waitingProposals.map((p) => (
                   <Inline key={p.id} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
-                    <T size="sm" truncate title={p.statement}>{p.statement}</T>
+                    <T size="sm" truncate className="min-w-0" title={p.statement}>{p.statement}</T>
                     <ProposalRowAction p={p} onAsk={ask} onOpen={() => setDetailId(p.id)} />
                   </Inline>
                 ))}
                 {waitingItems.map((i) => (
                   <Inline key={`${i.text}|${i.ownerUserId ?? ''}`} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
-                    <T size="sm" truncate title={i.text}>{i.text}</T>
+                    <T size="sm" truncate className="min-w-0" title={i.text}>{i.text}</T>
                     <PortalLink href={newWorkItemHref(m.initiativeId!, i.text)} testId="meeting-needs-create">Create work item</PortalLink>
                   </Inline>
                 ))}
@@ -280,12 +283,12 @@ export default function MeetingPage() {
           </DetailSection>
           <DetailSection title="Decisions" as="h2" {...(written || decisions.length ? { hint: String(decisions.length) } : {})}>
             {decisions.length
-              ? <DataTable data={decisions} columns={decisionColumns} keyField={(d) => d.key} narrow size="sm" pageSize={1000} data-testid="meeting-decisions" aria-label="Decisions" />
+              ? <DataTable data={decisions} columns={decisionColumns} keyField={(d) => d.key} narrow pageSize={1000} data-testid="meeting-decisions" aria-label="Decisions" />
               : <EmptyLine written={written} none="No decisions were recorded." testId="meeting-decisions-empty" />}
           </DetailSection>
           <DetailSection title="Action items" as="h2" {...(written ? { hint: String(m.actionItems.length) } : {})}>
             {m.actionItems.length
-              ? <DataTable data={m.actionItems} columns={actionColumns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow size="sm" pageSize={1000} data-testid="meeting-action-items" aria-label="Action items" />
+              ? <DataTable data={m.actionItems} columns={actionColumns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow pageSize={1000} data-testid="meeting-action-items" aria-label="Action items" />
               : <EmptyLine written={written} none="No action items were recorded." testId="meeting-action-items-empty" />}
           </DetailSection>
           {proposals.length > 0 && (
@@ -315,7 +318,7 @@ export default function MeetingPage() {
   );
 }
 
-/** A proposal row's one action: Answer (waiting on the viewer, or their answer is optional), Run it now (theirs to run), else Details. */
+/** A "Needs you" row's one action: Run it now (theirs to run), Answer (waiting on the viewer, or optional), else Details. */
 function ProposalRowAction({ p, onAsk, onOpen }: { p: ProposalView; onAsk: (p: ProposalView) => void; onOpen: () => void }) {
   const stop = (run: () => void) => (e: MouseEvent) => { e.stopPropagation(); run(); };
   if (p.state === 'consented' && p.you.canRun) return <Button variant="link" size="sm" onClick={stop(() => onAsk(p))} data-testid="meeting-proposal-run">{RUN_NOW}</Button>;

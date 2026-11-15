@@ -915,11 +915,12 @@ async function scriptedFilm() {
   await hold(4500);
   await shotPng(layla, 's13a');
   await goInApp(vera, `/iq/meetings/${encodeURIComponent(callId)}`);
-  await vera.page.getByTestId('meeting-delete').waitFor({ timeout: 30000 });
+  await vera.page.getByTestId('meeting-actions').waitFor({ timeout: 30000 });
   await sleep(1500);
   await hidePrompt(vera);
   cut('full', [V('vera')]);
   await hold(1200);
+  await press(vera, vera.page.getByTestId('meeting-actions')); // Delete is in the header's menu
   await press(vera, vera.page.getByTestId('meeting-delete'));
   const confirmDelete = vera.page.getByRole('button', { name: /Delete the record/ }).last();
   await confirmDelete.waitFor({ timeout: 15000 });
@@ -1377,11 +1378,12 @@ async function liveScenes() {
   await hold(4500);
   await shotPng(layla, 's14a');
   skip();
-  await vera.page.getByTestId('meeting-delete').scrollIntoViewIfNeeded().catch(() => undefined);
+  await vera.page.getByTestId('meeting-actions').scrollIntoViewIfNeeded().catch(() => undefined);
   await sleep(800);
   await hidePrompt(vera);
   cut('full', [V('vera')]);
   await hold(1200);
+  await press(vera, vera.page.getByTestId('meeting-actions')); // Delete is in the header's menu
   await press(vera, vera.page.getByTestId('meeting-delete'));
   const confirmDelete = vera.page.getByRole('button', { name: /Delete the record/ }).last();
   await confirmDelete.waitFor({ timeout: 15000 });
