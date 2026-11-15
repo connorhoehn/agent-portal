@@ -70,6 +70,8 @@ export interface LiveMeetingSession {
   answerToolCall(callId: string, output: string): boolean;
   /** Silent context for the model ("the card was declined"). False when the session cannot take it. */
   appendContext(text: string): boolean;
+  /** What the session has heard of the current person-turn but not yet emitted as an `inputTranscript` ('' when nothing). Read-only, for the voice gate. */
+  pendingInputText(): string;
   /** The provider's error events so far (codes only, bounded); absent on a session with no provider. */
   readonly providerErrors?: readonly ProviderErrorInfo[];
   /** Ends the session, resolving once `closed` has been emitted (or a bounded wait passed). Idempotent. */

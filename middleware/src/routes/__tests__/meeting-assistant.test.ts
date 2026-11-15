@@ -186,7 +186,7 @@ describe('Nova\'s voice switch (package 7a)', () => {
   const notices = async () => (await runtime.messages.listMessages(`orgiq:huddle:${CALL}`, 50)).map((m) => String(m.message)).filter((t) => /voice/.test(t));
   it('is off by default; an inviter turns it on and off, each with one notice in the call chat; a repeat is a quiet success', async () => {
     await post('invite');
-    expect((await get('state')).body).toMatchObject({ voice: false, voiceFramesRelayed: 0, voiceFramesDropped: 0 });
+    expect((await get('state')).body).toMatchObject({ voice: false, voiceFramesRelayed: 0, voiceFramesDropped: 0, voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
     expect((await post('voice', 'alice', { on: true })).body).toMatchObject({ voice: true });
     expect((await post('voice', 'alice', { on: true })).status).toBe(200);
     expect((await get('state', 'bob')).body).toMatchObject({ voice: true });

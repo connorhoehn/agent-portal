@@ -91,6 +91,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private tokens: BackendTokens = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   private seconds = 0;
   private input: Piece | null = null;
+  /** The turn heard so far and not yet flushed (the voice gate reads it; never stored or logged). */
+  pendingInputText(): string { return this.input?.text.replace(/\s+/g, ' ').trim() ?? ''; }
   private output: Utterance | null = null;
   private outputTimer: unknown = null;
   /** A delegation began and its work has not produced its first message or function call yet. */

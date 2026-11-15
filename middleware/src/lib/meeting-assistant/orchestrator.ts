@@ -25,6 +25,7 @@ import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meet
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { NovaSpeech, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
+import { VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
 import { findAddress, nameLock, parseCommand, type DetectorEvent } from './detector.js';
@@ -266,6 +267,14 @@ interface CallRun {
   /** Set the moment a pause begins and cleared when a session is open again, so no frame is relayed in between. */
   voiceHeld: boolean;
   relay: VoiceRelay;
+  /** In front of the relay: an utterance nobody asked for is held, then withheld (voice-gate.ts). */
+  gate: VoiceGate;
+  /** When the latest heard line that addressed Nova ended (epoch ms; not an echo), or a request was handed to a text session. */
+  addressedAt: number;
+  /** Tool calls of this session that passed the name lock (the server's own check that the asker addressed Nova). */
+  addressedCalls: Set<string>;
+  /** When the server last told the session news about addressed work (`tellSession`), epoch ms. */
+  newsAt: number;
   speech: NovaSpeech;
   /** When the provider says the open session ends (epoch ms), or null when it did not say. */
   expiresAt: number | null;
@@ -418,8 +427,9 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
+    run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
     // The record's switch (a restarted call keeps it); read after the run is registered so two invites never both start.
     try { run.voice = (await this.store.get(ctx.callId))?.voice === true; } catch { /* off */ }
@@ -447,7 +457,7 @@ export class AssistantRuntime {
   async pause(callId: string): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
-    run.voiceHeld = true; run.relay.clear(); // nothing is relayed from the moment a pause begins
+    run.voiceHeld = true; run.relay.clear(); run.gate.clear(); // nothing is relayed (or held) from the moment a pause begins
     this.deps.watcher?.pause(callId); // no wait or check carries across a pause
     await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = null; run.replyById.clear(); });
     await this.closeListening(callId);
@@ -471,7 +481,7 @@ export class AssistantRuntime {
   async stop(callId: string, reason: StopReason = 'left'): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
-    run.finished = true; run.relay.clear();
+    run.finished = true; run.relay.clear(); run.gate.clear();
     this.deps.watcher?.stop(callId);
     // Whatever a step before it throws, the audio and the tap are released and the settlement is told: money is booked once, here.
     const guarded = async (step: () => Promise<void>): Promise<void> => {
@@ -571,7 +581,7 @@ export class AssistantRuntime {
     if (!session) throw new Error('no live session is available in this process');
     run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.readyMessages = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
+    run.calls = new Map(); run.addressedCalls = new Set(); run.gate.clear(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
     this.wire(run, session);
     run.sessionKind = session.kind;
@@ -649,6 +659,7 @@ export class AssistantRuntime {
         if (session.kind === 'scripted') return;
         run.readyMessages.push(run.sessionStartedAt + e.atMs);
         if (run.readyMessages.length > MAX_DELEGATIONS) run.readyMessages.shift();
+        run.gate.poke();
       }),
       session.on('delegationReady', (e) => {
         if (session.kind === 'scripted') return;
@@ -673,6 +684,7 @@ export class AssistantRuntime {
     if (run.intentionalClose || run.finished || run.session !== session) return;
     // An unexpected close (decision 11): replace the session with the last minutes of the call as context, a few times at most.
     run.session = null;
+    run.gate.clear(); // what the lost session was saying is never finished
     this.deps.audio?.suspend(run.ctx.callId); // the tap stays, its audio waits for the new session (and its time base)
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
@@ -755,7 +767,7 @@ export class AssistantRuntime {
     const run = this.runs.get(callId);
     if (!run) return;
     run.voice = on;
-    if (!on) run.relay.clear();
+    if (!on) { run.relay.clear(); run.gate.clear(); }
   }
 
   /** What the voice relay did on this run: frames handed to the gateway, and frames dropped (no gateway, a burst, a pause). Zeros when no run. */
@@ -772,9 +784,12 @@ export class AssistantRuntime {
     return run.session !== null;
   }
 
-  voiceStats(callId: string): { voiceFramesRelayed: number; voiceFramesDropped: number } {
+  voiceStats(callId: string): { voiceFramesRelayed: number; voiceFramesDropped: number; voiceFramesWithheld: number; voiceUtterancesWithheld: number } {
     const run = this.runs.get(callId);
-    return { voiceFramesRelayed: run?.relay.relayed ?? 0, voiceFramesDropped: run?.relay.dropped ?? 0 };
+    return {
+      voiceFramesRelayed: run?.relay.relayed ?? 0, voiceFramesDropped: run?.relay.dropped ?? 0,
+      voiceFramesWithheld: run?.gate.withheldFrames ?? 0, voiceUtterancesWithheld: run?.gate.withheldUtterances ?? 0,
+    };
   }
 
   /**
@@ -782,15 +797,58 @@ export class AssistantRuntime {
    * one and no pause has begun) and the run has not ended; otherwise it is simply not sent (and not counted: it never was audio for
    * anyone). The provider sends voiced frames only (live-session.ts), so nothing flows while the model is quiet.
    *
-   * WHAT MAY BE SPOKEN. There is no filter on the content here, on purpose. After audit repair B2 a private answer never reaches the
-   * shared session, so the model cannot say one; anything it says aloud is already safe to hear as far as privacy goes. The provider
-   * gives no tie between a stretch of audio and the tool call it answers, so a filter by "reply context" would be a guess, and a wrong
-   * guess either leaks or silences. A refused call (`not addressed`, `could not tell who asked`) needs nothing special either.
+   * WHAT MAY BE SPOKEN: only speech someone asked for. The model is told to stay silent unless addressed, but it does not always, and
+   * its audio arrives long before the utterance's transcript is final (the chat side drops an unprompted remark; that comes too late
+   * for the voice). So every utterance passes the gate (voice-gate.ts), which decides at its first frame and holds that decision for
+   * the whole utterance. It goes out at once when someone addressed Nova in the last VOICE_PROMPT_WINDOW_MS (a heard line by the
+   * detector's own rule, an echo of Nova excluded, including what the session has heard but not yet flushed), or when Nova has
+   * addressed work in flight (a tool call that passed the name lock and is still open, a live PUBLIC reply context, or the second
+   * model's message ready and unspoken; a muted context never counts). Otherwise it is held, unsent and in memory only, for at most
+   * VOICE_GATE_HOLD_MS while the reason may still arrive (the provider often speaks before it flushes the request's transcript), then
+   * released in order or withheld whole. Nothing is filtered by content: after audit repair B2 a private answer never reaches the
+   * shared session, so what is asked for is safe to hear. Nova counts as heard (the echo guard) only for frames actually relayed.
    */
   private onOutputAudio(run: CallRun, session: LiveMeetingSession, e: SessionEvents['outputAudio']): void {
     if (!run.voice || run.voiceHeld || run.finished || run.session !== session) return;
-    run.speech.noteFrame(this.now());
-    run.relay.push(e.pcm, e.last === true);
+    run.gate.frame(e.pcm, e.last === true);
+  }
+
+  private makeGate(run: CallRun): VoiceGate {
+    return new VoiceGate({
+      now: () => this.now(),
+      allowed: () => this.voiceWanted(run),
+      send: (pcm, last) => {
+        if (!run.voice || run.voiceHeld || run.finished || !run.session) return;
+        run.speech.noteFrame(this.now());
+        run.relay.push(pcm, last);
+      },
+      decided: (decision, heldMs, why) => trace('voice', { decision, heldMs, why }),
+    });
+  }
+
+  /** Tell the session news about addressed work (a write done, failed, declined or expired): what Nova says about it next is wanted. */
+  private tellSession(run: CallRun | null | undefined, text: string): void {
+    if (!run?.session?.appendContext(text)) return;
+    run.newsAt = this.now();
+    run.gate.poke();
+  }
+
+  /** Why Nova's voice is wanted right now (the gate's two conditions), or null when nobody asked. */
+  private voiceWanted(run: CallRun): VoiceGateWhy | null {
+    const now = this.now();
+    // 1. Someone addressed Nova just now, or is addressing her now (heard, not yet flushed).
+    if (now - run.addressedAt <= VOICE_PROMPT_WINDOW_MS) return 'addressed';
+    const pending = run.session?.pendingInputText() ?? '';
+    if (pending && findAddress(pending) !== null && !(run.voice && run.speech.isEcho({ text: pending, startAt: now, endAt: now }))) return 'hearing';
+    // 2. Addressed work in flight.
+    for (const id of run.addressedCalls) if (run.calls.get(id) === 'open') return 'call';
+    const c = run.reply;
+    if (c && c.visibility === 'public' && this.contextLive(c, now)) return 'reply';
+    if (now - run.newsAt < REPLY_CONTEXT_TTL_MS) return 'reply';
+    // The second model's words belong to the latest answer: after a muted one (a private or refused call) they open nothing.
+    const mutedNow = !!c && c.visibility === 'muted' && this.contextLive(c, now);
+    if (!mutedNow && run.readyMessages.some((m) => m <= now && now - m < ASKER_WINDOW_MS)) return 'message';
+    return null;
   }
 
   /** Is Nova answering in this call: her voice going out now, or one of her tool calls still open? (The watcher waits while she is.) */
@@ -817,6 +875,12 @@ export class AssistantRuntime {
 
   /** Queue a line write behind the earlier ones of this run (never rejects). */
   private onInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
+    // The voice gate reads the heard text at once, before the line is attributed or stored.
+    if (findAddress(e.text) !== null) {
+      const endAt = run.sessionStartedAt + e.endMs;
+      if (!(run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt }))) run.addressedAt = Math.max(run.addressedAt, endAt);
+    }
+    run.gate.poke();
     run.inputNo += 1;
     run.inputEndAt.set(run.inputNo, run.sessionStartedAt + e.endMs);
     if (run.inputEndAt.size > 64) run.inputEndAt.delete(run.inputEndAt.keys().next().value as number);
@@ -1065,6 +1129,7 @@ export class AssistantRuntime {
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
         if (session?.acceptsText) {
+          run.addressedAt = Math.max(run.addressedAt, this.now()); // the detector judged it a request: its spoken answer is wanted
           try { session.sendText(e.askedBy, e.text); } catch (err) { console.warn('[meeting-assistant] sendText failed', (err as Error).message); }
         }
       } else if (e.type === 'command') {
@@ -1117,6 +1182,7 @@ export class AssistantRuntime {
       // A muted context never replaces a live public one (its own call still finds it by id).
       if (!(ctx.visibility === 'muted' && run.reply && run.reply.visibility === 'public' && this.contextLive(run.reply, answeredAt))) run.reply = ctx;
       run.replyById.set(modelCallId, ctx);
+      run.gate.poke();
       for (const [id, c] of run.replyById) if (answeredAt - c.answeredAt >= REPLY_CONTEXT_TTL_MS) run.replyById.delete(id);
     }
     return sent;
@@ -1189,6 +1255,7 @@ export class AssistantRuntime {
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
     if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await this.refuse(run, e.callId, 'not addressed'); return; }
+    run.addressedCalls.add(e.callId); run.gate.poke();
     // (b2) At most MAX_CALLS_PER_REQUEST calls per addressed request: text inside a record must not be able to lead the
     // model into an open-ended chain of reads. A request is the asker plus the line that addressed Nova in the window.
     const addressing = [...lines].reverse().find((l) => (l.userId === asker || l.speakers?.includes(asker) === true) && l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
@@ -1344,7 +1411,7 @@ export class AssistantRuntime {
       const text = result.ok ? capText((result.output as { say?: unknown } | null)?.say ?? 'Done.', 300) : capText(result.error ?? 'It did not work.', 300);
       if (turn.actionId) await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: result.ok ? 'done' : 'failed', by: userId, resultText: text }).catch(() => null);
       // The card keeps the asker's own sentence; the shared session only ever gets a fixed one (low finding: the browser's words are not model input).
-      run?.session?.appendContext(result.ok ? 'The action you offered was done.' : 'The action you offered did not work.');
+      this.tellSession(run, result.ok ? 'The action you offered was done.' : 'The action you offered did not work.');
       return { turn: moved };
     }
     const modelCallId = run?.turnCalls.get(turnId);
@@ -1377,7 +1444,7 @@ export class AssistantRuntime {
     if (run) for (const c of [run.reply, ...run.replyById.values()]) if (c) delete c.card;
     if (decision === 'confirm') { await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'running' }); return; }
     const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'declined' });
-    if (moved) run?.session?.appendContext(`${await nameOf(turn.askedBy)} declined the action you offered. It was not done.`);
+    if (moved) this.tellSession(run, `${await nameOf(turn.askedBy)} declined the action you offered. It was not done.`);
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1527,7 +1594,7 @@ export class AssistantRuntime {
           : why.card ?? (turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`);
         await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
       }
-      run?.session?.appendContext(`The action offered to ${askerName} expired without being done.`);
+      this.tellSession(run, `The action offered to ${askerName} expired without being done.`);
       return;
     }
     if (run) {

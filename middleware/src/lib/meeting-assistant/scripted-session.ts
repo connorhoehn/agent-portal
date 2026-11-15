@@ -92,6 +92,8 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
 
   appendAudio(): void { /* the scripted session never hears anything */ }
 
+  pendingInputText(): string { return ''; }
+
   sendText(userId: string, text: string): void {
     if (this.ended) return;
     const step = scriptFor(text);

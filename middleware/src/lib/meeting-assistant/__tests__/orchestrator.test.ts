@@ -59,6 +59,9 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   private readonly open = new Set<string>();
   closed = false;
   async start(i: SessionStartInput) { this.startInput = i; }
+  /** What the session has heard and not yet flushed (the voice gate reads it). */
+  pending = '';
+  pendingInputText() { return this.pending; }
   appendAudio(b: Buffer) { this.audio.push(b); }
   sendText(): void { throw new SessionTextUnsupported(); }
   answerToolCall(id: string, output: string) { if (this.closed || !this.open.delete(id)) return false; this.answers.push([id, output]); return true; }
@@ -1267,7 +1270,9 @@ describe('relaying Nova\'s voice', () => {
       voiceSink: (channel, frame) => { if (!sinkUp) return false; sent.push({ channel, data: frame.data }); return true; },
     }, { tickMs: 0 });
     await runtime.start(ctx);
-    return fake();
+    const s = fake();
+    s.pending = 'Nova, are you there?'; // someone is addressing Nova: the voice gate lets her speech through
+    return s;
   }
   const frames = async (s: FakeSession, n: number, lastToo = true) => {
     for (let i = 0; i < n; i += 1) s.fire('outputAudio', { pcm, seq: i + 1, ...(lastToo && i === n - 1 ? { last: true as const } : {}) });
@@ -1278,7 +1283,7 @@ describe('relaying Nova\'s voice', () => {
     const s = await voiceRuntime();
     await frames(s, 3);
     expect(sent).toEqual([]);
-    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 0 });
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 0, voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
   });
 
   it('with the voice on, relays each frame to the call chat channel in order, the last one marked, and counts them', async () => {
@@ -1288,7 +1293,7 @@ describe('relaying Nova\'s voice', () => {
     expect(sent.map((f) => f.channel)).toEqual(Array(4).fill(`orgiq:huddle:${CALL}`));
     expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4]);
     expect(sent.map((f) => f.data.last === true)).toEqual([false, false, false, true]);
-    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 4, voiceFramesDropped: 0 });
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 4, voiceFramesDropped: 0, voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
   });
 
   it('keeps the numbering across a replaced session, and ignores a frame from the session that was replaced', async () => {
@@ -1298,6 +1303,7 @@ describe('relaying Nova\'s voice', () => {
     s.drop(); await flush();
     const next = fake();
     expect(next).not.toBe(s);
+    next.pending = 'Nova, are you there?';
     await frames(s, 1); // the old session still talks: not relayed
     await frames(next, 2);
     expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4]);
@@ -1307,7 +1313,7 @@ describe('relaying Nova\'s voice', () => {
     const s = await voiceRuntime();
     runtime.setVoice(CALL, true); sinkUp = false;
     await frames(s, 3);
-    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 3 });
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 3, voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
   });
 
   it('relays nothing while paused or after leaving, and nothing after the voice is switched off again', async () => {
@@ -1323,6 +1329,7 @@ describe('relaying Nova\'s voice', () => {
     expect(sent).toHaveLength(1);
     await runtime.resume(CALL);
     const resumed = fake();
+    resumed.pending = 'Nova, are you there?';
     await frames(resumed, 1);
     expect(sent).toHaveLength(2);
     await runtime.stop(CALL);
@@ -1339,10 +1346,152 @@ describe('relaying Nova\'s voice', () => {
     factory = () => { const s = new ScriptedSession(() => now); sessions.push(s); return s; };
     await runtime.start(ctx);
     runtime.setVoice(CALL, true);
-    scripted().sendText(ALICE, 'what is two plus two'); await flush();
+    await say(ALICE, 'Nova, what is two plus two?'); // the detector hands the request over: its spoken answer is wanted
     expect(sent).toHaveLength(9);
     expect(sent.at(-1)!.data.last).toBe(true);
     expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+});
+
+describe('Nova\'s voice goes out only for speech someone asked for (the voice gate)', () => {
+  let sent: number[];
+  let t0: number;
+  const pcm = Buffer.alloc(4800, 9);
+  async function gateRuntime(): Promise<FakeSession> {
+    await runtime.stop(CALL);
+    sent = [];
+    factory = () => { const x = new FakeSession(); sessions.push(x); return x; };
+    runtime = new AssistantRuntime({
+      store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [],
+      voiceSink: (_channel, frame) => { sent.push(frame.data.seq); return true; },
+    }, { tickMs: 0 });
+    await runtime.start(ctx);
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    t0 = now;
+    return fake();
+  }
+  /** One utterance of `n` frames 100 ms apart, the last marked (the clock ends 100 ms after its last frame). */
+  const utter = async (s: FakeSession, n: number, from = 1, lastToo = true) => {
+    for (let i = 0; i < n; i += 1) { s.fire('outputAudio', { pcm, seq: from + i, ...(lastToo && i === n - 1 ? { last: true as const } : {}) }); now += 100; }
+    await flush();
+  };
+  const stats = () => runtime.voiceStats(CALL);
+
+  it('ordinary talk, a place called Nova Scotia, then an utterance nobody asked for: nothing is relayed and it is counted as withheld', async () => {
+    const s = await gateRuntime();
+    s.hear('I think the release is in decent shape.', 0, 1500);
+    s.hear('Nova Scotia has the best lobster I have ever eaten.', 1600, 3200); await flush();
+    now = t0 + 4000;
+    await utter(s, 25);
+    expect(sent).toEqual([]);
+    expect(stats()).toMatchObject({ voiceFramesRelayed: 0, voiceFramesWithheld: 25, voiceUtterancesWithheld: 1 });
+  });
+
+  it('a request, then the answer: relayed at once, frame by frame', async () => {
+    const s = await gateRuntime();
+    s.hear('Nova, what is two plus two?', 0, 1500); await flush();
+    now = t0 + 3000;
+    await utter(s, 6);
+    expect(sent).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(stats()).toMatchObject({ voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
+  });
+
+  it('a request ten seconds old no longer opens the gate', async () => {
+    const s = await gateRuntime();
+    s.hear('Nova, what is two plus two?', 0, 1500); await flush();
+    now = t0 + 1500 + 10_001;
+    await utter(s, 25);
+    expect(sent).toEqual([]);
+  });
+
+  it('the provider speaks before it flushes the request: the first frames are held, then released in order when the line arrives', async () => {
+    const s = await gateRuntime();
+    now = t0 + 2000;
+    await utter(s, 5, 1, false);
+    expect(sent).toEqual([]);
+    s.hear('Nova, what is two plus two?', 500, 1900); await flush();
+    expect(sent).toEqual([1, 2, 3, 4, 5]);
+    await utter(s, 3, 6);
+    expect(sent).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(stats().voiceUtterancesWithheld).toBe(0);
+  });
+
+  it('what the session has heard but not flushed counts: a person addressing Nova right now opens it', async () => {
+    const s = await gateRuntime();
+    now = t0 + 2000;
+    s.pending = 'Nova, what is';
+    await utter(s, 3);
+    expect(sent).toEqual([1, 2, 3]);
+  });
+
+  it('the answer after a confirmed write, minutes later, is relayed; the same speech with no news is withheld', async () => {
+    const s = await gateRuntime();
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, create a work item for y.', at: now - 500, captionId: 'w1' });
+    s.call('c1', 'create', { kind: 'work-item', fields: { title: 'y' } }); await flush();
+    expect(mockPosts.actions).toHaveLength(1);
+    now += 3 * 60_000;
+    await utter(s, 25); // minutes after the card: nobody asked for this
+    expect(sent).toEqual([]);
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { say: 'Created it.' } });
+    now += 1500;
+    await utter(s, 4, 26);
+    expect(sent).toEqual([1, 2, 3, 4]); // the relay numbers its own frames from 1
+    expect(stats()).toMatchObject({ voiceFramesRelayed: 4, voiceUtterancesWithheld: 1 });
+  });
+
+  it('an addressed read in flight opens it; once answered privately (a muted context), the speech after it is withheld, ready message or not', async () => {
+    const s = await gateRuntime();
+    await store.appendLine({ callId: CALL, userId: BOB, participantId: '', speakerName: 'Bob', text: 'Nova, how much budget do I have?', at: now - 2000, captionId: 'p1' });
+    s.call('call_p', 'budget', { scope: 'me' }); await flush();
+    now += 30_000; // long after anyone spoke: only the open call speaks for it
+    await utter(s, 3);
+    expect(sent).toEqual([1, 2, 3]);
+    const [turn] = await runtime.turnsFor(CALL, BOB);
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { say: 'You have spent $4,217.' } });
+    s.fire('messageReady', { atMs: now - t0 }); await flush();
+    now += 2000;
+    await utter(s, 25, 4);
+    expect(sent).toEqual([1, 2, 3]);
+    expect(stats().voiceUtterancesWithheld).toBe(1);
+  });
+
+  it('a refused call is not addressed work: its follow-up is withheld', async () => {
+    const s = await gateRuntime();
+    now = t0 + 30_000;
+    s.call('call_x', 'search', { query: 'x' }); await flush();
+    expect(s.answersFor('call_x').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
+    await utter(s, 25);
+    expect(sent).toEqual([]);
+  });
+
+  it('a withheld utterance was never heard: the same words said by a person over it are kept, not taken for an echo', async () => {
+    const s = await gateRuntime();
+    now = t0 + 5000;
+    s.fire('outputTranscript', { text: 'Nova, find the runbooks for you', final: false });
+    await utter(s, 25);
+    s.fire('outputTranscript', { text: 'Nova, find the runbooks for you', final: true });
+    expect(sent).toEqual([]);
+    s.hear('Nova find the runbooks', 5300, 6500); await flush();
+    expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['Nova find the runbooks']);
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(0);
+  });
+
+  it('a pause, the voice switched off, or a replaced session forgets what is held: nothing of it is sent later', async () => {
+    const s = await gateRuntime();
+    now = t0 + 2000;
+    await utter(s, 4, 1, false);
+    runtime.setVoice(CALL, false); runtime.setVoice(CALL, true);
+    s.hear('Nova, what is two plus two?', 500, 1900); await flush();
+    expect(sent).toEqual([]); // the held frames were forgotten, not released
+    now += 11_000;
+    await utter(s, 4, 5, false); // held again (the request is old now)
+    s.drop(); await flush();
+    const next = fake();
+    next.pending = 'Nova, hello';
+    await utter(next, 2, 9);
+    expect(sent).toEqual([1, 2]);
   });
 });
 
@@ -1355,9 +1504,11 @@ describe('Nova cannot address herself through a microphone (the echo guard)', ()
     await runtime.start(ctx);
     runtime.setVoice(CALL, true);
     const s = fake(); const start = now;
+    s.pending = 'Nova, can you hear me'; // the voice gate opens: someone is addressing Nova
     s.fire('outputTranscript', { text: said, final: false });
     for (let i = 0; i < 6; i += 1) { s.fire('outputAudio', { pcm, seq: i + 1, ...(i === 5 ? { last: true as const } : {}) }); now += 100; }
     s.fire('outputTranscript', { text: said, final: true });
+    s.pending = '';
     await flush();
     return { s, start }; // Nova's span is [start, start + 500 + 100 + 400]
   }

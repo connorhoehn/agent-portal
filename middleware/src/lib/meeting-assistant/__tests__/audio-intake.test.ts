@@ -30,6 +30,7 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   readonly frames: Buffer[] = [];
   async start(_i: SessionStartInput) { /* nothing */ }
   appendAudio(b: Buffer) { this.frames.push(b); }
+  pendingInputText() { return ''; }
   sendText(): void { throw new SessionTextUnsupported(); }
   answerToolCall() { return false; } appendContext() { return true; }
   async close() { this.emit('closed', { reason: 'closed' }); }
