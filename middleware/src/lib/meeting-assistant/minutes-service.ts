@@ -4,6 +4,11 @@
 // leaving ends here; the first writer wins (`putMinutes` is idempotent on the call id) and a deleted record is never
 // written again (the tombstone).
 //
+// Nova can be invited back into a call it left. When it leaves again the minutes are ADDED to, never written twice: the writer reads
+// only the lines after `throughSeq` with the stored minutes as `earlier`, the store appends what is new after what is there (indices
+// name items, so they never move) under a compare on `throughSeq`, and the bell rings once more. A leave that arrives while an earlier
+// write of the same call still runs waits for it (one queue per call), so nothing a later period heard is lost.
+//
 // Privacy: minutes are the attendees' (routes/meeting-assistant.ts `attendeeOf`). Nothing here widens that.
 //
 // Proposals (docs/meeting-consent-design.md, package 6): a decision a proposal already holds is not written again as a decision line;
@@ -20,7 +25,7 @@ import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } fr
 import { NOVA_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
-  capTranscript, chatSummary, minutesCounts, withoutHeld, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
+  capTranscript, chatSummary, minutesCounts, withoutHeld, withoutStored, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
@@ -109,8 +114,10 @@ export async function notifyMinutesReady(minutes: MinutesRecord, now: number = D
     if (minutes.deleted || minutes.writer === 'none' || !minutes.attendees.length) return [];
     if (!(await assistantStore().claimMinutesNotice(minutes.callId, now))) return [];
     const names = await Promise.all(minutes.attendees.map((u) => nameOf(u)));
+    const name = meetingNameOf(minutes, names);
     return await notify(minutes.attendees, {
-      type: MINUTES_READY_TYPE, title: `Minutes from ${meetingNameOf(minutes, names)} are ready`,
+      // Once per writing: an addition (Nova was invited back and heard more) clears the claim, and its bell says the minutes changed.
+      type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes from ${name} were updated` : `Minutes from ${name} are ready`,
       action: { label: 'Open the meeting', href: meetingPagePath(minutes.callId) },
       payload: { tenant: minutes.tenant, kind: MINUTES_READY_TYPE, callId: minutes.callId },
     });
@@ -183,13 +190,14 @@ const actionCardKey = (callId: string, index: number): string => createHash('sha
 export const actionCardTurnId = (callId: string, index: number): string => `t-m-${actionCardKey(callId, index)}`;
 
 /** Offer each owned action item to its owner as a "Create a work item" card, only while the owner is still in the live call. */
-async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initiativeName: string | null): Promise<number> {
+async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initiativeName: string | null, fromIndex = 0): Promise<number> {
   const store = assistantStore();
   const seated = await seatedNow(record.callId);
   if (!seated.size) return 0;
   let cards = 0;
   for (const [i, item] of minutes.actionItems.entries()) {
     if (cards >= MAX_CARDS) break;
+    if (i < fromIndex) continue; // an addition offers only its new items; the earlier ones were offered when they were written
     const owner = item.ownerUserId;
     if (item.done || !owner || !seated.has(owner) || !minutes.attendees.includes(owner)) continue;
     const roles = await import('./orchestrator.js').then((m) => m.defaultRolesOf(owner, record.tenant)).catch(() => [] as string[]);
@@ -217,13 +225,24 @@ async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initi
  * write (no assistant, still in the call, no lines recorded, or the record was deleted).
  */
 export function writeMinutes(callId: string): Promise<MinutesRecord | null> {
+  // One queue per call: a leave that arrives while an earlier write (or rewrite) still runs waits for it and then runs, so what Nova heard
+  // after being invited back is added rather than lost. Requests that arrive while one is already waiting share that one.
+  const waiting = queued.get(callId);
+  if (waiting) return waiting;
   const running = writing.get(callId);
-  if (running) return running;
-  const p = writeMinutesOnce(callId).finally(() => { writing.delete(callId); });
+  if (!running) return startWrite(callId, () => writeMinutesOnce(callId));
+  const next = running.then(() => undefined, () => undefined).then(() => { queued.delete(callId); return startWrite(callId, () => writeMinutesOnce(callId)); });
+  queued.set(callId, next);
+  return next;
+}
+const writing = new Map<string, Promise<MinutesRecord | null>>();
+const queued = new Map<string, Promise<MinutesRecord | null>>();
+/** Run one write as this call's current one (`writing`), and clear it when it ends unless a later one has taken its place. */
+function startWrite(callId: string, run: () => Promise<MinutesRecord | null>): Promise<MinutesRecord | null> {
+  const p: Promise<MinutesRecord | null> = run().finally(() => { if (writing.get(callId) === p) writing.delete(callId); });
   writing.set(callId, p);
   return p;
 }
-const writing = new Map<string, Promise<MinutesRecord | null>>();
 
 /** A write or a rewrite of this call's minutes is running in this process (the meeting page shows "Nova is writing the minutes"). */
 export const minutesWriting = (callId: string): boolean => writing.has(callId);
@@ -266,7 +285,7 @@ async function composeMinutes(callId: string, record: AssistantRecord, attempts:
     callId, tenant: record.tenant, lobby: record.lobby, initiativeId: record.initiativeId, callName,
     startedAt: record.invitedAt, endedAt, invitedBy: record.invitedBy, attendees,
     summary: draft ? draft.summary : result.note ?? NOTES.failed, decisions: draft?.decisions ?? [], actionItems: draft?.actionItems ?? [], topics: draft?.topics ?? [],
-    lineCount: lines.length, truncated: draft?.truncated ?? false, writer: result.writer, createdAt,
+    lineCount: lines.length, throughSeq: lines[lines.length - 1]!.seq, truncated: draft?.truncated ?? false, writer: result.writer, createdAt,
     // Without a writer there is nothing to try again; a failure or a refused budget may be tried again, within the caps.
     attempts: writer ? attempts : 0, retryable: !draft && !!writer, notifiedAt: null,
   };
@@ -277,7 +296,16 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   const store = assistantStore();
   const record = await store.get(callId);
   if (!record || record.state !== 'left') return null;
-  if (await store.getMinutes(callId)) return null;
+  const existing = await store.getMinutes(callId);
+  if (existing) {
+    // Nova was invited back and has left again. A deleted record is never written; minutes without a draft are written again over the
+    // whole call (within the caps); minutes with a draft get what the later period heard added to them.
+    if (existing.deleted) return null;
+    // The same leave reported twice (the dismissal's run ending, then the call ending) finds minutes that already end at it: nothing to do.
+    if ((record.leftAt ?? 0) <= existing.endedAt) return null;
+    if (existing.writer === 'none') return existing.retryable ? rewriteRun(callId, record, existing, MAX_ATTEMPTS) : null;
+    return addToMinutes(callId, record, existing, 1, true);
+  }
   const composed = await composeMinutes(callId, record, 1, Date.now());
   if (!composed) {
     // Nothing was recorded: no minutes. A person's dismissal already said so in its own notice; the other ways of leaving say it here.
@@ -314,22 +342,105 @@ export async function rewriteMinutes(callId: string, max: number): Promise<{ out
   if (writing.has(callId)) return { outcome: 'busy', done: none };
   const store = assistantStore();
   const [record, current] = await Promise.all([store.get(callId), store.getMinutes(callId)]);
-  if (!record || record.state !== 'left' || !current || current.deleted || current.writer !== 'none' || !current.retryable) return { outcome: 'not-needed', done: none };
+  if (!record || record.state !== 'left' || !current || current.deleted) return { outcome: 'not-needed', done: none };
+  const cap = Math.min(max, MAX_ATTEMPTS);
+  // An owed addition (a later period's could not be written) is tried again within the same caps, counted apart from the first write's.
+  if (current.writer !== 'none') {
+    if (!current.additionOwed) return { outcome: 'not-needed', done: none };
+    const made = current.additionAttempts ?? 0;
+    if (made >= cap) return { outcome: 'limit', done: none };
+    if (writing.has(callId) || queued.has(callId)) return { outcome: 'busy', done: none };
+    const run = startWrite(callId, async () => {
+      if (!(await store.claimMinutesAddition(callId, made, cap))) return null;
+      return addToMinutes(callId, record, current, made + 1, false);
+    });
+    return { outcome: 'started', done: track(run.catch((e: unknown) => { console.warn('[meeting-assistant] minutes addition failed', (e as Error).message); return null; })) };
+  }
+  if (!current.retryable) return { outcome: 'not-needed', done: none };
   const attempts = current.attempts ?? 1;
-  if (attempts >= Math.min(max, MAX_ATTEMPTS)) return { outcome: 'limit', done: none };
-  if (writing.has(callId)) return { outcome: 'busy', done: none };
-  // Claim the run before the writer is called: a crash after this still counts it, so the cap can only under-spend.
-  const run = (async (): Promise<MinutesRecord | null> => {
-    if (!(await store.claimMinutesAttempt(callId, attempts, Math.min(max, MAX_ATTEMPTS)))) return null;
-    const composed = await composeMinutes(callId, record, attempts + 1, current.createdAt);
-    if (!composed) return null;
-    if (!(await store.rewriteMinutes(composed.minutes))) return null;
-    const stored = await store.getMinutes(callId);
-    if (stored && composed.draft) await notifyMinutesReady(stored);
-    return stored;
-  })().finally(() => { writing.delete(callId); });
-  writing.set(callId, run);
+  if (attempts >= cap) return { outcome: 'limit', done: none };
+  if (writing.has(callId) || queued.has(callId)) return { outcome: 'busy', done: none };
+  const run = startWrite(callId, () => rewriteRun(callId, record, current, cap));
   return { outcome: 'started', done: track(run.catch((e: unknown) => { console.warn('[meeting-assistant] minutes rewrite failed', (e as Error).message); return null; })) };
+}
+
+/** One more run of the writer for minutes without a draft, over the whole call, claimed first (a crash after the claim still counts it). */
+async function rewriteRun(callId: string, record: AssistantRecord, current: MinutesRecord, cap: number): Promise<MinutesRecord | null> {
+  const store = assistantStore();
+  const attempts = current.attempts ?? 1;
+  if (attempts >= cap) return null;
+  if (!(await store.claimMinutesAttempt(callId, attempts, cap))) return null;
+  const composed = await composeMinutes(callId, record, attempts + 1, current.createdAt);
+  if (!composed) return null;
+  if (!(await store.rewriteMinutes(composed.minutes))) return null;
+  const stored = await store.getMinutes(callId);
+  if (stored && composed.draft) await notifyMinutesReady(stored);
+  return stored;
+}
+
+const ADDITION_FAILED = `${NOVA_NAME} could not add what it heard after it was invited back to the minutes. The minutes so far are unchanged, ${NOVA_NAME} will try again, and the transcript is kept for the people who were in the call.`;
+
+/**
+ * Add what Nova heard since the minutes were written (it was invited back) to minutes that hold a draft. The writer reads only the newer
+ * lines with the stored minutes as `earlier`; the store appends the new items after the stored ones under a compare on `throughSeq`, so
+ * two additions at once write once. Nothing new: the minutes stay as they are (their end and attendees move) and no bell rings. A failed
+ * or refused run marks the addition owed (`attempt` runs made) and leaves the minutes intact. `fromLeave` is the run a leave started (it
+ * says so in the chat when it fails); the sweep's and an attendee's retries say nothing there.
+ */
+async function addToMinutes(callId: string, record: AssistantRecord, current: MinutesRecord, attempt: number, fromLeave: boolean): Promise<MinutesRecord | null> {
+  const store = assistantStore();
+  const expect = current.throughSeq ?? null;
+  const lines = await allLines(callId);
+  const fresh = expect !== null ? lines.filter((l) => l.seq > expect) : lines.filter((l) => l.at > current.endedAt);
+  const attendees = [...new Set([...record.attendees, ...lines.flatMap((l) => (l.userId ? [l.userId] : []))])];
+  const endedAt = record.leftAt ?? Date.now();
+  if (!fresh.length) {
+    const lastSeq = expect ?? lines.filter((l) => l.at <= current.endedAt).reduce((n, l) => Math.max(n, l.seq), 0);
+    return store.appendMinutes(callId, expect, { summary: null, decisions: [], actionItems: [], topics: [], endedAt, attendees, lineCount: current.lineCount, throughSeq: lastSeq, truncated: false, added: false });
+  }
+  const roster: RosterEntry[] = await Promise.all(attendees.map(async (userId) => ({ userId, name: await nameOf(userId) })));
+  const initiativeName = record.initiativeId ? await getProject(record.initiativeId).then((p) => p?.name ?? null).catch(() => null) : null;
+  // Writes done in the call since the earlier minutes were written (the ones before are in them already).
+  const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
+  const doneActions = turns.filter((t) => t.kind === 'write' && t.createdAt > current.endedAt).map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
+  const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
+  const held = {
+    statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence),
+    agreed: proposals.filter((p) => p.outcome.kind === 'decision' && ['consented', 'running', 'done'].includes(p.state)).map((p) => p.statement),
+    open: proposals.filter((p) => ['open', 'objected', 'consented'].includes(p.state) && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement),
+  };
+  const earlier = { summary: current.summary, decisions: current.decisions, actionItems: current.actionItems.map((i) => i.text), topics: current.topics };
+  const writer = (writerFactory ?? defaultMinutesWriterFactory)();
+  let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
+  if (writer) {
+    // The cost is booked to the person who invited Nova into this period (the record's current inviter).
+    result = await Promise.race([
+      writeDraft(record, writer, { lines: fresh, roster, callName: current.callName, doneActions, held, earlier }),
+      new Promise<typeof result>((resolve) => { const t = setTimeout(() => resolve({ draft: null, note: NOTES.failed, writer: 'none' }), MINUTES_TIMEOUT_MS * 2 + 5000); t.unref?.(); }),
+    ]);
+  }
+  if (!result.draft) {
+    // The minutes so far stay exactly as they are; the addition is owed and the sweep (or an attendee) tries it again within the caps.
+    const marked = await store.oweMinutesAddition(callId, expect, { attempts: attempt, endedAt, attendees });
+    if (marked && fromLeave && writer) await postNoticeQuietly(callId, ADDITION_FAILED, { minutes: true });
+    return store.getMinutes(callId);
+  }
+  const draft = result.draft;
+  const decisions = withoutStored(withoutHeld(draft.decisions, held), current.decisions);
+  const topics = draft.topics.filter((t) => !current.topics.includes(t));
+  const stored = await store.appendMinutes(callId, expect, {
+    summary: draft.summary || current.summary, decisions, actionItems: draft.actionItems, topics, endedAt, attendees,
+    lineCount: current.lineCount + fresh.length, throughSeq: fresh[fresh.length - 1]!.seq, truncated: draft.truncated, added: true,
+  });
+  if (!stored) return null; // another addition of the same lines won
+  const fromIndex = stored.actionItems.length - draft.actionItems.length;
+  const counts = { ...minutesCounts(stored, await store.listProposals(callId).catch(() => proposals)), added: true };
+  const text = chatSummary(stored.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
+  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId, minutes: counts } }, { minutes: true })
+    .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
+  await notifyMinutesReady(stored);
+  await offerCards(record, stored, initiativeName, fromIndex).catch((e: unknown) => console.warn('[meeting-assistant] action cards not offered', (e as Error).message));
+  return stored;
 }
 
 /** The sweep's part: try each failed write again, up to AUTO_ATTEMPTS runs in all. Returns how many were tried. Never throws. */

@@ -31,7 +31,7 @@ export interface AssistantNoticeMetadata extends AssistantBase {
 }
 
 /** The counts a minutes notice carries. `decisions` includes the decisions people consented to through the call's proposals. */
-export interface MinutesCounts { decisions: number; actionItems: number; proposals: number }
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** Nova added a later period to minutes that existed. */ added?: boolean }
 
 export interface AssistantReplyMetadata extends AssistantBase {
   kind: 'assistant-reply';
@@ -93,7 +93,7 @@ function minutesCounts(raw: unknown): MinutesCounts | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const c = raw as Record<string, unknown>;
   return count(c['decisions']) && count(c['actionItems']) && count(c['proposals'])
-    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'] } : null;
+    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'], ...(c['added'] === true ? { added: true } : {}) } : null;
 }
 
 /** Parse stored metadata back into a typed shape; null when it is not a well-formed Nova message. */
