@@ -1072,7 +1072,7 @@ Decided during the repairs (14 November): a write asked for in a call must name 
 
 **First real call (14 November).** A three-person call on the local chain (media server, platform API, gateway) with Nova on the real provider: the call connected, the taps delivered audio for every speaker with nothing late or unmapped, and the transcript was accurate. Attribution drifted from about 3 to about 8 seconds over the take; that fix is merged and has not yet been seen on a live call.
 
-**Third sweep and the experience run (14 and 15 November).** Three read-only passes on the experience found 44 things (`docs/meeting-assistant-audit.md`, "Third sweep"); all were repaired in the same run, and the chat cards, the meeting page, the Meetings list and the call block were redesigned (ui-components 2.528.0 and 2.529.0). The walk has 56 steps.
+**Third sweep and the experience run (14 and 15 November).** Three read-only passes on the experience found 44 things (`docs/meeting-assistant-audit.md`, "Third sweep"); all were repaired in the same run, and the chat cards, the meeting page, the Meetings list and the call block were redesigned (ui-components 2.528.0 and 2.529.0). The walk has 56 steps. A second pass closed four of the leftovers (the silent proposal cap, the action item's status after its work item is made from the meeting page, the late "Click to hear Nova", and a shell defect that let the whole document scroll).
 
 Next package, decided: let Nova be invited again after it leaves a call. It needs a second listening period on the same record and a way to add to minutes that are already written, so it is its own piece of work.
 

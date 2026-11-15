@@ -204,6 +204,15 @@ Audited at `50bc577a`, after the second sweep's repairs and the consent workflow
 - **The meeting page and the Meetings list.** Delete moved into a menu; "Needs you" comes first when something waits on the viewer; the summary is a lead sentence and up to four bullets, never a retelling by speaker; decisions, action items and proposals are tables with portraits; a proposal opens in a drawer; the transcript is collapsed. The list shows length, people and outcomes.
 - **The call block** (library 2.529.0). Everyone in the call has a tile side by side, with "+N" only past what fits, and the recording notice is an indicator with a tooltip on the meta line instead of a banner on its own line.
 
+### Second pass (15 November)
+
+Four of the items first listed as open were closed in the same run:
+
+- **The proposal cap.** When Nova has raised its eighth proposal in a call it says so once, and that people can still ask it to record a decision. The count is read from the stored proposals, so a restart neither repeats nor loses the notice.
+- **An action item made into a work item from the meeting page.** The button now goes through the meeting's own route, which keeps the plain path's permission checks, creates the work item and records its id on the action item; the page then reads "Work item created" with a link the server builds.
+- **"Click to hear Nova".** It shows as soon as Nova's voice is on and the browser still needs a click, before any reply is lost.
+- **The prompt over the last rows.** The page could already be scrolled clear of the docked prompt. The real defect was different: hidden labels in the proposals table made the whole document taller than the screen, so scrolling past the end slid the header, prompt and footer off the screen. The shell no longer lets the document scroll.
+
 ### Decided
 
 - Nova cannot rejoin a call it left. A second listening period needs a way to add to minutes that were already written; it is the next package, not a patch.
@@ -215,13 +224,10 @@ Audited at `50bc577a`, after the second sweep's repairs and the consent workflow
 ### Still open
 
 - Re-inviting Nova after it leaves (above).
-- The cap of eight proposals per call is silent until it is reached.
 - "Paused for" on the meeting page is all the time Nova was in the call and not listening; pauses are not tracked on their own.
 - A finished action row has no link to what it created; the card carries no link the browser can trust.
-- An action item whose work item was made through the plain "Create work item" link still reads "Not created".
-- On the meeting page the docked answer prompt can cover the last table rows.
-- In a browser that blocks sound, "Click to hear Nova" still appears only after the first spoken answer was lost.
-- Covered by unit tests only, because the walk cannot produce them: the "working for" mark (a lookup finishes too fast to catch) and the failed-minutes path (the scripted writer cannot fail).
+- Covered by unit tests only, because the walk cannot produce them: the "working for" mark (a lookup finishes too fast to catch), the failed-minutes path (the scripted writer cannot fail), a work item made from an action item on the meeting page (the walk's meeting has none left to make), and the "Click to hear Nova" prompt (headless Chromium does not block sound).
+- The meeting page's "Create work item" now makes a story at once, titled with the action item's text; the earlier path opened the initiative's form first. Two presses at the same moment on two servers could make two work items, of which one is recorded.
 - The meeting page is not in the DOM geometry audit's route list.
 - From the real-provider runs, unchanged by this sweep: Nova still voices speech nobody asked for when its voice is on; the two-askers case was relaxed and not re-run against the provider; the echo guard is unproven on a long call; the attribution fix has not yet been seen on a live call.
 
