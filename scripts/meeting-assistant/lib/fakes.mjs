@@ -39,6 +39,11 @@ const HEARD_RMS = 150;
  *   dry.followup    string | (output) => { text, frames }  what is said once the call's output arrives
  *   dry.afterContext string | (content) => { text, frames }  what is said when the server appends context about that call (a write done or declined)
  *   dry.id          a name other entries can point at (`echoOf`)
+ *   dry.remark      { text, frames }  an UNPROMPTED remark, as the real provider sometimes made one: once the line is heard Nova starts
+ *                   speaking (voiced audio first, its output transcript 300 ms later) though nobody addressed her
+ *   dry.audioFirstMs  N  the real ordering for a request: `dry.reply` starts voicing at once, and the request's input transcript (and
+ *                   then the reply's output transcript) follow N ms later. The wall time of each such reply's first voiced frame is
+ *                   kept in `seen.firstVoicedAt` (a scenario measures what the voice gate's hold cost against it).
  * An echo entry (`addEcho`) sends a transcript delta for the window in which a reply was heard again by a microphone.
  */
 /**
@@ -62,7 +67,7 @@ export function wordDeltas(text, startMs, endMs) {
 export class FakeProvider {
   constructor({ port }) {
     this.port = port; this.entries = []; this.echoes = []; this.t0Wall = 0; this.connections = 0; this.live = new Set();
-    this.seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0, voicedSent: 0, silentSent: 0, replies: [], calls: [], deltas: 0, cuts: 0, hangups: 0, unheard: 0, startedAt: [], instructions: [] };
+    this.seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0, voicedSent: 0, silentSent: 0, replies: [], calls: [], deltas: 0, cuts: 0, hangups: 0, unheard: 0, startedAt: [], instructions: [], remarks: 0, firstVoicedAt: [] };
     this.replySpans = new Map(); // dry.id -> { startMs, endMs, text } on the connection that spoke it
     this.wss = null;
   }
@@ -96,10 +101,18 @@ export class FakeProvider {
     const timers = new Set();
     const later = (ms, fn) => { const h = setTimeout(() => { timers.delete(h); fn(); }, ms); timers.add(h); };
 
+    const outputText = (text, frames, startMs) => send({ type: 'session.output_transcript.delta', start_ms: startMs, end_ms: startMs + frames * 100, delta: ` ${text}` });
     const speakText = (text, frames, id) => {
-      send({ type: 'session.output_transcript.delta', start_ms: st.audioMs, end_ms: st.audioMs + frames * 100, delta: ` ${text}` });
+      outputText(text, frames, st.audioMs);
       if (id) this.replySpans.set(id, { startMs: st.audioMs, endMs: st.audioMs + frames * 100, text, conn: this.connections });
       st.speaking += frames; this.seen.replies.push(text.slice(0, 40));
+    };
+    /** Voice first, words after (the real provider's order): returns what sends the transcript, for the caller to send later. */
+    const voiceFirst = (text, frames, mark) => {
+      const startMs = st.audioMs;
+      st.speaking += frames; this.seen.replies.push(text.slice(0, 40));
+      if (mark) st.markFirst = true;
+      return () => outputText(text, frames, startMs);
     };
     const pending = () => {
       const now = st.audioMs;
@@ -118,7 +131,19 @@ export class FakeProvider {
         if (!delta) continue;
         // As the real provider sends it (paid run, 14 November): a word or two per delta, each with its own span, and no delta ever
         // ends a sentence, so a turn ends only at a gap, a delegation or Nova's own speech (or the server's idle flush).
-        for (const w of wordDeltas(delta, Math.max(0, reported(start)), Math.max(1, reported(end)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; }
+        const heard = () => { for (const w of wordDeltas(delta, Math.max(0, reported(start)), Math.max(1, reported(end)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; } };
+        if (dry.reply && dry.audioFirstMs) {
+          // The answer is voiced before the request's own transcript has even arrived; its words come after that.
+          const words = voiceFirst(dry.reply.text, dry.reply.frames ?? 25, true);
+          later(dry.audioFirstMs, () => { heard(); later(300, words); });
+          continue;
+        }
+        heard();
+        if (dry.remark) {
+          // Nobody asked: the model speaks anyway (voice first, its words 300 ms later), as the real one did in paid runs.
+          this.seen.remarks += 1;
+          later(dry.delayMs ?? 400, () => { const words = voiceFirst(dry.remark.text, dry.remark.frames ?? 15, false); later(300, words); });
+        }
         const delegateWork = (callId) => {
           send({ type: 'session.delegation.created', offset_ms: st.audioMs, delegation: { id: `item_${callId}`, type: 'delegation', target: 'responses' } });
           // The voice acknowledges at once, before the work has produced anything (the real one within about 350 ms).
@@ -176,6 +201,7 @@ export class FakeProvider {
         // moment every frame seen so far allows, never the moment the first one happened to be read.
         { const zero = Date.now() - st.audioMs - 100; if (!st.anchor || zero < st.anchor) st.anchor = zero; }
         st.outSeq += 1;
+        if (st.speaking > 0 && st.markFirst) { st.markFirst = false; this.seen.firstVoicedAt.push(Date.now()); }
         if (st.speaking > 0) { st.speaking -= 1; this.seen.voicedSent += 1; send({ type: 'session.output_audio.delta', delta: voiced, event_id: `out_${st.outSeq}` }); }
         else { this.seen.silentSent += 1; send({ type: 'session.output_audio.delta', delta: silent, event_id: `out_${st.outSeq}` }); }
         { let sum = 0; const n = buf.length / 2; for (let i = 0; i < n; i += 1) { const v = buf.readInt16LE(i * 2); sum += v * v; } st.rms.push(Math.sqrt(sum / Math.max(1, n))); }

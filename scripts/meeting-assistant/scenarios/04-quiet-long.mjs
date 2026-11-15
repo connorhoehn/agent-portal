@@ -2,6 +2,9 @@
 // lines include the word without a request (a story about asking Nova, a place called Nova Scotia at the start of a sentence, the word
 // "innovation", a colleague named Nora being asked a question). Voice is on. Nova must say nothing, call no tool and relay no voice;
 // attribution is measured line by line; one addressed request at the end is answered.
+// The fake provider also makes two UNPROMPTED remarks during the quiet part (voice first, as the real one did): the voice gate must
+// withhold both. The final request is answered in the real provider's order (the answer's first frame before the request's own
+// transcript), so the gate's hold must cover it, and the answer is still heard.
 import { synth, msOf, findAllSaid, PEOPLE } from '../lib/harness.mjs';
 
 const TOPICS = ['the reminder emails', 'the calendar sync', 'the onboarding checklist', 'the invite links', 'the time zone picker', 'the mobile layout', 'the sign-in page', 'the weekly digest', 'the search filters', 'the export to spreadsheets', 'the dark theme', 'the release notes'];
@@ -57,8 +60,14 @@ export default {
     const budgetMs = Math.max(0, minutes * 60_000 - 20_000 - talk);
     const gap = Math.max(1300, Math.round(budgetMs / synthed.length));
     ctx.at(500);
-    const placed = synthed.map((l) => ({ ...l, ev: ctx.next(l.who, l.text, { gap }) }));
-    const finalReq = ctx.next('vera', 'Nova, what is two plus two?', { gap: 4000, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    // Two ordinary lines (a third and two thirds of the way in) after which the model speaks though nobody asked it to.
+    const remarkAt = new Set([Math.floor(synthed.length / 3), Math.floor((2 * synthed.length) / 3)]);
+    const REMARKS = [{ text: 'That sounds like a sensible plan to me.', frames: 15 }, { text: 'I can help with that whenever you are ready, just let me know.', frames: 25 }];
+    const placed = synthed.map((l, i) => ({ ...l, ev: ctx.next(l.who, l.text, { gap, ...(remarkAt.has(i) ? { dry: { remark: REMARKS[[...remarkAt].indexOf(i)] } } : {}) }) }));
+    const finalReq = ctx.next('vera', 'Nova, what is two plus two?', { gap: 4000, dry: { reply: { text: 'Two plus two is four.', frames: 12 }, audioFirstMs: 600 } });
+    // When the answer's first frame reaches Vera's socket (against when the provider voiced it: what the gate's hold cost).
+    let firstHeardAt = 0;
+    p.vera.audioHook = () => { if (!firstHeardAt) firstHeardAt = Date.now(); };
     r.note(`${placed.length} lines, ${Math.round(finalReq.endMs / 1000)} s of talk, gap ${gap} ms`);
     ctx.begin();
     // The quiet part is judged at the moment the final request begins, before it can change anything.
@@ -68,12 +77,16 @@ export default {
     const quietFrames = Object.values(p).reduce((n, x) => n + x.audioFrames, 0);
     const seenCalls = ctx.world.provider?.seen.calls.length ?? 0;
     await ctx.until(finalReq.endMs + 9000);
+    const finalState = await call.state();
+    const finalFrames = p.vera.audioFrames;
     await ctx.world.stopLanes();
     await ctx.debug();
 
     r.expect('Nova posted nothing to the call chat during the quiet talk (notices aside)', quietMsgs.length === 0, quietMsgs.map((m) => String(m.message).slice(0, 50)).join(' | '));
     r.expect('no tool call was made or refused', seenCalls === 0 && quietState?.refusedCalls === 0, `provider calls ${seenCalls}, refusedCalls ${quietState?.refusedCalls}`);
     r.expect('no voice frame was relayed to anyone', quietFrames === 0 && quietState?.voiceFramesRelayed === 0, `${quietFrames} frames at the sockets, relayed ${quietState?.voiceFramesRelayed}`);
+    r.expect('the fake provider made its two unprompted remarks, and the voice gate withheld both', (ctx.world.provider?.seen.remarks ?? 0) >= 2 && (quietState?.voiceUtterancesWithheld ?? 0) >= 2,
+      `remarks ${ctx.world.provider?.seen.remarks}, utterances withheld ${quietState?.voiceUtterancesWithheld} (${quietState?.voiceFramesWithheld} frames)`);
     r.expect('no request was counted from talk that never asked Nova anything', quietState?.counters?.requests === 0, `requests ${quietState?.counters?.requests}, pending ${JSON.stringify((quietState?.pendingRequests ?? []).map((q) => q.text.slice(0, 30)))}`);
     r.expect('the audio side is clean: nothing unmapped, nothing unacknowledged, nothing late', await (async () => {
       const a = await call.audio(); const c = a?.counters ?? {}; return (c.unmappedChunks ?? 0) === 0 && (c.unackedChunks ?? 0) === 0 && (c.lateChunks ?? 0) === 0 && (c.overrunChunks ?? 0) === 0;
@@ -94,6 +107,10 @@ export default {
     r.measure('lines under the wrong person', wrong);
     const after = await call.chatMessages(p.vera);
     const answer = after.find((m) => m.metadata?.kind === 'assistant-reply' && /four/i.test(String(m.message)));
+    r.expect('the final answer is voiced although its first frame came before the request\'s transcript: frames relayed and heard by Vera',
+      (finalState?.voiceFramesRelayed ?? 0) > 0 && finalFrames > 0, `relayed ${finalState?.voiceFramesRelayed}, at Vera's socket ${finalFrames}`);
+    const voicedAt = ctx.world.provider?.seen.firstVoicedAt?.[0];
+    if (voicedAt && firstHeardAt) r.measure('the answer\'s first frame held by the voice gate (ms)', firstHeardAt - voicedAt);
     r.expect('the one addressed request at the end is answered, labelled with Vera', !!answer && answer.metadata.askedBy === 'u-vera', answer ? `labelled ${answer.metadata.askedBy}` : 'no reply');
   },
 };
