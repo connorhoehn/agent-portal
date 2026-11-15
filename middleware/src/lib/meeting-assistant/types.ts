@@ -210,6 +210,10 @@ export interface ProposalRun {
   title: string | null;
   href: string | null;
   note: string | null;
+  /** A decision record's state as it was made: decided, or waiting for the initiative owner's decision. */
+  recordedAs?: 'decided' | 'waiting';
+  /** Closed because someone raised it again: the new proposal's id. */
+  raisedAs?: string;
 }
 
 export interface Proposal {
@@ -226,6 +230,8 @@ export interface Proposal {
   /** The person whose browser runs it: must consent. Another consenter takes it over by consenting again as executor while it is `consented`. */
   executor: string;
   source: ProposalSource;
+  /** Who asked Nova for it (an asked write); null when Nova raised it from what it heard. */
+  askedBy?: string | null;
   /** Transcript line numbers the proposal rests on. */
   evidence: number[];
   state: ProposalState;

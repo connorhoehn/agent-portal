@@ -132,8 +132,25 @@ export function namedStatement(summary: string, people: ReadonlyArray<{ name: st
   return capText(`${summary}${parts.length ? `, ${parts.join(', ')}` : ''}`, max);
 }
 
-/** What Nova's session is told: whose consent it needs, and that it was asked in the chat. */
+/** An asked update in words: "Reassign a work item" or "Change status on the work item \"Runbook\"", never a typed record reference. */
+export function updateStatement(a: Record<string, unknown>): string {
+  const ref = capText(typeof a['ref'] === 'string' ? a['ref'] : '', 120);
+  const typed = /^([a-z][a-z-]*):[^\s]+$/i.exec(ref);
+  const kind = typed ? typed[1]!.toLowerCase() : '';
+  const label = kind ? kind.replace(/-/g, ' ') : 'record';
+  const what = ref && !typed ? `the ${label} "${ref}"` : `a ${label}`;
+  const fields = a['fields'] && typeof a['fields'] === 'object' && !Array.isArray(a['fields']) ? Object.keys(a['fields'] as Record<string, unknown>) : [];
+  if (fields.length === 1 && fields[0] === 'assignee') return `Reassign ${what}`;
+  const changed = fields.filter((f) => f !== 'assignee').map((f) => f.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase());
+  return changed.length ? `Change ${changed.join(', ')} on ${what}` : `Update ${what}`;
+}
+
+/**
+ * What Nova says to the asker: their own consent is needed too (the asker runs it, and nobody is consented automatically), with each
+ * named person's, and where to answer. "This needs your consent and Priya's. Answer in the prompt above the call controls."
+ */
 export function consentStatus(names: readonly string[]): string {
-  const whose = names.length <= 1 ? `${names[0] ?? 'someone'}'s` : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}'s`;
-  return `This needs ${whose} consent; I have asked in the chat.`;
+  const others = names.map((n) => `${n}'s`);
+  const whose = others.length === 0 ? 'your consent' : others.length === 1 ? `your consent and ${others[0]}` : `your consent, ${others.slice(0, -1).join(', ')} and ${others.at(-1)}`;
+  return `This needs ${whose}. Answer in the prompt above the call controls.`;
 }

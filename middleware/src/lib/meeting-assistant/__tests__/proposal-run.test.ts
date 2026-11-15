@@ -16,7 +16,7 @@ jest.mock('../chat.js', () => ({
 import { MemoryAssistantStore } from '../store.js';
 import { AssistantRuntime, setAssistantRuntime } from '../orchestrator.js';
 import { buildProposal, createProposal, onProposalChanged, respondToProposal } from '../proposals.js';
-import { PROPOSAL_TURN_TTL_MS } from '../proposal-run.js';
+import { failedSentence, PROPOSAL_TURN_TTL_MS } from '../proposal-run.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { newAssistantSession, type AssistantRecord, type ProposalOutcome } from '../types.js';
 import type { LineIntake } from '../intake.js';
@@ -114,7 +114,7 @@ describe('the executor\'s rights', () => {
     roles[PRIYA] = [];
     await consented();
     expect(await turns()).toEqual([]);
-    expect(await proposal()).toMatchObject({ state: 'consented', run: { turnId: null, by: PRIYA, note: 'Priya cannot run this; Sam can, by consenting again to run it.' } });
+    expect(await proposal()).toMatchObject({ state: 'consented', run: { turnId: null, by: PRIYA, note: 'Priya cannot run this. Sam can run it instead.' } });
   });
 
   it('the executor loses the right before the claim: refused, back to consented; Sam takes over and gets the one new turn', async () => {
@@ -123,7 +123,7 @@ describe('the executor\'s rights', () => {
     roles[PRIYA] = [];
     expect(await runtime.claimTurn(CALL, first!.turnId, PRIYA)).toEqual({ conflict: 'not allowed' });
     expect((await store.getTurn(CALL, first!.turnId))!.status).toBe('declined');
-    expect(await proposal()).toMatchObject({ state: 'consented', run: { note: expect.stringMatching(/^Priya cannot run this; Sam can/) } });
+    expect(await proposal()).toMatchObject({ state: 'consented', run: { note: expect.stringMatching(/^Priya cannot run this\. Sam can/) } });
     expect((await consent(LEE, true))).toMatchObject({ ok: false, why: 'not-a-consenter' });
     expect((await consent(SAM, true)).ok).toBe(true);
     await flush();
@@ -171,10 +171,27 @@ describe('the result', () => {
     expect(seen).toEqual(['open', 'open', 'consented', 'running', 'done']); // created, Sam, Priya, the run, the result
   });
 
-  it('failed with the browser\'s reason', async () => {
+  it('failed: one plain sentence that says nothing was changed, never the browser\'s own words', async () => {
     const t = await claimed();
-    await runtime.submitResult(CALL, t.turnId, PRIYA, { ok: false, claimId: t.claimId!, error: 'You are not on this initiative.' });
-    expect(await proposal()).toMatchObject({ state: 'failed', run: { note: 'You are not on this initiative.', href: null } });
+    await runtime.submitResult(CALL, t.turnId, PRIYA, { ok: false, claimId: t.claimId!, error: 'Forbidden: You are not on this initiative.' });
+    expect(await proposal()).toMatchObject({ state: 'failed', run: { note: 'Priya was not allowed to do this, so nothing was changed.', href: null } });
+  });
+
+  it('a failed run names what went wrong in words', () => {
+    const decision = { outcome: { kind: 'decision' as const, initiativeId: null } };
+    const update = { outcome: { kind: 'tool' as const, name: 'update', args: {} } };
+    expect(failedSentence('404 Not Found', update, 'Priya')).toBe('The record it changes was deleted or moved since, so nothing was changed.');
+    expect(failedSentence('no such initiative', decision, 'Priya')).toBe('The initiative was deleted or moved since, so nothing was changed.');
+    expect(failedSentence('409 version conflict', update, 'Priya')).toBe('The record changed since people consented, so nothing was changed.');
+    expect(failedSentence('TypeError: x is undefined', update, 'Priya')).toBe('Nova could not carry this out, so nothing was changed.');
+    expect(failedSentence(undefined, update, 'Priya')).toBe('Nova could not carry this out, so nothing was changed.');
+  });
+
+  it('a decision recorded says whether it was decided or waits for the owner', async () => {
+    const t = await claimed();
+    await runtime.submitResult(CALL, t.turnId, PRIYA, { ok: true, claimId: t.claimId!, output: { id: 'd-1' } });
+    const state = (t.tool.args as { fields: { state: string } }).fields.state;
+    expect((await proposal()).run).toMatchObject({ recordedAs: state === 'resolved' ? 'decided' : 'waiting' });
   });
 
   it('a result or a claim from someone else is refused and the proposal keeps running', async () => {
@@ -192,7 +209,7 @@ describe('time and delete', () => {
     now += PROPOSAL_TURN_TTL_MS + 1;
     expect(await runtime.sweepTurns()).toBe(1);
     expect((await turns())[0]!.status).toBe('expired');
-    expect(await proposal()).toMatchObject({ state: 'consented', run: { turnId: null, note: expect.stringMatching(/browser was not there/) } });
+    expect(await proposal()).toMatchObject({ state: 'consented', run: { turnId: null, note: expect.stringMatching(/^Priya was not there to run this\. Priya can run it now/) } });
     expect(mockPosted).toEqual([]);
     // The executor tries again: one new turn.
     expect((await consent(PRIYA, true)).ok).toBe(true);

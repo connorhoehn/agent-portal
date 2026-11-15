@@ -31,7 +31,7 @@ import { assistantStore, assistantIntake, setAssistantStore, setAssistantIntake,
 import { AssistantRuntime, setAssistantRuntime, defaultRolesOf } from '../../lib/meeting-assistant/orchestrator.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
-import { onProposalConsented, PROPOSAL_AFTER_CALL_MS } from '../../lib/meeting-assistant/proposals.js';
+import { createProposal, onProposalConsented, PROPOSAL_AFTER_CALL_MS } from '../../lib/meeting-assistant/proposals.js';
 import { getUser } from '../../providers/identity.js';
 import { callChatChannel } from '../../lib/call-chat.js';
 import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
@@ -237,7 +237,7 @@ describe('a late consent on the meeting page', () => {
     expect((await propose({ id: 'p-late', outcome: TOOL, executor: 'dave', named: ['dave'] })).status).toBe(201);
     // Dave is not in the call: told at once, with no words of the proposal.
     await new Promise<void>((r) => setImmediate(r));
-    expect(sent.filter((n) => n.userId === 'dave')).toEqual([{ userId: 'dave', title: 'A proposal from this meeting needs you', href: `/iq/meetings/${CALL}`, payload: expect.objectContaining({ callId: CALL }) }]);
+    expect(sent.filter((n) => n.userId === 'dave')).toEqual([{ userId: 'dave', title: expect.stringMatching(/^A proposal from (the .+ call|a call) needs you$/), href: `/iq/meetings/${CALL}`, payload: expect.objectContaining({ callId: CALL }) }]);
     expect(JSON.stringify(sent)).not.toMatch(/smallest|Cutover/);
     expect((await respond('sam', 'consent', undefined, 'p-late')).body.state).toBe('open');
     expect((await post('dismiss', 'priya')).status).toBe(200);
@@ -276,5 +276,83 @@ describe('a late consent on the meeting page', () => {
       { id: 'p-2', statement: 'Lee owns the runbook', state: 'objected', outcome: 'decision', consentedBy: [], objectedBy: ['Lee Lin'] },
     ]);
     expect(JSON.stringify(m.body.proposals)).not.toContain('out next week');
+  });
+});
+
+describe('the consent workflow repairs', () => {
+  it("someone else's last consent waits for the executor: only the executor is offered Run it now, and only their click starts it", async () => {
+    const started: string[] = [];
+    const off = onProposalConsented((p) => { started.push(p.id); });
+    try {
+      expect((await propose({ outcome: { kind: 'tool', name: 'create', args: { kind: 'work-item', fields: { title: 'Cutover runbook' } } } })).status).toBe(201);
+      expect((await respond('priya', 'consent')).body).toMatchObject({ state: 'open', you: { canRun: false } });
+      const last = await respond('sam', 'consent');
+      expect(last.body).toMatchObject({ state: 'consented', you: { canRun: false } });
+      await new Promise<void>((r) => setImmediate(r));
+      expect(started).toEqual([]);
+      const [mine] = (await get('proposals', 'priya')).body.proposals;
+      expect(mine).toMatchObject({ state: 'consented', you: { isExecutor: true, canRun: true } });
+      // Sam consented but is not the executor and nothing was handed back: refused.
+      expect((await post('proposals/p-1/response', 'sam', { response: 'consent', asExecutor: true })).status).toBe(409);
+      expect((await post('proposals/p-1/response', 'lee', { response: 'consent', asExecutor: true })).status).toBe(409);
+      expect((await post('proposals/p-1/response', 'priya', { response: 'consent', asExecutor: true })).status).toBe(200);
+      await new Promise<void>((r) => setImmediate(r));
+      expect(started).toEqual(['p-1']);
+    } finally { off(); }
+  });
+
+  it('a decision that cannot be recorded here is still the executor\'s click to end, with the reason', async () => {
+    expect((await propose()).status).toBe(201);
+    await respond('priya', 'consent'); await respond('sam', 'consent');
+    expect((await get('proposals', 'priya')).body.proposals[0]).toMatchObject({ state: 'consented', you: { canRun: true } });
+    expect((await get('proposals', 'sam')).body.proposals[0]).toMatchObject({ you: { canRun: false } });
+  });
+
+  it('the lines Nova heard go only to people who were in the call; a named person who was not sees who raised it, never the lines', async () => {
+    const store = assistantStore();
+    const record = (await store.get(CALL))!;
+    if (record.state !== 'listening') await store.transition(CALL, { from: [record.state], to: 'listening', by: 'priya', at: clock });
+    const a = await store.appendLine({ callId: CALL, userId: 'sam', participantId: 'b', speakerName: 'Sam Song', text: "Let's cut over the smallest tenants first", at: clock, captionId: 'c1' });
+    const b = await store.appendLine({ callId: CALL, userId: 'lee', participantId: 'c', speakerName: 'Lee Lin', text: 'Agreed', at: clock, captionId: 'c2' });
+    expect(a && b).toBeTruthy();
+    expect((await propose({ id: 'p-h', named: ['dave'], evidence: [a!.seq, b!.seq] })).status).toBe(201);
+    const [seen] = (await get('proposals', 'sam')).body.proposals.filter((p: { id: string }) => p.id === 'p-h');
+    expect(seen).toMatchObject({ source: 'dev', askedBy: null, heard: [{ speaker: 'Sam Song', text: "Let's cut over the smallest tenants first" }, { speaker: 'Lee Lin', text: 'Agreed' }] });
+    const [away] = (await get('proposals', 'dave')).body.proposals;
+    expect(away).toMatchObject({ id: 'p-h', statement: 'Cut over the smallest tenants first', heard: [], evidence: [] });
+    expect(JSON.stringify(away)).not.toMatch(/Agreed|cut over the smallest tenants first"/);
+  });
+
+  it('the outcome is plain words, never the tool name', async () => {
+    expect((await propose({ id: 'p-t', outcome: { kind: 'tool', name: 'create', args: { kind: 'work-item', fields: { title: 'Cutover runbook', assignee: 'lee' } } }, named: ['lee'] })).status).toBe(201);
+    const [p] = (await get('proposals', 'sam')).body.proposals.filter((x: { id: string }) => x.id === 'p-t');
+    expect(p.outcome.summary).toBe('Create a work item titled "Cutover runbook", owned by Lee Lin');
+  });
+
+  it('on an asked proposal only the asker may drop it; the dismisser may undo it', async () => {
+    await createProposal(assistantStore(), { id: 'p-a', callId: CALL, tenant: 'orgiq', statement: 'Create a work item, owned by Lee Lin', outcome: { kind: 'tool', name: 'create', args: { kind: 'work-item', fields: { title: 'x', assignee: 'lee' } } }, named: ['lee'], executor: 'sam', source: 'asked', askedBy: 'sam', at: clock });
+    const [asSeen] = (await get('proposals', 'priya')).body.proposals.filter((x: { id: string }) => x.id === 'p-a');
+    expect(asSeen).toMatchObject({ source: 'asked', askedBy: { userId: 'sam', name: 'Sam Song' }, you: { canDismiss: false } });
+    expect((await respond('priya', 'not-a-decision', undefined, 'p-a')).status).toBe(403);
+    const dropped = await respond('sam', 'not-a-decision', undefined, 'p-a');
+    expect(dropped.body).toMatchObject({ state: 'dismissed', you: { canReopen: true } });
+    expect((await respond('priya', 'reopen', undefined, 'p-a')).status).toBe(403);
+    expect((await respond('sam', 'reopen', undefined, 'p-a')).body).toMatchObject({ state: 'open', dismissedBy: null });
+  });
+
+  it('raise it again: an objected proposal is closed and a new open one with the same outcome is made, once', async () => {
+    expect((await propose()).status).toBe(201);
+    await respond('sam', 'consent');
+    await respond('lee', 'object', 'Out next week');
+    const [blocked] = (await get('proposals', 'priya')).body.proposals;
+    expect(blocked).toMatchObject({ state: 'objected', you: { canRaiseAgain: true } });
+    const raised = await post('proposals/p-1/raise-again', 'priya');
+    expect(raised.status).toBe(200);
+    expect(raised.body).toMatchObject({ state: 'open', statement: 'Cut over the smallest tenants first', responses: [] });
+    expect(raised.body.id).not.toBe('p-1');
+    const list = (await get('proposals', 'priya')).body.proposals;
+    expect(list.find((x: { id: string }) => x.id === 'p-1')).toMatchObject({ state: 'dismissed', run: { raisedAs: raised.body.id } });
+    expect((await post('proposals/p-1/raise-again', 'priya')).status).toBe(409);
+    expect((await post('proposals/p-1/raise-again', 'erin')).status).toBe(404);
   });
 });

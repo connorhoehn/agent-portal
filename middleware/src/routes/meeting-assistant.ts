@@ -21,11 +21,17 @@
 //    only proposal turns: a consent given on the meeting page after the call runs in that browser.)
 //   GET  proposals   a seat, a recorded attendee, or a person a proposal names or makes its executor (who sees only those): the call's
 //                    proposals (docs/meeting-consent-design.md) with each person's answer and who is still needed. Anyone else 404.
-//   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision', reason? }: the
-//                    reason is for an objection only, one line of at most 200 characters, and everyone in the call sees it. "Not a
-//                    decision" needs a seat now. With `asExecutor: true` (consent only, while it is consented, by someone who
-//                    consented) the caller becomes the one whose browser runs it. Answers the updated proposal, with `run` (the
-//                    latest run: who, what was made, or why not); 409 once it is running, finished or expired.
+//                    The lines Nova heard (`heard`, a short quoted excerpt) go only to people who held a seat; a named person or
+//                    executor who was never in the call sees the statement and who raised it, never the lines.
+//   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision' | 'reopen', reason? }:
+//                    the reason is for an objection only, one line of at most 200 characters, and everyone in the call sees it. "Not
+//                    a decision" needs a seat now, and on a proposal a person asked for only the asker may (403). `reopen` undoes a
+//                    dismissal, by the person who made it. With `asExecutor: true` (consent only, while it is consented, and only
+//                    when the view says `you.canRun`) the caller becomes the one whose browser runs it, and it starts. Answers the
+//                    updated proposal, with `run` (the latest run: who, what was made, or why not); 409 once it is running,
+//                    finished or expired.
+//   POST proposals/:id/raise-again  the same people: an objected or failed proposal is closed and a new open one with the same
+//                    outcome is made (no answers carry). 409 when it cannot be raised again or the call has its cap of proposals.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none;
@@ -49,7 +55,7 @@ import {
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { eraseCall } from '../lib/meeting-assistant/erase.js';
-import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
+import { assistantRuntime, describeCall, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
@@ -63,7 +69,12 @@ import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/
 import { NOVA_NAME } from '../lib/meeting-assistant/chat-types.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
-import { ANSWERABLE, cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
+import {
+  ANSWERABLE, cleanReason, closeProposals, isDue, listProposalsFor, mayDismiss, mayRaiseAgain, mayReopen, ProposalInputError, raiseAgain, respondToProposal, whatIsMissing, type ResponseKind,
+} from '../lib/meeting-assistant/proposals.js';
+import { decisionRecordedAs, mayRunProposal } from '../lib/meeting-assistant/proposal-run.js';
+import { MAX_PER_CALL } from '../lib/meeting-assistant/decision-watcher.js';
+import { updateStatement } from '../lib/meeting-assistant/named-people.js';
 import type { Proposal } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
@@ -527,23 +538,95 @@ const visibleTo = (v: ProposalViewer, p: Proposal): boolean => v.seated || v.att
 /** The end of the call for expiry: when the assistant left (the call ending makes it leave). Null while it is in the call. */
 const endedAt = (record: AssistantRecord): number | null => (record.state === 'left' ? (record.leftAt ?? record.invitedAt) : null);
 
-async function proposalView(p: Proposal, viewer: string) {
-  const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : [])])];
+const recOf = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
+const projectName = async (id: string | null): Promise<string | null> => (id ? getProject(id).then((x) => x?.name?.trim() || null).catch(() => null) : null);
+
+/**
+ * What will be written, in plain words: "Record as a decision on Auth Migration", or the write's own sentence with its owner and
+ * initiative ('Create a work item titled "Runbook", owned by Lee, on Auth Migration'). Never a tool name or a typed record reference.
+ */
+async function outcomeSummary(p: Proposal, record: AssistantRecord, names: Record<string, string>): Promise<string> {
+  if (p.outcome.kind === 'decision') {
+    const name = await projectName(p.outcome.initiativeId ?? record.initiativeId);
+    return name ? `Record as a decision on ${name}` : 'Record as a decision';
+  }
+  const args = recOf(p.outcome.args); const fields = recOf(args['fields']);
+  let line = p.outcome.name === 'update' ? updateStatement(args) : describeCall(p.outcome.name, args).summary;
+  const assignee = typeof fields['assignee'] === 'string' ? fields['assignee'].trim() : '';
+  if (assignee) {
+    const self = /^(me|myself|i)$/i.test(assignee) && p.askedBy ? p.askedBy : null;
+    const who = self ? names[self] ?? await nameOf(self) : names[assignee] ?? (p.named.includes(assignee) ? await nameOf(assignee) : assignee.slice(0, 80));
+    line += `, owned by ${who}`;
+  }
+  const initiative = typeof fields['initiative'] === 'string' ? fields['initiative'].trim() : '';
+  const typed = /^initiative:(.+)$/.exec(initiative);
+  const on = typed ? await projectName(typed[1]!) : initiative.slice(0, 120) || null;
+  return on ? `${line}, on ${on}` : line;
+}
+
+/** The last few lines Nova heard for it, quoted (at most four), for people who held a seat only. */
+const HEARD_MAX = 4;
+async function heardLines(p: Proposal): Promise<Array<{ speaker: string; text: string }>> {
+  const want = p.evidence.slice(-HEARD_MAX);
+  if (!want.length) return [];
+  const from = want[0]!; const to = want[want.length - 1]!;
+  if (to - from > 400) return [];
+  const lines = await assistantStore().lines(p.callId, from - 1, to - from + 1).catch(() => []);
+  return lines.filter((l) => want.includes(l.seq)).map((l) => ({ speaker: l.speakerName, text: l.text.length > 240 ? `${l.text.slice(0, 239)}…` : l.text }));
+}
+
+/** A run Nova handed back (consented again with a note: the executor may not run it, or was not there). */
+const handedBack = (p: Proposal): boolean => p.state === 'consented' && !!p.run && p.run.turnId === null && !!p.run.note && !p.run.raisedAs;
+
+/**
+ * Whether `viewer` may run it now ("Run it now", a consent as executor): it is consented, they may run its write, and either they
+ * are its executor, or Nova handed it back and they consented, or Nova handed it back, nobody who consented can run it and they have
+ * not answered. Anyone else's click before the executor's would break "the executor's click is the last step".
+ */
+async function canRunNow(p: Proposal, record: AssistantRecord, viewer: string): Promise<boolean> {
+  if (p.state !== 'consented') return false;
+  const mine = p.responses.find((r) => r.userId === viewer);
+  if (mine && mine.response !== 'consent') return false;
+  if (!(p.executor === viewer || handedBack(p))) return false;
+  const deps = assistantRuntime().proposalDeps;
+  const may = await mayRunProposal(deps, p, record, viewer).catch(() => 'no' as const);
+  // A write that cannot run at all is still the executor's to start: their click ends it as failed, with the reason.
+  if (may === 'never') return p.executor === viewer;
+  if (may === 'no') return false;
+  if (mine) return true;
+  for (const r of p.responses) if (r.response === 'consent' && (await mayRunProposal(deps, p, record, r.userId).catch(() => 'no' as const)) === 'yes') return false;
+  return true;
+}
+
+async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer, 'record' | 'seated' | 'attendee'>) {
+  const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : []), ...(p.askedBy ? [p.askedBy] : [])])];
   const names = Object.fromEntries(await Promise.all(people.map(async (u) => [u, await nameOf(u)] as const)));
   const mine = p.responses.find((r) => r.userId === viewer);
+  const wasThere = v.seated || v.attendee;
+  const answerable = ANSWERABLE.includes(p.state);
+  const recordsAs = p.state === 'done' ? p.run?.recordedAs ?? null : answerable ? await decisionRecordedAs(assistantRuntime().proposalDeps, p, v.record.initiativeId) : null;
   return {
-    id: p.id, callId: p.callId, statement: p.statement, outcome: p.outcome, argsDigest: p.argsDigest, source: p.source, evidence: p.evidence,
+    id: p.id, callId: p.callId, statement: p.statement, outcome: { ...p.outcome, summary: await outcomeSummary(p, v.record, names) }, argsDigest: p.argsDigest, source: p.source,
+    // Who raised it: the person who asked Nova, or Nova from what it heard. The lines it heard go only to people who were there.
+    askedBy: p.askedBy ? { userId: p.askedBy, name: names[p.askedBy] } : null,
+    evidence: wasThere ? p.evidence : [], heard: wasThere && p.source !== 'asked' ? await heardLines(p) : [],
+    // A decision recorded as decided by its executor, or as waiting for the initiative owner's decision.
+    recordsAs,
     state: p.state, executor: { userId: p.executor, name: names[p.executor] }, named: p.named.map((u) => ({ userId: u, name: names[u] })),
     // A reason is shared with everyone who can see the proposal, and labelled so.
     responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
     missing: whatIsMissing(p), dismissedBy: p.dismissedBy, dismissedByName: p.dismissedBy ? names[p.dismissedBy] : null, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
     // The latest run (proposal-run.ts): running with its executor; done with what was made (`title`, and `href` for a decision record);
     // failed, or handed back to consented, with one sentence (`note`) the card shows.
-    run: p.run ? { by: { userId: p.run.by, name: names[p.run.by] }, at: p.run.at, title: p.run.title, href: p.run.href, note: p.run.note } : null,
+    run: p.run ? { by: { userId: p.run.by, name: names[p.run.by] }, at: p.run.at, title: p.run.title, href: p.run.href, note: p.run.note, raisedAs: p.run.raisedAs ?? null } : null,
     you: {
       userId: viewer, response: mine?.response ?? null, isExecutor: p.executor === viewer, isNamed: p.named.includes(viewer),
-      // While it is consented, anyone who consented may consent again to run it in their own browser (the executor trying again, or a take-over).
-      canRun: p.state === 'consented' && mine?.response === 'consent',
+      isAsker: !!p.askedBy && p.askedBy === viewer,
+      canRun: await canRunNow(p, v.record, viewer),
+      // "Not a decision" (Nova raised it) or "Drop it" (the asker's own), in the call only; its undo by the same person; raise it again.
+      canDismiss: v.seated && answerable && mayDismiss(p, viewer),
+      canReopen: mayReopen(p, viewer) && !isDue({ state: 'open', expiresAt: p.expiresAt }, Date.now()),
+      canRaiseAgain: mayRaiseAgain(p),
     },
   };
 }
@@ -553,10 +636,10 @@ meetingAssistantRouter.get('/proposals', asyncHandler(async (req, res) => {
   const all = await listProposalsFor(assistantStore(), v.callId, Date.now(), endedAt(v.record));
   const shown = all.filter((p) => visibleTo(v, p));
   if (!v.seated && !v.attendee && !shown.length) throw new NotFoundError('Not found');
-  res.json({ callId: v.callId, proposals: await Promise.all(shown.map((p) => proposalView(p, v.session.sub))) });
+  res.json({ callId: v.callId, proposals: await Promise.all(shown.map((p) => proposalView(p, v.session.sub, v))) });
 }));
 
-const RESPONSES: readonly ResponseKind[] = ['consent', 'object', 'withdraw', 'not-a-decision'];
+const RESPONSES: readonly ResponseKind[] = ['consent', 'object', 'withdraw', 'not-a-decision', 'reopen'];
 meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(async (req, res) => {
   const v = await proposalViewer(req);
   const id = req.params['proposalId'];
@@ -564,7 +647,7 @@ meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(asyn
   const body = (req.body ?? {}) as { response?: unknown; reason?: unknown; asExecutor?: unknown };
   if (body.asExecutor !== undefined && typeof body.asExecutor !== 'boolean') throw new ValidationError('asExecutor must be true or false');
   const asExecutor = body.asExecutor === true;
-  if (!RESPONSES.includes(body.response as ResponseKind)) throw new ValidationError("response must be 'consent', 'object', 'withdraw' or 'not-a-decision'");
+  if (!RESPONSES.includes(body.response as ResponseKind)) throw new ValidationError("response must be 'consent', 'object', 'withdraw', 'not-a-decision' or 'reopen'");
   const response = body.response as ResponseKind;
   let reason: string | null;
   try { reason = cleanReason(body.reason); } catch (e) { if (e instanceof ProposalInputError) throw new ValidationError(e.message); throw e; }
@@ -573,15 +656,38 @@ meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(asyn
   const existing = await store.getProposal(v.callId, id);
   if (!existing || !visibleTo(v, existing)) throw new NotFoundError('No such proposal');
   if (response === 'not-a-decision' && !v.seated) throw new AppError(403, 'Only someone in the call can mark a proposal as not a decision');
-  const out = await respondToProposal(store, v.callId, id, { userId: v.session.sub, response, reason, at: Date.now(), ...(asExecutor ? { asExecutor } : {}) }, endedAt(v.record));
+  if (response === 'not-a-decision' && !mayDismiss(existing, v.session.sub)) throw new AppError(403, 'Only the person who asked for it can drop it');
+  if (asExecutor && !(await canRunNow(existing, v.record, v.session.sub))) throw new AppError(409, 'Only the person running it, or someone who can when they cannot, may run it now');
+  const joins = asExecutor && !existing.responses.some((r) => r.userId === v.session.sub);
+  const out = await respondToProposal(store, v.callId, id, { userId: v.session.sub, response, reason, at: Date.now(), ...(asExecutor ? { asExecutor } : {}), ...(joins ? { mayJoin: true } : {}) }, endedAt(v.record));
   if (!out.ok) {
     if (out.why === 'not-found') throw new NotFoundError('No such proposal');
     if (out.why === 'reason-not-allowed') throw new ValidationError('a reason goes with an objection only');
     if (out.why === 'busy') throw new AppError(409, 'Too many answers at once; try again');
     if (out.why === 'not-a-consenter') throw new AppError(409, 'Only someone who consented can run it');
+    if (out.why === 'not-allowed') throw new AppError(403, response === 'reopen' ? 'Only the person who dismissed it can reopen it' : 'Only the person who asked for it can drop it');
     throw new AppError(409, `This proposal is ${out.proposal?.state ?? 'finished'}`);
   }
-  res.json(await proposalView(out.proposal, v.session.sub));
+  res.json(await proposalView(out.proposal, v.session.sub, v));
+}));
+
+meetingAssistantRouter.post('/proposals/:proposalId/raise-again', asyncHandler(async (req, res) => {
+  const v = await proposalViewer(req);
+  const id = req.params['proposalId'];
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(id)) throw new NotFoundError('No such proposal');
+  const store = assistantStore();
+  const existing = await store.getProposal(v.callId, id);
+  if (!existing || !visibleTo(v, existing)) throw new NotFoundError('No such proposal');
+  const out = await raiseAgain(store, v.callId, id, v.session.sub, Date.now(), MAX_PER_CALL);
+  if (!out.ok) {
+    if (out.why === 'not-found') throw new NotFoundError('No such proposal');
+    if (out.why === 'cap') throw new AppError(409, 'This call already has as many proposals as it can hold');
+    if (out.why === 'busy') throw new AppError(409, 'Too many answers at once; try again');
+    throw new AppError(409, `This proposal is ${out.proposal?.state ?? 'finished'}`);
+  }
+  // A copy raised after the call ended keeps the call's deadline on the meeting page.
+  if (endedAt(v.record) !== null) await closeProposals(store, v.callId, endedAt(v.record)!);
+  res.json(await proposalView((await store.getProposal(v.callId, out.proposal.id)) ?? out.proposal, v.session.sub, v));
 }));
 
 meetingAssistantRouter.get('/state', asyncHandler(async (req, res) => {

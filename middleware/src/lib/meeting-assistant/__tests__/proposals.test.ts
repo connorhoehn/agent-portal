@@ -5,7 +5,7 @@ import { MemoryAssistantStore } from '../store.js';
 import { SqlAssistantStore, proposalFromRow } from '../store-sql.js';
 import {
   applyResponse, buildProposal, cleanReason, closeProposals, consentMet, createProposal, listProposalsFor, onProposalConsented,
-  ProposalInputError, PROPOSAL_AFTER_CALL_MS, respondToProposal, settle, whatIsMissing, type ResponseInput,
+  mayDismiss, mayRaiseAgain, ProposalInputError, PROPOSAL_AFTER_CALL_MS, raiseAgain, respondToProposal, settle, startsRun, whatIsMissing, type ResponseInput,
 } from '../proposals.js';
 import { hashToolArgs } from '../../voice/catalogue.js';
 import type { AssistantRecord, Proposal } from '../types.js';
@@ -122,11 +122,63 @@ describe('the consent rule (pure)', () => {
     const as = (p: Proposal, userId: string, response: ResponseInput['response'] = 'consent') => applyResponse(p, { userId, response, at: T0 + 2000, asExecutor: true });
     expect(as(answer(base(), 'u-sam', 'consent'), 'u-sam')).toEqual({ ok: false, why: 'not-consented' });
     expect(as(done, 'u-lee')).toEqual({ ok: false, why: 'not-a-consenter' });
+    // Someone who has not answered joins only when the route found nobody who consented can run it (`mayJoin`); an objector never.
+    const joined = applyResponse(done, { userId: 'u-lee', response: 'consent', at: T0 + 2000, asExecutor: true, mayJoin: true });
+    expect(joined).toMatchObject({ ok: true, proposal: { executor: 'u-lee', state: 'consented' } });
+    if (joined.ok) expect(joined.proposal.responses.map((r) => [r.userId, r.response])).toEqual([['u-sam', 'consent'], ['u-priya', 'consent'], ['u-lee', 'consent']]);
+    const blocked = { ...done, responses: [...done.responses, { userId: 'u-bob', response: 'object' as const, reason: null, at: T0 }] };
+    expect(applyResponse({ ...blocked, state: 'consented' }, { userId: 'u-bob', response: 'consent', at: T0 + 2000, asExecutor: true, mayJoin: true })).toEqual({ ok: false, why: 'not-a-consenter' });
     expect(as(done, 'u-sam', 'object')).toEqual({ ok: false, why: 'reason-not-allowed' });
     const out = as(done, 'u-sam');
     expect(out).toMatchObject({ ok: true, changed: true, proposal: { state: 'consented', executor: 'u-sam' } });
     // The rule still holds with the new executor: two people, the executor among them.
     if (out.ok) expect(consentMet(out.proposal)).toBe(true);
+  });
+});
+
+describe("the executor's click is the last step", () => {
+  const sam = { userId: 'u-sam', response: 'consent' as const };
+  const priya = { userId: 'u-priya', response: 'consent' as const };
+  it('the executor consenting last starts it; anyone else consenting last leaves it consented for the executor', () => {
+    expect(startsRun({ state: 'open' }, { state: 'consented', executor: 'u-priya' }, priya)).toBe(true);
+    expect(startsRun({ state: 'open' }, { state: 'consented', executor: 'u-priya' }, sam)).toBe(false);
+    expect(startsRun({ state: 'objected' }, { state: 'consented', executor: 'u-priya' }, { userId: 'u-lee', response: 'withdraw' })).toBe(false);
+    expect(startsRun({ state: 'consented' }, { state: 'consented', executor: 'u-priya' }, priya)).toBe(false);
+    expect(startsRun({ state: 'consented' }, { state: 'consented', executor: 'u-priya' }, { ...priya, asExecutor: true })).toBe(true);
+    expect(startsRun({ state: 'open' }, { state: 'open', executor: 'u-priya' }, priya)).toBe(false);
+  });
+});
+
+describe('dismissing, undoing it, and raising it again', () => {
+  it('"Not a decision" by anyone on one Nova raised; on an asked one only the asker may drop it', () => {
+    expect(mayDismiss(base({ source: 'watcher' }), 'u-sam')).toBe(true);
+    expect(mayDismiss(base({ source: 'dev' }), 'u-sam')).toBe(true);
+    const asked = base({ source: 'asked', askedBy: 'u-dana', executor: 'u-dana' });
+    expect(mayDismiss(asked, 'u-sam')).toBe(false);
+    expect(mayDismiss(asked, 'u-dana')).toBe(true);
+    expect(applyResponse(asked, { userId: 'u-sam', response: 'not-a-decision', at: T0 })).toEqual({ ok: false, why: 'not-allowed' });
+    expect(applyResponse(asked, { userId: 'u-dana', response: 'not-a-decision', at: T0 })).toMatchObject({ ok: true, proposal: { state: 'dismissed', dismissedBy: 'u-dana' } });
+    // An old row with no asker recorded: its executor asked.
+    expect(mayDismiss({ source: 'asked', askedBy: null, executor: 'u-dana' }, 'u-dana')).toBe(true);
+  });
+
+  it('the person who dismissed it reopens it to where its answers put it; nobody else can', () => {
+    const consented = answer(answer(base(), 'u-sam', 'consent'), 'u-priya', 'consent');
+    const gone = answer(answer(base(), 'u-sam', 'consent'), 'u-lee', 'not-a-decision');
+    expect(applyResponse(gone, { userId: 'u-sam', response: 'reopen', at: T0 + 5 })).toEqual({ ok: false, why: 'not-allowed' });
+    expect(applyResponse(gone, { userId: 'u-lee', response: 'reopen', at: T0 + 5 })).toMatchObject({ ok: true, proposal: { state: 'open', dismissedBy: null } });
+    const goneLate = answer(consented, 'u-lee', 'not-a-decision');
+    expect(applyResponse(goneLate, { userId: 'u-lee', response: 'reopen', at: T0 + 5 })).toMatchObject({ ok: true, proposal: { state: 'consented' } });
+    expect(applyResponse(base(), { userId: 'u-lee', response: 'reopen', at: T0 + 5 })).toEqual({ ok: false, why: 'finished' });
+    const raised = { ...gone, run: { turnId: null, by: 'u-lee', at: T0, title: null, href: null, note: 'x', raisedAs: 'p-2' } };
+    expect(applyResponse(raised, { userId: 'u-lee', response: 'reopen', at: T0 + 5 })).toEqual({ ok: false, why: 'not-allowed' });
+  });
+
+  it('only an objected or failed proposal is raised again, and only once', () => {
+    expect(mayRaiseAgain({ state: 'objected', run: null })).toBe(true);
+    expect(mayRaiseAgain({ state: 'failed', run: null })).toBe(true);
+    expect(mayRaiseAgain({ state: 'open', run: null })).toBe(false);
+    expect(mayRaiseAgain({ state: 'failed', run: { turnId: null, by: 'a', at: 0, title: null, href: null, note: null, raisedAs: 'p-2' } })).toBe(false);
   });
 });
 
@@ -225,6 +277,41 @@ describe('the service on the memory store', () => {
     expect(p).toMatchObject({ state: 'expired', expiresAt: end + PROPOSAL_AFTER_CALL_MS });
   });
 
+  it("a non-executor's last consent waits for the executor's own click, which starts it", async () => {
+    const seen: string[] = [];
+    const off = onProposalConsented((p) => { seen.push(`${p.executor}`); });
+    await createProposal(store, input());
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-priya', response: 'consent', at: T0 + 1 });
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-sam', response: 'consent', at: T0 + 2 });
+    await new Promise((r) => setImmediate(r));
+    expect(seen).toEqual([]);
+    expect((await store.getProposal('call-1', 'p-1'))!.state).toBe('consented');
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-priya', response: 'consent', at: T0 + 3, asExecutor: true });
+    await new Promise((r) => setImmediate(r));
+    off();
+    expect(seen).toEqual(['u-priya']);
+  });
+
+  it('raising an objected proposal again closes it and opens a new one with the same outcome and no answers, once', async () => {
+    await createProposal(store, input({ named: ['u-lee'], source: 'asked', askedBy: 'u-priya', evidence: [] }));
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-sam', response: 'consent', at: T0 + 1 });
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-lee', response: 'object', reason: 'Out next week', at: T0 + 2 });
+    expect(await raiseAgain(store, 'call-1', 'p-1', 'u-sam', T0 + 3, 8)).toMatchObject({ ok: true });
+    const [old, fresh] = await store.listProposals('call-1');
+    expect(old).toMatchObject({ state: 'dismissed', dismissedBy: 'u-sam', run: { raisedAs: fresh!.id, note: 'Raised again as a new proposal.' } });
+    expect(fresh).toMatchObject({ state: 'open', responses: [], statement: old!.statement, outcome: old!.outcome, argsDigest: old!.argsDigest, named: ['u-lee'], executor: 'u-priya', source: 'asked', askedBy: 'u-priya' });
+    expect(await raiseAgain(store, 'call-1', 'p-1', 'u-sam', T0 + 4, 8)).toMatchObject({ ok: false, why: 'not-raisable' });
+    expect(await raiseAgain(store, 'call-1', fresh!.id, 'u-sam', T0 + 4, 8)).toMatchObject({ ok: false, why: 'not-raisable' });
+  });
+
+  it('a raised copy counts toward the call\'s cap for its source', async () => {
+    await createProposal(store, input());
+    await respondToProposal(store, 'call-1', 'p-1', { userId: 'u-lee', response: 'object', at: T0 + 1 });
+    await createProposal(store, input({ id: 'p-2', statement: 'Another' }));
+    expect(await raiseAgain(store, 'call-1', 'p-1', 'u-sam', T0 + 3, 2)).toMatchObject({ ok: false, why: 'cap' });
+    expect((await store.getProposal('call-1', 'p-1'))!.state).toBe('objected');
+  });
+
   it('an unknown proposal is not found', async () => {
     expect(await respondToProposal(store, 'call-1', 'p-x', { userId: 'u-sam', response: 'consent', at: T0 })).toEqual({ ok: false, why: 'not-found' });
   });
@@ -255,8 +342,9 @@ describe('SqlAssistantStore proposal statements', () => {
     expect(proposalFromRow(row())).toEqual({
       id: 'p-1', callId: 'call-1', tenant: 'orgiq', statement: 'Cut over first', outcome: { kind: 'decision', initiativeId: null }, argsDigest: 'd',
       named: ['u-lee'], executor: 'u-priya', source: 'dev', evidence: [3], state: 'open', responses: [{ userId: 'u-sam', response: 'consent', reason: null, at: 5 }],
-      dismissedBy: null, createdAt: T0, updatedAt: T0 + 1000, expiresAt: null, version: 2, run: null,
+      dismissedBy: null, createdAt: T0, updatedAt: T0 + 1000, expiresAt: null, version: 2, run: null, askedBy: null,
     });
+    expect(proposalFromRow(row({ asked_by: 'u-dana' })).askedBy).toBe('u-dana');
   });
 
   it('creates from the call\'s own row (so it carries the tenant) and ignores a repeat', async () => {

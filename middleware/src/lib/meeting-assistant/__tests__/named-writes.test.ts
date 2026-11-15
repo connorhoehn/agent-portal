@@ -21,7 +21,7 @@ import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, classifyCall, setAssistantRuntime } from '../orchestrator.js';
 import { respondToProposal } from '../proposals.js';
-import { forgetProposalNotices, PROPOSAL_NOTICE_TITLE } from '../proposal-notify.js';
+import { forgetProposalNotices } from '../proposal-notify.js';
 import { PERSON_ARGUMENTS, peopleSaid, resolvePeople } from '../named-people.js';
 import { meetingTools } from '../instructions.js';
 import { ScriptedSession } from '../scripted-session.js';
@@ -78,11 +78,12 @@ describe('a write that names another person', () => {
     expect(await store.listTurns(CALL)).toEqual([]);
     const [p] = await proposals();
     expect(p).toMatchObject({
-      source: 'asked', named: [BOB], executor: ALICE, state: 'open', responses: [],
+      source: 'asked', askedBy: ALICE, named: [BOB], executor: ALICE, state: 'open', responses: [],
       statement: 'Create a work item titled "the cutover runbook", owned by Bob Ito',
       outcome: { kind: 'tool', name: 'create', args: { kind: 'work-item', fields: { title: 'the cutover runbook', assignee: 'Bob' } } },
     });
-    expect(mockPosts.replies).toEqual(['This needs Bob Ito\'s consent; I have asked in the chat.']);
+    // The asker runs it and must consent too, and is told where to answer.
+    expect(mockPosts.replies).toEqual(['This needs your consent and Bob Ito\'s. Answer in the prompt above the call controls.']);
     // Bob is seated: nobody is told by notification.
     expect(mockSent).toEqual([]);
   });
@@ -107,7 +108,7 @@ describe('a write that names another person', () => {
     expect(p).toMatchObject({ named: [DANA], executor: ALICE });
     await flush();
     expect(mockSent.map((s) => s.users)).toEqual([[DANA]]);
-    expect(mockSent[0]!.input).toMatchObject({ title: PROPOSAL_NOTICE_TITLE });
+    expect(mockSent[0]!.input).toMatchObject({ title: expect.stringMatching(/^A proposal from (the .+ call|a call) needs you$/) });
     expect(JSON.stringify(mockSent[0]!.input)).not.toMatch(/cutover|runbook|Alice|Dana|Bob|p-/i);
   });
 
@@ -130,6 +131,11 @@ describe('the consent it needs', () => {
     await consent(ALICE);
     expect(await store.listTurns(CALL)).toEqual([]);
     await consent(BOB);
+    await flush();
+    // Bob's consent was the last one needed, not the asker's: it waits for the asker's own click ("Run it now").
+    expect(await store.listTurns(CALL)).toEqual([]);
+    expect((await proposals())[0]!.state).toBe('consented');
+    await respondToProposal(store, CALL, proposalsNow[0]!.id, { userId: ALICE, response: 'consent', at: now, asExecutor: true });
     await flush();
     const turns = await runtime.turnsFor(CALL, ALICE);
     expect(turns).toHaveLength(1);

@@ -168,4 +168,6 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_proposals (
 -- names it, so its result closes the proposal and its expiry hands it back.
 ALTER TABLE meeting_assistant_proposals ADD COLUMN IF NOT EXISTS run JSONB CHECK (run IS NULL OR jsonb_typeof(run) = 'object');
 ALTER TABLE meeting_assistant_turns ADD COLUMN IF NOT EXISTS proposal_id TEXT;
+-- Who asked Nova for a proposal (an asked write that names someone); null for one Nova raised from what it heard.
+ALTER TABLE meeting_assistant_proposals ADD COLUMN IF NOT EXISTS asked_by TEXT;
 CREATE INDEX IF NOT EXISTS meeting_assistant_proposals_due_idx ON meeting_assistant_proposals (expires_at) WHERE state IN ('open', 'objected', 'consented');

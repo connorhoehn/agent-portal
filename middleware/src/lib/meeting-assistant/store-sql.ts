@@ -79,7 +79,7 @@ export function actionFromRow(r: Record<string, unknown>): AssistantAction {
     createdAt: ms(r['created_at']), decidedBy: strOrNull(r['decided_by']), decidedAt: msOrNull(r['decided_at']), resultText: strOrNull(r['result_text']) };
 }
 
-const PROPOSAL_COLUMNS = 'call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, dismissed_by, created_at, updated_at, expires_at, version, run';
+const PROPOSAL_COLUMNS = 'call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, dismissed_by, created_at, updated_at, expires_at, version, run, asked_by';
 
 export function proposalFromRow(r: Record<string, unknown>): Proposal {
   return {
@@ -88,7 +88,7 @@ export function proposalFromRow(r: Record<string, unknown>): Proposal {
     source: str(r['source']) as ProposalSource, evidence: json<number[]>(r['evidence'], []), state: str(r['state']) as ProposalState,
     responses: json<ProposalResponse[]>(r['responses'], []), dismissedBy: strOrNull(r['dismissed_by']),
     createdAt: ms(r['created_at']), updatedAt: ms(r['updated_at']), expiresAt: msOrNull(r['expires_at']), version: Number(r['version'] ?? 1),
-    run: r['run'] == null ? null : jsonObject<ProposalRun>(r['run']),
+    run: r['run'] == null ? null : jsonObject<ProposalRun>(r['run']), askedBy: strOrNull(r['asked_by']),
   };
 }
 
@@ -487,14 +487,14 @@ export class SqlAssistantStore implements AssistantStore {
   async createProposal(p: Proposal) {
     // The tenant comes from the call's record, as for turns and actions: no record, no row.
     const rows = await this.exec(
-      `INSERT INTO meeting_assistant_proposals (call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, created_at, updated_at, version)
-       SELECT :call, :id, tenant, :statement, :outcome::jsonb, :digest, :named::jsonb, :executor, :source, :evidence::jsonb, :state, :responses::jsonb, :at::timestamptz, :at::timestamptz, 1
+      `INSERT INTO meeting_assistant_proposals (call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, created_at, updated_at, version, asked_by)
+       SELECT :call, :id, tenant, :statement, :outcome::jsonb, :digest, :named::jsonb, :executor, :source, :evidence::jsonb, :state, :responses::jsonb, :at::timestamptz, :at::timestamptz, 1, :asked
        FROM meeting_assistants WHERE call_id = :call
        ON CONFLICT (call_id, proposal_id) DO NOTHING
        RETURNING ${PROPOSAL_COLUMNS}`,
       [s('call', p.callId), s('id', p.id), s('statement', p.statement), s('outcome', JSON.stringify(p.outcome)), s('digest', p.argsDigest),
         s('named', JSON.stringify(p.named)), s('executor', p.executor), s('source', p.source), s('evidence', JSON.stringify(p.evidence)),
-        s('state', p.state), s('responses', JSON.stringify(p.responses)), s('at', iso(p.createdAt))],
+        s('state', p.state), s('responses', JSON.stringify(p.responses)), s('at', iso(p.createdAt)), sOrNull('asked', p.askedBy ?? null)],
     );
     if (rows[0]) return { proposal: proposalFromRow(rows[0]), created: true };
     const existing = await this.getProposal(p.callId, p.id);

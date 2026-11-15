@@ -10,9 +10,18 @@
 // decision" dismisses it. Nothing runs on a timer: expiry (end of call + 72 h) only ends it. This module announces the move to
 // `consented` (onProposalConsented); proposal-run.ts runs it in the executor's browser.
 //
-// Taking over: while it is `consented` (its executor may not run it, or their browser was not there), a person who already consented
-// may consent again AS EXECUTOR. They become the executor and it is announced again, so the runner tries once more for them. The
-// rule is unchanged by it: they had consented, so every condition still holds, and the new executor's click is again the last step.
+// The executor's click is the last step (the design's condition 3). When the executor's own consent is the one that meets the rule, it
+// runs at once. When someone else's consent (or a withdrawn objection) meets it, it stops at `consented` and the executor is asked
+// "Ready: run it now"; only their click (a consent `asExecutor`) starts it.
+//
+// Taking over: while it is `consented` (its executor may not run it, or was not there), another person may consent AS EXECUTOR. They
+// become the executor and it is announced, so the runner tries for them. The route lets only people the server says can run it do
+// so (`you.canRun`): a consenter, or, when nobody who consented can run it, someone who has not answered (their click is a consent
+// too). The rule is unchanged by it: every condition still holds, and the new executor's click is the last step.
+//
+// "Not a decision" (dismiss): on a proposal Nova raised from what it heard, anyone seated; on one a person asked for, only the asker
+// ("Drop it"). The person who dismissed it may reopen it (`reopen`), unless it was raised again. "Raise it again" (`raiseAgain`)
+// closes an objected or failed proposal and opens a new one with the same outcome; earlier answers do not carry.
 //
 // The rule itself is pure (`consentMet`, `settle`, `applyResponse`, `whatIsMissing`) so it is tested without a store. The service
 // half (`createProposal`, `respondToProposal`, `listProposalsFor`, `closeProposals`) reads, applies the rule and writes back with the
@@ -33,11 +42,13 @@ export const PROPOSAL_AFTER_CALL_MS = 72 * 3600 * 1000;
 export const ANSWERABLE: readonly ProposalState[] = ['open', 'objected', 'consented'];
 export const FINISHED: readonly ProposalState[] = ['done', 'failed', 'dismissed', 'expired'];
 
-export type ResponseKind = 'consent' | 'object' | 'withdraw' | 'not-a-decision';
+export type ResponseKind = 'consent' | 'object' | 'withdraw' | 'not-a-decision' | 'reopen';
 export interface ResponseInput {
   userId: string; response: ResponseKind; reason?: string | null; at: number;
-  /** With `consent` only, while the proposal is `consented`, by someone who already consented: run it in my browser (a take-over, or the executor trying again). */
+  /** With `consent` only, while the proposal is `consented`: run it now, in my browser (the executor's own click, or a take-over the route allowed). */
   asExecutor?: boolean;
+  /** With `asExecutor`, by someone who has not answered: the route found that nobody who consented can run it and they can. */
+  mayJoin?: boolean;
 }
 
 const consenters = (p: Pick<Proposal, 'responses'>): Set<string> => new Set(p.responses.filter((r) => r.response === 'consent').map((r) => r.userId));
@@ -68,26 +79,42 @@ export function whatIsMissing(p: Pick<Proposal, 'responses' | 'named' | 'executo
 
 export type ApplyResult =
   | { ok: true; proposal: Proposal; changed: boolean }
-  | { ok: false; why: 'finished' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' };
+  | { ok: false; why: 'finished' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' | 'not-allowed' };
+
+/** Who may dismiss: anyone seated on a proposal Nova raised by itself; only the asker on one a person asked for. */
+export const mayDismiss = (p: Pick<Proposal, 'source' | 'askedBy' | 'executor'>, userId: string): boolean =>
+  p.source !== 'asked' || userId === (p.askedBy ?? p.executor);
+/** Who may undo a dismissal: the person who dismissed it, unless it was closed because someone raised it again. */
+export const mayReopen = (p: Pick<Proposal, 'state' | 'dismissedBy' | 'run'>, userId: string): boolean =>
+  p.state === 'dismissed' && p.dismissedBy === userId && !p.run?.raisedAs;
 
 /**
  * One person's answer, applied to a copy. Answers are taken only while the proposal is open, objected or consented; one answer per
  * person (a new one replaces theirs); a withdrawal removes theirs (none to remove is no change). The state is settled again after.
  */
 export function applyResponse(p: Proposal, input: ResponseInput): ApplyResult {
+  if (input.response === 'reopen') {
+    if (!mayReopen(p, input.userId)) return { ok: false, why: p.state === 'dismissed' ? 'not-allowed' : 'finished' };
+    const back: Proposal = { ...p, responses: p.responses.map((r) => ({ ...r })), dismissedBy: null, updatedAt: input.at };
+    return { ok: true, changed: true, proposal: { ...back, state: settle(back) } };
+  }
   if (!ANSWERABLE.includes(p.state)) return { ok: false, why: 'finished' };
   const reason = input.reason ?? null;
   if (reason !== null && input.response !== 'object') return { ok: false, why: 'reason-not-allowed' };
   const next: Proposal = { ...p, responses: p.responses.map((r) => ({ ...r })) };
   if (input.asExecutor) {
-    // Only a person who already consented takes over, and only once it is consented: nobody becomes executor of something not agreed.
+    // Only once it is consented: nobody becomes executor of something not agreed. Someone who had not answered consents by this
+    // click (the route allows that only when nobody who consented can run it); an objector must withdraw first.
     if (input.response !== 'consent') return { ok: false, why: 'reason-not-allowed' };
     if (p.state !== 'consented') return { ok: false, why: 'not-consented' };
-    if (!consenters(p).has(input.userId)) return { ok: false, why: 'not-a-consenter' };
-    const responses = next.responses.map((r) => (r.userId === input.userId ? { ...r, at: input.at } : r));
+    const had = consenters(p).has(input.userId);
+    if (!had && (!input.mayJoin || p.responses.some((r) => r.userId === input.userId))) return { ok: false, why: 'not-a-consenter' };
+    const responses = had ? next.responses.map((r) => (r.userId === input.userId ? { ...r, at: input.at } : r))
+      : [...next.responses, { userId: input.userId, response: 'consent' as const, reason: null, at: input.at }];
     return { ok: true, changed: true, proposal: { ...next, responses, executor: input.userId, state: 'consented', updatedAt: input.at } };
   }
   if (input.response === 'not-a-decision') {
+    if (!mayDismiss(p, input.userId)) return { ok: false, why: 'not-allowed' };
     return { ok: true, changed: true, proposal: { ...next, state: 'dismissed', dismissedBy: input.userId, updatedAt: input.at } };
   }
   const mine = next.responses.findIndex((r) => r.userId === input.userId);
@@ -136,6 +163,8 @@ export interface NewProposal {
   named: string[];
   executor: string;
   source: ProposalSource;
+  /** The person who asked Nova for it (an asked write). */
+  askedBy?: string | null;
   evidence?: number[];
   at: number;
 }
@@ -151,11 +180,13 @@ export function buildProposal(input: NewProposal): Proposal {
   const evidence = input.evidence ?? [];
   if (!Array.isArray(evidence) || evidence.length > MAX_EVIDENCE || evidence.some((n) => !Number.isInteger(n) || n < 1)) throw new ProposalInputError(`evidence must be at most ${MAX_EVIDENCE} line numbers`);
   if (!['watcher', 'asked', 'dev'].includes(input.source)) throw new ProposalInputError('Invalid source');
+  const askedBy = input.askedBy ?? null;
+  if (askedBy !== null && (typeof askedBy !== 'string' || !USER.test(askedBy))) throw new ProposalInputError('askedBy must be a user id');
   const outcome = cleanOutcome(input.outcome);
   return {
     id, callId: input.callId, tenant: input.tenant, statement, outcome, argsDigest: hashToolArgs(outcome),
     named: [...new Set(input.named)], executor: input.executor, source: input.source, evidence: [...new Set(evidence)].sort((a, b) => a - b),
-    state: 'open', responses: [], dismissedBy: null, createdAt: input.at, updatedAt: input.at, expiresAt: null, version: 1, run: null,
+    state: 'open', responses: [], dismissedBy: null, createdAt: input.at, updatedAt: input.at, expiresAt: null, version: 1, run: null, askedBy,
   };
 }
 
@@ -263,7 +294,18 @@ export async function listProposalsFor(store: AssistantStore, callId: string, no
 
 export type RespondResult =
   | { ok: true; proposal: Proposal }
-  | { ok: false; why: 'not-found' | 'finished' | 'expired' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' | 'busy'; proposal?: Proposal };
+  | { ok: false; why: 'not-found' | 'finished' | 'expired' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' | 'not-allowed' | 'busy'; proposal?: Proposal };
+
+/**
+ * Whether this saved answer starts the run: the executor's own click is the last step. A consent `asExecutor` (run it now, or a
+ * take-over) always does; an ordinary consent does when it is the executor's and it is the one that met the rule. Anyone else's
+ * consent, or a withdrawn objection, leaves it `consented` for the executor to start.
+ */
+export function startsRun(before: Pick<Proposal, 'state'>, after: Pick<Proposal, 'state' | 'executor'>, input: Pick<ResponseInput, 'userId' | 'response' | 'asExecutor'>): boolean {
+  if (after.state !== 'consented') return false;
+  if (input.asExecutor) return true;
+  return before.state !== 'consented' && input.response === 'consent' && input.userId === after.executor;
+}
 
 /**
  * Apply one answer. Reads the proposal, expires it when its time is up, applies the rule and writes back naming the version read; when
@@ -281,9 +323,46 @@ export async function respondToProposal(store: AssistantStore, callId: string, i
     if (!out.changed) return { ok: true, proposal: current };
     const saved = await store.saveProposal(out.proposal, current.version);
     if (!saved) continue; // someone else answered first: read again
-    if (saved.state === 'consented' && (current.state !== 'consented' || input.asExecutor)) announceConsented(saved);
+    if (startsRun(current, saved, input)) announceConsented(saved);
     await announceChanged(saved, 'changed');
     return { ok: true, proposal: saved };
+  }
+  return { ok: false, why: 'busy' };
+}
+
+export type RaiseResult =
+  | { ok: true; proposal: Proposal; closed: Proposal }
+  | { ok: false; why: 'not-found' | 'not-raisable' | 'cap' | 'busy'; proposal?: Proposal };
+
+/** Only a blocked or failed proposal is raised again, and only once. */
+export const mayRaiseAgain = (p: Pick<Proposal, 'state' | 'run'>): boolean => (p.state === 'objected' || p.state === 'failed') && !p.run?.raisedAs;
+
+/**
+ * "Raise it again" (the design's way past an objection, and the next step after a failed run): a NEW open proposal with the same
+ * statement, outcome, named people, executor, source, asker and evidence, with no answers (earlier consents do not carry). The old one
+ * is closed first, by a versioned save, so of two people raising it at once exactly one new proposal is made: an objected one moves
+ * to `dismissed` (by the raiser), a failed one stays failed; both carry the new id (`run.raisedAs`). A raised copy counts toward the
+ * call's cap for its source (`cap`), as the watcher's own proposals do.
+ */
+export async function raiseAgain(store: AssistantStore, callId: string, id: string, userId: string, at: number, cap: number): Promise<RaiseResult> {
+  const newId = `p-${randomBytes(8).toString('hex')}`;
+  for (let i = 0; i < SAVE_ATTEMPTS; i += 1) {
+    const read = await store.getProposal(callId, id);
+    if (!read) return { ok: false, why: 'not-found' };
+    const p = await expireIfDue(store, read, at);
+    if (!mayRaiseAgain(p)) return { ok: false, why: 'not-raisable', proposal: p };
+    if ((await store.listProposals(callId)).filter((x) => x.source === p.source).length >= cap) return { ok: false, why: 'cap', proposal: p };
+    const note = 'Raised again as a new proposal.';
+    // A failed run keeps whose it was and why; an objected one is closed by the person who raised it again.
+    const run = p.state === 'failed' && p.run ? { ...p.run, raisedAs: newId } : { turnId: null, title: null, href: null, by: userId, at, note, raisedAs: newId };
+    const closed = await store.saveProposal(p.state === 'objected' ? { ...p, state: 'dismissed', dismissedBy: userId, run, updatedAt: at } : { ...p, run, updatedAt: at }, p.version);
+    if (!closed) continue;
+    await announceChanged(closed, 'changed');
+    const { proposal } = await createProposal(store, {
+      id: newId, callId, tenant: p.tenant, statement: p.statement, outcome: p.outcome, named: p.named, executor: p.executor, source: p.source,
+      askedBy: p.askedBy ?? null, evidence: p.evidence, at,
+    });
+    return { ok: true, proposal, closed };
   }
   return { ok: false, why: 'busy' };
 }

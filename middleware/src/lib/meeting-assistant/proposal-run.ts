@@ -12,7 +12,11 @@
 // The executor's rights are checked when the turn is made and again when their browser claims it. When they may not run it, the
 // proposal goes back to `consented` with a note naming them, and any consenter who can run it takes over by consenting again as
 // executor (proposals.ts). A turn that expires (the browser was not there) also hands it back to `consented`, never `failed`. A
-// result closes it: `done` with what was made (a decision's title and page), or `failed` with the browser's reason.
+// result closes it: `done` with what was made (a decision's title and page, and whether it was recorded as decided or waiting), or
+// `failed` with one plain sentence that says nothing was changed (`failedSentence`), never the browser's own error text.
+//
+// `runOutlook` answers the card's two questions before anyone consents: may this person run it, and will a decision be recorded as
+// decided or as waiting for the initiative owner's decision.
 //
 // Nothing here speaks or posts in the call; the card reads the proposal. Statements, arguments and reasons are never logged.
 import { randomBytes } from 'node:crypto';
@@ -120,9 +124,9 @@ export async function cannotRunNote(deps: ProposalRunDeps, p: Proposal, name: st
     if (userId === p.executor || others.length >= 3) continue;
     if (await mayRun(deps, userId, p.tenant, name, args)) others.push(await deps.nameOf(userId));
   }
-  if (!others.length) return `${who} cannot run this, and nobody else who consented can.`;
+  if (!others.length) return `${who} cannot run this, and nobody who consented can. Someone else who can may consent and run it.`;
   const list = others.length === 1 ? others[0]! : `${others.slice(0, -1).join(', ')} or ${others[others.length - 1]!}`;
-  return `${who} cannot run this; ${list} can, by consenting again to run it.`;
+  return `${who} cannot run this. ${list} can run it instead.`;
 }
 
 /**
@@ -158,7 +162,7 @@ export async function startProposal(deps: ProposalRunDeps, callId: string, id: s
       return (await deps.store.createTurn(turn)).turn;
     } catch (e) {
       console.warn('[meeting-assistant] a proposal turn could not be made', p.id, (e as Error).message);
-      await handBack(deps, callId, id, turnId, 'Nova could not start this; the executor can consent again to try.');
+      await handBack(deps, callId, id, turnId, 'Nova could not start this. Nothing was changed, and it can be run again.');
       return null;
     }
   }
@@ -192,20 +196,37 @@ export async function checkBeforeClaim(deps: ProposalRunDeps, turn: AssistantTur
   return { ok: false, why: 'not-allowed' };
 }
 
+/**
+ * A failed run as one plain sentence that says nothing was changed (a write that fails changes nothing), never the browser's own
+ * error text: what was gone, who was not allowed, what changed since, or that Nova could not carry it out.
+ */
+export function failedSentence(error: string | undefined, p: Pick<Proposal, 'outcome'>, executorName: string): string {
+  const e = (error ?? '').toLowerCase();
+  const thing = p.outcome.kind === 'decision' ? 'The initiative' : p.outcome.name === 'update' ? 'The record it changes' : 'Something it needed';
+  if (/not found|no such|deleted|\b404\b|does not exist|gone/.test(e)) return `${thing} was deleted or moved since, so nothing was changed.`;
+  if (/forbidden|not allowed|permission|denied|unauthori[sz]ed|\b403\b|\b401\b/.test(e)) return `${executorName} was not allowed to do this, so nothing was changed.`;
+  if (/conflict|\b409\b|version|changed since|stale/.test(e)) return 'The record changed since people consented, so nothing was changed.';
+  return 'Nova could not carry this out, so nothing was changed.';
+}
+
 /** The executor's browser posted the turn's result (already accepted on the turn): close the proposal as done or failed. */
 export async function finishProposal(deps: ProposalRunDeps, turn: AssistantTurn, result: { ok: boolean; output?: unknown; error?: string }): Promise<Proposal | null> {
   if (!turn.proposalId) return null;
   const now = deps.now();
   const out = (result.output && typeof result.output === 'object' ? result.output : {}) as Record<string, unknown>;
+  const executorName = result.ok ? '' : await deps.nameOf(turn.askedBy).catch(() => 'The person running it');
+  // A decision record says how it was made: decided, or waiting for the initiative owner's decision.
+  const fields = (turn.tool.args as { fields?: { state?: unknown } } | null)?.fields;
+  const recordedAs = fields?.state === 'resolved' ? 'decided' as const : fields?.state === 'waiting' ? 'waiting' as const : null;
   return saveWith(deps, turn.callId, turn.proposalId, (p) => {
     if (p.state !== 'running' || p.run?.turnId !== turn.turnId) return null;
-    if (!result.ok) return { ...p, state: 'failed', run: run(p.executor, now, { turnId: turn.turnId, note: cap(result.error, PROPOSAL_NOTE_MAX) || 'It did not work.' }), updatedAt: now };
+    if (!result.ok) return { ...p, state: 'failed', run: run(p.executor, now, { turnId: turn.turnId, note: failedSentence(result.error, p, executorName) }), updatedAt: now };
     // A decision is titled by its statement and linked by the id the route answered; the browser's own words are not trusted for a link.
     const recordId = typeof out['id'] === 'string' && RECORD_ID.test(out['id']) ? out['id'] : null;
     const decision = p.outcome.kind === 'decision';
     const title = decision ? p.statement : (cap(out['say'], PROPOSAL_NOTE_MAX) || 'Done.');
     const href = decision && recordId ? `/iq/decisions/${encodeURIComponent(recordId)}` : null;
-    return { ...p, state: 'done', run: run(p.executor, now, { turnId: turn.turnId, title, href }), updatedAt: now };
+    return { ...p, state: 'done', run: run(p.executor, now, { turnId: turn.turnId, title, href, ...(decision && recordedAs ? { recordedAs } : {}) }), updatedAt: now };
   });
 }
 
@@ -214,7 +235,25 @@ export async function expireProposalTurn(deps: ProposalRunDeps, turn: AssistantT
   if (!turn.proposalId) return null;
   const name = await deps.nameOf(turn.askedBy);
   const note = turn.claimId !== undefined
-    ? 'Nova could not confirm whether this was done. Check before consenting again to run it.'
-    : `${name}'s browser was not there to run this; ${name} or another consenter can consent again to run it.`;
+    ? 'Nova could not confirm whether this was done. Check before running it again.'
+    : `${name} was not there to run this. ${name} can run it now, or another consenter can.`;
   return handBack(deps, turn.callId, turn.proposalId, turn.turnId, note);
+}
+
+/** Before it runs: whether a decision outcome will be recorded as decided by `executor`, or as waiting for the owner's decision. */
+export async function decisionRecordedAs(deps: Pick<ProposalRunDeps, 'mayDecide'>, p: Proposal, initiativeId: string | null): Promise<'decided' | 'waiting' | null> {
+  if (p.outcome.kind !== 'decision') return null;
+  const id = p.outcome.initiativeId ?? initiativeId;
+  if (!id) return null;
+  return (await deps.mayDecide(p.executor, p.tenant, id).catch(() => false)) ? 'decided' : 'waiting';
+}
+
+/**
+ * Whether `userId` may run this proposal's write now (the plan's tool under their roles): `yes`, `no`, or `never` when it cannot run
+ * at all (no initiative, decisions not kept here, the action changed): the executor's click then ends it as failed, with the reason.
+ */
+export async function mayRunProposal(deps: ProposalRunDeps, p: Proposal, record: AssistantRecord, userId: string): Promise<'yes' | 'no' | 'never'> {
+  const plan = await planOf({ ...deps, mayDecide: async () => false }, p, record);
+  if (!plan.ok) return 'never';
+  return (await mayRun(deps, userId, p.tenant, plan.name, plan.args)) ? 'yes' : 'no';
 }

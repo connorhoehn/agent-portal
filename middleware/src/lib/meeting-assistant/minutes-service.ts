@@ -238,7 +238,9 @@ async function composeMinutes(callId: string, record: AssistantRecord, attempts:
   const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
   const doneActions = turns.filter((t) => t.kind === 'write').map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
   // The decisions the call's proposals already hold are listed as proposals (GET minutes), never invented again as decision lines.
-  const proposals = await store.listProposals(callId).catch(() => []);
+  // A dismissed one ("Not a decision", or raised again as a new one) holds nothing: a real decision dismissed by mistake still
+  // reaches the minutes as a decision line.
+  const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
   const held = { statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence) };
 
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();

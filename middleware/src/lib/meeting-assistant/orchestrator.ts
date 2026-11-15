@@ -39,7 +39,7 @@ import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
 import { MAX_NAMED, MAX_STATEMENT_CHARS, ProposalInputError, closeProposals, createProposal, onProposalConsented } from './proposals.js';
-import { consentStatus, namedStatement, peopleSaid, resolvePeople, type PersonRole } from './named-people.js';
+import { consentStatus, namedStatement, peopleSaid, resolvePeople, updateStatement, type PersonRole } from './named-people.js';
 import type { RosterEntry } from './minutes.js';
 import { hookProposalNotices, notifyOpenProposals } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
@@ -378,7 +378,7 @@ export class AssistantRuntime {
   constructor(readonly deps: RuntimeDeps, private readonly opts: { tickMs?: number } = {}) {}
 
   private get store(): AssistantStore { return this.deps.store(); }
-  private get proposalDeps(): ProposalRunDeps {
+  get proposalDeps(): ProposalRunDeps {
     return {
       store: this.store, now: () => this.now(), rolesOf: this.deps.rolesOf, nameOf,
       actionAllowed: this.deps.actionAllowed ?? defaultActionAllowed, mayDecide: this.deps.mayDecide ?? defaultMayDecide,
@@ -1253,12 +1253,13 @@ export class AssistantRuntime {
     if (others.length > MAX_NAMED) { await this.refuse(run, e.callId, 'too many people'); return; }
     const people = await Promise.all(others.map(async (o) => ({ ...o, name: o.name && o.name !== o.userId ? o.name : await nameOf(o.userId) })));
     const a = e.args as Record<string, unknown>;
-    // An update's own sentence says nothing of what it changes; its statement names the row it is on instead.
-    const base = e.name === 'update' ? `Update ${capText(a['ref'], 120) || 'a record'}` : describeCall(e.name, e.args).summary;
+    // An update's own sentence says nothing of what it changes: its statement says what changes, in words, and names the row only
+    // by its title (a typed record reference such as "work-item:wi-12" is never shown).
+    const base = e.name === 'update' ? updateStatement(a) : describeCall(e.name, e.args).summary;
     try {
       await createProposal(this.store, {
         callId: run.ctx.callId, tenant: run.ctx.tenant, statement: namedStatement(base, people, MAX_STATEMENT_CHARS),
-        outcome: { kind: 'tool', name: e.name, args: e.args }, named: people.map((p) => p.userId), executor: asker, source: 'asked', at: this.now(),
+        outcome: { kind: 'tool', name: e.name, args: e.args }, named: people.map((p) => p.userId), executor: asker, source: 'asked', askedBy: asker, at: this.now(),
       });
     } catch (err) {
       if (!(err instanceof ProposalInputError)) throw err;
