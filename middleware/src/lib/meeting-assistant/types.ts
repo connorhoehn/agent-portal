@@ -278,4 +278,10 @@ export interface MinutesRecord {
   writer: MinutesWriterKind;
   createdAt: number;
   deleted?: { at: number; by: string };
+  /** Writer runs made for this call (each may cost model money); absent on an older row, read as 1 when a writer ran. Hard caps in minutes-service.ts. */
+  attempts?: number;
+  /** No draft, but a writer can run again (it failed or the budget refused it); false when no writer exists in this deployment. */
+  retryable?: boolean;
+  /** When the attendees were told the minutes are ready (the bell), once per meeting; null or absent until then. */
+  notifiedAt?: number | null;
 }

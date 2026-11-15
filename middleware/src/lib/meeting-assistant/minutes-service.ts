@@ -15,6 +15,7 @@ import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
 import { delegationCostUsd, delegationModel } from '../voice/ledger.js';
 import { voiceProviderConfigured } from '../voice/openai.js';
 import { callChatRuntime } from '../call-chat.js';
+import { notify } from '../social-notify.js';
 import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } from './chat.js';
 import { NOVA_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
@@ -38,9 +39,17 @@ export const defaultMinutesWriterFactory: MinutesWriterFactory = () => {
 let writerFactory: MinutesWriterFactory | null = null;
 export function setMinutesWriterFactory(next: MinutesWriterFactory | null): void { writerFactory = next; }
 
+/**
+ * Hard caps on writer runs per meeting: each run may cost model money. The sweep tries a failed write again until AUTO_ATTEMPTS runs
+ * were made in all; an attendee's "Write the minutes again" is refused once MAX_ATTEMPTS were made. Enforced by the store's conditional
+ * count (`claimMinutesAttempt`), so two presses, a press and the sweep, or two processes cannot exceed them.
+ */
+export const AUTO_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 5;
+
 const NOTES = {
-  budget: 'Minutes could not be written because the inviter\'s budget did not allow it. The transcript is kept; the people who were in the call can read it.',
-  failed: 'Minutes could not be written this time. The transcript is kept; the people who were in the call can read it.',
+  budget: 'Nova could not write the minutes because the inviter\'s budget did not allow it. The transcript is kept; the people who were in the call can read it.',
+  failed: 'Nova could not write the minutes. The transcript is kept; the people who were in the call can read it.',
   noWriter: 'Minutes are not available in this deployment. The transcript is kept; the people who were in the call can read it.',
   onPage: 'The minutes are on the meeting page.',
 } as const;
@@ -62,10 +71,50 @@ async function allLines(callId: string): Promise<TranscriptLine[]> {
   }
 }
 
-/** The call's name for the minutes: the initiative's name when it has one. */
-async function callNameOf(record: AssistantRecord): Promise<string> {
-  if (!record.initiativeId) return 'Call';
-  try { const name = (await getProject(record.initiativeId))?.name; return name ? `${name} call` : 'Call'; } catch { return 'Call'; }
+/** "14 Nov", in UTC (the server has no viewer's zone; the page shows the exact time beside it). */
+const dayLabel = (ms: number): string => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+/**
+ * A call with no initiative is named by its people and day, "Call with Ana and Raj, 14 Nov", so the Meetings list is not a column of
+ * identical "Call" rows. First names only; a long roster stops at two names and a count.
+ */
+export function untitledCallName(names: readonly string[], endedAt: number): string {
+  const first = [...new Set(names.map((n) => n.trim().split(/\s+/)[0] ?? '').filter(Boolean))];
+  const who = first.length === 0 ? '' : first.length === 1 ? first[0]! : first.length <= 3
+    ? `${first.slice(0, -1).join(', ')} and ${first[first.length - 1]}` : `${first.slice(0, 2).join(', ')} and ${first.length - 2} others`;
+  return who ? `Call with ${who}, ${dayLabel(endedAt)}` : `Call on ${dayLabel(endedAt)}`;
+}
+
+/** The name a meeting is shown under: the stored one, or for a meeting stored before untitled calls were named, its people and day. */
+export function meetingNameOf(m: Pick<MinutesRecord, 'callName' | 'endedAt'>, attendeeNames: readonly string[]): string {
+  return m.callName && m.callName !== 'Call' ? m.callName : untitledCallName(attendeeNames, m.endedAt);
+}
+
+/** The call's name for the minutes: the initiative's name when it has one, else its people and day. */
+async function callNameOf(record: AssistantRecord, roster: readonly RosterEntry[], endedAt: number): Promise<string> {
+  const untitled = () => untitledCallName(roster.map((r) => r.name), endedAt);
+  if (!record.initiativeId) return untitled();
+  try { const name = (await getProject(record.initiativeId))?.name; return name ? `${name} call` : untitled(); } catch { return untitled(); }
+}
+
+export const MINUTES_READY_TYPE = 'meeting-minutes-ready';
+
+/**
+ * The bell for written minutes: one notification per attendee, "Minutes from <call> are ready", linking to the meeting page. It carries
+ * no content of the meeting (the notification service cannot delete, and the inviter's delete must leave nothing behind). Sent once per
+ * meeting: the store marks it before sending, so a restart or a second writer never rings it again. Never throws.
+ */
+export async function notifyMinutesReady(minutes: MinutesRecord, now: number = Date.now()): Promise<string[]> {
+  try {
+    if (minutes.deleted || minutes.writer === 'none' || !minutes.attendees.length) return [];
+    if (!(await assistantStore().claimMinutesNotice(minutes.callId, now))) return [];
+    const names = await Promise.all(minutes.attendees.map((u) => nameOf(u)));
+    return await notify(minutes.attendees, {
+      type: MINUTES_READY_TYPE, title: `Minutes from ${meetingNameOf(minutes, names)} are ready`,
+      action: { label: 'Open the meeting', href: meetingPagePath(minutes.callId) },
+      payload: { tenant: minutes.tenant, kind: MINUTES_READY_TYPE, callId: minutes.callId },
+    });
+  } catch (e) { console.warn('[meeting-assistant] minutes notice not sent', (e as Error).message); return []; }
 }
 
 /** Is the call still running with this person seated? (A card needs the owner's browser in the call.) */
@@ -171,21 +220,20 @@ export function writeMinutes(callId: string): Promise<MinutesRecord | null> {
 }
 const writing = new Map<string, Promise<MinutesRecord | null>>();
 
-async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
-  const store = assistantStore();
-  const record = await store.get(callId);
-  if (!record || record.state !== 'left') return null;
-  if (await store.getMinutes(callId)) return null;
-  const lines = await allLines(callId);
-  if (!lines.length) {
-    // Nothing was recorded: no minutes. A person's dismissal already said so in its own notice; the other ways of leaving say it here.
-    if (record.leftBy === 'system') await postNoticeQuietly(callId, noticeText.nothingRecorded, { minutes: true });
-    return null;
-  }
+/** A write or a rewrite of this call's minutes is running in this process (the meeting page shows "Nova is writing the minutes"). */
+export const minutesWriting = (callId: string): boolean => writing.has(callId);
 
+interface Composed { minutes: MinutesRecord; draft: MinutesDraft | null; proposals: Awaited<ReturnType<ReturnType<typeof assistantStore>['listProposals']>>; initiativeName: string | null }
+
+/** Run the writer over the call's transcript and shape the minutes; `attempts` is the run this is. Null when nothing was recorded. */
+async function composeMinutes(callId: string, record: AssistantRecord, attempts: number, createdAt: number): Promise<Composed | null> {
+  const store = assistantStore();
+  const lines = await allLines(callId);
+  if (!lines.length) return null;
   const attendees = [...new Set([...record.attendees, ...lines.flatMap((l) => (l.userId ? [l.userId] : []))])];
   const roster: RosterEntry[] = await Promise.all(attendees.map(async (userId) => ({ userId, name: await nameOf(userId) })));
-  const callName = await callNameOf(record);
+  const endedAt = record.leftAt ?? Date.now();
+  const callName = await callNameOf(record, roster, endedAt);
   const initiativeName = record.initiativeId ? await getProject(record.initiativeId).then((p) => p?.name ?? null).catch(() => null) : null;
   const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
   const doneActions = turns.filter((t) => t.kind === 'write').map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
@@ -204,10 +252,27 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   const draft = result.draft ? { ...result.draft, decisions: withoutHeld(result.draft.decisions, held) } : null;
   const minutes: MinutesRecord = {
     callId, tenant: record.tenant, lobby: record.lobby, initiativeId: record.initiativeId, callName,
-    startedAt: record.invitedAt, endedAt: record.leftAt ?? Date.now(), invitedBy: record.invitedBy, attendees,
+    startedAt: record.invitedAt, endedAt, invitedBy: record.invitedBy, attendees,
     summary: draft ? draft.summary : result.note ?? NOTES.failed, decisions: draft?.decisions ?? [], actionItems: draft?.actionItems ?? [], topics: draft?.topics ?? [],
-    lineCount: lines.length, truncated: draft?.truncated ?? false, writer: result.writer, createdAt: Date.now(),
+    lineCount: lines.length, truncated: draft?.truncated ?? false, writer: result.writer, createdAt,
+    // Without a writer there is nothing to try again; a failure or a refused budget may be tried again, within the caps.
+    attempts: writer ? attempts : 0, retryable: !draft && !!writer, notifiedAt: null,
   };
+  return { minutes, draft, proposals, initiativeName };
+}
+
+async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
+  const store = assistantStore();
+  const record = await store.get(callId);
+  if (!record || record.state !== 'left') return null;
+  if (await store.getMinutes(callId)) return null;
+  const composed = await composeMinutes(callId, record, 1, Date.now());
+  if (!composed) {
+    // Nothing was recorded: no minutes. A person's dismissal already said so in its own notice; the other ways of leaving say it here.
+    if (record.leftBy === 'system') await postNoticeQuietly(callId, noticeText.nothingRecorded, { minutes: true });
+    return null;
+  }
+  const { minutes, draft, proposals, initiativeName } = composed;
   const stored = await store.putMinutes(minutes);
   if (!stored.created || stored.minutes.deleted) return null;
 
@@ -219,8 +284,68 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   const text = (draft ? chatSummary(stored.minutes.summary) : stored.minutes.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
   await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId, ...(counts ? { minutes: counts } : {}) } }, { minutes: true })
     .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
+  // The call chat is closed to everyone once the call is over: the bell is how the attendees learn the minutes are there.
+  if (draft) await notifyMinutesReady(stored.minutes);
   if (draft) await offerCards(record, stored.minutes, initiativeName).catch((e: unknown) => console.warn('[meeting-assistant] action cards not offered', (e as Error).message));
   return stored.minutes;
+}
+
+export type RewriteOutcome = 'started' | 'busy' | 'limit' | 'not-needed';
+
+/**
+ * Write the minutes again for a meeting whose earlier write produced no draft. `max` is the cap on writer runs in all: AUTO_ATTEMPTS
+ * for the sweep, MAX_ATTEMPTS for an attendee's press. One run at a time per meeting (this process's `writing`, and the store's
+ * conditional count across processes). Returns at once; the run itself is `done`.
+ */
+export async function rewriteMinutes(callId: string, max: number): Promise<{ outcome: RewriteOutcome; done: Promise<MinutesRecord | null> }> {
+  const none = Promise.resolve(null);
+  if (writing.has(callId)) return { outcome: 'busy', done: none };
+  const store = assistantStore();
+  const [record, current] = await Promise.all([store.get(callId), store.getMinutes(callId)]);
+  if (!record || record.state !== 'left' || !current || current.deleted || current.writer !== 'none' || !current.retryable) return { outcome: 'not-needed', done: none };
+  const attempts = current.attempts ?? 1;
+  if (attempts >= Math.min(max, MAX_ATTEMPTS)) return { outcome: 'limit', done: none };
+  if (writing.has(callId)) return { outcome: 'busy', done: none };
+  // Claim the run before the writer is called: a crash after this still counts it, so the cap can only under-spend.
+  const run = (async (): Promise<MinutesRecord | null> => {
+    if (!(await store.claimMinutesAttempt(callId, attempts, Math.min(max, MAX_ATTEMPTS)))) return null;
+    const composed = await composeMinutes(callId, record, attempts + 1, current.createdAt);
+    if (!composed) return null;
+    if (!(await store.rewriteMinutes(composed.minutes))) return null;
+    const stored = await store.getMinutes(callId);
+    if (stored && composed.draft) await notifyMinutesReady(stored);
+    return stored;
+  })().finally(() => { writing.delete(callId); });
+  writing.set(callId, run);
+  return { outcome: 'started', done: track(run.catch((e: unknown) => { console.warn('[meeting-assistant] minutes rewrite failed', (e as Error).message); return null; })) };
+}
+
+/** The sweep's part: try each failed write again, up to AUTO_ATTEMPTS runs in all. Returns how many were tried. Never throws. */
+export async function retryFailedMinutes(limit = 20): Promise<number> {
+  try {
+    let tried = 0;
+    const due = await assistantStore().listRetryableMinutes(AUTO_ATTEMPTS, limit);
+    lastRetryFailure = null;
+    for (const m of due) {
+      const { outcome, done } = await rewriteMinutes(m.callId, AUTO_ATTEMPTS);
+      if (outcome === 'started') { tried += 1; await done; }
+    }
+    return tried;
+  } catch (e) {
+    // A deployment without the tables would say this every run: once, and again only when the message changes.
+    const message = (e as Error).message;
+    if (message !== lastRetryFailure) console.warn('[meeting-assistant] minutes retry sweep failed (will keep trying)', message);
+    lastRetryFailure = message;
+    return 0;
+  }
+}
+let lastRetryFailure: string | null = null;
+
+/** Every few minutes, the failed writes are tried again (unref'd). Returns the stopper. */
+export function startMinutesRetrySweep(everyMs = 10 * 60_000): () => void {
+  const timer = setInterval(() => { void retryFailedMinutes(); }, everyMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 function doneActionText(turn: AssistantTurn): string {

@@ -127,6 +127,11 @@ CREATE TABLE IF NOT EXISTS meeting_minutes (
 );
 CREATE INDEX IF NOT EXISTS meeting_minutes_tenant_idx ON meeting_minutes (tenant, ended_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (created_at);
+-- A failed minutes write may run again (minutes-service.ts): `attempts` counts writer runs, each of which may cost model money, and is
+-- capped there; `retryable` is false when no writer exists. `notified_at` is set once when the attendees are told the minutes are ready.
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS retryable BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
 
 -- Package 7a: Nova speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;

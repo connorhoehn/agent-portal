@@ -28,7 +28,9 @@
 //                    latest run: who, what was made, or why not); 409 once it is running, finished or expired.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
-//   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none.
+//   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none;
+//                    410 (deleted / expired) to an attendee once the record is gone.
+//   POST minutes/rewrite  an attendee asks Nova to write failed minutes again (capped; minutes-service.ts MAX_ATTEMPTS).
 //   DELETE minutes | transcript   the INVITER only (an attendee who is not gets 403; anyone else 404): deletes the minutes AND the
 //                    transcript lines and leaves a tombstone, so they are never written again. Only after the assistant has left.
 //   (This file also exports `meetingsRouter`, mounted at /api/meetings: the caller's own attended meetings.)
@@ -50,8 +52,10 @@ import { eraseCall } from '../lib/meeting-assistant/erase.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
-import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
-import { endAbandonedCall } from '../lib/meeting-assistant/reconcile.js';
+import { MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
+import { retentionDays } from '../lib/meeting-assistant/retention.js';
+import { owedBy } from '../lib/meeting-assistant/proposal-notify.js';
+import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
@@ -59,7 +63,7 @@ import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/
 import { NOVA_NAME } from '../lib/meeting-assistant/chat-types.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
-import { cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
+import { ANSWERABLE, cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
 import type { Proposal } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
@@ -645,18 +649,65 @@ async function minutesProposals(callId: string, ended: number | null) {
   })));
 }
 
+const DAY_MS = 86_400_000;
+
+/**
+ * What Nova covered, from the call's record: the seconds it listened (not the meeting's length), the rest of its time in the call
+ * (paused, or waiting to start), and how many people were in the call without agreeing to be transcribed. A count only: the people
+ * who did not acknowledge are never named.
+ */
+function coverageOf(record: AssistantRecord, attendees: readonly string[]) {
+  const end = record.leftAt ?? Date.now();
+  const listenedSeconds = Math.floor(listeningSecondsOf(record, end));
+  const pausedSeconds = Math.max(0, Math.floor((end - record.invitedAt) / 1000) - listenedSeconds);
+  const acked = new Set([record.invitedBy, ...record.acked]);
+  return { listenedSeconds, pausedSeconds, untranscribed: attendees.filter((u) => !acked.has(u)).length };
+}
+
+/**
+ * A meeting's minutes, for the people who were in the call. A record the inviter deleted, or the retention sweep emptied, answers those
+ * people 410 with why (MEETING_DELETED, MEETING_EXPIRED): they were there, so it reveals nothing. Everyone else keeps the plain 404, and
+ * once the sweep removed the call entirely nothing is left to tell anyone, so the 404 is all there is. While Nova is still writing the
+ * first minutes, an attendee gets 404 MINUTES_WRITING.
+ */
 meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  const record = await liveRecordOf(session, callId);
+  const record = await attendeeOf(session, callId);
   const m = await assistantStore().getMinutes(callId);
-  if (!m || m.deleted) throw new NotFoundError('No minutes');
+  if (m?.deleted) {
+    const expired = m.deleted.by === 'system';
+    res.status(410).json({ code: expired ? 'MEETING_EXPIRED' : 'MEETING_DELETED', error: expired ? 'This meeting\'s record was removed after the retention period.' : 'This meeting\'s record was deleted.' });
+    return;
+  }
+  if (!m) {
+    if (minutesWriting(callId)) { res.status(404).json({ code: 'MINUTES_WRITING', error: 'Nova is writing the minutes.' }); return; }
+    throw new NotFoundError('No minutes');
+  }
+  const attendees = await namesOf(m.attendees);
+  const attempts = m.attempts ?? (m.writer === 'none' ? 0 : 1);
   res.json({
     proposals: await minutesProposals(callId, endedAt(record)),
-    callId, callName: m.callName, lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
-    invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), attendees: await namesOf(m.attendees), summary: m.summary, decisions: m.decisions,
+    callId, callName: meetingNameOf(m, attendees.map((a) => a.name)), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
+    invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), attendees, summary: m.summary, decisions: m.decisions,
     actionItems: m.actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
     youAreInviter: m.invitedBy === session.sub,
+    // The retention sweep removes the call this long after it ended (retention.ts counts from the same end time).
+    keptUntil: (record.leftAt ?? m.endedAt) + retentionDays() * DAY_MS,
+    coverage: coverageOf(record, m.attendees),
+    // No draft: whether an attendee may ask Nova to write them again (a hard cap on runs, each of which may cost model money).
+    rewrite: { writing: minutesWriting(callId), possible: m.writer === 'none' && m.retryable === true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts) },
   });
+}));
+
+/** An attendee asks Nova to write minutes that failed again. Refused while a write runs and once MAX_ATTEMPTS runs were made. */
+meetingAssistantRouter.post('/minutes/rewrite', refuseMasqueradeRead, asyncHandler(async (req, res) => {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  await liveRecordOf(session, callId);
+  const { outcome } = await rewriteMinutes(callId, MAX_ATTEMPTS);
+  if (outcome === 'started') { res.status(202).json({ callId, writing: true }); return; }
+  if (outcome === 'busy') { res.status(409).json({ code: 'MINUTES_WRITING', error: 'Nova is already writing these minutes.' }); return; }
+  if (outcome === 'limit') { res.status(429).json({ code: 'MINUTES_ATTEMPTS', error: `Nova has tried to write these minutes ${MAX_ATTEMPTS} times and will not try again. The transcript is still here to read.` }); return; }
+  res.status(409).json({ code: 'MINUTES_WRITTEN', error: 'These minutes do not need writing again.' });
 }));
 
 /**
@@ -668,8 +719,8 @@ const deleteRecord = asyncHandler(async (req, res) => {
   const record = await attendeeOf(session, callId);
   const deleted = !!(await assistantStore().getMinutes(callId))?.deleted;
   if (deleted && record.invitedBy !== session.sub) throw new NotFoundError('Not found');
-  if (record.invitedBy !== session.sub) throw new AppError(403, `Only the person who invited ${NOVA} can delete this meeting's record.`);
-  if (record.state !== 'left') throw new AppError(409, `Dismiss ${NOVA} before deleting this meeting's record.`);
+  if (record.invitedBy !== session.sub) throw new AppError(403, 'Only the person who invited Nova can delete this meeting.');
+  if (record.state !== 'left') throw new AppError(409, 'Nova is still in this call. Dismiss Nova before deleting this meeting.');
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
   res.json({ callId, deleted: true, linesRemoved: lines });
 });
@@ -709,9 +760,16 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   const initiative = req.query['initiative'];
   if (initiative !== undefined && (typeof initiative !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(initiative))) throw new ValidationError('Invalid initiative');
   const rows = await assistantStore().listMinutes({ tenant: session.tenant, userId: session.sub, limit, ...(initiative ? { initiativeId: initiative } : {}), ...(before ? { before } : {}) });
-  const meetings = await Promise.all(rows.map(async (m) => ({
-    callId: m.callId, callName: m.callName, lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
-    attendees: (await namesOf(m.attendees)).map((a) => a.name), summary: m.summary, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length,
-  })));
+  const store = assistantStore(); const now = Date.now();
+  const meetings = await Promise.all(rows.map(async (m) => {
+    const attendees = (await namesOf(m.attendees)).map((a) => a.name);
+    // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
+    const waitingOnYou = (await listProposalsFor(store, m.callId, now, m.endedAt).catch(() => []))
+      .filter((p) => ANSWERABLE.includes(p.state) && owedBy(p).includes(session.sub)).length;
+    return {
+      callId: m.callId, callName: meetingNameOf(m, attendees), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
+      attendees, summary: m.summary, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length, waitingOnYou,
+    };
+  }));
   res.json({ meetings, next: rows.length === limit ? rows[rows.length - 1]!.endedAt : null });
 }));

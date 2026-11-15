@@ -92,7 +92,7 @@ export function proposalFromRow(r: Record<string, unknown>): Proposal {
   };
 }
 
-const MINUTES_COLUMNS = 'call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at, deleted_at, deleted_by';
+const MINUTES_COLUMNS = 'call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at, deleted_at, deleted_by, attempts, retryable, notified_at';
 
 export function minutesFromRow(r: Record<string, unknown>): MinutesRecord {
   return {
@@ -101,6 +101,7 @@ export function minutesFromRow(r: Record<string, unknown>): MinutesRecord {
     summary: str(r['summary']), decisions: json<string[]>(r['decisions'], []), actionItems: json<MinutesActionItem[]>(r['action_items'], []), topics: json<string[]>(r['topics'], []),
     lineCount: Number(r['line_count'] ?? 0), truncated: r['truncated'] === true || r['truncated'] === 't', writer: str(r['writer']) as MinutesWriterKind, createdAt: ms(r['created_at']),
     ...(r['deleted_at'] != null ? { deleted: { at: ms(r['deleted_at']), by: str(r['deleted_by']) } } : {}),
+    attempts: Number(r['attempts'] ?? 1), retryable: r['retryable'] === true || r['retryable'] === 't', notifiedAt: msOrNull(r['notified_at']),
   };
 }
 
@@ -388,13 +389,14 @@ export class SqlAssistantStore implements AssistantStore {
 
   async putMinutes(m: MinutesRecord) {
     const rows = await this.exec(
-      `INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at)
-       VALUES (:call, :tenant, :lobby, :initiative, :name, :started::timestamptz, :ended::timestamptz, :by, :attendees::jsonb, :summary, :decisions::jsonb, :items::jsonb, :topics::jsonb, :lines, :truncated, :writer, :created::timestamptz)
+      `INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at, attempts, retryable)
+       VALUES (:call, :tenant, :lobby, :initiative, :name, :started::timestamptz, :ended::timestamptz, :by, :attendees::jsonb, :summary, :decisions::jsonb, :items::jsonb, :topics::jsonb, :lines, :truncated, :writer, :created::timestamptz, :attempts, :retryable)
        ON CONFLICT (call_id) DO NOTHING
        RETURNING ${MINUTES_COLUMNS}`,
       [s('call', m.callId), s('tenant', m.tenant), s('lobby', m.lobby), sOrNull('initiative', m.initiativeId), s('name', m.callName), s('started', iso(m.startedAt)), s('ended', iso(m.endedAt)),
         s('by', m.invitedBy), s('attendees', JSON.stringify(m.attendees)), s('summary', m.summary), s('decisions', JSON.stringify(m.decisions)), s('items', JSON.stringify(m.actionItems)),
-        s('topics', JSON.stringify(m.topics)), n('lines', m.lineCount), { name: 'truncated', value: { booleanValue: m.truncated } }, s('writer', m.writer), s('created', iso(m.createdAt))],
+        s('topics', JSON.stringify(m.topics)), n('lines', m.lineCount), { name: 'truncated', value: { booleanValue: m.truncated } }, s('writer', m.writer), s('created', iso(m.createdAt)),
+        n('attempts', m.attempts ?? 1), { name: 'retryable', value: { booleanValue: m.retryable === true } }],
     );
     if (rows[0]) return { minutes: minutesFromRow(rows[0]), created: true };
     const existing = await this.getMinutes(m.callId);
@@ -428,12 +430,50 @@ export class SqlAssistantStore implements AssistantStore {
               SELECT call_id, tenant, lobby, initiative_id, invited_at, COALESCE(left_at, invited_at), invited_by, 'none', :at::timestamptz, :at::timestamptz, :by
               FROM meeting_assistants WHERE call_id = :call
               ON CONFLICT (call_id) DO UPDATE SET call_name = '', attendees = '[]'::jsonb, summary = '', decisions = '[]'::jsonb, action_items = '[]'::jsonb, topics = '[]'::jsonb,
-                line_count = 0, truncated = false, writer = 'none', deleted_at = :at::timestamptz, deleted_by = :by
+                line_count = 0, truncated = false, writer = 'none', retryable = false, deleted_at = :at::timestamptz, deleted_by = :by
               RETURNING 1)
        SELECT (SELECT count(*) FROM gone) AS removed`,
       [s('call', callId), s('at', iso(at)), s('by', by), s('removed', REMOVED_BY_INVITER)],
     );
     return Number(rows[0]?.['removed'] ?? 0);
+  }
+
+  async claimMinutesAttempt(callId: string, expect: number, max: number) {
+    // One conditional update: two presses (or a press and the sweep) at once count once, and the cap holds across processes.
+    const rows = await this.exec(
+      `UPDATE meeting_minutes SET attempts = attempts + 1
+       WHERE call_id = :call AND deleted_at IS NULL AND writer = 'none' AND retryable AND attempts = :expect AND attempts < :max RETURNING 1`,
+      [s('call', callId), n('expect', expect), n('max', max)],
+    );
+    return rows.length > 0;
+  }
+
+  async rewriteMinutes(m: MinutesRecord) {
+    const rows = await this.exec(
+      `UPDATE meeting_minutes SET call_name = :name, attendees = :attendees::jsonb, summary = :summary, decisions = :decisions::jsonb, action_items = :items::jsonb,
+         topics = :topics::jsonb, line_count = :lines, truncated = :truncated, writer = :writer, retryable = :retryable
+       WHERE call_id = :call AND deleted_at IS NULL AND writer = 'none' RETURNING 1`,
+      [s('call', m.callId), s('name', m.callName), s('attendees', JSON.stringify(m.attendees)), s('summary', m.summary), s('decisions', JSON.stringify(m.decisions)),
+        s('items', JSON.stringify(m.actionItems)), s('topics', JSON.stringify(m.topics)), n('lines', m.lineCount), { name: 'truncated', value: { booleanValue: m.truncated } },
+        s('writer', m.writer), { name: 'retryable', value: { booleanValue: m.retryable === true } }],
+    );
+    return rows.length > 0;
+  }
+
+  async listRetryableMinutes(maxAttempts: number, limit: number) {
+    const rows = await this.exec(
+      `SELECT ${MINUTES_COLUMNS} FROM meeting_minutes WHERE deleted_at IS NULL AND writer = 'none' AND retryable AND attempts < :max ORDER BY created_at ASC, call_id ASC LIMIT :limit`,
+      [n('max', maxAttempts), n('limit', limit)],
+    );
+    return rows.map(minutesFromRow);
+  }
+
+  async claimMinutesNotice(callId: string, at: number) {
+    const rows = await this.exec(
+      `UPDATE meeting_minutes SET notified_at = :at::timestamptz WHERE call_id = :call AND deleted_at IS NULL AND notified_at IS NULL RETURNING 1`,
+      [s('call', callId), s('at', iso(at))],
+    );
+    return rows.length > 0;
   }
 
   async sweepMinutes(cutoffMs: number) {

@@ -16,6 +16,8 @@ jest.mock('../../lib/authz.js', () => ({
     (action === 'InviteMeetingAssistant' && req.session && mockInviters.has(req.session.sub) ? next() : res.status(403).json({ error: 'Forbidden', action })),
 }));
 const ledger: Array<Record<string, unknown>> = [];
+const mockBell: Array<{ users: string[]; input: { type: string; title: string; action?: { href: string }; payload?: Record<string, unknown> } }> = [];
+jest.mock('../../lib/social-notify.js', () => ({ ...jest.requireActual('../../lib/social-notify.js'), notify: async (users: string[], input: never) => { mockBell.push({ users, input }); return users; } }));
 jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async (e: Record<string, unknown>) => { ledger.push(e); }) }));
 
 import express from 'express';
@@ -37,7 +39,7 @@ import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
 import type { Session } from '../../lib/session.js';
-import type { Proposal } from '../../lib/meeting-assistant/types.js';
+import { newAssistantSession, type Proposal } from '../../lib/meeting-assistant/types.js';
 
 const CALL = 'call-m1'; const LOBBY = 'orgiq:dm:alice:bob:carol';
 const mk = (sub: string, over: Partial<Session> = {}): Session => ({ sub, name: sub, tenant: 'orgiq', role: 'member', epoch: 0, grants: { orgiq: ['member'], social: ['participant'] }, iat: 100, ...over });
@@ -70,7 +72,7 @@ async function holdCall(lobby = LOBBY): Promise<void> {
 }
 
 beforeEach(async () => {
-  clock = Date.parse('2026-11-13T12:00:00.000Z'); ledger.length = 0;
+  clock = Date.parse('2026-11-13T12:00:00.000Z'); ledger.length = 0; mockBell.length = 0;
   mockConfig.meetingAssistant.enabled = true; mockConfig.mock.aurora = true;
   mockInviters.clear(); mockInviters.add('alice'); mockInviters.add('bob');
   const masked = mk('alice', { act: { sub: 'root', epoch: 0 } } as Partial<Session>);
@@ -106,7 +108,7 @@ describe('writing the minutes', () => {
   it('a dismissal writes the minutes once and Nova leaves one message with the summary, the counts and the page link', async () => {
     await talk(); await finish();
     const m = (await get('minutes')).body;
-    expect(m).toMatchObject({ callId: CALL, callName: 'Call', writer: 'scripted', lineCount: 3, youAreInviter: true });
+    expect(m).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, \d{1,2} [A-Z][a-z]{2}$/), writer: 'scripted', lineCount: 3, youAreInviter: true });
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.'].map((d) => d));
     expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker' }, { text: 'update the runbook' }]));
     const leaving = await minutesNotices();
@@ -188,7 +190,8 @@ describe('writing the minutes', () => {
     await talk(); await finish();
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ writer: 'none', decisions: [], actionItems: [] });
-    expect(m.summary).toMatch(/could not be written/);
+    expect(m.summary).toMatch(/Nova could not write the minutes/);
+    expect(m.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 4 });
     expect(released).toEqual([['h1']]);
     expect((await get('transcript')).body.lines).toHaveLength(3);
   });
@@ -265,7 +268,7 @@ describe('who can read them', () => {
   it('the list holds only the caller\'s own meetings, newest first, with names and counts, and pages by `before`', async () => {
     const mine = (await meetings('alice')).body;
     expect(mine.meetings).toHaveLength(1);
-    expect(mine.meetings[0]).toMatchObject({ callId: CALL, callName: 'Call', initiativeId: null, lobby: LOBBY, attendees: ['Alice Archer', 'Bob Baker'], decisionCount: 1, actionItemCount: 2 });
+    expect(mine.meetings[0]).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, /), waitingOnYou: 0, initiativeId: null, lobby: LOBBY, attendees: ['Alice Archer', 'Bob Baker'], decisionCount: 1, actionItemCount: 2 });
     expect(mine.meetings[0].summary).toContain('Alice Archer said');
     for (const user of ['carol', 'dave', 'root']) expect((await meetings(user)).body.meetings).toEqual([]);
     expect((await meetings('alice', '?initiative=p-other')).body.meetings).toEqual([]);
@@ -283,10 +286,14 @@ describe('deleting', () => {
     expect((await get('minutes', 'alice')).status).toBe(200);
   });
 
-  it('the inviter deletes minutes and transcript together; both then 404 for everyone, and nothing is written again', async () => {
+  it('the inviter deletes minutes and transcript together; the people who were there are told it was deleted, everyone else gets 404, and nothing is written again', async () => {
     const out = await del('minutes', 'alice');
     expect(out.body).toMatchObject({ deleted: true, linesRemoved: 3 });
-    for (const user of ['alice', 'bob']) { expect((await get('minutes', user)).status).toBe(404); expect((await get('transcript', user)).status).toBe(404); }
+    for (const user of ['alice', 'bob']) {
+      expect(await get('minutes', user)).toMatchObject({ status: 410, body: { code: 'MEETING_DELETED' } });
+      expect((await get('transcript', user)).status).toBe(404);
+    }
+    for (const user of ['carol', 'dave', 'root']) expect((await get('minutes', user)).status).toBe(404);
     expect((await meetings('alice')).body.meetings).toEqual([]);
     expect(await assistantStore().lines(CALL, 0, 10)).toEqual([]);
     const tomb = await assistantStore().getMinutes(CALL);
@@ -312,7 +319,7 @@ describe('deleting', () => {
 
   it('DELETE transcript is the same delete', async () => {
     expect((await del('transcript', 'alice')).status).toBe(200);
-    expect((await get('minutes', 'alice')).status).toBe(404);
+    expect((await get('minutes', 'alice')).status).toBe(410);
   });
 
   it('a record whose assistant has not left cannot be deleted yet', async () => {
@@ -342,5 +349,119 @@ describe('the scripted writer is the mock world default', () => {
     setMinutesWriterFactory(() => new ScriptedMinutesWriter());
     await talk(); await finish();
     expect((await get('minutes')).body.writer).toBe('scripted');
+  });
+});
+
+describe('the bell when the minutes are written', () => {
+  it('each attendee gets one notification with the call name and the meeting page, and no content of the meeting', async () => {
+    await talk(); await finish();
+    expect(mockBell).toHaveLength(1);
+    const [bell] = mockBell;
+    expect(bell!.users.sort()).toEqual(['alice', 'bob']);
+    expect(bell!.input).toMatchObject({ type: 'meeting-minutes-ready', title: expect.stringMatching(/^Minutes from Call with Alice and Bob, .+ are ready$/), action: { href: `/iq/meetings/${CALL}` }, payload: { tenant: 'orgiq', callId: CALL } });
+    expect(JSON.stringify(bell!.input)).not.toMatch(/cut over|rollback|runbook/);
+    // A second finish, and a fresh process reading the same store (the mark is stored), ring nothing more.
+    await runtime.finish(CALL); await minutesIdle();
+    const { notifyMinutesReady } = await import('../../lib/meeting-assistant/minutes-service.js');
+    expect(await notifyMinutesReady((await assistantStore().getMinutes(CALL))!)).toEqual([]);
+    expect(mockBell).toHaveLength(1);
+  });
+
+  it('a failed write rings nothing', async () => {
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async () => { throw new MinutesWriterError('provider answered 500'); } }));
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });
+    await talk(); await finish();
+    expect(mockBell).toEqual([]);
+  });
+});
+
+describe('writing failed minutes again', () => {
+  let runs: number; let failing: boolean;
+  beforeEach(async () => {
+    runs = 0; failing = true;
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input) => { runs += 1; if (failing) throw new MinutesWriterError('provider answered 500'); return new ScriptedMinutesWriter().write(input); } }));
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });
+    await talk(); await finish();
+  });
+  const rewrite = (user = 'alice') => request(app).post(url('minutes/rewrite')).set('x-user', user).send({});
+
+  it('the sweep tries again until three runs were made in all, then stops', async () => {
+    const { retryFailedMinutes } = await import('../../lib/meeting-assistant/minutes-service.js');
+    expect(runs).toBe(1);
+    expect(await retryFailedMinutes()).toBe(1);
+    expect(await retryFailedMinutes()).toBe(1);
+    expect(await retryFailedMinutes()).toBe(0);
+    expect(runs).toBe(3);
+    expect((await assistantStore().getMinutes(CALL))!.attempts).toBe(3);
+  });
+
+  it('an attendee may press it until five runs were made in all; then it is refused with a plain sentence', async () => {
+    for (let i = 0; i < 4; i += 1) { expect((await rewrite(i % 2 ? 'bob' : 'alice')).status).toBe(202); await minutesIdle(); }
+    expect(runs).toBe(5);
+    const refused = await rewrite();
+    expect(refused).toMatchObject({ status: 429, body: { code: 'MINUTES_ATTEMPTS' } });
+    expect(refused.body.error).toMatch(/^Nova has tried to write these minutes 5 times/);
+    expect(runs).toBe(5);
+    expect((await get('minutes')).body.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 0 });
+  });
+
+  it('one run at a time: a second press while one runs is refused and starts nothing', async () => {
+    let release!: () => void;
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async () => { runs += 1; await new Promise<void>((r) => { release = r; }); throw new MinutesWriterError('provider answered 500'); } }));
+    expect((await rewrite()).status).toBe(202);
+    expect(await rewrite('bob')).toMatchObject({ status: 409, body: { code: 'MINUTES_WRITING' } });
+    expect((await get('minutes')).body.rewrite.writing).toBe(true);
+    await new Promise((r) => setImmediate(r)); release(); await minutesIdle();
+    expect(runs).toBe(2);
+  });
+
+  it('a run that succeeds replaces the note with the minutes, rings the bell once, and cannot be pressed again', async () => {
+    failing = false;
+    expect((await rewrite('bob')).status).toBe(202); await minutesIdle();
+    const m = (await get('minutes')).body;
+    expect(m).toMatchObject({ writer: 'openai', decisions: ['Thanks for joining. We decided to cut over on Thursday.'], rewrite: { possible: false } });
+    expect(mockBell).toHaveLength(1);
+    expect(await rewrite()).toMatchObject({ status: 409, body: { code: 'MINUTES_WRITTEN' } });
+  });
+
+  it('only the people who were there may press it, and not after a delete', async () => {
+    for (const user of ['carol', 'root']) expect((await rewrite(user)).status).toBe(404);
+    await del('minutes', 'alice');
+    expect((await rewrite()).status).toBe(404);
+    expect(runs).toBe(1);
+  });
+});
+
+describe('what the meeting page is told', () => {
+  it('when the record goes, and what Nova covered: its listening time, the rest, and how many were not transcribed (a count, no names)', async () => {
+    const store = assistantStore();
+    // Fifteen minutes from the invite to Nova leaving, ten of them listening; Carol held a seat and never acknowledged.
+    await store.create({ callId: 'call-cov', tenant: 'orgiq', lobby: LOBBY, initiativeId: null, state: 'listening', invitedBy: 'alice', invitedAt: clock - 15 * 60_000, pausedBy: null, leftAt: null,
+      leftBy: null, acked: ['alice', 'bob'], attendees: ['alice', 'bob', 'carol'], presentAtInvite: ['alice', 'bob', 'carol'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
+      session: { ...newAssistantSession(3600), listeningSeconds: 600 } });
+    await store.appendLine({ callId: 'call-cov', userId: 'alice', participantId: 'p', speakerName: 'Alice Archer', text: 'We agreed to ship on Friday.', at: clock - 1000, captionId: 'c1' });
+    await store.transition('call-cov', { from: ['listening'], to: 'left', by: 'alice', at: clock });
+    const { writeMinutes } = await import('../../lib/meeting-assistant/minutes-service.js');
+    await writeMinutes('call-cov');
+    const m = (await request(app).get(url('minutes', 'call-cov')).set('x-user', 'bob')).body;
+    expect(m.keptUntil).toBe(clock + 30 * 86_400_000);
+    expect(m.coverage).toEqual({ listenedSeconds: 600, pausedSeconds: 300, untranscribed: 1 });
+    expect(JSON.stringify(m.coverage)).not.toMatch(/carol/i);
+  });
+
+  it('a record the retention sweep emptied tells the people who were there it was removed; others get 404', async () => {
+    await talk(); await finish();
+    await assistantStore().tombstoneMinutes(CALL, 'system', Date.now());
+    expect(await get('minutes', 'bob')).toMatchObject({ status: 410, body: { code: 'MEETING_EXPIRED' } });
+    expect((await get('minutes', 'carol')).status).toBe(404);
+  });
+
+  it('a Meetings row counts the proposals that wait on the viewer, for that viewer only', async () => {
+    await talk();
+    await assistantStore().createProposal(proposal('p-open', { named: ['bob'], executor: 'alice', responses: [{ userId: 'alice', response: 'consent', reason: null, at: clock } as never] }));
+    await finish();
+    const row = async (user: string) => (await meetings(user)).body.meetings[0];
+    expect((await row('bob')).waitingOnYou).toBe(1);
+    expect((await row('alice')).waitingOnYou).toBe(0);
   });
 });

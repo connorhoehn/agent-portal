@@ -102,6 +102,14 @@ export interface AssistantStore {
   listMinutes(filter: MinutesFilter): Promise<MinutesRecord[]>;
   /** Delete the call's lines and replace its minutes with a tombstone (created when none exist), so they are not written again. Returns the lines removed. */
   tombstoneMinutes(callId: string, by: string, at: number): Promise<number>;
+  /** Count one more writer run for minutes that have no draft yet, only when `attempts` is still `expect` and below `max` (one run at a time, a hard cap). True when counted. */
+  claimMinutesAttempt(callId: string, expect: number, max: number): Promise<boolean>;
+  /** Replace the content of minutes that have no draft (writer 'none', not deleted) with a new write; `attempts` and `notifiedAt` are kept. True when replaced. */
+  rewriteMinutes(minutes: MinutesRecord): Promise<boolean>;
+  /** Minutes without a draft that may be written again, with fewer than `maxAttempts` runs, oldest first. */
+  listRetryableMinutes(maxAttempts: number, limit: number): Promise<MinutesRecord[]>;
+  /** Mark the attendees as told the minutes are ready; true only for the first caller (so the bell rings once, also across a restart). */
+  claimMinutesNotice(callId: string, at: number): Promise<boolean>;
   /** Delete minutes and tombstones created at or before `cutoffMs`. Returns how many went. */
   sweepMinutes(cutoffMs: number): Promise<number>;
   /** Record a proposal; an existing (call, id) is returned as it is with `created: false`. */
@@ -330,6 +338,34 @@ export class MemoryAssistantStore implements AssistantStore {
     const old = this.minutes.get(callId);
     this.minutes.set(callId, tombstone(callId, old, r, by, at));
     return rows.length;
+  }
+
+  async claimMinutesAttempt(callId: string, expect: number, max: number) {
+    const m = this.minutes.get(callId);
+    if (!m || m.deleted || m.writer !== 'none' || !m.retryable) return false;
+    const n = m.attempts ?? 1;
+    if (n !== expect || n >= max) return false;
+    m.attempts = n + 1;
+    return true;
+  }
+
+  async rewriteMinutes(next: MinutesRecord) {
+    const m = this.minutes.get(next.callId);
+    if (!m || m.deleted || m.writer !== 'none') return false;
+    this.minutes.set(next.callId, { ...copy(next), attempts: m.attempts ?? 1, notifiedAt: m.notifiedAt ?? null, createdAt: m.createdAt });
+    return true;
+  }
+
+  async listRetryableMinutes(maxAttempts: number, limit: number) {
+    return [...this.minutes.values()].filter((m) => !m.deleted && m.writer === 'none' && m.retryable && (m.attempts ?? 1) < maxAttempts)
+      .sort((a, b) => a.createdAt - b.createdAt || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
+  }
+
+  async claimMinutesNotice(callId: string, at: number) {
+    const m = this.minutes.get(callId);
+    if (!m || m.deleted || m.notifiedAt) return false;
+    m.notifiedAt = at;
+    return true;
   }
 
   async sweepMinutes(cutoffMs: number) {
