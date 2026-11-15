@@ -21,7 +21,7 @@ import { sessionOf, type AssistantRecord } from './types.js';
 import type { AssistantStore } from './store.js';
 import { assistantIntake } from './intake-select.js';
 
-export const RESTART_NOTICE = `${NOVA_NAME} stopped listening because the service restarted. Anyone who can invite ${NOVA_NAME} can resume.`;
+export const RESTART_NOTICE = `${NOVA_NAME} stopped listening because the service restarted. Anyone here can resume ${NOVA_NAME}.`;
 /** How many records one reconcile looks at; a deployment never has this many calls open at once. */
 export const RECONCILE_LIMIT = 500;
 

@@ -22,6 +22,7 @@ import { callChatChannel, callChatRuntime } from '../call-chat.js';
 import { notify } from '../social-notify.js';
 import { postThreadMessage, updateThreadMessage } from '../social-chat.js';
 import { assistantStore } from './store-select.js';
+import { assistantLimits } from './limits.js';
 import { onProposalChanged } from './proposals.js';
 import type { Proposal } from './types.js';
 import {
@@ -76,8 +77,10 @@ export async function postAsAssistant(callId: string, message: { text: string; m
 // Notices. Plain sentences, no emoji. Names are display names.
 
 export const noticeText = {
-  joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays): string =>
-    `${NOVA_NAME} joined at ${inviterName}'s invitation. While ${NOVA_NAME} is listening, what you say in this call is sent to the speech provider and kept as text for ${retentionDays} days. Anyone here can pause or dismiss ${NOVA_NAME}.`,
+  joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
+    `${NOVA_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
+    `${NOVA_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
+    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone; a dismissed ${NOVA_NAME} cannot rejoin this call.`,
   paused: (name: string): string => `${name} paused ${NOVA_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${NOVA_NAME}. ${NOVA_NAME} is listening again.`,
   dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${NOVA_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,

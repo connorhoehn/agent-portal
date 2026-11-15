@@ -303,7 +303,7 @@ describe('the refusals', () => {
     answers.push(...s.answersFor('call_1').map(([, o]) => o));
     expect(answers).toEqual(['{"refused":"could not tell who asked"}']);
     s.say('Sorry, I cannot do that.'); await flush();
-    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']); // only the fixed line; the follow-up is muted
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['Nova could not tell who asked. Ask again.']); // only the fixed line; the follow-up is muted
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(1);
   });
 
@@ -338,7 +338,7 @@ describe('the refusals', () => {
     await flush();
     expect(s.answersFor('call_9').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
-    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['Nova could not tell who asked. Ask again.']);
   });
 
   it('the real session asker is the latest attributed speaker, and when it is the person who said the name the call goes ahead', async () => {
@@ -363,16 +363,18 @@ describe('the refusals', () => {
     expect(mockPosts.replies).toEqual([{ text: 'There are no matches.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 
-  it('a tool outside the asker\'s role is refused with a reply that says so; a person with no grants can do nothing; the excluded tools never run', async () => {
+  it('a tool outside the asker\'s role is refused: the reason privately to the asker, a neutral line to the call; a person with no grants can do nothing; the excluded tools never run', async () => {
     await say(CAROL, 'Nova, find the Kubernetes experts');
     expect(await store.listTurns(CALL)).toEqual([]);
-    expect(mockPosts.replies).toEqual([{ text: 'Carol cannot do that here.', askedBy: CAROL, askedByName: 'Carol' }]);
+    expect(mockPosts.replies).toEqual([{ text: "Nova can't do that from this call.", askedBy: CAROL, askedByName: 'Carol' }]);
+    expect(mockPosts.privates).toEqual([{ userId: CAROL, text: expect.stringMatching(/^Nova did not do that because it needs a permission your role here does not include\./) }]);
+    expect(mockPosts.replies.map((r) => r.text).join(' ')).not.toMatch(/Carol/);
     mockPosts.replies.length = 0;
     await intake.handle(CALL, { userId: ALICE, text: 'Nova, open the budgets page.', at: now });
     runtime.devToolCall(CALL, ALICE, 'open', { page: 'budgets' });
     await flush();
     expect(await store.listTurns(CALL)).toEqual([]);
-    expect(mockPosts.replies).toEqual([{ text: 'Alice cannot do that here.', askedBy: ALICE, askedByName: 'Alice' }]);
+    expect(mockPosts.replies).toEqual([{ text: "Nova can't do that from this call.", askedBy: ALICE, askedByName: 'Alice' }]);
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(2);
   });
 
@@ -801,7 +803,7 @@ describe('the asker is the person who addressed Nova (B3), on the real path', ()
     expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(2);
-    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['Nova could not tell who asked. Ask again.']);
     now += 31_000;
     await line(null, 'Nova, find the experts again.', now - 500);
     s.call('call_3', 'search', { query: 'x' }); await flush();
@@ -822,7 +824,7 @@ describe('the asker is the person who addressed Nova (B3), on the real path', ()
     s.call('call_1', 'search', { query: 'x' }); await flush();
     expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
-    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['Nova could not tell who asked. Ask again.']);
   });
 });
 
@@ -850,7 +852,7 @@ describe('a private read never passes through the shared session (B2)', () => {
     s.call('call_p', 'budget', { scope: 'me' }); await flush();
     const [turn] = await runtime.turnsFor(CALL, BOB);
     await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 1 } });
-    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Your answer is ready; open the page to see it.' }]);
+    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Your answer is in your notifications.' }]);
     mockPosts.privates.length = 0;
     await line(BOB, 'Nova, how much budget do I have now?', now - 500);
     s.call('call_q', 'budget', { scope: 'me' }); await flush();
@@ -858,6 +860,12 @@ describe('a private read never passes through the shared session (B2)', () => {
     await submitClaimed(CALL, t2!.turnId, BOB, { ok: true, output: { say: `x\n\u0007${'y'.repeat(700)}` } });
     expect(mockPosts.privates[0]!.text).toHaveLength(600);
     expect(mockPosts.privates[0]!.text).not.toMatch(/[\u0000-\u001f]/);
+    mockPosts.privates.length = 0;
+    await line(BOB, 'Nova, and my budget for next week?', now - 200);
+    s.call('call_r', 'budget', { scope: 'me' }); await flush();
+    const [t3] = await runtime.turnsFor(CALL, BOB);
+    await submitClaimed(CALL, t3!.turnId, BOB, { ok: false, error: 'boom' });
+    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Nova could not get that. Ask again.' }]);
   });
 });
 

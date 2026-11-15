@@ -383,6 +383,23 @@ async function main() {
       return 'paused: both see it, nothing stored; resumed: stored';
     });
 
+    // ── 5b. A spoken pause does what the button does: the same named notice, seen by both ──
+    await step('5b: "Nova, pause" said by the second person pauses Nova for both and posts the same named notice as the button; resume brings listening back', async () => {
+      const before = (await novaOf(vera, 'assistant-notice')).filter((m) => /paused Nova\. Nothing is being heard or stored\./.test(m.message)).length;
+      await inject(NORA.userId, 'Nova, pause.');
+      await waitMark(vera.page, /^Nova is paused$/);
+      await waitMark(nora.page, /^Nova is paused$/);
+      const notices = await waitFor(async () => {
+        const all = (await novaOf(vera, 'assistant-notice')).filter((m) => /paused Nova\. Nothing is being heard or stored\./.test(m.message));
+        return all.length > before ? all : null;
+      }, 20000, 'the spoken pause notice');
+      check(!notices.at(-1).message.startsWith(NORA.userId), `the spoken pause notice names an id, not a person: "${notices.at(-1).message}"`);
+      check((await stateOf(vera)).pausedBy === NORA.userId, 'the pause is not recorded as the speaker\'s');
+      await novaMenu(vera, 'Resume Nova');
+      await waitMark(vera.page, /^Nova is listening$/);
+      return `paused by voice; notice "${notices.at(-1).message}"`;
+    });
+
     // ── 8. A spoken read is answered in the call chat, labelled with who asked (the scripted session: no model) ──
     await step('8: "Nova, what is two plus two?" from the inviter lands in the call chat as Nova\'s reply to that person; nothing else was asked of the browser', async () => {
       await inject(VERA.userId, 'Nova, what is two plus two?');
@@ -1020,6 +1037,8 @@ async function main() {
       }
       const again = await vera.api.post(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/invite`, { data: {} });
       check(again.status() === 409, `a re-invite answered ${again.status()}, not 409`);
+      const againError = (await again.json().catch(() => ({}))).error;
+      check(againError === 'Nova has already left this call and cannot rejoin it.', `the re-invite refusal reads "${againError}"`);
       check(await vera.page.getByTestId('nova-roster-entry').count() === 0, 'Nova stayed in the roster');
       await barFits(vera.page, 'the bar after dismissal', 1280);
       await shot(vera.page, '6-left');
@@ -1030,9 +1049,9 @@ async function main() {
       return 'left; re-invite 409; the open proposal expires in 72 h';
     });
 
-    await step('6b: with Nova dismissed the unconfirmed card reads Expired for both, says nobody confirmed it in time, and nothing was created', async () => {
+    await step('6b: with Nova dismissed the unconfirmed card reads Expired for both, says Nova was dismissed (not that its asker failed to confirm), and nothing was created', async () => {
       const expired = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === expiryCard.metadata.actionId && m.metadata.status === 'expired'), 20000, 'the card going to expired');
-      check(/did not confirm this in time/.test(expired.metadata.resultText ?? ''), `the expired card says "${expired.metadata.resultText}"`);
+      check(expired.metadata.resultText === 'Nova was dismissed before this was done.', `the expired card says "${expired.metadata.resultText}"`);
       for (const p of [vera, nora]) {
         const card = p.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
         await waitFor(async () => /Expired/.test(await card.getByTestId('assistant-action-status').innerText().catch(() => '')), 15000, `${p.who.userId} seeing Expired`);

@@ -17,6 +17,9 @@ export function assistantLimits(): AssistantLimits {
   return { maxSeconds: Math.round(maxMinutes * 60), hardMaxSeconds: Math.round(hardMinutes * 60), maxRequests: Math.floor(positive('MEETING_ASSISTANT_MAX_REQUESTS', 60)) };
 }
 
+/** The call is told when this many requests are left before the cap. */
+export const REQUESTS_WARNING_LEFT = 5;
+
 /** The warning goes out this long before the ceiling. */
 export const CEILING_WARNING_SECONDS = 300;
 

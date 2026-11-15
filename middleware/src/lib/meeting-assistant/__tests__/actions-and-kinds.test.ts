@@ -113,7 +113,7 @@ describe('message kinds', () => {
   });
 
   it('the notice sentences are plain, name the person, and carry the configured retention', () => {
-    expect(noticeText.joined('Una', 30)).toBe("Nova joined at Una's invitation. While Nova is listening, what you say in this call is sent to the speech provider and kept as text for 30 days. Anyone here can pause or dismiss Nova.");
+    expect(noticeText.joined('Una', 30)).toBe("Nova joined at Una's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Nova, or dismiss it for everyone; a dismissed Nova cannot rejoin this call.");
     expect(noticeText.paused('Una')).toBe('Una paused Nova. Nothing is being heard or stored.');
     expect(noticeText.dismissed('Una')).toBe('Una dismissed Nova.');
     for (const text of [noticeText.joined('Una', 7), noticeText.paused('Una'), noticeText.resumed('Una'), noticeText.dismissed('Una')]) expect(text).not.toMatch(/\p{Extended_Pictographic}/u);

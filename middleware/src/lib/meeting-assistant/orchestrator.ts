@@ -31,7 +31,7 @@ import { findAddress, nameLock, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
 import { callChatRuntime } from '../call-chat.js';
-import { CEILING_WARNING_SECONDS, assistantLimits } from './limits.js';
+import { CEILING_WARNING_SECONDS, REQUESTS_WARNING_LEFT, assistantLimits } from './limits.js';
 import { finishMinutes } from './minutes-service.js';
 import { assistantSpend, currentListeningSecondsOf, listeningSecondsOf, settleFinished, type ReserveOutcome } from './spend.js';
 import type { AssistantStore } from './store.js';
@@ -54,7 +54,7 @@ export const WRITE_TURN_TTL_MS = 10 * 60_000;
 export const ASKER_WINDOW_MS = 20_000;
 /** Tool calls one addressed request may make; the next is refused with "too many steps". */
 export const MAX_CALLS_PER_REQUEST = 3;
-export const TYPED_UNSUPPORTED_REPLY = 'I can only hear spoken requests in this call. Say my name and ask aloud.';
+export const TYPED_UNSUPPORTED_REPLY = `${NOVA_NAME} only hears spoken requests in this call. Say "${NOVA_NAME}" and ask aloud.`;
 /** A call chat message that addresses Nova: it starts with the name and a comma, colon or space, or mentions @Nova. */
 export const addressesNova = (text: string): boolean => /^\s*@?nova(?:[,:\s]|$)/i.test(text) || /(^|[^\w])@nova\b/i.test(text);
 export const MAX_REPLACEMENTS = 3;
@@ -198,7 +198,7 @@ export const UNASKED_NOTICE_EVERY_MS = 30_000;
 export const ATTENDANCE_EVERY_MS = 15_000;
 /** The process writes "still alive" on each listening record this often (audit M5); a restart closes the listening period there. */
 export const HEARTBEAT_EVERY_MS = 30_000;
-export const UNASKED_REPLY = 'I could not tell who asked. Please ask again.';
+export const UNASKED_REPLY = `${NOVA_NAME} could not tell who asked. Ask again.`;
 
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
 interface CallRun {
@@ -293,8 +293,13 @@ export const EXPIRY_WORDS: Readonly<Record<ExpiryCause, { model: string; chat: (
   restarted: { model: 'Nova was restarted', chat: (n) => `${NOVA_NAME} was restarted before it could finish ${n}'s request. Ask again once it is listening.`, card: `${NOVA_NAME} was restarted before this ran. Ask again once it is listening.` },
 };
 
+/** A request the asker's role does not allow: the call reads the first line, the asker alone the second. */
+export const NOT_PERMITTED_PUBLIC = `${NOVA_NAME} can't do that from this call.`;
+export const NOT_PERMITTED_PRIVATE = `${NOVA_NAME} did not do that because it needs a permission your role here does not include. Someone who has it can ask ${NOVA_NAME}, or an admin can help.`;
 /** What a private read posts when the asker's browser sent no sentence of its own. */
-export const PRIVATE_FALLBACK = 'Your answer is ready; open the page to see it.';
+export const PRIVATE_FALLBACK = 'Your answer is in your notifications.';
+/** What a private read posts when it did not work. */
+export const PRIVATE_FAILED = `${NOVA_NAME} could not get that. Ask again.`;
 export const PRIVATE_SAY_MAX = 600;
 /** One plain-text line of at most `max` characters: control characters dropped, whitespace collapsed. */
 const plainSentence = (v: unknown, max: number): string => (typeof v === 'string' ? v : '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -1033,6 +1038,10 @@ export class AssistantRuntime {
           }
           continue;
         }
+        // A few requests before the cap, said once (the count only rises, so it equals this once).
+        if (record && record.requests === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) {
+          await postNoticeQuietly(callId, `${NOVA_NAME} can answer ${REQUESTS_WARNING_LEFT} more requests in this call, then it stops answering.`);
+        }
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
         if (session?.acceptsText) {
@@ -1180,7 +1189,9 @@ export class AssistantRuntime {
       trace('call.refused', { call: e.callId, why: 'role' });
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
       await this.store.bumpRefused(callId);
-      await postReply(callId, { text: `${askerName} cannot do that here.`, askedBy: asker, askedByName: askerName });
+      // The reason goes to the asker alone (their notifications); the call sees only a neutral line that puts nothing on them.
+      await postPrivately(callId, asker, { text: NOT_PERMITTED_PRIVATE }).catch(() => false);
+      await postReply(callId, { text: NOT_PERMITTED_PUBLIC, askedBy: asker, askedByName: askerName });
       return;
     }
     if (!argsOk) { await this.refuse(run, e.callId, 'invalid arguments'); return; }
@@ -1323,7 +1334,7 @@ export class AssistantRuntime {
         this.answer(run, modelCallId, result.ok ? { status: 'answered_privately' } : { error: 'It did not work.' });
       }
       const say = result.ok ? plainSentence((result.output as { say?: unknown } | null)?.say, PRIVATE_SAY_MAX) : '';
-      await postPrivately(callId, userId, { text: result.ok ? (say || PRIVATE_FALLBACK) : 'Nova could not get that.' }).catch(() => false);
+      await postPrivately(callId, userId, { text: result.ok ? (say || PRIVATE_FALLBACK) : PRIVATE_FAILED }).catch(() => false);
       if (result.ok) await postReply(callId, { text: `Answered privately for ${await nameOf(userId)}.`, askedBy: userId, askedByName: await nameOf(userId) }).catch(() => null);
       return { turn: moved };
     }
@@ -1420,7 +1431,11 @@ export class AssistantRuntime {
       await this.stop(callId, 'limit');
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
       await this.store.patchSession(callId, { warned: true });
-      await postNoticeQuietly(callId, `${NOVA_NAME} leaves in 5 minutes. Anyone who can invite ${NOVA_NAME} can extend.`);
+      // Said according to whether more time can still be added, and naming the inviter for the people who cannot extend.
+      const canExtend = s.ceilingSeconds < assistantLimits().hardMaxSeconds;
+      await postNoticeQuietly(callId, canExtend
+        ? `${NOVA_NAME} leaves in 5 minutes. Anyone who can invite ${NOVA_NAME} can extend its time; if you can't, ask ${await nameOf(record.invitedBy)}.`
+        : `${NOVA_NAME} leaves in 5 minutes; this call cannot be extended further.`);
     }
   }
 

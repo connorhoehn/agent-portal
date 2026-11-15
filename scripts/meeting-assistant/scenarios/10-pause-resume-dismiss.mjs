@@ -29,6 +29,7 @@ export default {
     const framesAtPause = ctx.world.provider?.seen.frames ?? null;
     r.expect('the request during the pause was not stored', !linesPaused.some((l) => /two plus two/i.test(l.text)), `${linesPaused.length} line(s) stored`);
     r.expect('the request during the pause was not answered', !chatPaused.some((m) => m.metadata?.kind === 'assistant-reply'));
+    r.expect('the pause posted the named notice (the path a spoken pause shares)', chatPaused.some((m) => m.metadata?.kind === 'assistant-notice' && /paused Nova\. Nothing is being heard or stored\./.test(String(m.message))));
     const lane = ctx.lanes.nora;
     r.expect('the sink refused the audio during the pause (a dead token answers 404)', (lane.answers['404'] ?? 0) > 0, `answers ${JSON.stringify(lane.answers)}; counters ${JSON.stringify(audioPaused?.counters ?? null)}`);
     if (framesBefore !== null) r.expect('no audio reached the provider during the pause', framesAtPause - framesBefore <= 12, `${framesAtPause - framesBefore} frames between the pause and ${Math.round((Date.now() - pausedAt) / 1000)} s later (a few can be in flight)`);

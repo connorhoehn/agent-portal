@@ -196,10 +196,12 @@ describe('deleting and reusing', () => {
 describe('before anything starts (preflight)', () => {
   const session = { sub: 'u-ana', name: 'Ana', tenant: 'orgiq', role: 'member', epoch: 0, grants: {}, iat: 0 } as unknown as Session;
 
-  it('refuses the real path with a plain 503 naming the missing settings, never their values', async () => {
+  it('refuses the real path with a plain 503 for the person; the missing settings (never their values) go to the server log', async () => {
     mockConfig.meetingAssistant.media = { url: `http://127.0.0.1:${port}`, adminToken: '', sinkBaseUrl: '' };
-    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN') });
-    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ message: expect.stringContaining('MEETING_ASSISTANT_SINK_BASE_URL') });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Nova isn't set up here. Ask an admin." });
+    expect(warn.mock.calls.map((c) => String(c[0])).join(' ')).toMatch(/MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN, MEETING_ASSISTANT_SINK_BASE_URL/);
+    warn.mockRestore();
     expect(missingMediaSettings()).toEqual(['MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN', 'MEETING_ASSISTANT_SINK_BASE_URL']);
     await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.not.toMatchObject({ message: expect.stringContaining(`${port}`) });
   });
@@ -253,7 +255,7 @@ describe('the sink secret gates arming (B4)', () => {
     await settle();
     expect(tapPosts()).toEqual([]);
     setChannelResolver({ channelOf: async () => ARN });
-    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('MEETING_ASSISTANT_SINK_SECRET') });
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Nova isn't set up here. Ask an admin." });
   });
 
   it('with a secret configured arming goes ahead; the secret never appears in a message', async () => {

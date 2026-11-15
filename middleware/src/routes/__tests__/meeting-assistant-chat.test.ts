@@ -81,7 +81,7 @@ describe('notices', () => {
     expect((await post('invite')).status).toBe(201);
     const [notice] = await chat();
     expect(notice).toMatchObject({ userId: 'agent:nova', metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Nova' } });
-    expect(notice!.message).toBe("Nova joined at Alice Ames's invitation. While Nova is listening, what you say in this call is sent to the speech provider and kept as text for 14 days. Anyone here can pause or dismiss Nova.");
+    expect(notice!.message).toBe("Nova joined at Alice Ames's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 14 days. Nova writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Nova, or dismiss it for everyone; a dismissed Nova cannot rejoin this call.");
     await post('invite');
     expect(await chat()).toHaveLength(1);
   });
