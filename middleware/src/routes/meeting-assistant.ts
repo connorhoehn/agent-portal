@@ -396,7 +396,7 @@ async function rejoin(req: Request, res: Response, session: Session, before: Ass
   if (!held.ok) { await stopIntakeIfLeft(); sendRefusal(res, held.refusal, 'invite'); return; }
   const giveBack = async () => { await spend.release(held.holdId ? [held.holdId] : []); };
   const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
-  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId) }); } catch (e) {
+  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId), fromSeq: prior.nextSeq }); } catch (e) {
     await giveBack(); await stopIntakeIfLeft();
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
     throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);

@@ -1661,6 +1661,20 @@ describe('who a spoken answer is posted for, and which speech is only an acknowl
     expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
   });
 
+  it('after Nova was invited back, a request left unanswered in the earlier period is never taken as this period\'s asker', async () => {
+    await realRuntime();
+    await line(BOB, 'Nova, what is two plus two?', T0 + 1000);           // Nova left before answering it
+    await runtime.stop(CALL);
+    const fromSeq = (await store.get(CALL))!.nextSeq;
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], audio: audioTap }, { tickMs: 0 });
+    await runtime.start({ ...ctx, fromSeq });
+    const s = fake();
+    await line(ALICE, 'Nova, what time is it?', T0 + 5000);
+    now = T0 + 6000;
+    s.sayAt('Noon.', 6000); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Noon.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
   it('a reply after its context\'s time window falls to the asker of the latest unanswered line', async () => {
     const s = await realRuntime();
     await line(ALICE, 'Nova, find the experts.', T0 + 1000);

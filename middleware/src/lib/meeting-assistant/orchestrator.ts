@@ -84,6 +84,8 @@ export interface StartContext {
   roster: readonly string[];
   /** The call's record name (an initiative's name), or null. */
   recordName: string | null;
+  /** Nova was invited back: lines before this one belong to an earlier period and are never taken as a request of this one. */
+  fromSeq?: number;
 }
 
 export interface RuntimeDeps {
@@ -1009,7 +1011,8 @@ export class AssistantRuntime {
   private async addressingLines(run: CallRun): Promise<TranscriptLine[]> {
     const record = await this.store.get(run.ctx.callId);
     if (!record) return [];
-    const lines = (await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
+    const floor = run.ctx.fromSeq ?? 0; // an earlier period's request is never this period's (Nova was invited back)
+    const lines = (await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => l.seq >= floor && !this.echoOf(run, l));
     return replyAddressing(lines);
   }
 
