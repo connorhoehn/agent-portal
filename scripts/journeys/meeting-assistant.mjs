@@ -796,8 +796,9 @@ async function main() {
       const blockSel = '[data-testid="shell-call-media"][data-expanded="true"] section[data-call-dock]';
       if (!(await vera.page.locator(blockSel).first().isVisible().catch(() => false))) await vera.page.getByTestId('shell-call-dock-chat').click();
       await vera.page.locator(blockSel).first().waitFor({ timeout: 20000 });
-      const tilesNow = async () => vera.page.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => `${b.getAttribute('data-layout')}:${b.querySelectorAll('[data-peer-id]').length} tiles "${b.querySelector('[data-testid="call-dock-meta"]')?.textContent ?? ''}" ${b.querySelector('[data-variant]')?.getAttribute('data-variant') ?? ''}`).join(' | '), blockSel);
-      await waitFor(async () => (await vera.page.locator(`${blockSel} [data-peer-id]`).count()) === 3, 20000, 'three tiles in the call block')
+      const tilesNow = async () => vera.page.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => `${b.getAttribute('data-layout')}:${b.querySelectorAll('[data-peer-id]').length} tiles [${[...b.querySelectorAll('[data-peer-id]')].map((t) => `${t.getAttribute('data-peer-id')}=${t.getAttribute('aria-label') ?? t.tagName}`).join(', ')}] "${b.querySelector('[data-testid="call-dock-meta"]')?.textContent ?? ''}" ${b.querySelector('[data-variant]')?.getAttribute('data-variant') ?? ''}`).join(' | '), blockSel);
+      // Seats are the people in the call; an invitee who never answered the huddle's ring keeps a "ringing" placeholder tile after them (2.436.0).
+      await waitFor(async () => (await vera.page.locator(`${blockSel} [data-peer-id]:not([data-ringing="true"])`).count()) === 3, 20000, 'three tiles in the call block')
         .catch(async (e) => { throw new StepFailure(`${e.message}: ${await tilesNow()}`); });
       const seenAt = [];
       for (const width of [1440, 1280]) {
@@ -805,14 +806,16 @@ async function main() {
         const r = await vera.page.evaluate((sel) => {
           const block = document.querySelector(sel);
           const tiles = [...block.querySelectorAll('[data-peer-id]')];
+          const seats = tiles.filter((t) => t.getAttribute('data-ringing') !== 'true');
           const rects = tiles.map((t) => t.getBoundingClientRect());
           const media = block.closest('[data-testid="shell-call-media"]');
           const dot = block.querySelector('[data-testid="call-recording-indicator-dot"]');
           return {
             layout: block.getAttribute('data-layout'),
-            count: tiles.length,
-            first: tiles[0]?.getAttribute('aria-label') ?? '',
-            names: tiles.map((t) => t.querySelector('[data-tile-label] span')?.textContent ?? ''),
+            count: seats.length,
+            ringing: tiles.filter((t) => t.getAttribute('data-ringing') === 'true').map((t) => t.getAttribute('aria-label')),
+            first: seats[0]?.getAttribute('aria-label') ?? '',
+            names: seats.map((t) => t.querySelector('[data-tile-label] span')?.textContent ?? ''),
             sizes: [...new Set(rects.map((b) => `${Math.round(b.width)}x${Math.round(b.height)}`))],
             tops: [...new Set(rects.map((b) => Math.round(b.top)))],
             overlap: rects.some((b, i) => i > 0 && b.left < rects[i - 1].right - 1 && Math.round(b.top) === Math.round(rects[i - 1].top)),
@@ -827,7 +830,7 @@ async function main() {
           };
         }, blockSel);
         check(r.layout === 'compact', `the block's layout is ${r.layout} at ${width}`);
-        check(r.count === 3, `${r.count} tiles for three people at ${width}`);
+        check(r.count === 3, `${r.count} seated tiles for three people at ${width}`);
         check(r.first === 'You' || r.first.startsWith('You,'), `the first tile is "${r.first}" at ${width}`);
         check(r.names.every((n) => n.trim().length > 0) && r.names[0] === 'You', `tile names ${JSON.stringify(r.names)} at ${width}`);
         check(r.sizes.length === 1, `the tiles differ in size at ${width}: ${r.sizes.join(', ')}`);
@@ -839,7 +842,7 @@ async function main() {
         // The stand-in SFU never connects media, so the meta line may still read "Connecting…"; the tiles are the seats.
         check(/^3 people · |^Connecting/.test(r.meta), `the meta line reads "${r.meta}" at ${width}`);
         check(r.height <= 120, `the call block is ${r.height}px tall at ${width}`);
-        seenAt.push(`${width}: ${r.count} tiles ${r.sizes[0]} (${r.names.join(', ')}), block ${r.height}px, "${r.meta}" + dot`);
+        seenAt.push(`${width}: ${r.count} tiles ${r.sizes[0]} (${r.names.join(', ')}${r.ringing.length ? `; then ${r.ringing.join(', ')}` : ''}), block ${r.height}px, "${r.meta}" + dot`);
         await shot(vera.page, 'G1-call-block-three', width);
         await vera.page.locator(blockSel).first().screenshot({ path: path.join(SHOTS, `G1-call-block-only-${width}.png`) });
       }
