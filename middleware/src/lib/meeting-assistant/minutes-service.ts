@@ -178,6 +178,10 @@ async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input:
   }
 }
 
+const actionCardKey = (callId: string, index: number): string => createHash('sha256').update(`${callId}:${index}`).digest('hex').slice(0, 16);
+/** The turn behind the "Create a work item" card offered for the minutes' action item at `index`; once done, the work item exists. */
+export const actionCardTurnId = (callId: string, index: number): string => `t-m-${actionCardKey(callId, index)}`;
+
 /** Offer each owned action item to its owner as a "Create a work item" card, only while the owner is still in the live call. */
 async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initiativeName: string | null): Promise<number> {
   const store = assistantStore();
@@ -191,10 +195,10 @@ async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initi
     const roles = await import('./orchestrator.js').then((m) => m.defaultRolesOf(owner, record.tenant)).catch(() => [] as string[]);
     if (!roles.some((role) => meetingTools(record.tenant, role).some((t) => t.name === 'create'))) continue;
     const args = createWorkItemArgs(item.text, initiativeName);
-    const key = createHash('sha256').update(`${record.callId}:${i}`).digest('hex').slice(0, 16);
+    const key = actionCardKey(record.callId, i);
     const actionId = `m-${key}`;
     const now = Date.now();
-    const turn: AssistantTurn = { turnId: `t-m-${key}`, callId: record.callId, askedBy: owner, tool: { name: 'create', args }, kind: 'write', status: 'pending', actionId, createdAt: now, expiresAt: now + WRITE_CARD_TTL_MS };
+    const turn: AssistantTurn = { turnId: actionCardTurnId(record.callId, i), callId: record.callId, askedBy: owner, tool: { name: 'create', args }, kind: 'write', status: 'pending', actionId, createdAt: now, expiresAt: now + WRITE_CARD_TTL_MS };
     const made = await store.createTurn(turn);
     if (!made.created) continue;
     const posted = await postAction(record.callId, {
@@ -241,7 +245,12 @@ async function composeMinutes(callId: string, record: AssistantRecord, attempts:
   // A dismissed one ("Not a decision", or raised again as a new one) holds nothing: a real decision dismissed by mistake still
   // reaches the minutes as a decision line.
   const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
-  const held = { statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence) };
+  const held = {
+    statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence),
+    // For the scripted summary's bullets: decisions agreed through a proposal, and proposals still waiting for answers.
+    agreed: proposals.filter((p) => p.outcome.kind === 'decision' && ['consented', 'running', 'done'].includes(p.state)).map((p) => p.statement),
+    open: proposals.filter((p) => ['open', 'objected', 'consented'].includes(p.state) && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement),
+  };
 
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };

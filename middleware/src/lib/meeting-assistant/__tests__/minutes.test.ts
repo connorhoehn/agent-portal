@@ -8,7 +8,7 @@ import { sweepTranscripts } from '../retention.js';
 import { SqlAssistantStore, minutesFromRow } from '../store-sql.js';
 import {
   buildMinutesRequest, capTranscript, MAX_MINUTES_BYTES, MAX_MINUTES_LINES, MinutesWriterError, OpenAiMinutesWriter, parseMinutesResponse, resolveOwner,
-  ScriptedMinutesWriter, heldByProposal, withoutHeld, type RosterEntry,
+  ScriptedMinutesWriter, heldByProposal, withoutHeld, summaryParts, composeSummary, chatSummary, type RosterEntry,
 } from '../minutes.js';
 import type { AssistantRecord, MinutesRecord, TranscriptLine } from '../types.js';
 
@@ -22,10 +22,27 @@ describe('the scripted writer', () => {
   const write = (lines: TranscriptLine[], doneActions?: Array<{ text: string; ownerUserId: string }>) =>
     new ScriptedMinutesWriter().write({ lines, roster: ROSTER, callName: 'Auth call', ...(doneActions ? { doneActions } : {}) });
 
-  it('summarises with the first sentence of each speaker, in the order they first spoke', async () => {
-    const out = await write([line('u-vera', 'Welcome all. Let us start.'), line('u-nora', 'The cutover is risky! We need a plan.'), line('u-vera', 'Second thought.')]);
-    expect(out.summary).toBe('Vera Green said: Welcome all. Nora Diaz said: The cutover is risky!');
+  it('summarises as a lead and bullets built from what it found, never a speaker-by-speaker echo of the lines', async () => {
+    const out = await write([
+      line('u-vera', 'Welcome all. Let us start.', { at: 0 }), line('u-nora', 'We decided to ship Thursday.', { at: 60_000 }),
+      line('u-vera', "I'll draft the rollout note.", { at: 180_000 }),
+    ]);
+    expect(out.summary).toBe('Three people met for 3 minutes about Auth.\n- Agreed: We decided to ship Thursday.\n- Next step: Vera Green to draft the rollout note.');
+    expect(out.summary).not.toMatch(/said:/);
+    expect(summaryParts(out.summary)).toEqual({ lead: 'Three people met for 3 minutes about Auth.', points: ['Agreed: We decided to ship Thursday.', 'Next step: Vera Green to draft the rollout note.'] });
     expect(out.truncated).toBe(false);
+  });
+
+  it('names the decisions agreed through proposals and the proposals still open, and says so when nothing was found', async () => {
+    const out = await new ScriptedMinutesWriter().write({
+      lines: [line('u-vera', 'Chatter.')], roster: ROSTER.slice(0, 2), callName: 'Call with Vera and Nora, 14 Nov',
+      held: { statements: ['Freeze schema changes', 'Keep tenants read-only'], evidence: [], agreed: ['Freeze schema changes'], open: ['Keep tenants read-only', 'Page the on-call', 'Move the review'] },
+    });
+    const { lead, points } = summaryParts(out.summary);
+    expect(lead).toBe('Two people met for under a minute.');
+    expect(points).toEqual(['Agreed: Freeze schema changes.', '3 proposals still wait for answers: Keep tenants read-only; Page the on-call; and 1 more.']);
+    const nothing = await write([line('u-vera', 'Chatter.')]);
+    expect(summaryParts(nothing.summary).points).toEqual(['No decisions or next steps were recorded.']);
   });
 
   it('finds an action item for "I will", "<Name> will", and "action item:", and owns the first two by the roster', async () => {
@@ -140,6 +157,23 @@ describe('parsing the answer', () => {
       { input_tokens: 100, output_tokens: 20, input_tokens_details: { cached_tokens: 40 } }), ROSTER);
     expect(out.actionItems).toEqual([{ text: 'a', ownerUserId: 'u-nora', ownerName: 'Nora Diaz' }, { text: 'b' }, { text: 'c' }, { text: 'd' }]);
     expect(out.usage).toEqual({ inputTokens: 100, outputTokens: 20, cachedTokens: 40 });
+  });
+
+  it('keeps the lead and at most four bullets, stored one per line, and the chat reads only the lead', () => {
+    const out = parseMinutesResponse(answer({ summary: 'Three people met about the cutover.', points: ['- Agreed to freeze schema changes.', 'Vera owns the rollback note.', 'c', 'd', 'e'], decisions: [], topics: [], actionItems: [] }), ROSTER);
+    expect(out.summary).toBe('Three people met about the cutover.\n- Agreed to freeze schema changes.\n- Vera owns the rollback note.\n- c\n- d');
+    expect(summaryParts(out.summary).points).toHaveLength(4);
+    expect(chatSummary(out.summary)).toBe('Three people met about the cutover.');
+    // An older record holds one paragraph: it is all lead, no bullets.
+    expect(summaryParts('Vera said one thing. Nora said another.')).toEqual({ lead: 'Vera said one thing. Nora said another.', points: [] });
+    expect(summaryParts(composeSummary('', ['only a bullet', 'second']))).toEqual({ lead: 'only a bullet', points: ['second'] });
+  });
+
+  it('asks the model for a short lead and two to four plain bullets, no quotes and no retelling by speaker', () => {
+    const body = buildMinutesRequest('m', { lines: [], roster: ROSTER, callName: 'c', truncated: false }) as { instructions: string; text: { format: { schema: { required: string[] } } } };
+    expect(body.text.format.schema.required).toContain('points');
+    expect(body.instructions).toMatch(/two to four short bullets/);
+    expect(body.instructions).toMatch(/never quote the transcript, never retell it speaker by speaker/);
   });
 
   it('bounds what it keeps and refuses non-JSON and empty answers', () => {

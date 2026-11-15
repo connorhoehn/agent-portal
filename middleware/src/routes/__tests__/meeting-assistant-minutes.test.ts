@@ -110,7 +110,11 @@ describe('writing the minutes', () => {
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, \d{1,2} [A-Z][a-z]{2}$/), writer: 'scripted', lineCount: 3, youAreInviter: true });
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.'].map((d) => d));
-    expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker' }, { text: 'update the runbook' }]));
+    expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker', workItemCreated: false }, { text: 'update the runbook', workItemCreated: false }]));
+    // The summary is a lead and bullets, sent split as well; never a speaker-by-speaker echo.
+    expect(m.summary).not.toMatch(/said:/);
+    expect(m.summaryLead).toBe('Two people met for under a minute.');
+    expect(m.summaryPoints).toEqual(['Agreed: Thanks for joining. We decided to cut over on Thursday.', '2 next steps: Bob Baker to rehearse the rollback; update the runbook.']);
     const leaving = await minutesNotices();
     expect(leaving).toHaveLength(1);
     // The text is the summary's first sentences; the counts ride on the message for the chat's minutes card.
@@ -159,11 +163,17 @@ describe('writing the minutes', () => {
     expect(meta).toMatchObject({ summary: 'Create a work item: rehearse the rollback', askedBy: 'bob', tool: { name: 'create' } });
     const turns = await assistantStore().listTurns(CALL, { askedBy: 'bob' });
     expect(turns[0]).toMatchObject({ kind: 'write', status: 'pending', tool: { name: 'create', args: { kind: 'work-item', fields: expect.objectContaining({ title: 'rehearse the rollback', initiative: null, type: null }) } } });
+    const before = (await get('minutes', 'alice')).body.actionItems as Array<{ text: string; workItemCreated: boolean }>;
+    expect(before.map((i) => i.workItemCreated)).toEqual([false, false]);
     // The card is decided after the assistant left: only by its owner.
     const decide = (user: string) => request(app).post(url(`actions/${meta.actionId}/decision`)).set('x-user', user).send({ decision: 'confirm' });
     expect((await decide('alice')).status).toBe(403);
     expect((await decide('bob')).status).toBe(200);
     expect((await get('turns?mine=1', 'bob')).body.turns).toHaveLength(1);
+    // Once the card's turn is carried out, the meeting page says the item's work item was created; the other item still has none.
+    await assistantStore().moveTurn(CALL, turns[0]!.turnId, { from: ['pending', 'running'], to: 'done' });
+    const after = (await get('minutes', 'alice')).body.actionItems as Array<{ text: string; workItemCreated: boolean }>;
+    expect(after.map((i) => [i.text, i.workItemCreated])).toEqual([['rehearse the rollback', true], ['update the runbook', false]]);
   });
 
   it('when the call has ended no cards are offered and the items are only on the page', async () => {
@@ -269,7 +279,8 @@ describe('who can read them', () => {
     const mine = (await meetings('alice')).body;
     expect(mine.meetings).toHaveLength(1);
     expect(mine.meetings[0]).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, /), waitingOnYou: 0, initiativeId: null, lobby: LOBBY, attendees: ['Alice Archer', 'Bob Baker'], decisionCount: 1, actionItemCount: 2 });
-    expect(mine.meetings[0].summary).toContain('Alice Archer said');
+    expect(mine.meetings[0]).toMatchObject({ summaryLead: 'Two people met for under a minute.', outcomes: { decisions: 1, actionItems: 2, open: 0 } });
+    expect(typeof mine.meetings[0].listenedSeconds).toBe('number');
     for (const user of ['carol', 'dave', 'root']) expect((await meetings(user)).body.meetings).toEqual([]);
     expect((await meetings('alice', '?initiative=p-other')).body.meetings).toEqual([]);
     expect((await meetings('alice', `?before=${mine.meetings[0].endedAt}`)).body.meetings).toEqual([]);

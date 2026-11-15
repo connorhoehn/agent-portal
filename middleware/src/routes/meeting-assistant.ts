@@ -58,7 +58,8 @@ import { eraseCall } from '../lib/meeting-assistant/erase.js';
 import { assistantRuntime, describeCall, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
-import { MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
+import { actionCardTurnId, MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
+import { minutesCounts, summaryParts } from '../lib/meeting-assistant/minutes.js';
 import { retentionDays } from '../lib/meeting-assistant/retention.js';
 import { owedBy } from '../lib/meeting-assistant/proposal-notify.js';
 import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
@@ -863,11 +864,17 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
   }
   const attendees = await namesOf(m.attendees);
   const attempts = m.attempts ?? (m.writer === 'none' ? 0 : 1);
+  // An action item whose "Create a work item" card was carried out (or that was done in the call) has its work item.
+  const doneTurns = new Set((await assistantStore().listTurns(callId, { statuses: ['done'] }).catch(() => [])).map((t) => t.turnId));
+  const actionItems = m.actionItems.map((item, i) => ({ ...item, workItemCreated: item.done === true || doneTurns.has(actionCardTurnId(callId, i)) }));
+  const parts = summaryParts(m.summary);
   res.json({
     proposals: await minutesProposals(callId, endedAt(record)),
     callId, callName: meetingNameOf(m, attendees.map((a) => a.name)), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
     invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), attendees, summary: m.summary, decisions: m.decisions,
-    actionItems: m.actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
+    // The summary's lead sentence and its bullets (an older record's paragraph is all lead).
+    summaryLead: parts.lead, summaryPoints: parts.points,
+    actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
     youAreInviter: m.invitedBy === session.sub,
     // The retention sweep removes the call this long after it ended (retention.ts counts from the same end time).
     keptUntil: (record.leftAt ?? m.endedAt) + retentionDays() * DAY_MS,
@@ -942,11 +949,17 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   const meetings = await Promise.all(rows.map(async (m) => {
     const attendees = (await namesOf(m.attendees)).map((a) => a.name);
     // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
-    const waitingOnYou = (await listProposalsFor(store, m.callId, now, m.endedAt).catch(() => []))
-      .filter((p) => ANSWERABLE.includes(p.state) && owedBy(p).includes(session.sub)).length;
+    const proposals = await listProposalsFor(store, m.callId, now, m.endedAt).catch(() => []);
+    const waitingOnYou = proposals.filter((p) => ANSWERABLE.includes(p.state) && owedBy(p).includes(session.sub)).length;
+    // Nova's listening time (not the meeting's length), and what came out of it: decisions (agreed proposals included, as the minutes
+    // card counts them), action items and the proposals still open.
+    const record = await store.get(m.callId).catch(() => null);
+    const listenedSeconds = record ? Math.floor(listeningSecondsOf(record, record.leftAt ?? now)) : null;
+    const counts = minutesCounts(m, proposals);
     return {
       callId: m.callId, callName: meetingNameOf(m, attendees), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
-      attendees, summary: m.summary, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length, waitingOnYou,
+      attendees, summary: m.summary, summaryLead: summaryParts(m.summary).lead, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length, waitingOnYou,
+      listenedSeconds, outcomes: { decisions: counts.decisions, actionItems: counts.actionItems, open: proposals.filter((p) => ANSWERABLE.includes(p.state)).length },
     };
   }));
   res.json({ meetings, next: rows.length === limit ? rows[rows.length - 1]!.endedAt : null });
