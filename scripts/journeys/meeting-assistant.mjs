@@ -358,6 +358,14 @@ async function main() {
       await inject(NORA.userId, heldBack);
       check(!(await stored(vera, heldBack, 3500)), 'a line was stored while Nova was paused');
       await barFits(vera.page, 'the bar while paused', 1280);
+      // The pause notice is Nova speaking quietly: one row at the start under Nova's mark, its sentence in a tinted pill, not centred grey text.
+      await seen(vera.page, 'huddle-thread');
+      const pausedLine = vera.page.locator('[data-testid="chat-system-line"]').filter({ hasText: /paused Nova\. Nothing is being heard or stored\./ }).last();
+      await pausedLine.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no pause notice'); });
+      const lineLook = await pausedLine.evaluate((el) => ({ voice: el.getAttribute('data-voice'), mark: !!el.querySelector('[data-testid="assistant-mark"]'),
+        pill: !!el.querySelector('[data-testid="chat-assistant-notice"]'), justify: getComputedStyle(el).justifyContent }));
+      check(lineLook.voice === 'assistant' && lineLook.mark && lineLook.pill, `the pause notice is not in Nova's voice: ${JSON.stringify(lineLook)}`);
+      check(lineLook.justify !== 'center', 'the pause notice is still centred');
       await shot(vera.page, '5-paused');
       await novaMenu(vera, 'Resume Nova');
       await waitMark(vera.page, /^Nova is listening$/);
@@ -376,7 +384,17 @@ async function main() {
       check(typeof reply.metadata.askedByName === 'string' && reply.metadata.askedByName.length > 0 && reply.metadata.askedByName !== VERA.userId, `the label has no display name: ${reply.metadata.askedByName}`);
       check((await myTurns(vera)).length === 0, 'a plain answer left a turn for the browser');
       check((await myTurns(nora)).length === 0, 'a plain answer left a turn for the other person');
-      return `reply "Four." labelled "${reply.metadata.askedByName}"`;
+      // In the chat the reply is Nova's to look at: its mark, the author "Nova", the tinted surface, and "Asked by" under the text.
+      await seen(vera.page, 'huddle-thread');
+      const row = vera.page.locator('[data-testid="chat-message"][data-voice="assistant"]').filter({ hasText: 'Four.' }).last();
+      await row.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no reply row in Nova\'s voice'); });
+      const look = await row.evaluate((el) => ({ mark: !!el.querySelector('[data-testid="assistant-mark"]'), author: el.querySelector('[data-testid="message-row-author"]')?.textContent?.trim() ?? null,
+        askedBy: el.querySelector('[data-testid="assistant-reply-asked-by"]')?.textContent?.trim() ?? null,
+        tinted: getComputedStyle(el.querySelector('[data-testid="message-row-content"]')).backgroundColor }));
+      check(look.mark && look.author === 'Nova', `the reply row shows mark ${look.mark}, author ${look.author}`);
+      check(look.askedBy === `Asked by ${reply.metadata.askedByName}`, `the reply's caption reads ${look.askedBy}`);
+      check(!/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(look.tinted), `the reply text sits on no surface (${look.tinted})`);
+      return `reply "Four." labelled "${reply.metadata.askedByName}", drawn in Nova's voice`;
     });
 
     // ── 8a. A spoken read runs in the asker's own browser ──
@@ -1034,15 +1052,31 @@ async function main() {
     };
     let layla;
 
-    await step('12: after the dismissal Nova leaves one message in the call chat: the summary and the decision and action item counts, no path in its sentence, and a link element "Open the meeting page" that goes to the meeting page', async () => {
-      const msg = await waitFor(async () => (await chatMessages(vera)).find((m) => /Nova's minutes/.test(m.message ?? '')), 20000, 'the minutes message in the call chat');
+    await step('12: after the dismissal Nova leaves one minutes card in the call chat, in its own voice: "Meeting minutes", the summary, the counts of decisions (the decision consented through a proposal included), action items and proposals, no path in its text, and a link element "Open the meeting page" that goes to the meeting page', async () => {
+      const msg = await waitFor(async () => (await chatMessages(vera)).find((m) => m.metadata?.kind === 'assistant-notice' && m.metadata?.minutes), 20000, 'the minutes message in the call chat');
       check(msg.userId === 'agent:nova' || msg.metadata?.assistant === true, 'the minutes message is not Nova\'s');
-      check(/\d+ decisions? and \d+ action items?/.test(msg.message), `no counts in "${msg.message}"`);
-      check(!msg.message.includes('/iq/meetings'), `the sentence still carries a path: "${msg.message}"`);
+      const counts = msg.metadata.minutes;
+      check(['decisions', 'actionItems', 'proposals'].every((k) => Number.isInteger(counts[k])), `no counts on the message: ${JSON.stringify(counts)}`);
+      // P5 recorded a decision through a consented proposal before the dismissal: the count holds it, on top of the minutes' own decision lines.
+      const minutes = await (await vera.api.get(asApi(vera, 'minutes'))).json();
+      const agreed = (minutes.proposals ?? []).filter((p) => p.outcome === 'decision' && ['consented', 'running', 'done'].includes(p.state)).length;
+      check(agreed >= 1, `no decision was consented through a proposal before the minutes: ${JSON.stringify(minutes.proposals)}`);
+      check(counts.decisions === minutes.decisions.length + agreed, `the card counts ${counts.decisions} decisions; the minutes hold ${minutes.decisions.length} and ${agreed} through proposals`);
+      check(counts.actionItems === minutes.actionItems.length && counts.proposals === (minutes.proposals ?? []).length, `the counts ${JSON.stringify(counts)} differ from the minutes`);
+      check(!msg.message.includes('/iq/meetings'), `the text still carries a path: "${msg.message}"`);
       check(msg.metadata?.meetingCallId === callId, `the message carries meetingCallId ${msg.metadata?.meetingCallId}, not ${callId}`);
       check(/ said: /.test(msg.message), `no summary in "${msg.message}"`);
-      const all = (await chatMessages(vera)).filter((m) => /Nova's minutes/.test(m.message ?? ''));
+      const all = (await chatMessages(vera)).filter((m) => m.metadata?.minutes);
       check(all.length === 1, `${all.length} minutes messages were posted`);
+      const card = vera.page.getByTestId('assistant-minutes-card').last();
+      await card.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no minutes card'); });
+      check((await card.getByTestId('assistant-minutes-title').innerText()).trim() === 'Meeting minutes', 'the minutes card has no "Meeting minutes" title');
+      check((await card.getByTestId('assistant-minutes-summary').innerText()).trim().length > 0, 'the minutes card shows no summary');
+      const shown = (await card.getByTestId('assistant-minutes-counts').innerText()).replace(/\s+/g, ' ');
+      check(shown.includes(`${counts.decisions} decision`) && shown.includes(`${counts.actionItems} action item`) && shown.includes(`${counts.proposals} proposal`), `the card shows "${shown}" for ${JSON.stringify(counts)}`);
+      check(await card.evaluate((el) => el.closest('[data-testid="chat-message"]')?.getAttribute('data-voice') === 'assistant'), 'the minutes card is not in a row in Nova\'s voice');
+      await card.scrollIntoViewIfNeeded();
+      for (const width of [1440, 1280]) await shot(vera.page, '12-chat-minutes', width);
       const expected = `/iq/meetings/${encodeURIComponent(callId)}`;
       const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
       await link.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no meeting link under the closing notice'); });
@@ -1055,7 +1089,7 @@ async function main() {
       await seen(vera.page, 'meeting-page', 30000);
       await vera.page.goBack({ waitUntil: 'domcontentloaded' });
       await vera.page.getByTestId('shell-footer-row').waitFor({ timeout: 30000 });
-      return `"${msg.message.slice(0, 200)}"; link ${expected}`;
+      return `"${msg.message.slice(0, 160)}"; ${shown}; link ${expected}`;
     });
 
     // The minutes steps read in a fresh tab of each person, so the first tabs stay in the call until step 18.
