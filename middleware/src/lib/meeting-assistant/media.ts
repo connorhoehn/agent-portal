@@ -19,7 +19,7 @@ import { AppError } from '../async-handler.js';
 import type { Session } from '../session.js';
 import { platformBearer, socialPlatformUrl } from '../../providers/social-platform.js';
 import { postNoticeQuietly } from './chat.js';
-import { NOVA_NAME } from './chat-types.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { SINK_SECRET_SETTING, sinkSecretUsable } from './sink-secret.js';
 import type { AudioIntake } from './audio-intake.js';
@@ -33,11 +33,11 @@ export const TAP_REARM_MS = 30_000;
 /** A tap delete that failed is tried again after each of these waits; after that, on every later arm or disarm for the call. */
 const DELETE_RETRY_MS = [1000, 3000, 9000];
 const MAX_PENDING_DELETES_PER_CALL = 20;
-/** What a person reads when Nova cannot be started here at all (the missing settings go to the server log, never to them). */
-export const NOT_SET_UP = `${NOVA_NAME} isn't set up here. Ask an admin.`;
+/** What a person reads when Milo cannot be started here at all (the missing settings go to the server log, never to them). */
+export const NOT_SET_UP = `${ASSISTANT_NAME} isn't set up here. Ask an admin.`;
 /** The call has no audio to listen to yet: trying again once someone's microphone is on helps. */
-export const NO_AUDIO_YET = `${NOVA_NAME} can join once someone in the call has their microphone on.`;
-export const CANNOT_HEAR_NOTICE = `${NOVA_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
+export const NO_AUDIO_YET = `${ASSISTANT_NAME} can join once someone in the call has their microphone on.`;
+export const CANNOT_HEAR_NOTICE = `${ASSISTANT_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
 
 export interface MediaConfig { url: string; adminToken: string; sinkBaseUrl: string }
 
@@ -271,7 +271,7 @@ export class TapArmer {
   }
 
   /**
-   * Read-only, for the state view: whether the call's audio reaches Nova. `ok` once a tap exists, or when no media server is in the
+   * Read-only, for the state view: whether the call's audio reaches Milo. `ok` once a tap exists, or when no media server is in the
    * picture (the mock world); `connecting` while the tap is being made; `no-audio` after the give-up notice was said.
    */
   hearing(callId: string): 'ok' | 'connecting' | 'no-audio' {

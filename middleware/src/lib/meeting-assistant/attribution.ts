@@ -119,7 +119,7 @@ export function attribute(intervals: readonly VoicedInterval[], piece: Transcrip
  * 14 November saw a turn's reported start about 1 s after its speaker's voice began, and the gap GROWING by about 1.3 s a minute
  * (2.6 s two minutes in; a ten-minute run lost almost every line). Each whole turn one person clearly spoke gives a sample near the
  * current estimate; the lag used is the median of the latest few, so it follows the drift. Spans are moved back by it before they
- * are attributed, so short lines ("Nova?") and the edges of a split land on the right voice.
+ * are attributed, so short lines ("Milo?") and the edges of a split land on the right voice.
  */
 export const LAG_SAMPLES = 3;
 /** A sample may be this much negative: in one paid session the provider's times ran slightly EARLY of the voices. */
@@ -174,7 +174,7 @@ export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: read
   }
   // A sentence mark the provider put at the head of the next piece belongs to the line before; it is dropped from the new one.
   // A group shorter than SPLIT_MIN_MS is a word or two at the edge of someone's turn that the noisy word times put on the neighbouring
-  // voice (paid run: "Nova, what is" went to the person who had just stopped); it stays with the group before it (or after, first).
+  // voice (paid run: "Milo, what is" went to the person who had just stopped); it stays with the group before it (or after, first).
   for (let i = 0; i < groups.length && groups.length > 1;) {
     const g = groups[i]!;
     if (g.parts[g.parts.length - 1]!.endMs - g.parts[0]!.startMs >= SPLIT_MIN_MS) { i += 1; continue; }

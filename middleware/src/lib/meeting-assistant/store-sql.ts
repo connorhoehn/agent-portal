@@ -442,7 +442,7 @@ export class SqlAssistantStore implements AssistantStore {
     // One statement, so it is all or nothing and safe to repeat: the lines go, the minutes row is written or blanked as a tombstone, and the
     // other tables that hold words are blanked in the same step (audit M2): the record's pending requests, each turn's tool arguments and
     // each action's result text; the proposals (statements, reasons, arguments) are deleted. Open turns and cards are expired in the same step, so a late result is refused. A call with no assistant record has nothing to hold the tombstone row.
-    // The record's row is locked first and read as it is after any invitation back that committed meanwhile: while Nova is in the call
+    // The record's row is locked first and read as it is after any invitation back that committed meanwhile: while Milo is in the call
     // again nothing is touched (go is false). The record is marked erased in the same step, so an invitation back waiting on the lock
     // finds the mark when it re-reads the row and does not move it.
     const rows = await this.exec(

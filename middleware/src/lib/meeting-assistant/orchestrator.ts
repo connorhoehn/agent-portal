@@ -17,18 +17,18 @@
 import { randomBytes } from 'node:crypto';
 import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
-import { NOVA_NAME } from './chat-types.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
-import { NovaSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
+import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import { VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
-import { findAddress, nameLock, parseCommand, type DetectorEvent } from './detector.js';
+import { findAddress, NAME_ALTERNATION, nameLock, parseCommand, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
 import { callChatRuntime } from '../call-chat.js';
@@ -55,13 +55,15 @@ export const WRITE_TURN_TTL_MS = 10 * 60_000;
 export const ASKER_WINDOW_MS = 20_000;
 /** Tool calls one addressed request may make; the next is refused with "too many steps". */
 export const MAX_CALLS_PER_REQUEST = 3;
-export const TYPED_UNSUPPORTED_REPLY = `${NOVA_NAME} only hears spoken requests in this call. Say "${NOVA_NAME}" and ask aloud.`;
-/** A call chat message that addresses Nova: it starts with the name and a comma, colon or space, or mentions @Nova. */
-export const addressesNova = (text: string): boolean => /^\s*@?nova(?:[,:\s]|$)/i.test(text) || /(^|[^\w])@nova\b/i.test(text);
+export const TYPED_UNSUPPORTED_REPLY = `${ASSISTANT_NAME} only hears spoken requests in this call. Say "${ASSISTANT_NAME}" and ask aloud.`;
+const TYPED_START = new RegExp(`^\\s*@?(?:${NAME_ALTERNATION})(?:[,:\\s]|$)`, 'i');
+const TYPED_MENTION = new RegExp(`(^|[^\\w])@(?:${NAME_ALTERNATION})\\b`, 'i');
+/** A call chat message that addresses the assistant: it starts with the name and a comma, colon or space, or mentions @Milo. */
+export const addressesAssistant = (text: string): boolean => TYPED_START.test(text) || TYPED_MENTION.test(text);
 export const MAX_REPLACEMENTS = 3;
 /** The provider's session is replaced this long before its `expires_at` (about two hours after it starts). */
 export const SESSION_EXPIRY_MARGIN_MS = 5 * 60_000;
-/** A failed replacement is retried after each of these delays; when they are spent Nova leaves (audit B9). */
+/** A failed replacement is retried after each of these delays; when they are spent Milo leaves (audit B9). */
 export const REPLACEMENT_RETRY_MS: readonly number[] = [1000, 3000, 9000];
 /** The most a tool call's arguments may weigh, as JSON, and the most a browser's result may weigh. */
 export const MAX_ARGS_BYTES = 4096;
@@ -84,10 +86,10 @@ export interface StartContext {
   roster: readonly string[];
   /** The call's record name (an initiative's name), or null. */
   recordName: string | null;
-  /** Nova was invited back: lines before this one belong to an earlier period and are never taken as a request of this one. */
+  /** Milo was invited back: lines before this one belong to an earlier period and are never taken as a request of this one. */
   fromSeq?: number;
   /**
-   * Which period of Nova in this call the run serves (types.ts `periodOf`; 1 for the first). An invitation back passes the new one; absent,
+   * Which period of Milo in this call the run serves (types.ts `periodOf`; 1 for the first). An invitation back passes the new one; absent,
    * it is the record's period (1 when no record exists yet). What the run writes on the record when it stops counts only for this period.
    */
   period?: number;
@@ -112,7 +114,7 @@ export interface RuntimeDeps {
   onFinished?: (event: FinishedEvent) => Promise<void>;
   /** The audio side (audio-intake.ts): told when a session opens and closes. Absent in tests that do not care. */
   audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'> & Partial<Pick<AudioIntake, 'forget'>>;
-  /** Where Nova's voice frames go (the gateway's in-process sink); false from it means no gateway runs here. Default: lib/social-chat.ts `sendThreadFrame`. */
+  /** Where Milo's voice frames go (the gateway's in-process sink); false from it means no gateway runs here. Default: lib/social-chat.ts `sendThreadFrame`. */
   voiceSink?: VoiceSink;
   /** Sleep for `ms` (replacement retries, the turn sweep's tests); injectable so tests never wait. */
   wait?: (ms: number) => Promise<void>;
@@ -140,7 +142,7 @@ type CallState = 'open' | 'answered' | 'dropped';
 
 /**
  * Who a spoken reply belongs to (audit B1, re-audit F1). A run has ONE current context, set only by `answer()`; people speaking never
- * change it, except that a later line addressing Nova supersedes it. `muted` means the continuation is not posted (a refused call, a
+ * change it, except that a later line addressing Milo supersedes it. `muted` means the continuation is not posted (a refused call, a
  * private answer, an expired read).
  */
 export interface ReplyContext {
@@ -151,17 +153,17 @@ export interface ReplyContext {
   /** The latest line stored when the context was set: only a line stored after it can end the context (the order decides, not the clocks). */
   lastSeq?: number;
   /**
-   * The answer was a write's card ("Waiting for <name>"): Nova's first words about it ("I have asked Vera to confirm.") are spoken but
+   * The answer was a write's card ("Waiting for <name>"): Milo's first words about it ("I have asked Vera to confirm.") are spoken but
    * not posted, since the card already says so. Cleared by that first utterance, or once the card is decided.
    */
   card?: true;
 }
-/** How soon after a bare "Nova?" the same person's next line is the request it announced. */
+/** How soon after a bare "Milo?" the same person's next line is the request it announced. */
 export const BARE_NAME_FOLLOW_MS = 8_000;
-const BARE_NAME = new RegExp(`^\\s*((hey|hi|ok|okay)[\\s,]+)?${NOVA_NAME}[\\s.,!?…]*$`, 'i');
+const BARE_NAME = new RegExp(`^\\s*((hey|hi|ok|okay)[\\s,]+)?(?:${NAME_ALTERNATION})[\\s.,!?…]*$`, 'i');
 
 /**
- * The lines a spoken answer can be for, oldest first. A bare "Nova?" asks nothing yet: what Nova says to it ("Yes?") answers nobody,
+ * The lines a spoken answer can be for, oldest first. A bare "Milo?" asks nothing yet: what Milo says to it ("Yes?") answers nobody,
  * and the same person's next line, a few seconds later, is the request even without the name.
  */
 export function replyAddressing(lines: readonly TranscriptLine[]): TranscriptLine[] {
@@ -173,7 +175,7 @@ export function replyAddressing(lines: readonly TranscriptLine[]): TranscriptLin
     if (l.userId !== null) { if (bare) bareAt.set(l.userId, l.at); else bareAt.delete(l.userId); }
     if (bare) continue;
     const hit = findAddress(l.text);
-    // "Nova, pause" / "Nova, leave" addresses Nova but asks nothing: never the request a later answer belongs to.
+    // "Milo, pause" / "Milo, leave" addresses Milo but asks nothing: never the request a later answer belongs to.
     if (hit) { const command = parseCommand(hit.rest); if (command === 'pause' || command === 'dismiss') continue; }
     if (hit !== null || announced) out.push(l);
   }
@@ -187,7 +189,7 @@ export const REPLY_CONTEXT_TTL_MS = 20_000;
  * One delegation: the model began working on a request at `at` (epoch ms). Its work first produces either a function call (the
  * call takes this delegation: `callId`) or a spoken message (a plain answer worked out by the second model). Speech that begins
  * before that first item is the short acknowledgement the voice gives as it hands the work over (the real provider speaks it at
- * once, before the function call arrives). `asker` is who addressed Nova at `at` (judged then, audit S2), for a delegated plain answer.
+ * once, before the function call arrives). `asker` is who addressed Milo at `at` (judged then, audit S2), for a delegated plain answer.
  */
 interface Delegation {
   at: number;
@@ -213,23 +215,23 @@ export const ACKNOWLEDGEMENT_WINDOW_MS = 6_000;
 /** A line must end this long after a delegation to count as spoken after it (a line's reported end can run a little late). */
 const ACKNOWLEDGEMENT_LINE_MARGIN_MS = 1_000;
 /**
- * A sanity bound only: how far the end of a line heard before a delegation (or before Nova's first word) may lie after that moment's
+ * A sanity bound only: how far the end of a line heard before a delegation (or before Milo's first word) may lie after that moment's
  * wall-clock time and still count as before it. The order the events arrived in is what decides: the paid runs saw the provider's
  * audio clock start up to 2 s ahead of the server's and then gain about 1.3 s every 100 s, so over a long call the two drift far apart.
  */
 export const DELEGATION_LINE_SKEW_MS = 5 * 60_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
-/** How often the seat roster is read to record who is present while Nova is. */
+/** How often the seat roster is read to record who is present while Milo is. */
 export const ATTENDANCE_EVERY_MS = 15_000;
 /** The process writes "still alive" on each listening record this often (audit M5); a restart closes the listening period there. */
 export const HEARTBEAT_EVERY_MS = 30_000;
-export const UNASKED_REPLY = `${NOVA_NAME} could not tell who asked. Ask again.`;
+export const UNASKED_REPLY = `${ASSISTANT_NAME} could not tell who asked. Ask again.`;
 
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
 interface CallRun {
   ctx: StartContext;
-  /** The period of Nova in the call this run serves (`StartContext.period`). */
+  /** The period of Milo in the call this run serves (`StartContext.period`). */
   period: number;
   session: LiveMeetingSession | null;
   unsubscribers: Array<() => void>;
@@ -255,7 +257,7 @@ interface CallRun {
   calls: Map<string, CallState>;
   /** The model's call id behind each turn that is waiting on the asker's browser. */
   turnCalls: Map<string, string>;
-  /** Tool calls made so far for each addressed request, keyed by asker and the line that addressed Nova (decision: a cap on chained calls). */
+  /** Tool calls made so far for each addressed request, keyed by asker and the line that addressed Milo (decision: a cap on chained calls). */
   requestCalls: Map<string, number>;
   /** People already told that typed requests are not heard in this call. */
   typedNoticed: Set<string>;
@@ -281,7 +283,7 @@ interface CallRun {
   tokens: { input: number; output: number; cached: number };
   totals: { seconds: number; input: number; output: number; cached: number };
   replacements: number;
-  /** Nova speaks aloud in this call (the record's `voice`, cached so a frame does not read the store). */
+  /** Milo speaks aloud in this call (the record's `voice`, cached so a frame does not read the store). */
   voice: boolean;
   /** Set the moment a pause begins and cleared when a session is open again, so no frame is relayed in between. */
   voiceHeld: boolean;
@@ -290,13 +292,13 @@ interface CallRun {
   gate: VoiceGate;
   /** When the last relayed frame ends playing (epoch ms): frames released together after a hold play one after another. 0 when nothing is queued to play. */
   playhead: number;
-  /** When the latest heard line that addressed Nova ended (epoch ms; not an echo), or a request was handed to a text session. */
+  /** When the latest heard line that addressed Milo ended (epoch ms; not an echo), or a request was handed to a text session. */
   addressedAt: number;
-  /** Tool calls of this session that passed the name lock (the server's own check that the asker addressed Nova). */
+  /** Tool calls of this session that passed the name lock (the server's own check that the asker addressed Milo). */
   addressedCalls: Set<string>;
   /** When the server last told the session news about addressed work (`tellSession`), epoch ms. */
   newsAt: number;
-  speech: NovaSpeech;
+  speech: AssistantSpeech;
   /** When the provider says the open session ends (epoch ms), or null when it did not say. */
   expiresAt: number | null;
   sessionKind: 'openai' | 'scripted';
@@ -306,38 +308,38 @@ interface CallRun {
   lineChain: Promise<void>;
   /** Provider error events across this run's sessions: how many, and the latest few as codes only. */
   providerErrorCount: number;
-  /** Transcript pieces judged to be Nova's own voice and not stored. */
+  /** Transcript pieces judged to be Milo's own voice and not stored. */
   echoLinesDropped: number;
   providerErrors: ProviderErrorInfo[];
   finished: boolean;
 }
 
 /**
- * Why a turn waiting on its asker was ended: its time ran out, Nova was paused or its session replaced under it, or Nova left the call
+ * Why a turn waiting on its asker was ended: its time ran out, Milo was paused or its session replaced under it, or Milo left the call
  * (dismissed, its time limit, a lost connection, the call ending) or the service restarted. Each cause has its own words, so nothing
- * that ended because Nova left is ever put on the asker.
+ * that ended because Milo left is ever put on the asker.
  */
 export type ExpiryCause = 'timeout' | 'paused' | 'replaced' | 'left' | 'dismissed' | 'limit' | 'lost' | 'restarted';
-/** Why Nova's run stopped: the cause its open turns are ended with. */
+/** Why Milo's run stopped: the cause its open turns are ended with. */
 export type StopReason = Extract<ExpiryCause, 'left' | 'dismissed' | 'limit' | 'lost'>;
 export const EXPIRY_WORDS: Readonly<Record<ExpiryCause, { model: string; chat: (name: string) => string; card: string | null }>> = {
-  timeout: { model: 'the person who asked is not available', chat: (n) => `${NOVA_NAME} could not finish ${n}'s request because ${n}'s browser did not respond. Ask again.`, card: null },
-  paused: { model: 'Nova was paused', chat: (n) => `${NOVA_NAME} was paused before it could finish ${n}'s request. Ask again once it is listening.`, card: `${NOVA_NAME} was paused before this was done. Ask again once it is listening.` },
-  replaced: { model: 'Nova\'s session was restarted', chat: (n) => `${NOVA_NAME}'s session was restarted before it could finish ${n}'s request. Ask again.`, card: `${NOVA_NAME}'s session was restarted before this was done. Ask again.` },
-  left: { model: 'Nova has left the call', chat: (n) => `${NOVA_NAME} left the call before it could finish ${n}'s request.`, card: `${NOVA_NAME} left the call before this was done.` },
-  dismissed: { model: 'Nova was dismissed', chat: (n) => `${NOVA_NAME} was dismissed before it could finish ${n}'s request.`, card: `${NOVA_NAME} was dismissed before this was done.` },
-  limit: { model: 'Nova reached its time limit', chat: (n) => `${NOVA_NAME} reached its time limit before it could finish ${n}'s request.`, card: `${NOVA_NAME} reached its time limit before this was done.` },
-  lost: { model: 'Nova lost its connection', chat: (n) => `${NOVA_NAME} lost its connection before it could finish ${n}'s request.`, card: `${NOVA_NAME} lost its connection before this was done.` },
-  restarted: { model: 'Nova was restarted', chat: (n) => `${NOVA_NAME} was restarted before it could finish ${n}'s request. Ask again once it is listening.`, card: `${NOVA_NAME} was restarted before this ran. Ask again once it is listening.` },
+  timeout: { model: 'the person who asked is not available', chat: (n) => `${ASSISTANT_NAME} could not finish ${n}'s request because ${n}'s browser did not respond. Ask again.`, card: null },
+  paused: { model: `${ASSISTANT_NAME} was paused`, chat: (n) => `${ASSISTANT_NAME} was paused before it could finish ${n}'s request. Ask again once it is listening.`, card: `${ASSISTANT_NAME} was paused before this was done. Ask again once it is listening.` },
+  replaced: { model: `${ASSISTANT_NAME}'s session was restarted`, chat: (n) => `${ASSISTANT_NAME}'s session was restarted before it could finish ${n}'s request. Ask again.`, card: `${ASSISTANT_NAME}'s session was restarted before this was done. Ask again.` },
+  left: { model: `${ASSISTANT_NAME} has left the call`, chat: (n) => `${ASSISTANT_NAME} left the call before it could finish ${n}'s request.`, card: `${ASSISTANT_NAME} left the call before this was done.` },
+  dismissed: { model: `${ASSISTANT_NAME} was dismissed`, chat: (n) => `${ASSISTANT_NAME} was dismissed before it could finish ${n}'s request.`, card: `${ASSISTANT_NAME} was dismissed before this was done.` },
+  limit: { model: `${ASSISTANT_NAME} reached its time limit`, chat: (n) => `${ASSISTANT_NAME} reached its time limit before it could finish ${n}'s request.`, card: `${ASSISTANT_NAME} reached its time limit before this was done.` },
+  lost: { model: `${ASSISTANT_NAME} lost its connection`, chat: (n) => `${ASSISTANT_NAME} lost its connection before it could finish ${n}'s request.`, card: `${ASSISTANT_NAME} lost its connection before this was done.` },
+  restarted: { model: `${ASSISTANT_NAME} was restarted`, chat: (n) => `${ASSISTANT_NAME} was restarted before it could finish ${n}'s request. Ask again once it is listening.`, card: `${ASSISTANT_NAME} was restarted before this ran. Ask again once it is listening.` },
 };
 
 /** A request the asker's role does not allow: the call reads the first line, the asker alone the second. */
-export const NOT_PERMITTED_PUBLIC = `${NOVA_NAME} can't do that from this call.`;
-export const NOT_PERMITTED_PRIVATE = `${NOVA_NAME} did not do that because it needs a permission your role here does not include. Someone who has it can ask ${NOVA_NAME}, or an admin can help.`;
+export const NOT_PERMITTED_PUBLIC = `${ASSISTANT_NAME} can't do that from this call.`;
+export const NOT_PERMITTED_PRIVATE = `${ASSISTANT_NAME} did not do that because it needs a permission your role here does not include. Someone who has it can ask ${ASSISTANT_NAME}, or an admin can help.`;
 /** What a private read posts when the asker's browser sent no sentence of its own. */
 export const PRIVATE_FALLBACK = 'Your answer is in your notifications.';
 /** What a private read posts when it did not work. */
-export const PRIVATE_FAILED = `${NOVA_NAME} could not get that. Ask again.`;
+export const PRIVATE_FAILED = `${ASSISTANT_NAME} could not get that. Ask again.`;
 export const PRIVATE_SAY_MAX = 600;
 /** One plain-text line of at most `max` characters: control characters dropped, whitespace collapsed. */
 const plainSentence = (v: unknown, max: number): string => (typeof v === 'string' ? v : '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -489,7 +491,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -545,7 +547,7 @@ export class AssistantRuntime {
    * Dismissed or left: close the session, expire what is open (each with the words for `reason`), tell the spend settlement.
    * Idempotent; the first call's reason is the one used. Until it has finished (the settlement included) the call counts as stopping
    * (`settled`, `start`). What it writes on the record (the closed clock, the usage, the settlement) holds only while the record is still in
-   * the run's period, so even a stop that ends after Nova was invited back cannot touch the newer period.
+   * the run's period, so even a stop that ends after Milo was invited back cannot touch the newer period.
    */
   async stop(callId: string, reason: StopReason = 'left'): Promise<void> {
     const run = this.runs.get(callId);
@@ -573,7 +575,7 @@ export class AssistantRuntime {
   }
 
   /**
-   * What follows a pause or a dismiss, whoever caused it: the Pause or Dismiss button (the route) or "Nova, pause" / "Nova, leave"
+   * What follows a pause or a dismiss, whoever caused it: the Pause or Dismiss button (the route) or "Milo, pause" / "Milo, leave"
    * said in the call (the intake moved the record). One path for both, so they cannot drift: the named notice in the chat, and for a
    * dismiss the open proposals closed and moved to the meeting page, the people they still need who are absent told, the run stopped
    * (its open requests ended as "dismissed"), the used minutes settled and the audio bindings dropped. `record` is the moved record.
@@ -774,7 +776,7 @@ export class AssistantRuntime {
   }
 
   /**
-   * Nova has no session and the call still wants one: open a replacement with the last minutes as context. An unexpected close
+   * Milo has no session and the call still wants one: open a replacement with the last minutes as context. An unexpected close
    * counts against MAX_REPLACEMENTS; the planned replacement before the provider's expiry does not.
    */
   private async reopen(run: CallRun, reason: string, counted: boolean): Promise<void> {
@@ -828,20 +830,20 @@ export class AssistantRuntime {
     if (closed && !run.finished) await this.reopen(run, 'planned replacement before the provider expiry', false);
   }
 
-  /** Nova has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
+  /** Milo has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
   private async giveUp(run: CallRun): Promise<void> {
     const callId = run.ctx.callId;
     await this.snapshotAttendance(callId);
     const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
     if (!done) return;
-    await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left this call.`, { leaving: true });
+    await postNoticeQuietly(callId, `${ASSISTANT_NAME} lost its connection and has left this call.`, { leaving: true });
     this.deps.intake().stop(callId);
     this.deps.audio?.detach(callId);
     await this.stop(callId, 'lost');
   }
 
   // -------------------------------------------------------------------------------------------------------------
-  // Nova's voice (package 7a)
+  // Milo's voice (package 7a)
 
   /** The call's voice switch changed (the route wrote the record first). Turning it off drops what is queued. */
   setVoice(callId: string, on: boolean): void {
@@ -874,21 +876,21 @@ export class AssistantRuntime {
   }
 
   /**
-   * One frame of what Nova said aloud. Relayed only while the call's voice is on, the call is listening (this session is the open
+   * One frame of what Milo said aloud. Relayed only while the call's voice is on, the call is listening (this session is the open
    * one and no pause has begun) and the run has not ended; otherwise it is simply not sent (and not counted: it never was audio for
    * anyone). The provider sends voiced frames only (live-session.ts), so nothing flows while the model is quiet.
    *
    * WHAT MAY BE SPOKEN: only speech someone asked for. The model is told to stay silent unless addressed, but it does not always, and
    * its audio arrives long before the utterance's transcript is final (the chat side drops an unprompted remark; that comes too late
    * for the voice). So every speaking turn passes the gate (voice-gate.ts), which decides at its first frame and holds that decision
-   * for the whole turn, through the pauses between its sentences, until Nova has been silent for a gap. It goes out at once when
-   * someone addressed Nova in the last VOICE_PROMPT_WINDOW_MS (a heard line by the
-   * detector's own rule, an echo of Nova excluded, including what the session has heard but not yet flushed), or when Nova has
+   * for the whole turn, through the pauses between its sentences, until Milo has been silent for a gap. It goes out at once when
+   * someone addressed Milo in the last VOICE_PROMPT_WINDOW_MS (a heard line by the
+   * detector's own rule, an echo of Milo excluded, including what the session has heard but not yet flushed), or when Milo has
    * addressed work in flight (a tool call that passed the name lock and is still open, a live PUBLIC reply context, or the second
    * model's message ready and unspoken; a muted context never counts). Otherwise it is held, unsent and in memory only, for at most
    * VOICE_GATE_HOLD_MS while the reason may still arrive (the provider often speaks before it flushes the request's transcript), then
    * released in order or withheld whole. Nothing is filtered by content: after audit repair B2 a private answer never reaches the
-   * shared session, so what is asked for is safe to hear. Nova counts as heard (the echo guard) only for frames actually relayed, each
+   * shared session, so what is asked for is safe to hear. Milo counts as heard (the echo guard) only for frames actually relayed, each
    * at the moment it plays: a burst released after a hold plays 100 ms a frame from the release on, so its tail is heard (and may
    * echo) up to the hold's length later than its frames were sent.
    */
@@ -916,24 +918,24 @@ export class AssistantRuntime {
     });
   }
 
-  /** Forget what Nova was about to say: the gate's held frames and her words for them; with `relay`, also what is queued to go out (and its playout). */
+  /** Forget what Milo was about to say: the gate's held frames and its words for them; with `relay`, also what is queued to go out (and its playout). */
   private dropVoice(run: CallRun, relay: boolean): void {
     if (relay) { run.relay.clear(); run.playhead = 0; }
     run.gate.clear();
     run.speech.forgetUnheard();
   }
 
-  /** Tell the session news about addressed work (a write done, failed, declined or expired): what Nova says about it next is wanted. */
+  /** Tell the session news about addressed work (a write done, failed, declined or expired): what Milo says about it next is wanted. */
   private tellSession(run: CallRun | null | undefined, text: string): void {
     if (!run?.session?.appendContext(text)) return;
     run.newsAt = this.now();
     run.gate.poke();
   }
 
-  /** Why Nova's voice is wanted right now (the gate's two conditions), or null when nobody asked. */
+  /** Why Milo's voice is wanted right now (the gate's two conditions), or null when nobody asked. */
   private voiceWanted(run: CallRun): VoiceGateWhy | null {
     const now = this.now();
-    // 1. Someone addressed Nova just now, or is addressing her now (heard, not yet flushed).
+    // 1. Someone addressed Milo just now, or is addressing it now (heard, not yet flushed).
     if (now - run.addressedAt <= VOICE_PROMPT_WINDOW_MS) return 'addressed';
     const pending = run.session?.pendingInputText() ?? '';
     if (pending && findAddress(pending) !== null && !(run.voice && run.speech.isEcho({ text: pending, startAt: now, endAt: now }))) return 'hearing';
@@ -948,14 +950,14 @@ export class AssistantRuntime {
     return null;
   }
 
-  /** Is Nova answering in this call: her voice going out now, or one of her tool calls still open? (The watcher waits while she is.) */
-  novaAnswering(callId: string): boolean {
+  /** Is Milo answering in this call: its voice going out now, or one of its tool calls still open? (The watcher waits while it is.) */
+  assistantAnswering(callId: string): boolean {
     const run = this.runs.get(callId);
     if (!run || run.finished) return false;
     return run.speech.speakingAt(this.now()) || [...run.calls.values()].includes('open');
   }
 
-  /** Is this stored line Nova's own voice heard back (the echo guard), for the watcher? */
+  /** Is this stored line Milo's own voice heard back (the echo guard), for the watcher? */
   isEchoLine(callId: string, line: TranscriptLine): boolean {
     const run = this.runs.get(callId);
     return !!run && this.echoOf(run, line);
@@ -988,7 +990,7 @@ export class AssistantRuntime {
   }
 
   private async storeInput(run: CallRun, e: SessionEvents['inputTranscript'], inputNo = 0): Promise<void> {
-    // Nova's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
+    // Milo's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
     if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; trace('line.echo', { startMs: e.startMs, endMs: e.endMs }); return; }
     // One heard turn can hold two people (a request spoken right after someone else's sentence): one line per voice.
     // The split is judged with each piece moved back by the measured lag of the provider's times behind the voices.
@@ -1025,19 +1027,19 @@ export class AssistantRuntime {
   }
 
   /**
-   * Who addressed Nova (audit B3): the speaker of the latest stored line in the window before `atMs` that addresses Nova by the
+   * Who addressed Milo (audit B3): the speaker of the latest stored line in the window before `atMs` that addresses Milo by the
    * detector's own rule. A line with no primary speaker (nobody, or two people who started together) says nobody; a request spoken over someone names who spoke it.
    */
   private async findAsker(callId: string, atMs: number, turn?: { fromSeq: number; toSeq: number }): Promise<{ ok: true; userId: string; seq: number } | { ok: false }> {
     const record = await this.store.get(callId);
     if (!record) return { ok: false };
     const run = this.runs.get(callId);
-    // Nova's own voice heard back through a microphone is not a person addressing her (echo guard).
+    // Milo's own voice heard back through a microphone is not a person addressing it (echo guard).
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !run || !this.echoOf(run, l));
     const addressing = lines.filter((l) => l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
-    // Two people addressed Nova in ONE heard turn (the provider joined them: a request, and another person's question 300 ms after
+    // Two people addressed Milo in ONE heard turn (the provider joined them: a request, and another person's question 300 ms after
     // it) just before the model began working. It works through them in order, so its work is for the first one nothing has served
-    // yet; the later person's request is left free for what Nova says next. Lines from separate turns keep the latest-line rule.
+    // yet; the later person's request is left free for what Milo says next. Lines from separate turns keep the latest-line rule.
     if (turn && run) {
       const lastTurn = run.lineInput.get(turn.toSeq);
       const waiting = addressing.filter((l) => l.seq > turn.fromSeq && l.seq <= turn.toSeq && lastTurn !== undefined && lastTurn > 0 && run.lineInput.get(l.seq) === lastTurn && l.userId !== null && !run.answeredLines.has(l.seq) && !run.claimedLines.has(l.seq));
@@ -1054,8 +1056,8 @@ export class AssistantRuntime {
    * moment, the call is still open, and no acknowledgement was taken for it yet. Taking one marks it (one per call at most).
    */
   private takeAcknowledgement(run: CallRun, from: number, to: number, addressing: TranscriptLine[], fromLines = from): boolean {
-    // An acknowledgement is spoken as the work is handed over. Once someone has addressed Nova after that moment (their line
-    // ends clearly later than the delegation, and no call has taken it), what Nova says next answers them.
+    // An acknowledgement is spoken as the work is handed over. Once someone has addressed Milo after that moment (their line
+    // ends clearly later than the delegation, and no call has taken it), what Milo says next answers them.
     const addressedSince = (openedAt: number) => addressing.some((l) => l.at > openedAt + ACKNOWLEDGEMENT_LINE_MARGIN_MS && l.at <= fromLines && !run.claimedLines.has(l.seq));
     // A delegation: speech that began before its work produced a message or a function call (whether or not the call has arrived).
     for (const d of run.delegations) {
@@ -1082,7 +1084,7 @@ export class AssistantRuntime {
 
   /**
    * A plain answer the second model worked out: the oldest delegation whose work produced a spoken message (no call) before this
-   * utterance began, not yet answered, within the asker window. It belongs to whoever addressed Nova at the delegation moment;
+   * utterance began, not yet answered, within the asker window. It belongs to whoever addressed Milo at the delegation moment;
    * that line (and the asker's earlier addressing lines in the window) count as answered. Undefined when there is none.
    */
   private async takeDelegatedAnswer(run: CallRun, at: number): Promise<{ asker: string | null } | undefined> {
@@ -1102,17 +1104,17 @@ export class AssistantRuntime {
     return at - c.answeredAt < (c.visibility === 'public' ? REPLY_CONTEXT_TTL_MS : MUTED_CONTEXT_TTL_MS);
   }
 
-  /** Lines that address Nova by the detector's rule (echoes excluded), oldest first, from the latest stored ones. */
+  /** Lines that address Milo by the detector's rule (echoes excluded), oldest first, from the latest stored ones. */
   private async addressingLines(run: CallRun): Promise<TranscriptLine[]> {
     const record = await this.store.get(run.ctx.callId);
     if (!record) return [];
-    const floor = run.ctx.fromSeq ?? 0; // an earlier period's request is never this period's (Nova was invited back)
+    const floor = run.ctx.fromSeq ?? 0; // an earlier period's request is never this period's (Milo was invited back)
     const lines = (await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => l.seq >= floor && !this.echoOf(run, l));
     return replyAddressing(lines);
   }
 
   /**
-   * A reply context ends when a person other than its asker addressed Nova after the context was set (a muted context has no
+   * A reply context ends when a person other than its asker addressed Milo after the context was set (a muted context has no
    * asker, so anyone does). The same asker speaking again keeps it: the answer still goes to them.
    */
   private async contextEnded(run: CallRun, c: ReplyContext): Promise<boolean> {
@@ -1128,8 +1130,8 @@ export class AssistantRuntime {
   /**
    * The asker for a plain answer: the oldest addressing line in the window that nothing has answered and no call has taken, marked
    * answered, so two quick questions from two people get one answer each in order. Only when there is none, a line whose call is
-   * still open (Nova speaking about that request, not marked). Null when the line does not say who (or several people voiced it);
-   * undefined when no line in the window addressed Nova at all (the speech answers nobody).
+   * still open (Milo speaking about that request, not marked). Null when the line does not say who (or several people voiced it);
+   * undefined when no line in the window addressed Milo at all (the speech answers nobody).
    */
   private async takeUnansweredAsker(run: CallRun, at: number): Promise<string | null | undefined> {
     const open = (await this.addressingLines(run)).filter((l) => l.at <= at && l.at >= at - ASKER_WINDOW_MS && !run.answeredLines.has(l.seq));
@@ -1142,8 +1144,8 @@ export class AssistantRuntime {
   }
 
   /**
-   * One finished utterance of Nova's, in the order of the rules in the header: the scripted session's exact call; the
-   * first short acknowledgement of an open call (never posted); the current context unless another person addressed Nova since (muted: silent; public: posted for its asker);
+   * One finished utterance of Milo's, in the order of the rules in the header: the scripted session's exact call; the
+   * first short acknowledgement of an open call (never posted); the current context unless another person addressed Milo since (muted: silent; public: posted for its asker);
    * else a plain answer for the oldest unanswered addressing line (no label when none says who).
    */
   private async onOutput(run: CallRun, e: SessionEvents['outputTranscript']): Promise<void> {
@@ -1163,7 +1165,7 @@ export class AssistantRuntime {
       // The short acknowledgement the voice speaks as it delegates: not an answer; changes nothing.
       await run.lineChain;
       // Lines heard before this utterance began (the provider's audio clock runs a little apart from the server's): every line
-      // emitted before Nova's first word counts as before it, up to DELEGATION_LINE_SKEW_MS later than its wall-clock start.
+      // emitted before Milo's first word counts as before it, up to DELEGATION_LINE_SKEW_MS later than its wall-clock start.
       const bound = e.inputsBefore ? run.inputEndAt.get(e.inputsBefore) : undefined;
       const tLines = bound !== undefined ? Math.max(t, Math.min(bound, t + DELEGATION_LINE_SKEW_MS)) : t;
       // An utterance that begins after a message of the second model became ready speaks that message: it is no acknowledgement
@@ -1181,17 +1183,17 @@ export class AssistantRuntime {
         decide('owner.delegated', { asker, context: 'newer-work' });
       } else if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
         if (c.visibility === 'muted' || !c.asker) { decide('drop.mutedContext', { call: c.modelCallId }); return; }
-        // Nova's first words about a write's card say what the card already shows: spoken, not posted.
+        // Milo's first words about a write's card say what the card already shows: spoken, not posted.
         if (c.card) { delete c.card; decide('drop.cardSays', { call: c.modelCallId }); return; }
         asker = c.asker;
         decide('owner.context', { asker, call: c.modelCallId });
       } else {
-        // A plain answer with no tool call: whoever addressed Nova in the oldest line nothing has answered; no label when none says.
+        // A plain answer with no tool call: whoever addressed Milo in the oldest line nothing has answered; no label when none says.
         const record = await this.store.get(run.ctx.callId);
         if (record && record.requests > assistantLimits().maxRequests) { decide('drop.limit'); return; }
         const delegated = await this.takeDelegatedAnswer(run, t);
         const found = delegated ? delegated.asker : await this.takeUnansweredAsker(run, tLines);
-        // Nobody addressed Nova in the window: an unprompted remark is not posted as anyone's answer.
+        // Nobody addressed Milo in the window: an unprompted remark is not posted as anyone's answer.
         if (found === undefined) { decide('drop.unprompted'); return; }
         asker = found;
         decide(delegated ? 'owner.delegated' : 'owner.unanswered', { asker, context: c ? (this.contextLive(c, t) ? 'ended' : 'stale') : 'none' });
@@ -1211,18 +1213,18 @@ export class AssistantRuntime {
     if (!run) return;
     for (const e of events) {
       if (e.type === 'request') {
-        // Past the per-call cap Nova says so once and ignores further requests (the cap counts what the detector found).
+        // Past the per-call cap Milo says so once and ignores further requests (the cap counts what the detector found).
         const record = await this.store.get(callId);
         if (record && record.requests > assistantLimits().maxRequests) {
           if (!sessionOf(record).limitNoticed) {
             await this.store.patchSession(callId, { limitNoticed: true });
-            await postNoticeQuietly(callId, `${NOVA_NAME} has reached its limit of ${assistantLimits().maxRequests} requests for this call and will not answer more.`);
+            await postNoticeQuietly(callId, `${ASSISTANT_NAME} has reached its limit of ${assistantLimits().maxRequests} requests for this call and will not answer more.`);
           }
           continue;
         }
         // A few requests before the cap, said once (the count only rises, so it equals this once).
         if (record && record.requests === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) {
-          await postNoticeQuietly(callId, `${NOVA_NAME} can answer ${REQUESTS_WARNING_LEFT} more requests in this call, then it stops answering.`);
+          await postNoticeQuietly(callId, `${ASSISTANT_NAME} can answer ${REQUESTS_WARNING_LEFT} more requests in this call, then it stops answering.`);
         }
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
@@ -1246,13 +1248,13 @@ export class AssistantRuntime {
   // A typed request in the call chat (after the message is stored; the caller never waits for this)
 
   /**
-   * A seated person typed a message to Nova. A session that takes text (the scripted one) gets it as the person's own
+   * A seated person typed a message to Milo. A session that takes text (the scripted one) gets it as the person's own
    * line, so the detector and the name lock treat it like speech; one that cannot (the real one) is told once per person
    * per call, in chat, that only spoken requests are heard.
    */
   async onTypedMessage(callId: string, userId: string, text: string): Promise<void> {
     const run = this.runs.get(callId);
-    if (!run?.session || run.finished || !addressesNova(text)) return;
+    if (!run?.session || run.finished || !addressesAssistant(text)) return;
     const record = await this.store.get(callId);
     if (!record || record.state !== 'listening') return;
     if (run.session.acceptsText) { await this.deps.intake().handle(callId, { userId, text, at: this.now() }); return; }
@@ -1316,17 +1318,17 @@ export class AssistantRuntime {
     trace('call', { call: id, name: voiceTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).
     await run.lineChain;
-    // The lines that addressed Nova up to that moment are this call's request: its context answers them, and a plain answer
+    // The lines that addressed Milo up to that moment are this call's request: its context answers them, and a plain answer
     // spoken meanwhile goes to someone else's line first.
     await this.claimAddressing(run, id, judgeAt ?? this.now(), judged?.userId).catch(() => undefined);
     try {
       await this.handleToolCall(run, e, judgeAt, judged ? judged.userId : undefined);
     } catch (err) {
       console.warn('[meeting-assistant] tool call failed', (err as Error).message);
-      this.answer(run, id, { error: 'Nova could not run that.' });
+      this.answer(run, id, { error: `${ASSISTANT_NAME} could not run that.` });
     } finally {
       // Anything still open that no turn is holding gets an answer now: an unanswered call stalls the session.
-      if (run.calls.get(id) === 'open' && !run.holding.has(id)) this.answer(run, id, { error: 'Nova could not run that.' });
+      if (run.calls.get(id) === 'open' && !run.holding.has(id)) this.answer(run, id, { error: `${ASSISTANT_NAME} could not run that.` });
     }
   }
 
@@ -1340,7 +1342,7 @@ export class AssistantRuntime {
     // The asker judged at the delegation (audit S2) when there was one; otherwise the latest addressing line before the call.
     const asker = e.askedBy ?? (judgedAsker !== undefined ? judgedAsker : await this.findAsker(callId, atMs).then((f) => (f.ok ? f.userId : null)));
     if (!asker) {
-      // No line addressed Nova, or the one that did has no single speaker: nobody is asked to confirm anything.
+      // No line addressed Milo, or the one that did has no single speaker: nobody is asked to confirm anything.
       await this.refuse(run, e.callId, 'could not tell who asked');
       if (this.now() - run.lastUnaskedNoticeAt >= UNASKED_NOTICE_EVERY_MS) {
         run.lastUnaskedNoticeAt = this.now();
@@ -1355,7 +1357,7 @@ export class AssistantRuntime {
     if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await this.refuse(run, e.callId, 'not addressed'); return; }
     run.addressedCalls.add(e.callId); run.gate.poke();
     // (b2) At most MAX_CALLS_PER_REQUEST calls per addressed request: text inside a record must not be able to lead the
-    // model into an open-ended chain of reads. A request is the asker plus the line that addressed Nova in the window.
+    // model into an open-ended chain of reads. A request is the asker plus the line that addressed Milo in the window.
     const addressing = [...lines].reverse().find((l) => (l.userId === asker || l.speakers?.includes(asker) === true) && l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
     const requestKey = `${asker}|${addressing?.seq ?? 0}`;
     const made = (run.requestCalls.get(requestKey) ?? 0) + 1;
@@ -1409,10 +1411,10 @@ export class AssistantRuntime {
       const posted = await postAction(callId, { actionId: actionId!, askedBy: asker, askedByName: askerName, summary, ...(title ? { title } : {}), ...(does ? { does } : {}), ...(detail.length ? { detail } : {}), tool: { name, argsDigest: hashToolArgs(e.args) } });
       if (!posted) {
         await this.store.moveTurn(callId, turnId, { from: ['pending'], to: 'expired' });
-        this.answer(run, e.callId, { error: 'Nova could not offer that action.' });
+        this.answer(run, e.callId, { error: `${ASSISTANT_NAME} could not offer that action.` });
         return;
       }
-      // The card says "Waiting for <name>": Nova may say it, but its words about the card are not posted again (card: true).
+      // The card says "Waiting for <name>": Milo may say it, but its words about the card are not posted again (card: true).
       this.answer(run, e.callId, { status: 'waiting_for_confirmation', person: askerName }, { asker, visibility: 'public', card: true });
       return;
     }
@@ -1420,7 +1422,7 @@ export class AssistantRuntime {
     run.holding.add(e.callId);
   }
 
-  /** Everyone who held a seat while Nova was in the call, everyone seated now and the inviter, by display name. */
+  /** Everyone who held a seat while Milo was in the call, everyone seated now and the inviter, by display name. */
   private async rosterOf(record: AssistantRecord): Promise<RosterEntry[]> {
     let seated: string[] = [];
     try { seated = (await callChatRuntime().seatedUsers(record.callId)).filter((u) => u.active).map((u) => u.userId); } catch { /* the seat roster is best effort here */ }
@@ -1430,7 +1432,7 @@ export class AssistantRuntime {
 
   /**
    * The proposal an asked write that names other people becomes: the frozen call as its outcome, those people named, the asker
-   * its executor. Nova is told whose consent it needs; the card in the chat is the proposal's own (chat.ts). Nothing is logged.
+   * its executor. Milo is told whose consent it needs; the card in the chat is the proposal's own (chat.ts). Nothing is logged.
    */
   private async proposeNamed(run: CallRun, e: SessionEvents['toolCall'], asker: string, others: ReadonlyArray<RosterEntry & { role: PersonRole }>): Promise<void> {
     if (others.length > MAX_NAMED) { await this.refuse(run, e.callId, 'too many people'); return; }
@@ -1446,7 +1448,7 @@ export class AssistantRuntime {
       });
     } catch (err) {
       if (!(err instanceof ProposalInputError)) throw err;
-      this.answer(run, e.callId, { error: 'Nova could not offer that.' });
+      this.answer(run, e.callId, { error: `${ASSISTANT_NAME} could not offer that.` });
       return;
     }
     const names = people.map((p) => p.name);
@@ -1538,7 +1540,7 @@ export class AssistantRuntime {
     const turn = (await this.store.listTurns(callId, { statuses: ['pending'] })).find((t) => t.actionId === actionId);
     if (!turn) return;
     const run = this.runs.get(callId);
-    // Once the card is decided, anything Nova says next is news (done, declined): it is posted as usual.
+    // Once the card is decided, anything Milo says next is news (done, declined): it is posted as usual.
     if (run) for (const c of [run.reply, ...run.replyById.values()]) if (c) delete c.card;
     if (decision === 'confirm') { await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'running' }); return; }
     const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'declined' });
@@ -1549,7 +1551,7 @@ export class AssistantRuntime {
   // Time
 
   /**
-   * Expire every turn in any call whose time is up, whether or not a run is live in this process: after Nova left (the minutes'
+   * Expire every turn in any call whose time is up, whether or not a run is live in this process: after Milo left (the minutes'
    * `m-` cards) and after a restart there is no run, and the cards must still settle (audit M9).
    */
   async sweepTurns(limit = 200): Promise<number> {
@@ -1599,7 +1601,7 @@ export class AssistantRuntime {
   hasRuns(): boolean { return this.runs.size > 0; }
   callIds(): string[] { return [...this.runs.keys()]; }
 
-  /** Everyone who holds an ACTIVE seat right now was present while Nova was (audit M1); departed rows are never counted. */
+  /** Everyone who holds an ACTIVE seat right now was present while Milo was (audit M1); departed rows are never counted. */
   private async snapshotAttendance(callId: string): Promise<void> {
     try { for (const u of await callChatRuntime().seatedUsers(callId)) if (u.active) await this.store.attend(callId, u.userId); } catch { /* the seat roster is best effort here */ }
   }
@@ -1615,7 +1617,7 @@ export class AssistantRuntime {
       await this.snapshotAttendance(callId);
       const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
       if (!done) return;
-      await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit.`, { leaving: true });
+      await postNoticeQuietly(callId, `${ASSISTANT_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit.`, { leaving: true });
       this.deps.intake().stop(callId);
       await this.stop(callId, 'limit');
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
@@ -1623,8 +1625,8 @@ export class AssistantRuntime {
       // Said according to whether more time can still be added, and naming the inviter for the people who cannot extend.
       const canExtend = s.ceilingSeconds < assistantLimits().hardMaxSeconds;
       await postNoticeQuietly(callId, canExtend
-        ? `${NOVA_NAME} leaves in 5 minutes. Anyone who can invite ${NOVA_NAME} can extend its time; if you can't, ask ${await nameOf(record.invitedBy)}.`
-        : `${NOVA_NAME} leaves in 5 minutes; this call cannot be extended further.`);
+        ? `${ASSISTANT_NAME} leaves in 5 minutes. Anyone who can invite ${ASSISTANT_NAME} can extend its time; if you can't, ask ${await nameOf(record.invitedBy)}.`
+        : `${ASSISTANT_NAME} leaves in 5 minutes; this call cannot be extended further.`);
     }
   }
 
@@ -1660,7 +1662,7 @@ export class AssistantRuntime {
     });
     if (!held.ok) return { ok: false, why: 'refused', refusal: held.refusal };
     await this.store.patchSession(callId, { ceilingSeconds: next, warned: false, extensions: s.extensions + 1, holds: held.holdId ? [...s.holds, held.holdId] : s.holds });
-    await postNoticeQuietly(callId, `${await nameOf(by.sub)} extended ${NOVA_NAME}'s time by ${Math.round(added / 60)} minutes.`);
+    await postNoticeQuietly(callId, `${await nameOf(by.sub)} extended ${ASSISTANT_NAME}'s time by ${Math.round(added / 60)} minutes.`);
     return { ok: true, ceilingSeconds: next, addedSeconds: added };
   }
 
@@ -1671,7 +1673,7 @@ export class AssistantRuntime {
   }
 
   /**
-   * Expire one turn and update its card. `run` is the call's live run, or null when there is none (Nova has left, or the server
+   * Expire one turn and update its card. `run` is the call's live run, or null when there is none (Milo has left, or the server
    * restarted): the card is still settled, there is just no session to tell and no model call to answer (audit M9).
    */
   private async expireTurn(run: CallRun | null, turn: AssistantTurn, given: ExpiryCause = 'timeout'): Promise<void> {
@@ -1685,10 +1687,10 @@ export class AssistantRuntime {
     const why = EXPIRY_WORDS[cause];
     if (turn.kind === 'write') {
       if (turn.actionId) {
-        // Claimed but no result: it may or may not have run, so the card must not say it did not (audit B6). Ended because Nova
+        // Claimed but no result: it may or may not have run, so the card must not say it did not (audit B6). Ended because Milo
         // left, was dismissed, hit its limit, lost its connection or was restarted: that cause, never the asker. Otherwise
         // confirmed but never claimed: the asker's browser was not there; never confirmed: nobody decided in time.
-        const resultText = turn.claimId !== undefined ? 'Nova could not confirm whether this was done. Check before trying again.'
+        const resultText = turn.claimId !== undefined ? `${ASSISTANT_NAME} could not confirm whether this was done. Check before trying again.`
           : why.card ?? (turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`);
         await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
       }
@@ -1700,13 +1702,13 @@ export class AssistantRuntime {
       run.turnCalls.delete(turn.turnId);
       if (modelCallId) this.answer(run, modelCallId, { error: why.model });
     }
-    // Posted even when Nova has just left (the record is already `left` by the time the run stops): the asker is told.
+    // Posted even when Milo has just left (the record is already `left` by the time the run stops): the asker is told.
     await postReply(callId, { text: why.chat(askerName), askedBy: turn.askedBy, askedByName: askerName }, { leaving: true }).catch(() => null);
   }
 
   /**
-   * A turn found due with no live run in this process: Nova left the call before it ended (a turn made before the leave), or the
-   * service restarted under a call that is still on. A card offered after Nova left (the minutes' cards) keeps its own cause.
+   * A turn found due with no live run in this process: Milo left the call before it ended (a turn made before the leave), or the
+   * service restarted under a call that is still on. A card offered after Milo left (the minutes' cards) keeps its own cause.
    */
   private async causeWithoutRun(turn: AssistantTurn, given: ExpiryCause): Promise<ExpiryCause> {
     if (given !== 'timeout') return given;
@@ -1765,7 +1767,7 @@ export function assistantRuntime(): AssistantRuntime {
   if (runtime) return runtime;
   const watcher = new DecisionWatcher(defaultWatcherDeps({
     store: assistantStore, clock: Date.now,
-    novaAnswering: (callId) => runtime?.novaAnswering(callId) ?? false,
+    assistantAnswering: (callId) => runtime?.assistantAnswering(callId) ?? false,
     isEcho: (callId, line) => runtime?.isEchoLine(callId, line) ?? false,
   }));
   return (runtime = new AssistantRuntime({

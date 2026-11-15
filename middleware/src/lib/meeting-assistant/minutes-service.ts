@@ -4,7 +4,7 @@
 // leaving ends here; the first writer wins (`putMinutes` is idempotent on the call id) and a deleted record is never
 // written again (the tombstone).
 //
-// Nova can be invited back into a call it left. When it leaves again the minutes are ADDED to, never written twice: the writer reads
+// Milo can be invited back into a call it left. When it leaves again the minutes are ADDED to, never written twice: the writer reads
 // only the lines after `throughSeq` with the stored minutes as `earlier`, the store appends what is new after what is there (indices
 // name items, so they never move) under a compare on `throughSeq`, and the bell rings once more. A leave that arrives while an earlier
 // write of the same call still runs waits for it (one queue per call), so nothing a later period heard is lost.
@@ -22,7 +22,7 @@ import { voiceProviderConfigured } from '../voice/openai.js';
 import { callChatRuntime } from '../call-chat.js';
 import { notify } from '../social-notify.js';
 import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } from './chat.js';
-import { NOVA_NAME } from './chat-types.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
   capTranscript, chatSummary, minutesCounts, withoutHeld, withoutStored, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
@@ -53,8 +53,8 @@ export const AUTO_ATTEMPTS = 3;
 export const MAX_ATTEMPTS = 5;
 
 const NOTES = {
-  budget: 'Nova could not write the minutes because the inviter\'s budget did not allow it. The transcript is kept; the people who were in the call can read it.',
-  failed: 'Nova could not write the minutes. The transcript is kept; the people who were in the call can read it.',
+  budget: `${ASSISTANT_NAME} could not write the minutes because the inviter's budget did not allow it. The transcript is kept; the people who were in the call can read it.`,
+  failed: `${ASSISTANT_NAME} could not write the minutes. The transcript is kept; the people who were in the call can read it.`,
   noWriter: 'Minutes are not available in this deployment. The transcript is kept; the people who were in the call can read it.',
   onPage: 'The minutes are on the meeting page.',
 } as const;
@@ -116,7 +116,7 @@ export async function notifyMinutesReady(minutes: MinutesRecord, now: number = D
     const names = await Promise.all(minutes.attendees.map((u) => nameOf(u)));
     const name = meetingNameOf(minutes, names);
     return await notify(minutes.attendees, {
-      // Once per writing: an addition (Nova was invited back and heard more) clears the claim, and its bell says the minutes changed.
+      // Once per writing: an addition (Milo was invited back and heard more) clears the claim, and its bell says the minutes changed.
       type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes from ${name} were updated` : `Minutes from ${name} are ready`,
       action: { label: 'Open the meeting', href: meetingPagePath(minutes.callId) },
       payload: { tenant: minutes.tenant, kind: MINUTES_READY_TYPE, callId: minutes.callId },
@@ -230,7 +230,7 @@ async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initi
  * write (no assistant, still in the call, no lines recorded, or the record was deleted).
  */
 export function writeMinutes(callId: string): Promise<MinutesRecord | null> {
-  // One queue per call: a leave that arrives while an earlier write (or rewrite) still runs waits for it and then runs, so what Nova heard
+  // One queue per call: a leave that arrives while an earlier write (or rewrite) still runs waits for it and then runs, so what Milo heard
   // after being invited back is added rather than lost. Requests that arrive while one is already waiting share that one.
   const waiting = queued.get(callId);
   if (waiting) return waiting;
@@ -249,7 +249,7 @@ function startWrite(callId: string, run: () => Promise<MinutesRecord | null>): P
   return p;
 }
 
-/** A write or a rewrite of this call's minutes is running in this process (the meeting page shows "Nova is writing the minutes"). */
+/** A write or a rewrite of this call's minutes is running in this process (the meeting page shows "Milo is writing the minutes"). */
 export const minutesWriting = (callId: string): boolean => writing.has(callId);
 
 interface Composed { minutes: MinutesRecord; draft: MinutesDraft | null; proposals: Awaited<ReturnType<ReturnType<typeof assistantStore>['listProposals']>>; initiativeName: string | null }
@@ -303,7 +303,7 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   if (!record || record.state !== 'left') return null;
   const existing = await store.getMinutes(callId);
   if (existing) {
-    // Nova was invited back and has left again. A deleted record is never written; minutes without a draft are written again over the
+    // Milo was invited back and has left again. A deleted record is never written; minutes without a draft are written again over the
     // whole call (within the caps); minutes with a draft get what the later period heard added to them.
     if (existing.deleted) return null;
     // The same leave reported twice (the dismissal's run ending, then the call ending) finds minutes that already end at it: nothing to do.
@@ -329,7 +329,7 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   // Proposals are read again: one consented while the writer ran is counted.
   const counts = draft ? minutesCounts(stored.minutes, await store.listProposals(callId).catch(() => proposals)) : null;
   const text = (draft ? chatSummary(stored.minutes.summary) : stored.minutes.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
-  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId, ...(counts ? { minutes: counts } : {}) } }, { minutes: true })
+  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', meetingCallId: callId, ...(counts ? { minutes: counts } : {}) } }, { minutes: true })
     .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
   // The call chat is closed to everyone once the call is over: the bell is how the attendees learn the minutes are there.
   if (draft) await notifyMinutesReady(stored.minutes);
@@ -385,10 +385,10 @@ async function rewriteRun(callId: string, record: AssistantRecord, current: Minu
   return stored;
 }
 
-const ADDITION_FAILED = `${NOVA_NAME} could not add what it heard after it was invited back to the minutes. The minutes so far are unchanged, ${NOVA_NAME} will try again, and the transcript is kept for the people who were in the call.`;
+const ADDITION_FAILED = `${ASSISTANT_NAME} could not add what it heard after it was invited back to the minutes. The minutes so far are unchanged, ${ASSISTANT_NAME} will try again, and the transcript is kept for the people who were in the call.`;
 
 /**
- * Add what Nova heard since the minutes were written (it was invited back) to minutes that hold a draft. The writer reads only the newer
+ * Add what Milo heard since the minutes were written (it was invited back) to minutes that hold a draft. The writer reads only the newer
  * lines with the stored minutes as `earlier`; the store appends the new items after the stored ones under a compare on `throughSeq`, so
  * two additions at once write once. Nothing new: the minutes stay as they are (their end and attendees move) and no bell rings. A failed
  * or refused run marks the addition owed (`attempt` runs made) and leaves the minutes intact. `fromLeave` is the run a leave started (it
@@ -425,7 +425,7 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
   if (writer) {
-    // The cost is booked to the person who invited Nova into this period (the record's current inviter).
+    // The cost is booked to the person who invited Milo into this period (the record's current inviter).
     result = await Promise.race([
       writeDraft(record, writer, { lines: fresh, roster, callName: current.callName, doneActions, held, earlier }, { addition: (current.additions ?? 0) + 1, attempt }),
       new Promise<typeof result>((resolve) => { const t = setTimeout(() => resolve({ draft: null, note: NOTES.failed, writer: 'none' }), MINUTES_TIMEOUT_MS * 2 + 5000); t.unref?.(); }),
@@ -448,7 +448,7 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   const fromIndex = stored.actionItems.length - draft.actionItems.length;
   const counts = { ...minutesCounts(stored, await store.listProposals(callId).catch(() => proposals)), added: true };
   const text = chatSummary(stored.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
-  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId, minutes: counts } }, { minutes: true })
+  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', meetingCallId: callId, minutes: counts } }, { minutes: true })
     .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
   await notifyMinutesReady(stored);
   await offerCards(record, stored, initiativeName, fromIndex).catch((e: unknown) => console.warn('[meeting-assistant] action cards not offered', (e as Error).message));

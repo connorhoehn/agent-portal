@@ -2,10 +2,10 @@
 // transcript and posts a proposal, without a sound and without touching the live session.
 //
 //   1. Each stored line is tested against a cheap trigger (TRIGGER: the minutes' DECISION pattern, widened).
-//   2. On a hit it waits for a pause: no new line for QUIET_MS, at most MAX_WAIT_MS from the hit. It never checks while Nova is
-//      answering (past the cap while she still is, the wait is dropped), never while paused (pause clears the wait), and never in a
+//   2. On a hit it waits for a pause: no new line for QUIET_MS, at most MAX_WAIT_MS from the hit. It never checks while Milo is
+//      answering (past the cap while it still is, the wait is dropped), never while paused (pause clears the wait), and never in a
 //      call with fewer than two people seated.
-//   3. It sends the last WINDOW_MS of lines (at most WINDOW_LINES; Nova's own echoes and unattributed pieces left out) to the model
+//   3. It sends the last WINDOW_MS of lines (at most WINDOW_LINES; Milo's own echoes and unattributed pieces left out) to the model
 //      (decision-model.ts) and reads a strict schema back (decision-prompt.ts).
 //   4. A proposal is posted only when: the answer says it is a decision with confidence >= MIN_CONFIDENCE; its evidence lines are in
 //      the window and come from two or more people; no watcher proposal of this call was posted in the last MIN_GAP_MS and fewer
@@ -29,6 +29,7 @@ import { createProposal } from './proposals.js';
 import { DECISION_MODEL_ID, type CheckLine, type DecisionAnswer } from './decision-prompt.js';
 import { makeDecisionModel, type DecisionModel, type ModelCheckResult } from './decision-model.js';
 import { watcherSpend, type WatcherSpend } from './spend.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
 import type { AssistantRecord, Proposal, ProposalOutcome, TranscriptLine } from './types.js';
 
@@ -43,7 +44,7 @@ export const MIN_GAP_MS = 2 * 60_000;
 export const MAX_PER_CALL = 8;
 export const NEAR_DISMISSED = 0.6;
 /** Said once in a call, by the proposal that reaches the cap (the watcher's own, or one raised again). */
-export const capNotice = (): string => `Nova has raised ${MAX_PER_CALL} proposals in this call and will not raise more. You can still ask Nova to record a decision.`;
+export const capNotice = (): string => `${ASSISTANT_NAME} has raised ${MAX_PER_CALL} proposals in this call and will not raise more. You can still ask ${ASSISTANT_NAME} to record a decision.`;
 
 /**
  * After a proposal of `source` was stored: when it is the one that brought the call's count to exactly MAX_PER_CALL, post the cap
@@ -59,7 +60,7 @@ export async function noticeIfCapReached(store: AssistantStore, callId: string, 
 
 export type CheckCode =
   | 'posted' | 'gone' | 'not-listening' | 'alone' | 'cap' | 'too-soon' | 'budget' | 'one-speaker' | 'model-timeout' | 'model-error'
-  | 'malformed' | 'not-a-decision' | 'low-confidence' | 'evidence' | 'duplicate' | 'suppressed' | 'no-outcome' | 'invalid' | 'nova-busy';
+  | 'malformed' | 'not-a-decision' | 'low-confidence' | 'evidence' | 'duplicate' | 'suppressed' | 'no-outcome' | 'invalid' | 'assistant-busy';
 
 export interface WatcherDeps {
   store: () => AssistantStore;
@@ -72,11 +73,11 @@ export interface WatcherDeps {
   initiativeName: (initiativeId: string) => Promise<string | null>;
   model?: () => DecisionModel;
   spend?: () => WatcherSpend;
-  /** Is Nova answering in this call right now (speaking, or a tool call of hers open)? */
-  novaAnswering?: (callId: string) => boolean;
-  /** Is this stored line Nova's own voice heard back? */
+  /** Is Milo answering in this call right now (speaking, or one of its tool calls open)? */
+  assistantAnswering?: (callId: string) => boolean;
+  /** Is this stored line Milo's own voice heard back? */
   isEcho?: (callId: string, line: TranscriptLine) => boolean;
-  /** Posts one of Nova's notices to the call (never throws). Default: the call chat. */
+  /** Posts one of Milo's notices to the call (never throws). Default: the call chat. */
   notice?: (callId: string, text: string) => Promise<void>;
   /** A one-shot timer; returns its canceller. Default: an unref'd setTimeout. */
   schedule?: (fn: () => void, ms: number) => () => void;
@@ -127,7 +128,7 @@ export class DecisionWatcher {
   private now(): number { return this.deps.clock(); }
   private schedule(fn: () => void, ms: number): () => void { return (this.deps.schedule ?? defaultSchedule)(fn, ms); }
 
-  /** Begin watching a call (Nova joined or resumed after a restart). Idempotent. */
+  /** Begin watching a call (Milo joined or resumed after a restart). Idempotent. */
   start(callId: string): void {
     if (this.watches.has(callId)) return;
     this.watches.set(callId, { callId, hitAt: null, lastLineAt: 0, cancel: null, gen: 0, checking: null, counts: {} });
@@ -141,7 +142,7 @@ export class DecisionWatcher {
     w.gen += 1;
   }
 
-  /** Nova left or was dismissed: everything of this call is dropped. */
+  /** Milo left or was dismissed: everything of this call is dropped. */
   stop(callId: string): void {
     const w = this.watches.get(callId);
     if (!w) return;
@@ -158,7 +159,7 @@ export class DecisionWatcher {
   /** Wait for a check under way (tests). */
   async idle(callId: string): Promise<void> { await this.watches.get(callId)?.checking; }
 
-  /** A line was stored. Unattributed pieces and Nova's echoes neither trigger nor reset the wait. */
+  /** A line was stored. Unattributed pieces and Milo's echoes neither trigger nor reset the wait. */
   onLine(line: TranscriptLine): void {
     const w = this.watches.get(line.callId);
     if (!w || line.userId === null) return;
@@ -191,9 +192,9 @@ export class DecisionWatcher {
     if (w.gen !== gen || this.watches.get(w.callId) !== w || w.hitAt === null) return;
     const now = this.now();
     const capAt = w.hitAt + MAX_WAIT_MS;
-    if (this.deps.novaAnswering?.(w.callId) || w.checking) {
-      // Never while Nova is answering (or a check is still out): try again after a quiet spell, but not past the cap.
-      if (now >= capAt) { this.clearWait(w); this.finish(w, 'nova-busy', 0); return; }
+    if (this.deps.assistantAnswering?.(w.callId) || w.checking) {
+      // Never while Milo is answering (or a check is still out): try again after a quiet spell, but not past the cap.
+      if (now >= capAt) { this.clearWait(w); this.finish(w, 'assistant-busy', 0); return; }
       this.arm(w, Math.min(QUIET_MS, capAt - now));
       return;
     }
@@ -254,13 +255,13 @@ export class DecisionWatcher {
     await noticeIfCapReached(store, w.callId, 'watcher', this.deps.notice ?? (async () => undefined)).catch(() => false);
   }
 
-  /** The window: the last WINDOW_MS of stored lines, at most WINDOW_LINES, attributed and not Nova's echo. */
+  /** The window: the last WINDOW_MS of stored lines, at most WINDOW_LINES, attributed and not Milo's echo. */
   private async windowOf(record: AssistantRecord, now: number): Promise<TranscriptLine[]> {
     const recent = await this.deps.store().lines(record.callId, Math.max(0, record.nextSeq - 1 - WINDOW_LINES), WINDOW_LINES);
     return recent.filter((l) => l.at >= now - WINDOW_MS && l.userId !== null && !this.deps.isEcho?.(record.callId, l)).slice(-WINDOW_LINES);
   }
 
-  /** Everyone who held a seat while Nova was in the call, and everyone seated now, by display name. */
+  /** Everyone who held a seat while Milo was in the call, and everyone seated now, by display name. */
   private async rosterOf(record: AssistantRecord, seated: Set<string>): Promise<RosterEntry[]> {
     const ids = [...new Set([...record.attendees, ...seated, record.invitedBy])];
     return Promise.all(ids.map(async (userId) => ({ userId, name: await this.deps.nameOf(userId).catch(() => userId) })));

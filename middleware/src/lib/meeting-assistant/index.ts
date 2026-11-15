@@ -1,4 +1,4 @@
-// The meeting assistant (Nova), package 1: flag, stores, caption intake and the detector.
+// The meeting assistant (Milo), package 1: flag, stores, caption intake and the detector.
 // docs/meeting-assistant-design.md. Routes: routes/meeting-assistant.ts (+ the mock-only
 // injector in routes/meeting-assistant-dev.ts).
 import { config } from '../../config.js';

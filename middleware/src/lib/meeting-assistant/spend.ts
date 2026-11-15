@@ -2,13 +2,13 @@
 //
 //   invite   reserve the ceiling's minutes at the voice rate against the INVITER, on the call's initiative when it has one
 //            (lib/spend-holds.ts reserveSpend, the same chokepoint voice uses). Refused: the invite fails with the refusal
-//            voice would give, and Nova does not join.
+//            voice would give, and Milo does not join.
 //   extend   reserve the added minutes the same way, under a second source id.
-//   settle   when Nova leaves, two ledger rows keyed by the call, as lib/voice/ledger.ts books a voice session: the listening
+//   settle   when Milo leaves, two ledger rows keyed by the call, as lib/voice/ledger.ts books a voice session: the listening
 //            seconds (`ma:<callId>`, which settles the invite's hold) and the delegated tokens (`ma:<callId>:tokens`).
 //            Extension holds are released; the invite's hold is settled by its ledger row.
 //
-// The provider's own seconds win (the session reports them cumulatively); with none, the seconds Nova was listening are the
+// The provider's own seconds win (the session reports them cumulatively); with none, the seconds Milo was listening are the
 // estimate, floored at the provider's 15-second minimum. The mock world's scripted session reports elapsed seconds, so the
 // ledger shows a realistic entry without a paid call.
 import { MIN_BILLED_SECONDS, voiceConfig, voiceCostUsd } from '../voice/config.js';
@@ -37,7 +37,7 @@ export interface SettleInput {
   tokens: { input: number; output: number; cached: number };
   /** The session that ran: only the provider's figures are `reported`. */
   sessionKind: 'openai' | 'scripted';
-  /** What Nova was listening for, as the server counted it. */
+  /** What Milo was listening for, as the server counted it. */
   listeningSeconds: number;
   /** The ledger part to book under (0, or the part of the fresh hold a resume after a settlement reserved). */
   part?: number;
@@ -118,9 +118,9 @@ export function listeningSecondsOf(record: Pick<AssistantRecord, 'session'>, now
 }
 
 /**
- * Nova left: release the extension holds and book the ledger rows, once (`session.settled`). Called by the runtime when a
+ * Milo left: release the extension holds and book the ledger rows, once (`session.settled`). Called by the runtime when a
  * call's run ends. A failure is logged and leaves `settled` false; the hold then expires on its own. `period` is the period the run
- * served: once the record has moved to a newer one (Nova was invited back), this settles nothing, so a late stop never books an
+ * served: once the record has moved to a newer one (Milo was invited back), this settles nothing, so a late stop never books an
  * earlier period's figures under the newer period's part (the invitation back settled the earlier one from the record).
  */
 export async function settleFinished(e: { callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number }; sessionKind: 'openai' | 'scripted'; period?: number }, now: number = Date.now()): Promise<void> {

@@ -14,14 +14,14 @@
 import { meetingAssistantEnabled } from './index.js';
 import { mediaConfig, tapArmer, type TapArmer } from './media.js';
 import { postNoticeQuietly } from './chat.js';
-import { NOVA_NAME } from './chat-types.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import { assistantStore } from './store-select.js';
 import { settleFinished } from './spend.js';
 import { periodOf, sessionOf, type AssistantRecord } from './types.js';
 import type { AssistantStore } from './store.js';
 import { assistantIntake } from './intake-select.js';
 
-export const RESTART_NOTICE = `${NOVA_NAME} stopped listening because the service restarted. Anyone here can resume ${NOVA_NAME}.`;
+export const RESTART_NOTICE = `${ASSISTANT_NAME} stopped listening because the service restarted. Anyone here can resume ${ASSISTANT_NAME}.`;
 /** How many records one reconcile looks at; a deployment never has this many calls open at once. */
 export const RECONCILE_LIMIT = 500;
 

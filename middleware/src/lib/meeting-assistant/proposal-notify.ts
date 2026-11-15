@@ -2,18 +2,19 @@
 //
 // The rules kept here:
 //   - Only a named person or the executor who has not answered, and who is not seated in the call, is told it needs them.
-//   - The asker and the executor are told when a proposal ends (done, failed, expired) and when Nova could not run it (a hand-back);
+//   - The asker and the executor are told when a proposal ends (done, failed, expired) and when Milo could not run it (a hand-back);
 //     an executor who is not in the call is told when everyone needed has consented and only their own click is left.
 //   - A notification's title names the call ("A proposal from the Auth Migration call needs you") and links to the meeting page. It
 //     carries no statement, reason or name of the proposal: the notification service cannot delete, and the inviter's delete must
 //     leave nothing behind. The call's name is its initiative's name, never anything said in it.
 //   - Each person is told once per proposal and event in this process: it needs them (when it is created for those not in the
-//     call, and when the call ends or Nova leaves for those still owing an answer who are not seated then), it ended, each hand-back.
+//     call, and when the call ends or Milo leaves for those still owing an answer who are not seated then), it ended, each hand-back.
 import { callChatRuntime } from '../call-chat.js';
 import { notify } from '../social-notify.js';
 import { getProject } from '../../providers/projects.js';
 import { ANSWERABLE, onProposalChanged } from './proposals.js';
 import { assistantStore } from './store-select.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
 import type { Proposal } from './types.js';
 
@@ -25,7 +26,7 @@ const ENDED_TITLES: Readonly<Record<'done' | 'failed' | 'expired', (label: CallL
   failed: (l) => `A proposal from ${l} could not be carried out`,
   expired: (l) => `A proposal from ${l} expired without running`,
 };
-export const handBackTitle = (label: CallLabel): string => `Nova could not run a proposal from ${label}`;
+export const handBackTitle = (label: CallLabel): string => `${ASSISTANT_NAME} could not run a proposal from ${label}`;
 export const readyTitle = (label: CallLabel): string => `A proposal from ${label} is ready for you to run`;
 /** The portal's meeting page (minutes-service.ts `meetingPagePath`, kept here to avoid loading the minutes stack). */
 const meetingPage = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
@@ -82,7 +83,7 @@ export async function notifyProposalEnded(p: Proposal, label?: CallLabel): Promi
 /** True when this saved proposal is a hand-back: consented again with a note, no turn, not raised again. */
 export const isHandBack = (p: Pick<Proposal, 'state' | 'run'>): boolean => p.state === 'consented' && !!p.run && p.run.turnId === null && !!p.run.note && !p.run.raisedAs;
 
-/** Nova could not run it (the executor may not, or was not there): the executor is told, once per hand-back. */
+/** Milo could not run it (the executor may not, or was not there): the executor is told, once per hand-back. */
 export async function notifyHandBack(p: Proposal, label?: CallLabel): Promise<string[]> {
   if (!isHandBack(p)) return [];
   return tellOnce(p, [p.executor], `back-${p.run!.at}`, 'meeting-proposal-handed-back', handBackTitle(label ?? await callLabelOf(p.callId)));
@@ -94,7 +95,7 @@ export async function notifyReadyToRun(p: Proposal, seated: ReadonlySet<string>,
   return tellOnce(p, [p.executor], 'ready', 'meeting-proposal-ready', readyTitle(label ?? await callLabelOf(p.callId)));
 }
 
-/** The call ended or Nova left: everyone still owed an answer who is not seated now is told. Never throws. */
+/** The call ended or Milo left: everyone still owed an answer who is not seated now is told. Never throws. */
 export async function notifyOpenProposals(store: AssistantStore, callId: string): Promise<number> {
   try {
     const seated = await seatedNow(callId);

@@ -1,13 +1,13 @@
 // The meeting assistant's routes (docs/meeting-assistant-design.md), mounted at /api/calls/:callId/assistant.
 //
-//   POST invite      InviteMeetingAssistant + a seat. Creates the record and starts listening. On a call Nova has left it invites Nova back
+//   POST invite      InviteMeetingAssistant + a seat. Creates the record and starts listening. On a call Milo has left it invites Milo back
 //                    (`rejoin`): a new listening period on the same record, a fresh hold against this person, everyone else acknowledges
 //                    again. Refused for good once the record was deleted or the call used its whole listening time.
 //   POST pause       a seat. Anyone in the call can pause (decision 8).
 //   POST resume      a seat. { confirmOverUserBudget? }: after a restart a resume holds money again; only the inviter's confirmation counts.
 //   POST dismiss     a seat. The assistant leaves (anyone who may invite it can invite it back).
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
-//   POST voice       InviteMeetingAssistant + a seat. { on: boolean }: Nova speaks aloud in this call (off by default) or stops. One notice in the call chat.
+//   POST voice       InviteMeetingAssistant + a seat. { on: boolean }: Milo speaks aloud in this call (off by default) or stops. One notice in the call chat.
 //   POST participant a seat. { participantId }: bind YOUR media participant id (the per-join id the media server minted for your seat)
 //                    to yourself, so audio the taps send under that id is yours. The id must be `<your user id>-<base36 stamp>`.
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
@@ -23,7 +23,7 @@
 //    only proposal turns: a consent given on the meeting page after the call runs in that browser.)
 //   GET  proposals   a seat, a recorded attendee, or a person a proposal names or makes its executor (who sees only those): the call's
 //                    proposals (docs/meeting-consent-design.md) with each person's answer and who is still needed. Anyone else 404.
-//                    The lines Nova heard (`heard`, a short quoted excerpt) go only to people who held a seat; a named person or
+//                    The lines Milo heard (`heard`, a short quoted excerpt) go only to people who held a seat; a named person or
 //                    executor who was never in the call sees the statement and who raised it, never the lines.
 //   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision' | 'reopen', reason? }:
 //                    the reason is for an objection only, one line of at most 200 characters, and everyone in the call sees it. "Not
@@ -38,8 +38,8 @@
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none;
 //                    410 (deleted / expired) to an attendee once the record is gone.
-//   POST minutes/rewrite  an attendee asks Nova to write failed minutes again (capped; minutes-service.ts MAX_ATTEMPTS).
-//   DELETE minutes | transcript   whoever invited Nova into this call, in any period, only (an attendee who is not gets 403; anyone else 404): deletes the minutes AND the
+//   POST minutes/rewrite  an attendee asks Milo to write failed minutes again (capped; minutes-service.ts MAX_ATTEMPTS).
+//   DELETE minutes | transcript   whoever invited Milo into this call, in any period, only (an attendee who is not gets 403; anyone else 404): deletes the minutes AND the
 //                    transcript lines and leaves a tombstone, so they are never written again. Only after the assistant has left.
 //   (This file also exports `meetingsRouter`, mounted at /api/meetings: the caller's own attended meetings.)
 //
@@ -73,7 +73,7 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
-import { NOVA_NAME } from '../lib/meeting-assistant/chat-types.js';
+import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import {
@@ -139,13 +139,13 @@ const seatOf = async (req: Request): Promise<{ session: Session; callId: string 
 /** Seat holders who have not acknowledged: everyone known to be present or to have been, minus the inviter and the acked. */
 async function mustAck(record: AssistantRecord, callId: string): Promise<string[]> {
   const live = (await callChatRuntime().seatedUsers(callId).catch(() => [])).filter((u) => u.active).map((u) => u.userId);
-  // After Nova was invited back, the people of earlier periods who are not here now owe nothing yet: they are asked when they return.
+  // After Milo was invited back, the people of earlier periods who are not here now owe nothing yet: they are asked when they return.
   const earlier = recordSession(record).periods?.length ? [] : record.attendees;
   const everyone = new Set([...record.presentAtInvite, ...earlier, ...live]);
   return [...everyone].filter((u) => u !== record.invitedBy && !record.acked.includes(u)).sort();
 }
 
-/** Whether the call's audio reaches Nova: `connecting` while it joins or between live sessions, `no-audio` once the tap gave up. */
+/** Whether the call's audio reaches Milo: `connecting` while it joins or between live sessions, `no-audio` once the tap gave up. */
 export function hearingOf(state: AssistantRecord['state'], sessionOpen: boolean | null, tap: 'ok' | 'connecting' | 'no-audio'): 'ok' | 'connecting' | 'no-audio' {
   if (state === 'invited') return 'connecting';
   if (state !== 'listening') return 'ok';
@@ -154,7 +154,7 @@ export function hearingOf(state: AssistantRecord['state'], sessionOpen: boolean 
 }
 
 /**
- * What Nova is working on right now, for everyone in the call: the asker's name and whether it is a lookup or a change, never what
+ * What Milo is working on right now, for everyone in the call: the asker's name and whether it is a lookup or a change, never what
  * was asked. A read waiting on (or running in) the asker's browser, and a confirmed change being made. A change still waiting for
  * its confirmation is not "working": its card says it waits. Proposal runs are left out (their own card shows them).
  * Also, without content, the change cards still waiting for a decision: their expiry, and whether they wait on this viewer.
@@ -181,11 +181,11 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
   return {
     callId, state: record.state, lobby: record.lobby, initiativeId: record.initiativeId,
     invitedBy: record.invitedBy, invitedByName, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
-    // Who dismissed Nova, by name, so the bar can say why it left ('system' is Nova itself leaving: its time limit or a lost connection).
+    // Who dismissed Milo, by name, so the bar can say why it left ('system' is Milo itself leaving: its time limit or a lost connection).
     leftByName: record.leftBy && record.leftBy !== 'system' ? await nameOf(record.leftBy).catch(() => null) : null,
-    // After Nova left: whether it can be invited back, or why never in this call (the record was deleted, the call's listening time is used up).
+    // After Milo left: whether it can be invited back, or why never in this call (the record was deleted, the call's listening time is used up).
     ...(record.state === 'left' ? { rejoin: await rejoinStanding(record, runtime.deps.clock()) } : {}),
-    // Which period of Nova in this call this is (1 for the first); a notice closed in an earlier period shows again in a new one.
+    // Which period of Milo in this call this is (1 for the first); a notice closed in an earlier period shows again in a new one.
     period: (recordSession(record).periods?.length ?? 0) + 1,
     mustAck: owing, youMustAck: owing.includes(session.sub),
     counters: { requests: record.requests, linesStored: record.linesStored },
@@ -201,7 +201,7 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
   };
 }
 
-/** The call's record name for Nova's instructions: the initiative's name, or null. */
+/** The call's record name for Milo's instructions: the initiative's name, or null. */
 async function recordNameOf(initiativeId: string | null): Promise<string | null> {
   if (!initiativeId) return null;
   try { return (await getProject(initiativeId))?.name ?? null; } catch { return null; }
@@ -223,14 +223,13 @@ async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
 
 const noteSeat = async (callId: string, session: Session) => { await attendOnce(callId, session.sub); };
 
-const NOVA = NOVA_NAME;
-const NOT_HERE = `${NOVA} is not in this call.`;
-const ALREADY_LEFT = `${NOVA} has already left this call.`;
+const NOT_HERE = `${ASSISTANT_NAME} is not in this call.`;
+const ALREADY_LEFT = `${ASSISTANT_NAME} has already left this call.`;
 /** A pause, resume or dismiss the record's state does not allow right now, in words (never the state's name). */
 function cannotMoveNow(state: AssistantRecord['state']): string {
-  if (state === 'invited') return `${NOVA} is still joining. Try again in a moment.`;
+  if (state === 'invited') return `${ASSISTANT_NAME} is still joining. Try again in a moment.`;
   if (state === 'left') return ALREADY_LEFT;
-  return `${NOVA} could not do that just now. Try again in a moment.`;
+  return `${ASSISTANT_NAME} could not do that just now. Try again in a moment.`;
 }
 
 /**
@@ -240,11 +239,11 @@ function cannotMoveNow(state: AssistantRecord['state']): string {
  */
 function sendRefusal(res: Response, refusal: SpendRefusal, action: 'invite' | 'resume' | 'extend'): void {
   const body = refusal.body as Record<string, unknown>;
-  const lead = action === 'invite' ? `${NOVA} can't join` : action === 'resume' ? `${NOVA} can't resume` : `${NOVA} can't get more time`;
+  const lead = action === 'invite' ? `${ASSISTANT_NAME} can't join` : action === 'resume' ? `${ASSISTANT_NAME} can't resume` : `${ASSISTANT_NAME} can't get more time`;
   const gate = typeof body['gate'] === 'string' ? body['gate'] : '';
   const retryAfter = typeof body['retryAfterS'] === 'number' ? body['retryAfterS'] : null;
   const words =
-    refusal.status === 409 && body['confirmFlag'] ? (action === 'invite' ? `This would put ${NOVA}'s time over your budget.` : `This would put ${NOVA}'s time over the budget of the person who invited it. Only they can choose to go ahead.`)
+    refusal.status === 409 && body['confirmFlag'] ? (action === 'invite' ? `This would put ${ASSISTANT_NAME}'s time over your budget.` : `This would put ${ASSISTANT_NAME}'s time over the budget of the person who invited it. Only they can choose to go ahead.`)
     : refusal.status === 429 ? `${lead} right now because too much is already running. Try again${retryAfter ? ` in about ${Math.max(1, Math.round(retryAfter / 60))} minute${Math.round(retryAfter / 60) > 1 ? 's' : ''}` : ' shortly'}.`
     : refusal.status === 423 ? `${lead} because spending is paused here. Ask an admin.`
     : refusal.status === 503 ? `${lead} right now because its budget could not be checked. Try again in a few minutes; if it keeps happening, ask an admin.`
@@ -294,7 +293,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   const pre = await preflightAudio(session, callId, lobby);
   startListening();
   // Money first (decision 10): the ceiling's minutes are held against the inviter. A refusal ends the invite here, in the shape
-  // the voice mint gives, and Nova never joins.
+  // the voice mint gives, and Milo never joins.
   const initiativeId = initiativeOfLobby(lobby);
   const ceilingSeconds = assistantLimits().maxSeconds;
   const spend = assistantSpend();
@@ -313,7 +312,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   try { await assistantRuntime().start(startCtx); } catch (e) {
     await giveBack();
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
-    throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
+    throw new AppError(503, `${ASSISTANT_NAME} could not start. Try again in a moment.`);
   }
   // `invited` is the moment of the invite; the inviter acknowledges by inviting, so listening starts at once.
   const invitedAt = assistantRuntime().deps.clock();
@@ -341,18 +340,18 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
 
-/** Why Nova cannot be invited back into a call it left, for good: the record was deleted, or the call used all the listening time it may have. */
-export const REJOIN_DELETED = `This call's record was deleted, so ${NOVA} cannot join it again.`;
-export const REJOIN_LIMIT = `${NOVA} has already listened to this call for as long as it can.`;
+/** Why Milo cannot be invited back into a call it left, for good: the record was deleted, or the call used all the listening time it may have. */
+export const REJOIN_DELETED = `This call's record was deleted, so ${ASSISTANT_NAME} cannot join it again.`;
+export const REJOIN_LIMIT = `${ASSISTANT_NAME} has already listened to this call for as long as it can.`;
 export type RejoinStanding = 'allowed' | 'deleted' | 'limit';
-/** Nova was dismissed a moment ago and is still leaving (its notice, its settlement and its session closing take a second or two). */
-export const REJOIN_STILL_LEAVING = `${NOVA} is still leaving this call. Try again in a moment.`;
-/** How long an invitation back waits for Nova's earlier leave to finish before it answers REJOIN_STILL_LEAVING. Tests shorten it. */
+/** Milo was dismissed a moment ago and is still leaving (its notice, its settlement and its session closing take a second or two). */
+export const REJOIN_STILL_LEAVING = `${ASSISTANT_NAME} is still leaving this call. Try again in a moment.`;
+/** How long an invitation back waits for Milo's earlier leave to finish before it answers REJOIN_STILL_LEAVING. Tests shorten it. */
 let rejoinWaitMs = 8_000;
 export function setRejoinWaitMs(ms: number | null): void { rejoinWaitMs = ms ?? 8_000; }
 
 /**
- * Seconds Nova listened in this call so far, every period included. A `left` record should have no period open; one a dead process left
+ * Seconds Milo listened in this call so far, every period included. A `left` record should have no period open; one a dead process left
  * open counts only to that process's last heartbeat (never past the leave), as the reconcile closes it, never to now: otherwise a call
  * would read as having used its whole listening time just because time passed.
  */
@@ -363,15 +362,15 @@ export const heardSoFar = (record: AssistantRecord, now: number): number => {
   return listeningSecondsOf(record, Math.min(record.leftAt ?? now, now, Math.max(s.listeningSince, aliveAt)));
 };
 
-/** Whether a call Nova left may have it back: no for good once its record was deleted or its whole-call listening time is used up. */
+/** Whether a call Milo left may have it back: no for good once its record was deleted or its whole-call listening time is used up. */
 async function rejoinStanding(record: AssistantRecord, now: number): Promise<RejoinStanding> {
   if ((await assistantStore().getMinutes(record.callId).catch(() => null))?.deleted) return 'deleted';
   return heardSoFar(record, now) >= assistantLimits().hardMaxSeconds ? 'limit' : 'allowed';
 }
 
 /**
- * Nova is invited back into a call it left (`POST /invite` on a `left` record): a new listening period on the same record. Anyone who may
- * invite and holds a seat may do it. The earlier period was settled when Nova left (settled here from the record first if it was not);
+ * Milo is invited back into a call it left (`POST /invite` on a `left` record): a new listening period on the same record. Anyone who may
+ * invite and holds a seat may do it. The earlier period was settled when Milo left (settled here from the record first if it was not);
  * a fresh hold is reserved against the person inviting it back for the time left under the hard maximum, under the next ledger part; then
  * the live session starts, and one conditional step moves the record back to listening. Of two at once one wins; the other gives its
  * hold back and answers with the record as it stands. Everyone but the person inviting owes a new acknowledgement; the voice is off.
@@ -383,7 +382,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   // anything is settled or held, so its stop never closes or bills the new period. Nothing is held when it takes too long.
   if (!(await runtime.settled(callId, rejoinWaitMs, periodOf(read) + 1))) throw new AppError(409, REJOIN_STILL_LEAVING);
   const before = (await store.get(callId)) ?? read;
-  // Someone else brought Nova back meanwhile: the caller sees the record as it stands, and nothing of that period is touched here.
+  // Someone else brought Milo back meanwhile: the caller sees the record as it stands, and nothing of that period is touched here.
   if (before.state !== 'left') { res.json(await view(before, callId, session)); return; }
   const standing = await rejoinStanding(before, runtime.deps.clock());
   if (standing === 'deleted') throw new AppError(409, REJOIN_DELETED);
@@ -394,7 +393,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   if (!recordSession(prior).settled || recordSession(prior).listeningSince != null) {
     await settleFromRecord(callId, { clock: runtime.deps.clock, period: periodOf(prior) }); // only the period that left
     prior = (await store.get(callId)) ?? prior;
-    if (!recordSession(prior).settled) throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
+    if (!recordSession(prior).settled) throw new AppError(503, `${ASSISTANT_NAME} could not start. Try again in a moment.`);
   }
   if (prior.state !== 'left' || prior.leftAt === null) { res.json(await view(prior, callId, session)); return; }
   const s = recordSession(prior, limits.maxSeconds);
@@ -407,7 +406,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   startListening();
   const part = Math.max(s.extensions, s.ledgerPart ?? 0) + 1;
   const spend = assistantSpend();
-  // The person inviting Nova back owns this hold, so their own confirmation past their budget counts (as on a first invite).
+  // The person inviting Milo back owns this hold, so their own confirmation past their budget counts (as on a first invite).
   const held = await spend.reserve({
     callId, tenant: prior.tenant, inviterId: session.sub, initiativeId: prior.initiativeId, seconds: grant, part,
     ...(confirmOverBudget(req) ? { confirmOverUserBudget: true } : {}),
@@ -420,7 +419,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     await giveBack(); await stopIntakeIfLeft();
     if (e instanceof RunStillStopping) throw new AppError(409, REJOIN_STILL_LEAVING); // a leave that began after the wait above
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
-    throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
+    throw new AppError(503, `${ASSISTANT_NAME} could not start. Try again in a moment.`);
   }
   const now = runtime.deps.clock();
   const period = { invitedBy: prior.invitedBy, from: s.periodFrom ?? prior.invitedAt, leftAt: prior.leftAt, leftBy: prior.leftBy };
@@ -448,7 +447,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     res.json(await view(current, callId, session));
     return;
   }
-  // The call may have ended while Nova was being invited back: its end found Nova still out and did nothing for this period. Nova then
+  // The call may have ended while Milo was being invited back: its end found Milo still out and did nothing for this period. Milo then
   // leaves with the call now, the way a call end takes it out (the new period closed and settled, its hold settled with it), and the
   // person is told. A lookup that fails is not an end.
   if ((await callChatRuntime().lobbyOf(callId).catch(() => prior.lobby)) === null) {
@@ -457,7 +456,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   }
   runtime.setVoice(callId, false);
   await armAudio(callId, pre);
-  await assistantAudio().refresh(callId).catch(() => undefined); // only the person inviting Nova back is heard until the others acknowledge
+  await assistantAudio().refresh(callId).catch(() => undefined); // only the person inviting Milo back is heard until the others acknowledge
   await postNoticeQuietly(callId, noticeText.rejoined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, Math.round(grant / 60)));
   res.json(await view(moved, callId, session));
 }
@@ -469,7 +468,7 @@ export const INVITER_ASK_EVERY_MS = 2 * 60_000;
 /** Per runtime (one per process; a test's fresh runtime starts clean): when each call last asked its inviter. */
 const inviterAsked = new WeakMap<object, Map<string, number>>();
 export const inviterAskLine = (inviter: string, asker: string, what: 'resume' | 'extend'): string =>
-  `${asker} could not ${what === 'resume' ? 'resume Nova' : "extend Nova's time"} because it would go past ${inviter}'s budget. ${inviter}, you can ${what === 'resume' ? 'resume Nova' : "extend Nova's time"} and confirm the cost.`;
+  `${asker} could not ${what === 'resume' ? `resume ${ASSISTANT_NAME}` : `extend ${ASSISTANT_NAME}'s time`} because it would go past ${inviter}'s budget. ${inviter}, you can ${what === 'resume' ? `resume ${ASSISTANT_NAME}` : `extend ${ASSISTANT_NAME}'s time`} and confirm the cost.`;
 
 /**
  * A resume or an extend was refused over the inviter's budget, by someone who is not the inviter: they cannot confirm past it, so one
@@ -496,7 +495,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
     // Resuming listens again: a new token and a new tap, so the channel is looked up again first (503, still paused, when it cannot be).
     const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
-    // Leaving: whoever holds a seat right now was there while Nova was (read before the record becomes `left`, which closes attendance).
+    // Leaving: whoever holds a seat right now was there while Milo was (read before the record becomes `left`, which closes attendance).
     if (to === 'left') for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) if (u.active) await attendOnce(callId, u.userId);
     // A resume after a settlement (the reconcile after a restart booked the spend and released the hold) starts a fresh period: a fresh
     // hold first, so a refusal ends the resume here with the record still paused (audit M5).
@@ -538,12 +537,12 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
           await store.transition(callId, { from: ['listening'], to: 'paused', by: session.sub, at: Date.now() });
           if (e instanceof AppError) throw e;
           console.warn('[meeting-assistant] resume failed', (e as Error).message);
-          throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
+          throw new AppError(503, `${ASSISTANT_NAME} could not start. Try again in a moment.`);
         }
         await armAudio(callId, pre);
       }
       if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(await nameOf(session.sub, session.name)));
-      // Pause and dismiss: the same steps "Nova, pause" and "Nova, leave" said in the call take (the notice, and for a dismiss the
+      // Pause and dismiss: the same steps "Milo, pause" and "Milo, leave" said in the call take (the notice, and for a dismiss the
       // proposals closed, absent people told, the run stopped and the minutes settled).
       else await runtime.afterMove(callId, to, done, { userId: session.sub, name: session.name });
       res.json(await view(await store.get(callId), callId, session));
@@ -570,7 +569,7 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   res.json(await view(acked, callId, session));
 }));
 
-/** Nova speaking aloud is a per-call switch (decision 4), off until someone with the invite right turns it on; the call is told either way. */
+/** Milo speaking aloud is a per-call switch (decision 4), off until someone with the invite right turns it on; the call is told either way. */
 meetingAssistantRouter.post('/voice', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   const on = (req.body as { on?: unknown } | undefined)?.on;
@@ -610,7 +609,7 @@ meetingAssistantRouter.post('/participant', asyncHandler(async (req, res) => {
   res.json({ callId, participantId: id, bound: true });
 }));
 
-/** Anyone who may invite Nova may extend her time (decision 10): the default minutes, once per request, up to the hard maximum. */
+/** Anyone who may invite Milo may extend its time (decision 10): the default minutes, once per request, up to the hard maximum. */
 meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   await noteSeat(callId, session);
@@ -623,7 +622,7 @@ meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), 
   }
   if (out.why === 'no-assistant') throw new NotFoundError(NOT_HERE);
   if (out.why === 'left') throw new AppError(409, ALREADY_LEFT);
-  throw new AppError(409, `${NOVA} is already at its longest time for this call (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes), so it cannot be extended further.`);
+  throw new AppError(409, `${ASSISTANT_NAME} is already at its longest time for this call (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes), so it cannot be extended further.`);
 }));
 
 /** Only the person an action was offered to decides it (decision 5). Everyone else, and anyone with no such action: no. */
@@ -640,7 +639,7 @@ meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (r
   if (record.state === 'left' && !actionId.startsWith('m-')) throw new AppError(409, ALREADY_LEFT);
   const action = await store.getAction(callId, actionId);
   if (!action) throw new NotFoundError('No such action');
-  if (action.askedBy !== session.sub) throw new AppError(403, `Only the person who asked ${NOVA} can decide this.`);
+  if (action.askedBy !== session.sub) throw new AppError(403, `Only the person who asked ${ASSISTANT_NAME} can decide this.`);
   const to = decision === 'confirm' ? 'confirmed' : 'declined';
   const moved = await moveAction(callId, actionId, { from: ['waiting'], to, by: session.sub });
   if (!moved) {
@@ -767,7 +766,7 @@ async function outcomeSummary(p: Proposal, record: AssistantRecord, names: Recor
   return on ? `${line}, on ${on}` : line;
 }
 
-/** The last few lines Nova heard for it, quoted (at most four), for people who held a seat only. */
+/** The last few lines Milo heard for it, quoted (at most four), for people who held a seat only. */
 const HEARD_MAX = 4;
 async function heardLines(p: Proposal): Promise<Array<{ speaker: string; text: string }>> {
   const want = p.evidence.slice(-HEARD_MAX);
@@ -781,12 +780,12 @@ async function heardLines(p: Proposal): Promise<Array<{ speaker: string; text: s
   })));
 }
 
-/** A run Nova handed back (consented again with a note: the executor may not run it, or was not there). */
+/** A run Milo handed back (consented again with a note: the executor may not run it, or was not there). */
 const handedBack = (p: Proposal): boolean => p.state === 'consented' && !!p.run && p.run.turnId === null && !!p.run.note && !p.run.raisedAs;
 
 /**
  * Whether `viewer` may run it now ("Run it now", a consent as executor): it is consented, they may run its write, and either they
- * are its executor, or Nova handed it back and they consented, or Nova handed it back, nobody who consented can run it and they have
+ * are its executor, or Milo handed it back and they consented, or Milo handed it back, nobody who consented can run it and they have
  * not answered. Anyone else's click before the executor's would break "the executor's click is the last step".
  */
 async function canRunNow(p: Proposal, record: AssistantRecord, viewer: string): Promise<boolean> {
@@ -813,7 +812,7 @@ async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer,
   const recordsAs = p.state === 'done' ? p.run?.recordedAs ?? null : answerable ? await decisionRecordedAs(assistantRuntime().proposalDeps, p, v.record.initiativeId) : null;
   return {
     id: p.id, callId: p.callId, statement: p.statement, outcome: { ...p.outcome, summary: await outcomeSummary(p, v.record, names) }, argsDigest: p.argsDigest, source: p.source,
-    // Who raised it: the person who asked Nova, or Nova from what it heard. The lines it heard go only to people who were there.
+    // Who raised it: the person who asked Milo, or Milo from what it heard. The lines it heard go only to people who were there.
     askedBy: p.askedBy ? { userId: p.askedBy, name: names[p.askedBy] } : null,
     evidence: wasThere ? p.evidence : [], heard: wasThere && p.source !== 'asked' ? await heardLines(p) : [],
     // A decision recorded as decided by its executor, or as waiting for the initiative owner's decision.
@@ -829,7 +828,7 @@ async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer,
       userId: viewer, response: mine?.response ?? null, isExecutor: p.executor === viewer, isNamed: p.named.includes(viewer),
       isAsker: !!p.askedBy && p.askedBy === viewer,
       canRun: await canRunNow(p, v.record, viewer),
-      // "Not a decision" (Nova raised it) or "Drop it" (the asker's own), in the call only; its undo by the same person; raise it again.
+      // "Not a decision" (Milo raised it) or "Drop it" (the asker's own), in the call only; its undo by the same person; raise it again.
       canDismiss: v.seated && answerable && mayDismiss(p, viewer),
       canReopen: mayReopen(p, viewer) && !isDue({ state: 'open', expiresAt: p.expiresAt }, Date.now()),
       canRaiseAgain: mayRaiseAgain(p),
@@ -893,7 +892,7 @@ meetingAssistantRouter.post('/proposals/:proposalId/raise-again', asyncHandler(a
   }
   // A copy raised after the call ended keeps the call's deadline on the meeting page.
   if (endedAt(v.record) !== null) await closeProposals(store, v.callId, endedAt(v.record)!);
-  // A watcher proposal raised again during the call can be the one that reaches the cap: the call is told once, as when Nova raises it.
+  // A watcher proposal raised again during the call can be the one that reaches the cap: the call is told once, as when Milo raises it.
   else await noticeIfCapReached(store, v.callId, out.proposal.source, postNoticeQuietly).catch(() => false);
   res.json(await proposalView((await store.getProposal(v.callId, out.proposal.id)) ?? out.proposal, v.session.sub, v));
 }));
@@ -936,7 +935,7 @@ async function liveRecordOf(session: Session, callId: string): Promise<Assistant
  * `after`/`limit` (forward from a seq, as the meeting page and the live view's polling read), or `tail` (the newest `tail` lines,
  * optionally those before the seq `before`, with `earlier` saying whether older lines exist: the live view's first read and its
  * "Load earlier lines"). Every answer names the speakers of the lines it carries, with their portraits, so a view needs no second read,
- * and `since` (when Nova was invited) so a line's time reads from the start of Nova's listening.
+ * and `since` (when Milo was invited) so a line's time reads from the start of Milo's listening.
  */
 meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
@@ -996,15 +995,15 @@ async function minutesProposals(callId: string, ended: number | null) {
 const DAY_MS = 86_400_000;
 
 /**
- * What Nova covered, from the call's record: the seconds it listened (not the meeting's length), the rest of its time in the call
+ * What Milo covered, from the call's record: the seconds it listened (not the meeting's length), the rest of its time in the call
  * (paused, or waiting to start), and how many people were in the call without agreeing to be transcribed. A count only: the people
  * who did not acknowledge are never named.
  */
 export function coverageOf(record: AssistantRecord, attendees: readonly string[]) {
   const end = record.leftAt ?? Date.now();
   const s = recordSession(record);
-  // Every period counts: the seconds listened include the earlier ones (`settledListeningSeconds`), and Nova's time in the call is the
-  // sum of its periods, so the time between them (Nova was not there) is neither listening nor paused.
+  // Every period counts: the seconds listened include the earlier ones (`settledListeningSeconds`), and Milo's time in the call is the
+  // sum of its periods, so the time between them (Milo was not there) is neither listening nor paused.
   const listenedSeconds = Math.floor(listeningSecondsOf(record, end));
   const inCallMs = (s.periods ?? []).reduce((n, p) => n + Math.max(0, p.leftAt - p.from), 0) + Math.max(0, end - (s.periodFrom ?? record.invitedAt));
   const pausedSeconds = Math.max(0, Math.floor(inCallMs / 1000) - listenedSeconds);
@@ -1015,7 +1014,7 @@ export function coverageOf(record: AssistantRecord, attendees: readonly string[]
 /**
  * A meeting's minutes, for the people who were in the call. A record the inviter deleted, or the retention sweep emptied, answers those
  * people 410 with why (MEETING_DELETED, MEETING_EXPIRED): they were there, so it reveals nothing. Everyone else keeps the plain 404, and
- * once the sweep removed the call entirely nothing is left to tell anyone, so the 404 is all there is. While Nova is still writing the
+ * once the sweep removed the call entirely nothing is left to tell anyone, so the 404 is all there is. While Milo is still writing the
  * first minutes, an attendee gets 404 MINUTES_WRITING.
  */
 meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async (req, res) => {
@@ -1028,7 +1027,7 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     return;
   }
   if (!m) {
-    if (minutesWriting(callId)) { res.status(404).json({ code: 'MINUTES_WRITING', error: 'Nova is writing the minutes.' }); return; }
+    if (minutesWriting(callId)) { res.status(404).json({ code: 'MINUTES_WRITING', error: `${ASSISTANT_NAME} is writing the minutes.` }); return; }
     throw new NotFoundError('No minutes');
   }
   const attendees = await facesOf(m.attendees);
@@ -1048,17 +1047,17 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     // The summary's lead sentence and its bullets (an older record's paragraph is all lead).
     summaryLead: parts.lead, summaryPoints: parts.points,
     actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
-    // Anyone who invited Nova into this call, in any period, may delete its record.
-    youAreInviter: invitedNovaHere(record, session.sub),
+    // Anyone who invited Milo into this call, in any period, may delete its record.
+    youAreInviter: invitedAssistantHere(record, session.sub),
     // The retention sweep removes the call this long after it ended (retention.ts counts from the same end time).
     keptUntil: (record.leftAt ?? m.endedAt) + retentionDays() * DAY_MS,
     coverage: coverageOf(record, m.attendees),
-    // No draft, or an addition that could not be written: whether an attendee may ask Nova to try again (a hard cap on runs, each of
+    // No draft, or an addition that could not be written: whether an attendee may ask Milo to try again (a hard cap on runs, each of
     // which may cost model money; an owed addition's runs are counted apart from the first write's).
     rewrite: m.writer !== 'none' && m.additionOwed
       ? { writing: minutesWriting(callId), possible: true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - (m.additionAttempts ?? 0)) }
       : { writing: minutesWriting(callId), possible: m.writer === 'none' && m.retryable === true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts) },
-    // Nova was invited back and is in the call now: what it hears is added to these minutes when it leaves.
+    // Milo was invited back and is in the call now: what it hears is added to these minutes when it leaves.
     backInCall: record.state !== 'left',
     // A later part of the call could not be added yet: these minutes stand as they are until it is.
     additionOwed: m.writer !== 'none' && m.additionOwed === true,
@@ -1105,22 +1104,22 @@ meetingAssistantRouter.post('/minutes/action-items/:index/work-item', refuseMasq
   } finally { creatingWorkItem.delete(key); }
 }));
 
-/** An attendee asks Nova to write minutes that failed again. Refused while a write runs and once MAX_ATTEMPTS runs were made. */
+/** An attendee asks Milo to write minutes that failed again. Refused while a write runs and once MAX_ATTEMPTS runs were made. */
 meetingAssistantRouter.post('/minutes/rewrite', refuseMasqueradeRead, asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
   await liveRecordOf(session, callId);
   const { outcome } = await rewriteMinutes(callId, MAX_ATTEMPTS);
   if (outcome === 'started') { res.status(202).json({ callId, writing: true }); return; }
-  if (outcome === 'busy') { res.status(409).json({ code: 'MINUTES_WRITING', error: 'Nova is already writing these minutes.' }); return; }
-  if (outcome === 'limit') { res.status(429).json({ code: 'MINUTES_ATTEMPTS', error: `Nova has tried to write these minutes ${MAX_ATTEMPTS} times and will not try again. The transcript is still here to read.` }); return; }
+  if (outcome === 'busy') { res.status(409).json({ code: 'MINUTES_WRITING', error: `${ASSISTANT_NAME} is already writing these minutes.` }); return; }
+  if (outcome === 'limit') { res.status(429).json({ code: 'MINUTES_ATTEMPTS', error: `${ASSISTANT_NAME} has tried to write these minutes ${MAX_ATTEMPTS} times and will not try again. The transcript is still here to read.` }); return; }
   res.status(409).json({ code: 'MINUTES_WRITTEN', error: 'These minutes do not need writing again.' });
 }));
 
-/** The delete found Nova back in the call: someone invited it back between the delete's check and its erase. */
-export const DELETE_WHILE_BACK = `${NOVA} is back in this call. Delete the meeting after it leaves.`;
+/** The delete found Milo back in the call: someone invited it back between the delete's check and its erase. */
+export const DELETE_WHILE_BACK = `${ASSISTANT_NAME} is back in this call. Delete the meeting after it leaves.`;
 
-/** The person invited Nova into this call, in this period or an earlier one: they may delete its record (after Nova has left). */
-export const invitedNovaHere = (record: AssistantRecord, userId: string): boolean =>
+/** The person invited Milo into this call, in this period or an earlier one: they may delete its record (after Milo has left). */
+export const invitedAssistantHere = (record: AssistantRecord, userId: string): boolean =>
   record.invitedBy === userId || (recordSession(record).periods ?? []).some((p) => p.invitedBy === userId);
 
 /**
@@ -1131,11 +1130,11 @@ const deleteRecord = asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
   const record = await attendeeOf(session, callId);
   const deleted = !!(await assistantStore().getMinutes(callId))?.deleted;
-  const inviter = invitedNovaHere(record, session.sub);
+  const inviter = invitedAssistantHere(record, session.sub);
   if (deleted && !inviter) throw new NotFoundError('Not found');
-  if (!inviter) throw new AppError(403, 'Only the person who invited Nova can delete this meeting.');
-  if (record.state !== 'left') throw new AppError(409, 'Nova is still in this call. Dismiss Nova before deleting this meeting.');
-  // The erase itself is conditional on Nova being out of the call: one invited back since the check above keeps everything.
+  if (!inviter) throw new AppError(403, `Only the person who invited ${ASSISTANT_NAME} can delete this meeting.`);
+  if (record.state !== 'left') throw new AppError(409, `${ASSISTANT_NAME} is still in this call. Dismiss ${ASSISTANT_NAME} before deleting this meeting.`);
+  // The erase itself is conditional on Milo being out of the call: one invited back since the check above keeps everything.
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
   if (lines === null) throw new AppError(409, DELETE_WHILE_BACK);
   res.json({ callId, deleted: true, linesRemoved: lines });
@@ -1143,7 +1142,7 @@ const deleteRecord = asyncHandler(async (req, res) => {
 meetingAssistantRouter.delete('/minutes', refuseMasqueradeRead, deleteRecord);
 meetingAssistantRouter.delete('/transcript', refuseMasqueradeRead, deleteRecord);
 
-/** The call ended with Nova in it: Nova leaves with the call (settled, minutes written), and its open proposals move to the meeting page. */
+/** The call ended with Milo in it: Milo leaves with the call (settled, minutes written), and its open proposals move to the meeting page. */
 async function endWithCall(callId: string): Promise<void> {
   const store = assistantStore();
   await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
@@ -1190,7 +1189,7 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
     // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
     const proposals = await listProposalsFor(store, m.callId, now, m.endedAt).catch(() => []);
     const waitingOnYou = proposals.filter((p) => ANSWERABLE.includes(p.state) && owedBy(p).includes(session.sub)).length;
-    // Nova's listening time (not the meeting's length), and what came out of it: decisions (agreed proposals included, as the minutes
+    // Milo's listening time (not the meeting's length), and what came out of it: decisions (agreed proposals included, as the minutes
     // card counts them), action items and the proposals still open.
     const record = await store.get(m.callId).catch(() => null);
     const listenedSeconds = record ? Math.floor(listeningSecondsOf(record, record.leftAt ?? now)) : null;

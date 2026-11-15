@@ -1,8 +1,8 @@
 // The meeting assistant's limits, read from the environment on every call (like lib/voice/config.ts) so a test or an
 // operator override needs no restart path of its own.
-//   MEETING_ASSISTANT_MAX_MINUTES       listening minutes per call before Nova leaves (default 60); also what one extension adds
+//   MEETING_ASSISTANT_MAX_MINUTES       listening minutes per call before Milo leaves (default 60); also what one extension adds
 //   MEETING_ASSISTANT_HARD_MAX_MINUTES  the most a call can be extended to (default 180, never below the first ceiling)
-//   MEETING_ASSISTANT_MAX_REQUESTS      requests Nova answers per call (default 60)
+//   MEETING_ASSISTANT_MAX_REQUESTS      requests Milo answers per call (default 60)
 export interface AssistantLimits { maxSeconds: number; hardMaxSeconds: number; maxRequests: number }
 
 function positive(name: string, fallback: number): number {

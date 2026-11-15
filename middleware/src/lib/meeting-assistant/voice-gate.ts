@@ -1,4 +1,4 @@
-// Nova's voice gate (docs/meeting-assistant-design.md, decision 4): her voice goes out only for speech someone asked for.
+// Milo's voice gate (docs/meeting-assistant-design.md, decision 4): its voice goes out only for speech someone asked for.
 //
 // The live model is told to stay silent unless addressed, and the chat side already drops an unprompted remark, but its audio
 // arrives frame by frame long before the utterance's transcript is final. This gate stands in front of the relay and decides once
@@ -18,9 +18,9 @@
 //             for VOICE_UTTERANCE_GAP_MS. Nothing of it is sent, not even a `last` frame.
 //
 // Held audio lives only in this object's memory: never on disk, never logged, gone when released, withheld or cleared. Pure: the
-// clock and the timer are injected; the caller does the sending (and notes when Nova was heard).
+// clock and the timer are injected; the caller does the sending (and notes when Milo was heard).
 
-/** A heard line that addressed Nova opens the gate for a turn that begins within this long after the line ended. */
+/** A heard line that addressed Milo opens the gate for a turn that begins within this long after the line ended. */
 export const VOICE_PROMPT_WINDOW_MS = 10_000;
 /** How long a turn nobody asked for is held, from its first frame, waiting for the reason to arrive. */
 export const VOICE_GATE_HOLD_MS = 2000;
@@ -39,7 +39,7 @@ export interface VoiceGateOptions {
   now: () => number;
   /** Is the voice wanted at this moment, and why; null when nobody asked. */
   allowed: () => VoiceGateWhy | null;
-  /** Relay one frame, in order, with its own `last` flag (the caller notes Nova as heard). */
+  /** Relay one frame, in order, with its own `last` flag (the caller notes Milo as heard). */
   send: (pcm: Buffer, last: boolean) => void;
   /** Each decision, for the trace: numbers and codes only. A turn records `open`, or `held` and then `released` or `withheld`. */
   decided?: (decision: VoiceGateDecision, heldMs: number, why: VoiceGateWhy | 'timeout' | null) => void;
@@ -59,7 +59,7 @@ export class VoiceGate {
 
   constructor(private readonly o: VoiceGateOptions) {}
 
-  /** One output frame of Nova's voice, in order. */
+  /** One output frame of Milo's voice, in order. */
   frame(pcm: Buffer, last: boolean): void {
     const now = this.o.now();
     // A held turn whose hold has run out (its timer not run yet) is decided first, as it stood.
@@ -86,7 +86,7 @@ export class VoiceGate {
   /** Frames held right now (tests and counters). */
   heldFrames(): number { return this.held.length; }
 
-  /** Where the current turn stands (the caller keeps Nova's words for a held turn aside, and drops them for a withheld one). */
+  /** Where the current turn stands (the caller keeps Milo's words for a held turn aside, and drops them for a withheld one). */
   phase(): VoiceGatePhase { return this.state; }
 
   private begin(now: number): void {

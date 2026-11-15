@@ -1,6 +1,6 @@
 // Retention (docs/meeting-assistant-design.md, decision 9; audit M3). Every table of the feature is swept, by the call's age: a call
 // older than MEETING_TRANSCRIPT_RETENTION_DAYS (30 by default), counted from when it ended (`leftAt`, else `invitedAt`), loses its
-// lines, minutes (or tombstone), turns, actions and its assistant record, and Nova's own chat messages for it are replaced with the
+// lines, minutes (or tombstone), turns, actions and its assistant record, and Milo's own chat messages for it are replaced with the
 // fixed line (the call chat's own message store keeps its own age limit: the Dynamo adapter's 90-day TTL, none in memory; this sweep does not change it). A call that
 // is still `listening` or `paused` is not swept, unless nothing has served it for longer than the hard maximum plus a margin (it is then
 // ended first, as of its last heartbeat). No audio exists to delete. The same sweep expires proposals whose 72 hours after the
@@ -20,7 +20,7 @@ export const ABANDONED_MARGIN_MS = 30 * 60_000;
 export function retentionDays(): number { return config.meetingAssistant?.transcriptRetentionDays ?? 30; }
 
 export interface SweepOptions {
-  /** Replace Nova's chat messages for a call; defaults to chat.ts (loaded on demand, so the store tests never pull the chat stack in). */
+  /** Replace Milo's chat messages for a call; defaults to chat.ts (loaded on demand, so the store tests never pull the chat stack in). */
   eraseChat?: (callId: string) => Promise<unknown>;
   /** End an abandoned listening or paused record as of `at`; defaults to the reconcile's (loaded on demand). */
   endAbandoned?: (callId: string, at: number) => Promise<unknown>;
@@ -52,7 +52,7 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
     try {
       // The stored words (lines, requests, tool arguments, result text) go first and for certain; only then the chat step, which may be down.
       // A call whose chat step fails keeps its record, emptied, and the next sweep tries the chat again.
-      if ((await store.tombstoneMinutes(call.callId, 'system', nowMs)) === null) continue; // Nova was invited back meanwhile: not expired
+      if ((await store.tombstoneMinutes(call.callId, 'system', nowMs)) === null) continue; // Milo was invited back meanwhile: not expired
       await eraseChat(call.callId);
       await store.purgeCall(call.callId);
     } catch (e) { console.warn('[meeting-assistant] retention could not remove a call', (e as Error).message); }

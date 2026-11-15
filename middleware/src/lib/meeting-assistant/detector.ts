@@ -6,28 +6,32 @@
 // silence, so one spoken request arrives as several captions, sometimes with a word cut in half and
 // with junk slivers ("Thank you.") between. The detector rebuilds the request for ONE speaker.
 //
-//   Name.    "Nova" as a whole word, any case, punctuation around it, "Nova's" tolerated.
+//   Name.    The assistant's name (`ASSISTANT_NAME`, "Milo") or one of the spellings a transcript writes it with
+//            ("Mylo"; `NAME_FORMS`), as a whole word, any case, punctuation around it, "Milo's" tolerated. A name
+//            straight followed by a word that makes it part of another name or a common noun ("milo grain") is no
+//            mention; with a comma between ("Milo, grain prices are next") it is.
 //   Address. A caption is a request only if the name is *addressing* the assistant:
 //     A. the name starts the caption or a sentence, or only greeting words precede it
-//        ("Hey Nova", "Okay, Nova", "...logic. Nova, please."); or
-//     B. mid-sentence, it is followed by a comma / colon / dash ("so, Nova, can you"), or by
-//        "please", an imperative verb ("Nova write up ..."), a question word, or "can/could/would/will you".
-//     So "I think Nova could help with that budget question" is NOT a request (mid-sentence, "could"
-//     not followed by "you"), but "I think Nova, could you help" and "Nova could help with budget" are.
+//        ("Hey Milo", "Okay, Milo", "...logic. Milo, please."); or
+//     B. mid-sentence, it is followed by a comma / colon / dash ("so, Milo, can you"), or by
+//        "please", an imperative verb ("Milo write up ..."), a question word, or "can/could/would/will you".
+//     So "I think Milo could help with that budget question" is NOT a request (mid-sentence, "could"
+//     not followed by "you"), but "I think Milo, could you help" and "Milo could help with budget" are.
 //   C. the name is the last word of the caption (unless it follows thanks / bye): the request starts next caption.
-//   Text before the name is dropped. If nothing follows the name ("...Nova.") the request is opened
+//   Text before the name is dropped. If nothing follows the name ("...Milo.") the request is opened
 //   empty and starts with the same speaker's next caption.
 //   Stitching. The same speaker's following captions join the request. It closes when the speaker has been
 //     quiet for 1.5 s since their last caption arrived; the wait stretches to 4 s when that caption looks
 //     cut off (no closing . ? ! or a dangling word like "and") or the request has under three words so far
-//     (a bare "Nova, please."). Hard caps: 12 captions or 60 s per request.
+//     (a bare "Milo, please."). Hard caps: 12 captions or 60 s per request.
 //   Other speakers' captions never join; each speaker has at most one open request.
 //   Half-cut words. A caption ending in `pr-` followed by one starting with lowercase `iya` is joined: "priya".
 //   Slivers. A caption of at most two words that is exactly a known Whisper filler is not stitched and
 //     never becomes a request; the intake still stores it in the transcript.
-//   Cancel. "Nova, never mind / cancel / stop" from the asker, while their request is open, cancels it.
-//   Commands. "Nova, stop listening" / "Nova, pause" -> pause; "Nova, leave" -> dismiss; any speaker
+//   Cancel. "Milo, never mind / cancel / stop" from the asker, while their request is open, cancels it.
+//   Commands. "Milo, stop listening" / "Milo, pause" -> pause; "Milo, leave" -> dismiss; any speaker
 //     (decision 8: anyone in the call can pause or dismiss).
+import { ASSISTANT_NAME } from './chat-types.js';
 import type { TranscriptLine } from './types.js';
 
 export interface RequestEvent {
@@ -66,7 +70,25 @@ export const DETECTOR_LIMITS = {
   openerWords: 3,
 } as const;
 
-const NAME = /(^|[^\p{L}\p{N}_])(nova)(?:['’]s)?(?![\p{L}\p{N}_]|-\p{L})/giu;
+/**
+ * How a transcript may write the assistant's name, keyed by the name (`ASSISTANT_NAME`, lower case): the spellings a speech-to-text
+ * service produces for it, and the words that, straight after it with only a space between, make it part of another name or a
+ * common noun rather than an address. A rename adds one entry here; a name without an entry is matched as written, with no exceptions.
+ */
+export const NAME_FORMS: Readonly<Record<string, { spellings: readonly string[]; notAddress: readonly string[] }>> = {
+  milo: {
+    spellings: ['milo', 'mylo'],
+    // "milo" is also sorghum, the grain ("the milo fields", "Milo grain prices are up"), and a malted drink ("Milo powder").
+    // Nouns only: a word someone could ask the assistant to do ("crop", "seed", "field") stays an address.
+    notAddress: ['grain', 'sorghum', 'fields', 'crops', 'drink', 'powder'],
+  },
+};
+const forms = NAME_FORMS[ASSISTANT_NAME.toLowerCase()];
+/** Every way the name is heard, lower case: the name itself first. */
+export const NAME_SPELLINGS: readonly string[] = [...new Set([ASSISTANT_NAME.toLowerCase(), ...(forms?.spellings ?? [])])];
+/** The spellings as a regular-expression alternation, each escaped so it matches as written. */
+export const NAME_ALTERNATION = NAME_SPELLINGS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const NAME = new RegExp(`(^|[^\\p{L}\\p{N}_])(${NAME_ALTERNATION})(?:['’]s)?(?![\\p{L}\\p{N}_]|-\\p{L})`, 'giu');
 const GREETING_ONLY = /^(?:(?:hey|hi|hello|ok|okay|so|yo|and|but|alright|well|um|uh|oh|there)[\s,.!-]*)+$/i;
 const IMPERATIVES = new Set([
   'please', 'write', 'create', 'make', 'summarize', 'summarise', 'assign', 'add', 'draft', 'tell', 'show', 'find',
@@ -101,13 +123,13 @@ export function looksCut(text: string): boolean {
 }
 
 /**
- * Capitalised words that, straight after the assistant's name with only a space between, make a known place or product name
- * ("Nova Scotia"), not an address. A small explicit list: an address has a comma, a pause or a request after the name.
+ * Words that, straight after the assistant's name with only a space between, make it part of something else (`NAME_FORMS`),
+ * not an address. A small explicit list: an address has a comma, a pause or a request after the name.
  */
-const NAME_PHRASE_SECOND_WORDS: ReadonlySet<string> = new Set(['scotia', 'scotian', 'lima', 'gorica', 'friburgo', 'poshta', 'launcher']);
+const NAME_PHRASE_SECOND_WORDS: ReadonlySet<string> = new Set(forms?.notAddress ?? []);
 /**
- * Is the text right after the name the second word of a place or product named with it ("Nova Scotia")? Judged however the
- * transcript writes it: any case, or a possessive ("Nova Scotia's"). A comma between them is an address ("Nova, Scotia is next").
+ * Is the text right after the name the second word of something named with it ("milo grain")? Judged however the transcript
+ * writes it: any case, or a possessive ("Milo powder's"). A comma between them is an address ("Milo, grain prices are next").
  */
 const namePhraseFollows = (after: string): boolean => {
   const m = /^\s+([\p{L}'’]+)/u.exec(after);

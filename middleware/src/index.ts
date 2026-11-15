@@ -386,7 +386,7 @@ app.use('/api/uploads', createUploadsRouter(
   }));
 app.use('/api/calls', callPagesRouter);
 app.use('/api/calls', callChatRouter);
-// The meeting assistant (Nova): flag-gated, a call seat required (routes/meeting-assistant.ts).
+// The meeting assistant (Milo): flag-gated, a call seat required (routes/meeting-assistant.ts).
 app.use('/api/calls/:callId/assistant', meetingAssistantRouter);
 app.use('/api/meetings', meetingsRouter);
 // The sweeps run whether or not the feature is on: turning it off must not keep stored words for ever (audit M4).

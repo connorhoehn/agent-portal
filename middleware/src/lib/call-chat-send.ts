@@ -8,7 +8,7 @@ import { defineFeature, type RealtimeFeature } from '@connorhoehn/realtime-modul
 import { AppError } from './async-handler.js';
 import { canonicalCallPage, type CallPageDescriptor } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
-import { claimsAssistant, NOVA_USER_ID } from './meeting-assistant/chat-types.js';
+import { claimsAssistant, isAssistantUserId } from './meeting-assistant/chat-types.js';
 import { huddleChatOf, inCallChatNamespace, METADATA_KEYS, type CallChatRuntime } from './call-chat.js';
 
 /** What a client may do on a huddle channel through the chat service. */
@@ -23,7 +23,7 @@ export function huddleSendInput(data: Record<string, unknown>): HuddleSend | str
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'A huddle message needs a delivery id';
   const row = raw as Record<string, unknown>;
   if (typeof row.clientDeliveryId !== 'string' || !DELIVERY_ID.test(row.clientDeliveryId)) return 'A huddle message needs a valid delivery id';
-  // Nova's keys are the server's alone (lib/meeting-assistant/chat.ts): refuse them, do not quietly drop them.
+  // Milo's keys are the server's alone (lib/meeting-assistant/chat.ts): refuse them, do not quietly drop them.
   if (claimsAssistant(row)) return 'A message cannot carry the assistant\'s markers';
   let page: CallPageDescriptor | null = null;
   if (row.pageReference !== undefined) {
@@ -107,7 +107,7 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
       const captured = context.router.getClientData?.(clientId)?.userContext;
       const userId = typeof captured?.['userId'] === 'string' ? captured['userId'] : '';
       // The assistant's author id is not a person: a connection claiming it posts nothing.
-      if (userId === NOVA_USER_ID) return refuse(clientId, action, channel, 'This author cannot post to a huddle conversation');
+      if (isAssistantUserId(userId)) return refuse(clientId, action, channel, 'This author cannot post to a huddle conversation');
       await enqueue(callId, async () => {
         const owner = current();
         try {
@@ -139,7 +139,7 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
             await owner.messages.updateMessage(channel, stored.id, { message: '', metadata: { deleted: true }, deletedAt: new Date().toISOString() });
           }
           if (stored) acknowledged.delete(`${clientId}\0${stored.id}`);
-          // Nova hears typed requests only through this hook, after the message is stored; it never delays or fails the send.
+          // Milo hears typed requests only through this hook, after the message is stored; it never delays or fails the send.
           if (stored) void typedToAssistant(callId, userId, input.text);
         } catch (error) {
           if (context.router.getClientData?.(clientId)?.userContext !== captured) return;

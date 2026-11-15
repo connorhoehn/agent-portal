@@ -25,7 +25,7 @@ export interface SessionEvents {
   /** One piece of what the call said, with its offsets on the session's own timeline (ms since `start`). */
   /** One person-turn of heard speech. `parts` are the provider's own pieces in order (word groups with their times), when it sent several: the server splits the turn where the voice changes. */
   inputTranscript: { text: string; startMs: number; endMs: number; parts?: Array<{ text: string; startMs: number; endMs: number }> };
-  /** What Nova said. `final: false` is the text so far; `final: true` ends the piece. */
+  /** What Milo said. `final: false` is the text so far; `final: true` ends the piece. */
   outputTranscript: { text: string; final: boolean; /** For a final utterance: when it began and when its last word arrived, in ms on the session timeline (the same clock as a tool call's `atMs`). */ startedAt?: number; endedAt?: number; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string; /** How many input transcripts the session had emitted when this utterance began (lines heard before it). */ inputsBefore?: number };
   /** The delegation backend called a function. `atMs` is the session timeline when it arrived. */
   toolCall: { callId: string; name: string; args: unknown; atMs: number; askedBy?: string };
@@ -37,7 +37,7 @@ export interface SessionEvents {
   messageReady: { atMs: number };
   /** Cumulative seconds the session has run, and the backend tokens so far when the provider reported them. */
   usage: { seconds: number; backendTokens?: BackendTokens; /** True when `seconds` is the server's own wall-clock estimate (an unexpected close). */ estimated?: boolean };
-  /** What Nova said aloud: PCM16 mono 24 kHz, at most 100 ms, VOICED frames only (silence is dropped at the source). `seq` counts frames from 1 per session. Never stored or logged. */
+  /** What Milo said aloud: PCM16 mono 24 kHz, at most 100 ms, VOICED frames only (silence is dropped at the source). `seq` counts frames from 1 per session. Never stored or logged. */
   outputAudio: { pcm: Buffer; seq: number; /** True on the final frame of an utterance (the end of the tail after the last voiced frame). */ last?: true };
   /** The provider told us when the session ends (epoch ms). */
   expires: { atMs: number };

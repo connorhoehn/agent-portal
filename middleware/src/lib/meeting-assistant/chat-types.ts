@@ -1,16 +1,28 @@
-// What Nova puts in the call chat (docs/meeting-assistant-design.md, decisions 4 to 6). One file, shared by the
+// What the meeting assistant puts in the call chat (docs/meeting-assistant-design.md, decisions 4 to 6). One file, shared by the
 // server's posting (chat.ts), the render gate in lib/call-chat.ts and the tests. The portal keeps a mirror of the
 // metadata shapes in portal/src/lib/assistantMessages.ts; change both together.
 //
-// The identity is fixed. A message is Nova's only if it was stored by chat.ts: `userId` is NOVA_USER_ID, and
-// `metadata.assistant === true` with `metadata.kind` starting `assistant-`. No signed-in client can produce one:
-// the huddle send path (call-chat-send.ts) refuses the author and the keys, and `render` (call-chat.ts) shows the
-// assistant keys only on a message whose stored author is Nova.
+// The identity is fixed. A message is the assistant's only if it was stored by chat.ts: `userId` is ASSISTANT_USER_ID (or, for
+// a message stored before the rename, a LEGACY_ASSISTANT_USER_IDS entry), and `metadata.assistant === true` with `metadata.kind`
+// starting `assistant-`. No signed-in client can produce one: the huddle send path (call-chat-send.ts) refuses the author and the
+// keys, and `render` (call-chat.ts) shows the assistant keys only on a message whose stored author is the assistant.
 
-export const NOVA_USER_ID = 'agent:nova';
-export const NOVA_NAME = 'Nova' as const;
-/** What Nova's own chat messages say once their call's record is deleted (by the inviter, or by retention). */
-export const DELETED_RECORD_LINE = 'This record was deleted by the person who invited Nova.';
+/** The assistant's name, the one place it is spelled: every sentence the server builds for a person or tells the model uses it. */
+export const ASSISTANT_NAME = 'Milo' as const;
+/** The assistant's fixed author id in the call chat. Neutral, so a rename never touches stored data. */
+export const ASSISTANT_USER_ID = 'agent:meeting-assistant';
+/**
+ * Author ids the assistant's messages were stored under before, under its earlier name. Read, never written: a stored message
+ * keeps its author, and the render gate, the erase and the send refusal treat it as the assistant's.
+ */
+export const LEGACY_ASSISTANT_USER_IDS: readonly string[] = ['agent:nova'];
+/** Is this stored author the assistant (under its id now, or one it was stored under before)? */
+export const isAssistantUserId = (userId: string | null | undefined): boolean =>
+  userId === ASSISTANT_USER_ID || (!!userId && LEGACY_ASSISTANT_USER_IDS.includes(userId));
+/** What the assistant's own chat messages say once their call's record is deleted (by the inviter, or by retention). */
+export const DELETED_RECORD_LINE = `This record was deleted by the person who invited ${ASSISTANT_NAME}.`;
+/** The same line as messages erased before the rename read it; an erase treats such a message as already erased. */
+export const LEGACY_DELETED_RECORD_LINES: readonly string[] = ['This record was deleted by the person who invited Nova.'];
 export const ASSISTANT_KIND_PREFIX = 'assistant-';
 
 export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action' | 'assistant-proposal';
@@ -19,8 +31,11 @@ export const ASSISTANT_KINDS: readonly AssistantKind[] = ['assistant-notice', 'a
 export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
 export const ACTION_STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
 
-/** Fields every Nova message carries. */
-export interface AssistantBase { assistant: true; displayName: typeof NOVA_NAME }
+/**
+ * Fields every assistant message carries. `displayName` is the name it was posted under: ASSISTANT_NAME now, and a message stored
+ * before a rename keeps the name it was written with.
+ */
+export interface AssistantBase { assistant: true; displayName: string }
 
 export interface AssistantNoticeMetadata extends AssistantBase {
   kind: 'assistant-notice';
@@ -31,7 +46,7 @@ export interface AssistantNoticeMetadata extends AssistantBase {
 }
 
 /** The counts a minutes notice carries. `decisions` includes the decisions people consented to through the call's proposals. */
-export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** Nova added a later period to minutes that existed. */ added?: boolean }
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** The assistant added a later period to minutes that existed. */ added?: boolean }
 
 export interface AssistantReplyMetadata extends AssistantBase {
   kind: 'assistant-reply';
@@ -64,7 +79,7 @@ export const PROPOSAL_CARD_STATES: readonly AssistantProposalState[] = ['open', 
 /**
  * A proposal card (docs/meeting-consent-design.md). It carries the proposal's id and state only: the statement is the message text,
  * and names, answers and reasons are read from the proposals route by people allowed to see them. It has no buttons; answers are
- * given in the deck. Deleting the record blanks the text like any other Nova message, and the proposals go with the record.
+ * given in the deck. Deleting the record blanks the text like any other assistant message, and the proposals go with the record.
  */
 export interface AssistantProposalMetadata extends AssistantBase {
   kind: 'assistant-proposal';
@@ -80,7 +95,7 @@ export type ActionInput = Omit<AssistantActionMetadata, keyof AssistantBase | 'k
 
 export const isAssistantKind = (kind: unknown): boolean => typeof kind === 'string' && kind.startsWith(ASSISTANT_KIND_PREFIX);
 
-/** Does a metadata bag carry anything only Nova may carry? Used to refuse a person's send. */
+/** Does a metadata bag carry anything only the assistant may carry? Used to refuse a person's send. */
 export function claimsAssistant(metadata: Record<string, unknown> | undefined | null): boolean {
   if (!metadata) return false;
   return 'assistant' in metadata || isAssistantKind(metadata['kind']);
@@ -96,12 +111,14 @@ function minutesCounts(raw: unknown): MinutesCounts | null {
     ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'], ...(c['added'] === true ? { added: true } : {}) } : null;
 }
 
-/** Parse stored metadata back into a typed shape; null when it is not a well-formed Nova message. */
+/** Parse stored metadata back into a typed shape; null when it is not a well-formed assistant message. */
 export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const m = raw as Record<string, unknown>;
   if (m['assistant'] !== true) return null;
-  const base = { assistant: true as const, displayName: NOVA_NAME };
+  // The name the message was posted under stays (a message stored before a rename keeps its old name); a message without one reads as
+  // the assistant's name now.
+  const base = { assistant: true as const, displayName: str(m['displayName'], 64) ? m['displayName'] : ASSISTANT_NAME };
   if (m['kind'] === 'assistant-notice') {
     const minutes = minutesCounts(m['minutes']);
     return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}) };

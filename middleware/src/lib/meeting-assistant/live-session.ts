@@ -70,7 +70,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
-/** One thing Nova said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
+/** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
 interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number }
 
 export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSession {
@@ -329,14 +329,14 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const startMs = num(ev['start_ms']), endMs = Math.max(startMs, num(ev['end_ms']));
     const gapMs = this.opts.gapMs ?? 1000;
     if (side === 'input') {
-      // Input never ends or splits an utterance of Nova's: only output quiet does.
+      // Input never ends or splits an utterance of Milo's: only output quiet does.
       if (this.input && startMs - this.input.endMs > gapMs) this.flushInput('gap');
       const part = { text: delta, startMs, endMs };
       this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs, parts: [...this.input.parts, part] } : { text: delta, startMs, endMs, parts: [part] };
       if (SENTENCE_END.test(this.input.text)) this.flushInput('sentence'); else this.armIdle();
     } else {
       const at = this.sinceStart();
-      // Nova beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
+      // Milo beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
       // utterance is judged (the provider's input deltas come in small pieces, and its idle flush would land after a short answer).
       if (!this.output) this.flushInput('output');
       this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, inputsBefore: this.inputCount };

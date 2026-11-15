@@ -28,7 +28,7 @@ import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { canonicalCallPage, type CallPageDescriptor, type CanonicalCallPage, type CallLifecycleObserver } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';
-import { NOVA_USER_ID, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
+import { isAssistantUserId, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
 import type { Session } from './session.js';
 import type { CallChatStateStore, CallChatState, CallChatMember } from './call-chat-state.js';
 import { invalidateChannel } from './gateway/authority-invalidation.js';
@@ -360,7 +360,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
     // The meeting assistant's kinds are shown only on a message its fixed identity authored: a person's message
     // that carries `assistant` or `assistant-…` keys never reaches a reader with them (call-chat-send.ts refuses
     // them on the way in; this is the second lock, on the way out).
-    const assistant = message.userId === NOVA_USER_ID ? parseAssistantMetadata(message.metadata) : null;
+    const assistant = isAssistantUserId(message.userId) ? parseAssistantMetadata(message.metadata) : null;
     if (assistant) Object.assign(metadata, clone(assistant));
     const page = dmPageDescriptor(message.metadata?.['pageReference']);
     if (page) {
@@ -522,7 +522,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
       }
       return frame;
     }
-    // Nova's voice (meeting assistant package 7a): a transient frame for the call's main chat channel, only for a connected seat of that
+    // Milo's voice (meeting assistant package 7a): a transient frame for the call's main chat channel, only for a connected seat of that
     // call that has not left. Room chats never carry it. The router has already checked this socket may read the channel.
     if (frame.type === 'assistant-audio') {
       const ref = huddleChatOf(typeof frame.channel === 'string' ? frame.channel : '');

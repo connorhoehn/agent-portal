@@ -1,4 +1,4 @@
-// Nova's voice in the call chat (docs/meeting-assistant-design.md, decisions 4 to 6, 8).
+// Milo's voice in the call chat (docs/meeting-assistant-design.md, decisions 4 to 6, 8).
 //
 // The path. A seatless server post: `postThreadMessage` (lib/social-chat.ts), the same one REST comments and bot-run
 // system comments use. It writes the call chat's own message store, then hands the row to the gateway's
@@ -10,7 +10,7 @@
 // is the ONE coupling, and it lives in `social-chat.ts` (`setThreadLiveAppend` / `setThreadLiveUpdate`).
 //
 // Who may post: only server code that calls this module. The huddle send path refuses the author and the keys
-// (call-chat-send.ts), and `render` only shows the assistant keys on a message Nova authored (call-chat.ts).
+// (call-chat-send.ts), and `render` only shows the assistant keys on a message Milo authored (call-chat.ts).
 //
 // When: only while an assistant record exists for the call and is not `left`; the dismiss notice is the one
 // exception (`leaving`). A private reply is not a chat message: `postPrivately` goes to one person's notifications.
@@ -26,7 +26,7 @@ import { assistantLimits } from './limits.js';
 import { onProposalChanged } from './proposals.js';
 import type { Proposal } from './types.js';
 import {
-  DELETED_RECORD_LINE, NOVA_NAME, NOVA_USER_ID,
+  ASSISTANT_NAME, ASSISTANT_USER_ID, DELETED_RECORD_LINE, LEGACY_DELETED_RECORD_LINES, isAssistantUserId,
   type ActionInput, type AssistantActionStatus, type AssistantMetadata, type ReplyInput,
 } from './chat-types.js';
 
@@ -43,7 +43,7 @@ export async function nameOf(userId: string, fallback?: string): Promise<string>
 }
 
 export interface PostOptions {
-  /** The leave notice, and the "Nova left before it could finish" replies that follow it, are allowed once Nova has left. */
+  /** The leave notice, and the "Milo left before it could finish" replies that follow it, are allowed once Milo has left. */
   leaving?: boolean;
   /** So is the minutes message after it (and the action cards that message offers): minutes.ts is the only caller. */
   minutes?: boolean;
@@ -51,14 +51,14 @@ export interface PostOptions {
   fixed?: { id: string; at: string };
 }
 
-/** Is Nova in this call (a record that has not left)? */
+/** Is Milo in this call (a record that has not left)? */
 export async function assistantPresent(callId: string): Promise<boolean> {
   const record = await assistantStore().get(callId);
   return !!record && record.state !== 'left';
 }
 
 /**
- * Put one message into the call's chat as Nova. Returns the stored message, or null when the assistant is not
+ * Put one message into the call's chat as Milo. Returns the stored message, or null when the assistant is not
  * in the call (no record, or it left) and this is not the leave notice. No seat, no client.
  */
 export async function postAsAssistant(callId: string, message: { text: string; metadata: AssistantMetadata }, opts: PostOptions = {}): Promise<ChatMessage | null> {
@@ -66,7 +66,7 @@ export async function postAsAssistant(callId: string, message: { text: string; m
   if (!record || (record.state === 'left' && !opts.leaving && !opts.minutes)) return null;
   const at = opts.fixed?.at ?? new Date().toISOString();
   const row: ChatMessage = {
-    id: opts.fixed?.id ?? messageId(at), clientId: 'server:assistant', userId: NOVA_USER_ID, channel: callChatChannel(callId),
+    id: opts.fixed?.id ?? messageId(at), clientId: 'server:assistant', userId: ASSISTANT_USER_ID, channel: callChatChannel(callId),
     message: message.text, metadata: { ...message.metadata }, timestamp: at,
   };
   await postThreadMessage(row, chatStore());
@@ -78,24 +78,24 @@ export async function postAsAssistant(callId: string, message: { text: string; m
 
 export const noticeText = {
   joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
-    `${NOVA_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
-    `${NOVA_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
-    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone.`,
-  /** Nova was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges again. */
+    `${ASSISTANT_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
+    `${ASSISTANT_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
+    `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
+  /** Milo was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges again. */
   rejoined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
-    `${NOVA_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
-    `${NOVA_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes} minutes. ` +
-    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone.`,
-  paused: (name: string): string => `${name} paused ${NOVA_NAME}. Nothing is being heard or stored.`,
-  resumed: (name: string): string => `${name} resumed ${NOVA_NAME}. ${NOVA_NAME} is listening again.`,
-  dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${NOVA_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,
-  voiceOn: (name: string): string => `${name} turned ${NOVA_NAME}'s voice on. Each person can mute it for themselves.`,
-  voiceOff: (name: string): string => `${name} turned ${NOVA_NAME}'s voice off.`,
-  nothingRecorded: `${NOVA_NAME} left. Nothing was recorded, so there are no minutes.`,
+    `${ASSISTANT_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
+    `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes} minutes. ` +
+    `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
+  paused: (name: string): string => `${name} paused ${ASSISTANT_NAME}. Nothing is being heard or stored.`,
+  resumed: (name: string): string => `${name} resumed ${ASSISTANT_NAME}. ${ASSISTANT_NAME} is listening again.`,
+  dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${ASSISTANT_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,
+  voiceOn: (name: string): string => `${name} turned ${ASSISTANT_NAME}'s voice on. Each person can mute it for themselves.`,
+  voiceOff: (name: string): string => `${name} turned ${ASSISTANT_NAME}'s voice off.`,
+  nothingRecorded: `${ASSISTANT_NAME} left. Nothing was recorded, so there are no minutes.`,
 };
 
 export function postNotice(callId: string, text: string, opts: PostOptions = {}): Promise<ChatMessage | null> {
-  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice' } }, opts);
+  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice' } }, opts);
 }
 
 /** A notice that must never fail the route that caused it: the state change already happened. */
@@ -110,7 +110,7 @@ export async function postNoticeQuietly(callId: string, text: string, opts: Post
 export function postReply(callId: string, input: ReplyInput, opts: PostOptions = {}): Promise<ChatMessage | null> {
   return postAsAssistant(callId, {
     text: input.text,
-    metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-reply', askedBy: input.askedBy, askedByName: input.askedByName, private: false },
+    metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-reply', askedBy: input.askedBy, askedByName: input.askedByName, private: false },
   }, opts);
 }
 
@@ -130,7 +130,7 @@ export async function postAction(callId: string, input: ActionInput, opts: PostO
   }
   const status = input.status ?? 'waiting';
   const metadata: AssistantMetadata = {
-    assistant: true, displayName: NOVA_NAME, kind: 'assistant-action', actionId: input.actionId, askedBy: input.askedBy, askedByName: input.askedByName,
+    assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-action', actionId: input.actionId, askedBy: input.askedBy, askedByName: input.askedByName,
     summary: input.summary, ...(input.title ? { title: input.title } : {}), ...(input.does ? { does: input.does } : {}),
     ...(input.detail?.length ? { detail: input.detail } : {}), tool: input.tool, status,
     ...(input.resultText ? { resultText: input.resultText } : {}),
@@ -173,7 +173,7 @@ export function proposalCardId(p: Pick<Proposal, 'id' | 'createdAt'>): string {
 export async function postProposalCard(p: Proposal): Promise<ChatMessage | null> {
   return postAsAssistant(p.callId, {
     text: p.statement,
-    metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-proposal', proposalId: p.id, state: p.state },
+    metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-proposal', proposalId: p.id, state: p.state },
   }, { fixed: { id: proposalCardId(p), at: new Date(p.createdAt).toISOString() } });
 }
 
@@ -198,22 +198,22 @@ export async function postPrivately(callId: string, userId: string, input: { tex
   const record = await assistantStore().get(callId);
   if (!record || record.state === 'left') return false;
   const sent = await notify([userId], {
-    type: 'assistant-private-reply', title: input.title ?? `${NOVA_NAME} (only you can see this)`, body: input.text,
+    type: 'assistant-private-reply', title: input.title ?? `${ASSISTANT_NAME} (only you can see this)`, body: input.text,
     payload: { tenant: record.tenant, kind: 'assistant-private-reply', callId, assistant: true },
   });
   return sent.includes(userId);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Erasing Nova's words from a call's chat (audit M2, M3). Only messages authored by the assistant identity change; people's own
+// Erasing Milo's words from a call's chat (audit M2, M3). Only messages authored by the assistant identity change; people's own
 // messages are theirs. The text goes through `updateThreadMessage`, the same path a card's status change takes.
 
 /** The most messages of one call chat an erase reads; the update itself is by message id and has no window. */
 export const ERASE_SCAN_MAX = 20_000;
 
 /**
- * After a record's delete (or its expiry) the call chat says so ONCE: one of Nova's messages stays as a plain notice with the fixed line
- * (no card, no status, no asker, no tool, no link to the page), and every other message Nova left is hidden with the chat's soft-delete
+ * After a record's delete (or its expiry) the call chat says so ONCE: one of Milo's messages stays as a plain notice with the fixed line
+ * (no card, no status, no asker, no tool, no link to the page), and every other message Milo left is hidden with the chat's soft-delete
  * mark (`metadata.deleted`; the call chat's history read drops it), its text the same fixed line and every other key gone, so nothing of
  * the meeting's words or the cards' shape is left. People's messages are never touched. Safe to repeat: a second erase changes nothing.
  * Returns how many messages changed.
@@ -222,16 +222,18 @@ export async function eraseAssistantMessages(callId: string): Promise<number> {
   const channel = callChatChannel(callId);
   const rows = await chatStore().listMessages(channel, ERASE_SCAN_MAX);
   if (rows.length >= ERASE_SCAN_MAX) console.warn(`[meeting-assistant] erase read the ${ERASE_SCAN_MAX} newest messages of a call chat; older ones were not looked at`);
-  const nova = rows.filter((m) => m.userId === NOVA_USER_ID && !m.deletedAt && m.metadata?.['deleted'] !== true);
-  const KEPT: Record<string, unknown> = { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice' };
-  const isKept = (m: ChatMessage): boolean => m.message === DELETED_RECORD_LINE
-    && Object.keys(m.metadata ?? {}).length === Object.keys(KEPT).length && Object.entries(KEPT).every(([k, v]) => m.metadata?.[k] === v);
-  // The one that stays: a message already erased to the plain line (a repeat), else Nova's newest.
-  const keep = nova.find(isKept) ?? nova[nova.length - 1];
+  const mine = rows.filter((m) => isAssistantUserId(m.userId) && !m.deletedAt && m.metadata?.['deleted'] !== true);
+  const KEPT: Record<string, unknown> = { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice' };
+  // A message erased before a rename reads the line and carries the name of its day: it is already erased, and stays as it is.
+  const isKept = (m: ChatMessage): boolean => (m.message === DELETED_RECORD_LINE || LEGACY_DELETED_RECORD_LINES.includes(m.message))
+    && Object.keys(m.metadata ?? {}).length === Object.keys(KEPT).length
+    && Object.entries(KEPT).every(([k, v]) => (k === 'displayName' ? typeof m.metadata?.[k] === 'string' : m.metadata?.[k] === v));
+  // The one that stays: a message already erased to the plain line (a repeat), else Milo's newest.
+  const keep = mine.find(isKept) ?? mine[mine.length - 1];
   const without = (m: ChatMessage, extra: Record<string, unknown>): Record<string, unknown> =>
     ({ ...Object.fromEntries(Object.keys(m.metadata ?? {}).map((k) => [k, undefined])), ...extra });
   let changed = 0;
-  for (const m of nova) {
+  for (const m of mine) {
     if (m === keep && isKept(m)) continue;
     const patch = m === keep
       ? { message: DELETED_RECORD_LINE, metadata: without(m, KEPT) }

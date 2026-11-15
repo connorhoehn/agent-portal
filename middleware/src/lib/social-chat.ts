@@ -636,7 +636,7 @@ export async function updateThreadMessage(channel: string, messageId: string,
   } catch (error) { console.warn('[social-chat] live thread update failed', error); }
   let target = store;
   if (!target) { const chat = socialChat(); await chat.ready; target = chat.chatStore; }
-  // By id, not by a recent-window scan: an old message must be reachable (a record's delete reaches all of Nova's messages).
+  // By id, not by a recent-window scan: an old message must be reachable (a record's delete reaches all of Milo's messages).
   const existing = target.getMessage ? await target.getMessage(channel, messageId) : (await target.listMessages(channel, 20_000)).find((m) => m.id === messageId) ?? null;
   if (!existing || existing.deletedAt) return null;
   const merged: Record<string, unknown> = { ...(existing.metadata ?? {}) };

@@ -19,7 +19,7 @@
 // so (`you.canRun`): a consenter, or, when nobody who consented can run it, someone who has not answered (their click is a consent
 // too). The rule is unchanged by it: every condition still holds, and the new executor's click is the last step.
 //
-// "Not a decision" (dismiss): on a proposal Nova raised from what it heard, anyone seated; on one a person asked for, only the asker
+// "Not a decision" (dismiss): on a proposal Milo raised from what it heard, anyone seated; on one a person asked for, only the asker
 // ("Drop it"). The person who dismissed it may reopen it (`reopen`), unless it was raised again. "Raise it again" (`raiseAgain`)
 // closes an objected or failed proposal and opens a new one with the same outcome; earlier answers do not carry.
 //
@@ -81,7 +81,7 @@ export type ApplyResult =
   | { ok: true; proposal: Proposal; changed: boolean }
   | { ok: false; why: 'finished' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' | 'not-allowed' };
 
-/** Who may dismiss: anyone seated on a proposal Nova raised by itself; only the asker on one a person asked for. */
+/** Who may dismiss: anyone seated on a proposal Milo raised by itself; only the asker on one a person asked for. */
 export const mayDismiss = (p: Pick<Proposal, 'source' | 'askedBy' | 'executor'>, userId: string): boolean =>
   p.source !== 'asked' || userId === (p.askedBy ?? p.executor);
 /** Who may undo a dismissal: the person who dismissed it, unless it was closed because someone raised it again. */
@@ -163,7 +163,7 @@ export interface NewProposal {
   named: string[];
   executor: string;
   source: ProposalSource;
-  /** The person who asked Nova for it (an asked write). */
+  /** The person who asked Milo for it (an asked write). */
   askedBy?: string | null;
   evidence?: number[];
   at: number;

@@ -1,14 +1,14 @@
-// Nova's voice, server half (docs/meeting-assistant-design.md decision 4, package 7a).
+// Milo's voice, server half (docs/meeting-assistant-design.md decision 4, package 7a).
 //
 // Two small pieces the orchestrator uses, neither of which touches a disk, a log or a store:
 //
 //   VoiceRelay   hands each 100 ms output frame to the gateway sink, one at a time and in order, behind a burst guard (at most 3 s of
 //                audio queued per call; the rest is dropped and counted). A frame is transient: it is base64 in one gateway frame
 //                and then gone.
-//   NovaSpeech   remembers WHEN Nova was being heard (each relayed frame at the moment it PLAYS: frames released together after a hold
+//   AssistantSpeech   remembers WHEN Milo was being heard (each relayed frame at the moment it PLAYS: frames released together after a hold
 //                play one after another, so the caller passes each one's playout time, which may lie ahead of the clock) and for
-//                VOICE_ECHO_TAIL_MS after, and WHAT she said then, so a caption of Nova's own voice coming back through a microphone is
-//                not taken for a person addressing her (the echo guard).
+//                VOICE_ECHO_TAIL_MS after, and WHAT it said then, so a caption of Milo's own voice coming back through a microphone is
+//                not taken for a person addressing it (the echo guard).
 //
 // The gateway frame, for the browser (the portal's playback package codes against this):
 //   { type: 'assistant-audio', channel: 'orgiq:huddle:<callId>',
@@ -26,11 +26,11 @@ export const VOICE_FRAME_BYTES = 4800; // 100 ms of PCM16 mono at 24 kHz
 export const VOICE_FRAME_MS = 100;
 export const VOICE_MAX_QUEUED_MS = 3000;
 /**
- * Nova counts as speaking this long after the last frame went out. Playout, the browser's jitter buffer, the microphone path and the
+ * Milo counts as speaking this long after the last frame went out. Playout, the browser's jitter buffer, the microphone path and the
  * transcript's stamping lag put an echo's end well after the last relayed frame (a simulated echo 900 ms late slipped past a 400 ms tail).
  */
 export const VOICE_ECHO_TAIL_MS = 1500;
-/** A line is judged an echo (given matching words) when at least this share of its own voiced span lies inside Nova's speaking window. */
+/** A line is judged an echo (given matching words) when at least this share of its own voiced span lies inside Milo's speaking window. */
 export const ECHO_OVERLAP_SHARE = 0.5;
 
 export interface AssistantAudioFrame {
@@ -103,16 +103,16 @@ const words = (text: string): string[] => text.toLowerCase().replace(/[^a-z0-9'\
 
 interface Span { start: number; end: number; lastFrameAt: number; done: string[]; partial: string }
 
-/** How long after a span's last frame Nova's transcript text may still be attached to it. */
+/** How long after a span's last frame Milo's transcript text may still be attached to it. */
 const TEXT_LAG_MS = 3000;
 
-export class NovaSpeech {
+export class AssistantSpeech {
   private spans: Span[] = [];
   private orphan: { text: string; at: number } | null = null;
-  /** Nova's words for frames the voice gate holds (nobody has heard them yet): they join the span the release opens or extends. */
+  /** Milo's words for frames the voice gate holds (nobody has heard them yet): they join the span the release opens or extends. */
   private unheard: { done: string[]; partial: string } | null = null;
 
-  /** A frame of Nova's voice plays from `at` for the next 100 ms (`at` is its playout time: the clock, or later behind earlier frames). */
+  /** A frame of Milo's voice plays from `at` for the next 100 ms (`at` is its playout time: the clock, or later behind earlier frames). */
   noteFrame(at: number): void {
     let cur = this.spans[this.spans.length - 1];
     if (cur && at <= cur.end) { cur.end = at + VOICE_FRAME_MS + VOICE_ECHO_TAIL_MS; cur.lastFrameAt = at; }
@@ -131,7 +131,7 @@ export class NovaSpeech {
   }
 
   /**
-   * What Nova's transcript says at `now`: the text so far (`final` false) or a finished piece. Attached to the span it belongs to;
+   * What Milo's transcript says at `now`: the text so far (`final` false) or a finished piece. Attached to the span it belongs to;
    * with `held` (the voice gate is holding the frames these words go with) kept aside until those frames are relayed.
    */
   noteText(now: number, text: string, final: boolean, held = false): void {
@@ -148,14 +148,14 @@ export class NovaSpeech {
   /** The frames these words went with were withheld or forgotten (nobody heard them): drop the words too. */
   forgetUnheard(): void { this.unheard = null; this.orphan = null; }
 
-  /** Was Nova being heard for any part of [startMs, endMs]? (For counters and tests.) */
+  /** Was Milo being heard for any part of [startMs, endMs]? (For counters and tests.) */
   speakingAt(ms: number): boolean { return this.spans.some((s) => ms >= s.start && ms <= s.end); }
 
   /**
-   * Is this caption Nova's own voice coming back? Only when most of the caption's span (ECHO_OVERLAP_SHARE) lies inside one Nova-speaking
-   * span (her speech plus the tail; judged by overlap because a delayed echo's end falls past the window) AND its words
-   * match what Nova said then: contained in her words in order (two words or more), or at least 80% of its words (three or more) are hers.
-   * A person who merely talks over her is kept, and so is anyone whose span is unknown.
+   * Is this caption Milo's own voice coming back? Only when most of the caption's span (ECHO_OVERLAP_SHARE) lies inside one Milo-speaking
+   * span (its speech plus the tail; judged by overlap because a delayed echo's end falls past the window) AND its words
+   * match what Milo said then: contained in Milo's words in order (two words or more), or at least 80% of its words (three or more) are Milo's.
+   * A person who merely talks over it is kept, and so is anyone whose span is unknown.
    */
   isEcho(line: { text: string; startAt: number; endAt: number } | null): boolean {
     if (!line || !(line.endAt >= line.startAt)) return false;
@@ -163,13 +163,13 @@ export class NovaSpeech {
     const share = (s: Span): number => len > 0 ? (Math.min(line.endAt, s.end) - Math.max(line.startAt, s.start)) / len : (line.startAt >= s.start && line.startAt <= s.end ? 1 : 0);
     const span = this.spans.map((s) => ({ s, v: share(s) })).filter((x) => x.v >= ECHO_OVERLAP_SHARE).sort((a, b) => b.v - a.v)[0]?.s;
     if (!span) return false;
-    const nova = words([...span.done, span.partial].join(' '));
+    const spoken = words([...span.done, span.partial].join(' '));
     const mine = words(line.text);
-    if (mine.length < 2 || nova.length === 0) return false;
-    const joined = ` ${nova.join(' ')} `;
+    if (mine.length < 2 || spoken.length === 0) return false;
+    const joined = ` ${spoken.join(' ')} `;
     if (joined.includes(` ${mine.join(' ')} `)) return true;
     if (mine.length < 3) return false;
-    const set = new Set(nova);
+    const set = new Set(spoken);
     return mine.filter((w) => set.has(w)).length / mine.length >= 0.8;
   }
 }

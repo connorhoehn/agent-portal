@@ -33,7 +33,7 @@ export interface StateChange {
   at: number;
 }
 
-/** Nova is invited back into a call it left (`rejoin`): the person, the moment, who is seated now, and the session bookkeeping to write with it. */
+/** Milo is invited back into a call it left (`rejoin`): the person, the moment, who is seated now, and the session bookkeeping to write with it. */
 export interface RejoinChange {
   /** The leave the caller read: the record must still be `left` from exactly this moment, or nothing changes. */
   leftAt: number;
@@ -105,7 +105,7 @@ export interface AssistantStore {
   getAction(callId: string, actionId: string): Promise<AssistantAction | null>;
   /** Move an action; null when it is unknown or not in one of `change.from`. */
   decideAction(callId: string, actionId: string, change: ActionChange): Promise<AssistantAction | null>;
-  /** Turn Nova's voice on or off for the call; the record, or null when there is none. */
+  /** Turn Milo's voice on or off for the call; the record, or null when there is none. */
   setVoice(callId: string, on: boolean): Promise<AssistantRecord | null>;
   /**
    * Merge fields into the record's session bookkeeping; null when there is no record. With `when.period`, only while the record is still
@@ -146,7 +146,7 @@ export interface AssistantStore {
   listMinutes(filter: MinutesFilter): Promise<MinutesRecord[]>;
   /**
    * Delete the call's lines and replace its minutes with a tombstone (created when none exist), so they are not written again; the record
-   * is marked (`session.erasedAt`) so it is never joined again. Returns the lines removed, or null, with nothing touched, while Nova is in
+   * is marked (`session.erasedAt`) so it is never joined again. Returns the lines removed, or null, with nothing touched, while Milo is in
    * the call (`listening` or `paused`: it was invited back): the check is part of the same step.
    */
   tombstoneMinutes(callId: string, by: string, at: number): Promise<number | null>;
@@ -251,7 +251,7 @@ export class MemoryAssistantStore implements AssistantStore {
 
   async attend(callId: string, userId: string) {
     const r = this.records.get(callId);
-    if (r && r.state !== 'left') addTo(r.attendees, userId); // attendance ends when Nova leaves (audit M1)
+    if (r && r.state !== 'left') addTo(r.attendees, userId); // attendance ends when Milo leaves (audit M1)
   }
 
   async appendLine(line: Omit<TranscriptLine, 'seq'>) {
@@ -406,7 +406,7 @@ export class MemoryAssistantStore implements AssistantStore {
 
   async tombstoneMinutes(callId: string, by: string, at: number) {
     const r = this.records.get(callId);
-    if (r && (r.state === 'listening' || r.state === 'paused')) return null; // Nova is in the call again: nothing is erased
+    if (r && (r.state === 'listening' || r.state === 'paused')) return null; // Milo is in the call again: nothing is erased
     const rows = this.transcript.get(callId) ?? [];
     this.transcript.delete(callId);
     if (r) r.session = { ...sessionOf(r), erasedAt: at };

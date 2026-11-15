@@ -23,6 +23,7 @@ import { randomBytes } from 'node:crypto';
 import { CREATE_ACTIONS, hashToolArgs } from '../voice/catalogue.js';
 import { MEETING_EXCLUDED_TOOLS, meetingTools } from './instructions.js';
 import { announceProposalChanged } from './proposals.js';
+import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
 import type { AssistantRecord, AssistantTurn, Proposal, ProposalRun } from './types.js';
 
@@ -162,7 +163,7 @@ export async function startProposal(deps: ProposalRunDeps, callId: string, id: s
       return (await deps.store.createTurn(turn)).turn;
     } catch (e) {
       console.warn('[meeting-assistant] a proposal turn could not be made', p.id, (e as Error).message);
-      await handBack(deps, callId, id, turnId, 'Nova could not start this. Nothing was changed, and it can be run again.');
+      await handBack(deps, callId, id, turnId, `${ASSISTANT_NAME} could not start this. Nothing was changed, and it can be run again.`);
       return null;
     }
   }
@@ -198,7 +199,7 @@ export async function checkBeforeClaim(deps: ProposalRunDeps, turn: AssistantTur
 
 /**
  * A failed run as one plain sentence that says nothing was changed (a write that fails changes nothing), never the browser's own
- * error text: what was gone, who was not allowed, what changed since, or that Nova could not carry it out.
+ * error text: what was gone, who was not allowed, what changed since, or that Milo could not carry it out.
  */
 export function failedSentence(error: string | undefined, p: Pick<Proposal, 'outcome'>, executorName: string): string {
   const e = (error ?? '').toLowerCase();
@@ -206,7 +207,7 @@ export function failedSentence(error: string | undefined, p: Pick<Proposal, 'out
   if (/not found|no such|deleted|\b404\b|does not exist|gone/.test(e)) return `${thing} was deleted or moved since, so nothing was changed.`;
   if (/forbidden|not allowed|permission|denied|unauthori[sz]ed|\b403\b|\b401\b/.test(e)) return `${executorName} was not allowed to do this, so nothing was changed.`;
   if (/conflict|\b409\b|version|changed since|stale/.test(e)) return 'The record changed since people consented, so nothing was changed.';
-  return 'Nova could not carry this out, so nothing was changed.';
+  return `${ASSISTANT_NAME} could not carry this out, so nothing was changed.`;
 }
 
 /** The executor's browser posted the turn's result (already accepted on the turn): close the proposal as done or failed. */
@@ -235,7 +236,7 @@ export async function expireProposalTurn(deps: ProposalRunDeps, turn: AssistantT
   if (!turn.proposalId) return null;
   const name = await deps.nameOf(turn.askedBy);
   const note = turn.claimId !== undefined
-    ? 'Nova could not confirm whether this was done. Check before running it again.'
+    ? `${ASSISTANT_NAME} could not confirm whether this was done. Check before running it again.`
     : `${name} was not there to run this. ${name} can run it now, or another consenter can.`;
   return handBack(deps, turn.callId, turn.proposalId, turn.turnId, note);
 }

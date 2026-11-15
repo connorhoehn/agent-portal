@@ -1,11 +1,11 @@
 // Asked writes that name someone else (docs/meeting-consent-design.md, "Packages" item 7, and "Decided").
 //
 // The rules kept here:
-//   - A write asked of Nova whose arguments name a person other than the asker becomes a proposal that needs that person's
+//   - A write asked of Milo whose arguments name a person other than the asker becomes a proposal that needs that person's
 //     consent (proposals.ts), with the asker as its executor. A write that names only the asker, or nobody, keeps the asker's card.
 //   - Which arguments name a person is the explicit table below, per write tool. It fails closed: an argument that may hold a
 //     person counts, and every write a meeting can offer must have a row (a test holds the table to the catalogue).
-//   - A named person is resolved to a user id here on the server, from the call's roster (everyone who held a seat while Nova
+//   - A named person is resolved to a user id here on the server, from the call's roster (everyone who held a seat while Milo
 //     was in, everyone seated now, and the inviter) and then the org directory: "me" is the asker, then an exact user id, an exact
 //     display name, or a first name only one person has. A name that matches nobody, or several people, is refused.
 //   - Nothing here logs a name or an argument.
@@ -146,7 +146,7 @@ export function updateStatement(a: Record<string, unknown>): string {
 }
 
 /**
- * What Nova says to the asker: their own consent is needed too (the asker runs it, and nobody is consented automatically), with each
+ * What Milo says to the asker: their own consent is needed too (the asker runs it, and nobody is consented automatically), with each
  * named person's, and where to answer. "This needs your consent and Priya's. Answer in the prompt above the call controls."
  */
 export function consentStatus(names: readonly string[]): string {

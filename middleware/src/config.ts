@@ -94,7 +94,7 @@ export const config = {
     cloudwatch: flag('MOCK_CLOUDWATCH'),
   },
 
-  // The meeting assistant (Nova; docs/meeting-assistant-design.md). Off by default: with the flag
+  // The meeting assistant (Milo; docs/meeting-assistant-design.md). Off by default: with the flag
   // off every /api/calls/:callId/assistant route and the dev caption injector answer 404.
   // Transcript lines are kept `transcriptRetentionDays` days (30 unless MEETING_TRANSCRIPT_RETENTION_DAYS says otherwise).
   meetingAssistant: {

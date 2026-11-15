@@ -2,7 +2,7 @@
 // (docs/meeting-assistant-design.md). Words are stored, audio never is.
 
 /**
- * invited -> listening <-> paused -> left. `left` is not final: anyone who may invite Nova can invite it back (left -> listening, one
+ * invited -> listening <-> paused -> left. `left` is not final: anyone who may invite Milo can invite it back (left -> listening, one
  * conditional step, `AssistantStore.rejoin`), which starts another listening period on the same record (`session.periods`).
  */
 export type AssistantState = 'invited' | 'listening' | 'paused' | 'left';
@@ -61,7 +61,7 @@ export interface AssistantRecord {
   /** The next transcript line number. */
   nextSeq: number;
   pendingRequests: PendingRequest[];
-  /** Nova speaks aloud in this call (package 7a). Off by default; a record written before it reads as off. */
+  /** Milo speaks aloud in this call (package 7a). Off by default; a record written before it reads as off. */
   voice?: boolean;
   /** The live session's bookkeeping (package 4a); absent on a record written before it, read as the defaults. */
   session?: AssistantSession;
@@ -83,7 +83,7 @@ export interface AssistantSession {
   warned: boolean;
   /** The request cap notice went out. */
   limitNoticed: boolean;
-  /** Sessions started after the first because one closed unexpectedly or Nova resumed. */
+  /** Sessions started after the first because one closed unexpectedly or Milo resumed. */
   replacements: number;
   /** Spend hold ids of the extensions (the invite's own hold is settled by the ledger row and needs no id here). */
   holds: string[];
@@ -114,13 +114,13 @@ export interface AssistantSession {
   lateChunks?: number;
   /** When the current period began: absent for the first (it began at `invitedAt`), set by each rejoin. */
   periodFrom?: number;
-  /** The earlier periods of this call, oldest first: who invited Nova, when it came and when it left, and who dismissed it ('system' for its own leaving). */
+  /** The earlier periods of this call, oldest first: who invited Milo, when it came and when it left, and who dismissed it ('system' for its own leaving). */
   periods?: AssistantPeriod[];
   /** When the call's words were erased (the inviter's delete, or retention): the record is never joined again. Written in the erase's own step. */
   erasedAt?: number;
 }
 
-/** One closed period of Nova in a call, kept when it is invited back (the record's own fields then describe the new period). */
+/** One closed period of Milo in a call, kept when it is invited back (the record's own fields then describe the new period). */
 export interface AssistantPeriod { invitedBy: string; from: number; leftAt: number; leftBy: string | null }
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
@@ -133,7 +133,7 @@ export const newAssistantSession = (ceilingSeconds: number): AssistantSession =>
 export const sessionOf = (record: Pick<AssistantRecord, 'session'>, fallbackCeilingSeconds = 3600): AssistantSession =>
   ({ ...newAssistantSession(fallbackCeilingSeconds), ...(record.session ?? {}) });
 
-/** Which period of Nova in this call the record describes now: 1 for the first, one more for each invitation back. */
+/** Which period of Milo in this call the record describes now: 1 for the first, one more for each invitation back. */
 export const periodOf = (record: Pick<AssistantRecord, 'session'>): number => (Array.isArray(record.session?.periods) ? record.session.periods.length : 0) + 1;
 
 export type TurnKind = 'read' | 'write' | 'private-read';
@@ -175,7 +175,7 @@ export interface RawLine {
   speakers?: string[];
 }
 
-/** An action Nova offered in the call chat (package 2 records the decision; running the tool is package 4). */
+/** An action Milo offered in the call chat (package 2 records the decision; running the tool is package 4). */
 export interface AssistantAction {
   callId: string;
   actionId: string;
@@ -245,7 +245,7 @@ export interface Proposal {
   /** The person whose browser runs it: must consent. Another consenter takes it over by consenting again as executor while it is `consented`. */
   executor: string;
   source: ProposalSource;
-  /** Who asked Nova for it (an asked write); null when Nova raised it from what it heard. */
+  /** Who asked Milo for it (an asked write); null when Milo raised it from what it heard. */
   askedBy?: string | null;
   /** Transcript line numbers the proposal rests on. */
   evidence: number[];
@@ -309,7 +309,7 @@ export interface MinutesRecord {
   notifiedAt?: number | null;
   /** The last transcript line the minutes cover; absent on a record written before it (then the lines up to `endedAt`). */
   throughSeq?: number;
-  /** How many times Nova added a later period of the call to these minutes. */
+  /** How many times Milo added a later period of the call to these minutes. */
   additions?: number;
   /** A later period's addition failed or its budget refused it: the minutes stand as they are and the addition is tried again. */
   additionOwed?: boolean;
