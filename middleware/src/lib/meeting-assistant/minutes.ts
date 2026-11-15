@@ -34,7 +34,13 @@ export interface MinutesInput {
 }
 
 /** What the stored minutes already say (an addition's writer reads it; it is never rewritten). */
-export interface EarlierMinutes { summary: string; decisions: readonly string[]; actionItems: readonly string[]; topics: readonly string[] }
+export interface EarlierMinutes {
+  summary: string;
+  decisions: readonly string[];
+  /** The stored action items: their words, who owns them (by name) and whether they were already done in the call. */
+  actionItems: ReadonlyArray<{ text: string; ownerName?: string; done?: boolean }>;
+  topics: readonly string[];
+}
 
 export interface MinutesDraft {
   /** The lead sentence, then up to four bullets, one per line, each "- " first (`composeSummary`; read back with `summaryParts`). */
@@ -283,7 +289,8 @@ export class ScriptedMinutesWriter implements MinutesWriter {
       const later = scriptedSummary({ people, spanMs, callName: '', decisions: [], items: [], agreed: [], open: [] }).lead.replace(/\.$/, '');
       const lead = `${summaryParts(earlier.summary).lead} After Nova was invited back, ${later.charAt(0).toLowerCase()}${later.slice(1)} more.`;
       const { points } = scriptedSummary({ people, spanMs, callName: input.callName, decisions: [...earlier.decisions, ...kept],
-        items: [...earlier.actionItems.map((text) => ({ text })), ...items], agreed: input.held?.agreed ?? [], open: input.held?.open ?? [] });
+        items: [...earlier.actionItems.map((i) => ({ text: i.text, ...(i.ownerName ? { ownerName: i.ownerName } : {}), ...(i.done ? { done: true } : {}) })), ...items],
+        agreed: input.held?.agreed ?? [], open: input.held?.open ?? [] });
       const summary = lines.length ? composeSummary(truncated ? `${lead} Only the most recent part of the later talk was summarised.` : lead, points) : earlier.summary;
       return { summary, decisions: kept, actionItems: items, topics: newTopics, truncated };
     }
@@ -351,7 +358,7 @@ export function buildMinutesRequest(model: string, input: { lines: readonly Tran
     EARLIER_DELIMITER,
     `Summary: ${clean(e.summary).replace(/\s+/g, ' ').trim()}`,
     'Decisions:', ...e.decisions.map((d) => `- ${clean(d)}`),
-    'Action items:', ...e.actionItems.map((a) => `- ${clean(a)}`),
+    'Action items:', ...e.actionItems.map((a) => `- ${clean(a.text)}${a.ownerName ? ` (${clean(a.ownerName)})` : ''}${a.done ? ' (done in the call)' : ''}`),
     `Topics: ${e.topics.map(clean).join(', ')}`,
     END_EARLIER_DELIMITER,
   ].join('\n') : '';

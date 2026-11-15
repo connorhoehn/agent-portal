@@ -30,7 +30,7 @@ import {
 import { assistantStore } from './store-select.js';
 import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
-import type { AssistantRecord, AssistantTurn, MinutesRecord, MinutesWriterKind, TranscriptLine } from './types.js';
+import { sessionOf, type AssistantRecord, type AssistantTurn, type MinutesRecord, type MinutesWriterKind, type TranscriptLine } from './types.js';
 
 /** Where the meeting page lives in the portal (`/iq/meetings/:callId`); the chat message and the notification link to it. */
 export const meetingPagePath = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
@@ -400,16 +400,21 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   }
   const roster: RosterEntry[] = await Promise.all(attendees.map(async (userId) => ({ userId, name: await nameOf(userId) })));
   const initiativeName = record.initiativeId ? await getProject(record.initiativeId).then((p) => p?.name ?? null).catch(() => null) : null;
-  // Writes done in the call since the earlier minutes were written (the ones before are in them already).
+  // Writes done in the call in its later periods (the earlier ones are in the minutes already; one run from the meeting page between
+  // periods was not done in the call).
+  const s = sessionOf(record);
+  const later = [...(s.periods ?? []), { from: s.periodFrom ?? record.invitedAt, leftAt: endedAt }].filter((p) => p.leftAt > current.endedAt);
   const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
-  const doneActions = turns.filter((t) => t.kind === 'write' && t.createdAt > current.endedAt).map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
+  const doneActions = turns.filter((t) => t.kind === 'write' && t.createdAt > current.endedAt && later.some((p) => t.createdAt >= p.from && t.createdAt <= p.leftAt))
+    .map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
   const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
   const held = {
     statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence),
     agreed: proposals.filter((p) => p.outcome.kind === 'decision' && ['consented', 'running', 'done'].includes(p.state)).map((p) => p.statement),
     open: proposals.filter((p) => ['open', 'objected', 'consented'].includes(p.state) && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement),
   };
-  const earlier = { summary: current.summary, decisions: current.decisions, actionItems: current.actionItems.map((i) => i.text), topics: current.topics };
+  const earlier = { summary: current.summary, decisions: current.decisions, topics: current.topics,
+    actionItems: current.actionItems.map((i) => ({ text: i.text, ...(i.ownerName ? { ownerName: i.ownerName } : {}), ...(i.done ? { done: true } : {}) })) };
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
   if (writer) {
