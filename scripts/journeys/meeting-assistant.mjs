@@ -699,7 +699,16 @@ async function main() {
     const card = (p, id) => p.page.locator(`[data-testid="assistant-proposal-card"][data-proposal-id="${id}"]`).last();
     const cardState = (p, id, state) => waitFor(async () => (await card(p, id).getAttribute('data-state').catch(() => null)) === state, 20000, `${p.who.userId}: the card reading ${state}`);
     const deckOf = (p) => p.page.getByTestId('nova-proposal-ask');
-    const askFor = async (p, statement) => { await deckOf(p).filter({ hasText: statement }).waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no deck prompt for "${statement}"`); }); };
+    const askFor = async (p, statement) => {
+      await deckOf(p).filter({ hasText: statement }).waitFor({ timeout: 20000 }).catch(async () => {
+        // Say what this person's proposals route holds, so a missing prompt can be told from a stale or refused read.
+        const res = await p.api.get(asApi(p, 'proposals')).catch(() => null);
+        const list = res && res.ok() ? (await res.json()).proposals.map((x) => `${x.id}:${x.state}:${x.you?.response ?? '-'}:${(x.missing?.people ?? []).join('+')}+${x.missing?.more}`).join(', ') : `HTTP ${res?.status()}`;
+        const deck = await deckOf(p).innerText({ timeout: 2000 }).catch(() => '(no deck)');
+        const page = await p.page.evaluate(() => ({ decks: document.querySelectorAll('[data-composer-prompt-deck]').length, store: JSON.stringify(Object.fromEntries(Object.entries(sessionStorage).filter(([k]) => k.startsWith('nova-proposal')))), count: document.querySelector('[data-testid="nova-proposal-count"]')?.getAttribute('aria-label') ?? null })).catch((e) => ({ err: String(e) }));
+        throw new StepFailure(`${p.who.userId}: no deck prompt for "${statement}"; route: ${list}; deck: ${deck.replace(/\s+/g, ' ').slice(0, 160)}; page: ${JSON.stringify(page)}`);
+      });
+    };
     /** A digit pressed in the deck: the prompt's keys act only while focus is in it (`keypad: 'deck'`), never page-wide. */
     const digit = async (p, key, deck = deckOf(p)) => { await deck.locator('[data-composer-prompt-option]').first().focus(); await p.page.keyboard.press(key); };
     /** A digit pressed with focus nowhere in particular (the page body), as a stray key on the call would be. */
@@ -726,7 +735,7 @@ async function main() {
       await card(vera, id).getByTestId('assistant-proposal-heard').waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the card shows no heard lines to an attendee'); });
       const away = await browser.newContext(); contexts.push(away);
       check((await away.request.post(`${PORTAL}/api/session/login`, { data: { userId: 'u-theo' } })).status() === 200, 'the absent person could not sign in');
-      check((await away.request.post(`${PORTAL}/api/session/role`, { data: { tenant: 'orgiq', role: 'sme' } })).status() === 200, 'the absent person has no orgiq role');
+      check((await away.request.post(`${PORTAL}/api/session/role`, { data: { tenant: 'orgiq', role: 'member' } })).status() === 200, 'the absent person has no orgiq role');
       const res = await away.request.get(asApi(null, 'proposals'));
       check(res.status() === 200, `the named person who was not there: ${res.status()}`);
       const theirs = (await res.json()).proposals;
@@ -759,8 +768,8 @@ async function main() {
       // The card asks nothing itself: its only control is Answer, which opens the deck.
       const buttons = (await card(vera, p1).getByRole('button').allInnerTexts()).map((t) => t.trim());
       check(buttons.length === 1 && buttons[0] === 'Answer', `the card's controls: ${JSON.stringify(buttons)}`);
-      const noraText = await card(nora, p1).innerText();
-      check(noraText.includes('Needs Vera') && noraText.includes('(runs it) and one more person.'), `the second person's needs line: ${noraText.replace(/\s+/g, ' ')}`);
+      // The second person's card fills on their own poll: their needs line names the executor, not "you".
+      await waitFor(async () => { const t = await card(nora, p1).innerText(); return t.includes('Needs Vera') && t.includes('(runs it) and one more person.'); }, 15000, 'the second person\'s needs line naming the executor');
       for (const width of [1440, 1280]) { await vera.page.setViewportSize({ width, height: 900 }); await sleep(400); await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P2-proposal-card', width); }
       await vera.page.setViewportSize({ width: 1440, height: 900 });
       return text.replace(/\s+/g, ' ').slice(0, 200);

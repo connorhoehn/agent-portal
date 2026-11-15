@@ -572,7 +572,10 @@ async function heardLines(p: Proposal): Promise<Array<{ speaker: string; text: s
   const from = want[0]!; const to = want[want.length - 1]!;
   if (to - from > 400) return [];
   const lines = await assistantStore().lines(p.callId, from - 1, to - from + 1).catch(() => []);
-  return lines.filter((l) => want.includes(l.seq)).map((l) => ({ speaker: l.speakerName, text: l.text.length > 240 ? `${l.text.slice(0, 239)}…` : l.text }));
+  // The speaker by their directory name (as the transcript shows them), never a raw id.
+  return Promise.all(lines.filter((l) => want.includes(l.seq)).map(async (l) => ({
+    speaker: l.userId ? await nameOf(l.userId).catch(() => l.speakerName) : l.speakerName || 'Someone', text: l.text.length > 240 ? `${l.text.slice(0, 239)}…` : l.text,
+  })));
 }
 
 /** A run Nova handed back (consented again with a note: the executor may not run it, or was not there). */
