@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-15T09:46:43.629Z",
-  "serverHandlerSha": "4ffa8c6a1213865c93ed6d4a160caad9ab21744f6b621fc2a6f0cbe86b3bbc11",
+  "capturedAt": "2026-11-15T16:12:07.207Z",
+  "serverHandlerSha": "be500c3bea9eefcacdbc3f52abf324c2447d2e89b6d0089573990d939cc5e489",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -3962,8 +3962,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
