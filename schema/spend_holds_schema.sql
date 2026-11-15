@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS spend_holds (
 -- this file (agent_invoke: a chat invoke or a /summarize run, work item 16;
 -- microvm: one microVM runner attempt, docs/microvm-runner-design.md §6;
 -- voice_session: one voice navigator session, docs/voice-navigator-spec.md §7;
--- meeting_assistant: one call's Nova listening, docs/meeting-assistant-design.md decision 10;
+-- meeting_assistant: one call's Milo listening, docs/meeting-assistant-design.md decision 10;
 -- learning: one server-side distillation, docs/learning-loop-design.md).
 ALTER TABLE spend_holds DROP CONSTRAINT IF EXISTS spend_holds_source_check;
 ALTER TABLE spend_holds ADD CONSTRAINT spend_holds_source_check

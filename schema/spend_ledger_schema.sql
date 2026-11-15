@@ -59,7 +59,7 @@ ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMER
 -- agent_invoke: a chat invoke or a /summarize run, work item 16; microvm: one
 -- microVM runner attempt, docs/microvm-runner-design.md §6; voice_session: one
 -- voice navigator session, docs/voice-navigator-spec.md §7; meeting_assistant: one
--- call's Nova listening, docs/meeting-assistant-design.md decision 10; learning: one
+-- call's Milo listening, docs/meeting-assistant-design.md decision 10; learning: one
 -- server-side distillation of a finished run, docs/learning-loop-design.md).
 ALTER TABLE spend_entries DROP CONSTRAINT IF EXISTS spend_entries_source_check;
 ALTER TABLE spend_entries ADD CONSTRAINT spend_entries_source_check

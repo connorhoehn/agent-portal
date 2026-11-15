@@ -74,7 +74,7 @@ function publicView(session: Session) {
     switchable: switchableGrants(session.sub, session.grants),
     availableRoles: rolesForTenant(session.grants, session.tenant),
     availableTenants: TENANTS.filter(t => rolesForTenant(session.grants, t).length > 0),
-    masquerading: session.act ? { asUser: session.sub, actor: session.act.sub } : null, meetingAssistant: meetingAssistantEnabled(), // the call assistant's server flag; the portal hides every Nova control when false
+    masquerading: session.act ? { asUser: session.sub, actor: session.act.sub } : null, meetingAssistant: meetingAssistantEnabled(), // the call assistant's server flag; the portal hides every Milo control when false
   };
 }
 

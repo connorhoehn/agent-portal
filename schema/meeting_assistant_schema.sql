@@ -1,6 +1,6 @@
 -- The meeting assistant's state and transcript (docs/meeting-assistant-design.md, decisions 8 and 9).
 --
--- One `meeting_assistants` row per call the assistant (Nova) was invited to, written by
+-- One `meeting_assistants` row per call the assistant (Milo) was invited to, written by
 -- middleware/src/lib/meeting-assistant/ (store-sql.ts) behind /api/calls/:callId/assistant.
 -- One `meeting_transcript_lines` row per caption stored while it was listening. Words are
 -- stored, audio never is: there is no audio column and no place to put one. Lines are
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS meeting_transcript_lines (
 );
 CREATE INDEX IF NOT EXISTS meeting_transcript_lines_at_idx ON meeting_transcript_lines (at);
 
--- Actions Nova offered in the call chat (package 2). One row per card; only the asker decides it
+-- Actions Milo offered in the call chat (package 2). One row per card; only the asker decides it
 -- (the route checks), and a decision moves `waiting` once. Running the tool is package 4.
 CREATE TABLE IF NOT EXISTS meeting_assistant_actions (
   call_id      TEXT        NOT NULL REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
@@ -132,7 +132,7 @@ CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (creat
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS retryable BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
--- Nova can be invited back into a call it left; what it hears then is ADDED to the minutes (minutes-service.ts). `through_seq` is the last
+-- Milo can be invited back into a call it left; what it hears then is ADDED to the minutes (minutes-service.ts). `through_seq` is the last
 -- transcript line the minutes cover (NULL on an older row: the lines up to ended_at); `additions` counts the additions made; an addition
 -- that failed or was refused leaves `addition_owed` set, and `addition_attempts` counts its runs apart from `attempts`.
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS through_seq INTEGER;
@@ -140,7 +140,7 @@ ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS additions INTEGER NOT NULL 
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS addition_owed BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS addition_attempts INTEGER NOT NULL DEFAULT 0;
 
--- Package 7a: Nova speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
+-- Package 7a: Milo speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;
 
 -- Meeting consent, package 1 (docs/meeting-consent-design.md): proposals people in the call appear to have agreed, waiting for their
@@ -175,6 +175,6 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_proposals (
 -- names it, so its result closes the proposal and its expiry hands it back.
 ALTER TABLE meeting_assistant_proposals ADD COLUMN IF NOT EXISTS run JSONB CHECK (run IS NULL OR jsonb_typeof(run) = 'object');
 ALTER TABLE meeting_assistant_turns ADD COLUMN IF NOT EXISTS proposal_id TEXT;
--- Who asked Nova for a proposal (an asked write that names someone); null for one Nova raised from what it heard.
+-- Who asked Milo for a proposal (an asked write that names someone); null for one Milo raised from what it heard.
 ALTER TABLE meeting_assistant_proposals ADD COLUMN IF NOT EXISTS asked_by TEXT;
 CREATE INDEX IF NOT EXISTS meeting_assistant_proposals_due_idx ON meeting_assistant_proposals (expires_at) WHERE state IN ('open', 'objected', 'consented');

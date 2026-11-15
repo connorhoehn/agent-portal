@@ -54,7 +54,7 @@ permit (
     // Start an initiative by hand (POST /api/graph/projects); the creator owns it
     // unless they name another person from the directory.
     OrgIQ::Action::"CreateInitiative",
-    // Invite the call assistant (Nova) into a call you hold a seat in (POST /api/calls/:callId/assistant/invite).
+    // Invite the call assistant (Milo) into a call you hold a seat in (POST /api/calls/:callId/assistant/invite).
     // Held by every orgiq role that may join a call; the route also needs the seat.
     OrgIQ::Action::"InviteMeetingAssistant"
   ],
