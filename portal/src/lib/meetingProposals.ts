@@ -1,24 +1,36 @@
 // Proposals Nova notices in a call, as the portal reads them (docs/meeting-consent-design.md). The shapes mirror the proposals route
 // in middleware/src/routes/meeting-assistant.ts (`proposalView`); change both together.
 //
-// The rules kept here: the card in the chat only shows; answers are given in the deck. The deck asks one proposal at a time, oldest
-// first, and only proposals this person may still answer; after answering the same person may withdraw from the deck. An objection's
-// reason is shared with everyone in the call and the deck says so before it is sent.
+// The rules kept here: answers are given in the deck; the card in the chat shows the proposal and carries the quiet actions (Answer,
+// which opens the deck; withdrawing an answer; Undo of a dismissal; Raise it again). The deck asks one proposal at a time: first those
+// waiting on this person (they are needed and have not consented, or they may run it now), then those where their answer is optional.
+// Only the first group is counted. An objection's reason is shared with everyone who can see the proposal, and the deck says so first.
 
 export type ProposalState = 'open' | 'consented' | 'running' | 'done' | 'failed' | 'objected' | 'dismissed' | 'expired';
 export const PROPOSAL_STATES: readonly ProposalState[] = ['open', 'consented', 'running', 'done', 'failed', 'objected', 'dismissed', 'expired'];
 export type ProposalResponseKind = 'consent' | 'object';
-export type ProposalAnswer = 'consent' | 'object' | 'withdraw' | 'not-a-decision';
+export type ProposalAnswer = 'consent' | 'object' | 'withdraw' | 'not-a-decision' | 'reopen';
 
 export interface ProposalPerson { userId: string; name: string }
 export interface ProposalResponseView extends ProposalPerson { response: ProposalResponseKind; reason: string | null; at: number }
-export type ProposalOutcomeView = { kind: 'decision'; initiativeId: string | null } | { kind: 'tool'; name: string };
+/** `summary`: what will be written, in plain words, from the server ("Create a work item titled …, owned by Lee"). */
+export type ProposalOutcomeView = { kind: 'decision'; initiativeId: string | null; summary?: string } | { kind: 'tool'; name: string; summary?: string };
 
-export interface ProposalRunView { by: ProposalPerson; at: number; title: string | null; href: string | null; note: string | null }
+export interface ProposalRunView { by: ProposalPerson; at: number; title: string | null; href: string | null; note: string | null; raisedAs: string | null }
+/** A line Nova heard, sent only to people who were in the call. */
+export interface HeardLine { speaker: string; text: string }
 
 export interface ProposalView {
   id: string;
+  callId: string | null;
   statement: string;
+  /** `asked`: a person asked Nova for it (`askedBy`); otherwise Nova raised it from what it heard. */
+  source: 'watcher' | 'asked' | 'dev';
+  askedBy: ProposalPerson | null;
+  /** The lines Nova heard (a short excerpt); empty for anyone who was not in the call. */
+  heard: HeardLine[];
+  /** A decision: recorded as decided by its executor, or as waiting for the initiative owner's decision. */
+  recordsAs: 'decided' | 'waiting' | null;
   outcome: ProposalOutcomeView;
   state: ProposalState;
   executor: ProposalPerson;
@@ -32,7 +44,12 @@ export interface ProposalView {
   run: ProposalRunView | null;
   /** When it expires unrun (end of the call + 72 h); null while the call goes on. */
   expiresAt: number | null;
-  you: { userId: string; response: ProposalResponseKind | null; isExecutor: boolean; isNamed: boolean; canRun: boolean };
+  you: {
+    userId: string; response: ProposalResponseKind | null; isExecutor: boolean; isNamed: boolean; isAsker: boolean;
+    /** The server says this person may run it now (the executor's "Run it now", or a take-over after a hand-back). */
+    canRun: boolean;
+    canDismiss: boolean; canReopen: boolean; canRaiseAgain: boolean;
+  };
 }
 
 /** States in which people may still answer (the server's ANSWERABLE). */
@@ -50,8 +67,12 @@ const portalPath = (v: unknown): string | null => (str(v) && /^\/(?!\/)/.test(v)
 const runOf = (v: unknown): ProposalRunView | null => {
   const r = rec(v); const by = person(r?.['by']);
   if (!r || !by) return null;
-  return { by, at: Number(r['at']) || 0, title: str(r['title']) ? r['title'] : null, href: portalPath(r['href']), note: str(r['note']) ? r['note'] : null };
+  return { by, at: Number(r['at']) || 0, title: str(r['title']) ? r['title'] : null, href: portalPath(r['href']), note: str(r['note']) ? r['note'] : null, raisedAs: str(r['raisedAs']) ? r['raisedAs'] : null };
 };
+const heardOf = (v: unknown): HeardLine[] => (Array.isArray(v) ? v : []).flatMap((x): HeardLine[] => {
+  const r = rec(x);
+  return r && str(r['text']) ? [{ speaker: str(r['speaker']) ? r['speaker'] : 'Someone', text: r['text'] }] : [];
+});
 
 /** One proposal from the route's JSON; null when malformed (it is then left out, never drawn half). */
 export function parseProposal(raw: unknown): ProposalView | null {
@@ -59,8 +80,9 @@ export function parseProposal(raw: unknown): ProposalView | null {
   if (!r || !str(r['id']) || !str(r['statement']) || !PROPOSAL_STATES.includes(r['state'] as ProposalState)) return null;
   const executor = person(r['executor']);
   const o = rec(r['outcome']);
-  const outcome: ProposalOutcomeView | null = o?.['kind'] === 'decision' ? { kind: 'decision', initiativeId: str(o['initiativeId']) ? o['initiativeId'] : null }
-    : o?.['kind'] === 'tool' && str(o['name']) ? { kind: 'tool', name: o['name'] } : null;
+  const summary = o && str(o['summary']) ? { summary: o['summary'] } : {};
+  const outcome: ProposalOutcomeView | null = o?.['kind'] === 'decision' ? { kind: 'decision', initiativeId: str(o['initiativeId']) ? o['initiativeId'] : null, ...summary }
+    : o?.['kind'] === 'tool' && str(o['name']) ? { kind: 'tool', name: o['name'], ...summary } : null;
   if (!executor || !outcome) return null;
   const responses = (Array.isArray(r['responses']) ? r['responses'] : []).flatMap((x): ProposalResponseView[] => {
     const p = person(x); const xr = rec(x);
@@ -70,7 +92,9 @@ export function parseProposal(raw: unknown): ProposalView | null {
   const m = rec(r['missing']) ?? {};
   const you = rec(r['you']) ?? {};
   return {
-    id: r['id'], statement: r['statement'], outcome, state: r['state'] as ProposalState, executor,
+    id: r['id'], callId: str(r['callId']) ? r['callId'] : null, statement: r['statement'], outcome, state: r['state'] as ProposalState, executor,
+    source: r['source'] === 'asked' || r['source'] === 'dev' ? r['source'] : 'watcher', askedBy: person(r['askedBy']), heard: heardOf(r['heard']),
+    recordsAs: r['recordsAs'] === 'decided' || r['recordsAs'] === 'waiting' ? r['recordsAs'] : null,
     named: (Array.isArray(r['named']) ? r['named'] : []).map(person).filter((p): p is ProposalPerson => !!p), responses,
     missing: {
       people: Array.isArray(m['people']) ? m['people'].filter(str) : [], more: Number(m['more']) || 0,
@@ -80,7 +104,8 @@ export function parseProposal(raw: unknown): ProposalView | null {
     run: runOf(r['run']), expiresAt: Number(r['expiresAt']) || null,
     you: {
       userId: str(you['userId']) ? you['userId'] : '', response: you['response'] === 'consent' || you['response'] === 'object' ? you['response'] : null,
-      isExecutor: you['isExecutor'] === true, isNamed: you['isNamed'] === true, canRun: you['canRun'] === true,
+      isExecutor: you['isExecutor'] === true, isNamed: you['isNamed'] === true, isAsker: you['isAsker'] === true, canRun: you['canRun'] === true,
+      canDismiss: you['canDismiss'] === true, canReopen: you['canReopen'] === true, canRaiseAgain: you['canRaiseAgain'] === true,
     },
   };
 }
@@ -98,21 +123,64 @@ export const isAnswerable = (p: Pick<ProposalView, 'state'>): boolean => ANSWERA
 export type ChipState = 'waiting' | 'consented' | 'objected';
 export interface PersonChip { userId: string; name: string; state: ChipState; label: string; tone: 'neutral' | 'success' | 'danger'; runsIt: boolean }
 
-/** "Record as a decision on Auth Migration", or the tool it runs. `initiativeName` is null until it is known. */
+/**
+ * What will be written, in plain words: the server's summary ("Create a work item titled …, owned by Lee"), or for a decision "Record
+ * as a decision on Auth Migration". Never a tool name. `initiativeName` is null until it is known.
+ */
 export function outcomeLine(outcome: ProposalOutcomeView, initiativeName: string | null): string {
-  if (outcome.kind === 'decision') return initiativeName ? `Record as a decision on ${initiativeName}` : 'Record as a decision';
-  return `Run ${outcome.name.replace(/[_.-]+/g, ' ')}`;
+  if (outcome.kind === 'decision') return initiativeName ? `Record as a decision on ${initiativeName}` : outcome.summary ?? 'Record as a decision';
+  return outcome.summary ?? 'Carry out the action people agreed';
 }
+
+/** Before it runs, whether a decision will be recorded as decided or as waiting for the owner's decision; null for anything else. */
+export function recordsLine(p: Pick<ProposalView, 'recordsAs' | 'outcome' | 'state'>): string | null {
+  if (p.outcome.kind !== 'decision' || !p.recordsAs || !isAnswerable(p)) return null;
+  return p.recordsAs === 'decided' ? 'It will be recorded as decided.' : "It will be recorded as waiting for the initiative owner's decision.";
+}
+
+/** Who raised it: "Asked by Dana", or "Nova heard a decision" for one Nova raised from what it heard. */
+export function eyebrowOf(p: Pick<ProposalView, 'source' | 'askedBy' | 'executor'>): string {
+  return p.source === 'asked' ? `Asked by ${(p.askedBy ?? p.executor).name}` : 'Nova heard a decision';
+}
+
+/** One quoted line Nova heard, for the card and the deck: "“Let's cut over the smallest first.” Sam". */
+export const heardText = (l: HeardLine): string => `“${l.text}” ${l.speaker}`;
 
 const nameIn = (p: ProposalView, userId: string): string =>
   [p.executor, ...p.named, ...p.responses].find((x) => x.userId === userId)?.name ?? userId;
 
-/** "Needs: Priya (runs it), one more." — who still has to consent; null once nobody is missing. */
+const joinWords = (parts: readonly string[]): string => (parts.length <= 1 ? parts[0] ?? '' : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]!}`);
+
+/** Whether this person's consent is still required (they are named or run it, and have not consented). */
+export const isNeeded = (p: Pick<ProposalView, 'missing' | 'you'>): boolean => !!p.you.userId && p.missing.people.includes(p.you.userId);
+
+/** "Needs you (runs it) and Priya." when the viewer is needed, else "Needs Priya (runs it) and one more person."; null once nobody is missing. */
 export function needsLine(p: ProposalView): string | null {
-  const people = p.missing.people.map((u) => (u === p.executor.userId ? `${nameIn(p, u)} (runs it)` : nameIn(p, u)));
-  const more = p.missing.more === 0 ? [] : [p.missing.more === 1 ? 'one more' : `${p.missing.more} more`];
+  const me = p.you.userId;
+  const ordered = [...p.missing.people.filter((u) => u === me), ...p.missing.people.filter((u) => u !== me)];
+  const people = ordered.map((u) => `${u === me ? 'you' : nameIn(p, u)}${u === p.executor.userId ? ' (runs it)' : ''}`);
+  const more = p.missing.more === 0 ? [] : [p.missing.more === 1 ? 'one more person' : `${p.missing.more} more people`];
   const parts = [...people, ...more];
-  return parts.length ? `Needs: ${parts.join(', ')}.` : null;
+  return parts.length ? `Needs ${joinWords(parts)}.` : null;
+}
+
+/** For someone whose consent is not required: their answer is optional. */
+export const OPTIONAL_LINE = 'Your answer is optional: you can also consent or object.';
+
+/** While objected, what clears it: "Blocked until Bob withdraws the objection, or someone raises it again." Every objector is named. */
+export function blockedLine(p: ProposalView): string | null {
+  if (p.state !== 'objected') return null;
+  const objectors = p.responses.filter((r) => r.response === 'object').map((r) => (r.userId === p.you.userId ? 'you' : r.name));
+  if (!objectors.length) return null;
+  const verb = objectors.length > 1 ? 'withdraw their objections' : objectors[0] === 'you' ? 'withdraw your objection' : 'withdraws the objection';
+  return `Blocked until ${joinWords(objectors)} ${verb}, or someone raises it again.`;
+}
+
+/** "Waiting on you · expires Tue, Nov 17, 3:00 PM" (or "Expires …") once the call has ended; null while it goes on or once finished. */
+export function expiryLine(p: ProposalView, now = Date.now()): string | null {
+  if (!p.expiresAt || !isAnswerable(p) || p.expiresAt <= now) return null;
+  const when = new Date(p.expiresAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return waitingOnYou(p) ? `Waiting on you · expires ${when}` : `Expires ${when}`;
 }
 
 /** One chip per involved person (the executor, everyone named, everyone who answered), executor first. */
@@ -134,23 +202,29 @@ export function personChips(p: ProposalView): PersonChip[] {
 /** The card's closing line for a state other than open; null while open (the needs line says it). */
 export function stateLine(p: ProposalView): string | null {
   switch (p.state) {
-    // Handed back (the executor may not run it, or their browser was not there): the server's sentence says who can.
-    case 'consented': return p.run?.note ?? `Consented, waiting for ${p.executor.name} to run it`;
+    // Handed back (the executor may not run it, or was not there): the server's sentence says who can.
+    case 'consented': return p.run?.note ?? (p.you.isExecutor ? 'Everyone needed has consented. Ready for you to run it.' : `Everyone needed has consented. Ready for ${p.executor.name} to run it.`);
     case 'objected': {
-      const first = p.responses.find((r) => r.response === 'object');
-      return first ? `Objected by ${first.name}${first.reason ? `: ${first.reason}` : ''}` : 'Objected';
+      const objections = p.responses.filter((r) => r.response === 'object').map((r) => `${r.name}${r.reason ? `: ${r.reason}` : ''}`);
+      return objections.length ? `Objected by ${objections.join('; ')}` : 'Objected';
     }
     case 'dismissed': {
-      const who = p.dismissedByName ?? (p.dismissedBy ? nameIn(p, p.dismissedBy) : null);
-      return who ? `Marked not a decision by ${who}` : 'Marked not a decision';
+      if (p.run?.raisedAs) return 'Raised again as a new proposal';
+      const who = p.dismissedBy && p.dismissedBy === p.you.userId ? 'you' : p.dismissedByName ?? (p.dismissedBy ? nameIn(p, p.dismissedBy) : null);
+      const what = p.source === 'asked' ? 'Dropped' : p.outcome.kind === 'tool' ? 'Marked not needed' : 'Marked not a decision';
+      return who ? `${what} by ${who}` : what;
     }
     case 'expired': return 'Expired without running';
-    case 'running': return `Running in ${(p.run?.by ?? p.executor).name}'s browser`;
+    case 'running': return p.run?.by.userId === p.you.userId ? 'You are running it' : `${(p.run?.by ?? p.executor).name} is running it`;
     case 'done': {
-      const what = p.outcome.kind === 'decision' ? 'Recorded' : 'Done';
+      const what = p.outcome.kind !== 'decision' ? 'Done' : p.recordsAs === 'waiting' ? "Recorded as waiting for the owner's decision" : p.recordsAs === 'decided' ? 'Recorded as decided' : 'Recorded';
       return p.run?.title ? `${what} · ${p.run.title}` : what;
     }
-    case 'failed': return p.run?.note ? `Failed: ${p.run.note}` : 'Failed';
+    // The server's sentence says what went wrong and that nothing was changed.
+    case 'failed': {
+      const note = p.run?.note ?? 'Nova could not carry this out, so nothing was changed.';
+      return p.run?.raisedAs ? `${note} Raised again as a new proposal.` : note;
+    }
     default: return null;
   }
 }
@@ -158,34 +232,57 @@ export function stateLine(p: ProposalView): string | null {
 // ---- the deck ------------------------------------------------------------------------------------------------------------------
 
 /**
- * The proposals this person's deck asks about, oldest first: first those still waiting for their answer (not yet consented, so a new
- * answer can matter), then those they answered (to withdraw), skipping any they chose to keep as answered (`kept`, by `id:response`).
+ * Waiting on this person: it is open or objected and they are needed (named or running it) and have not answered, or the server says
+ * they may run it now. Only these are counted on Nova's footer mark.
  */
-export function deckQueue(proposals: readonly ProposalView[], kept: ReadonlySet<string> = new Set()): ProposalView[] {
-  const live = proposals.filter(isAnswerable);
-  const ask = live.filter((p) => p.you.response === null && p.state !== 'consented');
-  const answered = live.filter((p) => p.you.response !== null && !kept.has(keptKey(p)));
-  return [...ask, ...answered];
+export function waitingOnYou(p: ProposalView): boolean {
+  if (p.state === 'consented') return p.you.canRun;
+  return (p.state === 'open' || p.state === 'objected') && p.you.response === null && isNeeded(p);
 }
 
-/** A hand-back after the answer was kept asks again: the offer to run it is new. */
-export const keptKey = (p: Pick<ProposalView, 'id' | 'you' | 'run'>): string => `${p.id}:${p.you.response ?? ''}${mayTakeOver(p) && p.run ? `:${p.run.at}` : ''}`;
+/** Their answer is optional: open, they are not needed, and they have not answered. Asked after the waiting ones, never counted. */
+export const optionalFor = (p: ProposalView): boolean => p.state === 'open' && p.you.response === null && !isNeeded(p);
 
-/** A consenter who is not the executor may run a consented proposal in their own browser (the server's `you.canRun`). */
+/**
+ * The proposals this person's deck asks about, oldest first: those waiting on them, then those where their answer is optional,
+ * skipping any they set aside ("Not now", "Skip": `kept`, by `keptKey`). Answered ones are not asked again: withdrawing is on the card.
+ */
+export function deckQueue(proposals: readonly ProposalView[], kept: ReadonlySet<string> = new Set()): ProposalView[] {
+  const live = proposals.filter((p) => isAnswerable(p) && !kept.has(keptKey(p)));
+  return [...live.filter(waitingOnYou), ...live.filter((p) => !waitingOnYou(p) && optionalFor(p))];
+}
+
+/** How many of the deck's proposals are waiting on this person (the footer count). */
+export const waitingCount = (queue: readonly ProposalView[]): number => queue.filter(waitingOnYou).length;
+
+/** A set-aside run offer asks again after a new hand-back; a set-aside optional question stays aside. */
+export const keptKey = (p: Pick<ProposalView, 'id' | 'you' | 'run' | 'state'>): string =>
+  `${p.id}:${p.state === 'consented' && p.you.canRun ? `run:${p.run?.at ?? 0}` : p.you.response ?? 'ask'}`;
+
+/** Someone other than the executor may run a consented proposal now (after a hand-back; the server's `you.canRun`). */
 export const mayTakeOver = (p: Pick<ProposalView, 'you'>): boolean => p.you.canRun && !p.you.isExecutor;
 
 /** The card's link to what was made: only once done, and only to a portal path. */
 export const resultHref = (p: Pick<ProposalView, 'state' | 'run'>): string | null => (p.state === 'done' ? p.run?.href ?? null : null);
 
-/** The consent option's label: the executor's consent is the one that runs it. */
-export function consentLabel(p: Pick<ProposalView, 'outcome' | 'you'>): string {
-  if (!p.you.isExecutor) return 'Consent';
+/**
+ * The consent option's label. The executor's consent runs it only when it is the last one needed ("Consent and run" / "Consent and
+ * record"); otherwise it is "Consent", and they are asked to run it once everyone needed has consented.
+ */
+export function consentLabel(p: Pick<ProposalView, 'outcome' | 'you' | 'missing' | 'state'>): string {
+  const last = p.you.isExecutor && p.state === 'open' && p.missing.more === 0 && p.missing.people.length === 1 && p.missing.people[0] === p.you.userId;
+  if (!last) return 'Consent';
   return p.outcome.kind === 'decision' ? 'Consent and record' : 'Consent and run';
 }
+
+/** "Not a decision" on a decision Nova heard, "Not needed" on a work item it heard, "Drop it" for the asker of an asked one. */
+export const dismissLabel = (p: Pick<ProposalView, 'source' | 'outcome'>): string =>
+  (p.source === 'asked' ? 'Drop it' : p.outcome.kind === 'tool' ? 'Not needed' : 'Not a decision');
 
 /** The count on Nova's footer mark: "1 proposal", "2 proposals"; null at none. */
 export const proposalCountWords = (n: number): string | null => (n <= 0 ? null : n === 1 ? '1 proposal' : `${n} proposals`);
 
-export const RUN_HERE = 'Run it in my browser';
+export const RUN_NOW = 'Run it now';
+export const RUN_HERE = 'Run it myself';
 
-export const OBJECTION_SHARED = 'Everyone in the call will see this';
+export const OBJECTION_SHARED = 'Why do you object? Everyone who can see this proposal will see your reason.';

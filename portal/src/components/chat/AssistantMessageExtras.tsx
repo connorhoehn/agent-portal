@@ -22,8 +22,12 @@ import { useNavigate } from 'react-router';
 import { Button, Card, Chip, Inline, InlineAlert, Link, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
-import { useMeetingAssistant } from '../../lib/meetingAssistant';
-import { needsLine, outcomeLine, personChips, resultHref, stateLine, type ProposalState, type ProposalView } from '../../lib/meetingProposals';
+import { answerProposal, raiseProposalAgain, useMeetingAssistant } from '../../lib/meetingAssistant';
+import {
+  blockedLine, expiryLine, eyebrowOf, heardText, isAnswerable, needsLine, optionalFor, outcomeLine, personChips, recordsLine, resultHref, stateLine, waitingOnYou,
+  type ProposalState, type ProposalView,
+} from '../../lib/meetingProposals';
+import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { actionCardView, askedByLine, minutesCountLabels, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard, type MinutesCounts } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
@@ -104,8 +108,11 @@ export function AssistantProposalCardView({ card, statement, callId }: { card: A
 }
 
 /**
- * One proposal, read-only: the statement, what it will do, who it needs, a chip per person and how it ended, with a link to what
- * was made once done. The call chat's card and the meeting page's Proposals section draw this same card; answers are given in a deck.
+ * One proposal: who raised it ("Nova heard a decision" with the lines it heard, or "Asked by Dana"), the statement, what will be
+ * written, who it needs, whether a decision will be recorded as decided or waiting, a chip per person and how it ended, with a link to
+ * what was made once done. The call chat's card and the meeting page's Proposals section draw this same card. Answers are given in a
+ * deck; the card holds only quiet actions: Answer (opens the deck in the call), withdrawing your answer, Undo of your dismissal, and
+ * Raise it again on a blocked or failed one.
  */
 export function ProposalCard({ proposalId, state, statement, view, surface = 'default' }: {
   proposalId: string; state: ProposalState; statement: string; view: ProposalView | null;
@@ -116,19 +123,39 @@ export function ProposalCard({ proposalId, state, statement, view, surface = 'de
   const initiativeName = useInitiativeName(view?.outcome.kind === 'decision' ? view.outcome.initiativeId : null);
   const [label, tone] = PROPOSAL_PILL[state];
   const live = view ? { ...view, state } : null;
-  const needs = live && (state === 'open' || state === 'objected') ? needsLine(live) : null;
+  const needs = live && state === 'open' ? needsLine(live) : null;
+  const blocked = live ? blockedLine(live) : null;
   const closing = live ? stateLine(live) : null;
   const href = live ? resultHref(live) : null;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const callId = view?.callId ?? null;
+  const act = (run: (id: string) => Promise<string | null>) => {
+    if (!callId || busy) return;
+    setBusy(true); setError(null);
+    void run(callId).then((why) => { setError(why); setBusy(false); });
+  };
+  // Answer opens the deck in the call, where it is asked; it is offered only when the deck has a question for this person.
+  const answer = live && surface === 'assistant' && callId && (waitingOnYou(live) || optionalFor(live));
+  const withdraw = live && callId && live.you.response !== null && isAnswerable(live);
   return (
     <Card tone={surface} padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={proposalId} data-state={state}>
       <Stack gap="sm">
         <Inline gap="sm" align="center" wrap>
-          <T size="xs" weight="medium" tone="secondary">Proposal</T>
+          <T size="xs" weight="medium" tone="secondary" data-testid="assistant-proposal-eyebrow">{live ? eyebrowOf(live) : 'Proposal'}</T>
           <StatusPill tone={tone} label={label} size="sm" data-testid="assistant-proposal-status" />
         </Inline>
         <T size="sm" weight="medium" wrap data-testid="assistant-proposal-statement">{statement}</T>
+        {live && live.heard.length > 0 && (
+          <Stack gap="none" data-testid="assistant-proposal-heard">
+            {live.heard.map((line, i) => <T key={i} size="xs" tone="tertiary" wrap>{heardText(line)}</T>)}
+          </Stack>
+        )}
         {live && <T size="xs" tone="secondary" wrap data-testid="assistant-proposal-outcome">{outcomeLine(live.outcome, initiativeName)}</T>}
+        {live && recordsLine(live) && <T size="xs" tone="secondary" wrap data-testid="assistant-proposal-records">{recordsLine(live)}</T>}
         {needs && <T size="xs" tone="tertiary" wrap data-testid="assistant-proposal-needs">{needs}</T>}
+        {blocked && <T size="xs" tone="tertiary" wrap data-testid="assistant-proposal-blocked">{blocked}</T>}
+        {live && expiryLine(live) && <T size="xs" tone="tertiary" wrap data-testid="assistant-proposal-expiry">{expiryLine(live)}</T>}
         {live && (
           <Inline gap="xs" align="center" wrap data-testid="assistant-proposal-people">
             {personChips(live).map((chip) => (
@@ -144,6 +171,25 @@ export function ProposalCard({ proposalId, state, statement, view, surface = 'de
             {live?.outcome.kind === 'decision' ? 'Open the decision' : 'Open what was made'}
           </Link>
         )}
+        {live && (answer || withdraw || live.you.canReopen || live.you.canRaiseAgain) && (
+          <Inline gap="sm" align="center" wrap data-testid="assistant-proposal-actions">
+            {answer && (
+              <Button variant="link" size="sm" onClick={() => setProposalDeckHidden(callId, false)} data-testid="assistant-proposal-answer">Answer</Button>
+            )}
+            {live.you.canReopen && (
+              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => answerProposal(c, live.id, 'reopen'))} data-testid="assistant-proposal-undo">Undo</Button>
+            )}
+            {live.you.canRaiseAgain && (
+              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => raiseProposalAgain(c, live.id))} data-testid="assistant-proposal-raise">Raise it again</Button>
+            )}
+            {withdraw && (
+              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => answerProposal(c, live.id, 'withdraw'))} data-testid="assistant-proposal-withdraw">
+                {live.you.response === 'consent' ? 'Withdraw my consent' : 'Withdraw my objection'}
+              </Button>
+            )}
+          </Inline>
+        )}
+        {error && <T size="xs" tone="danger" wrap role="alert" data-testid="assistant-proposal-error">{error}</T>}
       </Stack>
     </Card>
   );

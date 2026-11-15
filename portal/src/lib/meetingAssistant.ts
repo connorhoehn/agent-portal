@@ -67,6 +67,13 @@ export async function answerProposal(callId: string, proposalId: string, answer:
   return result.ok ? null : (result.error ?? 'That answer was not saved.');
 }
 
+/** "Raise it again": a blocked or failed proposal becomes a new open one with the same outcome. Null on success, else why not. */
+export async function raiseProposalAgain(callId: string, proposalId: string): Promise<string | null> {
+  const result = await writeJson<unknown>(`${base(callId)}/proposals/${encodeURIComponent(proposalId)}/raise-again`, 'POST', {});
+  await refreshProposals(callId);
+  return result.ok ? null : (result.error ?? 'It was not raised again.');
+}
+
 /**
  * Runs one action, adopts the state it answers with, and says why when the server refused. A refusal that can be confirmed
  * (the shared spend refusal, `confirmFlag: confirmOverUserBudget`) becomes `ask` instead of an error, when `mayConfirm`
