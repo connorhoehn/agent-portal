@@ -383,6 +383,8 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   // anything is settled or held, so its stop never closes or bills the new period. Nothing is held when it takes too long.
   if (!(await runtime.settled(callId, rejoinWaitMs, periodOf(read) + 1))) throw new AppError(409, REJOIN_STILL_LEAVING);
   const before = (await store.get(callId)) ?? read;
+  // Someone else brought Nova back meanwhile: the caller sees the record as it stands, and nothing of that period is touched here.
+  if (before.state !== 'left') { res.json(await view(before, callId, session)); return; }
   const standing = await rejoinStanding(before, runtime.deps.clock());
   if (standing === 'deleted') throw new AppError(409, REJOIN_DELETED);
   if (standing === 'limit') throw new AppError(409, REJOIN_LIMIT);
@@ -390,7 +392,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   // The earlier period's money is booked before a new one starts: a leave whose settlement did not finish is settled from the record now.
   let prior = before;
   if (!recordSession(prior).settled || recordSession(prior).listeningSince != null) {
-    await settleFromRecord(callId, { clock: runtime.deps.clock });
+    await settleFromRecord(callId, { clock: runtime.deps.clock, period: periodOf(prior) }); // only the period that left
     prior = (await store.get(callId)) ?? prior;
     if (!recordSession(prior).settled) throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
   }

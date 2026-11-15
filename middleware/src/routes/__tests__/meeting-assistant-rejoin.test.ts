@@ -353,6 +353,30 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
   });
 
+  it('an invitation back that finds Nova already back after its wait answers with the record and touches nothing of that period', async () => {
+    budget('alice'); budget('bob');
+    const invitedAt = (await post('invite', 'alice')).body.invitedAt as number;
+    clock += 600_000;
+    const open = slowStop();
+    const dismissed = post('dismiss', 'carol').then((r) => r);
+    await leftNow();
+    const leftAt = (await record()).leftAt!;
+    const back = post('invite', 'bob').then((r) => r);
+    await flush();
+    // Meanwhile Nova is brought back elsewhere (another process): the second period is open and unsettled.
+    await assistantStore().rejoin(CALL, { leftAt, by: 'alice', at: clock, present: ['alice'], session: {
+      settled: false, ledgerPart: 1, extensions: 1, holds: [], listeningSeconds: 0, listeningSince: clock, settledListeningSeconds: 600,
+      periodFrom: clock, periods: [{ invitedBy: 'alice', from: invitedAt, leftAt, leftBy: 'carol' }] } });
+    const period2 = sessionOf(await record());
+    open();
+    const [d, b] = await Promise.all([dismissed, back]);
+    expect(d.status).toBe(200);
+    expect([b.status, b.body.state, b.body.invitedBy, b.body.period]).toEqual([200, 'listening', 'alice', 2]);
+    expect(sessionOf(await record())).toEqual(period2);
+    expect(holds().map((h) => h.sourceId)).toEqual(['ma:call-1']);
+    expect(entries().map((e) => e.sourceId)).not.toContain('ma:call-1:x1');
+  });
+
   it('start refuses a second run while the earlier one is stopping, and is a no-op for a live run of the same period', async () => {
     budget('alice');
     await post('invite', 'alice');
