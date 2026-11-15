@@ -134,4 +134,25 @@ describe('NovaSpeech (the echo guard)', () => {
     expect(s.isEcho({ text: 'here is the result', startAt: 9050, endAt: 9400 })).toBe(false);
     expect(s.isEcho({ text: 'here is the result', startAt: 1100, endAt: 1900 })).toBe(true);
   });
+
+  it('words for held frames wait for them: they join the span the release opens, and a frame noted at its playout time extends it', () => {
+    const s = new NovaSpeech();
+    s.noteText(1200, 'Two plus two', false, true);
+    s.noteText(1600, 'Two plus two is four.', true, true); // final while still held
+    // Released at 2000: six frames sent at once, noted at the times they play.
+    for (let i = 0; i < 6; i += 1) s.noteFrame(2000 + i * 100);
+    expect(s.speakingAt(2500 + 100 + VOICE_ECHO_TAIL_MS)).toBe(true);
+    expect(s.isEcho({ text: 'two is four', startAt: 2600, endAt: 3200 })).toBe(true);
+    // Words noted while the frames of that span are still to play attach to it, though their playout lies ahead of the clock.
+    s.noteText(2100, 'Two plus two is four. Anything else?', false);
+    expect(s.isEcho({ text: 'anything else', startAt: 3000, endAt: 3400 })).toBe(true);
+  });
+
+  it('words for a withheld turn are forgotten: the next span does not carry them', () => {
+    const s = new NovaSpeech();
+    s.noteText(1000, 'I can help with that whenever you are ready', false, true);
+    s.forgetUnheard();
+    s.noteFrame(1500);
+    expect(s.isEcho({ text: 'whenever you are ready', startAt: 1500, endAt: 2000 })).toBe(false);
+  });
 });

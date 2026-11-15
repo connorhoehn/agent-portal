@@ -5,8 +5,10 @@
 //   VoiceRelay   hands each 100 ms output frame to the gateway sink, one at a time and in order, behind a burst guard (at most 3 s of
 //                audio queued per call; the rest is dropped and counted). A frame is transient: it is base64 in one gateway frame
 //                and then gone.
-//   NovaSpeech   remembers WHEN Nova was being relayed (and for VOICE_ECHO_TAIL_MS after) and WHAT she said then, so a caption of Nova's own voice
-//                coming back through a microphone is not taken for a person addressing her (the echo guard).
+//   NovaSpeech   remembers WHEN Nova was being heard (each relayed frame at the moment it PLAYS: frames released together after a hold
+//                play one after another, so the caller passes each one's playout time, which may lie ahead of the clock) and for
+//                VOICE_ECHO_TAIL_MS after, and WHAT she said then, so a caption of Nova's own voice coming back through a microphone is
+//                not taken for a person addressing her (the echo guard).
 //
 // The gateway frame, for the browser (the portal's playback package codes against this):
 //   { type: 'assistant-audio', channel: 'orgiq:huddle:<callId>',
@@ -107,24 +109,44 @@ const TEXT_LAG_MS = 3000;
 export class NovaSpeech {
   private spans: Span[] = [];
   private orphan: { text: string; at: number } | null = null;
+  /** Nova's words for frames the voice gate holds (nobody has heard them yet): they join the span the release opens or extends. */
+  private unheard: { done: string[]; partial: string } | null = null;
 
-  /** A frame of Nova's voice went out at `now` (it plays for the next 100 ms). */
-  noteFrame(now: number): void {
-    const cur = this.spans[this.spans.length - 1];
-    if (cur && now <= cur.end) { cur.end = now + VOICE_FRAME_MS + VOICE_ECHO_TAIL_MS; cur.lastFrameAt = now; return; }
-    const span: Span = { start: now, end: now + VOICE_FRAME_MS + VOICE_ECHO_TAIL_MS, lastFrameAt: now, done: [], partial: '' };
-    if (this.orphan && now - this.orphan.at <= TEXT_LAG_MS) { span.partial = this.orphan.text; }
-    this.orphan = null;
-    this.spans.push(span);
-    if (this.spans.length > 20) this.spans.shift();
+  /** A frame of Nova's voice plays from `at` for the next 100 ms (`at` is its playout time: the clock, or later behind earlier frames). */
+  noteFrame(at: number): void {
+    let cur = this.spans[this.spans.length - 1];
+    if (cur && at <= cur.end) { cur.end = at + VOICE_FRAME_MS + VOICE_ECHO_TAIL_MS; cur.lastFrameAt = at; }
+    else {
+      cur = { start: at, end: at + VOICE_FRAME_MS + VOICE_ECHO_TAIL_MS, lastFrameAt: at, done: [], partial: '' };
+      if (this.orphan && at - this.orphan.at <= TEXT_LAG_MS) { cur.partial = this.orphan.text; }
+      this.orphan = null;
+      this.spans.push(cur);
+      if (this.spans.length > 20) this.spans.shift();
+    }
+    if (this.unheard) {
+      cur.done.push(...this.unheard.done);
+      if (this.unheard.partial) cur.partial = this.unheard.partial;
+      this.unheard = null;
+    }
   }
 
-  /** What Nova's transcript says at `now`: the text so far (`final` false) or a finished piece. Attached to the span it belongs to. */
-  noteText(now: number, text: string, final: boolean): void {
+  /**
+   * What Nova's transcript says at `now`: the text so far (`final` false) or a finished piece. Attached to the span it belongs to;
+   * with `held` (the voice gate is holding the frames these words go with) kept aside until those frames are relayed.
+   */
+  noteText(now: number, text: string, final: boolean, held = false): void {
+    if (held) {
+      const u = (this.unheard ??= { done: [], partial: '' });
+      if (final) { u.done.push(text); u.partial = ''; } else u.partial = text;
+      return;
+    }
     const cur = this.spans[this.spans.length - 1];
     if (!cur || now > cur.lastFrameAt + TEXT_LAG_MS) { if (!final) this.orphan = { text, at: now }; return; }
     if (final) { cur.done.push(text); cur.partial = ''; } else cur.partial = text;
   }
+
+  /** The frames these words went with were withheld or forgotten (nobody heard them): drop the words too. */
+  forgetUnheard(): void { this.unheard = null; this.orphan = null; }
 
   /** Was Nova being heard for any part of [startMs, endMs]? (For counters and tests.) */
   speakingAt(ms: number): boolean { return this.spans.some((s) => ms >= s.start && ms <= s.end); }

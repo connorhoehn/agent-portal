@@ -1,5 +1,5 @@
-// The voice gate: an utterance nobody asked for is held, then released in order or withheld whole (voice-gate.ts).
-import { VOICE_GATE_HOLD_MS, VOICE_UTTERANCE_GAP_MS, VoiceGate, type VoiceGateDecision, type VoiceGateWhy } from '../voice-gate.js';
+// The voice gate: a speaking turn nobody asked for is held, then released in order or withheld whole (voice-gate.ts).
+import { VOICE_GATE_HOLD_MS, VOICE_OPEN_TURN_GAP_MS, VOICE_UTTERANCE_GAP_MS, VoiceGate, type VoiceGateDecision, type VoiceGateWhy } from '../voice-gate.js';
 
 let now: number;
 let why: VoiceGateWhy | null;
@@ -93,13 +93,13 @@ describe('the voice gate', () => {
     expect(sent).toEqual([{ n: 1, last: false }, { n: 2, last: false }, { n: 3, last: true }]);
   });
 
-  it('recovers from an utterance whose last frame never came: a gap longer than the utterance gap starts a new one', () => {
+  it('an open turn ends only when no frame has come for longer than the open-turn gap: the next one is decided afresh', () => {
     why = 'addressed';
     frames(1, 2, false); // no last frame
     why = null;
-    advance(VOICE_UTTERANCE_GAP_MS + 1);
+    advance(VOICE_OPEN_TURN_GAP_MS + 1);
     gate.frame(f(3), false);
-    expect(sent.map((s) => s.n)).toEqual([1, 2]); // the new utterance was decided again, and held
+    expect(sent.map((s) => s.n)).toEqual([1, 2]); // the new turn was decided again, and held
     expect(gate.heldFrames()).toBe(1);
   });
 
@@ -123,4 +123,66 @@ describe('the voice gate', () => {
     gate.frame(f(9), true);
     expect(sent).toEqual([{ n: 9, last: true }]);
   });
+
+  // A spoken answer is several `last`-marked pieces (the provider marks one after every 300 ms of silence): one decision covers them all.
+  it('an open turn stays open through the pauses between sentences, with each sentence\'s last frame passed on in order', () => {
+    why = 'addressed';
+    frames(1, 6); // sentence one, its last frame marked
+    why = null; // the window that opened it has passed
+    advance(700); frames(7, 8);
+    advance(VOICE_UTTERANCE_GAP_MS + 500); frames(15, 4); // a longer pause, still inside the open-turn gap
+    expect(sent.map((s) => s.n)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
+    expect(sent.filter((s) => s.last).map((s) => s.n)).toEqual([6, 14, 18]);
+    expect(decisions).toEqual([['open', 0, 'addressed']]); // one decision for the turn
+  });
+
+  it('the lead-in survives: sentence one complete and held, sentence two 400 ms later, the request at 1.5 s, both relayed in order', () => {
+    frames(1, 6); // 0 to 500 ms, complete (last), held
+    advance(500); // sentence two starts 400 ms after sentence one's last frame
+    frames(7, 6, false); // 1000 to 1500 ms
+    expect(sent).toEqual([]);
+    expect(gate.heldFrames()).toBe(12); // one held turn, not an early decision
+    why = 'hearing'; gate.poke(); // the request's transcript, 1.5 s after the first frame
+    advance(100); frames(13, 3);
+    expect(sent.map((s) => s.n)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+    expect(sent.filter((s) => s.last).map((s) => s.n)).toEqual([6, 15]);
+    expect(decisions).toEqual([['held', 0, null], ['released', 1500, 'hearing']]);
+    expect(gate.withheldUtterances).toBe(0);
+  });
+
+  it('a held turn of several sentences is withheld whole at 2 s even while frames keep coming, and keeps dropping until the gap', () => {
+    frames(1, 8); // sentence one, complete
+    advance(500); frames(9, 15); // sentence two runs past the hold's end: the timer withholds at 2 s
+    expect(decisions.map((d) => d[0])).toEqual(['held', 'withheld']);
+    expect(decisions[1]).toEqual(['withheld', VOICE_GATE_HOLD_MS, 'timeout']);
+    why = 'addressed'; // a reason that comes now does not bring any of it back
+    advance(600); frames(24, 5); // sentence three, after a short pause: still the withheld turn
+    expect(sent).toEqual([]);
+    expect(gate.withheldFrames).toBe(28);
+    expect(gate.withheldUtterances).toBe(1);
+    advance(VOICE_UTTERANCE_GAP_MS + 1); frames(29, 2); // a new turn, decided afresh
+    expect(sent.map((s) => s.n)).toEqual([29, 30]);
+  });
+
+  it('a short held turn is never ended early by a pause: what follows inside the hold joins it and is decided with it', () => {
+    frames(1, 4); // 0 to 300 ms, complete
+    advance(VOICE_UTTERANCE_GAP_MS + 100); gate.frame(f(5), false); // 1.9 s: past the withheld-turn gap, inside the hold
+    expect(decisions.map((d) => d[0])).toEqual(['held']);
+    expect(gate.heldFrames()).toBe(5);
+    why = 'reply'; gate.poke();
+    advance(100); gate.frame(f(6), true);
+    expect(sent.map((s) => s.n)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it('clear also ends an open turn: the next frame, however soon, is decided afresh', () => {
+    why = 'addressed';
+    frames(1, 3, false);
+    gate.clear();
+    why = null;
+    advance(100); gate.frame(f(4), false);
+    expect(sent.map((s) => s.n)).toEqual([1, 2, 3]);
+    expect(gate.heldFrames()).toBe(1);
+    expect(gate.phase()).toBe('held');
+  });
 });
+

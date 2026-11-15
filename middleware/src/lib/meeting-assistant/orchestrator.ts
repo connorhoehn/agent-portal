@@ -24,7 +24,7 @@ import {
 import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
-import { NovaSpeech, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
+import { NovaSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import { VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
@@ -269,8 +269,10 @@ interface CallRun {
   /** Set the moment a pause begins and cleared when a session is open again, so no frame is relayed in between. */
   voiceHeld: boolean;
   relay: VoiceRelay;
-  /** In front of the relay: an utterance nobody asked for is held, then withheld (voice-gate.ts). */
+  /** In front of the relay: a speaking turn nobody asked for is held, then withheld (voice-gate.ts). */
   gate: VoiceGate;
+  /** When the last relayed frame ends playing (epoch ms): frames released together after a hold play one after another. 0 when nothing is queued to play. */
+  playhead: number;
   /** When the latest heard line that addressed Nova ended (epoch ms; not an echo), or a request was handed to a text session. */
   addressedAt: number;
   /** Tool calls of this session that passed the name lock (the server's own check that the asker addressed Nova). */
@@ -429,7 +431,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -459,7 +461,7 @@ export class AssistantRuntime {
   async pause(callId: string): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
-    run.voiceHeld = true; run.relay.clear(); run.gate.clear(); // nothing is relayed (or held) from the moment a pause begins
+    run.voiceHeld = true; this.dropVoice(run, true); // nothing is relayed (or held) from the moment a pause begins
     this.deps.watcher?.pause(callId); // no wait or check carries across a pause
     await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = null; run.replyById.clear(); });
     await this.closeListening(callId);
@@ -483,7 +485,7 @@ export class AssistantRuntime {
   async stop(callId: string, reason: StopReason = 'left'): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
-    run.finished = true; run.relay.clear(); run.gate.clear();
+    run.finished = true; this.dropVoice(run, true);
     this.deps.watcher?.stop(callId);
     // Whatever a step before it throws, the audio and the tap are released and the settlement is told: money is booked once, here.
     const guarded = async (step: () => Promise<void>): Promise<void> => {
@@ -583,7 +585,7 @@ export class AssistantRuntime {
     if (!session) throw new Error('no live session is available in this process');
     run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.readyMessages = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    run.calls = new Map(); run.addressedCalls = new Set(); run.gate.clear(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
+    run.calls = new Map(); run.addressedCalls = new Set(); this.dropVoice(run, false); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
     this.wire(run, session);
     run.sessionKind = session.kind;
@@ -671,7 +673,11 @@ export class AssistantRuntime {
         trace('delegation.ready', { at: d.at, readyAt: d.readyAt, item: e.item });
       }),
       session.on('outputAudio', (e) => this.onOutputAudio(run, session, e)),
-      session.on('outputTranscript', (e) => { if (run.voice) run.speech.noteText(this.now(), e.text, e.final); }),
+      session.on('outputTranscript', (e) => {
+        // Words for frames the gate holds wait for those frames; words for a withheld turn were never heard and are dropped.
+        const g = run.gate.phase();
+        if (run.voice && g !== 'dropping') run.speech.noteText(this.now(), e.text, e.final, g === 'held');
+      }),
       session.on('expires', (e) => { run.expiresAt = e.atMs; }),
       session.on('closed', guard((e: SessionEvents['closed']) => this.onClosed(run, session, e.reason))),
       session.on('error', (e) => {
@@ -686,7 +692,7 @@ export class AssistantRuntime {
     if (run.intentionalClose || run.finished || run.session !== session) return;
     // An unexpected close (decision 11): replace the session with the last minutes of the call as context, a few times at most.
     run.session = null;
-    run.gate.clear(); // what the lost session was saying is never finished
+    this.dropVoice(run, false); // what the lost session was saying is never finished
     this.deps.audio?.suspend(run.ctx.callId); // the tap stays, its audio waits for the new session (and its time base)
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
@@ -769,7 +775,7 @@ export class AssistantRuntime {
     const run = this.runs.get(callId);
     if (!run) return;
     run.voice = on;
-    if (!on) { run.relay.clear(); run.gate.clear(); }
+    if (!on) this.dropVoice(run, true);
   }
 
   /** What the voice relay did on this run: frames handed to the gateway, and frames dropped (no gateway, a burst, a pause). Zeros when no run. */
@@ -801,14 +807,17 @@ export class AssistantRuntime {
    *
    * WHAT MAY BE SPOKEN: only speech someone asked for. The model is told to stay silent unless addressed, but it does not always, and
    * its audio arrives long before the utterance's transcript is final (the chat side drops an unprompted remark; that comes too late
-   * for the voice). So every utterance passes the gate (voice-gate.ts), which decides at its first frame and holds that decision for
-   * the whole utterance. It goes out at once when someone addressed Nova in the last VOICE_PROMPT_WINDOW_MS (a heard line by the
+   * for the voice). So every speaking turn passes the gate (voice-gate.ts), which decides at its first frame and holds that decision
+   * for the whole turn, through the pauses between its sentences, until Nova has been silent for a gap. It goes out at once when
+   * someone addressed Nova in the last VOICE_PROMPT_WINDOW_MS (a heard line by the
    * detector's own rule, an echo of Nova excluded, including what the session has heard but not yet flushed), or when Nova has
    * addressed work in flight (a tool call that passed the name lock and is still open, a live PUBLIC reply context, or the second
    * model's message ready and unspoken; a muted context never counts). Otherwise it is held, unsent and in memory only, for at most
    * VOICE_GATE_HOLD_MS while the reason may still arrive (the provider often speaks before it flushes the request's transcript), then
    * released in order or withheld whole. Nothing is filtered by content: after audit repair B2 a private answer never reaches the
-   * shared session, so what is asked for is safe to hear. Nova counts as heard (the echo guard) only for frames actually relayed.
+   * shared session, so what is asked for is safe to hear. Nova counts as heard (the echo guard) only for frames actually relayed, each
+   * at the moment it plays: a burst released after a hold plays 100 ms a frame from the release on, so its tail is heard (and may
+   * echo) up to the hold's length later than its frames were sent.
    */
   private onOutputAudio(run: CallRun, session: LiveMeetingSession, e: SessionEvents['outputAudio']): void {
     if (!run.voice || run.voiceHeld || run.finished || run.session !== session) return;
@@ -821,11 +830,24 @@ export class AssistantRuntime {
       allowed: () => this.voiceWanted(run),
       send: (pcm, last) => {
         if (!run.voice || run.voiceHeld || run.finished || !run.session) return;
-        run.speech.noteFrame(this.now());
+        // Playout: a frame plays once the frames before it have (a released burst plays over its length, not at the instant it went).
+        const playAt = Math.max(this.now(), run.playhead);
+        run.speech.noteFrame(playAt);
+        run.playhead = playAt + VOICE_FRAME_MS;
         run.relay.push(pcm, last);
       },
-      decided: (decision, heldMs, why) => trace('voice', { decision, heldMs, why }),
+      decided: (decision, heldMs, why) => {
+        if (decision === 'withheld') run.speech.forgetUnheard();
+        trace('voice', { decision, heldMs, why });
+      },
     });
+  }
+
+  /** Forget what Nova was about to say: the gate's held frames and her words for them; with `relay`, also what is queued to go out (and its playout). */
+  private dropVoice(run: CallRun, relay: boolean): void {
+    if (relay) { run.relay.clear(); run.playhead = 0; }
+    run.gate.clear();
+    run.speech.forgetUnheard();
   }
 
   /** Tell the session news about addressed work (a write done, failed, declined or expired): what Nova says about it next is wanted. */

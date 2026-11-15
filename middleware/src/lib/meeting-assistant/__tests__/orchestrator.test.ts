@@ -37,6 +37,7 @@ import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
+import { VOICE_OPEN_TURN_GAP_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
@@ -1451,7 +1452,7 @@ describe('Nova\'s voice goes out only for speech someone asked for (the voice ga
     const [turn] = await runtime.turnsFor(CALL, BOB);
     await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { say: 'You have spent $4,217.' } });
     s.fire('messageReady', { atMs: now - t0 }); await flush();
-    now += 2000;
+    now += VOICE_OPEN_TURN_GAP_MS; // past the open turn's gap: the next speech is a new turn, decided afresh
     await utter(s, 25, 4);
     expect(sent).toEqual([1, 2, 3]);
     expect(stats().voiceUtterancesWithheld).toBe(1);
@@ -1492,6 +1493,45 @@ describe('Nova\'s voice goes out only for speech someone asked for (the voice ga
     next.pending = 'Nova, hello';
     await utter(next, 2, 9);
     expect(sent).toEqual([1, 2]);
+  });
+
+  it('a plain spoken answer longer than the request window is relayed whole: the pauses between its sentences do not end the turn', async () => {
+    const s = await gateRuntime();
+    s.hear('Nova, can you walk us through the launch plan?', 0, 2500); await flush();
+    now = t0 + 3000;
+    // Seven sentences of 2.5 s, each ending in its own `last` frame, 400 to 700 ms apart: about 21 s, well past the 10 s window.
+    let seq = 1;
+    for (const pause of [500, 400, 700, 600, 450, 650, 0]) { await utter(s, 25, seq); seq += 25; now += pause; }
+    expect(sent).toHaveLength(175);
+    expect(stats()).toMatchObject({ voiceFramesRelayed: 175, voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
+  });
+
+  it('after a hold, the released answer plays out over its length: an echo of its last words at playout time is Nova\'s own voice', async () => {
+    const s = await gateRuntime();
+    now = t0 + 2000; // the answer is voiced before the request's own transcript has arrived
+    s.fire('outputTranscript', { text: 'The capital of Portugal is Lisbon and it sits on the river near the coast', final: false });
+    await utter(s, 19, 1, false);
+    expect(sent).toEqual([]);
+    s.hear('Nova, tell us about Lisbon', 0, 1800); await flush(); // 1.9 s into the hold: the 19 held frames go out at once
+    expect(sent).toHaveLength(19);
+    await utter(s, 11, 20, true); // the rest of the 3 s answer
+    expect(sent).toHaveLength(30);
+    // The burst plays from the release (3.9 s) at 100 ms a frame and the rest queues behind it: the last frame plays at 6.8 s, not at
+    // 4.9 s when it was sent, so a microphone hears the last words back around 7 s (outside the window the send times alone would give).
+    s.hear('near the coast', 7000, 7700); await flush();
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(1);
+    expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['Nova, tell us about Lisbon']);
+  });
+
+  it('a short answer whose words arrive while it is held is still matched after its release: the words wait for the frames', async () => {
+    const s = await gateRuntime();
+    now = t0 + 2000;
+    await utter(s, 6, 1, true); // complete, held
+    s.fire('outputTranscript', { text: 'Two plus two is four', final: true }); // the provider flushes its words during the hold
+    s.hear('Nova, what is two plus two?', 0, 1700); await flush();
+    expect(sent).toHaveLength(6);
+    s.hear('two plus two is four', 3000, 3500); await flush(); // heard back while the burst plays
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(1);
   });
 });
 
