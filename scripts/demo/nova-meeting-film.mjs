@@ -926,10 +926,13 @@ async function scriptedFilm() {
   await hold(3000);
   await shotPng(vera, 's13b');
   await press(vera, confirmDelete);
-  await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 });
+  // Nova's messages are blanked one by one before the page moves on (about 20 s on the real call's chat store): played fast.
+  brisk(4);
+  await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 90000 });
+  normal();
   await hold(3000);
   skip();
-  await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 30000, 'Nova\'s words leaving Nora\'s chat');
+  await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 60000, 'Nova\'s words leaving Nora\'s chat');
   cut('full', [V('nora', 'chat-end')]);
   await hold(6000);
   await shotPng(nora, 's13c');
