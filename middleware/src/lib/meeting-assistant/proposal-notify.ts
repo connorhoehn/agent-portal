@@ -2,7 +2,8 @@
 //
 // The rules kept here:
 //   - Only a named person or the executor who has not answered, and who is not seated in the call, is told it needs them.
-//   - The asker and the executor are told when a proposal ends (done, failed, expired) and when Nova could not run it (a hand-back).
+//   - The asker and the executor are told when a proposal ends (done, failed, expired) and when Nova could not run it (a hand-back);
+//     an executor who is not in the call is told when everyone needed has consented and only their own click is left.
 //   - A notification's title names the call ("A proposal from the Auth Migration call needs you") and links to the meeting page. It
 //     carries no statement, reason or name of the proposal: the notification service cannot delete, and the inviter's delete must
 //     leave nothing behind. The call's name is its initiative's name, never anything said in it.
@@ -25,6 +26,7 @@ const ENDED_TITLES: Readonly<Record<'done' | 'failed' | 'expired', (label: CallL
   expired: (l) => `A proposal from ${l} expired without running`,
 };
 export const handBackTitle = (label: CallLabel): string => `Nova could not run a proposal from ${label}`;
+export const readyTitle = (label: CallLabel): string => `A proposal from ${label} is ready for you to run`;
 /** The portal's meeting page (minutes-service.ts `meetingPagePath`, kept here to avoid loading the minutes stack). */
 const meetingPage = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
 
@@ -86,13 +88,19 @@ export async function notifyHandBack(p: Proposal, label?: CallLabel): Promise<st
   return tellOnce(p, [p.executor], `back-${p.run!.at}`, 'meeting-proposal-handed-back', handBackTitle(label ?? await callLabelOf(p.callId)));
 }
 
+/** Everyone needed consented but the executor's own click is still to come, and they are not in the call: they are told, once. */
+export async function notifyReadyToRun(p: Proposal, seated: ReadonlySet<string>, label?: CallLabel): Promise<string[]> {
+  if (p.state !== 'consented' || p.run || seated.has(p.executor)) return [];
+  return tellOnce(p, [p.executor], 'ready', 'meeting-proposal-ready', readyTitle(label ?? await callLabelOf(p.callId)));
+}
+
 /** The call ended or Nova left: everyone still owed an answer who is not seated now is told. Never throws. */
 export async function notifyOpenProposals(store: AssistantStore, callId: string): Promise<number> {
   try {
     const seated = await seatedNow(callId);
     const label = await callLabelOf(callId, store);
     let n = 0;
-    for (const p of await store.listProposals(callId)) n += (await notifyProposalNeeds(p, seated, label)).length;
+    for (const p of await store.listProposals(callId)) n += (await notifyProposalNeeds(p, seated, label)).length + (await notifyReadyToRun(p, seated, label)).length;
     return n;
   } catch (e) { console.warn('[meeting-assistant] proposal notices failed', (e as Error).message); return 0; }
 }
@@ -104,5 +112,6 @@ export function hookProposalNotices(): void {
     if (how === 'created') { await notifyProposalNeeds(p, await seatedNow(p.callId)); return; }
     await notifyProposalEnded(p);
     await notifyHandBack(p);
+    if (p.state === 'consented' && !p.run) await notifyReadyToRun(p, await seatedNow(p.callId));
   });
 }

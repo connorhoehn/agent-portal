@@ -8,7 +8,7 @@ jest.mock('../../call-chat.js', () => ({ callChatRuntime: () => ({ seatedUsers: 
 jest.mock('../../../providers/projects.js', () => ({ getProject: async (id: string) => (id === 'p-auth' ? { id, name: 'Auth Migration' } : null) }));
 
 import { buildProposal } from '../proposals.js';
-import { callLabelOf, forgetProposalNotices, notifyHandBack, notifyOpenProposals, notifyProposalEnded, notifyProposalNeeds, owedBy } from '../proposal-notify.js';
+import { callLabelOf, forgetProposalNotices, notifyHandBack, notifyOpenProposals, notifyProposalEnded, notifyProposalNeeds, notifyReadyToRun, owedBy } from '../proposal-notify.js';
 import { MemoryAssistantStore } from '../store.js';
 import { setAssistantStore } from '../store-select.js';
 
@@ -83,4 +83,13 @@ it('a hand-back tells the executor, once per hand-back; a consented one waiting 
   expect(await notifyHandBack({ ...p, run: { ...run, at: 11 } })).toEqual(['u-ada']);
   expect(mockSent[0]!.input).toMatchObject({ title: 'Nova could not run a proposal from the Auth Migration call' });
   expect(JSON.stringify(mockSent)).not.toMatch(/smallest|not there|p1/);
+});
+
+it('an executor away from the call is told once when only their own click is left', async () => {
+  const p = { ...make(), state: 'consented' as const };
+  expect(await notifyReadyToRun(p, new Set(['u-ada']))).toEqual([]);
+  expect(await notifyReadyToRun({ ...p, state: 'open' }, new Set())).toEqual([]);
+  expect(await notifyReadyToRun(p, new Set())).toEqual(['u-ada']);
+  expect(await notifyReadyToRun(p, new Set())).toEqual([]);
+  expect(mockSent[0]!.input).toMatchObject({ title: 'A proposal from the Auth Migration call is ready for you to run' });
 });
