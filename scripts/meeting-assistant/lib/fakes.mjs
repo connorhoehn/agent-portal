@@ -33,6 +33,9 @@ const HEARD_RMS = 150;
  *
  *   dry.transcript  true (default) | false (heard nothing) | a string (a different text than was spoken)
  *   dry.reply       { text, frames }  a spoken answer: output text and that many voiced 100 ms frames, `delayMs` after (default 400)
+ *                   or { sentences: [{ text, frames }], pausesMs: [ms, ...] }  a long plain answer spoken as several sentences with a
+ *                   quiet pause between each two (the pauses taken in turn from `pausesMs`, default 400 to 700 ms); its words go out
+ *                   at once as one output transcript. With `dry.id` the voiced frames sent for it are counted in `seen.voicedFor[id]`.
  *   dry.call        { name, args }    a delegation, the voice's short acknowledgement, then the function call; the output comes back as `response.item.create`
  *   dry.delegate    true              the reply is worked out by the second model: a delegation and an acknowledgement first, the reply `delayMs` later
  *   dry.ack         { text, frames } | false  what the voice says as it hands the work over (default "One moment.", 8 frames)
@@ -67,7 +70,7 @@ export function wordDeltas(text, startMs, endMs) {
 export class FakeProvider {
   constructor({ port }) {
     this.port = port; this.entries = []; this.echoes = []; this.t0Wall = 0; this.connections = 0; this.live = new Set();
-    this.seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0, voicedSent: 0, silentSent: 0, replies: [], calls: [], deltas: 0, cuts: 0, hangups: 0, unheard: 0, startedAt: [], instructions: [], remarks: 0, firstVoicedAt: [] };
+    this.seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0, voicedSent: 0, silentSent: 0, voicedFor: {}, replies: [], calls: [], deltas: 0, cuts: 0, hangups: 0, unheard: 0, startedAt: [], instructions: [], remarks: 0, firstVoicedAt: [] };
     this.replySpans = new Map(); // dry.id -> { startMs, endMs, text } on the connection that spoke it
     this.wss = null;
   }
@@ -93,7 +96,7 @@ export class FakeProvider {
 
   onConnection(ws) {
     this.connections += 1; this.live.add(ws);
-    const st = { audioMs: 0, anchor: 0, speaking: 0, outSeq: 0, openedAt: Date.now(), calls: new Map(), callNo: 0, sentCalls: 0, rms: [] };
+    const st = { audioMs: 0, anchor: 0, speaking: 0, script: [], outSeq: 0, openedAt: Date.now(), calls: new Map(), callNo: 0, sentCalls: 0, rms: [] };
     const silent = Buffer.alloc(4800).toString('base64');
     const tone = Buffer.alloc(4800); for (let i = 0; i < 2400; i += 1) tone.writeInt16LE(Math.round(3000 * Math.sin((2 * Math.PI * 330 * i) / 24000)), i * 2);
     const voiced = tone.toString('base64');
@@ -106,6 +109,19 @@ export class FakeProvider {
       outputText(text, frames, st.audioMs);
       if (id) this.replySpans.set(id, { startMs: st.audioMs, endMs: st.audioMs + frames * 100, text, conn: this.connections });
       st.speaking += frames; this.seen.replies.push(text.slice(0, 40));
+    };
+    /** A long answer: its words at once, then each sentence's voiced frames with a quiet pause between sentences (one frame per input frame). */
+    const speakSentences = (reply, id) => {
+      const pauses = reply.pausesMs?.length ? reply.pausesMs : [400, 550, 700, 450];
+      const text = reply.sentences.map((x) => x.text).join(' ');
+      const frames = [];
+      reply.sentences.forEach((x, i) => {
+        for (let k = 0; k < (x.frames ?? 30); k += 1) frames.push({ voiced: true, id });
+        if (i < reply.sentences.length - 1) for (let k = 0; k < Math.round(pauses[i % pauses.length] / 100); k += 1) frames.push({ voiced: false });
+      });
+      outputText(text, frames.length, st.audioMs);
+      if (id) this.replySpans.set(id, { startMs: st.audioMs, endMs: st.audioMs + frames.length * 100, text, conn: this.connections });
+      st.script.push(...frames); this.seen.replies.push(text.slice(0, 40));
     };
     /** Voice first, words after (the real provider's order): returns what sends the transcript, for the caller to send later. */
     const voiceFirst = (text, frames, mark) => {
@@ -157,7 +173,8 @@ export class FakeProvider {
             send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message', id: itemId } } });
             later(600, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
           });
-        } else if (dry.reply) later(dry.delayMs ?? 400, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
+        } else if (dry.reply?.sentences) later(dry.delayMs ?? 400, () => speakSentences(dry.reply, dry.id));
+        else if (dry.reply) later(dry.delayMs ?? 400, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
         if (dry.call) {
           // The model begins working the moment it has heard the request: the delegation event comes then, and its function call
           // reaches the server `delayMs` later (the paid run saw the two apart, never together).
@@ -203,7 +220,11 @@ export class FakeProvider {
         st.outSeq += 1;
         if (st.speaking > 0 && st.markFirst) { st.markFirst = false; this.seen.firstVoicedAt.push(Date.now()); }
         if (st.speaking > 0) { st.speaking -= 1; this.seen.voicedSent += 1; send({ type: 'session.output_audio.delta', delta: voiced, event_id: `out_${st.outSeq}` }); }
-        else { this.seen.silentSent += 1; send({ type: 'session.output_audio.delta', delta: silent, event_id: `out_${st.outSeq}` }); }
+        else if (st.script.length && st.script[0].voiced) {
+          const { id } = st.script.shift();
+          this.seen.voicedSent += 1; if (id) this.seen.voicedFor[id] = (this.seen.voicedFor[id] ?? 0) + 1;
+          send({ type: 'session.output_audio.delta', delta: voiced, event_id: `out_${st.outSeq}` });
+        } else { if (st.script.length) st.script.shift(); this.seen.silentSent += 1; send({ type: 'session.output_audio.delta', delta: silent, event_id: `out_${st.outSeq}` }); }
         { let sum = 0; const n = buf.length / 2; for (let i = 0; i < n; i += 1) { const v = buf.readInt16LE(i * 2); sum += v * v; } st.rms.push(Math.sqrt(sum / Math.max(1, n))); }
         st.audioMs += (buf.length / 2 / 24000) * 1000;
       } else if (ev.type === 'response.item.create') {
