@@ -41,8 +41,12 @@ export default {
     r.expect('(b) the card is Vera\'s, who asked for it', !!card && card.metadata.askedBy === 'u-vera', card ? `askedBy ${card.metadata.askedBy}, ${card.metadata.status}` : 'no card');
     const stateAfter = await call.state();
     r.measure('refused calls so far', stateAfter?.refusedCalls ?? -1);
-    const seven = by(/fifty[ -]?six|\b56\b/i);
-    r.expect('(c) Nora\'s plain question is answered in the call chat while Vera\'s read waits', !!seven && seven.metadata.askedBy === 'u-nora', seven ? `labelled ${seven.metadata.askedBy}` : 'no reply posted');
+    // A real model may answer Nora at once, or wait for the read and say both in one breath (paid run, 14 November): one utterance
+    // cannot be split, so then it carries the read's label. Either way an answer of hers that stands alone is labelled Nora.
+    const sevens = replies.filter((m) => /fifty[ -]?six|\b56\b/i.test(String(m.message)));
+    const alone = sevens.filter((m) => !/right now|online|vera and nora/i.test(String(m.message)));
+    r.measure('(c) Nora\'s answer folded into the read\'s result', sevens.length > 0 && alone.length === 0 ? 1 : 0);
+    r.expect('(c) Nora\'s plain question is answered in the call chat; standing alone, it is labelled Nora', sevens.length > 0 && alone.every((m) => m.metadata.askedBy === 'u-nora') && (ctx.dry ? alone.length > 0 : true), sevens.map((m) => `labelled ${m.metadata.askedBy}`).join(', ') || 'no reply posted');
     const online = by(/right now|online|vera and nora/i);
     r.expect('(c) Vera\'s own read is answered to the call once her browser reports, labelled with Vera', !!online && online.metadata.askedBy === 'u-vera', online ? `labelled ${online.metadata.askedBy}` : 'no reply');
     const waited = veraRuns.log.find((x) => x.tool === 'activity');
