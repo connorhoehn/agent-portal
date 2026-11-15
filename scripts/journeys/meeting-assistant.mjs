@@ -23,6 +23,8 @@
 //   R1 to R4 (Nova invited back, run after 13b): a third person joins again; "Invite Nova again" beside the left chip on one footer line
 //     with three people; the inviter uses it, the chat says Nova is back, the others owe the acknowledgement again and their words are
 //     not kept until they give it; something is said; Nova is dismissed; the minutes hold both periods, the earlier items in place.
+//   R3b, R5: the second person's live transcript stays open across that dismissal; Nova is invited back a third time, the view listens
+//     again, and when Nova leaves again the line said just before is read into it (one more read after every leave, not only the first).
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -1814,6 +1816,15 @@ async function main() {
       return 'before: absent; after: stored; page note shown';
     });
 
+    await step('R3b: the second person opens the live transcript from Nova\'s menu in the second period; it stays open through R4 and R5', async () => {
+      await novaMenu(nora, /Show transcript/);
+      await seen(nora.page, 'live-transcript');
+      const head = (await nora.page.getByTestId('live-transcript-panel').locator('header').first().innerText()).replace(/\s+/g, ' ').trim();
+      check(/^Live transcript/.test(head) && /Nova is listening/.test(head), `the transcript's header reads "${head}"`);
+      await waitFor(async () => Number(await nora.page.getByTestId('live-transcript').getAttribute('data-lines')) > 0, 10000, 'the stored lines in the second person\'s transcript');
+      return `"${head}"`;
+    });
+
     await step('R4: Nova is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Nova added to them', async () => {
       await novaMenu(vera, 'Dismiss Nova for everyone');
       await vera.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
@@ -1837,6 +1848,34 @@ async function main() {
       check(await veraM.page.getByTestId('meeting-addition-note').count() === 0, 'the meeting page still says Nova is back');
       for (const width of [1440, 1280]) await shot(veraM.page, 'R4-meeting-both-periods', width);
       return `${rejoinBefore.length} earlier items in place, ${items.length - rejoinBefore.length} added; "${m.summaryLead.slice(0, 120)}"`;
+    });
+
+    await step('R5: the second person\'s transcript, open since the second period, says Nova left; Nova invited back a third time, it listens again; she acknowledges, says a line and dismisses Nova at once: after Nova has left the view shows that line (the read after a leave is made again in a later period)', async () => {
+      const panel = nora.page.getByTestId('live-transcript-panel');
+      const head = async () => (await panel.locator('header').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+      check(await nora.page.getByTestId('live-transcript').isVisible(), 'the second person\'s live transcript closed with the dismissal');
+      await waitFor(async () => /Nova has left; this is what it heard/.test(await head()), 20000, 'the open transcript saying Nova has left');
+      await vera.page.getByTestId('nova-invite-again').click();
+      await waitMark(vera.page, /^Nova is listening$/, 20000);
+      await waitFor(async () => /Nova is listening/.test(await head()), 20000, 'the open transcript listening again');
+      await seen(nora.page, 'nova-notice', 20000);
+      await nora.page.getByTestId('nova-notice-acknowledge').click();
+      await gone(nora.page, 'nova-notice');
+      const last = `Third period: the rollout note goes out with build ${Date.now() % 100000}.`;
+      await inject(NORA.userId, last);
+      check(await stored(vera, last, 10000), 'the line before the third dismissal was not stored');
+      await novaMenu(nora, 'Dismiss Nova for everyone');
+      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
+      await seen(nora.page, 'nova-left', 20000);
+      await panel.locator('[data-seg-index]').filter({ hasText: last }).waitFor({ state: 'visible', timeout: 10000 })
+        .catch(() => { throw new StepFailure('after Nova left again the open transcript never showed the last line said before'); });
+      const after = await head();
+      check(/Nova has left; this is what it heard/.test(after), `after the third dismissal the transcript's header reads "${after}"`);
+      await waitFor(async () => { const r = await (await vera.api.get(asApi(vera, 'minutes'))).json(); return r.additions === 2 ? r : null; }, 30000, 'the minutes being added to for the third period');
+      await nora.page.getByTestId('live-transcript-back').click();
+      await gone(nora.page, 'live-transcript');
+      await seen(nora.page, 'huddle-thread');
+      return `"${after}"; the last line shown after the leave`;
     });
 
     await step('14: a person who was not in the call gets a not-found page and a 404 from both API routes', async () => {

@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AssistantPhase } from './meetingAssistantModel';
 import {
-  livePlan, liveAfterUrl, liveTailUrl, mergeLines, mergeSpeakers, newestSeq, oldestSeq, type LiveLine, type LiveSpeaker,
+  LIVE_READS_START, livePlan, liveAfterUrl, liveTailUrl, mergeLines, mergeSpeakers, newestSeq, oldestSeq, readEnded, readStarted, readToStart,
+  readsAtPhase, type LiveLine, type LiveReads, type LiveSpeaker,
 } from './liveTranscriptModel.ts';
 
 let shown: string | null = null;
@@ -57,9 +58,13 @@ export function useLiveTranscript(callId: string | null, on: boolean, phase: Ass
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [finalRead, setFinalRead] = useState(false);
+  /** Bumped when a read comes back, so a final read that waited for it starts. */
+  const [readsDone, setReadsDone] = useState(0);
   const generation = useRef(0);
   const held = useRef<LiveLine[]>([]);
-  const inFlight = useRef(false);
+  const reads = useRef<LiveReads>(LIVE_READS_START);
+  const phaseNow = useRef(phase);
+  phaseNow.current = phase;
 
   const take = useCallback((answer: Answer, mode: 'tail' | 'after' | 'earlier') => {
     const next = mergeLines(held.current, answer.lines ?? []);
@@ -74,38 +79,49 @@ export function useLiveTranscript(callId: string | null, on: boolean, phase: Ass
   useEffect(() => {
     generation.current += 1;
     const mine = generation.current;
-    held.current = []; inFlight.current = false;
+    held.current = []; reads.current = readsAtPhase(LIVE_READS_START, phaseNow.current);
     setLines([]); setSpeakers(new Map()); setSince(null); setEarlier(false); setLoaded(false); setError(null); setFinalRead(false);
     if (!on || !callId) return;
     read(liveTailUrl(callId)).then((a) => { if (mine === generation.current) { take(a, 'tail'); setLoaded(true); } })
       .catch((e: unknown) => { if (mine === generation.current) { setError(e instanceof Error ? e.message : String(e)); setLoaded(true); } });
   }, [callId, on, take]);
 
+  // Nova's phase moved: a new listening period forgets the last final read; leaving owes one (liveTranscriptModel.ts).
+  useEffect(() => {
+    reads.current = readsAtPhase(reads.current, phase);
+    setFinalRead(reads.current.final === 'done');
+  }, [phase]);
+
   const plan = livePlan(on && loaded, phase, finalRead);
-  const pollOnce = useCallback(async (mine: number) => {
-    if (!callId || inFlight.current) return;
-    inFlight.current = true;
+  const readAfter = useCallback(async (mine: number, kind: 'poll' | 'final') => {
+    if (!callId) return;
+    reads.current = readStarted(reads.current, kind);
     try {
       const a = await read(liveAfterUrl(callId, newestSeq(held.current)));
       if (mine === generation.current) take(a, 'after');
     } catch (e) {
       if (mine === generation.current) setError(e instanceof Error ? e.message : String(e));
-    } finally { inFlight.current = false; }
+    } finally {
+      if (mine === generation.current) {
+        reads.current = readEnded(reads.current);
+        setFinalRead(reads.current.final === 'done');
+        setReadsDone((n) => n + 1);
+      }
+    }
   }, [callId, take]);
 
   const everyMs = plan.kind === 'poll' ? plan.everyMs : 0;
   useEffect(() => {
     if (!everyMs) return;
     const mine = generation.current;
-    const timer = setInterval(() => void pollOnce(mine), everyMs);
+    const timer = setInterval(() => { if (readToStart(reads.current, true) === 'poll') void readAfter(mine, 'poll'); }, everyMs);
     return () => clearInterval(timer);
-  }, [everyMs, pollOnce]);
-  // Nova left: one more read for the last lines it stored, then nothing.
+  }, [everyMs, readAfter]);
+  // Nova left: one more read for the last lines it stored (after a poll still out comes back), then nothing until a new period.
   useEffect(() => {
-    if (plan.kind !== 'final') return;
-    const mine = generation.current;
-    void pollOnce(mine).finally(() => { if (mine === generation.current) setFinalRead(true); });
-  }, [plan.kind, pollOnce]);
+    if (!on || !loaded) return;
+    if (readToStart(reads.current, false) === 'final') void readAfter(generation.current, 'final');
+  }, [on, loaded, phase, readsDone, readAfter]);
 
   const loadEarlier = useCallback(() => {
     const before = oldestSeq(held.current);

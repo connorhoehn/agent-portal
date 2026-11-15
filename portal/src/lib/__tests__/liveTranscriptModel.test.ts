@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_TAIL, liveAfterUrl, livePlan, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
-  newestSeq, oldestSeq, type LiveLine,
+  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_READS_START, LIVE_TAIL, liveAfterUrl, livePlan, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
+  newestSeq, oldestSeq, readEnded, readStarted, readToStart, readsAtPhase, type LiveLine, type LiveReads,
 } from '../liveTranscriptModel.ts';
 import { liveTranscriptOn, setLiveTranscript } from '../liveTranscript.ts';
 
@@ -61,3 +61,47 @@ test('the view is on for one call at a time and turns off per call', () => {
   setLiveTranscript('c1', false);
   assert.equal(liveTranscriptOn('c1'), false);
 });
+
+test('Nova invited back and leaving again: the new period forgets the last final read, so the second leave reads once more', () => {
+  let r: LiveReads = readsAtPhase(LIVE_READS_START, 'listening');
+  r = readsAtPhase(r, 'left');
+  assert.equal(readToStart(r, false), 'final');
+  r = readEnded(readStarted(r, 'final'));
+  assert.equal(r.final, 'done');
+  assert.equal(readToStart(r, true), null); // nothing more while Nova is away
+  r = readsAtPhase(r, 'invited'); // a second listening period
+  assert.equal(r.final, 'none');
+  assert.equal(readToStart(r, true), 'poll');
+  r = readsAtPhase(readsAtPhase(r, 'listening'), 'paused');
+  assert.equal(r.final, 'none');
+  r = readsAtPhase(readsAtPhase(r, 'listening'), 'left');
+  assert.equal(readToStart(r, false), 'final'); // the second leave is read too
+  r = readEnded(readStarted(r, 'final'));
+  assert.equal(r.final, 'done');
+  assert.equal(livePlan(true, 'left', r.final === 'done').kind, 'done');
+});
+
+test('a poll in flight as Nova leaves: the final read waits for it, then is made (that poll may predate her last lines)', () => {
+  let r: LiveReads = readsAtPhase(LIVE_READS_START, 'listening');
+  assert.equal(readToStart(r, true), 'poll');
+  r = readStarted(r, 'poll');
+  r = readsAtPhase(r, 'left');
+  assert.equal(r.final, 'owed');
+  assert.equal(readToStart(r, false), null); // one read at a time: wait for the poll
+  r = readEnded(r);
+  assert.equal(r.final, 'owed'); // the poll that came back was not the final read
+  assert.equal(readToStart(r, false), 'final');
+  r = readEnded(readStarted(r, 'final'));
+  assert.equal(r.final, 'done');
+});
+
+test('a final read still out when Nova is invited back again counts as a poll: the next leave is still read', () => {
+  let r: LiveReads = readsAtPhase(readsAtPhase(LIVE_READS_START, 'listening'), 'left');
+  r = readStarted(r, 'final');
+  r = readsAtPhase(r, 'listening');
+  r = readsAtPhase(r, 'left');
+  r = readEnded(r);
+  assert.equal(r.final, 'owed');
+  assert.equal(readToStart(r, false), 'final');
+});
+

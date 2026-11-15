@@ -34,6 +34,36 @@ export function livePlan(on: boolean, phase: AssistantPhase, finalRead: boolean)
   return { kind: 'done' };
 }
 
+/**
+ * The hook's reads after the first, one at a time: `out` is the read in flight, `final` the read after Nova left (owed, or made).
+ * A call can have several listening periods (Nova invited back), so a new period (invited, listening or paused) forgets the last
+ * final read and leaving again owes another. A poll still out when Nova leaves is waited for, then the final read is made: that
+ * poll's answer may have been written before her last lines were stored.
+ */
+export interface LiveReads { out: 'poll' | 'final' | null; final: 'none' | 'owed' | 'done' }
+export const LIVE_READS_START: LiveReads = { out: null, final: 'none' };
+
+/** Nova's phase is now `phase`. A final read still out when a new period begins counts as an ordinary poll. */
+export function readsAtPhase(r: LiveReads, phase: AssistantPhase): LiveReads {
+  if (phase === 'left') return r.final === 'none' ? { ...r, final: 'owed' } : r;
+  if (phase === 'invited' || phase === 'listening' || phase === 'paused') {
+    return r.final === 'none' && r.out !== 'final' ? r : { out: r.out === 'final' ? 'poll' : r.out, final: 'none' };
+  }
+  return r;
+}
+
+/** The read to start now, if any: the owed final read once nothing is out; a due poll only when nothing is out and none is owed. */
+export function readToStart(r: LiveReads, pollDue: boolean): 'poll' | 'final' | null {
+  if (r.out) return null;
+  if (r.final === 'owed') return 'final';
+  return pollDue && r.final === 'none' ? 'poll' : null;
+}
+
+export const readStarted = (r: LiveReads, kind: 'poll' | 'final'): LiveReads => ({ ...r, out: kind });
+
+/** The read in flight came back (or failed): when it was the owed final read, that read is made. */
+export const readEnded = (r: LiveReads): LiveReads => ({ out: null, final: r.out === 'final' && r.final === 'owed' ? 'done' : r.final });
+
 /** New lines after what is held, oldest first, each seq once (a poll that overlaps a slow earlier one adds nothing twice). */
 export function mergeLines(held: readonly LiveLine[], incoming: readonly LiveLine[]): LiveLine[] {
   if (!incoming.length) return held as LiveLine[];
