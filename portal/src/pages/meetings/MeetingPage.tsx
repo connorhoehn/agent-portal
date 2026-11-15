@@ -21,7 +21,6 @@ import { useFetch } from '../../hooks/useFetch';
 import { sendJson } from '../../lib/writeJson';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
-import { newWorkItemHref } from '../projects/initiativeNavigation';
 import { proposalPrompt } from '../../components/shell/NovaProposalAsk';
 import { MeetingTurnRunner } from '../../components/shell/MeetingTurnRunner';
 import { answerProposal, raiseProposalAgain } from '../../lib/meetingAssistant';
@@ -32,7 +31,7 @@ import {
 } from '../../lib/meetingProposals';
 import {
   actionStatus, actionWaitsOn, canCreateFor, decisionRows, goneCopy, headerMeta, minutesWritten, orderProposals, proposalClosed, proposalPill,
-  quietMeta, summaryOf, actionText, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
+  quietMeta, summaryOf, actionText, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl, createWorkItemUrl, workItemLink,
   MINUTES_UNAVAILABLE, type DecisionRow, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
@@ -43,6 +42,27 @@ function PortalLink({ href, children, testId }: { href: string; children: ReactN
   const navigate = useNavigate();
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } };
   return <T size="sm"><Link href={href} onClick={onClick} {...(testId ? { 'data-testid': testId } : {})}>{children}</Link></T>;
+}
+
+/**
+ * "Create work item" on an action item: the server makes it on the meeting's initiative and records it, so the row then says so with
+ * its link. A refusal is said beside the button.
+ */
+function CreateWorkItem({ callId, index, onDone, testId }: { callId: string; index: number; onDone: () => void; testId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const create = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true); setError(null);
+    void sendJson(createWorkItemUrl(callId, index), 'POST').then(onDone, (err: unknown) => setError(err instanceof Error ? err.message : String(err))).finally(() => setBusy(false));
+  };
+  return (
+    <Inline gap="xs" align="center" wrap={false} className="min-w-0">
+      <Button variant="link" size="sm" disabled={busy} onClick={create} data-testid={testId}>Create work item</Button>
+      {error && <T size="sm" tone="danger" truncate title={error} role="alert">{error}</T>}
+    </Inline>
+  );
 }
 
 /** The initiative's name, read once per id; "—" until known or when there is none. */
@@ -220,8 +240,12 @@ export default function MeetingPage() {
     { key: 'text', header: 'Action', truncate: true, wrap: 'two-lines', render: (i) => <T size="sm">{actionText(i.text)}</T> },
     { key: 'owner', header: 'Owner', width: '200px', render: (i) => (i.ownerName ? <PersonName face={facesFor([i.ownerName], people)[0]!} /> : <T size="sm" tone="secondary">Nobody named</T>) },
     { key: 'status', header: 'Status', width: '168px', render: (i) => { const s = actionStatus(i); return <StatusPill tone={s.tone} label={s.label} size="sm" data-testid="meeting-action-status" />; } },
-    { key: 'create', header: '', width: '160px', render: (i) => (m.initiativeId && canCreateFor(i, viewer) && !i.workItemCreated
-      ? <PortalLink href={newWorkItemHref(m.initiativeId, i.text)} testId="meeting-create-work-item">Create work item</PortalLink> : null) },
+    { key: 'create', header: '', width: '160px', render: (i) => {
+      const href = workItemLink(i);
+      if (href) return <PortalLink href={href} testId="meeting-work-item-link">Open work item</PortalLink>;
+      return m.initiativeId && canCreateFor(i, viewer) && !i.workItemCreated
+        ? <CreateWorkItem callId={callId} index={m.actionItems.indexOf(i)} onDone={minutes.refresh} testId="meeting-create-work-item" /> : null;
+    } },
   ];
 
   return (
@@ -256,7 +280,7 @@ export default function MeetingPage() {
                 {waitingItems.map((i) => (
                   <Inline key={`${i.text}|${i.ownerUserId ?? ''}`} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
                     <T size="sm" truncate className="min-w-0" title={actionText(i.text)}>{actionText(i.text)}</T>
-                    <PortalLink href={newWorkItemHref(m.initiativeId!, i.text)} testId="meeting-needs-create">Create work item</PortalLink>
+                    <CreateWorkItem callId={callId} index={m.actionItems.indexOf(i)} onDone={minutes.refresh} testId="meeting-needs-create" />
                   </Inline>
                 ))}
               </Stack>

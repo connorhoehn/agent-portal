@@ -25,8 +25,21 @@ export interface MeetingListRow {
   people?: Array<{ name: string; avatarUrl: string | null }>;
 }
 
-/** `workItemCreated`: the server says its work item exists (done in the call, or its card was carried out); absent from an older server. */
-export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean; workItemCreated?: boolean }
+/**
+ * `workItemCreated`: the server says its work item exists (done in the call, its card was carried out, or it was made from the meeting
+ * page); absent from an older server. `workItemHref`: the server's link to the one made from the meeting page, else null or absent.
+ */
+export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean; workItemCreated?: boolean; workItemHref?: string | null }
+
+/** The route that makes an action item's work item (the server creates it and records it once). */
+export const createWorkItemUrl = (callId: string, index: number): string =>
+  `/api/calls/${encodeURIComponent(callId)}/assistant/minutes/action-items/${index}/work-item`;
+
+/** The server's link to an action item's work item, only when it is the portal's own work-item page; anything else is no link. */
+export function workItemLink(i: MinutesActionItem): string | null {
+  const href = i.workItemHref;
+  return typeof href === 'string' && /^\/iq\/projects\/[^/?#]+\?tab=work&item=[^&#/]+$/.test(href) ? href : null;
+}
 /** `avatarUrl`: the person's portrait from the server; null or absent draws initials. */
 export interface MinutesPerson { userId: string; name: string; avatarUrl?: string | null }
 

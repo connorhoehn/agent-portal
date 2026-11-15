@@ -5,7 +5,14 @@ const mockConfig = { region: 'us-east-1', auth: { sessionSigningSecretArn: '' },
 jest.mock('../../config.js', () => ({ config: mockConfig }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/projects.js', () => ({ getProject: jest.fn() }));
-jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
+const mockCreated: Array<{ projectId: string; title: string }> = [];
+jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn(), createWorkItem: jest.fn(async (input: { projectId: string; title: string }) => { mockCreated.push(input); return { id: `wi-${mockCreated.length}`, ...input }; }) }));
+const mockStewards = new Set<string>();
+jest.mock('../../lib/initiative-scope.js', () => ({ ...jest.requireActual('../../lib/initiative-scope.js'),
+  requireInitiativeScope: async (req: { session?: { sub: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }) => {
+    if (req.session && mockStewards.has(req.session.sub)) return true; res.status(403).json({ code: 'NOT_ON_INITIATIVE' }); return false; } }));
+jest.mock('../../lib/work-graph/live.js', () => ({ notifyWorkGraphChanged: jest.fn(async () => undefined) }));
+const mockDispatchers = new Set<string>();
 const mockInviters = new Set<string>();
 jest.mock('../../lib/authz.js', () => ({
   resolveSession: (req: { session?: unknown }) => req.session,
@@ -13,7 +20,7 @@ jest.mock('../../lib/authz.js', () => ({
   requireTenant: (tenant: string) => (req: { session?: { tenant: string; role: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) =>
     (req.session?.tenant === tenant || req.session?.role === 'admin' ? next() : res.status(403).json({ error: 'Forbidden' })),
   requireAction: (action: string) => (req: { session?: { sub: string } }, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) =>
-    (action === 'InviteMeetingAssistant' && req.session && mockInviters.has(req.session.sub) ? next() : res.status(403).json({ error: 'Forbidden', action })),
+    ((action === 'InviteMeetingAssistant' ? mockInviters : action === 'DispatchAgentRun' ? mockDispatchers : new Set()).has(req.session?.sub ?? '') ? next() : res.status(403).json({ error: 'Forbidden', action })),
 }));
 const ledger: Array<Record<string, unknown>> = [];
 const mockBell: Array<{ users: string[]; input: { type: string; title: string; action?: { href: string }; payload?: Record<string, unknown> } }> = [];
@@ -75,6 +82,8 @@ beforeEach(async () => {
   clock = Date.parse('2026-11-13T12:00:00.000Z'); ledger.length = 0; mockBell.length = 0;
   mockConfig.meetingAssistant.enabled = true; mockConfig.mock.aurora = true;
   mockInviters.clear(); mockInviters.add('alice'); mockInviters.add('bob');
+  mockCreated.length = 0; mockDispatchers.clear(); mockStewards.clear();
+  for (const u of ['alice', 'bob', 'carol']) { mockDispatchers.add(u); mockStewards.add(u); }
   const masked = mk('alice', { act: { sub: 'root', epoch: 0 } } as Partial<Session>);
   sessions = new Map([...['alice', 'bob', 'carol', 'dave'].map((u) => [u, mk(u)] as const), ['root', mk('root', { role: 'admin' })], ['masked', masked],
     ['eve', mk('eve', { tenant: 'assessment', role: 'assessor', grants: { assessment: ['assessor'] } })]]);
@@ -110,7 +119,7 @@ describe('writing the minutes', () => {
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, \d{1,2} [A-Z][a-z]{2}$/), writer: 'scripted', lineCount: 3, youAreInviter: true });
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.'].map((d) => d));
-    expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker', workItemCreated: false }, { text: 'update the runbook', workItemCreated: false }]));
+    expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker', workItemCreated: false, workItemHref: null }, { text: 'update the runbook', workItemCreated: false, workItemHref: null }]));
     // The summary is a lead and bullets, sent split as well; never a speaker-by-speaker echo.
     expect(m.summary).not.toMatch(/said:/);
     expect(m.summaryLead).toBe('Two people met for under a minute.');
@@ -477,5 +486,61 @@ describe('what the meeting page is told', () => {
     const row = async (user: string) => (await meetings(user)).body.meetings[0];
     expect((await row('bob')).waitingOnYou).toBe(1);
     expect((await row('alice')).waitingOnYou).toBe(0);
+  });
+});
+
+describe('a work item made from the meeting page', () => {
+  const CW = 'call-wi';
+  const make = (index: number, user = 'alice') => request(app).post(url(`minutes/action-items/${index}/work-item`, CW)).set('x-user', user).send({});
+  const items = async (user = 'alice') => (await request(app).get(url('minutes', CW)).set('x-user', user)).body.actionItems as Array<{ text: string; workItemCreated: boolean; workItemHref: string | null }>;
+  beforeEach(async () => {
+    const store = assistantStore();
+    await store.create({ callId: CW, tenant: 'orgiq', lobby: 'orgiq:initiative:p-auth', initiativeId: 'p-auth', state: 'left', invitedBy: 'alice', invitedAt: clock - 60_000, pausedBy: null, leftAt: clock,
+      leftBy: 'alice', acked: ['alice', 'bob'], attendees: ['alice', 'bob'], presentAtInvite: ['alice', 'bob'], requests: 0, linesStored: 2, nextSeq: 3, pendingRequests: [] });
+    await store.putMinutes({ callId: CW, tenant: 'orgiq', lobby: 'orgiq:initiative:p-auth', initiativeId: 'p-auth', callName: 'Auth sync', startedAt: clock - 60_000, endedAt: clock,
+      invitedBy: 'alice', attendees: ['alice', 'bob'], summary: 'Two people met.', decisions: [], topics: [], lineCount: 2, truncated: false, writer: 'scripted', createdAt: clock,
+      actionItems: [{ text: 'update the runbook' }, { text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker' }] });
+  });
+
+  it('creates it on the meeting\'s initiative, and the page then reads "created" with a link built on the server', async () => {
+    expect((await items()).map((i) => [i.workItemCreated, i.workItemHref])).toEqual([[false, null], [false, null]]);
+    const r = await make(0);
+    expect(r.status).toBe(201);
+    expect(r.body).toEqual({ index: 0, created: true, workItemCreated: true, workItemHref: '/iq/projects/p-auth?tab=work&item=wi-1' });
+    expect(mockCreated).toEqual([expect.objectContaining({ projectId: 'p-auth', title: 'update the runbook', type: 'story' })]);
+    for (const user of ['alice', 'bob']) {
+      expect((await items(user)).map((i) => [i.text, i.workItemCreated, i.workItemHref])).toEqual([['update the runbook', true, '/iq/projects/p-auth?tab=work&item=wi-1'], ['rehearse the rollback', false, null]]);
+    }
+    // The stored id never leaves the server as a field of its own.
+    expect(JSON.stringify(await items())).not.toMatch(/workItemId/);
+  });
+
+  it('pressing it twice is a no-op: one work item, the same link', async () => {
+    await make(0);
+    const again = await make(0, 'bob');
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ created: false, workItemHref: '/iq/projects/p-auth?tab=work&item=wi-1' });
+    expect(mockCreated).toHaveLength(1);
+    expect(await assistantStore().setActionItemWorkItem(CW, 0, 'wi-other')).toBe(false);
+    expect((await items())[0]!.workItemHref).toBe('/iq/projects/p-auth?tab=work&item=wi-1');
+  });
+
+  it('only someone who was there may, with the same gates as creating work anywhere, and only for an item that is theirs or nobody\'s', async () => {
+    expect((await make(0, 'carol')).status).toBe(404); // not in the call (carol could create work on the initiative)
+    expect((await make(0, 'eve')).status).toBe(403); // another tenant
+    expect((await make(0, 'masked')).status).toBe(403); // masquerading
+    expect((await make(1, 'alice')).status).toBe(403); // Bob's item
+    expect((await make(9, 'alice')).status).toBe(404);
+    mockDispatchers.delete('alice');
+    expect((await make(0, 'alice')).status).toBe(403);
+    mockDispatchers.add('alice'); mockStewards.delete('alice');
+    expect(await make(0, 'alice')).toMatchObject({ status: 403, body: { code: 'NOT_ON_INITIATIVE' } });
+    expect(mockCreated).toHaveLength(0);
+    expect((await items()).every((i) => !i.workItemCreated)).toBe(true);
+    // After a delete nobody can.
+    await request(app).delete(url('minutes', CW)).set('x-user', 'alice');
+    mockStewards.add('alice');
+    expect((await make(0, 'alice')).status).toBe(404);
+    expect(mockCreated).toHaveLength(0);
   });
 });

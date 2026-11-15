@@ -110,6 +110,8 @@ export interface AssistantStore {
   listRetryableMinutes(maxAttempts: number, limit: number): Promise<MinutesRecord[]>;
   /** Mark the attendees as told the minutes are ready; true only for the first caller (so the bell rings once, also across a restart). */
   claimMinutesNotice(callId: string, at: number): Promise<boolean>;
+  /** Record the work item made for action item `index` of live minutes, only when that item has none yet. True when recorded. */
+  setActionItemWorkItem(callId: string, index: number, workItemId: string): Promise<boolean>;
   /** Delete minutes and tombstones created at or before `cutoffMs`. Returns how many went. */
   sweepMinutes(cutoffMs: number): Promise<number>;
   /** Record a proposal; an existing (call, id) is returned as it is with `created: false`. */
@@ -365,6 +367,14 @@ export class MemoryAssistantStore implements AssistantStore {
     const m = this.minutes.get(callId);
     if (!m || m.deleted || m.notifiedAt) return false;
     m.notifiedAt = at;
+    return true;
+  }
+
+  async setActionItemWorkItem(callId: string, index: number, workItemId: string) {
+    const m = this.minutes.get(callId);
+    const item = m && !m.deleted ? m.actionItems[index] : undefined;
+    if (!item || item.workItemId) return false;
+    item.workItemId = workItemId;
     return true;
   }
 

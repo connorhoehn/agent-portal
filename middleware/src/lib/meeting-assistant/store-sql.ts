@@ -476,6 +476,17 @@ export class SqlAssistantStore implements AssistantStore {
     return rows.length > 0;
   }
 
+  async setActionItemWorkItem(callId: string, index: number, workItemId: string) {
+    // One conditional update inside the jsonb list (no column needed; an older row's items simply lack the key): two presses at once
+    // record one id.
+    const rows = await this.exec(
+      `UPDATE meeting_minutes SET action_items = jsonb_set(action_items, ARRAY[:idx::text, 'workItemId'], to_jsonb(:wid::text))
+       WHERE call_id = :call AND deleted_at IS NULL AND jsonb_typeof(action_items -> :idx::int) = 'object' AND (action_items -> :idx::int ->> 'workItemId') IS NULL RETURNING 1`,
+      [s('call', callId), n('idx', index), s('wid', workItemId)],
+    );
+    return rows.length > 0;
+  }
+
   async sweepMinutes(cutoffMs: number) {
     const rows = await this.exec(
       `WITH gone AS (DELETE FROM meeting_minutes WHERE created_at <= :cutoff::timestamptz RETURNING 1) SELECT count(*) AS removed FROM gone`,

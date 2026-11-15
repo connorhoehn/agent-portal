@@ -255,6 +255,8 @@ export interface MinutesActionItem {
   ownerName?: string;
   /** Already done in the call (a write the owner confirmed and ran), so nothing is offered for it. */
   done?: boolean;
+  /** The work item made for it from the meeting page (the server created it and stored its id), once; absent on older records. */
+  workItemId?: string;
 }
 
 /** Who wrote the minutes: the scripted rules (mock world), the provider's text model, or nobody (transcript only). */

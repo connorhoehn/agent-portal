@@ -46,6 +46,9 @@
 // the call ended, by attendance, and the proposals, which also serve the people a proposal needs. Every route is refused under a masquerade, reads included: they show a person's own turns and the call's words.
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
+import { requireInitiativeScope } from '../lib/initiative-scope.js';
+import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
+import { createWorkItem } from '../providers/work-items.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
 import { callChatRuntime, onCallChatFinished } from '../lib/call-chat.js';
 import type { Session } from '../lib/session.js'; import { getUser } from '../providers/identity.js';
@@ -880,7 +883,11 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
   const attempts = m.attempts ?? (m.writer === 'none' ? 0 : 1);
   // An action item whose "Create a work item" card was carried out (or that was done in the call) has its work item.
   const doneTurns = new Set((await assistantStore().listTurns(callId, { statuses: ['done'] }).catch(() => [])).map((t) => t.turnId));
-  const actionItems = m.actionItems.map((item, i) => ({ ...item, workItemCreated: item.done === true || doneTurns.has(actionCardTurnId(callId, i)) }));
+  // One made from the meeting page carries its id; the link is built here from that id and the meeting's own initiative.
+  const actionItems = m.actionItems.map(({ workItemId, ...item }, i) => ({
+    ...item, workItemCreated: item.done === true || !!workItemId || doneTurns.has(actionCardTurnId(callId, i)),
+    workItemHref: workItemId && m.initiativeId ? workItemHref(m.initiativeId, workItemId) : null,
+  }));
   const parts = summaryParts(m.summary);
   res.json({
     proposals: await minutesProposals(callId, endedAt(record)),
@@ -896,6 +903,45 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     // No draft: whether an attendee may ask Nova to write them again (a hard cap on runs, each of which may cost model money).
     rewrite: { writing: minutesWriting(callId), possible: m.writer === 'none' && m.retryable === true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts) },
   });
+}));
+
+/** The portal's page for a work item on its initiative's Work tab. */
+export const workItemHref = (initiativeId: string, workItemId: string): string =>
+  `/iq/projects/${encodeURIComponent(initiativeId)}?tab=work&item=${encodeURIComponent(workItemId)}`;
+
+const creatingWorkItem = new Set<string>();
+
+/**
+ * "Create work item" on a meeting page's action item: the server makes the work item on the meeting's initiative and records it
+ * against the item, so the page can say it was created and link to it. An attendee only, of live minutes; the item must be theirs or
+ * nobody's and not done in the call; and the same gates as creating work anywhere (`DispatchAgentRun`, someone who owns or
+ * contributes to the initiative). Once: an item that already has its work item answers with it and creates nothing.
+ */
+meetingAssistantRouter.post('/minutes/action-items/:index/work-item', refuseMasqueradeRead, requireAction('DispatchAgentRun'), asyncHandler(async (req, res) => {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  const raw = req.params['index'];
+  if (typeof raw !== 'string' || !/^\d{1,3}$/.test(raw)) throw new NotFoundError('No such action item');
+  const index = Number(raw);
+  await liveRecordOf(session, callId);
+  const store = assistantStore();
+  const m = await store.getMinutes(callId);
+  const item = m && !m.deleted ? m.actionItems[index] : undefined;
+  if (!m || !item) throw new NotFoundError('No such action item');
+  if (item.workItemId) { res.json({ index, created: false, workItemCreated: true, workItemHref: m.initiativeId ? workItemHref(m.initiativeId, item.workItemId) : null }); return; }
+  if (!m.initiativeId) throw new AppError(409, 'This meeting has no initiative to add work to');
+  if (item.done) throw new AppError(409, 'This was already done in the call');
+  if (item.ownerUserId && item.ownerUserId !== session.sub) throw new AppError(403, 'Only the person this action item names can create its work item');
+  if (!await requireInitiativeScope(req, res, m.initiativeId, { action: 'create work' })) return;
+  const key = `${callId}#${index}`;
+  if (creatingWorkItem.has(key)) throw new AppError(409, 'This work item is already being created');
+  creatingWorkItem.add(key);
+  try {
+    const created = await createWorkItem({ projectId: m.initiativeId, type: 'story', title: item.text.trim().slice(0, 200), status: 'open', priority: 'medium' });
+    void notifyWorkGraphChanged(created.projectId, 'work-item');
+    const recorded = await store.setActionItemWorkItem(callId, index, created.id);
+    const id = recorded ? created.id : ((await store.getMinutes(callId))?.actionItems[index]?.workItemId ?? created.id);
+    res.status(recorded ? 201 : 200).json({ index, created: recorded, workItemCreated: true, workItemHref: workItemHref(m.initiativeId, id) });
+  } finally { creatingWorkItem.delete(key); }
 }));
 
 /** An attendee asks Nova to write minutes that failed again. Refused while a write runs and once MAX_ATTEMPTS runs were made. */

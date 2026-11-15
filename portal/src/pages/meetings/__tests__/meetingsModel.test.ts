@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref, proposalsLive, proposalsUrl,
   goneCopy, meetingsUrl, headerMeta, quietMeta, summaryOf, listLead, listenedLabel, outcomesLabel, orderProposals, proposalClosed, proposalPill,
-  actionStatus, actionWaitsOn, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
+  actionStatus, actionWaitsOn, createWorkItemUrl, workItemLink, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
   assert.equal(durationLabel(0, 20_000), 'under a minute');
@@ -156,4 +156,16 @@ test('what a proposal does, short: the kind and the target', () => {
 test('faces carry the portrait the server sent, by name; others draw initials', () => {
   assert.deepEqual(facesFor(['Vera Green', 'Theo Chang'], [{ name: 'Vera Green', avatarUrl: '/avatars/photos/v.jpg' }, { name: 'Theo Chang', avatarUrl: null }]),
     [{ name: 'Vera Green', src: '/avatars/photos/v.jpg' }, { name: 'Theo Chang' }]);
+});
+
+test('an action item made into a work item from the meeting page reads created, with the server\'s link and nothing else', () => {
+  const made = { text: 'update the runbook', workItemCreated: true, workItemHref: '/iq/projects/p-auth?tab=work&item=wi-1' };
+  assert.equal(actionStatus(made).label, 'Work item created');
+  assert.equal(workItemLink(made), '/iq/projects/p-auth?tab=work&item=wi-1');
+  assert.equal(actionWaitsOn({ ...made, ownerUserId: 'u-a' }, 'u-a'), false);
+  for (const href of ['https://evil.example/iq/projects/p?tab=work&item=x', '//evil.example', '/iq/projects/p?tab=work&item=x&next=/', 'javascript:alert(1)', null, undefined]) {
+    assert.equal(workItemLink({ text: 'a', workItemCreated: true, workItemHref: href as string | null }), null, String(href));
+  }
+  assert.equal(actionStatus({ text: 'a' }).label, 'Not created');
+  assert.equal(createWorkItemUrl('call 1', 2), '/api/calls/call%201/assistant/minutes/action-items/2/work-item');
 });
