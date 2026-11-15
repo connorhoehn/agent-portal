@@ -75,7 +75,7 @@ export function NovaBarControls() {
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}
     {/* After Nova left: why (who dismissed it, its time limit, a lost connection), and that it cannot come back to this call. */}
     {state && controls.left && why && <Tooltip content={why} placement="top">
-      <Chip size="xs" tone="neutral" className="max-w-[22rem] truncate" aria-label={why} data-testid="nova-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''}>{why}</Chip>
+      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={why} data-testid="nova-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''}>{why}</Chip>
     </Tooltip>}
     {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, Nova's voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss Nova`} triggerTestId="nova-mark"
       triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="nova-menu"

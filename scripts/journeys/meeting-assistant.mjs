@@ -303,6 +303,11 @@ async function main() {
       check(!(await vera.page.locator('[data-call-stream], video').filter({ hasText: /Nova/ }).count()), 'Nova took a media tile');
       for (const width of [1440, 1280]) await barFits(vera.page, 'the bar with Nova listening', width);
       await shot(vera.page, '2-listening-roster');
+      // In-call 9: a late joiner reads the standing facts in the menu instead of the chat history they missed.
+      await nora.page.getByTestId('nova-mark').click();
+      const facts = (await nora.page.getByTestId('nova-facts').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      await nora.page.keyboard.press('Escape');
+      check(/Invited by .+/.test(facts) && /voice is off/.test(facts) && /Anyone here can pause or dismiss Nova/.test(facts), `the menu does not state who invited, the voice and who may pause or dismiss: "${facts}"`);
       return `marks "${a}" and "${b}"; roster "${line.trim().slice(0, 120)}"`;
     });
 
@@ -318,6 +323,9 @@ async function main() {
       check(/Nothing you say is kept until you acknowledge/.test(text), `the notice does not say nothing is kept before acknowledging: "${text}"`);
       check(await nora.page.getByTestId('nova-notice-acknowledge').isVisible(), 'no acknowledge control');
       check(await nora.page.getByTestId('nova-notice-secondary').isVisible(), 'no way to dismiss Nova from the notice');
+      const secondary = (await nora.page.getByTestId('nova-notice-secondary').innerText()).trim();
+      check(secondary === 'Dismiss Nova for everyone', `the notice's dismissal does not say it is for everyone: "${secondary}"`);
+      check(/Nova writes minutes for the people in the call/.test(text) && /^.*Nova is listening to this call\./.test(text), `the notice is not the agreed banner copy: "${text}"`);
       check(await vera.page.getByTestId('nova-notice').count() === 0, 'the inviter sees the notice');
       await barFits(nora.page, 'the bar under the notice', 1280);
       await shot(nora.page, '3-notice');
@@ -1045,6 +1053,8 @@ async function main() {
         await waitFor(async () => /turned Nova's voice on/.test(await bodyText(p.page)), 15000, `${p.who.userId} seeing the notice`);
         const label = await p.page.getByTestId('nova-mark').first().getAttribute('aria-label');
         check(/Nova's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
+        // In-call 8: the voice is seen on the bar without opening the menu.
+        await waitFor(async () => (await p.page.getByTestId('nova-voice-chip').innerText().catch(() => '')).trim() === 'Voice on', 10000, `${p.who.userId} seeing "Voice on" on the bar`);
       }
       await vera.page.getByTestId('nova-mark').click();
       check(await vera.page.getByRole('menuitem', { name: "Turn Nova's voice off" }).isVisible(), 'no "Turn Nova\'s voice off" item');
@@ -1088,6 +1098,11 @@ async function main() {
     await step('7b-d: the second person mutes Nova: on the next request their page plays nothing and the asker\'s still does; unmute brings it back', async () => {
       await novaMenu(nora, 'Mute Nova for me');
       await waitFor(async () => (await voiceOf(nora)).muted, 5000, 'the mute');
+      // In-call 8: the mute shows on the bar, and is kept for this call only (not for every later call).
+      await waitFor(async () => (await nora.page.getByTestId('nova-voice-chip').innerText().catch(() => '')).trim() === 'Muted for you', 5000, '"Muted for you" on the bar');
+      check((await vera.page.getByTestId('nova-voice-chip').innerText()).trim() === 'Voice on', 'the mute showed for the other person');
+      const keys = await nora.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('orgiq.novaMuted')));
+      check(keys.length === 1 && keys[0] === `orgiq.novaMuted:${callId}`, `the mute is not kept per call: ${JSON.stringify(keys)}`);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
       await ask();
       await waitFor(async () => (await voiceOf(vera)).frames > v0.frames, 20000, 'the asker\'s frames');
@@ -1135,7 +1150,21 @@ async function main() {
       expiryCard = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && m.metadata.summary.includes('expiry audit')), 20000, 'the card');
       check(expiryCard.metadata.status === 'waiting', `the card is ${expiryCard.metadata.status}`);
       for (const p of [vera, nora]) await p.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last().waitFor({ timeout: 20000 });
-      return 'waiting for both';
+      // In-call 4: the card says when it expires, and the asker's footer count includes it and jumps to it.
+      for (const p of [vera, nora]) {
+        const card = p.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
+        const t = await waitFor(async () => (await card.getByTestId('assistant-action-expires').innerText().catch(() => '')).trim() || null, 15000, `${p.who.userId} seeing the card's expiry`);
+        check(/^expires in (9|10) min$/.test(t), `${p.who.userId}: the card's expiry reads "${t}"`);
+      }
+      const badge = vera.page.getByTestId('nova-proposal-count');
+      await waitFor(async () => (await badge.getAttribute('data-cards').catch(() => null)) === '1', 15000, 'the asker\'s footer count including the card');
+      check(/1 card waiting for your confirmation/.test((await badge.getAttribute('aria-label')) ?? ''), `the count does not say a card waits: "${await badge.getAttribute('aria-label')}"`);
+      check((await nora.page.getByTestId('nova-proposal-count').getAttribute('data-cards').catch(() => '0')) !== '1', 'the other person\'s count includes a card that waits on the asker');
+      await badge.click();
+      const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
+      await waitFor(async () => veraCard.getByTestId('assistant-action-confirm').evaluate((el) => el === document.activeElement).catch(() => false), 5000, 'the count jumping to the card\'s Confirm');
+      await shot(vera.page, '6a-card-waiting-count');
+      return 'waiting for both; expiry shown; the count jumps to the card';
     });
 
     const PROPOSAL_3 = 'Freeze schema changes during the cutover';
@@ -1150,12 +1179,25 @@ async function main() {
       return 'open, waiting for the executor';
     });
 
-    await step('6: dismiss: the mark goes, Invite does not return, the bar says "Nova has left this call", re-invite is refused', async () => {
-      await novaMenu(nora, 'Dismiss Nova');
+    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, Invite does not return, the bar says who dismissed Nova and that it cannot rejoin, re-invite is refused', async () => {
+      // In-call 3: the dismissal is asked once, naming its effect; keeping Nova changes nothing.
+      await novaMenu(nora, 'Dismiss Nova for everyone');
+      await seen(nora.page, 'nova-dismiss-ask');
+      const question = (await nora.page.getByTestId('nova-dismiss-ask').innerText()).replace(/\s+/g, ' ');
+      check(/Nova leaves for everyone and cannot be invited again in this call\./.test(question), `the dismissal question does not name its effect: "${question}"`);
+      check((await stateOf(nora)).state === 'listening', 'choosing Dismiss in the menu dismissed Nova before the question was answered');
+      await shot(nora.page, '6-dismiss-ask');
+      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Keep Nova/ }).click();
+      await gone(nora.page, 'nova-dismiss-ask');
+      check((await stateOf(nora)).state === 'listening', 'keeping Nova dismissed it');
+      await novaMenu(nora, 'Dismiss Nova for everyone');
+      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
       await seen(nora.page, 'nova-left');
       await seen(vera.page, 'nova-left');
       for (const p of [vera, nora]) {
-        check(/Nova has left this call/.test(await p.page.getByTestId('nova-left').innerText()), 'the left state is not in words');
+        // Around 1: the chip says who dismissed Nova and that it cannot come back to this call.
+        const why = (await p.page.getByTestId('nova-left').innerText()).trim();
+        check(/^.+ dismissed Nova\. It cannot rejoin this call\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Nova and that it cannot rejoin: "${why}"`);
         check(await p.page.getByTestId('nova-mark').count() === 0, 'the listening mark stayed');
         check(await p.page.getByTestId('nova-invite').count() === 0, 'Invite Nova came back');
         check(await p.page.getByTestId('nova-menu').count() === 0, 'Nova controls stayed');
