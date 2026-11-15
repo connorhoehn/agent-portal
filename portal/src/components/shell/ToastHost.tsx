@@ -49,7 +49,7 @@ export function ToastHost() {
             )}
           </Stack>
           <IconButton
-            aria-label="Dismiss"
+            aria-label="Close"
             icon={<CloseIcon />}
             size="sm"
             className="shrink-0"

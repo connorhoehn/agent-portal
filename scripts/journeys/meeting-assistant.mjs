@@ -545,6 +545,14 @@ async function main() {
       check(noraChat.every((m) => /^Answered privately for Vera/.test(m.message)), `the other person's chat carries more than the fixed line: ${JSON.stringify(noraChat.map((m) => m.message))}`);
       check(!(await chatPanel(nora).innerText()).includes(sent.say.slice(0, 40)), 'the private sentence is in the other person\'s chat');
       check(await nora.page.getByText(/only you can see this/i).count() === 0, 'the other person sees the private toast');
+      // In-call 10: the toast stays until closed (an info toast used to go after 5 s) and offers the bell where the answer is kept.
+      await sleep(6500);
+      check(await toast.isVisible(), 'the private toast went away on its own');
+      const toastCard = vera.page.locator('[role="status"]').filter({ hasText: /only you can see this/i }).first();
+      await toastCard.getByTestId('toast-action').click();
+      await seen(vera.page, 'activity-bell-popover', 5000);
+      check(await toast.count() === 0, '"Open notifications" did not close the toast');
+      await vera.page.keyboard.press('Escape');
       return `toast: "${toastBox.slice(0, 120)}"; public line "${line[0].message}"; other person: the fixed line only`;
     });
 
