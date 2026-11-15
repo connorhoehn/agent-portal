@@ -43,7 +43,7 @@ import { assistantStore, setAssistantStore, setAssistantIntake, LineIntake, Memo
 import { AUTO_ATTEMPTS, MAX_ATTEMPTS, minutesIdle, retryFailedMinutes, setMinutesWriterFactory } from '../../lib/meeting-assistant/minutes-service.js';
 import type { MinutesInput } from '../../lib/meeting-assistant/minutes.js';
 import { chatSummary, MinutesWriterError, ScriptedMinutesWriter } from '../../lib/meeting-assistant/minutes.js';
-import { setMinutesSpend } from '../../lib/meeting-assistant/spend.js';
+import { minutesSourceId, setMinutesSpend, type MinutesSpend } from '../../lib/meeting-assistant/spend.js';
 import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
@@ -167,8 +167,9 @@ describe('adding to the minutes after Nova was invited back', () => {
     // A card only for the new item (alice's, she is still in the call); the earlier ones are not offered again.
     const after = await cards();
     expect(after.slice(cardsBefore).map((c) => [c.askedBy, c.summary])).toEqual([['alice', 'Create a work item: write the release note']]);
-    // The cost of the addition is booked to the person who invited Nova back.
-    expect(ledger.filter((e) => e['sourceId'] === `ma:${CALL}:minutes`).map((e) => e['actorId'])).toEqual(['alice', 'bob']);
+    // The cost of the addition is booked to the person who invited Nova back, under the addition's own id (the ledger books once per id).
+    expect(ledger.filter((e) => String(e['sourceId']).startsWith(`ma:${CALL}:minutes`)).map((e) => [e['sourceId'], e['actorId']]))
+      .toEqual([[`ma:${CALL}:minutes`, 'alice'], [`ma:${CALL}:minutes:1:1`, 'bob']]);
     // A second report of the same leave (the call ending) changes nothing.
     await runtime.finish(CALL); await minutesIdle();
     expect(await minutesNotices()).toHaveLength(2);
@@ -271,6 +272,48 @@ describe('adding to the minutes after Nova was invited back', () => {
     const m = await minutes();
     expect(m).toMatchObject({ lineCount: 1, additions: 0 });
     expect(m.actionItems.map((i: { text: string }) => i.text)).toEqual(['book the room']);
+  });
+
+  it('every writer run books under its own source id: the first write keeps `ma:<call>:minutes`, an addition and each retry get their own', async () => {
+    expect([minutesSourceId('c'), minutesSourceId('c', 0, 1), minutesSourceId('c', 0, 2), minutesSourceId('c', 1, 1), minutesSourceId('c', 2, 3)])
+      .toEqual(['ma:c:minutes', 'ma:c:minutes', 'ma:c:minutes:0:2', 'ma:c:minutes:1:1', 'ma:c:minutes:2:3']);
+    // The mock world's scripted writer books straight to the ledger: the first write, then the addition, each a row of its own.
+    const rows = () => ledger.map((e) => String(e['sourceId'])).filter((id) => id.includes(':minutes'));
+    await talk(); await finish();
+    expect(rows()).toEqual([`ma:${CALL}:minutes`]);
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    clock += 1000; await post('dismiss', 'alice'); await minutesIdle();
+    expect(rows()).toEqual([`ma:${CALL}:minutes`, `ma:${CALL}:minutes:1:1`]);
+    expect((await minutes()).additions).toBe(1);
+  });
+
+  it('a retried write and a retried addition hold and book each run under its own id, the hold and the row under the same one', async () => {
+    const held: string[] = []; const booked: string[] = []; const released: string[] = [];
+    const spend: MinutesSpend = { reserve: async (i) => { held.push(i.sourceId); return { ok: true, holdId: i.sourceId }; }, release: async (ids) => { released.push(...ids); },
+      record: async (i) => { booked.push(i.sourceId); } };
+    setMinutesSpend(spend);
+    let failing = true;
+    // A failure after the request went out still costs something, so every run books.
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input: MinutesInput) => { if (failing) throw new MinutesWriterError('provider answered 500', { requestSent: true }); return new ScriptedMinutesWriter().write(input); } }));
+    await talk(); await finish();
+    failing = false;
+    expect((await post('minutes/rewrite', 'alice')).status).toBe(202); await minutesIdle();
+    expect((await minutes()).writer).toBe('openai');
+    const first = [`ma:${CALL}:minutes`, `ma:${CALL}:minutes:0:2`];
+    expect(booked).toEqual(first); expect(held).toEqual(first);
+    // The addition fails once (owed), a new leave runs it again with more lines, and the sweep's retry succeeds: three runs, three ids.
+    failing = true;
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    clock += 1000; await post('dismiss', 'alice'); await minutesIdle();
+    await backAndTalk([{ userId: 'alice', text: 'Action item: order the cake.' }], 'alice');
+    clock += 1000; await post('dismiss', 'bob'); await minutesIdle();
+    failing = false;
+    expect(await retryFailedMinutes()).toBe(1);
+    const additions = [`ma:${CALL}:minutes:1:1`, `ma:${CALL}:minutes:1:2`, `ma:${CALL}:minutes:1:3`];
+    expect(booked).toEqual([...first, ...additions]); expect(held).toEqual([...first, ...additions]);
+    expect(new Set(booked).size).toBe(booked.length);
+    expect(released).toEqual([`ma:${CALL}:minutes`, `ma:${CALL}:minutes:1:1`, `ma:${CALL}:minutes:1:2`]);   // the failed runs' holds go back
+    expect(await minutes()).toMatchObject({ additions: 1, additionOwed: false });
   });
 
   it('first minutes that failed are written again over the whole call when Nova leaves again', async () => {

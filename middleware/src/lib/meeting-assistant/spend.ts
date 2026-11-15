@@ -146,15 +146,19 @@ export async function settleFinished(e: { callId: string; usageSeconds: number; 
 // ---------------------------------------------------------------------------------------------------------------
 // The minutes (package 5): one text request, booked under `ma:<callId>:minutes` against the INVITER and the call's
 // initiative, through the same chokepoints as listening (reserveSpend, then a ledger row that settles its hold).
+// The ledger books once per source id, so every writer run books under its own: the first write's first run keeps
+// `ma:<callId>:minutes` (rows already booked stay valid); every other run is `ma:<callId>:minutes:<addition>:<attempt>`
+// (addition 0 for the first write, then 1, 2 ... for each addition; attempt 1 for its first run, then one more per retry).
 
-export const minutesSourceId = (callId: string): string => `${sourceIdFor(callId)}:minutes`;
+export const minutesSourceId = (callId: string, addition = 0, attempt = 1): string =>
+  addition === 0 && attempt <= 1 ? `${sourceIdFor(callId)}:minutes` : `${sourceIdFor(callId)}:minutes:${addition}:${attempt}`;
 
 export interface MinutesSpend {
-  /** Hold the estimated cost; a refusal means no model minutes (the record then carries a plain note). */
-  reserve(input: { callId: string; tenant: string; inviterId: string; initiativeId: string | null; estimateUsd: number }): Promise<ReserveOutcome>;
+  /** Hold the estimated cost; a refusal means no model minutes (the record then carries a plain note). `sourceId` is the run's (`minutesSourceId`). */
+  reserve(input: { callId: string; sourceId: string; tenant: string; inviterId: string; initiativeId: string | null; estimateUsd: number }): Promise<ReserveOutcome>;
   release(holdIds: readonly string[]): Promise<void>;
-  /** Book what the minutes cost. `reported` only when the provider's own token counts priced it. */
-  record(input: { callId: string; inviterId: string; initiativeId: string | null; tenant: string; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn?: number; tokensOut?: number }): Promise<void>;
+  /** Book what the minutes cost, under the run's `sourceId` (the same as its hold's, so the row settles it). `reported` only when the provider's own token counts priced it. */
+  record(input: { callId: string; sourceId: string; inviterId: string; initiativeId: string | null; tenant: string; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn?: number; tokensOut?: number }): Promise<void>;
 }
 
 /** What a scripted (mock-world) minutes entry books: a small estimate, so the mock ledger shows the line. */
@@ -165,7 +169,7 @@ export const realMinutesSpend: MinutesSpend = {
     const { reserveSpend, HOLD_GRACE_MS, spendRefusalResponse } = await import('../spend-holds.js');
     const forecast = { costUsdP75: i.estimateUsd, costUsdP25: Math.round((i.estimateUsd / 4) * 10_000) / 10_000, confidence: 'prior' as const };
     const held = await reserveSpend({
-      initiativeId: i.initiativeId, actorId: i.inviterId, source: 'meeting_assistant', sourceId: minutesSourceId(i.callId), forecast,
+      initiativeId: i.initiativeId, actorId: i.inviterId, source: 'meeting_assistant', sourceId: i.sourceId, forecast,
       expiresInMs: 10 * 60_000 + HOLD_GRACE_MS, tenant: i.tenant,
     });
     if (held.kind === 'held') return { ok: true, holdId: held.holdId };
@@ -176,7 +180,7 @@ export const realMinutesSpend: MinutesSpend = {
   async record(i) {
     const { recordSpend } = await import('../../providers/spend-ledger.js');
     await recordSpend({
-      source: 'meeting_assistant', sourceId: minutesSourceId(i.callId), initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
+      source: 'meeting_assistant', sourceId: i.sourceId, initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
       trigger: 'meeting-assistant-minutes', model: i.model, costUsd: i.costUsd, costBasis: i.basis, provider: 'openai',
       ...(i.tokensIn !== undefined ? { inputTokens: i.tokensIn } : {}), ...(i.tokensOut !== undefined ? { outputTokens: i.tokensOut } : {}),
       ...(i.costUsd !== null ? { estimatedCostUsd: i.costUsd } : {}),

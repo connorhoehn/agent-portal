@@ -28,7 +28,7 @@ import {
   capTranscript, chatSummary, minutesCounts, withoutHeld, withoutStored, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
-import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
+import { minutesSourceId, minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { sessionOf, type AssistantRecord, type AssistantTurn, type MinutesRecord, type MinutesWriterKind, type TranscriptLine } from './types.js';
 
@@ -145,9 +145,14 @@ const WRITE_CARD_TTL_MS = 10 * 60_000;
 const MAX_CARDS = 8;
 
 
-async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input: Parameters<MinutesWriter['write']>[0]): Promise<{ draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind }> {
+/**
+ * One writer run, its cost held and booked under the run's own source id (`minutesSourceId`): `run.addition` is 0 for the first write and
+ * then the number of the addition, `run.attempt` which run of it this is. The ledger books once per id, so a retry or an addition booked
+ * under the first write's id would be lost.
+ */
+async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input: Parameters<MinutesWriter['write']>[0], run: { addition: number; attempt: number }): Promise<{ draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind }> {
   const spend = minutesSpend();
-  const common = { callId: record.callId, tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId };
+  const common = { callId: record.callId, sourceId: minutesSourceId(record.callId, run.addition, run.attempt), tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId };
   if (writer.kind === 'scripted') {
     const draft = await writer.write(input);
     await spend.record({ ...common, model: 'scripted-minutes', costUsd: SCRIPTED_MINUTES_USD, basis: 'estimated' }).catch((e: unknown) => console.warn('[meeting-assistant] minutes spend not booked', (e as Error).message));
@@ -276,7 +281,7 @@ async function composeMinutes(callId: string, record: AssistantRecord, attempts:
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
   if (writer) {
     result = await Promise.race([
-      writeDraft(record, writer, { lines, roster, callName, doneActions, held }),
+      writeDraft(record, writer, { lines, roster, callName, doneActions, held }, { addition: 0, attempt: attempts }),
       new Promise<typeof result>((resolve) => { const t = setTimeout(() => resolve({ draft: null, note: NOTES.failed, writer: 'none' }), MINUTES_TIMEOUT_MS * 2 + 5000); t.unref?.(); }),
     ]);
   }
@@ -304,7 +309,9 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
     // The same leave reported twice (the dismissal's run ending, then the call ending) finds minutes that already end at it: nothing to do.
     if ((record.leftAt ?? 0) <= existing.endedAt) return null;
     if (existing.writer === 'none') return existing.retryable ? rewriteRun(callId, record, existing, MAX_ATTEMPTS) : null;
-    return addToMinutes(callId, record, existing, 1, true);
+    // An addition still owed (an earlier one failed) is the same addition, covering more lines now: this run counts as one more of its
+    // runs, so it books under an id of its own rather than the earlier first run's.
+    return addToMinutes(callId, record, existing, existing.additionOwed ? (existing.additionAttempts ?? 0) + 1 : 1, true);
   }
   const composed = await composeMinutes(callId, record, 1, Date.now());
   if (!composed) {
@@ -420,7 +427,7 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   if (writer) {
     // The cost is booked to the person who invited Nova into this period (the record's current inviter).
     result = await Promise.race([
-      writeDraft(record, writer, { lines: fresh, roster, callName: current.callName, doneActions, held, earlier }),
+      writeDraft(record, writer, { lines: fresh, roster, callName: current.callName, doneActions, held, earlier }, { addition: (current.additions ?? 0) + 1, attempt }),
       new Promise<typeof result>((resolve) => { const t = setTimeout(() => resolve({ draft: null, note: NOTES.failed, writer: 'none' }), MINUTES_TIMEOUT_MS * 2 + 5000); t.unref?.(); }),
     ]);
   }
