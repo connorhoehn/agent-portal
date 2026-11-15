@@ -289,6 +289,22 @@ describe('arming the tap from invite, pause and resume (the real audio path)', (
     expect((await assistantStore().get(CALL))!.state).toBe('listening');
   });
 
+  it('inviting Nova back looks the channel up again and arms a new tap; when the channel cannot be found Nova stays out and nothing is held', async () => {
+    await post('invite'); await post('dismiss');
+    await new Promise<void>((r) => setImmediate(r));
+    calls.length = 0;
+    channel = null;
+    const refused = await post('invite', 'bob');
+    expect([refused.status, refused.body.error]).toEqual([503, 'Nova can join once someone in the call has their microphone on.']);
+    expect((await assistantStore().get(CALL))!.state).toBe('left');
+    expect(assistantIntake().isListening(CALL)).toBe(false);
+    channel = ARN;
+    expect((await post('invite', 'bob')).status).toBe(200);
+    await new Promise<void>((r) => setImmediate(r));
+    expect(calls.filter((c) => c.startsWith('create'))).toHaveLength(1);
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
+  });
+
   it('dismiss deletes the tap and forgets who was who', async () => {
     await post('invite');
     await post('participant', 'bob', { participantId: 'bob-lq1' });
