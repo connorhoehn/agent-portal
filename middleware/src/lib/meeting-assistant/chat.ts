@@ -42,7 +42,7 @@ export async function nameOf(userId: string, fallback?: string): Promise<string>
 }
 
 export interface PostOptions {
-  /** The dismiss notice is a message allowed once the assistant has left. */
+  /** The leave notice, and the "Nova left before it could finish" replies that follow it, are allowed once Nova has left. */
   leaving?: boolean;
   /** So is the minutes message after it (and the action cards that message offers): minutes.ts is the only caller. */
   minutes?: boolean;
@@ -99,11 +99,11 @@ export async function postNoticeQuietly(callId: string, text: string, opts: Post
 // Replies and action cards.
 
 /** An answer shown to everyone in the call, labelled with who asked (decision 6). */
-export function postReply(callId: string, input: ReplyInput): Promise<ChatMessage | null> {
+export function postReply(callId: string, input: ReplyInput, opts: PostOptions = {}): Promise<ChatMessage | null> {
   return postAsAssistant(callId, {
     text: input.text,
     metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-reply', askedBy: input.askedBy, askedByName: input.askedByName, private: false },
-  });
+  }, opts);
 }
 
 export interface PostedAction { message: ChatMessage; created: boolean }

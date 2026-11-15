@@ -19,7 +19,7 @@ import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
 import { NOVA_NAME } from './chat-types.js';
 import {
-  nameOf, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
+  nameOf, noticeText, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
@@ -38,10 +38,10 @@ import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
-import { MAX_NAMED, MAX_STATEMENT_CHARS, ProposalInputError, createProposal, onProposalConsented } from './proposals.js';
+import { MAX_NAMED, MAX_STATEMENT_CHARS, ProposalInputError, closeProposals, createProposal, onProposalConsented } from './proposals.js';
 import { consentStatus, namedStatement, peopleSaid, resolvePeople, type PersonRole } from './named-people.js';
 import type { RosterEntry } from './minutes.js';
-import { hookProposalNotices } from './proposal-notify.js';
+import { hookProposalNotices, notifyOpenProposals } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
@@ -95,7 +95,7 @@ export interface RuntimeDeps {
   /** Called when a call's run ends (dismissed, left or abandoned), with what the sessions reported. Spend settles here. */
   onFinished?: (event: FinishedEvent) => Promise<void>;
   /** The audio side (audio-intake.ts): told when a session opens and closes. Absent in tests that do not care. */
-  audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'>;
+  audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'> & Partial<Pick<AudioIntake, 'forget'>>;
   /** Where Nova's voice frames go (the gateway's in-process sink); false from it means no gateway runs here. Default: lib/social-chat.ts `sendThreadFrame`. */
   voiceSink?: VoiceSink;
   /** Sleep for `ms` (replacement retries, the turn sweep's tests); injectable so tests never wait. */
@@ -274,13 +274,23 @@ interface CallRun {
   finished: boolean;
 }
 
-/** Why a read waiting on its asker's browser was ended: its time ran out, or Nova was paused, replaced or stopped under it. */
-type ExpiryCause = 'timeout' | 'paused' | 'replaced' | 'stopped';
-const EXPIRY_WORDS: Readonly<Record<ExpiryCause, { model: string; chat: (name: string) => string }>> = {
-  timeout: { model: 'the person who asked is not available', chat: (n) => `${n} is not available to run that, so I could not finish it.` },
-  paused: { model: 'Nova was paused', chat: (n) => `Nova was paused before it could finish ${n}'s request. Ask again once it is listening.` },
-  replaced: { model: 'Nova\'s session was restarted', chat: (n) => `Nova's session was restarted before it could finish ${n}'s request. Ask again.` },
-  stopped: { model: 'Nova has left the call', chat: (n) => `Nova left the call before it could finish ${n}'s request.` },
+/**
+ * Why a turn waiting on its asker was ended: its time ran out, Nova was paused or its session replaced under it, or Nova left the call
+ * (dismissed, its time limit, a lost connection, the call ending) or the service restarted. Each cause has its own words, so nothing
+ * that ended because Nova left is ever put on the asker.
+ */
+export type ExpiryCause = 'timeout' | 'paused' | 'replaced' | 'left' | 'dismissed' | 'limit' | 'lost' | 'restarted';
+/** Why Nova's run stopped: the cause its open turns are ended with. */
+export type StopReason = Extract<ExpiryCause, 'left' | 'dismissed' | 'limit' | 'lost'>;
+export const EXPIRY_WORDS: Readonly<Record<ExpiryCause, { model: string; chat: (name: string) => string; card: string | null }>> = {
+  timeout: { model: 'the person who asked is not available', chat: (n) => `${NOVA_NAME} could not finish ${n}'s request because ${n}'s browser did not respond. Ask again.`, card: null },
+  paused: { model: 'Nova was paused', chat: (n) => `${NOVA_NAME} was paused before it could finish ${n}'s request. Ask again once it is listening.`, card: `${NOVA_NAME} was paused before this was done. Ask again once it is listening.` },
+  replaced: { model: 'Nova\'s session was restarted', chat: (n) => `${NOVA_NAME}'s session was restarted before it could finish ${n}'s request. Ask again.`, card: `${NOVA_NAME}'s session was restarted before this was done. Ask again.` },
+  left: { model: 'Nova has left the call', chat: (n) => `${NOVA_NAME} left the call before it could finish ${n}'s request.`, card: `${NOVA_NAME} left the call before this was done.` },
+  dismissed: { model: 'Nova was dismissed', chat: (n) => `${NOVA_NAME} was dismissed before it could finish ${n}'s request.`, card: `${NOVA_NAME} was dismissed before this was done.` },
+  limit: { model: 'Nova reached its time limit', chat: (n) => `${NOVA_NAME} reached its time limit before it could finish ${n}'s request.`, card: `${NOVA_NAME} reached its time limit before this was done.` },
+  lost: { model: 'Nova lost its connection', chat: (n) => `${NOVA_NAME} lost its connection before it could finish ${n}'s request.`, card: `${NOVA_NAME} lost its connection before this was done.` },
+  restarted: { model: 'Nova was restarted', chat: (n) => `${NOVA_NAME} was restarted before it could finish ${n}'s request. Ask again once it is listening.`, card: `${NOVA_NAME} was restarted before this ran. Ask again once it is listening.` },
 };
 
 /** What a private read posts when the asker's browser sent no sentence of its own. */
@@ -439,8 +449,11 @@ export class AssistantRuntime {
     await this.openListening(callId);
   }
 
-  /** Dismissed or left: close the session, expire what is open, tell the spend settlement. Idempotent. */
-  async stop(callId: string): Promise<void> {
+  /**
+   * Dismissed or left: close the session, expire what is open (each with the words for `reason`), tell the spend settlement.
+   * Idempotent; the first call's reason is the one used.
+   */
+  async stop(callId: string, reason: StopReason = 'left'): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
     run.finished = true; run.relay.clear();
@@ -451,7 +464,7 @@ export class AssistantRuntime {
     };
     try {
       await guarded(() => this.serial(run, async () => { await this.closeSession(run, 'stop'); }));
-      await guarded(() => this.expireOpenTurns(run, false, 'stopped'));
+      await guarded(() => this.expireOpenTurns(run, false, reason));
       await guarded(() => this.closeListening(callId));
     } finally {
       this.deps.audio?.detach(callId);
@@ -461,6 +474,29 @@ export class AssistantRuntime {
         callId, usageSeconds: run.totals.seconds, tokens: { input: run.totals.input, output: run.totals.output, cached: run.totals.cached }, sessionKind: run.sessionKind,
       });
     }
+  }
+
+  /**
+   * What follows a pause or a dismiss, whoever caused it: the Pause or Dismiss button (the route) or "Nova, pause" / "Nova, leave"
+   * said in the call (the intake moved the record). One path for both, so they cannot drift: the named notice in the chat, and for a
+   * dismiss the open proposals closed and moved to the meeting page, the people they still need who are absent told, the run stopped
+   * (its open requests ended as "dismissed"), the used minutes settled and the audio bindings dropped. `record` is the moved record.
+   */
+  async afterMove(callId: string, to: 'paused' | 'left', record: AssistantRecord, by: { userId: string; name?: string }): Promise<void> {
+    const who = await nameOf(by.userId, by.name);
+    if (to === 'paused') {
+      await this.pause(callId);
+      await postNoticeQuietly(callId, noticeText.paused(who));
+      return;
+    }
+    await postNoticeQuietly(callId, noticeText.dismissed(who, record.linesStored === 0), { leaving: true });
+    await closeProposals(this.store, callId, record.leftAt ?? this.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
+    await notifyOpenProposals(this.store, callId).catch(() => 0); // the people they still need who are not in the call are told, without the statement
+    this.deps.intake().stop(callId);
+    await this.stop(callId, 'dismissed');
+    // No run in this process (it died): the used minutes are booked from the record. A settled record is left alone.
+    await (await import('./reconcile.js')).settleFromRecord(callId, { store: () => this.store, clock: () => this.now() });
+    this.deps.audio?.forget?.(callId);
   }
 
   async dispose(): Promise<void> {
@@ -486,7 +522,10 @@ export class AssistantRuntime {
     if (this.subscribedTo === intake) return;
     this.unsubscribeIntake?.();
     this.subscribedTo = intake;
-    this.unsubscribeIntake = intake.onEvents((callId, events) => this.onDetector(callId, events));
+    const offEvents = intake.onEvents((callId, events, applied) => this.onDetector(callId, events, applied));
+    // A spoken dismiss: whoever holds a seat is recorded as present before the record becomes `left` (as the Dismiss button does).
+    const offLeave = intake.onBeforeDismiss(async (callId) => { if (this.isRunning(callId)) await this.snapshotAttendance(callId); });
+    this.unsubscribeIntake = () => { offEvents(); offLeave(); };
     this.unsubscribeLines?.();
     this.unsubscribeLines = this.deps.watcher ? intake.onStored((line) => { if (this.isRunning(line.callId)) this.deps.watcher?.onLine(line); }) : null;
   }
@@ -690,7 +729,7 @@ export class AssistantRuntime {
     await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left this call.`, { leaving: true });
     this.deps.intake().stop(callId);
     this.deps.audio?.detach(callId);
-    await this.stop(callId);
+    await this.stop(callId, 'lost');
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -980,7 +1019,7 @@ export class AssistantRuntime {
   // -------------------------------------------------------------------------------------------------------------
   // The detector's requests (and pause or dismiss spoken in the call)
 
-  private async onDetector(callId: string, events: DetectorEvent[]): Promise<void> {
+  private async onDetector(callId: string, events: DetectorEvent[], applied: ReadonlySet<DetectorEvent> = new Set()): Promise<void> {
     const run = this.runs.get(callId);
     if (!run) return;
     for (const e of events) {
@@ -1000,10 +1039,13 @@ export class AssistantRuntime {
           try { session.sendText(e.askedBy, e.text); } catch (err) { console.warn('[meeting-assistant] sendText failed', (err as Error).message); }
         }
       } else if (e.type === 'command') {
+        // Only a command that moved the record is followed up (a repeat changes nothing and says nothing), through the same steps
+        // as the buttons.
+        if (!applied.has(e)) continue;
+        const to = e.command === 'pause' ? 'paused' : 'left';
         const record = await this.store.get(callId);
-        if (!record) continue;
-        if (record.state === 'paused') await this.pause(callId);
-        else if (record.state === 'left') await this.stop(callId);
+        if (!record || record.state !== to) continue;
+        await this.afterMove(callId, to, record, { userId: e.by });
       }
     }
   }
@@ -1375,7 +1417,7 @@ export class AssistantRuntime {
       if (!done) return;
       await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit.`, { leaving: true });
       this.deps.intake().stop(callId);
-      await this.stop(callId);
+      await this.stop(callId, 'limit');
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
       await this.store.patchSession(callId, { warned: true });
       await postNoticeQuietly(callId, `${NOVA_NAME} leaves in 5 minutes. Anyone who can invite ${NOVA_NAME} can extend.`);
@@ -1428,30 +1470,46 @@ export class AssistantRuntime {
    * Expire one turn and update its card. `run` is the call's live run, or null when there is none (Nova has left, or the server
    * restarted): the card is still settled, there is just no session to tell and no model call to answer (audit M9).
    */
-  private async expireTurn(run: CallRun | null, turn: AssistantTurn, cause: ExpiryCause = 'timeout'): Promise<void> {
+  private async expireTurn(run: CallRun | null, turn: AssistantTurn, given: ExpiryCause = 'timeout'): Promise<void> {
     const callId = turn.callId;
     const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending', 'running'], to: 'expired' });
     if (!moved) return;
     // A consented proposal's turn hands the proposal back to `consented`: its card says why; nothing is said in the call.
     if (turn.proposalId) { await expireProposalTurn(this.proposalDeps, turn); return; }
+    const cause = run ? given : await this.causeWithoutRun(turn, given);
     const askerName = await nameOf(turn.askedBy);
+    const why = EXPIRY_WORDS[cause];
     if (turn.kind === 'write') {
       if (turn.actionId) {
-        // Claimed but no result: it may or may not have run, so the card must not say it did not (audit B6). Confirmed but never
-        // claimed: the asker's browser was not there. Never confirmed: nobody decided in time.
+        // Claimed but no result: it may or may not have run, so the card must not say it did not (audit B6). Ended because Nova
+        // left, was dismissed, hit its limit, lost its connection or was restarted: that cause, never the asker. Otherwise
+        // confirmed but never claimed: the asker's browser was not there; never confirmed: nobody decided in time.
         const resultText = turn.claimId !== undefined ? 'Nova could not confirm whether this was done. Check before trying again.'
-          : turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`;
+          : why.card ?? (turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`);
         await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
       }
       run?.session?.appendContext(`The action offered to ${askerName} expired without being done.`);
       return;
     }
-    if (!run) return;
-    const modelCallId = run.turnCalls.get(turn.turnId);
-    run.turnCalls.delete(turn.turnId);
-    const why = EXPIRY_WORDS[cause];
-    if (modelCallId) this.answer(run, modelCallId, { error: why.model });
-    await postReply(callId, { text: why.chat(askerName), askedBy: turn.askedBy, askedByName: askerName }).catch(() => null);
+    if (run) {
+      const modelCallId = run.turnCalls.get(turn.turnId);
+      run.turnCalls.delete(turn.turnId);
+      if (modelCallId) this.answer(run, modelCallId, { error: why.model });
+    }
+    // Posted even when Nova has just left (the record is already `left` by the time the run stops): the asker is told.
+    await postReply(callId, { text: why.chat(askerName), askedBy: turn.askedBy, askedByName: askerName }, { leaving: true }).catch(() => null);
+  }
+
+  /**
+   * A turn found due with no live run in this process: Nova left the call before it ended (a turn made before the leave), or the
+   * service restarted under a call that is still on. A card offered after Nova left (the minutes' cards) keeps its own cause.
+   */
+  private async causeWithoutRun(turn: AssistantTurn, given: ExpiryCause): Promise<ExpiryCause> {
+    if (given !== 'timeout') return given;
+    const record = await this.store.get(turn.callId).catch(() => null);
+    if (!record) return given;
+    if (record.state === 'left') return turn.createdAt < (record.leftAt ?? Infinity) ? 'left' : given;
+    return 'restarted';
   }
 
   // -------------------------------------------------------------------------------------------------------------

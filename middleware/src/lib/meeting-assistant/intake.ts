@@ -42,7 +42,8 @@ export class LineIntake {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly tickMs: number;
   private readonly source: () => TranscriptSource;
-  private readonly listeners = new Set<(callId: string, events: DetectorEvent[]) => void | Promise<void>>();
+  private readonly listeners = new Set<(callId: string, events: DetectorEvent[], applied: ReadonlySet<DetectorEvent>) => void | Promise<void>>();
+  private readonly beforeDismiss = new Set<(callId: string) => Promise<void>>();
   private readonly storedListeners = new Set<(line: TranscriptLine) => void>();
 
   constructor(private readonly store: AssistantStore, opts: IntakeOptions = {}) {
@@ -127,21 +128,31 @@ export class LineIntake {
     }
   }
 
-  /** Hear what the detector decided, after the intake has applied it (requests queued, pause and dismiss done). */
-  onEvents(listener: (callId: string, events: DetectorEvent[]) => void | Promise<void>): () => void {
+  /**
+   * Hear what the detector decided, after the intake has applied it (requests queued, pause and dismiss done). `applied` holds the
+   * command events that moved the record; a command that changed nothing (a repeat) is not in it.
+   */
+  onEvents(listener: (callId: string, events: DetectorEvent[], applied: ReadonlySet<DetectorEvent>) => void | Promise<void>): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
   }
 
+  /** Run just before a spoken dismiss moves the record to `left` (attendance closes then). */
+  onBeforeDismiss(hook: (callId: string) => Promise<void>): () => void {
+    this.beforeDismiss.add(hook);
+    return () => { this.beforeDismiss.delete(hook); };
+  }
+
   private async apply(callId: string, events: DetectorEvent[]): Promise<void> {
-    await this.applyEvents(callId, events);
+    const applied = await this.applyEvents(callId, events);
     if (!events.length) return;
     for (const l of [...this.listeners]) {
-      try { await l(callId, events); } catch (e) { console.warn('[meeting-assistant] intake listener failed', (e as Error).message); }
+      try { await l(callId, events, applied); } catch (e) { console.warn('[meeting-assistant] intake listener failed', (e as Error).message); }
     }
   }
 
-  private async applyEvents(callId: string, events: DetectorEvent[]): Promise<void> {
+  private async applyEvents(callId: string, events: DetectorEvent[]): Promise<Set<DetectorEvent>> {
+    const applied = new Set<DetectorEvent>();
     for (const e of events) {
       if (e.type === 'request') {
         await this.store.addRequest(callId, { id: `rq-${e.lines[0]}-${e.lines[e.lines.length - 1]}`, askedBy: e.askedBy, text: e.text,
@@ -150,13 +161,20 @@ export class LineIntake {
         const change = e.command === 'pause'
           ? { from: ['listening'] as const, to: 'paused' as const }
           : { from: ['invited', 'listening', 'paused'] as const, to: 'left' as const };
+        if (e.command === 'dismiss') {
+          for (const hook of [...this.beforeDismiss]) {
+            try { await hook(callId); } catch (err) { console.warn('[meeting-assistant] before-dismiss step failed', (err as Error).message); }
+          }
+        }
         const done = await this.store.transition(callId, { ...change, by: e.by, at: this.clock() });
         if (done) {
+          applied.add(e);
           // Nothing half-heard carries across a pause, and a dismissed assistant stops listening altogether.
           this.detectors.set(callId, new RequestDetector(callId, this.clock));
           if (e.command === 'dismiss') this.stop(callId);
         }
       }
     }
+    return applied;
   }
 }

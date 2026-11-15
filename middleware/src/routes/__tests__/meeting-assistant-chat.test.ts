@@ -92,6 +92,14 @@ describe('notices', () => {
     expect((await texts()).slice(0, 3)).toEqual([expect.stringContaining("Nova joined at Alice Ames's invitation."), 'Bob Baker paused Nova. Nothing is being heard or stored.', 'carol resumed Nova. Nova is listening again.']);
   });
 
+  it('a refused pause or invite after a dismiss says in plain words that Nova has left, with the same 409', async () => {
+    await post('invite'); await post('dismiss', 'alice');
+    const paused = await post('pause', 'bob');
+    expect([paused.status, paused.body.error]).toEqual([409, 'Nova has already left this call.']);
+    const again = await post('invite', 'alice');
+    expect([again.status, again.body.error]).toEqual([409, 'Nova has already left this call and cannot rejoin it.']);
+  });
+
   it('pause, resume and dismiss each post one sentence naming who did it; repeats post nothing; nothing after dismissal', async () => {
     await post('invite');
     await post('pause', 'bob'); await post('pause', 'bob');

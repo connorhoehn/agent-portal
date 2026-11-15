@@ -33,6 +33,10 @@ export const TAP_REARM_MS = 30_000;
 /** A tap delete that failed is tried again after each of these waits; after that, on every later arm or disarm for the call. */
 const DELETE_RETRY_MS = [1000, 3000, 9000];
 const MAX_PENDING_DELETES_PER_CALL = 20;
+/** What a person reads when Nova cannot be started here at all (the missing settings go to the server log, never to them). */
+export const NOT_SET_UP = `${NOVA_NAME} isn't set up here. Ask an admin.`;
+/** The call has no audio to listen to yet: trying again once someone's microphone is on helps. */
+export const NO_AUDIO_YET = `${NOVA_NAME} can join once someone in the call has their microphone on.`;
 export const CANNOT_HEAR_NOTICE = `${NOVA_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
 
 export interface MediaConfig { url: string; adminToken: string; sinkBaseUrl: string }
@@ -188,11 +192,15 @@ export async function preflightAudio(session: Session, callId: string, lobby: st
   const media = mediaConfig();
   if (!media) {
     if (mockTranscriptEnabled()) return { channelArn: (await new MockChannelResolver().channelOf(session, callId)) ?? '', arm: false };
-    throw new AppError(503, `Live listening is not configured for this deployment (missing ${missingMediaSettings().join(', ')})`);
+    console.warn(`[meeting-assistant] live listening is not configured (missing ${missingMediaSettings().join(', ')})`);
+    throw new AppError(503, NOT_SET_UP);
   }
-  if (!sinkSecretUsable()) throw new AppError(503, `Live listening is not configured for this deployment (missing ${SINK_SECRET_SETTING})`);
+  if (!sinkSecretUsable()) {
+    console.warn(`[meeting-assistant] live listening is not configured (missing ${SINK_SECRET_SETTING})`);
+    throw new AppError(503, NOT_SET_UP);
+  }
   const channelArn = await channelResolver().channelOf(session, callId, lobby);
-  if (!channelArn) throw new AppError(503, 'This call has no live media session to listen to yet. Try again once someone is publishing audio.');
+  if (!channelArn) throw new AppError(503, NO_AUDIO_YET);
   return { channelArn, arm: true };
 }
 

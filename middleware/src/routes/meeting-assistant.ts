@@ -49,13 +49,15 @@ import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meetin
 import { eraseCall } from '../lib/meeting-assistant/erase.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
-import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
+import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
-import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
+import { endAbandonedCall } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
-import { assistantSpend, listeningSecondsOf } from '../lib/meeting-assistant/spend.js';
+import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
+import { NOVA_NAME } from '../lib/meeting-assistant/chat-types.js';
+type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import { cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
 import type { Proposal } from '../lib/meeting-assistant/types.js';
@@ -159,17 +161,49 @@ async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
 
 const noteSeat = async (callId: string, session: Session) => { await attendOnce(callId, session.sub); };
 
+const NOVA = NOVA_NAME;
+const NOT_HERE = `${NOVA} is not in this call.`;
+const ALREADY_LEFT = `${NOVA} has already left this call.`;
+/** A pause, resume or dismiss the record's state does not allow right now, in words (never the state's name). */
+function cannotMoveNow(state: AssistantRecord['state']): string {
+  if (state === 'invited') return `${NOVA} is still joining. Try again in a moment.`;
+  if (state === 'left') return ALREADY_LEFT;
+  return `${NOVA} could not do that just now. Try again in a moment.`;
+}
+
+/**
+ * A money refusal from the spend holds, sent with its status, headers and every machine-readable field unchanged, and its `error`
+ * replaced by a plain sentence for the person who clicked: what happened, and whether trying again helps. The original reason
+ * goes to the server log.
+ */
+function sendRefusal(res: Response, refusal: SpendRefusal, action: 'invite' | 'resume' | 'extend'): void {
+  const body = refusal.body as Record<string, unknown>;
+  const lead = action === 'invite' ? `${NOVA} can't join` : action === 'resume' ? `${NOVA} can't resume` : `${NOVA} can't get more time`;
+  const gate = typeof body['gate'] === 'string' ? body['gate'] : '';
+  const retryAfter = typeof body['retryAfterS'] === 'number' ? body['retryAfterS'] : null;
+  const words =
+    refusal.status === 409 && body['confirmFlag'] ? (action === 'invite' ? `This would put ${NOVA}'s time over your budget.` : `This would put ${NOVA}'s time over the budget of the person who invited it. Only they can choose to go ahead.`)
+    : refusal.status === 429 ? `${lead} right now because too much is already running. Try again${retryAfter ? ` in about ${Math.max(1, Math.round(retryAfter / 60))} minute${Math.round(retryAfter / 60) > 1 ? 's' : ''}` : ' shortly'}.`
+    : refusal.status === 423 ? `${lead} because spending is paused here. Ask an admin.`
+    : refusal.status === 503 ? `${lead} right now because its budget could not be checked. Try again in a few minutes; if it keeps happening, ask an admin.`
+    : gate === 'spend-hold' ? `${lead} in a call that is not part of an initiative here. Start the call from an initiative's page, or ask an admin.`
+    : `${lead} because the budget for this has reached its limit. Trying again won't help; ask an admin to raise it.`;
+  console.warn(`[meeting-assistant] ${action} refused (${refusal.status}${gate ? ` ${gate}` : ''}): ${String(body['error'] ?? '')}`);
+  if (refusal.headers) res.set(refusal.headers);
+  res.status(refusal.status).json({ ...body, error: words });
+}
+
 meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   const store = assistantStore();
   const startListening = () => {
     try { assistantIntake().start(callId); } catch (e) {
-      if (e instanceof TranscriptSourceNotConfigured) throw new AppError(503, 'Live transcripts are not configured for this deployment');
+      if (e instanceof TranscriptSourceNotConfigured) { console.warn('[meeting-assistant] live transcripts are not configured'); throw new AppError(503, NOT_SET_UP); }
       throw e;
     }
   };
   const existing = await store.get(callId);
-  if (existing?.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  if (existing?.state === 'left') throw new AppError(409, `${NOVA} has already left this call and cannot rejoin it.`);
   if (existing) {
     startListening(); await noteSeat(callId, session);
     // A record stuck in `invited` (the first request stopped before it moved on): the inviter's repeat finishes it, once (the move is conditional).
@@ -187,11 +221,11 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
     if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
     res.json(await view((await store.get(callId)) ?? current, callId, session)); return;
   }
-  if (!sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
+  if (!sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
 
   const runtime = callChatRuntime();
   const lobby = await runtime.lobbyOf(callId);
-  if (!lobby) throw new NotFoundError('Call is no longer active');
+  if (!lobby) throw new NotFoundError('This call has ended.');
   const present = (await runtime.seatedUsers(callId)).filter((u) => u.active).map((u) => u.userId);
   if (!present.includes(session.sub)) present.push(session.sub);
   // Real audio: the three media settings and the call's channel, found by the server from the call, or a 503 here and nothing started.
@@ -208,8 +242,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   });
   if (!held.ok) {
     assistantIntake().stop(callId);
-    if (held.refusal.headers) res.set(held.refusal.headers);
-    res.status(held.refusal.status).json(held.refusal.body);
+    sendRefusal(res, held.refusal, 'invite');
     return;
   }
   const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
@@ -218,7 +251,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   try { await assistantRuntime().start(startCtx); } catch (e) {
     await giveBack();
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
-    throw new AppError(503, 'The live assistant could not start. Try again shortly.');
+    throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
   }
   // `invited` is the moment of the invite; the inviter acknowledges by inviting, so listening starts at once.
   const invitedAt = assistantRuntime().deps.clock();
@@ -253,7 +286,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     const store = assistantStore();
     await noteSeat(callId, session);
     const before = await store.get(callId);
-    if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
+    if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
     // Resuming listens again: a new token and a new tap, so the channel is looked up again first (503, still paused, when it cannot be).
     const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
     // Leaving: whoever holds a seat right now was there while Nova was (read before the record becomes `left`, which closes attendance).
@@ -265,7 +298,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       const prior = recordSession(before); const limits = assistantLimits();
       const part = Math.max(prior.extensions, prior.ledgerPart ?? 0) + 1;
       const held = await assistantSpend().reserve({ callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part });
-      if (!held.ok) { if (held.refusal.headers) res.set(held.refusal.headers); res.status(held.refusal.status).json(held.refusal.body); return; }
+      if (!held.ok) { sendRefusal(res, held.refusal, 'resume'); return; }
       fresh = { holdId: held.holdId, patch: {
         settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: null, limitNoticed: false,
         // The ceiling counts the whole call: what was settled stays on the clock, so a restart does not buy a second full period.
@@ -278,12 +311,11 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     if (!done) await giveBackFresh();
     if (done) {
       const runtime = assistantRuntime();
-      if (to === 'paused') await runtime.pause(callId);
       if (to === 'listening') {
         try {
           if (fresh) await store.patchSession(callId, fresh.patch);
           // After a restart nothing in this process is hearing the call's captions: start the intake again (a no-op when it is running).
-          try { assistantIntake().start(callId); } catch (e) { if (e instanceof TranscriptSourceNotConfigured) throw new AppError(503, 'Live transcripts are not configured for this deployment'); throw e; }
+          try { assistantIntake().start(callId); } catch (e) { if (e instanceof TranscriptSourceNotConfigured) { console.warn('[meeting-assistant] live transcripts are not configured'); throw new AppError(503, NOT_SET_UP); } throw e; }
           if (runtime.isRunning(callId)) await runtime.resume(callId); else await startSession(callId, (await store.get(callId)) ?? done, session);
         } catch (e) {
           // No session to listen with: back to paused, and say so. A fresh hold is given back and the period stays settled.
@@ -292,29 +324,21 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
           await store.transition(callId, { from: ['listening'], to: 'paused', by: session.sub, at: Date.now() });
           if (e instanceof AppError) throw e;
           console.warn('[meeting-assistant] resume failed', (e as Error).message);
-          throw new AppError(503, 'The live assistant could not start. Try again shortly.');
+          throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
         }
         await armAudio(callId, pre);
       }
-      const who = await nameOf(session.sub, session.name);
-      if (to === 'paused') await postNoticeQuietly(callId, noticeText.paused(who));
-      if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
-      if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who, done.linesStored === 0), { leaving: true });
-      if (to === 'left') {
-        await closeProposals(store, callId, done.leftAt ?? Date.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
-        await notifyOpenProposals(store, callId); // the people they still need who are not in the call are told, without the statement
-        assistantIntake().stop(callId);
-        await assistantRuntime().stop(callId);
-        await settleFromRecord(callId); // no run in this process (it died): the used minutes are booked from the record
-        assistantAudio().forget(callId);
-      }
+      if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(await nameOf(session.sub, session.name)));
+      // Pause and dismiss: the same steps "Nova, pause" and "Nova, leave" said in the call take (the notice, and for a dismiss the
+      // proposals closed, absent people told, the run stopped and the minutes settled).
+      else await runtime.afterMove(callId, to, done, { userId: session.sub, name: session.name });
       res.json(await view(await store.get(callId), callId, session));
       return;
     }
     const current = await store.get(callId);
-    if (!current) throw new NotFoundError('The assistant is not in this call');
+    if (!current) throw new NotFoundError(NOT_HERE);
     if (current.state === to) { res.json(await view(current, callId, session)); return; }
-    throw new AppError(409, `The assistant is ${current.state}; it cannot ${to === 'left' ? 'be dismissed' : to === 'paused' ? 'pause' : 'resume'} now`);
+    throw new AppError(409, cannotMoveNow(current.state));
   });
 }
 meetingAssistantRouter.post('/pause', move('paused', ['listening']));
@@ -325,8 +349,8 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   const store = assistantStore();
   const current = await store.get(callId);
-  if (!current) throw new NotFoundError('The assistant is not in this call');
-  if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  if (!current) throw new NotFoundError(NOT_HERE);
+  if (current.state === 'left') throw new AppError(409, ALREADY_LEFT);
   const acked = await store.ack(callId, session.sub);
   await assistantAudio().refresh(callId); // this person's audio is admitted from now on, not at the next gate refresh
   res.json(await view(acked, callId, session));
@@ -339,11 +363,11 @@ meetingAssistantRouter.post('/voice', requireAction('InviteMeetingAssistant'), a
   if (typeof on !== 'boolean') throw new ValidationError('on must be true or false');
   const store = assistantStore();
   const current = await store.get(callId);
-  if (!current) throw new NotFoundError('The assistant is not in this call');
-  if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  if (!current) throw new NotFoundError(NOT_HERE);
+  if (current.state === 'left') throw new AppError(409, ALREADY_LEFT);
   if (current.voice === true === on) { res.json(await view(current, callId, session)); return; }
   const updated = await store.setVoice(callId, on);
-  if (!updated) throw new NotFoundError('The assistant is not in this call');
+  if (!updated) throw new NotFoundError(NOT_HERE);
   assistantRuntime().setVoice(callId, on);
   const who = await nameOf(session.sub, session.name);
   await postNoticeQuietly(callId, on ? noticeText.voiceOn(who) : noticeText.voiceOff(who));
@@ -364,8 +388,8 @@ meetingAssistantRouter.post('/participant', asyncHandler(async (req, res) => {
   const prefix = `${session.sub}-`;
   if (!id.startsWith(prefix) || !PARTICIPANT_STAMP.test(id.slice(prefix.length))) throw new AppError(403, 'You can only bind your own media participant id');
   const record = await assistantStore().get(callId);
-  if (!record) throw new NotFoundError('The assistant is not in this call');
-  if (record.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  if (!record) throw new NotFoundError(NOT_HERE);
+  if (record.state === 'left') throw new AppError(409, ALREADY_LEFT);
   const out = await assistantAudio().bindParticipant(callId, id, session.sub);
   if (out === 'taken') throw new AppError(409, 'That media participant id is already bound to someone else');
   if (out === 'too-many') throw new AppError(409, 'Too many media participant ids are bound for this call');
@@ -378,14 +402,10 @@ meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), 
   await noteSeat(callId, session);
   const out = await assistantRuntime().extend(callId, session, (req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true);
   if (out.ok) { res.json(await view(await assistantStore().get(callId), callId, session)); return; }
-  if (out.why === 'refused') {
-    if (out.refusal.headers) res.set(out.refusal.headers);
-    res.status(out.refusal.status).json(out.refusal.body);
-    return;
-  }
-  if (out.why === 'no-assistant') throw new NotFoundError('The assistant is not in this call');
-  if (out.why === 'left') throw new AppError(409, 'The assistant already left this call');
-  throw new AppError(409, `This call is already at its longest (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes)`);
+  if (out.why === 'refused') { sendRefusal(res, out.refusal, 'extend'); return; }
+  if (out.why === 'no-assistant') throw new NotFoundError(NOT_HERE);
+  if (out.why === 'left') throw new AppError(409, ALREADY_LEFT);
+  throw new AppError(409, `${NOVA} is already at its longest time for this call (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes), so it cannot be extended further.`);
 }));
 
 /** Only the person an action was offered to decides it (decision 5). Everyone else, and anyone with no such action: no. */
@@ -397,12 +417,12 @@ meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (r
   if (decision !== 'confirm' && decision !== 'decline') throw new ValidationError("decision must be 'confirm' or 'decline'");
   const store = assistantStore();
   const record = await store.get(callId);
-  if (!record) throw new NotFoundError('The assistant is not in this call');
+  if (!record) throw new NotFoundError(NOT_HERE);
   // The minutes' "Create a work item" cards (ids `m-...`) are offered after the assistant has left; every other card ends with it.
-  if (record.state === 'left' && !actionId.startsWith('m-')) throw new AppError(409, 'The assistant already left this call');
+  if (record.state === 'left' && !actionId.startsWith('m-')) throw new AppError(409, ALREADY_LEFT);
   const action = await store.getAction(callId, actionId);
   if (!action) throw new NotFoundError('No such action');
-  if (action.askedBy !== session.sub) throw new AppError(403, 'Only the person who asked can decide this action');
+  if (action.askedBy !== session.sub) throw new AppError(403, `Only the person who asked ${NOVA} can decide this.`);
   const to = decision === 'confirm' ? 'confirmed' : 'declined';
   const moved = await moveAction(callId, actionId, { from: ['waiting'], to, by: session.sub });
   if (!moved) {
@@ -648,8 +668,8 @@ const deleteRecord = asyncHandler(async (req, res) => {
   const record = await attendeeOf(session, callId);
   const deleted = !!(await assistantStore().getMinutes(callId))?.deleted;
   if (deleted && record.invitedBy !== session.sub) throw new NotFoundError('Not found');
-  if (record.invitedBy !== session.sub) throw new AppError(403, 'Only the person who invited the assistant can delete this record');
-  if (record.state !== 'left') throw new AppError(409, 'Dismiss the assistant before deleting its record');
+  if (record.invitedBy !== session.sub) throw new AppError(403, `Only the person who invited ${NOVA} can delete this meeting's record.`);
+  if (record.state !== 'left') throw new AppError(409, `Dismiss ${NOVA} before deleting this meeting's record.`);
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
   res.json({ callId, deleted: true, linesRemoved: lines });
 });

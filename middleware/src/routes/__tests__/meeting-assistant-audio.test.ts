@@ -262,12 +262,15 @@ describe('arming the tap from invite, pause and resume (the real audio path)', (
     const missing = await post('invite');
     mockConfig.mock.aurora = true;
     expect(missing.status).toBe(503);
-    expect(missing.body.error).toMatch(/MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN/);
+    // The person reads what to do; the missing setting goes to the server log, never into the response.
+    expect(missing.body.error).toBe("Nova isn't set up here. Ask an admin.");
+    expect(JSON.stringify(missing.body)).not.toMatch(/MEETING_ASSISTANT|admin-token|media\.local/);
     expect(JSON.stringify(missing.body)).not.toMatch(/admin-token|media\.local/);
     (mockConfig.meetingAssistant as unknown as { media: { adminToken: string } }).media.adminToken = 'admin-token';
     channel = null;
     const none = await post('invite');
     expect(none.status).toBe(503);
+    expect(none.body.error).toBe('Nova can join once someone in the call has their microphone on.');
     expect(await assistantStore().get(CALL)).toBeNull();
     expect(assistantIntake().isListening(CALL)).toBe(false);
     expect(calls).toEqual([]);

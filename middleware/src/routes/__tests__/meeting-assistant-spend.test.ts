@@ -109,7 +109,8 @@ describe('the invite reserves, the dismissal settles', () => {
     budget('alice', 1000, 0.5);                         // a hard cap of fifty cents against a $3 hold
     const res = await post('invite');
     expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({ reason: 'budget' });
+    expect(res.body).toMatchObject({ reason: 'budget', gate: 'user-cap', capUsd: 0.5 }); // the machine-readable fields are unchanged
+    expect(res.body.error).toBe("Nova can't join because the budget for this has reached its limit. Trying again won't help; ask an admin to raise it.");
     expect((await get('state')).body.state).toBe('none');
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
     expect(assistantIntake().isListening(CALL)).toBe(false);
@@ -120,7 +121,8 @@ describe('the invite reserves, the dismissal settles', () => {
     budget('alice', 1, 100);                         // $1 allocated against a $3 hold, a high hard cap: the user budget asks first
     const refused = await post('invite');
     expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ reason: 'budget' });
+    expect(refused.body).toMatchObject({ reason: 'budget', confirmFlag: 'confirmOverUserBudget' });
+    expect(refused.body.error).toBe("This would put Nova's time over your budget.");
     expect((await get('state')).body.state).toBe('none');
     const ok = await post('invite', 'alice', { confirmOverUserBudget: true });
     expect(ok.status).toBe(201);

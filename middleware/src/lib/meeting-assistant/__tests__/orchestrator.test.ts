@@ -16,6 +16,7 @@ jest.mock('../chat.js', () => {
     postReply: async (_c: string, r: { text: string; askedBy: string; askedByName: string }) => { mockPosts.replies.push(r); return { id: 'm' }; },
     postPrivately: async (_c: string, userId: string, r: { text: string }) => { mockPosts.privates.push({ userId, text: r.text }); return true; },
     postNoticeQuietly: async (_c: string, text: string) => { mockPosts.notices.push(text); },
+    noticeText: (jest.requireActual('../chat.js') as typeof import('../chat.js')).noticeText,
     postAction: async (callId: string, input: { actionId: string; askedBy: string; summary: string; detail?: string[]; tool: { name: string; argsDigest: string } }) => {
       mockPosts.actions.push(input);
       await store().createAction({ callId, actionId: input.actionId, messageId: `msg-${input.actionId}`, askedBy: input.askedBy, toolName: input.tool.name,
@@ -37,6 +38,7 @@ import { ScriptedSession } from '../scripted-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
+import { createProposal } from '../proposals.js';
 import type { AudioSink } from '../audio-intake.js';
 
 const CALL = 'call-1';
@@ -418,7 +420,7 @@ describe('one answer per tool call', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith(expect.any(String), '{"error":"the person who asked is not available"}');
     expect((await store.getTurn(CALL, turn!.turnId))!.status).toBe('expired');
-    expect(mockPosts.replies.at(-1)!.text).toMatch(/Bob is not available/);
+    expect(mockPosts.replies.at(-1)!.text).toBe("Nova could not finish Bob's request because Bob's browser did not respond. Ask again.");
     expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
     expect(await runtime.claimTurn(CALL, turn!.turnId, BOB)).toEqual({ conflict: 'expired' }); // (a claim is the browser's first step now)
     expect(spy).toHaveBeenCalledTimes(1);
@@ -1028,6 +1030,80 @@ describe('a failed replacement retries, then leaves (B9)', () => {
     await runtime.stop(CALL);
     expect(finished).toHaveLength(1);
     expect(finished[0]!.usageSeconds).toBe(180); // 90 from the dropped session once, 90 from the replacement
+  });
+});
+
+describe('spoken pause and dismiss take the same steps as the buttons (one shared path)', () => {
+  it('"Nova, pause" said in the call posts the named pause notice and closes the session, as the Pause button does', async () => {
+    await say(BOB, 'Nova, pause');
+    expect((await store.get(CALL))).toMatchObject({ state: 'paused', pausedBy: BOB });
+    expect(mockPosts.notices).toContain('Bob paused Nova. Nothing is being heard or stored.');
+    expect(runtime.hasSession(CALL)).toBe(false);
+  });
+
+  it('"Nova, leave" posts the named dismiss notice, closes and dates the open proposals, stops the run and ends open requests as dismissed', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    const card = mockPosts.actions[0]!.actionId;
+    const { proposal } = await createProposal(store, { callId: CALL, tenant: 'orgiq', statement: 'Cut over the smallest tenants first', outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: BOB, source: 'asked', at: now });
+    expect(proposal.expiresAt).toBeNull();
+    await say(CAROL, 'Nova, leave.');
+    expect((await store.get(CALL))).toMatchObject({ state: 'left', leftBy: CAROL });
+    expect(mockPosts.notices).toContain('Carol dismissed Nova.');
+    expect((await store.getProposal(CALL, proposal.id))!.expiresAt).toEqual(expect.any(Number));
+    expect(runtime.isRunning(CALL)).toBe(false);
+    expect(await store.getAction(CALL, card)).toMatchObject({ status: 'expired', resultText: 'Nova was dismissed before this was done.' });
+    expect(finished).toHaveLength(1);
+  });
+
+  it('the route\'s path and the spoken path are the same method: afterMove on a record the button moved does the same', async () => {
+    const moved = (await store.transition(CALL, { from: ['listening'], to: 'left', by: BOB, at: now }))!;
+    await runtime.afterMove(CALL, 'left', moved, { userId: BOB });
+    expect(mockPosts.notices).toContain('Bob dismissed Nova. Nothing was recorded, so there are no minutes.');
+    expect(runtime.isRunning(CALL)).toBe(false);
+  });
+});
+
+describe('requests cut short when Nova leaves say why, and never blame the asker', () => {
+  it('a read open when Nova is dismissed is answered in the chat with the cause', async () => {
+    await say(BOB, 'Nova, find the Kubernetes experts');
+    expect(await runtime.turnsFor(CALL, BOB)).toHaveLength(1);
+    await store.transition(CALL, { from: ['listening'], to: 'left', by: ALICE, at: now });
+    await runtime.stop(CALL, 'dismissed');
+    expect(mockPosts.replies.at(-1)).toEqual({ text: "Nova was dismissed before it could finish Bob's request.", askedBy: BOB, askedByName: 'Bob' });
+  });
+
+  it.each([
+    ['limit', 'Nova reached its time limit before this was done.'],
+    ['lost', 'Nova lost its connection before this was done.'],
+    ['left', 'Nova left the call before this was done.'],
+  ] as const)('a waiting card ended because Nova stopped (%s) names that cause', async (reason, text) => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    await runtime.stop(CALL, reason);
+    const action = await store.getAction(CALL, mockPosts.actions[0]!.actionId);
+    expect(action).toMatchObject({ status: 'expired', resultText: text });
+    expect(action!.resultText).not.toMatch(/did not confirm/);
+  });
+
+  it('a confirmed card that had not run when Nova left says Nova left, not that the browser was missing', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
+    await runtime.stop(CALL, 'left');
+    expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))!.resultText).toBe('Nova left the call before this was done.');
+  });
+
+  it('after a restart (no run, the call still on) a due card says Nova was restarted', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    await runtime.dispose(); // the process went away; the record is still listening
+    now += WRITE_TURN_TTL_MS + 1;
+    await runtime.sweepTurns();
+    expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))!.resultText).toBe('Nova was restarted before this ran. Ask again once it is listening.');
+  });
+
+  it('a card nobody decided in time while Nova was there keeps "did not confirm this in time"', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    now += WRITE_TURN_TTL_MS + 1;
+    await runtime.tick();
+    expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))!.resultText).toBe('Alice did not confirm this in time.');
   });
 });
 
