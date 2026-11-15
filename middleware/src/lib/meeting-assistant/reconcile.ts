@@ -17,7 +17,7 @@ import { postNoticeQuietly } from './chat.js';
 import { NOVA_NAME } from './chat-types.js';
 import { assistantStore } from './store-select.js';
 import { settleFinished } from './spend.js';
-import { sessionOf, type AssistantRecord } from './types.js';
+import { periodOf, sessionOf, type AssistantRecord } from './types.js';
 import type { AssistantStore } from './store.js';
 import { assistantIntake } from './intake-select.js';
 
@@ -75,12 +75,12 @@ async function defaultDeps(): Promise<ReconcileDeps> {
 }
 
 /** (a): close the open listening period at the last moment the process was alive. Returns the record as it now stands. */
-async function closePeriod(store: AssistantStore, record: AssistantRecord, now: number): Promise<AssistantRecord> {
+async function closePeriod(store: AssistantStore, record: AssistantRecord, now: number, period?: number): Promise<AssistantRecord> {
   const s = sessionOf(record);
   if (s.listeningSince == null) return record;
   const aliveAt = Math.min(now, Math.max(s.listeningSince, s.lastAliveAt ?? record.invitedAt));
   const closed = s.listeningSeconds + (aliveAt - s.listeningSince) / 1000;
-  return (await store.patchSession(record.callId, { listeningSeconds: closed, listeningSince: null })) ?? record;
+  return (await store.patchSession(record.callId, { listeningSeconds: closed, listeningSince: null }, period !== undefined ? { period } : undefined)) ?? record;
 }
 
 export async function reconcileAfterRestart(overrides: Partial<ReconcileDeps> = {}): Promise<ReconcileResult> {
@@ -127,17 +127,20 @@ export async function reconcileAfterRestart(overrides: Partial<ReconcileDeps> = 
  * A dismiss or a call end that finds no run in this process (the process that held it died): book the call's used minutes from the
  * record and release the hold, as the reconcile would. Safe to repeat: a settled record is left alone. Never throws.
  */
-export async function settleFromRecord(callId: string, overrides: Partial<Pick<ReconcileDeps, 'store' | 'clock' | 'settle'>> = {}): Promise<void> {
+export async function settleFromRecord(callId: string, overrides: Partial<Pick<ReconcileDeps, 'store' | 'clock' | 'settle'>> & { period?: number } = {}): Promise<void> {
   try {
     const store = (overrides.store ?? assistantStore)();
     const settle = overrides.settle ?? settleFinished;
     const now = (overrides.clock ?? Date.now)();
     const found = await store.get(callId);
     if (!found) return;
-    const record = await closePeriod(store, found, now);
+    // `period`: the leave this settles (a dismissal's own follow-up). A record already in a newer period is left alone.
+    if (overrides.period !== undefined && periodOf(found) !== overrides.period) return;
+    const record = await closePeriod(store, found, now, overrides.period);
     const s = sessionOf(record);
     if (s.settled) return;
-    await settle({ callId, usageSeconds: s.usageSeconds, tokens: { input: s.tokensIn, output: s.tokensOut, cached: s.tokensCached }, sessionKind: s.sessionKind ?? 'scripted' }, now);
+    await settle({ callId, usageSeconds: s.usageSeconds, tokens: { input: s.tokensIn, output: s.tokensOut, cached: s.tokensCached }, sessionKind: s.sessionKind ?? 'scripted',
+      ...(overrides.period !== undefined ? { period: overrides.period } : {}) }, now);
   } catch (e) { console.warn('[meeting-assistant] settling a call from its record failed', (e as Error).message); }
 }
 

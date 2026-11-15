@@ -13,7 +13,7 @@
 // ledger shows a realistic entry without a paid call.
 import { MIN_BILLED_SECONDS, voiceConfig, voiceCostUsd } from '../voice/config.js';
 import { assistantStore } from './store-select.js';
-import { sessionOf, type AssistantRecord } from './types.js';
+import { periodOf, sessionOf, type AssistantRecord } from './types.js';
 
 export interface SpendRefusal { status: number; body: unknown; headers?: Record<string, string> }
 export type ReserveOutcome = { ok: true; holdId: string | null } | { ok: false; refusal: SpendRefusal };
@@ -119,21 +119,26 @@ export function listeningSecondsOf(record: Pick<AssistantRecord, 'session'>, now
 
 /**
  * Nova left: release the extension holds and book the ledger rows, once (`session.settled`). Called by the runtime when a
- * call's run ends. A failure is logged and leaves `settled` false; the hold then expires on its own.
+ * call's run ends. A failure is logged and leaves `settled` false; the hold then expires on its own. `period` is the period the run
+ * served: once the record has moved to a newer one (Nova was invited back), this settles nothing, so a late stop never books an
+ * earlier period's figures under the newer period's part (the invitation back settled the earlier one from the record).
  */
-export async function settleFinished(e: { callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number }; sessionKind: 'openai' | 'scripted' }, now: number = Date.now()): Promise<void> {
+export async function settleFinished(e: { callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number }; sessionKind: 'openai' | 'scripted'; period?: number }, now: number = Date.now()): Promise<void> {
   const store = assistantStore();
   const record = await store.get(e.callId);
   if (!record) return;
+  const when = e.period !== undefined ? { period: e.period } : undefined;
+  if (when && periodOf(record) !== when.period) return;
   const s = sessionOf(record);
   if (s.settled) return;
-  // Claim the settlement first so two stops cannot book twice; give it back if the ledger write fails.
-  await store.patchSession(e.callId, { settled: true });
+  // Claim the settlement first so two stops cannot book twice; give it back if the ledger write fails. The claim holds only while the
+  // record is still in the run's period.
+  if (!(await store.patchSession(e.callId, { settled: true }, when))) return;
   try {
     await assistantSpend().settle({ record, usageSeconds: e.usageSeconds, tokens: e.tokens, sessionKind: e.sessionKind, listeningSeconds: currentListeningSecondsOf(record, now), part: s.ledgerPart ?? 0 });
     await assistantSpend().release(s.holds);
   } catch (err) {
-    await store.patchSession(e.callId, { settled: false });
+    await store.patchSession(e.callId, { settled: false }, when);
     console.warn('[meeting-assistant] spend settlement failed', (err as Error).message);
   }
 }

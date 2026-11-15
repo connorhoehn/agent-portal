@@ -47,7 +47,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
+import { periodOf, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
 export const WRITE_TURN_TTL_MS = 10 * 60_000;
@@ -86,6 +86,19 @@ export interface StartContext {
   recordName: string | null;
   /** Nova was invited back: lines before this one belong to an earlier period and are never taken as a request of this one. */
   fromSeq?: number;
+  /**
+   * Which period of Nova in this call the run serves (types.ts `periodOf`; 1 for the first). An invitation back passes the new one; absent,
+   * it is the record's period (1 when no record exists yet). What the run writes on the record when it stops counts only for this period.
+   */
+  period?: number;
+}
+
+/**
+ * `start` found a run for the call that is stopping (or one of an earlier period that has yet to stop): the new run cannot start until it
+ * is gone, or the old one's stop would close and settle the new period (`AssistantRuntime.settled` waits for it).
+ */
+export class RunStillStopping extends Error {
+  constructor(readonly callId: string) { super('the previous run of this call is still stopping'); this.name = 'RunStillStopping'; }
 }
 
 export interface RuntimeDeps {
@@ -119,6 +132,8 @@ export interface FinishedEvent {
   tokens: { input: number; output: number; cached: number };
   /** Which session ran; only the provider's own figures are `reported` in the ledger. */
   sessionKind: 'openai' | 'scripted';
+  /** The period the run served: a record that has moved to a newer one is not settled with these figures. */
+  period?: number;
 }
 
 type CallState = 'open' | 'answered' | 'dropped';
@@ -214,6 +229,8 @@ export const UNASKED_REPLY = `${NOVA_NAME} could not tell who asked. Ask again.`
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
 interface CallRun {
   ctx: StartContext;
+  /** The period of Nova in the call this run serves (`StartContext.period`). */
+  period: number;
   session: LiveMeetingSession | null;
   unsubscribers: Array<() => void>;
   /** Session timeline start on the wall clock, and a counter that makes caption ids unique across sessions. */
@@ -389,6 +406,8 @@ export function describeCall(name: string, args: unknown): { summary: string; de
 
 export class AssistantRuntime {
   private readonly runs = new Map<string, CallRun>();
+  /** Per call, the stops and leaves still finishing (a run's `stop`, a dismissal's follow-up): `settled` waits for them. */
+  private readonly stopping = new Map<string, Set<Promise<void>>>();
   private readonly extending = new Map<string, Promise<void>>();
   private subscribedTo: LineIntake | null = null;
   private unsubscribeIntake: (() => void) | null = null;
@@ -415,6 +434,40 @@ export class AssistantRuntime {
   }
 
   isRunning(callId: string): boolean { const r = this.runs.get(callId); return !!r && !r.finished; }
+
+  /**
+   * Resolves true once the call has no run in this process, live or stopping, and no leave still finishing (its settlement and its audio
+   * released); false when that takes longer than `timeoutMs` (wall clock). An invitation back waits for this before it books anything.
+   * With `period`, a live run already serving that period or a later one does not count: it is a concurrent invitation back's, not one
+   * that is leaving.
+   */
+  async settled(callId: string, timeoutMs: number, period?: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    const pause = (ms: number) => new Promise<void>((resolve) => { const t = setTimeout(resolve, Math.max(0, ms)); t.unref?.(); });
+    for (;;) {
+      const pending = this.stopping.get(callId);
+      const run = this.runs.get(callId);
+      const leaving = !!run && (run.finished || period === undefined || run.period < period);
+      if (!leaving && !pending?.size) return true;
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      // A stop in flight is awaited; a live run whose record already left (its stop not begun yet) is looked at again shortly.
+      await Promise.race([pending?.size ? Promise.allSettled([...pending]).then(() => undefined) : pause(25), pause(left)]);
+    }
+  }
+
+  /** Track `work` as a stop or leave of the call that is still finishing, until it ends (whatever the outcome). */
+  private holdStopping(callId: string, work: Promise<void>): Promise<void> {
+    let set = this.stopping.get(callId);
+    if (!set) { set = new Set(); this.stopping.set(callId, set); }
+    const tracked: Promise<void> = work.finally(() => {
+      const current = this.stopping.get(callId);
+      current?.delete(tracked);
+      if (current && !current.size) this.stopping.delete(callId);
+    });
+    set.add(tracked);
+    return tracked;
+  }
   hasSession(callId: string): boolean { return !!this.runs.get(callId)?.session; }
   /** Tests and the dev route: the scripted session of a call, if that is what it has. */
   sessionOf(callId: string): LiveMeetingSession | null { return this.runs.get(callId)?.session ?? null; }
@@ -422,12 +475,17 @@ export class AssistantRuntime {
   // -------------------------------------------------------------------------------------------------------------
   // Lifecycle
 
-  /** Start the live session for a call. Throws when the session cannot start; nothing is left running then. */
+  /**
+   * Start the live session for a call. Throws when the session cannot start; nothing is left running then. A live run of the same period
+   * makes this a no-op; a run that is stopping, one of another period, or a leave still finishing throws `RunStillStopping`.
+   */
   async start(ctx: StartContext): Promise<void> {
-    if (this.runs.has(ctx.callId)) return;
+    const existing = this.runs.get(ctx.callId);
+    if (existing && !existing.finished && !this.stopping.get(ctx.callId)?.size && (ctx.period === undefined || ctx.period === existing.period)) return;
+    if (existing || this.stopping.get(ctx.callId)?.size) throw new RunStillStopping(ctx.callId);
     this.watchIntake();
     const run: CallRun = {
-      ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
+      ctx, period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
@@ -435,8 +493,12 @@ export class AssistantRuntime {
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
-    // The record's switch (a restarted call keeps it); read after the run is registered so two invites never both start.
-    try { run.voice = (await this.store.get(ctx.callId))?.voice === true; } catch { /* off */ }
+    // The record's switch (a restarted call keeps it) and its period; read after the run is registered so two invites never both start.
+    try {
+      const record = await this.store.get(ctx.callId);
+      run.voice = record?.voice === true;
+      if (ctx.period === undefined && record) run.period = periodOf(record);
+    } catch { /* off, period 1 */ }
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
     await this.openListening(ctx.callId);
     this.deps.watcher?.start(ctx.callId);
@@ -449,13 +511,14 @@ export class AssistantRuntime {
     if (record && record.state === 'listening' && sessionOf(record).listeningSince == null) await this.store.patchSession(callId, { listeningSince: this.now() });
   }
 
-  /** The open listening period ends: its seconds join the total. */
-  private async closeListening(callId: string): Promise<void> {
+  /** The open listening period ends: its seconds join the total. With `period`, only while the record is still in that period. */
+  private async closeListening(callId: string, period?: number): Promise<void> {
     const record = await this.store.get(callId);
     if (!record) return;
+    if (period !== undefined && periodOf(record) !== period) return;
     const s = sessionOf(record);
     if (s.listeningSince == null) return;
-    await this.store.patchSession(callId, { listeningSeconds: currentListeningSecondsOf(record, this.now()), listeningSince: null });
+    await this.store.patchSession(callId, { listeningSeconds: currentListeningSecondsOf(record, this.now()), listeningSince: null }, period !== undefined ? { period } : undefined);
   }
 
   async pause(callId: string): Promise<void> {
@@ -464,7 +527,7 @@ export class AssistantRuntime {
     run.voiceHeld = true; this.dropVoice(run, true); // nothing is relayed (or held) from the moment a pause begins
     this.deps.watcher?.pause(callId); // no wait or check carries across a pause
     await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = null; run.replyById.clear(); });
-    await this.closeListening(callId);
+    await this.closeListening(callId, run.period);
   }
 
   async resume(callId: string): Promise<void> {
@@ -480,7 +543,9 @@ export class AssistantRuntime {
 
   /**
    * Dismissed or left: close the session, expire what is open (each with the words for `reason`), tell the spend settlement.
-   * Idempotent; the first call's reason is the one used.
+   * Idempotent; the first call's reason is the one used. Until it has finished (the settlement included) the call counts as stopping
+   * (`settled`, `start`). What it writes on the record (the closed clock, the usage, the settlement) holds only while the record is still in
+   * the run's period, so even a stop that ends after Nova was invited back cannot touch the newer period.
    */
   async stop(callId: string, reason: StopReason = 'left'): Promise<void> {
     const run = this.runs.get(callId);
@@ -491,18 +556,20 @@ export class AssistantRuntime {
     const guarded = async (step: () => Promise<void>): Promise<void> => {
       try { await step(); } catch (e) { console.warn('[meeting-assistant] stop step failed', (e as Error).message); }
     };
-    try {
-      await guarded(() => this.serial(run, async () => { await this.closeSession(run, 'stop'); }));
-      await guarded(() => this.expireOpenTurns(run, false, reason));
-      await guarded(() => this.closeListening(callId));
-    } finally {
-      this.deps.audio?.detach(callId);
-      this.runs.delete(callId);
-      if (!this.runs.size) this.disarmTimer();
-      await this.deps.onFinished?.({
-        callId, usageSeconds: run.totals.seconds, tokens: { input: run.totals.input, output: run.totals.output, cached: run.totals.cached }, sessionKind: run.sessionKind,
-      });
-    }
+    await this.holdStopping(callId, (async () => {
+      try {
+        await guarded(() => this.serial(run, async () => { await this.closeSession(run, 'stop'); }));
+        await guarded(() => this.expireOpenTurns(run, false, reason));
+        await guarded(() => this.closeListening(callId, run.period));
+      } finally {
+        this.deps.audio?.detach(callId);
+        if (this.runs.get(callId) === run) this.runs.delete(callId);
+        if (!this.runs.size) this.disarmTimer();
+        await this.deps.onFinished?.({
+          callId, usageSeconds: run.totals.seconds, tokens: { input: run.totals.input, output: run.totals.output, cached: run.totals.cached }, sessionKind: run.sessionKind, period: run.period,
+        });
+      }
+    })());
   }
 
   /**
@@ -518,14 +585,20 @@ export class AssistantRuntime {
       await postNoticeQuietly(callId, noticeText.paused(who));
       return;
     }
-    await postNoticeQuietly(callId, noticeText.dismissed(who, record.linesStored === 0), { leaving: true });
-    await closeProposals(this.store, callId, record.leftAt ?? this.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
-    await notifyOpenProposals(this.store, callId).catch(() => 0); // the people they still need who are not in the call are told, without the statement
-    this.deps.intake().stop(callId);
-    await this.stop(callId, 'dismissed');
-    // No run in this process (it died): the used minutes are booked from the record. A settled record is left alone.
-    await (await import('./reconcile.js')).settleFromRecord(callId, { store: () => this.store, clock: () => this.now() });
-    this.deps.audio?.forget?.(callId);
+    // The whole leave counts as stopping until its last step: an invitation back waits for it (`settled`), so none of these steps runs
+    // against the newer period; and each step that writes is conditional on the period that left anyway.
+    const period = periodOf(record);
+    await this.holdStopping(callId, (async () => {
+      await postNoticeQuietly(callId, noticeText.dismissed(who, record.linesStored === 0), { leaving: true });
+      await closeProposals(this.store, callId, record.leftAt ?? this.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
+      await notifyOpenProposals(this.store, callId).catch(() => 0); // the people they still need who are not in the call are told, without the statement
+      this.deps.intake().stop(callId);
+      await this.stop(callId, 'dismissed');
+      // No run in this process (it died): the used minutes are booked from the record. A settled record is left alone.
+      await (await import('./reconcile.js')).settleFromRecord(callId, { store: () => this.store, clock: () => this.now(), period });
+      const now = await this.store.get(callId).catch(() => null);
+      if (!now || (now.state === 'left' && periodOf(now) === period)) this.deps.audio?.forget?.(callId);
+    })());
   }
 
   async dispose(): Promise<void> {
@@ -623,7 +696,7 @@ export class AssistantRuntime {
   private foldUsage(run: CallRun): void {
     run.totals.seconds += run.usageSeconds; run.totals.input += run.tokens.input; run.totals.output += run.tokens.output; run.totals.cached += run.tokens.cached;
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    void this.store.patchSession(run.ctx.callId, { sessionKind: run.sessionKind, usageSeconds: run.totals.seconds, tokensIn: run.totals.input, tokensOut: run.totals.output, tokensCached: run.totals.cached }).catch(() => undefined);
+    void this.store.patchSession(run.ctx.callId, { sessionKind: run.sessionKind, usageSeconds: run.totals.seconds, tokensIn: run.totals.input, tokensOut: run.totals.output, tokensCached: run.totals.cached }, { period: run.period }).catch(() => undefined);
   }
 
   private wire(run: CallRun, session: LiveMeetingSession): void {
@@ -1517,7 +1590,7 @@ export class AssistantRuntime {
         lastAliveAt: run.heartbeatAt, sessionKind: run.sessionKind,
         usageSeconds: run.totals.seconds + run.usageSeconds, tokensIn: run.totals.input + run.tokens.input,
         tokensOut: run.totals.output + run.tokens.output, tokensCached: run.totals.cached + run.tokens.cached,
-      });
+      }, { period: run.period });
     } catch (e) { console.warn('[meeting-assistant] heartbeat failed', (e as Error).message); }
   }
 

@@ -131,6 +131,9 @@ export const newAssistantSession = (ceilingSeconds: number): AssistantSession =>
 export const sessionOf = (record: Pick<AssistantRecord, 'session'>, fallbackCeilingSeconds = 3600): AssistantSession =>
   ({ ...newAssistantSession(fallbackCeilingSeconds), ...(record.session ?? {}) });
 
+/** Which period of Nova in this call the record describes now: 1 for the first, one more for each invitation back. */
+export const periodOf = (record: Pick<AssistantRecord, 'session'>): number => (Array.isArray(record.session?.periods) ? record.session.periods.length : 0) + 1;
+
 export type TurnKind = 'read' | 'write' | 'private-read';
 export type TurnStatus = 'pending' | 'running' | 'done' | 'failed' | 'declined' | 'expired';
 

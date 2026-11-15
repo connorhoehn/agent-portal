@@ -61,7 +61,7 @@ import {
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { eraseCall } from '../lib/meeting-assistant/erase.js';
-import { assistantRuntime, describeCall, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
+import { assistantRuntime, describeCall, MAX_RESULT_BYTES, RunStillStopping, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { actionCardTurnId, MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
@@ -70,7 +70,7 @@ import { retentionDays } from '../lib/meeting-assistant/retention.js';
 import { owedBy } from '../lib/meeting-assistant/proposal-notify.js';
 import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
-import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
+import { newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
 import { NOVA_NAME } from '../lib/meeting-assistant/chat-types.js';
@@ -345,6 +345,11 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
 export const REJOIN_DELETED = `This call's record was deleted, so ${NOVA} cannot join it again.`;
 export const REJOIN_LIMIT = `${NOVA} has already listened to this call for as long as it can.`;
 export type RejoinStanding = 'allowed' | 'deleted' | 'limit';
+/** Nova was dismissed a moment ago and is still leaving (its notice, its settlement and its session closing take a second or two). */
+export const REJOIN_STILL_LEAVING = `${NOVA} is still leaving this call. Try again in a moment.`;
+/** How long an invitation back waits for Nova's earlier leave to finish before it answers REJOIN_STILL_LEAVING. Tests shorten it. */
+let rejoinWaitMs = 8_000;
+export function setRejoinWaitMs(ms: number | null): void { rejoinWaitMs = ms ?? 8_000; }
 
 /** Seconds Nova listened in this call so far, every period included (the record is `left`, so no period is open; one left open by a dead process counts to now). */
 const heardSoFar = (record: AssistantRecord, now: number): number => listeningSecondsOf(record, now);
@@ -362,9 +367,13 @@ async function rejoinStanding(record: AssistantRecord, now: number): Promise<Rej
  * the live session starts, and one conditional step moves the record back to listening. Of two at once one wins; the other gives its
  * hold back and answers with the record as it stands. Everyone but the person inviting owes a new acknowledgement; the voice is off.
  */
-async function rejoin(req: Request, res: Response, session: Session, before: AssistantRecord, startListening: () => void): Promise<void> {
-  const store = assistantStore(); const callId = before.callId; const runtime = assistantRuntime();
+async function rejoin(req: Request, res: Response, session: Session, read: AssistantRecord, startListening: () => void): Promise<void> {
+  const store = assistantStore(); const callId = read.callId; const runtime = assistantRuntime();
   const limits = assistantLimits();
+  // The earlier period's run may still be stopping (a dismissal's notice, settlement and closing session take a moment): wait for it before
+  // anything is settled or held, so its stop never closes or bills the new period. Nothing is held when it takes too long.
+  if (!(await runtime.settled(callId, rejoinWaitMs, periodOf(read) + 1))) throw new AppError(409, REJOIN_STILL_LEAVING);
+  const before = (await store.get(callId)) ?? read;
   const standing = await rejoinStanding(before, runtime.deps.clock());
   if (standing === 'deleted') throw new AppError(409, REJOIN_DELETED);
   if (standing === 'limit') throw new AppError(409, REJOIN_LIMIT);
@@ -396,8 +405,9 @@ async function rejoin(req: Request, res: Response, session: Session, before: Ass
   if (!held.ok) { await stopIntakeIfLeft(); sendRefusal(res, held.refusal, 'invite'); return; }
   const giveBack = async () => { await spend.release(held.holdId ? [held.holdId] : []); };
   const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
-  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId), fromSeq: prior.nextSeq }); } catch (e) {
+  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId), fromSeq: prior.nextSeq, period: periodOf(prior) + 1 }); } catch (e) {
     await giveBack(); await stopIntakeIfLeft();
+    if (e instanceof RunStillStopping) throw new AppError(409, REJOIN_STILL_LEAVING); // a leave that began after the wait above
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
     throw new AppError(503, `${NOVA} could not start. Try again in a moment.`);
   }

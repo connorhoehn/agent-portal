@@ -21,6 +21,9 @@ const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, arg
 const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, claim_id, claimed_at, proposal_id';
 const iso = (ms: number): string => new Date(ms).toISOString();
 
+/** The record's period (types.ts `periodOf`) in SQL: the earlier periods kept in the session, plus one. */
+const PERIOD_SQL = `(CASE WHEN jsonb_typeof(session->'periods') = 'array' THEN jsonb_array_length(session->'periods') ELSE 0 END + 1)`;
+
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
   acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests, voice, session`;
 
@@ -278,10 +281,12 @@ export class SqlAssistantStore implements AssistantStore {
     return rows[0] ? recordFromRow(rows[0]) : null;
   }
 
-  async patchSession(callId: string, patch: Partial<AssistantSession>) {
+  async patchSession(callId: string, patch: Partial<AssistantSession>, when?: { period?: number }) {
+    // With a period: one conditional statement, so a late stop of an earlier period never writes over the newer one.
+    const period = when?.period;
     const rows = await this.exec(
-      `UPDATE meeting_assistants SET session = session || :patch::jsonb, updated_at = now() WHERE call_id = :call RETURNING ${COLUMNS}`,
-      [s('call', callId), s('patch', JSON.stringify(patch))],
+      `UPDATE meeting_assistants SET session = session || :patch::jsonb, updated_at = now() WHERE call_id = :call${period !== undefined ? ` AND ${PERIOD_SQL} = :period` : ''} RETURNING ${COLUMNS}`,
+      [s('call', callId), s('patch', JSON.stringify(patch)), ...(period !== undefined ? [n('period', period)] : [])],
     );
     return rows[0] ? recordFromRow(rows[0]) : null;
   }

@@ -17,7 +17,7 @@
 //    read, so of two responses at once one wins and the other reads again (lib/meeting-assistant/proposals.ts retries).
 //    Its statement, outcome, digest, named people and executor are never rewritten.
 import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
-import { sessionOf } from './types.js';
+import { periodOf, sessionOf } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 
 export const MAX_PENDING_REQUESTS = 20;
@@ -105,8 +105,11 @@ export interface AssistantStore {
   decideAction(callId: string, actionId: string, change: ActionChange): Promise<AssistantAction | null>;
   /** Turn Nova's voice on or off for the call; the record, or null when there is none. */
   setVoice(callId: string, on: boolean): Promise<AssistantRecord | null>;
-  /** Merge fields into the record's session bookkeeping; null when there is no record. */
-  patchSession(callId: string, patch: Partial<AssistantSession>): Promise<AssistantRecord | null>;
+  /**
+   * Merge fields into the record's session bookkeeping; null when there is no record. With `when.period`, only while the record is still
+   * in that period (`periodOf`), in the same step: a run of an earlier period that stops late never changes the newer one (null then).
+   */
+  patchSession(callId: string, patch: Partial<AssistantSession>, when?: { period?: number }): Promise<AssistantRecord | null>;
   /** Add one to the refused-call counter; the new count, or 0 when there is no record. */
   bumpRefused(callId: string): Promise<number>;
   /** Record a turn; an existing (call, turnId) is returned as it is with `created: false`. */
@@ -293,9 +296,10 @@ export class MemoryAssistantStore implements AssistantStore {
     return copy(r);
   }
 
-  async patchSession(callId: string, patch: Partial<AssistantSession>) {
+  async patchSession(callId: string, patch: Partial<AssistantSession>, when?: { period?: number }) {
     const r = this.records.get(callId);
     if (!r) return null;
+    if (when?.period !== undefined && periodOf(r) !== when.period) return null;
     r.session = { ...sessionOf(r), ...copy(patch) };
     return copy(r);
   }

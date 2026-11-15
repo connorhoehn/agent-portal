@@ -4,7 +4,7 @@ jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true }, meeti
 import { MemoryAssistantStore, MAX_PENDING_REQUESTS } from '../store.js';
 import { SqlAssistantStore, recordFromRow, lineFromRow } from '../store-sql.js';
 import { sweepTranscripts } from '../retention.js';
-import { sessionOf, type AssistantRecord, type AssistantTurn } from '../types.js';
+import { periodOf, sessionOf, type AssistantRecord, type AssistantTurn } from '../types.js';
 import { turnFromRow } from '../store-sql.js';
 
 const record = (over: Partial<AssistantRecord> = {}): AssistantRecord => ({
@@ -339,6 +339,16 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
     expect((await s.appendLine(line()))!.seq).toBe(1);
   });
 
+  it('a session patch for a period writes only while the record is still in that period (a late stop of the earlier one changes nothing)', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left({ session: { ...sessionOf(left()), listeningSince: 5000 } }));
+    expect(periodOf((await s.get('call-1'))!)).toBe(1);
+    await s.rejoin('call-1', change({ session: { listeningSince: 12_000, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] } }));
+    expect(await s.patchSession('call-1', { listeningSince: null, listeningSeconds: 99 }, { period: 1 })).toBeNull();
+    expect(sessionOf((await s.get('call-1'))!)).toMatchObject({ listeningSince: 12_000, listeningSeconds: 0 });
+    expect(sessionOf((await s.patchSession('call-1', { listeningSeconds: 5 }, { period: 2 }))!).listeningSeconds).toBe(5);
+    expect(sessionOf((await s.patchSession('call-1', { listeningSeconds: 6 }))!).listeningSeconds).toBe(6);
+  });
+
   const minutes = (over: Record<string, unknown> = {}) => ({
     callId: 'call-1', tenant: 'orgiq', lobby: 'l', initiativeId: 'p-auth', callName: 'Auth call', startedAt: 1000, endedAt: 9000, invitedBy: 'u-vera', attendees: ['u-vera'],
     summary: 'First.', decisions: ['Ship Thursday'], actionItems: [{ text: 'Write the plan', ownerUserId: 'u-vera' }, { text: 'Done thing', done: true }], topics: ['rollout'],
@@ -412,6 +422,15 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
       expect(JSON.parse((param('session') as { stringValue: string }).stringValue)).toMatchObject({ ledgerPart: 1 });
       rows = [{ call_id: 'call-1', tenant: 'orgiq', lobby: 'l', state: 'listening', invited_by: 'u-raj', invited_at: '2026-11-13 10:00:00', session: '{"periods":[{"invitedBy":"u-vera","from":1,"leftAt":2,"leftBy":null}]}' }];
       expect(sessionOf((await store().rejoin('call-1', change()))!).periods).toHaveLength(1);
+    });
+
+    it('a session patch for a period is one conditional update on the number of earlier periods; without one it is unconditional', async () => {
+      await store().patchSession('call-1', { listeningSince: null }, { period: 2 });
+      const sql = norm(calls[0]!.sql);
+      expect(sql).toContain("WHERE call_id = :call AND (CASE WHEN jsonb_typeof(session->'periods') = 'array' THEN jsonb_array_length(session->'periods') ELSE 0 END + 1) = :period RETURNING");
+      expect(param('period')).toEqual({ longValue: 2 });
+      await store().patchSession('call-1', { listeningSince: null });
+      expect(norm(calls[1]!.sql)).toContain('WHERE call_id = :call RETURNING');
     });
 
     it('an addition extends the stored lists in place under a compare on through_seq; an owed one and its claim are conditional too', async () => {

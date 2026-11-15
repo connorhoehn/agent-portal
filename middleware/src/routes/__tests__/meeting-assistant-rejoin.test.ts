@@ -26,12 +26,13 @@ import { CallChatRuntime, callChatChannel, setCallChatRuntime } from '../../lib/
 import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle } from '../../lib/call-pages.js';
 import { assistantStore, assistantIntake, setAssistantStore, setAssistantIntake, LineIntake, MemoryAssistantStore, setTranscriptSource, MockTranscriptSource } from '../../lib/meeting-assistant/index.js';
-import { AssistantRuntime, setAssistantRuntime, defaultRolesOf } from '../../lib/meeting-assistant/orchestrator.js';
+import { AssistantRuntime, RunStillStopping, setAssistantRuntime, defaultRolesOf } from '../../lib/meeting-assistant/orchestrator.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
 import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { sessionOf } from '../../lib/meeting-assistant/types.js';
-import { coverageOf, REJOIN_DELETED, REJOIN_LIMIT } from '../meeting-assistant.js';
+import { coverageOf, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
+import { settleFromRecord } from '../../lib/meeting-assistant/reconcile.js';
 import { newAssistantSession } from '../../lib/meeting-assistant/types.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
@@ -80,6 +81,7 @@ beforeEach(async () => {
   setAssistantRuntime(runtime);
 });
 afterEach(() => {
+  setRejoinWaitMs(null);
   setAssistantRuntime(null); setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); rt.dispose(); setCallChatRuntime(null);
   for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
@@ -257,6 +259,89 @@ describe('inviting Nova back', () => {
     await post('invite', 'bob');
     expect((await del('transcript', 'alice')).status).toBe(409);
     expect((await del('transcript', 'bob')).status).toBe(409);
+  });
+});
+
+describe('inviting Nova back while its earlier period is still stopping', () => {
+  /** The dismissal's stop is held at its settlement until `open()`; the dismiss request answers only then. */
+  const slowStop = () => {
+    let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
+    runtime.deps.onFinished = async (e) => { await gate; await settleFinished(e, clock); };
+    return open;
+  };
+  const leftNow = async () => { for (let i = 0; i < 40 && (await record()).state !== 'left'; i += 1) await flush(); expect((await record()).state).toBe('left'); };
+
+  it('waits for the stop, then settles the first period once under its own part and starts the second with a live session', async () => {
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); clock += 600_000;
+    const open = slowStop();
+    const dismissed = post('dismiss', 'carol').then((r) => r);
+    await leftNow();
+    const back = post('invite', 'bob').then((r) => r);
+    await flush(); await new Promise<void>((r) => setTimeout(r, 60));
+    expect(holds().map((h) => h.sourceId)).toEqual(['ma:call-1']);      // nothing is held while the stop is still finishing
+    open();
+    const [d, b] = await Promise.all([dismissed, back]);
+    expect(d.status).toBe(200);
+    expect([b.status, b.body.state, b.body.invitedBy, b.body.period]).toEqual([200, 'listening', 'bob', 2]);
+    expect(entries().map((e) => [e.sourceId, e.costUsd])).toEqual([['ma:call-1', 0.5]]);
+    expect(runtime.isRunning(CALL)).toBe(true); expect(runtime.hasSession(CALL)).toBe(true);
+    expect(holds().map((h) => [h.sourceId, h.status])).toEqual([['ma:call-1', 'settled'], ['ma:call-1:x1', 'held']]);
+    expect(sessionOf(await record())).toMatchObject({ settled: false, ledgerPart: 1, listeningSince: clock, listeningSeconds: 0, settledListeningSeconds: 600 });
+    // The second period is billed on its own when it ends.
+    clock += 60_000; await post('dismiss', 'alice'); await flush();
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1', 'ma:call-1:x1']);
+  });
+
+  it('a stop that takes longer than the wait answers that Nova is still leaving, and nothing is held', async () => {
+    budget('alice'); budget('bob');
+    setRejoinWaitMs(40);
+    await post('invite', 'alice'); clock += 600_000;
+    const open = slowStop();
+    const dismissed = post('dismiss', 'carol').then((r) => r);
+    await leftNow();
+    const refused = await post('invite', 'bob');
+    expect([refused.status, refused.body.error]).toEqual([409, REJOIN_STILL_LEAVING]);
+    expect(holds().map((h) => h.sourceId)).toEqual(['ma:call-1']);
+    expect(entries()).toEqual([]);
+    open(); expect((await dismissed).status).toBe(200);
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
+    expect((await record()).state).toBe('left');
+    expect((await post('invite', 'bob')).status).toBe(200);                 // once it has left, the invitation back goes through
+  });
+
+  it('a stop that ends after Nova was invited back never changes the newer period\'s clock, usage or ledger', async () => {
+    budget('alice'); budget('bob');
+    const invitedAt = (await post('invite', 'alice')).body.invitedAt as number;
+    clock += 300_000;
+    // The record left and came back (as another process would) while this process's run of the first period still exists.
+    await assistantStore().transition(CALL, { from: ['listening'], to: 'left', by: 'system', at: clock });
+    await settleFromRecord(CALL, { clock: () => clock });
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
+    await assistantStore().rejoin(CALL, { leftAt: clock, by: 'bob', at: clock, present: ['bob'], session: {
+      settled: false, ledgerPart: 1, extensions: 1, holds: [], listeningSeconds: 0, listeningSince: clock, settledListeningSeconds: 300, usageSeconds: 0, tokensIn: 0,
+      periodFrom: clock, periods: [{ invitedBy: 'alice', from: invitedAt, leftAt: clock, leftBy: 'system' }] } });
+    clock += 60_000;
+    const before = sessionOf(await record());
+    await runtime.stop(CALL); await flush();
+    const after = sessionOf(await record());
+    expect(after).toEqual(before);
+    expect(after).toMatchObject({ settled: false, listeningSince: clock - 60_000, listeningSeconds: 0, usageSeconds: 0 });
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
+  });
+
+  it('start refuses a second run while the earlier one is stopping, and is a no-op for a live run of the same period', async () => {
+    budget('alice');
+    await post('invite', 'alice');
+    const ctx = { callId: CALL, tenant: 'orgiq', inviterId: 'alice', roster: [], recordName: null };
+    await expect(runtime.start({ ...ctx, period: 1 })).resolves.toBeUndefined();
+    await expect(runtime.start({ ...ctx, period: 2 })).rejects.toBeInstanceOf(RunStillStopping);
+    const open = slowStop();
+    const stopping = runtime.stop(CALL);
+    await expect(runtime.start(ctx)).rejects.toBeInstanceOf(RunStillStopping);
+    expect(await runtime.settled(CALL, 20)).toBe(false);
+    open(); await stopping;
+    expect(await runtime.settled(CALL, 20)).toBe(true);
   });
 });
 

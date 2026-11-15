@@ -594,7 +594,7 @@ describe('pause, resume, replacement and stop', () => {
     await say(BOB, 'Nova, find the runbooks');
     now += 61_000;
     await runtime.stop(CALL); await runtime.stop(CALL);
-    expect(finished).toEqual([{ callId: CALL, usageSeconds: 66, tokens: { input: 0, output: 0, cached: 0 }, sessionKind: 'scripted' }]);
+    expect(finished).toEqual([{ callId: CALL, usageSeconds: 66, tokens: { input: 0, output: 0, cached: 0 }, sessionKind: 'scripted', period: 1 }]);
     expect((await store.listTurns(CALL))[0]!.status).toBe('expired');
     expect(runtime.isRunning(CALL)).toBe(false);
   });
