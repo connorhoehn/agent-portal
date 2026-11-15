@@ -15,9 +15,16 @@ export interface MeetingListRow {
   actionItemCount: number;
   /** Proposals from this meeting waiting on the viewer's answer; absent from an older server. */
   waitingOnYou?: number;
+  /** The summary's lead sentence (absent from an older server: read from `summary`). */
+  summaryLead?: string;
+  /** Nova's listening time in seconds; null when the server no longer knows it, absent from an older server. */
+  listenedSeconds?: number | null;
+  /** What came out of the meeting, counted by the server: decisions (agreed proposals included), action items, proposals still open. */
+  outcomes?: { decisions: number; actionItems: number; open: number };
 }
 
-export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean }
+/** `workItemCreated`: the server says its work item exists (done in the call, or its card was carried out); absent from an older server. */
+export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean; workItemCreated?: boolean }
 export interface MinutesPerson { userId: string; name: string }
 
 /** A proposal as the minutes list it: its state and who consented or objected, by name only (docs/meeting-consent-design.md). */
@@ -34,6 +41,9 @@ export interface MinutesView {
   invitedByName: string;
   attendees: MinutesPerson[];
   summary: string;
+  /** The summary split by the server: its lead sentence and up to four bullets. Absent from an older server (`summaryOf` reads `summary`). */
+  summaryLead?: string;
+  summaryPoints?: string[];
   decisions: string[];
   actionItems: MinutesActionItem[];
   topics: string[];
@@ -136,21 +146,6 @@ export const waitingLabel = (n: number | undefined): string | null => (n && n > 
 /** "14 Dec 2026", in the viewer's zone. */
 export const dayLabel = (ms: number): string => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** How long the meeting is kept and who can remove it sooner: "Kept until 14 Dec 2026. Vera Green can delete it sooner." */
-export function keptLine(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'youAreInviter'>): string | null {
-  if (!m.keptUntil) return null;
-  return `Kept until ${dayLabel(m.keptUntil)}. ${m.youAreInviter ? 'You' : m.invitedByName || 'The person who invited Nova'} can delete it sooner.`;
-}
-
-/** What Nova covered, for the page's meta line: its listening time (not the meeting's length), its paused time, and a COUNT of people not transcribed. */
-export function coverageItems(c: MinutesCoverage | undefined): string[] {
-  if (!c) return [];
-  const items = [`Nova listened for ${durationLabel(0, c.listenedSeconds * 1000)}`];
-  if (c.pausedSeconds >= 60) items.push(`paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);
-  if (c.untranscribed > 0) items.push(c.untranscribed === 1 ? '1 person was not transcribed' : `${c.untranscribed} people were not transcribed`);
-  return items;
-}
-
 /** The Decisions and Action items sections when no minutes were written: never "No … were recorded", which reads as "there were none". */
 export const MINUTES_UNAVAILABLE = 'Not available because the minutes could not be written.';
 export const minutesWritten = (m: Pick<MinutesView, 'writer'>): boolean => m.writer !== 'none';
@@ -161,4 +156,114 @@ export function goneCopy(failure: { status: number | null; code: string | null }
   if (failure?.code === 'MEETING_EXPIRED') return { title: 'Meeting removed', description: 'This meeting\'s record was removed after the retention period.', writing: false };
   if (failure?.code === 'MINUTES_WRITING') return { title: 'Nova is writing the minutes', description: 'They appear here when they are ready.', writing: true };
   return { title: 'Meeting not found', description: 'There is no meeting record here. It may have been deleted, removed after the retention period, or you were not in that call.', writing: false };
+}
+
+// ---- the redesigned meeting page and list (one meta line, "Needs you", outcome tables) -------------------------------------------
+
+/**
+ * The summary's lead and bullets: the server's split when it sends one, otherwise the stored text read the same way (a "- " line is a
+ * bullet), so an older paragraph is all lead.
+ */
+export function summaryOf(m: Pick<MinutesView, 'summary' | 'summaryLead' | 'summaryPoints'>): { lead: string; points: string[] } {
+  if (typeof m.summaryLead === 'string') return { lead: m.summaryLead, points: (m.summaryPoints ?? []).slice(0, 4) };
+  const lines = m.summary.split('\n').map((l) => l.trim()).filter(Boolean);
+  const points = lines.filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim()).filter(Boolean);
+  const lead = lines.filter((l) => !l.startsWith('- ')).join(' ');
+  return { lead: lead || points[0] || '', points: (lead ? points : points.slice(1)).slice(0, 4) };
+}
+
+/** The Meetings row's quiet second line: the summary's lead. */
+export const listLead = (r: Pick<MeetingListRow, 'summary' | 'summaryLead'>): string => summaryLine(r.summaryLead ?? summaryOf({ summary: r.summary }).lead, 160);
+
+/** "3 min" of Nova's listening; null when unknown. */
+export const listenedLabel = (seconds: number | null | undefined): string | null =>
+  (typeof seconds === 'number' ? durationLabel(0, seconds * 1000) : null);
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** "2 decisions · 3 actions · 1 open", leaving out the zeros; "Nothing recorded" when all are zero; null from an older server. */
+export function outcomesLabel(o: MeetingListRow['outcomes']): string | null {
+  if (!o) return null;
+  const parts = [
+    ...(o.decisions ? [plural(o.decisions, 'decision', 'decisions')] : []),
+    ...(o.actionItems ? [plural(o.actionItems, 'action', 'actions')] : []),
+    ...(o.open ? [`${o.open} open`] : []),
+  ];
+  return parts.length ? parts.join(' · ') : 'Nothing recorded';
+}
+
+/** The header's one meta line, as words (the people are drawn as avatars between them by the page). */
+export function headerMeta(m: Pick<MinutesView, 'startedAt' | 'coverage' | 'invitedByName'>): { when: string; listened: string | null; invitedBy: string } {
+  const listened = m.coverage ? `Nova listened ${durationLabel(0, m.coverage.listenedSeconds * 1000)}` : null;
+  return { when: whenLabel(m.startedAt), listened, invitedBy: `invited by ${m.invitedByName}` };
+}
+
+/** The header's quieter second line: retention and who can delete sooner, then Nova's pause and how many people were not transcribed. */
+export function quietMeta(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'youAreInviter' | 'coverage'>): string[] {
+  const items: string[] = [];
+  if (m.keptUntil) {
+    items.push(`Kept until ${dayLabel(m.keptUntil)}`);
+    items.push(`${m.youAreInviter ? 'You' : m.invitedByName || 'The person who invited Nova'} can delete it sooner`);
+  }
+  const c = m.coverage;
+  if (c && c.pausedSeconds >= 60) items.push(`Nova paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);
+  if (c && c.untranscribed > 0) items.push(c.untranscribed === 1 ? '1 person was not transcribed' : `${c.untranscribed} people were not transcribed`);
+  return items;
+}
+
+export type PillTone = 'info' | 'success' | 'warning' | 'error' | 'neutral' | 'pending';
+
+/** A proposal's status pill, worded as the call's card words it. */
+export function proposalPill(p: { state: string; source?: string; outcome?: { kind: string }; run?: { raisedAs: string | null } | null }): { label: string; tone: PillTone } {
+  switch (p.state) {
+    case 'open': return { label: 'Waiting for consent', tone: 'pending' };
+    case 'consented': return { label: 'Consented', tone: 'info' };
+    case 'running': return { label: 'Running', tone: 'info' };
+    case 'done': return { label: 'Done', tone: 'success' };
+    case 'failed': return { label: 'Failed', tone: 'error' };
+    case 'objected': return { label: 'Objected', tone: 'warning' };
+    case 'expired': return { label: 'Expired', tone: 'neutral' };
+    case 'dismissed': return {
+      label: p.run?.raisedAs ? 'Raised again' : p.source === 'asked' ? 'Dropped' : p.outcome?.kind === 'tool' ? 'Not needed' : 'Not a decision', tone: 'neutral',
+    };
+    default: return { label: p.state, tone: 'neutral' };
+  }
+}
+
+/** Closed proposals (done, failed, not a decision, expired) are listed after the open ones and muted. */
+export const proposalClosed = (state: string): boolean => state === 'done' || state === 'failed' || state === 'dismissed' || state === 'expired';
+
+/** Open proposals first, then closed ones, each group in its own order (oldest first). */
+export function orderProposals<P extends { state: string }>(list: readonly P[]): P[] {
+  return [...list.filter((p) => !proposalClosed(p.state)), ...list.filter((p) => proposalClosed(p.state))];
+}
+
+/** An action item's status pill: done in the call, its work item made, or not yet. */
+export function actionStatus(i: MinutesActionItem): { label: string; tone: PillTone } {
+  if (i.done) return { label: 'Done in the call', tone: 'success' };
+  if (i.workItemCreated) return { label: 'Work item created', tone: 'success' };
+  return { label: 'Not created', tone: 'neutral' };
+}
+
+/** An action item waiting on the viewer: theirs (named as its owner), not done, and with no work item yet. */
+export const actionWaitsOn = (i: MinutesActionItem, viewerUserId: string | null): boolean =>
+  !!viewerUserId && i.ownerUserId === viewerUserId && !i.done && !i.workItemCreated;
+
+/** One row of the Decisions table: a decision line of the minutes, or a decision people agreed through a proposal. */
+export interface DecisionRow { key: string; text: string; initiativeId: string | null; agreedBy: string[]; href: string | null }
+
+/**
+ * The Decisions table: the minutes' own decision lines (on the meeting's initiative; nobody recorded as agreeing), then each decision
+ * proposal everyone needed consented to, with who consented and, once recorded, the link to it. The same count as the minutes card.
+ */
+export function decisionRows(
+  m: Pick<MinutesView, 'decisions' | 'initiativeId'>,
+  proposals: ReadonlyArray<{ id: string; statement: string; state: string; outcome: { kind: string; initiativeId?: string | null }; responses: ReadonlyArray<{ name: string; response: string }>; run: { href: string | null } | null }>,
+): DecisionRow[] {
+  const own = m.decisions.map((text, i) => ({ key: `m${i}`, text, initiativeId: m.initiativeId, agreedBy: [], href: null }));
+  const agreed = proposals.filter((p) => p.outcome.kind === 'decision' && (p.state === 'consented' || p.state === 'running' || p.state === 'done')).map((p) => ({
+    key: `p${p.id}`, text: p.statement, initiativeId: p.outcome.initiativeId ?? m.initiativeId,
+    agreedBy: p.responses.filter((r) => r.response === 'consent').map((r) => r.name), href: p.state === 'done' ? p.run?.href ?? null : null,
+  }));
+  return [...agreed, ...own];
 }

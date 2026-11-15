@@ -3,12 +3,12 @@
 // follow the server's `next` cursor with "Load older meetings" under the table (the library table pages only on the client).
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Chip, DataTable, Inline, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { AvatarGroup, Button, Chip, DataTable, Inline, Stack, T, Tooltip, VisuallyHidden, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { useFetch } from '../../hooks/useFetch';
 import { responseFailure } from '../../lib/apiFailure';
 import { relativeTime } from '../../lib/relativeTime';
-import { MEETINGS_URL, meetingHref, meetingsUrl, mergeMeetings, peopleLabel, summaryLine, waitingLabel, type MeetingListRow } from './meetingsModel';
+import { MEETINGS_URL, listenedLabel, listLead, meetingHref, meetingsUrl, mergeMeetings, outcomesLabel, peopleLabel, waitingLabel, type MeetingListRow } from './meetingsModel';
 
 interface MeetingsPage { meetings: MeetingListRow[]; next: number | null }
 
@@ -32,19 +32,38 @@ export default function MeetingsPage() {
     }
   }, [next]);
 
+  // Meeting (its name; the summary's lead as a quiet second line) · When · Length (Nova's listening) · People · Outcomes, and the
+  // "N waiting on you" chip. Every count comes from the server, for this viewer.
   const columns: DataTableColumn<MeetingListRow>[] = [
-    { key: 'name', header: 'Meeting', width: '288px', render: (r) => {
-      const waiting = waitingLabel(r.waitingOnYou);
+    { key: 'name', header: 'Meeting', render: (r) => {
+      const lead = listLead(r);
       return (
-        <Inline gap="xs" wrap={false} className="min-w-0">
-          <T size="sm" className="block min-w-0 max-w-[14rem] truncate" title={r.callName}>{r.callName}</T>
+        <Stack gap="none" className="min-w-0">
+          <T size="sm" weight="medium" truncate title={r.callName}>{r.callName}</T>
+          {lead && <T size="sm" tone="secondary" truncate title={lead} data-testid="iq-meetings-lead">{lead}</T>}
+        </Stack>
+      );
+    } },
+    { key: 'when', header: 'When', width: '112px', render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
+    { key: 'length', header: 'Length', width: '96px', priority: 2, render: (r) => <T size="sm" tone="secondary" tabular>{listenedLabel(r.listenedSeconds) ?? '—'}</T> },
+    { key: 'people', header: 'People', width: '128px', priority: 1, render: (r) => (r.attendees.length ? (
+      <Tooltip content={r.attendees.join(', ')} triggerClassName="inline-flex items-center">
+        <Inline as="span" gap="none" wrap={false} tabIndex={0} aria-label={peopleLabel(r.attendees)} data-testid="iq-meetings-people">
+          <AvatarGroup names={r.attendees} size={22} maxVisible={4} />
+          <VisuallyHidden>{peopleLabel(r.attendees)}</VisuallyHidden>
+        </Inline>
+      </Tooltip>
+    ) : null) },
+    { key: 'outcomes', header: 'Outcomes', width: '320px', render: (r) => {
+      const waiting = waitingLabel(r.waitingOnYou);
+      const outcomes = outcomesLabel(r.outcomes);
+      return (
+        <Inline gap="sm" wrap={false} className="min-w-0">
+          {outcomes && <T size="sm" tone="secondary" truncate data-testid="iq-meetings-outcomes">{outcomes}</T>}
           {waiting && <Chip size="xs" tone="warning" data-testid="iq-meetings-waiting">{waiting}</Chip>}
         </Inline>
       );
     } },
-    { key: 'when', header: 'When', width: '112px', numeric: true, render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
-    { key: 'people', header: 'People', width: '192px', priority: 1, render: (r) => <T size="sm" className="block max-w-[12rem] truncate" title={r.attendees.join(', ')}>{peopleLabel(r.attendees)}</T> },
-    { key: 'summary', header: 'Summary', render: (r) => <T size="sm" className="block max-w-[40rem] truncate" title={r.summary}>{summaryLine(r.summary)}</T> },
   ];
 
   return (

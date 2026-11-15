@@ -1,15 +1,18 @@
-// /iq/meetings/:callId — what the meeting assistant left behind: who was there, the summary, decisions, action items
-// and the transcript. Only the people who were in the call can read it; everyone else, admins included, gets the
-// same "not found" the server gives them; someone who was there is told when it was deleted or expired. The inviter can delete the
-// meeting (minutes and transcript together). Failed minutes can be written again from here, within the server's cap.
-// Proposals (docs/meeting-consent-design.md, package 6): each one is drawn with the call chat's own read-only card; someone who
-// still owes an answer is asked with the call's own deck prompt in the page's composer deck. A person a proposal names who was
-// not in the call sees only that section. A consent that completes one runs it in the executor's browser here (MeetingTurnRunner).
-import { useCallback, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+// /iq/meetings/:callId — what Nova left behind, read at a glance: who was there, what came out of it and what waits on the viewer.
+// Only the people who were in the call can read it; everyone else, admins included, gets the same "not found" the server gives them;
+// someone who was there is told when it was deleted or expired. The inviter can delete the meeting (minutes and transcript together)
+// from the header's menu. Failed minutes can be written again from the same menu, within the server's cap.
+// Layout: one meta line, "Needs you" (only when something waits on the viewer), a short summary, then the outcomes as tables
+// (Decisions, Action items, Proposals), and the transcript last, collapsed. A proposal row opens its detail in a drawer; someone who
+// still owes an answer is asked with the call's own deck prompt in the page's composer deck ("Answer" brings that proposal to the
+// front). A person a proposal names who was not in the call sees only the proposals. A consent that completes one runs it in the
+// executor's browser here (MeetingTurnRunner).
+import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import {
-  Button, DataTable, DetailPage, DetailSection, EmptyState, Inline, LoadingState, MetaLine, Stack, T,
-  type DataTableColumn,
+  AvatarGroup, Button, DataTable, DetailPage, DetailSection, Disclosure, Drawer, DropdownMenu, EmptyState, Inline, Link, LoadingState, MetaLine,
+  MoreIcon, Prose, Stack, StatusPill, T, Tooltip, UserChip, VisuallyHidden,
+  type DataTableColumn, type DropdownMenuItem,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
@@ -19,15 +22,59 @@ import { sendJson } from '../../lib/writeJson';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { newWorkItemHref } from '../projects/initiativeNavigation';
-import { ProposalCard } from '../../components/chat/AssistantMessageExtras';
 import { proposalPrompt } from '../../components/shell/NovaProposalAsk';
 import { MeetingTurnRunner } from '../../components/shell/MeetingTurnRunner';
-import { deckQueue, parseProposals } from '../../lib/meetingProposals';
+import { answerProposal, raiseProposalAgain } from '../../lib/meetingAssistant';
+import { bumpProposalPrompt } from '../../lib/proposalDeckState';
 import {
-  canCreateFor, coverageItems, goneCopy, keptLine, minutesWritten, peopleLabel, transcriptSegments, whenLabel, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
-  MINUTES_UNAVAILABLE, type MinutesActionItem, type MinutesView,
+  blockedLine, deckQueue, eyebrowOf, expiryLine, heardText, isAnswerable, needsLine, optionalFor, outcomeLine, parseProposals, personChips,
+  recordsLine, resultHref, stateLine, waitingOnYou, RUN_NOW, type ProposalView,
+} from '../../lib/meetingProposals';
+import {
+  actionStatus, actionWaitsOn, canCreateFor, decisionRows, goneCopy, headerMeta, minutesWritten, orderProposals, proposalClosed, proposalPill,
+  quietMeta, summaryOf, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
+  MINUTES_UNAVAILABLE, type DecisionRow, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
+
+/** A link inside the portal that navigates in place on a plain click, at the size of the text it sits in. */
+function PortalLink({ href, children, testId }: { href: string; children: ReactNode; testId?: string }) {
+  const navigate = useNavigate();
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } };
+  return <T size="sm"><Link href={href} onClick={onClick} {...(testId ? { 'data-testid': testId } : {})}>{children}</Link></T>;
+}
+
+/** The people as an avatar group; their names on hover or focus (Tooltip) and for screen readers. */
+function People({ names, label, testId }: { names: readonly string[]; label?: string; testId?: string }) {
+  if (!names.length) return null;
+  const words = label ?? names.join(', ');
+  return (
+    <Tooltip content={words} triggerClassName="inline-flex items-center">
+      <Inline as="span" gap="none" wrap={false} tabIndex={0} aria-label={words} {...(testId ? { 'data-testid': testId } : {})}>
+        <AvatarGroup names={[...names]} size={22} maxVisible={5} />
+        <VisuallyHidden>{words}</VisuallyHidden>
+      </Inline>
+    </Tooltip>
+  );
+}
+
+/** The initiative's name, read once per id; "—" until known or when there is none. */
+function InitiativeName({ id }: { id: string | null }) {
+  const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
+  return <T size="sm" tone="secondary" truncate>{named.data?.name?.trim() || '—'}</T>;
+}
+
+/** What a proposal does, in plain words ("Record as a decision on Observability Platform"). */
+function OutcomeWords({ p }: { p: ProposalView }) {
+  const id = p.outcome.kind === 'decision' ? p.outcome.initiativeId : null;
+  const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
+  return <T size="sm" tone="secondary" clamp={2}>{outcomeLine(p.outcome, named.data?.name?.trim() || null)}</T>;
+}
+
+/** The empty line of an outcome table: "No … were recorded.", or for failed minutes the rule that they are not available. */
+function EmptyLine({ written, none, testId }: { written: boolean; none: string; testId: string }) {
+  return <T size="sm" tone="secondary" data-testid={testId}>{written ? none : MINUTES_UNAVAILABLE}</T>;
+}
 
 export default function MeetingPage() {
   const { callId = '' } = useParams();
@@ -54,20 +101,32 @@ export default function MeetingPage() {
   if (nowLive !== live) setLive(nowLive);
   const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
   const keep = useCallback((key: string) => setKept((k) => new Set([...k, key])), []);
-  const head = deckQueue(proposals, kept)[0] ?? null;
+  // "Answer" / "Run it now" on a row brings that proposal to the front of the deck; `n` gives the prompt a new id so a hidden deck shows again.
+  const [focus, setFocus] = useState<{ id: string; n: number } | null>(null);
+  const focused = focus ? proposals.find((p) => p.id === focus.id && (waitingOnYou(p) || optionalFor(p))) ?? null : null;
+  const head = focused ?? deckQueue(proposals, kept)[0] ?? null;
+  const ask = useCallback((p: ProposalView) => {
+    setKept((k) => new Set([...k].filter((key) => !key.startsWith(`${p.id}:`))));
+    setFocus((f) => ({ id: p.id, n: (f?.n ?? 0) + 1 }));
+  }, []);
   const headInitiative = useFetch<{ name?: string }>(head?.outcome.kind === 'decision' && head.outcome.initiativeId ? `/api/graph/projects/${encodeURIComponent(head.outcome.initiativeId)}` : null);
   const refreshProposals = proposalsFetch.refresh;
+  const focusN = focused ? focus?.n ?? 0 : 0;
   const proposalAsk = useMemo<ComposerPrompt | null>(() => {
     if (!head || !callId) return null;
     const prompt = proposalPrompt(callId, head, headInitiative.data?.name?.trim() || null, { inCall: false, scope: `meeting-proposal:${callId}`, keep });
-    // The page's list is read again after every answer, so the card and the next question follow at once.
-    return { ...prompt, onAnswer: async (a) => { const out = await prompt.onAnswer(a); refreshProposals(); return out; } };
-  }, [head, callId, headInitiative.data?.name, keep, refreshProposals]);
+    // The page's list is read again after every answer, so the row and the next question follow at once.
+    return {
+      ...prompt, ...(focusN ? { id: `${prompt.id}:again-${focusN}` } : {}),
+      onAnswer: async (a) => { const out = await prompt.onAnswer(a); setFocus(null); refreshProposals(); return out; },
+    };
+  }, [head, callId, headInitiative.data?.name, keep, refreshProposals, focusN]);
   const me = session?.sub ?? null;
   const mayRunHere = proposals.some((p) => p.executor.userId === me && (p.state === 'consented' || p.state === 'running'));
   // The delete question rides the page's docked composer as a deck prompt; `asked` counts the times it was raised so Delete reopens a hidden one.
   const [asked, setAsked] = useState(0);
   const [answered, setAnswered] = useState(0);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const adapter = useMemo(() => collectionCommandAdapter({ noun: 'meeting' }, {
     id: 'meeting-commands', label: 'Meeting', placeholder: 'Refresh this meeting…',
     setQuery: () => { throw new Error('This page has nothing to search. No changes were made.'); },
@@ -91,20 +150,38 @@ export default function MeetingPage() {
   // A delete the inviter just asked for is asked first; the proposal waits behind it.
   const prompts = [...(deletePrompt ? [deletePrompt] : []), ...(proposalAsk ? [proposalAsk] : [])];
   const runner = callId && mayRunHere ? <MeetingTurnRunner afterCall={{ callId, initiativeId: m?.initiativeId ?? null, active: true }} /> : null;
-  // Drawn only when the call had proposals: a call without them keeps the page as it was.
-  const proposalSection = (first: boolean) => (proposals.length ? (
-    <DetailSection title="Proposals" as="h2" hint={String(proposals.length)} first={first}>
-      <Stack gap="sm" data-testid="meeting-proposals">{proposals.map((p) => <ProposalCard key={p.id} proposalId={p.id} state={p.state} statement={p.statement} view={p} />)}</Stack>
-    </DetailSection>
-  ) : null);
+  const detail = detailId ? proposals.find((p) => p.id === detailId) ?? null : null;
+  const drawer = <ProposalDrawer p={detail} onClose={() => setDetailId(null)} onAsk={(p) => { setDetailId(null); ask(p); }} afterAct={refreshProposals} />;
+
+  // The proposals table: statement · what it does · status · people with their answers · the row's one action. Open ones first.
+  const proposalColumns: DataTableColumn<ProposalView>[] = [
+    { key: 'statement', header: 'Proposal', render: (p) => (
+      <T size="sm" clamp={2} tone={proposalClosed(p.state) ? 'secondary' : 'primary'} data-testid="meeting-proposal-row" data-proposal-id={p.id} data-state={p.state}>{p.statement}</T>
+    ) },
+    { key: 'does', header: 'What it does', width: '30%', priority: 2, render: (p) => <OutcomeWords p={p} /> },
+    { key: 'status', header: 'Status', width: '168px', render: (p) => { const pill = proposalPill(p); return <StatusPill tone={pill.tone} label={pill.label} size="sm" data-testid="meeting-proposal-status" />; } },
+    { key: 'people', header: 'People', width: '120px', priority: 1, render: (p) => {
+      const chips = personChips(p);
+      return <People names={chips.map((c) => c.name)} label={chips.map((c) => (c.runsIt ? `${c.label} · runs it` : c.label)).join(', ')} />;
+    } },
+    { key: 'act', header: '', width: '120px', render: (p) => <ProposalRowAction p={p} onAsk={ask} onOpen={() => setDetailId(p.id)} /> },
+  ];
+  const proposalTable = (testId: string) => (
+    <DataTable data={orderProposals(proposals)} columns={proposalColumns} keyField={(p) => p.id} narrow size="sm" pageSize={1000}
+      onRowClick={(p) => setDetailId(p.id)} data-testid={testId} aria-label="Proposals" />
+  );
+
   // A person a proposal names who was not in the call: no minutes for them, only the proposals that need them.
   if (!m && proposals.length) {
     return (
       <>
         <DetailPage data-testid="meeting-page" title="Proposals from a meeting"
           meta={<MetaLine size="sm" items={['You were named in a proposal from this meeting, or asked to run it', 'Only the proposals that need you are shown']} />}>
-          <Stack gap="md" className="pb-6">{proposalSection(true)}</Stack>
+          <Stack gap="md" className="pb-6">
+            <DetailSection title="Proposals" as="h2" hint={String(proposals.length)} first>{proposalTable('meeting-proposals')}</DetailSection>
+          </Stack>
         </DetailPage>
+        {drawer}
         {runner}
         {prompts.length > 0 && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={prompts} />}
       </>
@@ -121,16 +198,33 @@ export default function MeetingPage() {
   }
 
   const viewer = session?.sub ?? null;
-  const names = m.attendees.map((a) => a.name);
   const written = minutesWritten(m);
-  const keptUntil = keptLine(m);
   const rewrite = m.rewrite;
-  const columns: DataTableColumn<MinutesActionItem>[] = [
-    { key: 'text', header: 'Action item', render: (i) => <T size="sm">{i.text}</T> },
-    { key: 'owner', header: 'Owner', width: '208px', render: (i) => <T size="sm">{i.ownerName ?? 'Nobody named'}</T> },
-    { key: 'create', header: '', width: '176px', render: (i) => (m.initiativeId && canCreateFor(i, viewer)
-      ? <Link to={newWorkItemHref(m.initiativeId, i.text)} data-testid="meeting-create-work-item" className="no-underline"><T size="sm" tone="primary" className="hover:underline">Create work item</T></Link>
-      : i.done ? <T size="sm" tone="secondary">Done in the call</T> : null) },
+  const summary = summaryOf(m);
+  const meta = headerMeta(m);
+  const quiet = quietMeta(m);
+  const decisions = decisionRows(m, proposals);
+  const waitingProposals = proposals.filter(waitingOnYou);
+  const waitingItems = m.initiativeId ? m.actionItems.filter((i) => actionWaitsOn(i, viewer)) : [];
+
+  const menu: DropdownMenuItem[] = [
+    ...(!written && rewrite?.possible && !rewrite.writing && rewrite.attemptsLeft > 0
+      ? [{ label: 'Write the minutes again', onSelect: () => { void writeAgain(); }, 'data-testid': 'meeting-rewrite-button' }] : []),
+    ...(m.youAreInviter ? [{ label: 'Delete this meeting', danger: true, onSelect: () => setAsked((n) => Math.max(n, answered) + 1), 'data-testid': 'meeting-delete' }] : []),
+  ];
+
+  const decisionColumns: DataTableColumn<DecisionRow>[] = [
+    { key: 'text', header: 'Decision', render: (d) => <T size="sm" clamp={2}>{d.text}</T> },
+    { key: 'initiative', header: 'Initiative', width: '200px', priority: 2, render: (d) => <InitiativeName id={d.initiativeId} /> },
+    { key: 'agreed', header: 'Agreed by', width: '120px', priority: 1, render: (d) => (d.agreedBy.length ? <People names={d.agreedBy} label={`Agreed by ${d.agreedBy.join(', ')}`} /> : null) },
+    { key: 'open', header: '', width: '120px', render: (d) => (d.href ? <PortalLink href={d.href} testId="meeting-decision-link">Open</PortalLink> : null) },
+  ];
+  const actionColumns: DataTableColumn<MinutesActionItem>[] = [
+    { key: 'text', header: 'Action', render: (i) => <T size="sm" clamp={2}>{i.text}</T> },
+    { key: 'owner', header: 'Owner', width: '200px', render: (i) => (i.ownerName ? <UserChip name={i.ownerName} avatarSize={22} /> : <T size="sm" tone="secondary">Nobody named</T>) },
+    { key: 'status', header: 'Status', width: '168px', render: (i) => { const s = actionStatus(i); return <StatusPill tone={s.tone} label={s.label} size="sm" data-testid="meeting-action-status" />; } },
+    { key: 'create', header: '', width: '160px', render: (i) => (m.initiativeId && canCreateFor(i, viewer) && !i.workItemCreated
+      ? <PortalLink href={newWorkItemHref(m.initiativeId, i.text)} testId="meeting-create-work-item">Create work item</PortalLink> : null) },
   ];
 
   return (
@@ -140,39 +234,64 @@ export default function MeetingPage() {
         title={m.callName}
         meta={(
           <Stack gap="xs">
-            <MetaLine size="sm" data-testid="meeting-meta" items={[whenLabel(m.startedAt), ...coverageItems(m.coverage), peopleLabel(names), `Nova invited by ${m.invitedByName}`]} />
-            {keptUntil && <T size="sm" tone="secondary" data-testid="meeting-kept">{keptUntil}</T>}
+            <MetaLine size="sm" data-testid="meeting-meta" items={[
+              meta.when, ...(meta.listened ? [meta.listened] : []),
+              <People key="people" names={m.attendees.map((a) => a.name)} testId="meeting-people" />,
+              meta.invitedBy,
+            ]} />
+            {quiet.length > 0 && <MetaLine size="sm" tone="tertiary" data-testid="meeting-kept" items={quiet} />}
           </Stack>
         )}
-        actions={m.youAreInviter
-          ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setAsked((n) => Math.max(n, answered) + 1)}>Delete this meeting</Button> : undefined}
+        actions={menu.length ? (
+          <DropdownMenu align="end" trigger={<MoreIcon size={16} aria-hidden="true" />} triggerLabel="Meeting actions" triggerTestId="meeting-actions" sections={[{ items: menu }]} />
+        ) : undefined}
       >
         <Stack gap="md" className="pb-6">
-          <DetailSection title="Summary" as="h2" first>
-            <T size="sm" data-testid="meeting-summary">{m.summary}</T>
-            {!written && rewrite?.possible && (
+          {(waitingProposals.length > 0 || waitingItems.length > 0) && (
+            <DetailSection title="Needs you" as="h2" hint={String(waitingProposals.length + waitingItems.length)} first>
+              <Stack gap="xs" data-testid="meeting-needs-you">
+                {waitingProposals.map((p) => (
+                  <Inline key={p.id} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
+                    <T size="sm" truncate title={p.statement}>{p.statement}</T>
+                    <ProposalRowAction p={p} onAsk={ask} onOpen={() => setDetailId(p.id)} />
+                  </Inline>
+                ))}
+                {waitingItems.map((i) => (
+                  <Inline key={`${i.text}|${i.ownerUserId ?? ''}`} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
+                    <T size="sm" truncate title={i.text}>{i.text}</T>
+                    <PortalLink href={newWorkItemHref(m.initiativeId!, i.text)} testId="meeting-needs-create">Create work item</PortalLink>
+                  </Inline>
+                ))}
+              </Stack>
+            </DetailSection>
+          )}
+          <DetailSection title="Summary" as="h2" first={!waitingProposals.length && !waitingItems.length}>
+            <Prose size="sm" data-testid="meeting-summary">
+              <p>{summary.lead}</p>
+              {summary.points.length > 0 && <ul>{summary.points.map((point, i) => <li key={i}>{point}</li>)}</ul>}
+            </Prose>
+            {!written && rewrite?.possible && (rewrite.writing || rewrite.attemptsLeft === 0 || rewriteError) && (
               <Inline gap="sm" wrap className="pt-2" data-testid="meeting-rewrite">
-                {rewrite.writing
-                  ? <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova is writing the minutes…</T>
-                  : rewrite.attemptsLeft > 0
-                    ? <Button size="sm" variant="secondary" data-testid="meeting-rewrite-button" onClick={() => { void writeAgain(); }}>Write the minutes again</Button>
-                    : <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova has tried to write these minutes five times and will not try again. The transcript is below.</T>}
+                {rewrite.writing && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova is writing the minutes…</T>}
+                {!rewrite.writing && rewrite.attemptsLeft === 0 && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova has tried to write these minutes five times and will not try again. The transcript is below.</T>}
                 {rewriteError && <T size="sm" tone="danger" data-testid="meeting-rewrite-error">{rewriteError}</T>}
               </Inline>
             )}
           </DetailSection>
-          <DetailSection title="Decisions" as="h2" {...(written ? { hint: String(m.decisions.length) } : {})}>
-            {m.decisions.length
-              ? <Stack gap="xs" data-testid="meeting-decisions">{m.decisions.map((d, i) => <T key={i} size="sm">{d}</T>)}</Stack>
-              : <T size="sm" tone="secondary" data-testid="meeting-decisions-empty">{written ? 'No decisions were recorded.' : MINUTES_UNAVAILABLE}</T>}
+          <DetailSection title="Decisions" as="h2" {...(written || decisions.length ? { hint: String(decisions.length) } : {})}>
+            {decisions.length
+              ? <DataTable data={decisions} columns={decisionColumns} keyField={(d) => d.key} narrow size="sm" pageSize={1000} data-testid="meeting-decisions" aria-label="Decisions" />
+              : <EmptyLine written={written} none="No decisions were recorded." testId="meeting-decisions-empty" />}
           </DetailSection>
-          {proposalSection(false)}
           <DetailSection title="Action items" as="h2" {...(written ? { hint: String(m.actionItems.length) } : {})}>
             {m.actionItems.length
-              ? <DataTable data={m.actionItems} columns={columns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow data-testid="meeting-action-items" />
-              : <T size="sm" tone="secondary" data-testid="meeting-action-items-empty">{written ? 'No action items were recorded.' : MINUTES_UNAVAILABLE}</T>}
+              ? <DataTable data={m.actionItems} columns={actionColumns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow size="sm" pageSize={1000} data-testid="meeting-action-items" aria-label="Action items" />
+              : <EmptyLine written={written} none="No action items were recorded." testId="meeting-action-items-empty" />}
           </DetailSection>
-          <DetailSection title="Transcript" as="h2" hint={`${m.lineCount} ${m.lineCount === 1 ? 'line' : 'lines'}`}>
+          {proposals.length > 0 && (
+            <DetailSection title="Proposals" as="h2" hint={String(proposals.length)}>{proposalTable('meeting-proposals')}</DetailSection>
+          )}
+          <Disclosure variant="plain" summary={<T size="sm" weight="medium">{`Transcript · ${m.lineCount} ${m.lineCount === 1 ? 'line' : 'lines'}`}</T>} data-testid="meeting-transcript">
             <TranscriptPanel
               title="By speaker"
               status={transcript.error ? 'failed' : transcript.lines.length || !transcript.loading ? 'ready' : 'processing'}
@@ -185,12 +304,82 @@ export default function MeetingPage() {
                 <Button size="sm" variant="secondary" data-testid="meeting-more-transcript" disabled={transcript.loading} onClick={transcript.loadMore}>Load more lines</Button>
               </Inline>
             )}
-          </DetailSection>
+          </Disclosure>
         </Stack>
       </DetailPage>
 
+      {drawer}
       {runner}
       {prompts.length > 0 && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={prompts} />}
     </>
+  );
+}
+
+/** A proposal row's one action: Answer (waiting on the viewer, or their answer is optional), Run it now (theirs to run), else Details. */
+function ProposalRowAction({ p, onAsk, onOpen }: { p: ProposalView; onAsk: (p: ProposalView) => void; onOpen: () => void }) {
+  const stop = (run: () => void) => (e: MouseEvent) => { e.stopPropagation(); run(); };
+  if (p.state === 'consented' && p.you.canRun) return <Button variant="link" size="sm" onClick={stop(() => onAsk(p))} data-testid="meeting-proposal-run">{RUN_NOW}</Button>;
+  if (waitingOnYou(p) || optionalFor(p)) return <Button variant="link" size="sm" onClick={stop(() => onAsk(p))} data-testid="meeting-proposal-answer">Answer</Button>;
+  return <Button variant="link" size="sm" onClick={stop(onOpen)} data-testid="meeting-proposal-details">Details</Button>;
+}
+
+/**
+ * A proposal's detail, opened from its row: the lines Nova heard (the server sends them only to people who were in the call), what it
+ * does, who it needs and what they answered (objection reasons included), how it ended with its link, and the quiet actions.
+ */
+function ProposalDrawer({ p, onClose, onAsk, afterAct }: { p: ProposalView | null; onClose: () => void; onAsk: (p: ProposalView) => void; afterAct: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const act = (run: (callId: string) => Promise<string | null>) => {
+    if (!p?.callId || busy) return;
+    setBusy(true); setError(null);
+    void run(p.callId).then((why) => { setError(why); setBusy(false); afterAct(); });
+  };
+  const href = p ? resultHref(p) : null;
+  const pill = p ? proposalPill(p) : null;
+  const withdraw = p && p.you.response !== null && isAnswerable(p);
+  const closing = p ? stateLine(p) : null;
+  const lines = p ? [recordsLine(p), p.state === 'open' ? needsLine(p) : null, blockedLine(p), expiryLine(p)].filter((l): l is string => !!l) : [];
+  return (
+    <Drawer open={!!p} onClose={() => { setError(null); onClose(); }} title={p?.statement ?? ''} subtitle={p ? eyebrowOf(p) : ''} width={440} data-testid="meeting-proposal-detail" closeTestId="meeting-proposal-detail-close">
+      {p && pill && (
+        <Stack gap="md">
+          <Inline gap="sm" align="center" wrap><StatusPill tone={pill.tone} label={pill.label} size="sm" /></Inline>
+          <DetailSection title="What it does" first><OutcomeWords p={p} />{lines.map((l, i) => <T key={i} size="sm" tone="secondary" wrap>{l}</T>)}</DetailSection>
+          {p.heard.length > 0 && (
+            <DetailSection title="What Nova heard">
+              <Stack gap="xs" data-testid="meeting-proposal-heard">{p.heard.map((line, i) => <T key={i} size="sm" tone="secondary" wrap>{heardText(line)}</T>)}</Stack>
+            </DetailSection>
+          )}
+          <DetailSection title="People">
+            <Stack gap="xs">
+              {personChips(p).map((c) => (
+                <Inline key={c.userId} gap="sm" align="center" wrap={false}>
+                  <UserChip name={c.name} avatarSize={22} />
+                  <T size="sm" tone={c.state === 'objected' ? 'danger' : 'secondary'} wrap>{`${c.label.slice(c.name.length + 3)}${c.runsIt ? ' · runs it' : ''}`}</T>
+                </Inline>
+              ))}
+            </Stack>
+          </DetailSection>
+          {(closing || href) && (
+            <DetailSection title="Result">
+              {closing && <T size="sm" tone={p.state === 'failed' ? 'danger' : 'secondary'} wrap data-testid="meeting-proposal-closing">{closing}</T>}
+              {href && <PortalLink href={href} testId="meeting-proposal-result-link">{p.outcome.kind === 'decision' ? 'Open the decision' : 'Open what was made'}</PortalLink>}
+            </DetailSection>
+          )}
+          <Inline gap="sm" align="center" wrap>
+            {(waitingOnYou(p) || optionalFor(p)) && <Button size="sm" variant="primary" onClick={() => onAsk(p)} data-testid="meeting-proposal-detail-answer">{p.state === 'consented' ? RUN_NOW : 'Answer'}</Button>}
+            {p.you.canReopen && <Button size="sm" variant="secondary" disabled={busy} onClick={() => act((c) => { bumpProposalPrompt(c, p.id); return answerProposal(c, p.id, 'reopen'); })} data-testid="meeting-proposal-undo">Undo</Button>}
+            {p.you.canRaiseAgain && <Button size="sm" variant="secondary" disabled={busy} onClick={() => act((c) => raiseProposalAgain(c, p.id))} data-testid="meeting-proposal-raise">Raise it again</Button>}
+            {withdraw && (
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => act((c) => { bumpProposalPrompt(c, p.id); return answerProposal(c, p.id, 'withdraw'); })} data-testid="meeting-proposal-withdraw">
+                {p.you.response === 'consent' ? 'Withdraw my consent' : 'Withdraw my objection'}
+              </Button>
+            )}
+          </Inline>
+          {error && <T size="sm" tone="danger" wrap role="alert">{error}</T>}
+        </Stack>
+      )}
+    </Drawer>
   );
 }

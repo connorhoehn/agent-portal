@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref, proposalsLive, proposalsUrl,
-  coverageItems, goneCopy, keptLine, meetingsUrl, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
+  goneCopy, meetingsUrl, headerMeta, quietMeta, summaryOf, listLead, listenedLabel, outcomesLabel, orderProposals, proposalClosed, proposalPill,
+  actionStatus, actionWaitsOn, decisionRows, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
   assert.equal(durationLabel(0, 20_000), 'under a minute');
@@ -53,18 +54,66 @@ test('the meeting page asks for proposals again only while an answer or a run ca
   assert.equal(proposalsLive([]), false);
 });
 
-test('what Nova covered reads as its listening time, a pause only when there was one, and a count of people not transcribed', () => {
-  assert.deepEqual(coverageItems({ listenedSeconds: 600, pausedSeconds: 30, untranscribed: 0 }), ['Nova listened for 10 min']);
-  assert.deepEqual(coverageItems({ listenedSeconds: 600, pausedSeconds: 300, untranscribed: 1 }), ['Nova listened for 10 min', 'paused for 5 min', '1 person was not transcribed']);
-  assert.deepEqual(coverageItems({ listenedSeconds: 3900, pausedSeconds: 0, untranscribed: 2 }), ['Nova listened for 1 h 5 min', '2 people were not transcribed']);
-  assert.deepEqual(coverageItems(undefined), []);
+test('the header: one meta line (when, Nova listened, invited by) and a quieter line for retention, a pause and a count of people not transcribed', () => {
+  const at = Date.UTC(2026, 11, 14, 12);
+  const meta = headerMeta({ startedAt: at, coverage: { listenedSeconds: 180, pausedSeconds: 0, untranscribed: 0 }, invitedByName: 'Vera Green' });
+  assert.equal(meta.listened, 'Nova listened 3 min');
+  assert.equal(meta.invitedBy, 'invited by Vera Green');
+  assert.equal(headerMeta({ startedAt: at, invitedByName: 'Vera Green' }).listened, null);
+  assert.deepEqual(quietMeta({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: false, coverage: { listenedSeconds: 600, pausedSeconds: 30, untranscribed: 1 } }),
+    ['Kept until 14 Dec 2026', 'Vera Green can delete it sooner', '1 person was not transcribed']);
+  assert.deepEqual(quietMeta({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: true, coverage: { listenedSeconds: 600, pausedSeconds: 300, untranscribed: 2 } }),
+    ['Kept until 14 Dec 2026', 'You can delete it sooner', 'Nova paused for 5 min', '2 people were not transcribed']);
+  assert.deepEqual(quietMeta({ invitedByName: 'Vera Green', youAreInviter: false }), []);
 });
 
-test('the page says how long the meeting is kept and who can delete it sooner', () => {
-  const at = Date.UTC(2026, 11, 14, 12);
-  assert.equal(keptLine({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: false }), 'Kept until 14 Dec 2026. Vera Green can delete it sooner.');
-  assert.equal(keptLine({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: true }), 'Kept until 14 Dec 2026. You can delete it sooner.');
-  assert.equal(keptLine({ invitedByName: 'Vera Green', youAreInviter: false }), null);
+test('the summary reads as the server split it, or from the stored lines; an older paragraph is all lead', () => {
+  assert.deepEqual(summaryOf({ summary: 'x', summaryLead: 'Lead.', summaryPoints: ['a', 'b', 'c', 'd', 'e'] }), { lead: 'Lead.', points: ['a', 'b', 'c', 'd'] });
+  assert.deepEqual(summaryOf({ summary: 'Three people met.\n- Agreed: ship it.\n- Vera to write it up.' }), { lead: 'Three people met.', points: ['Agreed: ship it.', 'Vera to write it up.'] });
+  assert.deepEqual(summaryOf({ summary: 'Vera Green said: hello. Nora said: hi.' }), { lead: 'Vera Green said: hello. Nora said: hi.', points: [] });
+  assert.equal(listLead({ summary: 'ignored', summaryLead: 'Three people met for 3 minutes about Observability Platform.' }), 'Three people met for 3 minutes about Observability Platform.');
+  assert.equal(listLead({ summary: 'Two people met.\n- Agreed: ship.' }), 'Two people met.');
+});
+
+test('the list says Nova\'s listening time and the outcomes in a few words', () => {
+  assert.equal(listenedLabel(180), '3 min');
+  assert.equal(listenedLabel(null), null);
+  assert.equal(outcomesLabel({ decisions: 2, actionItems: 3, open: 1 }), '2 decisions · 3 actions · 1 open');
+  assert.equal(outcomesLabel({ decisions: 1, actionItems: 0, open: 0 }), '1 decision');
+  assert.equal(outcomesLabel({ decisions: 0, actionItems: 0, open: 0 }), 'Nothing recorded');
+  assert.equal(outcomesLabel(undefined), null);
+});
+
+test('proposals: open ones first, closed ones after; the pill words each state as the call\'s card does', () => {
+  const list = [{ id: 'a', state: 'done' }, { id: 'b', state: 'open' }, { id: 'c', state: 'dismissed' }, { id: 'd', state: 'objected' }, { id: 'e', state: 'expired' }];
+  assert.deepEqual(orderProposals(list).map((p) => p.id), ['b', 'd', 'a', 'c', 'e']);
+  assert.equal(proposalClosed('failed'), true); assert.equal(proposalClosed('consented'), false);
+  assert.deepEqual(proposalPill({ state: 'open' }), { label: 'Waiting for consent', tone: 'pending' });
+  assert.equal(proposalPill({ state: 'dismissed', source: 'watcher', outcome: { kind: 'decision' }, run: null }).label, 'Not a decision');
+  assert.equal(proposalPill({ state: 'dismissed', source: 'asked', outcome: { kind: 'tool' }, run: null }).label, 'Dropped');
+  assert.equal(proposalPill({ state: 'dismissed', source: 'watcher', outcome: { kind: 'decision' }, run: { raisedAs: 'p2' } }).label, 'Raised again');
+});
+
+test('action items: their status, and which wait on the viewer', () => {
+  assert.equal(actionStatus({ text: 'a', done: true }).label, 'Done in the call');
+  assert.equal(actionStatus({ text: 'a', workItemCreated: true }).label, 'Work item created');
+  assert.equal(actionStatus({ text: 'a' }).label, 'Not created');
+  assert.equal(actionWaitsOn({ text: 'a', ownerUserId: 'u-vera' }, 'u-vera'), true);
+  assert.equal(actionWaitsOn({ text: 'a', ownerUserId: 'u-vera', workItemCreated: true }, 'u-vera'), false);
+  assert.equal(actionWaitsOn({ text: 'a' }, 'u-vera'), false, 'nobody\'s item does not wait on anyone');
+  assert.equal(actionWaitsOn({ text: 'a', ownerUserId: 'u-nora' }, 'u-vera'), false);
+});
+
+test('decisions: those agreed through proposals (with who consented and the link once recorded), then the minutes\' own lines', () => {
+  const rows = decisionRows({ decisions: ['Ship Thursday'], initiativeId: 'p1' }, [
+    { id: 'x', statement: 'Freeze schema', state: 'done', outcome: { kind: 'decision', initiativeId: 'p2' }, responses: [{ name: 'Vera', response: 'consent' }, { name: 'Theo', response: 'object' }], run: { href: '/iq/decisions/d1' } },
+    { id: 'y', statement: 'Open one', state: 'open', outcome: { kind: 'decision' }, responses: [], run: null },
+    { id: 'z', statement: 'A work item', state: 'done', outcome: { kind: 'tool' }, responses: [], run: { href: '/x' } },
+  ]);
+  assert.deepEqual(rows, [
+    { key: 'px', text: 'Freeze schema', initiativeId: 'p2', agreedBy: ['Vera'], href: '/iq/decisions/d1' },
+    { key: 'm0', text: 'Ship Thursday', initiativeId: 'p1', agreedBy: [], href: null },
+  ]);
 });
 
 test('a gone meeting is explained only to the people the server told; everyone else reads the neutral sentence', () => {
