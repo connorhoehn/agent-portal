@@ -165,6 +165,17 @@ describe('what a session is started with', () => {
     expect(describeCall('create', { kind: 'work-item', fields: { title: 'the login cookie bug' } }).summary).toBe('Create a work item titled "the login cookie bug"');
   });
 
+  it('gives the card a headline and a plain-words line, never a tool name, id or key: value row', () => {
+    const made = describeCall('create', { kind: 'work-item', fields: { title: 'the login cookie bug' }, initiative: 'p-auth-migration' });
+    expect(made).toMatchObject({ title: 'the login cookie bug', does: 'Creates a work item' });
+    expect(`${made.title} ${made.does}`).not.toMatch(/:|p-auth|create\b|work-item/);
+    expect(describeCall('create', { kind: 'saved-search', fields: {} })).toMatchObject({ does: 'Creates a saved search' });
+    expect(describeCall('create', { kind: 'saved-search', fields: {} }).title).toBeUndefined();
+    const status = describeCall('set_status', { status: 'away' });
+    expect(status.title).toBeUndefined();
+    expect(status.does).toBeUndefined();
+  });
+
   it('lists every argument the tool will receive on the card, nested ones included (audit B7)', () => {
     const long = 'x'.repeat(400);
     const { summary, detail } = describeCall('create', {
@@ -198,8 +209,8 @@ describe('a spoken request in the scripted world', () => {
     expect(turns[0]).toMatchObject({ askedBy: ALICE, kind: 'write', status: 'pending', actionId: mockPosts.actions[0]!.actionId, tool: { name: 'create' } });
     expect(turns[0]!.expiresAt - turns[0]!.createdAt).toBe(WRITE_TURN_TTL_MS);
     expect(await runtime.turnsFor(CALL, ALICE)).toEqual([]);
-    // the model was told at once: its next words are about the waiting card
-    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I have asked Alice to confirm.']);
+    // the model was told at once; its words about the waiting card ("I have asked Alice to confirm.") are spoken, not posted: the card says it
+    expect(mockPosts.replies).toEqual([]);
     // Bob cannot move Alice's turn
     expect(await submitClaimed(CALL, turns[0]!.turnId, BOB, { ok: true })).toBeNull();
     await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
@@ -459,6 +470,41 @@ describe('one answer per tool call', () => {
     await submitClaimed(CALL, reads[0]!.turnId, ALICE, { ok: true, output: { n: 1 } });
     expect(s.answersFor('c1')).toHaveLength(1);
     for (const id of ['c1', 'c2', 'c3']) expect(s.answersFor(id).length).toBe(1);
+  });
+
+  it('Nova\'s first words about a write\'s card are spoken, not posted (the card says who it waits for); after the decision it is posted again', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL);
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    await runtime.start(ctx);
+    const s = fake();
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, create a work item for y.', at: now - 500, captionId: 'a1' });
+    s.call('c1', 'create', { kind: 'work-item', fields: { title: 'y' } });
+    await flush();
+    expect(mockPosts.actions).toHaveLength(1);
+    expect(s.answersFor('c1')).toHaveLength(1);
+    s.say('I have asked Alice to confirm.', 'c1');
+    await flush();
+    expect(mockPosts.replies).toEqual([]);
+    // only the first utterance about the card is held back
+    s.say('It will land on the call\'s initiative.', 'c1');
+    await flush();
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['It will land on the call\'s initiative.']);
+  });
+
+  it('a write\'s card decided before Nova speaks: what Nova says next is posted', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL);
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    await runtime.start(ctx);
+    const s = fake();
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, create a work item for y.', at: now - 500, captionId: 'a1' });
+    s.call('c1', 'create', { kind: 'work-item', fields: { title: 'y' } });
+    await flush();
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'decline');
+    s.say('Alice declined it, so nothing was made.', 'c1');
+    await flush();
+    expect(mockPosts.replies.map((r) => ({ text: r.text, askedBy: r.askedBy }))).toEqual([{ text: 'Alice declined it, so nothing was made.', askedBy: ALICE }]);
   });
 
   it('a handler that throws still answers the call', async () => {

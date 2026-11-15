@@ -47,6 +47,10 @@ export interface AssistantActionMetadata extends AssistantBase {
   askedBy: string;
   askedByName: string;
   summary: string;
+  /** The record's own name, the card's headline ("the login cookie bug"); absent when the write names none (then the summary is). */
+  title?: string;
+  /** What confirming does, in plain words ("Creates a work item"); the card adds where it lands. No tool names, ids or `key: value`. */
+  does?: string;
   detail?: string[];
   tool: { name: string; argsDigest: string };
   status: AssistantActionStatus;
@@ -112,6 +116,7 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
       || !tool || !str(tool['name'], 128) || typeof tool['argsDigest'] !== 'string' || !ACTION_STATUSES.includes(m['status'] as AssistantActionStatus)) return null;
     const detail = Array.isArray(m['detail']) && m['detail'].every((x) => typeof x === 'string') ? (m['detail'] as string[]) : undefined;
     return { ...base, kind: 'assistant-action', actionId: m['actionId'], askedBy: m['askedBy'], askedByName: m['askedByName'], summary: m['summary'],
+      ...(str(m['title'], 200) ? { title: m['title'] } : {}), ...(str(m['does'], 300) ? { does: m['does'] } : {}),
       ...(detail ? { detail } : {}), tool: { name: tool['name'], argsDigest: tool['argsDigest'] }, status: m['status'] as AssistantActionStatus,
       ...(typeof m['resultText'] === 'string' ? { resultText: m['resultText'] } : {}) };
   }

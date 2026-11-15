@@ -203,6 +203,7 @@ async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initi
     if (!made.created) continue;
     const posted = await postAction(record.callId, {
       actionId, askedBy: owner, askedByName: item.ownerName ?? await nameOf(owner), summary: `Create a work item: ${item.text}`,
+      title: item.text.slice(0, 120), does: initiativeName ? `Creates a work item in ${initiativeName}` : 'Creates a work item',
       detail: [`title: ${item.text.slice(0, 120)}`], tool: { name: 'create', argsDigest: hashToolArgs(args) },
     }, { minutes: true }).catch(() => null);
     if (!posted) { await store.moveTurn(record.callId, turn.turnId, { from: ['pending'], to: 'expired' }); continue; }

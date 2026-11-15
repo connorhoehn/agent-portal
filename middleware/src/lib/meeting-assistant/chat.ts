@@ -126,7 +126,8 @@ export async function postAction(callId: string, input: ActionInput, opts: PostO
   const status = input.status ?? 'waiting';
   const metadata: AssistantMetadata = {
     assistant: true, displayName: NOVA_NAME, kind: 'assistant-action', actionId: input.actionId, askedBy: input.askedBy, askedByName: input.askedByName,
-    summary: input.summary, ...(input.detail?.length ? { detail: input.detail } : {}), tool: input.tool, status,
+    summary: input.summary, ...(input.title ? { title: input.title } : {}), ...(input.does ? { does: input.does } : {}),
+    ...(input.detail?.length ? { detail: input.detail } : {}), tool: input.tool, status,
     ...(input.resultText ? { resultText: input.resultText } : {}),
   };
   const message = await postAsAssistant(callId, { text: input.summary, metadata }, opts);

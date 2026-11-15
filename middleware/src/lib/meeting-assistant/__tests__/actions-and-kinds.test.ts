@@ -97,6 +97,9 @@ describe('message kinds', () => {
       tool: { name: 't', argsDigest: 'd' }, status: 'waiting', resultText: 'ok' };
     expect(parseAssistantMetadata(card)).toEqual(card);
     for (const status of ['confirmed', 'declined', 'expired', 'done', 'failed']) expect(parseAssistantMetadata({ ...card, status })!).toMatchObject({ status });
+    // the card's headline and plain-words line ride along; over-long or empty ones are dropped
+    expect(parseAssistantMetadata({ ...card, title: 'the cookie bug', does: 'Creates a work item' })).toEqual({ ...card, title: 'the cookie bug', does: 'Creates a work item' });
+    expect(parseAssistantMetadata({ ...card, title: 'x'.repeat(201), does: '' })).toEqual(card);
   });
 
   it('refuses malformed metadata: no marker, unknown kind, missing fields, bad status, a private reply as a chat message', () => {

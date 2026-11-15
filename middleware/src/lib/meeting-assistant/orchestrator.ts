@@ -132,6 +132,11 @@ export interface ReplyContext {
   answeredAt: number;
   /** The latest line stored when the context was set: only a line stored after it can end the context (the order decides, not the clocks). */
   lastSeq?: number;
+  /**
+   * The answer was a write's card ("Waiting for <name>"): Nova's first words about it ("I have asked Vera to confirm.") are spoken but
+   * not posted, since the card already says so. Cleared by that first utterance, or once the card is decided.
+   */
+  card?: true;
 }
 /** How soon after a bare "Nova?" the same person's next line is the request it announced. */
 export const BARE_NAME_FOLLOW_MS = 8_000;
@@ -345,8 +350,10 @@ function argLines(value: unknown, path: string, out: string[]): void {
 /**
  * A human line and the detail lines for a write's card. Built from the catalogue's own names and the call's own arguments.
  * The detail lists EVERY argument the tool will receive, nested ones included: the asker confirms what they can read.
+ * `title` is the record's own name for the card's headline, and `does` what confirming will do in plain words ("Creates a work item");
+ * the card adds where it lands. Neither carries a tool name, an id or a `key: value` row.
  */
-export function describeCall(name: string, args: unknown): { summary: string; detail: string[] } {
+export function describeCall(name: string, args: unknown): { summary: string; detail: string[]; title?: string; does?: string } {
   const a = args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {};
   const fields = a['fields'] && typeof a['fields'] === 'object' && !Array.isArray(a['fields']) ? a['fields'] as Record<string, unknown> : {};
   const detail: string[] = [];
@@ -356,7 +363,7 @@ export function describeCall(name: string, args: unknown): { summary: string; de
   if (name === 'create') {
     const kind = capText(a['kind'], 40), title = capText(fields['title'] ?? fields['name'], 120);
     const label = KIND_LABELS[kind] ?? (kind || 'record');
-    return { summary: `Create a ${label}${title ? ` titled "${title}"` : ''}`, detail };
+    return { summary: `Create a ${label}${title ? ` titled "${title}"` : ''}`, detail, ...(title ? { title } : {}), does: `Creates a ${label}` };
   }
   if (name === 'set_status') {
     const status = capText(a['status'], 20), message = capText(a['message'], 120);
@@ -987,6 +994,7 @@ export class AssistantRuntime {
     if (e.inReplyTo !== undefined) {
       const c = run.replyById.get(e.inReplyTo);
       if (!c || !this.contextLive(c, t) || c.visibility === 'muted' || !c.asker) { decide('drop.byId', { found: !!c, visibility: c?.visibility }); return; }
+      if (c.card) { delete c.card; decide('drop.cardSays', { call: c.modelCallId }); return; }
       asker = c.asker;
       decide('owner.byId', { asker });
     } else {
@@ -1011,6 +1019,8 @@ export class AssistantRuntime {
         decide('owner.delegated', { asker, context: 'newer-work' });
       } else if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
         if (c.visibility === 'muted' || !c.asker) { decide('drop.mutedContext', { call: c.modelCallId }); return; }
+        // Nova's first words about a write's card say what the card already shows: spoken, not posted.
+        if (c.card) { delete c.card; decide('drop.cardSays', { call: c.modelCallId }); return; }
         asker = c.asker;
         decide('owner.context', { asker, call: c.modelCallId });
       } else {
@@ -1092,7 +1102,7 @@ export class AssistantRuntime {
   // Tool calls
 
   /** The one place a tool call is answered. True when this call sent the answer. */
-  private answer(run: CallRun, modelCallId: string, output: unknown, reply: { asker: string; visibility: 'public' } | null = null): boolean {
+  private answer(run: CallRun, modelCallId: string, output: unknown, reply: { asker: string; visibility: 'public'; card?: true } | null = null): boolean {
     if (run.calls.get(modelCallId) !== 'open') return false;
     run.calls.set(modelCallId, 'answered');
     run.holding.delete(modelCallId);
@@ -1103,7 +1113,7 @@ export class AssistantRuntime {
     trace('call.answered', { call: modelCallId, sent, visibility: reply ? reply.visibility : 'muted', asker: reply?.asker ?? null, refused: !!(output && typeof output === 'object' && 'refused' in output) });
     // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
     if (sent) {
-      const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt, ...(run.lastLineSeq > 0 ? { lastSeq: run.lastLineSeq } : {}) };
+      const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt, ...(run.lastLineSeq > 0 ? { lastSeq: run.lastLineSeq } : {}), ...(reply?.card ? { card: true as const } : {}) };
       // A muted context never replaces a live public one (its own call still finds it by id).
       if (!(ctx.visibility === 'muted' && run.reply && run.reply.visibility === 'public' && this.contextLive(run.reply, answeredAt))) run.reply = ctx;
       run.replyById.set(modelCallId, ctx);
@@ -1230,14 +1240,15 @@ export class AssistantRuntime {
     await this.store.createTurn(turn);
     trace('call.turn', { call: e.callId, turn: turnId, kind, private: isPrivateRead(name, e.args) });
     if (kind === 'write') {
-      const { summary, detail } = describeCall(name, e.args);
-      const posted = await postAction(callId, { actionId: actionId!, askedBy: asker, askedByName: askerName, summary, ...(detail.length ? { detail } : {}), tool: { name, argsDigest: hashToolArgs(e.args) } });
+      const { summary, detail, title, does } = describeCall(name, e.args);
+      const posted = await postAction(callId, { actionId: actionId!, askedBy: asker, askedByName: askerName, summary, ...(title ? { title } : {}), ...(does ? { does } : {}), ...(detail.length ? { detail } : {}), tool: { name, argsDigest: hashToolArgs(e.args) } });
       if (!posted) {
         await this.store.moveTurn(callId, turnId, { from: ['pending'], to: 'expired' });
         this.answer(run, e.callId, { error: 'Nova could not offer that action.' });
         return;
       }
-      this.answer(run, e.callId, { status: 'waiting_for_confirmation', person: askerName }, { asker, visibility: 'public' });
+      // The card says "Waiting for <name>": Nova may say it, but its words about the card are not posted again (card: true).
+      this.answer(run, e.callId, { status: 'waiting_for_confirmation', person: askerName }, { asker, visibility: 'public', card: true });
       return;
     }
     run.turnCalls.set(turnId, e.callId);
@@ -1362,6 +1373,8 @@ export class AssistantRuntime {
     const turn = (await this.store.listTurns(callId, { statuses: ['pending'] })).find((t) => t.actionId === actionId);
     if (!turn) return;
     const run = this.runs.get(callId);
+    // Once the card is decided, anything Nova says next is news (done, declined): it is posted as usual.
+    if (run) for (const c of [run.reply, ...run.replyById.values()]) if (c) delete c.card;
     if (decision === 'confirm') { await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'running' }); return; }
     const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending'], to: 'declined' });
     if (moved) run?.session?.appendContext(`${await nameOf(turn.askedBy)} declined the action you offered. It was not done.`);
