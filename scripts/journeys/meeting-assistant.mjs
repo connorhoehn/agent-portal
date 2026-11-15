@@ -384,7 +384,8 @@ async function main() {
       check(typeof reply.metadata.askedByName === 'string' && reply.metadata.askedByName.length > 0 && reply.metadata.askedByName !== VERA.userId, `the label has no display name: ${reply.metadata.askedByName}`);
       check((await myTurns(vera)).length === 0, 'a plain answer left a turn for the browser');
       check((await myTurns(nora)).length === 0, 'a plain answer left a turn for the other person');
-      // In the chat the reply is Nova's to look at: its mark, the author "Nova", the tinted surface, and "Asked by" under the text.
+      // In the chat the reply is Nova's to look at: its mark, the author "Nova" and "Asked by" under the text, as an ordinary row (no
+      // tint: the tint belongs to Nova's cards, which stand out against its replies).
       await seen(vera.page, 'huddle-thread');
       const row = vera.page.locator('[data-testid="chat-message"][data-voice="assistant"]').filter({ hasText: 'Four.' }).last();
       await row.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no reply row in Nova\'s voice'); });
@@ -393,8 +394,26 @@ async function main() {
         tinted: getComputedStyle(el.querySelector('[data-testid="message-row-content"]')).backgroundColor }));
       check(look.mark && look.author === 'Nova', `the reply row shows mark ${look.mark}, author ${look.author}`);
       check(look.askedBy === `Asked by ${reply.metadata.askedByName}`, `the reply's caption reads ${look.askedBy}`);
-      check(!/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(look.tinted), `the reply text sits on no surface (${look.tinted})`);
-      return `reply "Four." labelled "${reply.metadata.askedByName}", drawn in Nova's voice`;
+      check(/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(look.tinted), `the reply text is tinted (${look.tinted}); only Nova's cards are`);
+      // The huddle dialogue is its own place: the muted surface behind the messages, its dot field under them, taking no pointer
+      // events, and still when the reader asks for reduced motion.
+      const surface = vera.page.getByTestId('huddle-dialogue-surface');
+      check(await surface.evaluate((el, row) => el.contains(row), await row.elementHandle()), 'the reply is not inside the huddle dialogue surface');
+      const ambient = async () => surface.evaluate((el) => {
+        const field = el.querySelector('[data-testid="ambient-surface-field"]');
+        const dots = field?.firstElementChild;
+        return { bg: getComputedStyle(el).backgroundColor, field: !!field, pointer: field ? getComputedStyle(field).pointerEvents : null,
+          hidden: field?.getAttribute('aria-hidden'), z: field ? getComputedStyle(field).zIndex : null, animation: dots ? getComputedStyle(dots).animationName : null };
+      });
+      const moving = await ambient();
+      check(moving.field && moving.pointer === 'none' && moving.hidden === 'true' && moving.z === '-1', `the dot field is not decoration: ${JSON.stringify(moving)}`);
+      check(!/^(rgba\(0, 0, 0, 0\)|transparent|rgb\(255, 255, 255\))$/.test(moving.bg), `the huddle dialogue has no surface of its own (${moving.bg})`);
+      check(moving.animation === 'uic-ambient-drift', `the dot field does not drift (${moving.animation})`);
+      await vera.page.emulateMedia({ reducedMotion: 'reduce' });
+      const still = await ambient();
+      await vera.page.emulateMedia({ reducedMotion: 'no-preference' });
+      check(still.animation === 'none', `the dot field still moves under reduced motion (${still.animation})`);
+      return `reply "Four." labelled "${reply.metadata.askedByName}" as an ordinary row; the dialogue on ${moving.bg}, its field drifting and still under reduced motion`;
     });
 
     // ── 8a. A spoken read runs in the asker's own browser ──
@@ -1075,6 +1094,10 @@ async function main() {
       const shown = (await card.getByTestId('assistant-minutes-counts').innerText()).replace(/\s+/g, ' ');
       check(shown.includes(`${counts.decisions} decision`) && shown.includes(`${counts.actionItems} action item`) && shown.includes(`${counts.proposals} proposal`), `the card shows "${shown}" for ${JSON.stringify(counts)}`);
       check(await card.evaluate((el) => el.closest('[data-testid="chat-message"]')?.getAttribute('data-voice') === 'assistant'), 'the minutes card is not in a row in Nova\'s voice');
+      // Nova's cards carry its tint against the plain replies: the minutes card, and every action and proposal card in the chat.
+      const tones = await vera.page.locator('[data-testid="assistant-minutes-card"], [data-testid="assistant-action-card"], [data-testid="assistant-proposal-card"]')
+        .evaluateAll((els) => els.map((el) => el.getAttribute('data-tone')));
+      check(tones.length >= 3 && tones.every((t) => t === 'assistant'), `Nova's cards are not all tinted: ${JSON.stringify(tones)}`);
       await card.scrollIntoViewIfNeeded();
       for (const width of [1440, 1280]) await shot(vera.page, '12-chat-minutes', width);
       const expected = `/iq/meetings/${encodeURIComponent(callId)}`;
