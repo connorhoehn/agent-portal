@@ -31,7 +31,7 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { sessionOf } from '../../lib/meeting-assistant/types.js';
-import { CALL_ENDED, coverageOf, DELETE_WHILE_BACK, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
+import { CALL_ENDED, coverageOf, DELETE_WHILE_BACK, heardSoFar, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
 import { settleFromRecord } from '../../lib/meeting-assistant/reconcile.js';
 import { minutesIdle, onCallEnded } from '../../lib/meeting-assistant/minutes-service.js';
 import { newAssistantSession } from '../../lib/meeting-assistant/types.js';
@@ -244,6 +244,28 @@ describe('inviting Nova back', () => {
     expect(back.status).toBe(200);
     expect(entries().map((e) => [e.sourceId, e.actorId])).toEqual([['ma:call-1', 'alice']]);
     expect(sessionOf(await record())).toMatchObject({ settledListeningSeconds: 120, ledgerPart: 1, settled: false });
+  });
+
+  it('a period a dead process left open counts to its last heartbeat, not to now: the call is not wrongly out of listening time', async () => {
+    process.env['MEETING_ASSISTANT_MAX_MINUTES'] = '10'; process.env['MEETING_ASSISTANT_HARD_MAX_MINUTES'] = '15';
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); clock += 120_000; await runtime.tick();      // its last heartbeat, two minutes in
+    const lastAliveAt = clock;
+    // The process died; half an hour later the call's end (elsewhere) moved the record to left without closing the clock or settling.
+    clock += 1_800_000;
+    await assistantStore().transition(CALL, { from: ['listening'], to: 'left', by: 'system', at: clock });
+    setAssistantRuntime(null);
+    runtime = new AssistantRuntime({ store: assistantStore, intake: assistantIntake, clock: () => clock, makeSession: () => new ScriptedSession(() => clock), rolesOf: defaultRolesOf,
+      onFinished: (e) => settleFinished(e, clock) }, { tickMs: 0 });
+    setAssistantRuntime(runtime);
+    clock += 3_600_000;                                                           // an hour later still
+    const r = await record();
+    expect(sessionOf(r)).toMatchObject({ listeningSince: expect.any(Number), lastAliveAt });
+    expect(heardSoFar(r, clock)).toBe(120);
+    expect(heardSoFar({ ...r, session: { ...sessionOf(r), lastAliveAt: undefined } }, clock)).toBe(1920);   // no heartbeat: up to the leave, still not now
+    expect((await get('state', 'bob')).body).toMatchObject({ state: 'left', rejoin: 'allowed' });
+    const back = await post('invite', 'bob');
+    expect([back.status, back.body.listeningSeconds, back.body.ceilingSeconds]).toEqual([200, 120, 120 + 600]);
   });
 
   it('the person who invited Nova in any period may delete the record afterwards; an attendee who never did gets 403', async () => {

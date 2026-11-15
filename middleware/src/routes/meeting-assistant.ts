@@ -351,8 +351,17 @@ export const REJOIN_STILL_LEAVING = `${NOVA} is still leaving this call. Try aga
 let rejoinWaitMs = 8_000;
 export function setRejoinWaitMs(ms: number | null): void { rejoinWaitMs = ms ?? 8_000; }
 
-/** Seconds Nova listened in this call so far, every period included (the record is `left`, so no period is open; one left open by a dead process counts to now). */
-const heardSoFar = (record: AssistantRecord, now: number): number => listeningSecondsOf(record, now);
+/**
+ * Seconds Nova listened in this call so far, every period included. A `left` record should have no period open; one a dead process left
+ * open counts only to that process's last heartbeat (never past the leave), as the reconcile closes it, never to now: otherwise a call
+ * would read as having used its whole listening time just because time passed.
+ */
+export const heardSoFar = (record: AssistantRecord, now: number): number => {
+  const s = recordSession(record);
+  if (record.state !== 'left' || s.listeningSince == null) return listeningSecondsOf(record, now);
+  const aliveAt = s.lastAliveAt ?? record.leftAt ?? s.listeningSince;
+  return listeningSecondsOf(record, Math.min(record.leftAt ?? now, now, Math.max(s.listeningSince, aliveAt)));
+};
 
 /** Whether a call Nova left may have it back: no for good once its record was deleted or its whole-call listening time is used up. */
 async function rejoinStanding(record: AssistantRecord, now: number): Promise<RejoinStanding> {
