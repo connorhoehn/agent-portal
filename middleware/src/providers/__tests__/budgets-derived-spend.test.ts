@@ -15,7 +15,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 
 import {
   listBudgets, listGrants, orgSummary,
-  mockInitiativeSpend, mockInitiativeWindowSpendUsd, MOCK_BUDGETS,
+  mockInitiativeSpend, mockInitiativeWindowSpendUsd, mockBudgetWindow, MOCK_BUDGETS,
 } from '../budgets.js';
 import { MOCK_BOTS, MOCK_BOT_RUNS, type BotRun } from '../bots.js';
 import { botRuns } from '../../mock/bots.js';
@@ -149,8 +149,20 @@ describe('the org summary is cuts of one row set', () => {
   });
 
   it('agrees with the per-initiative ledger on the maintenance floor', async () => {
+    // The org card windows on the calendar month; a row windows on its own
+    // period, and a sprint envelope (p-cost-opt) starts mid-month. Its cron
+    // runs before the sprint are the org's money but not the row's, so for
+    // such a row the month's share is counted from its rows directly. Summing
+    // the rows' own figures used to pass or fail by whether a seeded run, timed
+    // relative to now, had landed in that gap yet.
     const s = await orgSummary();
-    const perRow = (await listBudgets()).reduce((n, b) => n + b.maintenanceUsd, 0);
+    const start = monthStartMs();
+    const cronThisMonth = (id: string): number => runsFor(id)
+      .filter((r) => r.trigger === 'cron' && Date.parse(r.startedAt) >= start)
+      .reduce((n, r) => n + (r.costUsd ?? 0), 0);
+    const perRow = (await listBudgets()).reduce((n, b) => n + (
+      mockBudgetWindow(b.orgProjectId).start.getTime() === start ? b.maintenanceUsd : cronThisMonth(b.orgProjectId)
+    ), 0);
     expect(scale(perRow)).toBe(s.totalMaintenanceUsd);
   });
 });
