@@ -41,6 +41,8 @@ import { HuddleDraftMemory, type SavedHuddleDraft } from '../../lib/huddleDraftM
 import { useNovaRosterEntry } from './MeetingAssistantBar';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { oneErasedLine } from './erasedLines';
+import { LiveTranscript } from './LiveTranscript';
+import { setLiveTranscript, useLiveTranscriptOn } from '../../lib/liveTranscript';
 
 export type RetiredHuddleDraft = SavedHuddleDraft<RichChatDraft, CallPageDescriptor>;
 export interface HuddlePaneControl { visible: boolean; hide(): void }
@@ -502,6 +504,10 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
   }, [navigate, callLobby]);
   // Nova's notice is a system line; its action card stands in for the bubble's text (the card carries the summary).
   const assistantCard = useCallback((message: { content?: string; metadata?: Record<string, unknown> }) => assistantBody(message, viewerId, huddleCallId), [viewerId, huddleCallId]);
+  // Nova's live transcript (the footer menu's "Show transcript") takes the body while it is on; the thread stays mounted under it.
+  const transcriptOn = useLiveTranscriptOn(huddleCallId);
+  const callEnded = !!chat?.state.ended;
+  useEffect(() => { if (callEnded && huddleCallId) setLiveTranscript(huddleCallId, false); }, [callEnded, huddleCallId]);
   if (!chat?.callId) return null;
   const { state } = chat;
   const inRoom = isBreakoutChat(chat.callId, runtime?.channel ?? chat.channel);
@@ -587,8 +593,11 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       }} />;
   return <Stack gap="none" className="min-h-0 flex-1">
     {error}
-    {thread}
-    {chat.unavailableReason && input.owner !== 'composer' && <T size="xs" tone="tertiary" className="px-3 pb-2" wrap>{chat.unavailableReason}</T>}
+    {transcriptOn && <LiveTranscript callId={chat.callId} />}
+    <Stack gap="none" className="min-h-0 flex-1" hidden={transcriptOn}>
+      {thread}
+      {chat.unavailableReason && input.owner !== 'composer' && <T size="xs" tone="tertiary" className="px-3 pb-2" wrap>{chat.unavailableReason}</T>}
+    </Stack>
   </Stack>;
 }
 

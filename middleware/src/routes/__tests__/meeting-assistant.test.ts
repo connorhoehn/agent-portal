@@ -313,6 +313,7 @@ describe('lines, acknowledgement and the transcript', () => {
       expect(texts(t)).toEqual(['line 4', 'line 5']);
       expect(t.earlier).toBe(true);
       expect(t.next).toBe(5);
+      expect(t.since).toBe((await assistantStore().get(CALL))!.invitedAt);
       const all = (await get('transcript?tail=10')).body;
       expect(texts(all)).toHaveLength(5);
       expect(all.earlier).toBe(false);

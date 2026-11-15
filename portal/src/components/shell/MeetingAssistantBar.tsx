@@ -6,7 +6,7 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Badge, Button, CheckIcon, Chip, CloseIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Badge, Button, CheckIcon, Chip, CloseIcon, DocumentIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
@@ -18,7 +18,10 @@ import {
   ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, DISMISS_QUESTION,
 } from '../../lib/meetingAssistantModel';
 import { proposalCountWords, waitingCount } from '../../lib/meetingProposals';
-import { useHuddleChatToggle } from './HuddleChat';
+import { useHuddleChat, useHuddleChatToggle } from './HuddleChat';
+import { useComposerFocus } from '@connorhoehn/ui-components/social/rich-composer';
+import { setLiveTranscript, useLiveTranscriptOn } from '../../lib/liveTranscript';
+import { LIVE_HIDE_LABEL, LIVE_SHOW_DESCRIPTION, LIVE_SHOW_LABEL } from '../../lib/liveTranscriptModel';
 import { useLiveCallId } from '../../lib/liveCallId';
 import { useProposalQueue } from './NovaProposalAsk';
 import { setProposalDeckHidden } from '../../lib/proposalDeckState';
@@ -55,6 +58,9 @@ export function NovaBarControls() {
   // Only proposals that wait on this person count; a bystander's optional prompt is in the deck but not in the badge.
   const owed = waitingCount(useProposalQueue().queue);
   const chat = useHuddleChatToggle({ behavior: 'focus' });
+  const huddle = useHuddleChat();
+  const focus = useComposerFocus();
+  const transcriptOn = useLiveTranscriptOn(callId);
   // Nothing is drawn until the first state read answers: no "Invite Nova" while Nova may already be here.
   if (controls.hidden || view.phase === 'loading') return null;
   const cards = myWaitingActions(view);
@@ -90,6 +96,12 @@ export function NovaBarControls() {
         ...(voiceMenu && nova.canSetVoice ? [{ label: view.voice ? "Turn Nova's voice off" : "Turn Nova's voice on", description: view.voice ? "Nova's voice is on in this call" : 'Nova answers aloud when asked', icon: <SpeakerIcon size={14} />, onSelect: () => void nova.setVoice(!view.voice) }] : []),
         ...(voiceMenu ? [{ label: voice.muted ? 'Unmute Nova for me' : 'Mute Nova for me', description: 'Only for you, in this call', icon: <SpeakerIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
         ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
+        // The live transcript: the call's pane opens (as Message opens it) on what Nova is hearing; again, back to the chat.
+        ...(callId && (view.phase === 'listening' || view.phase === 'paused') ? [{ label: transcriptOn ? LIVE_HIDE_LABEL : LIVE_SHOW_LABEL, ...(transcriptOn ? {} : { description: LIVE_SHOW_DESCRIPTION }),
+          icon: <DocumentIcon size={14} />, onSelect: () => {
+            setLiveTranscript(callId, !transcriptOn);
+            if (!transcriptOn && huddle?.openPane({ focus: false })) focus.request({ mode: 'chat', target: { kind: 'huddle' } });
+          } }] : []),
         ...(controls.dismiss ? [{ label: DISMISS_LABEL, icon: <CloseIcon size={14} />, danger: true, onSelect: () => nova.askDismiss() }] : []),
       ] }]} />}
     {/* Nova's voice, seen without opening the menu: on for the call, or muted by this person. */}

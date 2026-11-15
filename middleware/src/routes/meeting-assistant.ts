@@ -806,7 +806,8 @@ async function liveRecordOf(session: Session, callId: string): Promise<Assistant
  * The stored lines, oldest first, for the people who were there (`liveRecordOf`), during the call and after it. Two ways to page:
  * `after`/`limit` (forward from a seq, as the meeting page and the live view's polling read), or `tail` (the newest `tail` lines,
  * optionally those before the seq `before`, with `earlier` saying whether older lines exist: the live view's first read and its
- * "Load earlier lines"). Every answer names the speakers of the lines it carries, with their portraits, so a view needs no second read.
+ * "Load earlier lines"). Every answer names the speakers of the lines it carries, with their portraits, so a view needs no second read,
+ * and `since` (when Nova was invited) so a line's time reads from the start of Nova's listening.
  */
 meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
@@ -826,7 +827,7 @@ meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
     lines = await store.lines(callId, after, intParam(req.query['limit'], 'limit', 1, 500, 100));
   }
   const speakers = await facesOf([...new Set(lines.flatMap((l) => (l.userId ? [l.userId] : [])))]);
-  res.json({ callId, after, lines, next: lines.length ? lines[lines.length - 1]!.seq : after, speakers, ...(earlier === undefined ? {} : { earlier }) });
+  res.json({ callId, after, lines, next: lines.length ? lines[lines.length - 1]!.seq : after, speakers, since: record.invitedAt, ...(earlier === undefined ? {} : { earlier }) });
 }));
 
 /** Notes and transcript are personal data: reading them is attributed to the person who was there, so no masquerade. */
