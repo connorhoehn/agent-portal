@@ -32,10 +32,10 @@ import { CallPageSharing } from './CallPageSharing';
 import { EmbeddedSocialEntry } from './EmbeddedSocial';
 import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
-import { NovaBarControls, NovaBudgetAsk, NovaNotice } from './MeetingAssistantBar';
-import { NovaProposalAsk } from './NovaProposalAsk';
+import { AssistantBarControls, AssistantBudgetAsk, AssistantConsentNotice } from './MeetingAssistantBar';
+import { AssistantProposalAsk } from './AssistantProposalAsk';
 import { MeetingTurnRunner } from './MeetingTurnRunner';
-import { NovaPrivateAnswers } from './NovaPrivateAnswers';
+import { AssistantPrivateAnswers } from './AssistantPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
@@ -130,7 +130,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     {...(meetingItems && joined && !over && !barShown ? { meetingItems } : {})}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
     // The call bar takes three parts of the row's free width to the today strip's one: shared evenly, at 1280 with three people,
-    // Nova's mark and a proposal count its last control (React) dropped under Message and the bar grew to two lines.
+    // Milo's mark and a proposal count its last control (React) dropped under Message and the bar grew to two lines.
     className="shell-collaboration-bar shrink-0 grow-[3] basis-[14rem] border-l border-border"
     data-testid="shell-call-dock"
   />;
@@ -246,11 +246,11 @@ export function SocialFooter() {
   return <Stack as="footer" ref={footer} gap="none" aria-label="Social and huddle" className="shell-social-footer shrink-0 border-t border-border bg-surface"
     data-testid="shell-footer">
     <ShellCallMedia id={mediaId} />
-    <NovaNotice />
-    <NovaBudgetAsk />
-    <NovaProposalAsk />
+    <AssistantConsentNotice />
+    <AssistantBudgetAsk />
+    <AssistantProposalAsk />
     <MeetingTurnRunner />
-    <NovaPrivateAnswers />
+    <AssistantPrivateAnswers />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
     {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
     <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">
@@ -258,8 +258,8 @@ export function SocialFooter() {
       <TodayStripSlot placement="footer" activeCall={drawn} />
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
       <VoiceFooterSlot />
-      {/* Nova's mark and controls sit beside the call bar, not inside it: the bar's own extras slot has no room at 1280 and a wrapped second line would make the bar taller. */}
-      {drawn && <NovaBarControls />}
+      {/* Milo's mark and controls sit beside the call bar, not inside it: the bar's own extras slot has no room at 1280 and a wrapped second line would make the bar taller. */}
+      {drawn && <AssistantBarControls />}
       {drawn
         ? <FooterCall mediaOpen={!!media?.open} onToggleMedia={() => media?.toggle()} />
         : <FooterIdle />}

@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay, soundPromptShown } from '../novaVoiceModel.ts';
+import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, soundPromptShown } from '../assistantVoiceModel.ts';
+
+test('the mute choice is read under its key, or under the key it was kept under before the rename', () => {
+  const store = (entries: Record<string, string>) => ({ getItem: (k: string) => entries[k] ?? null });
+  assert.equal(muteKey('c1'), 'orgiq.assistantMuted:c1');
+  assert.equal(readMutedFrom(store({ 'orgiq.assistantMuted:c1': '1' }), 'c1'), true);
+  assert.equal(readMutedFrom(store({ 'orgiq.novaMuted:c1': '1' }), 'c1'), true);
+  assert.equal(readMutedFrom(store({ 'orgiq.assistantMuted:c1': '0', 'orgiq.novaMuted:c1': '1' }), 'c1'), false, 'the new key wins');
+  assert.equal(readMutedFrom(store({ 'orgiq.novaMuted:c2': '1' }), 'c1'), false);
+  assert.equal(readMutedFrom(store({}), ''), false);
+});
 
 const b64 = (vals: number[]) => { const buf = Buffer.alloc(vals.length * 2); vals.forEach((v, i) => buf.writeInt16LE(v, i * 2)); return buf.toString('base64'); };
 
@@ -31,7 +41,7 @@ test('a new run id means the server counted again from 1, and a frame without on
   assert.equal(runChanged('run-a', { runId: '' }), false);
 });
 
-test('a frame plays only for this call, newer, unmuted, with voice on and Nova listening', () => {
+test('a frame plays only for this call, newer, unmuted, with voice on and Milo listening', () => {
   const g = { callId: 'c1', frameCallId: 'c1', seq: 5, lastSeq: 4, muted: false, voice: true, listening: true };
   assert.equal(shouldPlay(g), true);
   for (const bad of [{ frameCallId: 'c2' }, { seq: 4 }, { seq: 3 }, { muted: true }, { voice: false }, { listening: false }]) assert.equal(shouldPlay({ ...g, ...bad }), false);
@@ -54,12 +64,12 @@ test('a frame behind the clock starts just ahead of it, and one more than 500 ms
   assert.equal(scheduleFrame({ currentTime: 10, nextStartTime: 0, frameSeconds: 0.1, utteranceStarted: false, running: false }).play, false, 'nothing is scheduled while the context is suspended');
 });
 
-test('"Click to hear Nova" shows as soon as the voice is on and the browser waits for a click, before any reply; not muted, not off, not once allowed', () => {
+test('"Click to hear Milo" shows as soon as the voice is on and the browser waits for a click, before any reply; not muted, not off, not once allowed', () => {
   const on = { present: true, voiceOn: true, muted: false, needsGesture: true };
-  // No frame count in the condition at all: it is shown before Nova's first reply.
+  // No frame count in the condition at all: it is shown before Milo's first reply.
   assert.equal(soundPromptShown(on), true);
   assert.equal(soundPromptShown({ ...on, needsGesture: false }), false); // sound allowed (a click, or a browser that never blocks)
   assert.equal(soundPromptShown({ ...on, voiceOn: false }), false); // the voice turned off
-  assert.equal(soundPromptShown({ ...on, muted: true }), false); // this person muted Nova
-  assert.equal(soundPromptShown({ ...on, present: false }), false); // Nova not in the call (left, or not invited)
+  assert.equal(soundPromptShown({ ...on, muted: true }), false); // this person muted Milo
+  assert.equal(soundPromptShown({ ...on, present: false }), false); // Milo not in the call (left, or not invited)
 });

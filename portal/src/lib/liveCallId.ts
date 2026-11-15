@@ -1,4 +1,4 @@
-// The live call's id, or null while there is no joined call to listen to. Nova's footer pieces all key on it.
+// The live call's id, or null while there is no joined call to listen to. Milo's footer pieces all key on it.
 import { useCallHost } from './conversationCall';
 
 export function useLiveCallId(): string | null {

@@ -38,7 +38,7 @@ import { callScopeKey, hasJoinedCall, huddleChatScopeTenant } from './callShellM
 import { CallReactionPlayback } from '../../lib/callReactionPlayback';
 import { settleHuddleDraft } from '../../lib/huddleDraft';
 import { HuddleDraftMemory, type SavedHuddleDraft } from '../../lib/huddleDraftMemory';
-import { useNovaRosterEntry } from './MeetingAssistantBar';
+import { useAssistantRosterEntry } from './MeetingAssistantBar';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { oneErasedLine } from './erasedLines';
 import { LiveTranscript } from './LiveTranscript';
@@ -278,9 +278,9 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   const channelName = useCallback(() => store.get()?.channel ?? null, [store]);
   const joinedChannel = useSyncExternalStore(store.subscribe, channelName, channelName);
   const ready = mounted && joinedChannel === channel;
-  // Once the call is over the chat is closed to everyone: when Nova was in it and listened, say where its minutes are.
-  const nova = useMeetingAssistant(callId);
-  const minutesFollow = nova.enabled && nova.view.phase !== 'none' && (nova.view.listeningSeconds ?? 0) > 0;
+  // Once the call is over the chat is closed to everyone: when Milo was in it and listened, say where its minutes are.
+  const assistant = useMeetingAssistant(callId);
+  const minutesFollow = assistant.enabled && assistant.view.phase !== 'none' && (assistant.view.listeningSeconds ?? 0) > 0;
   const unavailableReason = !current ? 'Join a huddle to message its participants.'
     : rosterState.ended ? (minutesFollow ? 'This call has ended. Its minutes are in Meetings.' : 'This call has ended.')
     : !connected ? 'Reconnect to send huddle messages.'
@@ -493,7 +493,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
   // Each message's reference arrives resolved by the BFF for this reader.
   const host = useCallHost();
   const callLobby = host?.lobby?.lobbyName ?? null;
-  // Nova's messages (notice, reply, action card) carry their own part under the bubble; the BFF shows those keys only on
+  // Milo's messages (notice, reply, action card) carry their own part under the bubble; the BFF shows those keys only on
   // a message the assistant authored (middleware lib/call-chat.ts `render`).
   const viewerId = chat?.actorId ?? null; const huddleCallId = chat?.callId ?? null;
   const references = useCallback((message: { metadata?: Record<string, unknown> }) => {
@@ -502,9 +502,9 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       openTestId="huddle-chat-reference-open" unavailableTestId="huddle-chat-reference-unavailable" /> : null;
     return <><AssistantMessageExtras metadata={message.metadata} />{page}</>;
   }, [navigate, callLobby]);
-  // Nova's notice is a system line; its action card stands in for the bubble's text (the card carries the summary).
+  // Milo's notice is a system line; its action card stands in for the bubble's text (the card carries the summary).
   const assistantCard = useCallback((message: { content?: string; metadata?: Record<string, unknown> }) => assistantBody(message, viewerId, huddleCallId), [viewerId, huddleCallId]);
-  // Nova's live transcript (the footer menu's "Show transcript") takes the body while it is on; the thread stays mounted under it.
+  // Milo's live transcript (the footer menu's "Show transcript") takes the body while it is on; the thread stays mounted under it.
   const transcriptOn = useLiveTranscriptOn(huddleCallId);
   const callEnded = !!chat?.state.ended;
   useEffect(() => { if (callEnded && huddleCallId) setLiveTranscript(huddleCallId, false); }, [callEnded, huddleCallId]);
@@ -559,7 +559,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
       renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard} isAssistantMessage={isAssistantChatMessage}
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
-      // A deleted meeting's line once, however many of Nova's messages the open chat still holds (erasedLines.ts).
+      // A deleted meeting's line once, however many of Milo's messages the open chat still holds (erasedLines.ts).
       transformMessages={meetingChat ? (messages => meetingChat.withAnnouncements(oneErasedLine(messages))) : oneErasedLine}
       {...(meetingChat?.dock ? { dock: meetingChat.dock } : {})}
       composer={{
@@ -601,9 +601,9 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
   </Stack>;
 }
 
-function participantsLine(chat: HuddleChatContextValue, nova: string | null = null): string {
+function participantsLine(chat: HuddleChatContextValue, assistant: string | null = null): string {
   const count = chat.state.participants.length;
-  return `${chat.title} · ${count ? `${count} participant${count === 1 ? '' : 's'}` : 'Loading participants…'}${nova ? ` · ${nova}` : ''}`;
+  return `${chat.title} · ${count ? `${count} participant${count === 1 ? '' : 's'}` : 'Loading participants…'}${assistant ? ` · ${assistant}` : ''}`;
 }
 
 /**
@@ -630,7 +630,7 @@ function CallMediaPanel({ onClose, title, count }: { onClose(): void; title: str
  * stays with the central composer when that page has claimed it. */
 export function HuddleChatSplit({ children }: { children: ReactNode }) {
   const chat = useHuddleChat();
-  const novaEntry = useNovaRosterEntry(chat?.callId ?? null);
+  const assistantEntry = useAssistantRosterEntry(chat?.callId ?? null);
   const host = useCallHost();
   const media = useCallMediaPanel();
   const pageHoldsMedia = useCallBlockPageClaimed();
@@ -656,13 +656,13 @@ export function HuddleChatSplit({ children }: { children: ReactNode }) {
   const shown = pane.fits && !!chat?.callId && !chat.paneOwned && chat.view === 'pane';
   const mediaShown = !!media?.open && !pageHoldsMedia;
   const chatPane = shown && chat
-    ? <ChatSidePanelFrame title="Huddle chat" subtitle={participantsLine(chat, novaEntry)}
+    ? <ChatSidePanelFrame title="Huddle chat" subtitle={participantsLine(chat, assistantEntry)}
       onClose={chat.closeMessage}
       onOpenFullPage={chat.popOut} className="min-h-0 flex-1 border-l border-border bg-surface"
       data-testid="huddle-chat-panel">
       <Stack gap="none" className="h-full min-h-0">
         {mediaShown && <CallMediaGrid />}
-        <T className="sr-only" data-testid="huddle-chat-participants">{[...chat.state.participants.map(person => person.displayName), ...(novaEntry ? [novaEntry] : [])].join(', ')}</T>
+        <T className="sr-only" data-testid="huddle-chat-participants">{[...chat.state.participants.map(person => person.displayName), ...(assistantEntry ? [assistantEntry] : [])].join(', ')}</T>
         <HuddleChatBody />
       </Stack>
     </ChatSidePanelFrame>
@@ -683,7 +683,7 @@ export function HuddleChatSplit({ children }: { children: ReactNode }) {
 /** The popped-out huddle chat (the pane's ↗), floating above the footer. */
 export function HuddleChatPanel() {
   const chat = useHuddleChat();
-  const novaEntry = useNovaRosterEntry(chat?.callId ?? null);
+  const assistantEntry = useAssistantRosterEntry(chat?.callId ?? null);
   const anchorKey = useFooterAnchorKey();
   if (!chat?.callId || chat.paneOwned) return null;
   return <FloatingPanel key={anchorKey} open={chat.view === 'floating'} onClose={chat.closeMessage} title={`${chat.title} · Huddle chat`}
@@ -691,7 +691,7 @@ export function HuddleChatPanel() {
     heightClassName="h-[min(32rem,calc(100dvh-var(--shell-collaboration-floor,0px)-2rem))]" data-testid="huddle-chat-panel">
     <Stack gap="none" className="flex-1 min-h-0">
       <T size="xs" tone="secondary" className="border-b border-border px-3 py-2" wrap data-testid="huddle-chat-participants">
-        {[...chat.state.participants.map(person => person.displayName), ...(novaEntry ? [novaEntry] : [])].join(', ') || 'Loading participants…'}
+        {[...chat.state.participants.map(person => person.displayName), ...(assistantEntry ? [assistantEntry] : [])].join(', ') || 'Loading participants…'}
       </T>
       <HuddleChatBody />
     </Stack>

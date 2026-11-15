@@ -1,10 +1,12 @@
-// Proposals Nova notices in a call, as the portal reads them (docs/meeting-consent-design.md). The shapes mirror the proposals route
+// Proposals Milo notices in a call, as the portal reads them (docs/meeting-consent-design.md). The shapes mirror the proposals route
 // in middleware/src/routes/meeting-assistant.ts (`proposalView`); change both together.
 //
 // The rules kept here: answers are given in the deck; the card in the chat shows the proposal and carries the quiet actions (Answer,
 // which opens the deck; withdrawing an answer; Undo of a dismissal; Raise it again). The deck asks one proposal at a time: first those
 // waiting on this person (they are needed and have not consented, or they may run it now), then those where their answer is optional.
 // Only the first group is counted. An objection's reason is shared with everyone who can see the proposal, and the deck says so first.
+
+import { ASSISTANT_NAME } from './meetingAssistantModel.ts';
 
 export type ProposalState = 'open' | 'consented' | 'running' | 'done' | 'failed' | 'objected' | 'dismissed' | 'expired';
 export const PROPOSAL_STATES: readonly ProposalState[] = ['open', 'consented', 'running', 'done', 'failed', 'objected', 'dismissed', 'expired'];
@@ -17,17 +19,17 @@ export interface ProposalResponseView extends ProposalPerson { response: Proposa
 export type ProposalOutcomeView = { kind: 'decision'; initiativeId: string | null; summary?: string } | { kind: 'tool'; name: string; summary?: string };
 
 export interface ProposalRunView { by: ProposalPerson; at: number; title: string | null; href: string | null; note: string | null; raisedAs: string | null }
-/** A line Nova heard, sent only to people who were in the call. */
+/** A line Milo heard, sent only to people who were in the call. */
 export interface HeardLine { speaker: string; text: string }
 
 export interface ProposalView {
   id: string;
   callId: string | null;
   statement: string;
-  /** `asked`: a person asked Nova for it (`askedBy`); otherwise Nova raised it from what it heard. */
+  /** `asked`: a person asked Milo for it (`askedBy`); otherwise Milo raised it from what it heard. */
   source: 'watcher' | 'asked' | 'dev';
   askedBy: ProposalPerson | null;
-  /** The lines Nova heard (a short excerpt); empty for anyone who was not in the call. */
+  /** The lines Milo heard (a short excerpt); empty for anyone who was not in the call. */
   heard: HeardLine[];
   /** A decision: recorded as decided by its executor, or as waiting for the initiative owner's decision. */
   recordsAs: 'decided' | 'waiting' | null;
@@ -138,12 +140,12 @@ export function recordsLine(p: Pick<ProposalView, 'recordsAs' | 'outcome' | 'sta
   return p.recordsAs === 'decided' ? 'It will be recorded as decided.' : "It will be recorded as waiting for the initiative owner's decision.";
 }
 
-/** Who raised it: "Asked by Dana", or "Nova heard a decision" for one Nova raised from what it heard. */
+/** Who raised it: "Asked by Dana", or "Milo heard a decision" for one Milo raised from what it heard. */
 export function eyebrowOf(p: Pick<ProposalView, 'source' | 'askedBy' | 'executor'>): string {
-  return p.source === 'asked' ? `Asked by ${(p.askedBy ?? p.executor).name}` : 'Nova heard a decision';
+  return p.source === 'asked' ? `Asked by ${(p.askedBy ?? p.executor).name}` : `${ASSISTANT_NAME} heard a decision`;
 }
 
-/** One quoted line Nova heard, for the card and the deck: "“Let's cut over the smallest first.” Sam". */
+/** One quoted line Milo heard, for the card and the deck: "“Let's cut over the smallest first.” Sam". */
 export const heardText = (l: HeardLine): string => `“${l.text}” ${l.speaker}`;
 
 const nameIn = (p: ProposalView, userId: string): string =>
@@ -222,7 +224,7 @@ export function stateLine(p: ProposalView): string | null {
     }
     // The server's sentence says what went wrong and that nothing was changed.
     case 'failed': {
-      const note = p.run?.note ?? 'Nova could not carry this out, so nothing was changed.';
+      const note = p.run?.note ?? `${ASSISTANT_NAME} could not carry this out, so nothing was changed.`;
       return p.run?.raisedAs ? `${note} Raised again as a new proposal.` : note;
     }
     default: return null;
@@ -233,7 +235,7 @@ export function stateLine(p: ProposalView): string | null {
 
 /**
  * Waiting on this person: it is open or objected and they are needed (named or running it) and have not answered, or the server says
- * they may run it now. Only these are counted on Nova's footer mark.
+ * they may run it now. Only these are counted on Milo's footer mark.
  */
 export function waitingOnYou(p: ProposalView): boolean {
   if (p.state === 'consented') return p.you.canRun;
@@ -275,11 +277,11 @@ export function consentLabel(p: Pick<ProposalView, 'outcome' | 'you' | 'missing'
   return p.outcome.kind === 'decision' ? 'Consent and record' : 'Consent and run';
 }
 
-/** "Not a decision" on a decision Nova heard, "Not needed" on a work item it heard, "Drop it" for the asker of an asked one. */
+/** "Not a decision" on a decision Milo heard, "Not needed" on a work item it heard, "Drop it" for the asker of an asked one. */
 export const dismissLabel = (p: Pick<ProposalView, 'source' | 'outcome'>): string =>
   (p.source === 'asked' ? 'Drop it' : p.outcome.kind === 'tool' ? 'Not needed' : 'Not a decision');
 
-/** The count on Nova's footer mark: "1 proposal", "2 proposals"; null at none. */
+/** The count on Milo's footer mark: "1 proposal", "2 proposals"; null at none. */
 export const proposalCountWords = (n: number): string | null => (n <= 0 ? null : n === 1 ? '1 proposal' : `${n} proposals`);
 
 export const RUN_NOW = 'Run it now';

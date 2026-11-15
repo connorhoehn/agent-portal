@@ -1,8 +1,8 @@
-// What sits under a Nova message in the call chat (docs/meeting-assistant-design.md, decisions 5 and 6).
-// Every Nova message reads as one voice: the thread marks it (`isAssistantChatMessage` as ChatPanel's `isAssistantMessage`), so its
-// row wears Nova's mark and the accent author ink. The thread draws Nova's message through these slots:
+// What sits under a Milo message in the call chat (docs/meeting-assistant-design.md, decisions 5 and 6).
+// Every Milo message reads as one voice: the thread marks it (`isAssistantChatMessage` as ChatPanel's `isAssistantMessage`), so its
+// row wears Milo's mark and the accent author ink. The thread draws Milo's message through these slots:
 //   assistant-notice  a short state notice (paused, resumed, left...) is a system line (`renderSystemMessage`): one compact row under
-//                     Nova's mark in a tinted pill. A long one (the join notice) is a quiet notice block instead (`renderMessageBody`):
+//                     Milo's mark in a tinted pill. A long one (the join notice) is a quiet notice block instead (`renderMessageBody`):
 //                     its first sentence, the rest behind "More".
 //   assistant-minutes the minutes notice as a card: "Minutes" and "Ready", the summary's first lines, the counts as one line, and a
 //                     button that opens the meeting.
@@ -15,7 +15,7 @@
 // One anatomy for the action, proposal and minutes cards: a header row (what it is, its status pill), a one-line headline clamped to
 // two, ONE plain-words line saying what will happen, the people as avatars with their answer in each name and one line saying who it
 // needs, a footer row (buttons left, quiet meta right), and secondary material behind a disclosure that starts closed. State decides
-// the size: waiting on the viewer is the full card in Nova's accent; waiting on others the full card on the plain surface; finished
+// the size: waiting on the viewer is the full card in Milo's accent; waiting on others the full card on the plain surface; finished
 // collapses to one row with a success mark; declined, expired, not a decision or failed to one muted row with the reason. A row opens
 // to the full card. Every surface is opaque, so the dialogue's dot field never shows through. Library components only.
 
@@ -26,7 +26,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { usePeopleDirectory } from '../../hooks/usePageCalls';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
 import { answerProposal, raiseProposalAgain, useMeetingAssistant } from '../../lib/meetingAssistant';
-import { expiresWords } from '../../lib/meetingAssistantModel';
+import { ASSISTANT_NAME, expiresWords } from '../../lib/meetingAssistantModel';
 import {
   blockedLine, expiryLine, eyebrowOf, heardText, isAnswerable, needsLine, optionalFor, outcomeLine, personChips, personLabel, proposalLayout, recordsLine, resultHref,
   stateLine, waitingOnYou, type PersonChip, type ProposalState, type ProposalView,
@@ -42,7 +42,7 @@ type DataAttrs = Record<`data-${string}`, string | undefined>;
 
 // ---- the shared anatomy ---------------------------------------------------------------------------------------------------------
 
-/** The card's surface: Nova's accent (opaque) when it waits on the viewer, the plain surface otherwise. Tight, even padding. */
+/** The card's surface: Milo's accent (opaque) when it waits on the viewer, the plain surface otherwise. Tight, even padding. */
 function surface(layout: CardLayout): { tone: 'assistant' | 'default'; className: string } {
   return layout === 'you'
     ? { tone: 'assistant', className: 'mt-1 max-w-md bg-accent-callout px-3 py-2.5' }
@@ -53,7 +53,7 @@ interface FullCardProps {
   layout: CardLayout;
   testId: string;
   attrs: DataAttrs;
-  /** The header's left side: "Action · asked by Dana", "Nova heard a decision", "Minutes". */
+  /** The header's left side: "Action · asked by Dana", "Milo heard a decision", "Minutes". */
   header: ReactNode;
   headerTestId: string;
   pill: ReactNode;
@@ -166,22 +166,22 @@ export interface AssistantActionCardProps {
 
 /** The call's initiative's name, for "Creates a work item in <name>"; null until known, and not asked for when the line does not need it. */
 function useCallInitiativeName(callId: string | null, wanted: boolean): string | null {
-  const nova = useMeetingAssistant(wanted ? callId : null);
-  const id = wanted ? nova.view.initiativeId : null;
+  const assistant = useMeetingAssistant(wanted ? callId : null);
+  const id = wanted ? assistant.view.initiativeId : null;
   const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
   return named.data?.name?.trim() || null;
 }
 
 /** "expires in 7 min" while the card waits, from the call's state (which says when each waiting card expires), kept current each half minute. */
 function useExpiresWords(callId: string | null, actionId: string, waiting: boolean): string | null {
-  const nova = useMeetingAssistant(waiting ? callId : null);
+  const assistant = useMeetingAssistant(waiting ? callId : null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!waiting) return undefined;
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, [waiting]);
-  return waiting ? expiresWords(nova.view, actionId, now) : null;
+  return waiting ? expiresWords(assistant.view, actionId, now) : null;
 }
 
 export function AssistantActionCard({ action, viewerId, callId, decide = decideAssistantAction }: AssistantActionCardProps) {
@@ -222,7 +222,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
             {action.resultText && <T size="xs" tone="secondary" wrap data-testid="assistant-action-result">{action.resultText}</T>}
             {action.detail.length > 0 && (
               <Stack gap="none" data-testid="assistant-action-detail">
-                <T size="xs" tone="tertiary" wrap>Exactly what Nova will send:</T>
+                <T size="xs" tone="tertiary" wrap>Exactly what {ASSISTANT_NAME} will send:</T>
                 {action.detail.map((line, index) => <T key={index} size="xs" tone="tertiary" wrap>{line}</T>)}
               </Stack>
             )}
@@ -260,22 +260,22 @@ function useInitiativeName(id: string | null): string | null {
 }
 
 export function AssistantProposalCardView({ card, statement, callId }: { card: AssistantProposalCard; statement: string; callId: string | null }) {
-  const nova = useMeetingAssistant(callId);
-  const view = nova.proposals.find((p) => p.id === card.proposalId) ?? null;
+  const assistant = useMeetingAssistant(callId);
+  const view = assistant.proposals.find((p) => p.id === card.proposalId) ?? null;
   // The message's state moves with every change; the route's view may lag a poll behind, so the pill follows the message.
   return <ProposalCard proposalId={card.proposalId} state={card.state} statement={statement} view={view} surface="assistant" />;
 }
 
 /**
- * One proposal, in the shared anatomy: who raised it ("Nova heard a decision" or "Asked by Dana") and its pill, the statement, what
+ * One proposal, in the shared anatomy: who raised it ("Milo heard a decision" or "Asked by Dana") and its pill, the statement, what
  * will be written, the people as avatars with who it still needs, the quiet actions (Answer opens the deck in the call; withdrawing
- * your answer; Undo of your dismissal; Raise it again on a blocked or failed one) and when it expires; the lines Nova heard and how it
- * will be recorded sit behind "What Nova heard". Recorded or made, it is one row with the link; closed, one muted row with the reason.
+ * your answer; Undo of your dismissal; Raise it again on a blocked or failed one) and when it expires; the lines Milo heard and how it
+ * will be recorded sit behind "What Milo heard". Recorded or made, it is one row with the link; closed, one muted row with the reason.
  * The call chat's card and the meeting page's Proposals section draw this same card.
  */
 export function ProposalCard({ proposalId, state, statement, view, surface: where = 'default' }: {
   proposalId: string; state: ProposalState; statement: string; view: ProposalView | null;
-  /** `assistant` in the call chat, where it is one of Nova's messages (and Answer opens the call's deck); the meeting page lists it too. */
+  /** `assistant` in the call chat, where it is one of Milo's messages (and Answer opens the call's deck); the meeting page lists it too. */
   surface?: 'default' | 'assistant';
 }) {
   const navigate = useNavigate();
@@ -346,7 +346,7 @@ export function ProposalCard({ proposalId, state, statement, view, surface: wher
         </Stack>
       ) : null}
       more={hasMore && live ? {
-        label: live.heard.length > 0 ? 'What Nova heard' : 'How it will be recorded', testId: 'assistant-proposal-more',
+        label: live.heard.length > 0 ? `What ${ASSISTANT_NAME} heard` : 'How it will be recorded', testId: 'assistant-proposal-more',
         body: (
           <Stack gap="xs">
             {live.heard.length > 0 && (
@@ -387,7 +387,7 @@ export interface AssistantMessageExtrasProps {
   decide?: typeof decideAssistantAction;
 }
 
-/** The part under a Nova reply ("Asked by <name>"); null for any other message. */
+/** The part under a Milo reply ("Asked by <name>"); null for any other message. */
 export function AssistantMessageExtras({ metadata }: Pick<AssistantMessageExtrasProps, 'metadata'>) {
   const message = readAssistantMessage(metadata);
   if (message?.kind !== 'assistant-reply') return null;
@@ -447,8 +447,8 @@ export function MinutesCard({ summary, counts, callId }: { summary: string; coun
     <Card tone="default" padding="none" className="mt-1 max-w-md px-3 py-2.5" data-testid="assistant-minutes-card" data-layout="others">
       <Stack gap="xs">
         <Inline gap="sm" align="center" justify="between" wrap={false}>
-          {/* An addition (Nova was invited back and heard more) says so; the card is otherwise the same. */}
-          <T size="xs" weight="medium" tone="secondary" data-testid="assistant-minutes-title">{counts.added ? 'Nova added to the minutes' : 'Minutes'}</T>
+          {/* An addition (Milo was invited back and heard more) says so; the card is otherwise the same. */}
+          <T size="xs" weight="medium" tone="secondary" data-testid="assistant-minutes-title">{counts.added ? `${ASSISTANT_NAME} added to the minutes` : 'Minutes'}</T>
           <StatusPill tone="success" label={counts.added ? 'Updated' : 'Ready'} size="sm" data-testid="assistant-minutes-status" />
         </Inline>
         {summary && <T size="sm" clamp={2} data-testid="assistant-minutes-summary">{summary}</T>}
@@ -463,7 +463,7 @@ export function MinutesCard({ summary, counts, callId }: { summary: string; coun
   );
 }
 
-/** A short Nova state notice as a system line; null for any other message (and for the minutes notice and a long notice), so the thread draws it as usual. */
+/** A short Milo state notice as a system line; null for any other message (and for the minutes notice and a long notice), so the thread draws it as usual. */
 export function assistantSystemLine(message: { content: string; metadata?: Record<string, unknown> }): ReactNode | null {
   const read = readAssistantMessage(message.metadata);
   return read?.kind === 'assistant-notice' && !read.minutes && !isLongNotice(message.content) ? <NoticeLine content={message.content} callId={read.meetingCallId} /> : null;

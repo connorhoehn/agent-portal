@@ -1,4 +1,4 @@
-// /iq/meetings/:callId — what Nova left behind, read at a glance: who was there, what came out of it and what waits on the viewer.
+// /iq/meetings/:callId — what Milo left behind, read at a glance: who was there, what came out of it and what waits on the viewer.
 // Only the people who were in the call can read it; everyone else, admins included, gets the same "not found" the server gives them;
 // someone who was there is told when it was deleted or expired. The inviter can delete the meeting (minutes and transcript together)
 // from the header's menu. Failed minutes can be written again from the same menu, within the server's cap.
@@ -21,7 +21,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { sendJson } from '../../lib/writeJson';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
-import { proposalPrompt } from '../../components/shell/NovaProposalAsk';
+import { proposalPrompt } from '../../components/shell/AssistantProposalAsk';
 import { MeetingTurnRunner } from '../../components/shell/MeetingTurnRunner';
 import { answerProposal, raiseProposalAgain } from '../../lib/meetingAssistant';
 import { bumpProposalPrompt } from '../../lib/proposalDeckState';
@@ -36,6 +36,7 @@ import {
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
 import { Faces, PersonName } from './Faces';
+import { ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 
 /** A link inside the portal that navigates in place on a plain click, at the size of the text it sits in. */
 function PortalLink({ href, children, testId }: { href: string; children: ReactNode; testId?: string }) {
@@ -92,9 +93,9 @@ export default function MeetingPage() {
   const { callId = '' } = useParams();
   const navigate = useNavigate();
   const { session } = useSession();
-  // Asked again every few seconds while Nova writes the minutes (the first write, or "Write the minutes again").
+  // Asked again every few seconds while Milo writes the minutes (the first write, or "Write the minutes again").
   const [writing, setWriting] = useState(false);
-  // While Nova is back in the call the page reads again now and then, so the later part shows once Nova leaves and adds it.
+  // While Milo is back in the call the page reads again now and then, so the later part shows once Milo leaves and adds it.
   const [back, setBack] = useState(false);
   const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : back ? 15000 : undefined);
   const nowWriting = minutes.data ? minutes.data.rewrite?.writing === true : goneCopy(minutes.failure).writing;
@@ -151,7 +152,7 @@ export default function MeetingPage() {
   }), [minutes.refresh]);
   const deletePrompt = useMemo<ComposerPrompt | null>(() => asked > answered && minutes.data ? {
     id: `meeting-delete:${callId}:${asked}`, scope: `meeting-delete:${callId}`, kind: 'choice', eyebrow: 'Delete the meeting', title: minutes.data.callName,
-    question: 'Delete this meeting\'s minutes and transcript for everyone who was in the call? Nova will not write them again, and this cannot be undone. Work items created from them stay.',
+    question: `Delete this meeting's minutes and transcript for everyone who was in the call? ${ASSISTANT_NAME} will not write them again, and this cannot be undone. Work items created from them stay.`,
     options: [{ id: 'delete', label: 'Delete the meeting', emphasis: 'danger' }, { id: 'keep', label: 'Keep it' }],
     onAnswer: async (a) => {
       if (!('optionId' in a) || a.optionId !== 'delete') { setAnswered(asked); return; }
@@ -298,12 +299,12 @@ export default function MeetingPage() {
             </Prose>
             {!written && rewrite?.possible && (rewrite.writing || rewrite.attemptsLeft === 0 || rewriteError) && (
               <Inline gap="sm" wrap className="pt-2" data-testid="meeting-rewrite">
-                {rewrite.writing && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova is writing the minutes…</T>}
-                {!rewrite.writing && rewrite.attemptsLeft === 0 && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova has tried to write these minutes five times and will not try again. The transcript is below.</T>}
+                {rewrite.writing && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">{ASSISTANT_NAME} is writing the minutes…</T>}
+                {!rewrite.writing && rewrite.attemptsLeft === 0 && <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">{ASSISTANT_NAME} has tried to write these minutes five times and will not try again. The transcript is below.</T>}
                 {rewriteError && <T size="sm" tone="danger" data-testid="meeting-rewrite-error">{rewriteError}</T>}
               </Inline>
             )}
-            {/* Nova was invited back into the call: what it hears is added here when it leaves (or could not be yet). */}
+            {/* Milo was invited back into the call: what it hears is added here when it leaves (or could not be yet). */}
             {written && later && <T size="sm" tone="secondary" wrap className="pt-2" data-testid="meeting-addition-note">{later}</T>}
             {written && m.additionOwed && rewriteError && <T size="sm" tone="danger" className="pt-2" data-testid="meeting-rewrite-error">{rewriteError}</T>}
           </DetailSection>
@@ -353,7 +354,7 @@ function ProposalRowAction({ p, onAsk, onOpen }: { p: ProposalView; onAsk: (p: P
 }
 
 /**
- * A proposal's detail, opened from its row: the lines Nova heard (the server sends them only to people who were in the call), what it
+ * A proposal's detail, opened from its row: the lines Milo heard (the server sends them only to people who were in the call), what it
  * does, who it needs and what they answered (objection reasons included), how it ended with its link, and the quiet actions.
  */
 function ProposalDrawer({ p, people, meetingInitiativeId, onClose, onAsk, afterAct }: {
@@ -379,7 +380,7 @@ function ProposalDrawer({ p, people, meetingInitiativeId, onClose, onAsk, afterA
           <Inline gap="sm" align="center" wrap><StatusPill tone={pill.tone} label={pill.label} size="sm" /></Inline>
           <DetailSection title="What it does" first><OutcomeWords p={p} full meetingInitiativeId={meetingInitiativeId} />{lines.map((l, i) => <T key={i} size="sm" tone="secondary" wrap>{l}</T>)}</DetailSection>
           {p.heard.length > 0 && (
-            <DetailSection title="What Nova heard">
+            <DetailSection title={`What ${ASSISTANT_NAME} heard`}>
               <Stack gap="xs" data-testid="meeting-proposal-heard">{p.heard.map((line, i) => <T key={i} size="sm" tone="secondary" wrap>{heardText(line)}</T>)}</Stack>
             </DetailSection>
           )}

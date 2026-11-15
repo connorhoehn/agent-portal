@@ -1,5 +1,5 @@
 // Runs the call assistant's turns in this person's own browser (docs/meeting-assistant-design.md, decision 5).
-// Renders nothing. While this person is seated in a call with Nova (listening, paused, or after it left, on a confirmation), it asks the server for the turns made for
+// Renders nothing. While this person is seated in a call with Milo (listening, paused, or after it left, on a confirmation), it asks the server for the turns made for
 // this person every TURN_POLL_MS (the 5 s state poll is too slow for a read that someone is waiting on) and runs each
 // one once through the voice navigator's executor with this person's own session. See lib/meetingTurns.ts for the
 // rules: reads when pending, writes only when running, never twice.
@@ -21,7 +21,7 @@ import { PAGES, isPageVisible } from './portalCommands';
 import { useLiveCallId } from './MeetingAssistantBar';
 
 export { TURN_POLL_MS };
-/** After Nova has left, a confirmed card is followed by these extra polls (ms after the poke). */
+/** After Milo has left, a confirmed card is followed by these extra polls (ms after the poke). */
 const POKE_FOLLOW_UPS_MS = [1500, 4000, 9000];
 /** An error doubles the wait, up to this. */
 const POLL_MAX_MS = 30_000;
@@ -38,21 +38,21 @@ export interface AfterCallRun {
 export function MeetingTurnRunner({ afterCall }: { afterCall?: AfterCallRun } = {}) {
   const liveCallId = useLiveCallId();
   // After the call there is no seat and no state to read: the meeting page says when to ask.
-  const nova = useMeetingAssistant(afterCall ? null : liveCallId);
+  const assistant = useMeetingAssistant(afterCall ? null : liveCallId);
   const callId = afterCall ? afterCall.callId : liveCallId;
   const { session } = useSession();
   const { can } = useCapabilities();
   // Seated in the live call (callId) is the first condition. Confirmed turns run whenever the person is seated: keep asking
-  // while Nova listens or is paused; after it has left, ask when a card is confirmed (a poke) and a few times after.
-  const phase = nova.view.phase;
-  const mode: 'active' | 'poke' | 'off' = !nova.enabled ? 'off' : afterCall ? (afterCall.active ? 'active' : 'off') : phase === 'listening' || phase === 'invited' || phase === 'paused' ? 'active' : phase === 'left' ? 'poke' : 'off';
+  // while Milo listens or is paused; after it has left, ask when a card is confirmed (a poke) and a few times after.
+  const phase = assistant.view.phase;
+  const mode: 'active' | 'poke' | 'off' = !assistant.enabled ? 'off' : afterCall ? (afterCall.active ? 'active' : 'off') : phase === 'listening' || phase === 'invited' || phase === 'paused' ? 'active' : phase === 'left' ? 'poke' : 'off';
   const userId = session?.sub ?? null;
   const ledger = useMemo(() => new Map<string, DeliveryRecord>(), [userId]);
   const results = useMemo(() => new ResultMemory(), [userId, session?.tenant]);
   const host = useCallHost();
   const mediaId = ownMediaId(host?.call?.call?.participants as Parameters<typeof ownMediaId>[0], userId);
-  // M7: once an assistant record exists for this call and Nova has not left, tell the server this person's media id (again if it changes after a rejoin).
-  const present = nova.enabled && (nova.view.phase === 'invited' || nova.view.phase === 'listening' || nova.view.phase === 'paused');
+  // M7: once an assistant record exists for this call and Milo has not left, tell the server this person's media id (again if it changes after a rejoin).
+  const present = assistant.enabled && (assistant.view.phase === 'invited' || assistant.view.phase === 'listening' || assistant.view.phase === 'paused');
   useEffect(() => {
     if (!present || !callId || !mediaId) return undefined;
     let stopped = false;
@@ -62,7 +62,7 @@ export function MeetingTurnRunner({ afterCall }: { afterCall?: AfterCallRun } = 
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [present, callId, mediaId]);
   const callInitiative = useRef<{ id: string; name: string | null } | null>(null);
-  const initiativeId = afterCall ? afterCall.initiativeId : nova.view.initiativeId;
+  const initiativeId = afterCall ? afterCall.initiativeId : assistant.view.initiativeId;
   const initiativeName = useFetch<{ name?: string }>(initiativeId ? `/api/graph/projects/${encodeURIComponent(initiativeId)}` : null).data?.name ?? null;
   callInitiative.current = initiativeId ? { id: initiativeId, name: initiativeName } : null;
   const live = useRef({ session, can });
@@ -70,8 +70,9 @@ export function MeetingTurnRunner({ afterCall }: { afterCall?: AfterCallRun } = 
 
   useEffect(() => {
     if (mode === 'off' || !callId || !userId) return undefined;
-    const seen = new SeenTurns(`nova-turns:${callId}:${userId}`);
-    const pending = new PendingResults(`nova-results:${callId}:${userId}`);
+    // Kept under `nova-…` keys before the assistant was renamed: read once so a reload during the switch neither re-runs nor drops a turn.
+    const seen = new SeenTurns(`assistant-turns:${callId}:${userId}`, undefined, `nova-turns:${callId}:${userId}`);
+    const pending = new PendingResults(`assistant-results:${callId}:${userId}`, undefined, `nova-results:${callId}:${userId}`);
     // The server's clock, from the `Date` header of its answers: a turn's expiry is the server's time, not this browser's.
     let offset = 0;
     const serverNow = (): number => Date.now() + offset;
@@ -137,7 +138,7 @@ export function MeetingTurnRunner({ afterCall }: { afterCall?: AfterCallRun } = 
     };
     const hidden = (): boolean => typeof document !== 'undefined' && document.visibilityState === 'hidden';
     const followUps: ReturnType<typeof setTimeout>[] = [];
-    // While Nova is listening or paused the browser keeps asking; after it has left it asks only when a card is confirmed.
+    // While Milo is listening or paused the browser keeps asking; after it has left it asks only when a card is confirmed.
     // A hidden tab still polls (slower): its reads and confirmed writes must not wait.
     const chain = pollChain<ReturnType<typeof setTimeout>>({
       poll, schedule: (fn, ms) => setTimeout(fn, ms), cancel: (h) => clearTimeout(h),

@@ -1,8 +1,18 @@
-// Nova's spoken replies as the browser plays them (docs/meeting-assistant-design.md, decision 4, package 7).
-// Pure: the frame reader, the sequence filter and the scheduling decision. The AudioContext wiring is lib/novaVoice.ts.
+// Milo's spoken replies as the browser plays them (docs/meeting-assistant-design.md, decision 4, package 7).
+// Pure: the frame reader, the sequence filter and the scheduling decision. The AudioContext wiring is lib/assistantVoice.ts.
 // Audio is only decoded and played; nothing here stores, logs or sends it.
 
-export const NOVA_SAMPLE_RATE = 24000;
+export const VOICE_SAMPLE_RATE = 24000;
+
+/** A person's mute choice for one call, kept in this browser. */
+export const muteKey = (callId: string): string => `orgiq.assistantMuted:${callId}`;
+/** Where the choice was kept before the rename: read when the new key has nothing, never written. */
+const legacyMuteKey = (callId: string): string => `orgiq.novaMuted:${callId}`;
+/** Is the assistant muted for this person in this call? Under the key now, or the one used before the rename. */
+export function readMutedFrom(storage: Pick<Storage, 'getItem'>, callId: string): boolean {
+  if (!callId) return false;
+  return (storage.getItem(muteKey(callId)) ?? storage.getItem(legacyMuteKey(callId))) === '1';
+}
 /** Buffered ahead at the start of an utterance so a late frame does not leave a gap. */
 export const JITTER_BUFFER_S = 0.15;
 /** Smallest distance after `currentTime` a frame is scheduled at. */
@@ -25,7 +35,7 @@ export function parseAudioFrame(frame: unknown): AudioFrame | null {
   const { callId, seq, sampleRate, pcm } = b;
   if (typeof callId !== 'string' || !callId || typeof pcm !== 'string') return null;
   if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 1) return null;
-  const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 96000 ? sampleRate : NOVA_SAMPLE_RATE;
+  const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 96000 ? sampleRate : VOICE_SAMPLE_RATE;
   return { callId, runId: typeof b['runId'] === 'string' ? b['runId'].slice(0, 64) : '', seq, sampleRate: rate, pcm, last: b['last'] === true };
 }
 
@@ -49,14 +59,14 @@ export function runChanged(current: string, frame: Pick<AudioFrame, 'runId'>): b
 }
 
 export interface PlayGate { callId: string; frameCallId: string; seq: number; lastSeq: number; muted: boolean; voice: boolean; listening: boolean }
-/** Whether a frame may be played: this call, newer than the last one, not muted, voice on and Nova listening. */
+/** Whether a frame may be played: this call, newer than the last one, not muted, voice on and Milo listening. */
 export function shouldPlay(g: PlayGate): boolean {
   return g.frameCallId === g.callId && g.seq > g.lastSeq && !g.muted && g.voice && g.listening;
 }
 
 /**
- * "Click to hear Nova": shown as soon as Nova's voice is on for the call and this browser has not allowed sound yet (it waits for a
- * click), before any reply, unless this person muted Nova; gone once sound is allowed, the voice is off, or Nova is not in the call.
+ * "Click to hear Milo": shown as soon as Milo's voice is on for the call and this browser has not allowed sound yet (it waits for a
+ * click), before any reply, unless this person muted Milo; gone once sound is allowed, the voice is off, or Milo is not in the call.
  */
 export interface SoundPromptInput { present: boolean; voiceOn: boolean; muted: boolean; needsGesture: boolean }
 export const soundPromptShown = (i: SoundPromptInput): boolean => i.present && i.voiceOn && !i.muted && i.needsGesture;

@@ -1,5 +1,5 @@
 // The live transcript's two pieces of client state (docs/meeting-assistant-design.md):
-//   - whether the view is on, per call, shared by Nova's footer menu and whichever pane draws the call's chat (one tiny store,
+//   - whether the view is on, per call, shared by Milo's footer menu and whichever pane draws the call's chat (one tiny store,
 //     not one host's React context). Only one call is ever live, so the store holds that call; a call that ends resets it.
 //   - the lines, read by useLiveTranscript only while the view is on (liveTranscriptModel.ts decides when).
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -30,7 +30,7 @@ export function useLiveTranscriptOn(callId: string | null): boolean {
 export interface LiveTranscript {
   lines: LiveLine[];
   speakers: ReadonlyMap<string, LiveSpeaker>;
-  /** When Nova was invited (epoch ms); a line's time reads from it. */
+  /** When Milo was invited (epoch ms); a line's time reads from it. */
   since: number | null;
   /** Older lines exist before the oldest one held. */
   earlier: boolean;
@@ -86,7 +86,7 @@ export function useLiveTranscript(callId: string | null, on: boolean, phase: Ass
       .catch((e: unknown) => { if (mine === generation.current) { setError(e instanceof Error ? e.message : String(e)); setLoaded(true); } });
   }, [callId, on, take]);
 
-  // Nova's phase moved: a new listening period forgets the last final read; leaving owes one (liveTranscriptModel.ts).
+  // Milo's phase moved: a new listening period forgets the last final read; leaving owes one (liveTranscriptModel.ts).
   useEffect(() => {
     reads.current = readsAtPhase(reads.current, phase);
     setFinalRead(reads.current.final === 'done');
@@ -117,7 +117,7 @@ export function useLiveTranscript(callId: string | null, on: boolean, phase: Ass
     const timer = setInterval(() => { if (readToStart(reads.current, true) === 'poll') void readAfter(mine, 'poll'); }, everyMs);
     return () => clearInterval(timer);
   }, [everyMs, readAfter]);
-  // Nova left: one more read for the last lines it stored (after a poll still out comes back), then nothing until a new period.
+  // Milo left: one more read for the last lines it stored (after a poll still out comes back), then nothing until a new period.
   useEffect(() => {
     if (!on || !loaded) return;
     if (readToStart(reads.current, false) === 'final') void readAfter(generation.current, 'final');

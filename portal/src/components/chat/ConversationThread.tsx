@@ -178,11 +178,11 @@ export interface ConversationThreadProps {
   /** Offer Edit/Delete on the viewer's own messages (the gateway still decides). */
   editable?: boolean;
   renderMessageReferences?: WrappedChatPanelProps['renderMessageReferences'];
-  /** A host-drawn system line that replaces a message's whole row (Nova's notices). */
+  /** A host-drawn system line that replaces a message's whole row (Milo's notices). */
   renderSystemMessage?: WrappedChatPanelProps['renderSystemMessage'];
-  /** A host-drawn body that stands in for a message's text (Nova's action card). */
+  /** A host-drawn body that stands in for a message's text (Milo's action card). */
   renderMessageBody?: WrappedChatPanelProps['renderMessageBody'];
-  /** The messages an assistant wrote (Nova's): their rows take the assistant look. */
+  /** The messages an assistant wrote (Milo's): their rows take the assistant look. */
   isAssistantMessage?: WrappedChatPanelProps['isAssistantMessage'];
   /** Who else is composing; default the chat's. */
   typingUsers?: string[];

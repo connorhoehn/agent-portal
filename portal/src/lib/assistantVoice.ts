@@ -1,18 +1,16 @@
-// Nova's voice in the browser: a thin WebAudio player over lib/novaVoiceModel.ts.
+// Milo's voice in the browser: a thin WebAudio player over lib/assistantVoiceModel.ts.
 // Frames come from the call-chat socket the page already has (`assistant-audio`); each is decoded and scheduled
 // on one AudioContext. The audio is only played: never recorded, stored, logged or re-sent. The only thing kept
-// across visits is the person's mute choice, per call: muting Nova in one call does not carry into the next. Where no AudioContext can be made, frames are still counted as
+// across visits is the person's mute choice, per call: muting Milo in one call does not carry into the next. Where no AudioContext can be made, frames are still counted as
 // "would schedule" on a plain clock so the mark and the walk behave the same.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useGatewayFrames } from './gatewayFrames';
 import type { AssistantView } from './meetingAssistantModel';
-import { SPEAKING_HOLD_MS, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay, type AudioFrame } from './novaVoiceModel';
+import { SPEAKING_HOLD_MS, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, type AudioFrame } from './assistantVoiceModel';
 
-const MUTE_KEY = 'orgiq.novaMuted';
-const muteKey = (callId: string) => `${MUTE_KEY}:${callId}`;
 
-export interface NovaVoiceSnapshot {
+export interface AssistantVoiceSnapshot {
   muted: boolean;
   /** Frames are arriving now (back to false SPEAKING_HOLD_MS after the last one). */
   speaking: boolean;
@@ -25,9 +23,9 @@ export interface NovaVoiceSnapshot {
 
 interface Clock { currentTime: number; state?: string }
 
-const readMuted = (callId: string): boolean => { if (!callId) return false; try { return localStorage.getItem(muteKey(callId)) === '1'; } catch { return false; } };
+const readMuted = (callId: string): boolean => { try { return readMutedFrom(localStorage, callId); } catch { return false; } };
 
-class NovaPlayer {
+class AssistantVoicePlayer {
   private ctx: AudioContext | null = null;
   private clock: Clock = { get currentTime() { return performance.now() / 1000; } };
   private nextStart = 0;
@@ -37,11 +35,11 @@ class NovaPlayer {
   private hold: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private callId = '';
-  private snap: NovaVoiceSnapshot = { muted: false, speaking: false, needsGesture: false, framesPlayed: 0, framesIgnored: 0, lastSeq: 0 };
+  private snap: AssistantVoiceSnapshot = { muted: false, speaking: false, needsGesture: false, framesPlayed: 0, framesIgnored: 0, lastSeq: 0 };
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   getSnapshot = () => this.snap;
-  private set(patch: Partial<NovaVoiceSnapshot>) {
+  private set(patch: Partial<AssistantVoiceSnapshot>) {
     this.snap = { ...this.snap, ...patch };
     for (const l of this.listeners) l();
   }
@@ -136,13 +134,13 @@ class NovaPlayer {
   resetCall(callId: string) { this.callId = callId; this.runId = ''; this.stop(); this.set({ muted: readMuted(callId), framesPlayed: 0, framesIgnored: 0, lastSeq: 0 }); }
 }
 
-const player = new NovaPlayer();
+const player = new AssistantVoicePlayer();
 
 /**
- * Plays Nova's voice for one call while the state says it should. Every hook runs before any return.
- * Returns the player's snapshot and the controls the Nova mark's menu uses.
+ * Plays Milo's voice for one call while the state says it should. Every hook runs before any return.
+ * Returns the player's snapshot and the controls the Milo mark's menu uses.
  */
-export function useNovaVoice(callId: string | null, view: AssistantView) {
+export function useAssistantVoice(callId: string | null, view: AssistantView) {
   const { gateway } = useGatewayFrames();
   const snap = useSyncExternalStore(player.subscribe, player.getSnapshot, player.getSnapshot);
   const live = useRef({ callId, voice: view.voice, listening: view.phase === 'listening' || view.phase === 'invited', muted: snap.muted });
@@ -165,7 +163,7 @@ export function useNovaVoice(callId: string | null, view: AssistantView) {
 
   // Pause, leave, voice off, mute, call end: nothing more is played and what is scheduled is cancelled.
   useEffect(() => { if (!shouldSound) player.stop(); }, [shouldSound]);
-  // Voice on and not muted: learn now whether the browser holds sound until a click, before Nova's first reply.
+  // Voice on and not muted: learn now whether the browser holds sound until a click, before Milo's first reply.
   const wantsSound = !!callId && view.voice && !snap.muted;
   useEffect(() => { if (wantsSound) player.prime(); }, [wantsSound, callId]);
   useEffect(() => () => player.stop(), []);

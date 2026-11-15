@@ -1,4 +1,4 @@
-// /iq/meetings — the meetings the signed-in person attended with Nova present, newest first, one table.
+// /iq/meetings — the meetings the signed-in person attended with Milo present, newest first, one table.
 // Read from GET /api/meetings, which only ever returns the caller's own. The first page refreshes every minute; older meetings
 // follow the server's `next` cursor with "Load older meetings" under the table (the library table pages only on the client).
 import { useCallback, useState } from 'react';
@@ -9,6 +9,7 @@ import { CollectionCommandPage } from '../../components/collections/CollectionCo
 import { useFetch } from '../../hooks/useFetch';
 import { responseFailure } from '../../lib/apiFailure';
 import { relativeTime } from '../../lib/relativeTime';
+import { ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 import { MEETINGS_URL, facesFor, listenedLabel, listLead, meetingHref, meetingsUrl, mergeMeetings, outcomesLabel, peopleLabel, waitingLabel, type MeetingListRow } from './meetingsModel';
 
 interface MeetingsPage { meetings: MeetingListRow[]; next: number | null }
@@ -33,7 +34,7 @@ export default function MeetingsPage() {
     }
   }, [next]);
 
-  // Meeting (its name; the summary's lead as a quiet second line) · When · Length (Nova's listening) · People · Outcomes, and the
+  // Meeting (its name; the summary's lead as a quiet second line) · When · Length (Milo's listening) · People · Outcomes, and the
   // "N waiting on you" chip. Every count comes from the server, for this viewer.
   const columns: DataTableColumn<MeetingListRow>[] = [
     { key: 'name', header: 'Meeting', render: (r) => {
@@ -67,7 +68,7 @@ export default function MeetingsPage() {
     <CollectionCommandPage
       data-testid="iq-meetings"
       title="Meetings"
-      description="Meetings where Nova listened, with their minutes and transcript. Only the people who were in the call see them here."
+      description={`Meetings where ${ASSISTANT_NAME} listened, with their minutes and transcript. Only the people who were in the call see them here.`}
       toolbar={{
         label: 'Meetings',
         filters: [],
@@ -89,7 +90,7 @@ export default function MeetingsPage() {
         pageSize={1000}
         onRowClick={(r) => navigate(meetingHref(r.callId))}
         data-testid="iq-meetings-table"
-        emptyMessage="No meetings yet. When Nova leaves a call you were in, its minutes are kept here."
+        emptyMessage={`No meetings yet. When ${ASSISTANT_NAME} leaves a call you were in, its minutes are kept here.`}
       />
       {(next || older.error) && (
         <Inline justify="center" gap="sm" className="pt-2">

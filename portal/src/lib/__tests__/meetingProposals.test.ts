@@ -43,8 +43,8 @@ test('the card lines: outcome in words, needs with "you", chips, every objector 
   assert.equal(blockedLine(one()), null);
 });
 
-test('who raised it, the lines Nova heard, and how a decision will be recorded', () => {
-  assert.equal(eyebrowOf(one()), 'Nova heard a decision');
+test('who raised it, the lines Milo heard, and how a decision will be recorded', () => {
+  assert.equal(eyebrowOf(one()), 'Milo heard a decision');
   assert.equal(eyebrowOf(one({ source: 'asked', askedBy: { userId: 'u-dana', name: 'Dana' } })), 'Asked by Dana');
   const heard = one({ heard: [{ speaker: 'Sam', text: "Let's cut over the smallest first" }, { text: 'Agreed' }] });
   assert.deepEqual(heard.heard.map(heardText), ['\u201cLet\'s cut over the smallest first\u201d Sam', '\u201cAgreed\u201d Someone']);
@@ -69,7 +69,7 @@ test('the card reads the latest run in plain words: who is running it, what was 
   assert.equal(resultHref(one({ state: 'running', run: { by, at: 6, title: 'x', href: '/iq/decisions/d1', note: null } })), null);
   assert.equal(stateLine(one({ state: 'done' })), 'Recorded');
   assert.equal(stateLine(one({ state: 'failed', run: { by, at: 7, title: null, href: null, note: 'The initiative was deleted or moved since, so nothing was changed.' } })), 'The initiative was deleted or moved since, so nothing was changed.');
-  assert.equal(stateLine(one({ state: 'failed' })), 'Nova could not carry this out, so nothing was changed.');
+  assert.equal(stateLine(one({ state: 'failed' })), 'Milo could not carry this out, so nothing was changed.');
   assert.equal(stateLine(one({ state: 'failed', run: { by, at: 7, title: null, href: null, note: 'It failed.', raisedAs: 'p2' } })), 'It failed. Raised again as a new proposal.');
   const handedBack = one({ state: 'consented', run: { by: { userId: 'u-priya', name: 'Priya' }, at: 8, title: null, href: null, note: 'Priya cannot run this. Sam can run it instead.' } });
   assert.equal(stateLine(handedBack), 'Priya cannot run this. Sam can run it instead.');

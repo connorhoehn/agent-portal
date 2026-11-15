@@ -298,3 +298,19 @@ test('a proposal\'s decision runs with the typed initiative ref and answers the 
   const posts = log.filter((r) => r.method === 'POST');
   assert.deepEqual(posts.map((r) => [r.url, r.body]), [['/api/graph/decisions', { initiativeId: 'p-auth', statement: STATEMENT, state: 'waiting', source: 'call', callId: 'call-1', participants: ['u-sam', 'u-priya'] }]]);
 });
+
+test('turns taken and results waiting under the keys used before the rename are read, and kept under the new keys', () => {
+  const storage = memoryStorage();
+  storage.setItem('old-seen', JSON.stringify(['t-old']));
+  storage.setItem('old-pending', JSON.stringify([{ turnId: 't-wait', claimId: 'c-1', expiresAt: NOW + 60_000, body: { claimId: 'c-1', ok: true, output: { say: 'ok' } } }]));
+  const seen = new SeenTurns('new-seen', () => storage, 'old-seen');
+  const pending = new PendingResults('new-pending', () => storage, 'old-pending');
+  assert.equal(seen.has('t-old'), true);
+  assert.deepEqual(pending.list().map((r) => r.turnId), ['t-wait']);
+  seen.add('t-new');
+  assert.deepEqual(JSON.parse(storage.getItem('new-seen') ?? '[]'), ['t-old', 't-new']);
+  assert.equal(storage.getItem('old-seen'), JSON.stringify(['t-old']));
+  // Once the new key holds the list, the old one is no longer read.
+  storage.setItem('old-seen', JSON.stringify(['t-stale']));
+  assert.equal(new SeenTurns('new-seen', () => storage, 'old-seen').has('t-stale'), false);
+});

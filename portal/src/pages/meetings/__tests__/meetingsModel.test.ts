@@ -54,16 +54,16 @@ test('the meeting page asks for proposals again only while an answer or a run ca
   assert.equal(proposalsLive([]), false);
 });
 
-test('the header: one meta line (when, Nova listened, invited by) and a quieter line for retention, a pause and a count of people not transcribed', () => {
+test('the header: one meta line (when, Milo listened, invited by) and a quieter line for retention, a pause and a count of people not transcribed', () => {
   const at = Date.UTC(2026, 11, 14, 12);
   const meta = headerMeta({ startedAt: at, coverage: { listenedSeconds: 180, pausedSeconds: 0, untranscribed: 0 }, invitedByName: 'Vera Green' });
-  assert.equal(meta.listened, 'Nova listened 3 min');
+  assert.equal(meta.listened, 'Milo listened 3 min');
   assert.equal(meta.invitedBy, 'invited by Vera Green');
   assert.equal(headerMeta({ startedAt: at, invitedByName: 'Vera Green' }).listened, null);
   assert.deepEqual(quietMeta({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: false, coverage: { listenedSeconds: 600, pausedSeconds: 30, untranscribed: 1 } }),
     ['Kept until 14 Dec 2026', 'Vera Green can delete it sooner', '1 person was not transcribed']);
   assert.deepEqual(quietMeta({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: true, coverage: { listenedSeconds: 600, pausedSeconds: 300, untranscribed: 2 } }),
-    ['Kept until 14 Dec 2026', 'You can delete it sooner', 'Nova paused for 5 min', '2 people were not transcribed']);
+    ['Kept until 14 Dec 2026', 'You can delete it sooner', 'Milo paused for 5 min', '2 people were not transcribed']);
   assert.deepEqual(quietMeta({ invitedByName: 'Vera Green', youAreInviter: false }), []);
 });
 
@@ -75,7 +75,7 @@ test('the summary reads as the server split it, or from the stored lines; an old
   assert.equal(listLead({ summary: 'Two people met.\n- Agreed: ship.' }), 'Two people met.');
 });
 
-test('the list says Nova\'s listening time and the outcomes in a few words', () => {
+test('the list says Milo\'s listening time and the outcomes in a few words', () => {
   assert.equal(listenedLabel(180), '3 min');
   assert.equal(listenedLabel(null), null);
   assert.equal(outcomesLabel({ decisions: 2, actionItems: 3, open: 1 }), '2 decisions · 3 actions · 1 open');
@@ -143,7 +143,7 @@ test('the list pages by the server cursor and merges pages once each; the waitin
 test('done-action text never reaches a person as "Ran create" or "Created work item: X"', () => {
   assert.equal(actionText('Created work item: the login cookie bug'), 'Created work item "the login cookie bug"');
   assert.equal(actionText('Ran create'), 'Created a record');
-  assert.equal(actionText('Ran something_else'), 'Nova carried out a request');
+  assert.equal(actionText('Ran something_else'), 'Milo carried out a request');
   assert.equal(actionText('review the schema'), 'review the schema');
 });
 
@@ -170,10 +170,10 @@ test('an action item made into a work item from the meeting page reads created, 
   assert.equal(createWorkItemUrl('call 1', 2), '/api/calls/call%201/assistant/minutes/action-items/2/work-item');
 });
 
-test('a later part of the call: Nova back in the call, adding it, or not yet; and the retry the menu offers', () => {
-  assert.equal(additionNote({ backInCall: true }), 'Nova is back in this call. What it hears now is added to these minutes when it leaves.');
+test('a later part of the call: Milo back in the call, adding it, or not yet; and the retry the menu offers', () => {
+  assert.equal(additionNote({ backInCall: true }), 'Milo is back in this call. What it hears now is added to these minutes when it leaves.');
   assert.equal(additionNote({}), null);
-  assert.equal(additionNote({ additionOwed: true, rewrite: { writing: true, possible: true, attemptsLeft: 4 } }), 'Nova is adding the later part of this call to these minutes.');
+  assert.equal(additionNote({ additionOwed: true, rewrite: { writing: true, possible: true, attemptsLeft: 4 } }), 'Milo is adding the later part of this call to these minutes.');
   assert.match(additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 4 } })!, /could not add the later part of this call to these minutes yet/);
   assert.match(additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 0 } })!, /will not try again/);
   assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 2 } }, true), 'Add the later part again');

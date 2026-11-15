@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { actionCardView, askedByLine, decideAssistantAction, readAssistantMessage, type AssistantAction } from '../assistantMessages.ts';
 
 const card = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  assistant: true, displayName: 'Nova', kind: 'assistant-action', actionId: 'act-1', askedBy: 'u-vera', askedByName: 'Vera Lindqvist',
+  assistant: true, displayName: 'Milo', kind: 'assistant-action', actionId: 'act-1', askedBy: 'u-vera', askedByName: 'Vera Lindqvist',
   summary: 'Create work item "Login cookie bug"', detail: ['Assignee: Priya'], tool: { name: 'create_work_item', argsDigest: 'sha256:ab' }, status: 'waiting', ...over,
 });
 
@@ -13,7 +13,7 @@ test('reads the three kinds and nothing else', () => {
   const action = readAssistantMessage(card());
   assert.equal(action?.kind, 'assistant-action');
   assert.equal(readAssistantMessage(undefined), null);
-  assert.equal(readAssistantMessage({ kind: 'assistant-notice' }), null, 'no marker, no Nova');
+  assert.equal(readAssistantMessage({ kind: 'assistant-notice' }), null, 'no marker, no Milo');
   assert.equal(readAssistantMessage({ kind: 'call', callId: 'x' }), null);
 });
 
@@ -81,7 +81,7 @@ test('the card names the call initiative only for a new work item that names non
   assert.equal(namesNoInitiative({ tool: { name: 'update', argsDigest: '' }, detail: ['kind: work-item'] }), false);
 });
 
-test('a minutes notice carries well-formed counts only, and every Nova message is told apart from a person\'s', async () => {
+test('a minutes notice carries well-formed counts only, and every Milo message is told apart from a person\'s', async () => {
   const { readAssistantMessage, isAssistantChatMessage, minutesCountLabels } = await import('../assistantMessages.ts');
   const minutes = { decisions: 2, actionItems: 1, proposals: 0 };
   assert.deepEqual(readAssistantMessage({ assistant: true, kind: 'assistant-notice', meetingCallId: 'c-1', minutes }), { kind: 'assistant-notice', meetingCallId: 'c-1', minutes });
@@ -122,7 +122,7 @@ test('state decides the card\'s size: waiting on you, on others, done as a row, 
   assert.equal(actionLayout({ ...a, status: 'done' }, 'u-vera'), 'done');
   for (const status of ['declined', 'expired', 'failed'] as const) assert.equal(actionLayout({ ...a, status }, 'u-vera'), 'muted');
   assert.equal(actionRowText({ ...a, status: 'done', resultText: 'Created WI-12.' }), 'Created “the login cookie bug”');
-  assert.equal(actionRowText({ ...a, status: 'expired', resultText: 'Nova was dismissed before this was done.' }), 'the login cookie bug · Nova was dismissed before this was done.');
+  assert.equal(actionRowText({ ...a, status: 'expired', resultText: 'Milo was dismissed before this was done.' }), 'the login cookie bug · Milo was dismissed before this was done.');
   assert.equal(actionRowText({ ...a, status: 'declined' }), 'the login cookie bug · Vera Lindqvist declined it, so nothing was done.');
   const update = { ...a, title: undefined, tool: { name: 'update', argsDigest: '' }, summary: 'Update the work item' } as AssistantAction;
   assert.match(actionRowText({ ...update, status: 'failed', resultText: 'Use the full name.' }), /^Update the work item · Use the full name\.$/);
@@ -131,10 +131,10 @@ test('state decides the card\'s size: waiting on you, on others, done as a row, 
 test('the minutes counts read as one line; a long notice splits at its first sentence, a short one stays a pill', async () => {
   const { isLongNotice, minutesCountLine, splitNotice } = await import('../assistantMessages.ts');
   assert.equal(minutesCountLine({ decisions: 2, actionItems: 1, proposals: 0 }), '2 decisions · 1 action item · 0 proposals');
-  const join = "Nova joined at Vera Green's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes.";
+  const join = "Milo joined at Vera Green's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo writes minutes.";
   assert.equal(isLongNotice(join), true);
-  assert.deepEqual(splitNotice(join), { first: "Nova joined at Vera Green's invitation.", rest: 'Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes.' });
-  assert.equal(isLongNotice('Nora DaSilva paused Nova. Nothing is being heard or stored.'), false);
+  assert.deepEqual(splitNotice(join), { first: "Milo joined at Vera Green's invitation.", rest: 'Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo writes minutes.' });
+  assert.equal(isLongNotice('Nora DaSilva paused Milo. Nothing is being heard or stored.'), false);
   assert.deepEqual(splitNotice('One sentence only'), { first: 'One sentence only', rest: '' });
 });
 

@@ -1,11 +1,12 @@
-// The live transcript in the call's pane: what Nova is hearing, as it hears it. Pure, so node:test covers it; the hook
+// The live transcript in the call's pane: what Milo is hearing, as it hears it. Pure, so node:test covers it; the hook
 // (liveTranscript.ts) and the view (components/shell/LiveTranscript.tsx) only follow what these functions decide.
 
 import type { AssistantPhase } from './meetingAssistantModel';
+import { ASSISTANT_NAME } from './meetingAssistantModel.ts';
 
 /** The newest lines read when the view opens, and each "Load earlier lines" page. */
 export const LIVE_TAIL = 100;
-/** How often new lines are read while Nova listens, and while it is paused (nothing new is stored then; a resume shows soon enough). */
+/** How often new lines are read while Milo listens, and while it is paused (nothing new is stored then; a resume shows soon enough). */
 export const LIVE_POLL_LISTENING_MS = 2000;
 export const LIVE_POLL_PAUSED_MS = 5000;
 
@@ -20,8 +21,8 @@ export const liveAfterUrl = (callId: string, after: number): string =>
   `/api/calls/${encodeURIComponent(callId)}/assistant/transcript?after=${after}&limit=500`;
 
 /**
- * What the hook does next, from whether the view is on, Nova's phase and whether the last read after Nova left was made:
- * `idle` (nothing is fetched), `poll` every `everyMs`, `final` (one more read now that Nova has left), or `done`.
+ * What the hook does next, from whether the view is on, Milo's phase and whether the last read after Milo left was made:
+ * `idle` (nothing is fetched), `poll` every `everyMs`, `final` (one more read now that Milo has left), or `done`.
  * The first read (the tail) is made whenever the view is on and nothing is loaded yet, whatever the phase.
  */
 export type LivePlan = { kind: 'idle' } | { kind: 'poll'; everyMs: number } | { kind: 'final' } | { kind: 'done' };
@@ -35,15 +36,15 @@ export function livePlan(on: boolean, phase: AssistantPhase, finalRead: boolean)
 }
 
 /**
- * The hook's reads after the first, one at a time: `out` is the read in flight, `final` the read after Nova left (owed, or made).
- * A call can have several listening periods (Nova invited back), so a new period (invited, listening or paused) forgets the last
- * final read and leaving again owes another. A poll still out when Nova leaves is waited for, then the final read is made: that
+ * The hook's reads after the first, one at a time: `out` is the read in flight, `final` the read after Milo left (owed, or made).
+ * A call can have several listening periods (Milo invited back), so a new period (invited, listening or paused) forgets the last
+ * final read and leaving again owes another. A poll still out when Milo leaves is waited for, then the final read is made: that
  * poll's answer may have been written before her last lines were stored.
  */
 export interface LiveReads { out: 'poll' | 'final' | null; final: 'none' | 'owed' | 'done' }
 export const LIVE_READS_START: LiveReads = { out: null, final: 'none' };
 
-/** Nova's phase is now `phase`. A final read still out when a new period begins counts as an ordinary poll. */
+/** Milo's phase is now `phase`. A final read still out when a new period begins counts as an ordinary poll. */
 export function readsAtPhase(r: LiveReads, phase: AssistantPhase): LiveReads {
   if (phase === 'left') return r.final === 'none' ? { ...r, final: 'owed' } : r;
   if (phase === 'invited' || phase === 'listening' || phase === 'paused') {
@@ -87,20 +88,20 @@ export function mergeSpeakers(held: ReadonlyMap<string, LiveSpeaker>, incoming: 
 
 /** The quiet state after "Live transcript". */
 export function liveStateWords(phase: AssistantPhase): string {
-  if (phase === 'paused') return 'Nova is paused, nothing is being transcribed';
-  if (phase === 'left') return 'Nova has left; this is what it heard';
-  return 'Nova is listening';
+  if (phase === 'paused') return `${ASSISTANT_NAME} is paused, nothing is being transcribed`;
+  if (phase === 'left') return `${ASSISTANT_NAME} has left; this is what it heard`;
+  return `${ASSISTANT_NAME} is listening`;
 }
 
-export const LIVE_EMPTY = 'Nova has not heard anything yet.';
-export const LIVE_NOT_ACKED = 'Your own words are not transcribed until you acknowledge Nova\'s notice.';
+export const LIVE_EMPTY = `${ASSISTANT_NAME} has not heard anything yet.`;
+export const LIVE_NOT_ACKED = `Your own words are not transcribed until you acknowledge ${ASSISTANT_NAME}'s notice.`;
 export const LIVE_SHOW_LABEL = 'Show transcript';
 export const LIVE_HIDE_LABEL = 'Hide transcript';
-export const LIVE_SHOW_DESCRIPTION = 'What Nova is hearing, as it hears it';
+export const LIVE_SHOW_DESCRIPTION = `What ${ASSISTANT_NAME} is hearing, as it hears it`;
 
 /**
  * The rows the library's TranscriptPanel draws: the speaker's name and portrait from the answer's speakers (the line's own name
- * otherwise, "Unknown" for an unattributed line with none, as the meeting page reads it), and the time since Nova joined.
+ * otherwise, "Unknown" for an unattributed line with none, as the meeting page reads it), and the time since Milo joined.
  */
 export function liveSegments(lines: readonly LiveLine[], speakers: ReadonlyMap<string, LiveSpeaker>, since: number | null) {
   return lines.map((l) => {

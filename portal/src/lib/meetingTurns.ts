@@ -8,6 +8,7 @@
 // clock. Pure of React, so node:test covers it.
 
 import type { CallToolOutcome } from './voice/runCore.ts';
+import { ASSISTANT_NAME } from './meetingAssistantModel.ts';
 
 export const SAY_MAX_CHARS = 600;
 
@@ -42,10 +43,11 @@ export class SeenTurns {
   private readonly ids = new Set<string>();
   private readonly key: string;
   private readonly storage: () => Storage | null;
-  constructor(key: string, storage: () => Storage | null = defaultStorage) {
+  /** `legacyKey`: where an earlier version kept the same list; read when `key` has nothing, never written. */
+  constructor(key: string, storage: () => Storage | null = defaultStorage, legacyKey?: string) {
     this.key = key; this.storage = storage;
     try {
-      const raw = this.storage()?.getItem(this.key);
+      const raw = this.storage()?.getItem(this.key) ?? (legacyKey ? this.storage()?.getItem(legacyKey) : null);
       const list: unknown = raw ? JSON.parse(raw) : [];
       if (Array.isArray(list)) for (const id of list) if (typeof id === 'string') this.ids.add(id);
     } catch { /* storage may be blocked: memory alone then */ }
@@ -89,10 +91,11 @@ export class PendingResults {
   private readonly retry = new Map<string, { tries: number; nextAt: number }>();
   private readonly key: string;
   private readonly storage: () => Storage | null;
-  constructor(key: string, storage: () => Storage | null = defaultStorage) {
+  /** `legacyKey`: where an earlier version kept the same list; read when `key` has nothing, never written. */
+  constructor(key: string, storage: () => Storage | null = defaultStorage, legacyKey?: string) {
     this.key = key; this.storage = storage;
     try {
-      const raw = this.storage()?.getItem(this.key);
+      const raw = this.storage()?.getItem(this.key) ?? (legacyKey ? this.storage()?.getItem(legacyKey) : null);
       const list: unknown = raw ? JSON.parse(raw) : [];
       if (Array.isArray(list)) for (const r of list) {
         if (r && typeof r === 'object' && typeof r.turnId === 'string' && typeof r.claimId === 'string' && typeof r.expiresAt === 'number' && r.body && typeof r.body === 'object') this.map.set(r.turnId, r as PendingResult);
@@ -140,7 +143,7 @@ export function runnable(turn: AssistantTurn, now: number): boolean {
 /** The plain sentence a private read sends the server: built the way the voice navigator speaks the same result (`say`, from wireOutput), at most 600 characters. */
 export function privateSay(output: Record<string, unknown> | undefined): string {
   const say = typeof output?.['say'] === 'string' ? output['say'].replace(/\s+/g, ' ').trim() : '';
-  const line = say || 'Nova looked it up, but there was nothing to say.';
+  const line = say || `${ASSISTANT_NAME} looked it up, but there was nothing to say.`;
   return line.length > SAY_MAX_CHARS ? `${line.slice(0, SAY_MAX_CHARS - 1).trimEnd()}…` : line;
 }
 

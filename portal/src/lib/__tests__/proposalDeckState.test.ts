@@ -14,10 +14,20 @@ function withStorage(fn: (store: Map<string, string>) => void, storage?: unknown
 test('what this tab set aside ("Not now", "Skip") survives a reload', () => {
   withStorage((store) => {
     keepProposalAnswer('call-1', 'p1:ask');
-    assert.deepEqual(JSON.parse(store.get('nova-proposal-kept:call-1') ?? '[]'), ['p1:ask']);
+    assert.deepEqual(JSON.parse(store.get('assistant-proposal-kept:call-1') ?? '[]'), ['p1:ask']);
     forgetProposalDecks(); // a reload: memory is gone, the tab's storage is not
     assert.deepEqual([...proposalDeckOf('call-1').kept], ['p1:ask']);
     assert.deepEqual([...proposalDeckOf('call-2').kept], []);
+  });
+});
+
+test('what a tab set aside under the key used before the rename is still read, and written under the new key', () => {
+  withStorage((store) => {
+    store.set('nova-proposal-kept:call-1', JSON.stringify(['p0:ask']));
+    assert.deepEqual([...proposalDeckOf('call-1').kept], ['p0:ask']);
+    keepProposalAnswer('call-1', 'p1:ask');
+    assert.deepEqual(JSON.parse(store.get('assistant-proposal-kept:call-1') ?? '[]'), ['p0:ask', 'p1:ask']);
+    assert.equal(store.get('nova-proposal-kept:call-1'), JSON.stringify(['p0:ask']));
   });
 });
 

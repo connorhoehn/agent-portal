@@ -8,11 +8,11 @@ import { liveTranscriptOn, setLiveTranscript } from '../liveTranscript.ts';
 
 const line = (seq: number, over: Partial<LiveLine> = {}): LiveLine => ({ seq, userId: 'u1', speakerName: 'Ada', text: `line ${seq}`, at: 1_000 + seq * 1000, ...over });
 
-test('nothing is fetched while the view is off, whatever Nova is doing', () => {
+test('nothing is fetched while the view is off, whatever Milo is doing', () => {
   for (const phase of ['loading', 'none', 'invited', 'listening', 'paused', 'left'] as const) assert.deepEqual(livePlan(false, phase, false), { kind: 'idle' });
 });
 
-test('the view polls every 2 s while Nova listens, every 5 s while paused, reads once more after Nova leaves, then stops', () => {
+test('the view polls every 2 s while Milo listens, every 5 s while paused, reads once more after Milo leaves, then stops', () => {
   assert.deepEqual(livePlan(true, 'listening', false), { kind: 'poll', everyMs: LIVE_POLL_LISTENING_MS });
   assert.equal(LIVE_POLL_LISTENING_MS, 2000);
   assert.deepEqual(livePlan(true, 'invited', false), { kind: 'poll', everyMs: 2000 });
@@ -48,9 +48,9 @@ test('rows name the speaker with the portrait the answer carried; an unattribute
 });
 
 test('the state after "Live transcript"', () => {
-  assert.equal(liveStateWords('listening'), 'Nova is listening');
-  assert.equal(liveStateWords('paused'), 'Nova is paused, nothing is being transcribed');
-  assert.equal(liveStateWords('left'), 'Nova has left; this is what it heard');
+  assert.equal(liveStateWords('listening'), 'Milo is listening');
+  assert.equal(liveStateWords('paused'), 'Milo is paused, nothing is being transcribed');
+  assert.equal(liveStateWords('left'), 'Milo has left; this is what it heard');
 });
 
 test('the view is on for one call at a time and turns off per call', () => {
@@ -62,13 +62,13 @@ test('the view is on for one call at a time and turns off per call', () => {
   assert.equal(liveTranscriptOn('c1'), false);
 });
 
-test('Nova invited back and leaving again: the new period forgets the last final read, so the second leave reads once more', () => {
+test('Milo invited back and leaving again: the new period forgets the last final read, so the second leave reads once more', () => {
   let r: LiveReads = readsAtPhase(LIVE_READS_START, 'listening');
   r = readsAtPhase(r, 'left');
   assert.equal(readToStart(r, false), 'final');
   r = readEnded(readStarted(r, 'final'));
   assert.equal(r.final, 'done');
-  assert.equal(readToStart(r, true), null); // nothing more while Nova is away
+  assert.equal(readToStart(r, true), null); // nothing more while Milo is away
   r = readsAtPhase(r, 'invited'); // a second listening period
   assert.equal(r.final, 'none');
   assert.equal(readToStart(r, true), 'poll');
@@ -81,7 +81,7 @@ test('Nova invited back and leaving again: the new period forgets the last final
   assert.equal(livePlan(true, 'left', r.final === 'done').kind, 'done');
 });
 
-test('a poll in flight as Nova leaves: the final read waits for it, then is made (that poll may predate her last lines)', () => {
+test('a poll in flight as Milo leaves: the final read waits for it, then is made (that poll may predate its last lines)', () => {
   let r: LiveReads = readsAtPhase(LIVE_READS_START, 'listening');
   assert.equal(readToStart(r, true), 'poll');
   r = readStarted(r, 'poll');
@@ -95,7 +95,7 @@ test('a poll in flight as Nova leaves: the final read waits for it, then is made
   assert.equal(r.final, 'done');
 });
 
-test('a final read still out when Nova is invited back again counts as a poll: the next leave is still read', () => {
+test('a final read still out when Milo is invited back again counts as a poll: the next leave is still read', () => {
   let r: LiveReads = readsAtPhase(readsAtPhase(LIVE_READS_START, 'listening'), 'left');
   r = readStarted(r, 'final');
   r = readsAtPhase(r, 'listening');

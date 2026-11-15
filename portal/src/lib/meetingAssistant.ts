@@ -2,7 +2,7 @@
 // transcription notice and the roster line all read it), refreshed every
 // ASSISTANT_POLL_MS while something is watching and straight after each action.
 // Nothing here talks while the server flag is off (`useSession().session.meetingAssistant`).
-// The call's proposals (docs/meeting-consent-design.md) ride the same tick: they are read only while Nova is in the call or a proposal
+// The call's proposals (docs/meeting-consent-design.md) ride the same tick: they are read only while Milo is in the call or a proposal
 // can still be answered, so a call without either costs no extra request.
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
@@ -13,7 +13,7 @@ import { budgetConfirmOf } from './voice/client';
 import { budgetConfirmText } from './voice/controller';
 import { isAnswerable, parseProposals, type ProposalAnswer, type ProposalView } from './meetingProposals';
 import {
-  assistantPresent, ASSISTANT_POLL_MS, assistantControls, errorStale, ERROR_CLEAR_MS, LOADING_ASSISTANT, NO_ASSISTANT, parseAssistantState,
+  ASSISTANT_NAME, assistantPresent, ASSISTANT_POLL_MS, assistantControls, errorStale, ERROR_CLEAR_MS, LOADING_ASSISTANT, NO_ASSISTANT, parseAssistantState,
   type AssistantControls, type AssistantPhase, type AssistantView,
 } from './meetingAssistantModel';
 
@@ -24,7 +24,7 @@ export interface BudgetAsk { action: 'invite' | 'extend' | 'resume'; title: stri
 
 interface Slot {
   view: AssistantView; error: string | null; ask: BudgetAsk | null; busy: boolean;
-  /** "Dismiss Nova for everyone" was chosen and waits for its one confirmation (a deck prompt above the footer row). */
+  /** "Dismiss Milo for everyone" was chosen and waits for its one confirmation (a deck prompt above the footer row). */
   confirmingDismiss: boolean; proposals: ProposalView[]; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void>;
   /** When the error was raised and the phase then: a refresh that shows the phase moved on, or ERROR_CLEAR_MS, clears it. */
   errorRaised: { at: number; phase: AssistantPhase } | null;
@@ -47,7 +47,7 @@ const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' 
       slot.errorTimer = setTimeout(() => { if (slot.errorRaised === raised) publish(slot, { error: null }); }, ERROR_CLEAR_MS);
     }
   } else if (patch.view && slot.error && slot.errorRaised && errorStale(slot.errorRaised, Date.now(), patch.view.phase)) {
-    // The call moved on since the refusal (someone else resumed Nova, say): the old sentence no longer describes it.
+    // The call moved on since the refusal (someone else resumed Milo, say): the old sentence no longer describes it.
     Object.assign(slot, { error: null, errorRaised: null });
     if (slot.errorTimer) { clearTimeout(slot.errorTimer); slot.errorTimer = null; }
   }
@@ -56,7 +56,7 @@ const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' 
 };
 const base = (callId: string) => `/api/calls/${encodeURIComponent(callId)}/assistant`;
 
-/** One read of the state; a failure keeps what was last known (a missed poll must not make Nova vanish). */
+/** One read of the state; a failure keeps what was last known (a missed poll must not make Milo vanish). */
 export async function refreshAssistant(callId: string): Promise<void> {
   const slot = slotOf(callId);
   try {
@@ -113,19 +113,19 @@ export async function actOnAssistant(callId: string, action: AssistantAction, op
   else {
     // The phase the error is raised against is read first, so the refresh that follows does not clear it at once.
     await refreshAssistant(callId);
-    publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
+    publish(slot, { busy: false, error: result.error ?? `${ASSISTANT_NAME} could not do that.` });
   }
   return false;
 }
 
-/** Turns Nova's voice on or off for the call (an inviter's action; the server posts the notice in the chat). */
+/** Turns Milo's voice on or off for the call (an inviter's action; the server posts the notice in the chat). */
 export async function setAssistantVoice(callId: string, on: boolean): Promise<boolean> {
   const slot = slotOf(callId);
   publish(slot, { busy: true, error: null, ask: null });
   const result = await writeJson<unknown>(`${base(callId)}/voice`, 'POST', { on });
   if (result.ok) { publish(slot, { busy: false, view: parseAssistantState(callId, result.data) }); return true; }
   await refreshAssistant(callId);
-  publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
+  publish(slot, { busy: false, error: result.error ?? `${ASSISTANT_NAME} could not do that.` });
   return false;
 }
 
@@ -153,7 +153,7 @@ export interface MeetingAssistantHandle {
   /** Ask the one question before dismissing; `answerDismiss(true)` dismisses, false drops it. */
   askDismiss(): void;
   answerDismiss(yes: boolean): Promise<boolean>;
-  /** The inviter's switch: Nova speaks aloud in this call, or stops. */
+  /** The inviter's switch: Milo speaks aloud in this call, or stops. */
   setVoice(on: boolean): Promise<boolean>;
   /** This person may use the voice switch. */
   canSetVoice: boolean;

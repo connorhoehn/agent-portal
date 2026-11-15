@@ -1,17 +1,17 @@
 // The call assistant in the shell (docs/meeting-assistant-design.md, decisions 8 and 13):
-//   NovaBarControls  Invite Nova, the "Nova is listening" mark, Pause/Resume and Dismiss — the HuddleBar's `extras`. The mark says
-//                    what Nova is doing ("Nova is looking that up for Una"), whether it can hear the call, and its voice on a chip.
-//   NovaBudgetAsk    the questions asked above the footer row as deck prompts: an over-budget refusal, and "Dismiss Nova for everyone"
-//   NovaNotice       the transcription notice for someone who has not acknowledged, above the footer row
-//   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
+//   AssistantBarControls  Invite Milo, the "Milo is listening" mark, Pause/Resume and Dismiss — the HuddleBar's `extras`. The mark says
+//                    what Milo is doing ("Milo is looking that up for Una"), whether it can hear the call, and its voice on a chip.
+//   AssistantBudgetAsk    the questions asked above the footer row as deck prompts: an over-budget refusal, and "Dismiss Milo for everyone"
+//   AssistantConsentNotice       the transcription notice for someone who has not acknowledged, above the footer row
+//   useAssistantRosterEntry  the "Milo (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
 import { Badge, Button, CheckIcon, Chip, CloseIcon, DocumentIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
-import { useNovaVoice } from '../../lib/novaVoice';
-import { soundPromptShown } from '../../lib/novaVoiceModel';
+import { useAssistantVoice } from '../../lib/assistantVoice';
+import { soundPromptShown } from '../../lib/assistantVoiceModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
   assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
@@ -23,9 +23,9 @@ import { useComposerFocus } from '@connorhoehn/ui-components/social/rich-compose
 import { setLiveTranscript, useLiveTranscriptOn } from '../../lib/liveTranscript';
 import { LIVE_HIDE_LABEL, LIVE_SHOW_DESCRIPTION, LIVE_SHOW_LABEL } from '../../lib/liveTranscriptModel';
 import { useLiveCallId } from '../../lib/liveCallId';
-import { useProposalQueue } from './NovaProposalAsk';
+import { useProposalQueue } from './AssistantProposalAsk';
 import { setProposalDeckHidden } from '../../lib/proposalDeckState';
-import { hideNovaNotice, noticeKey, useNovaNoticeHidden } from '../../lib/novaNoticeHidden';
+import { hideAssistantNotice, noticeKey, useAssistantNoticeHidden } from '../../lib/assistantNoticeHidden';
 
 export { useLiveCallId };
 
@@ -47,12 +47,12 @@ function jumpToCard(actionId: string, openChat: (() => void) | null): void {
   go(10);
 }
 
-export function NovaBarControls() {
+export function AssistantBarControls() {
   const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
-  const { controls, view, busy } = nova;
-  const noticeClosed = useNovaNoticeHidden(noticeKey(callId, view.period));
-  const voice = useNovaVoice(callId, nova.view);
+  const assistant = useMeetingAssistant(callId);
+  const { controls, view, busy } = assistant;
+  const noticeClosed = useAssistantNoticeHidden(noticeKey(callId, view.period));
+  const voice = useAssistantVoice(callId, assistant.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
   // Only proposals that wait on this person count; a bystander's optional prompt is in the deck but not in the badge.
@@ -61,7 +61,7 @@ export function NovaBarControls() {
   const huddle = useHuddleChat();
   const focus = useComposerFocus();
   const transcriptOn = useLiveTranscriptOn(callId);
-  // Nothing is drawn until the first state read answers: no "Invite Nova" while Nova may already be here.
+  // Nothing is drawn until the first state read answers: no "Invite Milo" while Milo may already be here.
   if (controls.hidden || view.phase === 'loading') return null;
   const cards = myWaitingActions(view);
   const waiting = waitingWords(cards.length, owed);
@@ -72,115 +72,115 @@ export function NovaBarControls() {
   const voiceChip = voiceWords(view, voice.muted);
   const facts = standingFacts(view);
   const left = timeLeftWords(view);
-  // Before any reply: as soon as the voice is on and the browser still waits for a click (unless this person muted Nova).
+  // Before any reply: as soon as the voice is on and the browser still waits for a click (unless this person muted Milo).
   const soundPrompt = soundPromptShown({ present: !!words && !controls.left, voiceOn: view.voice, muted: voice.muted, needsGesture: voice.needsGesture });
-  // Someone who cannot invite, with no Nova in the call, gets no bar at all (not an empty ruled slot).
-  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !nova.error && !waiting) return null;
+  // Someone who cannot invite, with no Milo in the call, gets no bar at all (not an empty ruled slot).
+  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !assistant.error && !waiting) return null;
   const why = controls.left ? `${leftWords(view)}.` : null;
-  // A standing reason Nova can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
+  // A standing reason Milo can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
   const refused = controls.left ? rejoinRefusedWords(view) : null;
-  return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
+  return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="assistant-bar">
     {controls.invite && <Tooltip content={INVITE_HINT} placement="top">
-      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite">Invite Nova</Button>
+      <Button variant="secondary" size="sm" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite">Invite {ASSISTANT_NAME}</Button>
     </Tooltip>}
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}
-    {/* After Nova left: why (who dismissed it, its time limit, a lost connection); beside it, for people who may invite, the way back. */}
+    {/* After Milo left: why (who dismissed it, its time limit, a lost connection); beside it, for people who may invite, the way back. */}
     {state && controls.left && why && <Tooltip content={refused ? `${why} ${refused}` : why} placement="top">
-      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={refused ? `${why} ${refused}` : why} data-testid="nova-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-rejoin={view.rejoin ?? ''}>{why}</Chip>
+      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={refused ? `${why} ${refused}` : why} data-testid="assistant-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-rejoin={view.rejoin ?? ''}>{why}</Chip>
     </Tooltip>}
     {controls.inviteAgain && <Tooltip content={INVITE_HINT} placement="top">
-      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite-again">{INVITE_AGAIN_LABEL}</Button>
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite-again">{INVITE_AGAIN_LABEL}</Button>
     </Tooltip>}
-    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, Nova's voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss Nova`} triggerTestId="nova-mark"
-      triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="nova-menu"
+    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, ${ASSISTANT_NAME}'s voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss ${ASSISTANT_NAME}`} triggerTestId="assistant-status-mark"
+      triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="assistant-menu"
       trigger={<T size="xs" weight="medium" className="whitespace-nowrap">{words}{left ? ` · ${left}` : ''}</T>}
-      sections={[...(facts.length ? [{ label: `${ASSISTANT_NAME} in this call`, items: [], caption: facts.join('. ') + '.', 'data-testid': 'nova-facts' }] : []), { items: [
-        ...(controls.acknowledge ? [{ label: 'Acknowledge', description: 'Nova cannot hear you until you do', icon: <CheckIcon size={14} />, onSelect: () => void nova.acknowledge() }] : []),
-        ...(controls.pause ? [{ label: 'Pause Nova', icon: <PauseCircleIcon size={14} />, onSelect: () => void nova.pause() }] : []),
-        ...(controls.resume ? [{ label: 'Resume Nova', icon: <PlayCircleIcon size={14} />, onSelect: () => void nova.resume() }] : []),
-        ...(voiceMenu && nova.canSetVoice ? [{ label: view.voice ? "Turn Nova's voice off" : "Turn Nova's voice on", description: view.voice ? "Nova's voice is on in this call" : 'Nova answers aloud when asked', icon: <SpeakerIcon size={14} />, onSelect: () => void nova.setVoice(!view.voice) }] : []),
-        ...(voiceMenu ? [{ label: voice.muted ? 'Unmute Nova for me' : 'Mute Nova for me', description: 'Only for you, in this call', icon: <SpeakerIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
-        ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
-        // The live transcript: the call's pane opens (as Message opens it) on what Nova is hearing; again, back to the chat.
+      sections={[...(facts.length ? [{ label: `${ASSISTANT_NAME} in this call`, items: [], caption: facts.join('. ') + '.', 'data-testid': 'assistant-facts' }] : []), { items: [
+        ...(controls.acknowledge ? [{ label: 'Acknowledge', description: `${ASSISTANT_NAME} cannot hear you until you do`, icon: <CheckIcon size={14} />, onSelect: () => void assistant.acknowledge() }] : []),
+        ...(controls.pause ? [{ label: `Pause ${ASSISTANT_NAME}`, icon: <PauseCircleIcon size={14} />, onSelect: () => void assistant.pause() }] : []),
+        ...(controls.resume ? [{ label: `Resume ${ASSISTANT_NAME}`, icon: <PlayCircleIcon size={14} />, onSelect: () => void assistant.resume() }] : []),
+        ...(voiceMenu && assistant.canSetVoice ? [{ label: view.voice ? `Turn ${ASSISTANT_NAME}'s voice off` : `Turn ${ASSISTANT_NAME}'s voice on`, description: view.voice ? `${ASSISTANT_NAME}'s voice is on in this call` : `${ASSISTANT_NAME} answers aloud when asked`, icon: <SpeakerIcon size={14} />, onSelect: () => void assistant.setVoice(!view.voice) }] : []),
+        ...(voiceMenu ? [{ label: voice.muted ? `Unmute ${ASSISTANT_NAME} for me` : `Mute ${ASSISTANT_NAME} for me`, description: 'Only for you, in this call', icon: <SpeakerIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
+        ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void assistant.extend() }] : []),
+        // The live transcript: the call's pane opens (as Message opens it) on what Milo is hearing; again, back to the chat.
         ...(callId && (view.phase === 'listening' || view.phase === 'paused') ? [{ label: transcriptOn ? LIVE_HIDE_LABEL : LIVE_SHOW_LABEL, ...(transcriptOn ? {} : { description: LIVE_SHOW_DESCRIPTION }),
           icon: <DocumentIcon size={14} />, onSelect: () => {
             setLiveTranscript(callId, !transcriptOn);
             if (!transcriptOn && huddle?.openPane({ focus: false })) focus.request({ mode: 'chat', target: { kind: 'huddle' } });
           } }] : []),
-        ...(controls.dismiss ? [{ label: DISMISS_LABEL, icon: <CloseIcon size={14} />, danger: true, onSelect: () => nova.askDismiss() }] : []),
+        ...(controls.dismiss ? [{ label: DISMISS_LABEL, icon: <CloseIcon size={14} />, danger: true, onSelect: () => assistant.askDismiss() }] : []),
       ] }]} />}
-    {/* Nova's voice, seen without opening the menu: on for the call, or muted by this person. */}
-    {voiceChip && !controls.left && <Chip size="xs" tone={voice.muted ? 'neutral' : 'info'} icon={<SpeakerIcon size={12} />} data-testid="nova-voice-chip">{voiceChip}</Chip>}
+    {/* Milo's voice, seen without opening the menu: on for the call, or muted by this person. */}
+    {voiceChip && !controls.left && <Chip size="xs" tone={voice.muted ? 'neutral' : 'info'} icon={<SpeakerIcon size={12} />} data-testid="assistant-voice-chip">{voiceChip}</Chip>}
     {/* What waits on this person: change cards to confirm (they expire) and proposals to answer. The cards come first: the badge
         jumps to the soonest-expiring one; with none, it reopens the proposal deck that Esc hid. A count badge, with the words as its
         name and tooltip, keeps the footer on one line at 1280 with three people in the call. */}
     {waiting && callId && <Tooltip content={waiting} placement="top">
       <Button variant="ghost" size="sm" className="px-1" aria-label={waiting} data-cards={cards.length} data-proposals={owed}
-        onClick={() => { if (cards[0]) jumpToCard(cards[0].actionId, chat?.toggle ?? null); else setProposalDeckHidden(callId, false); }} data-testid="nova-proposal-count">
+        onClick={() => { if (cards[0]) jumpToCard(cards[0].actionId, chat?.toggle ?? null); else setProposalDeckHidden(callId, false); }} data-testid="assistant-proposal-count">
         <Badge variant="count" value={cards.length + owed} color="accent" aria-label={waiting} />
       </Button>
     </Tooltip>}
-    {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="nova-enable-sound">Click to hear Nova</Button>}
+    {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="assistant-enable-sound">Click to hear {ASSISTANT_NAME}</Button>}
     {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
-    {nova.error && <>
-      <Button ref={errorRef} variant="ghost" size="sm" className="max-w-[12rem] truncate text-danger" onClick={() => setErrorOpen((v) => !v)} aria-expanded={errorOpen} title={nova.error} data-testid="nova-error">{nova.error}</Button>
-      <InlinePopover trigger={errorRef} open={errorOpen} onClose={() => setErrorOpen(false)} placement="top-end" className="max-w-sm p-3" aria-label="Why Nova could not do that" data-testid="nova-error-full">
-        <T size="sm" tone="danger" wrap role="alert" data-testid="nova-error-text">{nova.error}</T>
+    {assistant.error && <>
+      <Button ref={errorRef} variant="ghost" size="sm" className="max-w-[12rem] truncate text-danger" onClick={() => setErrorOpen((v) => !v)} aria-expanded={errorOpen} title={assistant.error} data-testid="assistant-error">{assistant.error}</Button>
+      <InlinePopover trigger={errorRef} open={errorOpen} onClose={() => setErrorOpen(false)} placement="top-end" className="max-w-sm p-3" aria-label={`Why ${ASSISTANT_NAME} could not do that`} data-testid="assistant-error-full">
+        <T size="sm" tone="danger" wrap role="alert" data-testid="assistant-error-text">{assistant.error}</T>
       </InlinePopover>
     </>}
   </Inline>;
 }
 
 /** The server's over-budget refusal, asked as a deck prompt above the footer row (no dialog): the refusal sentence, then Go ahead or Cancel. */
-export function NovaBudgetAsk() {
+export function AssistantBudgetAsk() {
   const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
-  const { ask, answerAsk, confirmingDismiss, answerDismiss } = nova;
+  const assistant = useMeetingAssistant(callId);
+  const { ask, answerAsk, confirmingDismiss, answerDismiss } = assistant;
   const prompts = useMemo<ComposerPrompt[]>(() => ask ? [{
-    id: `nova-budget:${callId}:${ask.action}:${ask.detail}`, scope: `nova-budget:${callId}`, kind: 'choice', eyebrow: 'Nova', title: ask.title,
+    id: `assistant-budget:${callId}:${ask.action}:${ask.detail}`, scope: `assistant-budget:${callId}`, kind: 'choice', eyebrow: ASSISTANT_NAME, title: ask.title,
     question: ask.detail,
     options: [{ id: 'go', label: 'Go ahead', emphasis: 'primary' }, { id: 'cancel', label: 'Cancel' }],
     onAnswer: async (a) => { await answerAsk('optionId' in a && a.optionId === 'go'); },
   }] : [], [ask, callId, answerAsk]);
-  // Dismissing is for everyone, so it is asked once, naming that effect. Esc or Cancel keeps Nova.
+  // Dismissing is for everyone, so it is asked once, naming that effect. Esc or Cancel keeps Milo.
   const dismissPrompts = useMemo<ComposerPrompt[]>(() => confirmingDismiss ? [{
-    id: `nova-dismiss:${callId}`, scope: `nova-dismiss:${callId}`, kind: 'choice', eyebrow: 'Nova', title: `${DISMISS_LABEL}?`,
+    id: `assistant-dismiss:${callId}`, scope: `assistant-dismiss:${callId}`, kind: 'choice', eyebrow: ASSISTANT_NAME, title: `${DISMISS_LABEL}?`,
     question: DISMISS_QUESTION,
     options: [{ id: 'dismiss', label: DISMISS_LABEL, emphasis: 'danger' }, { id: 'keep', label: `Keep ${ASSISTANT_NAME}` }],
     onAnswer: async (a) => { await answerDismiss('optionId' in a && a.optionId === 'dismiss'); },
     onDismiss: () => { void answerDismiss(false); },
   }] : [], [confirmingDismiss, callId, answerDismiss]);
   return <>
-    {ask && <ComposerPromptDeck prompts={prompts} scope={`nova-budget:${callId}`} className="mx-4 my-1" data-testid="nova-budget-ask" />}
-    {confirmingDismiss && <ComposerPromptDeck prompts={dismissPrompts} scope={`nova-dismiss:${callId}`} className="mx-4 my-1" data-testid="nova-dismiss-ask" />}
+    {ask && <ComposerPromptDeck prompts={prompts} scope={`assistant-budget:${callId}`} className="mx-4 my-1" data-testid="assistant-budget-ask" />}
+    {confirmingDismiss && <ComposerPromptDeck prompts={dismissPrompts} scope={`assistant-dismiss:${callId}`} className="mx-4 my-1" data-testid="assistant-dismiss-ask" />}
   </>;
 }
 
 /** The notice, on the library's RecordingConsentNotice with its own wording and two actions. Its close mark only hides it here; nothing is acknowledged or dismissed by it. */
-export function NovaNotice() {
+export function AssistantConsentNotice() {
   const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
-  const key = noticeKey(callId, nova.view.period);
-  const hidden = useNovaNoticeHidden(key);
-  if (hidden || !noticeVisible(nova.enabled, nova.view)) return null;
-  const text = noticeText(nova.view);
-  return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="nova-notice"
+  const assistant = useMeetingAssistant(callId);
+  const key = noticeKey(callId, assistant.view.period);
+  const hidden = useAssistantNoticeHidden(key);
+  if (hidden || !noticeVisible(assistant.enabled, assistant.view)) return null;
+  const text = noticeText(assistant.view);
+  return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="assistant-consent-notice"
     title={text.title} description={text.body}
-    acknowledgeLabel="I understand" onAcknowledge={nova.busy ? () => {} : () => void nova.acknowledge()}
-    secondaryLabel={DISMISS_LABEL} onSecondary={nova.busy ? () => {} : () => nova.askDismiss()}
-    onDismiss={() => { if (key) hideNovaNotice(key); }} />;
+    acknowledgeLabel="I understand" onAcknowledge={assistant.busy ? () => {} : () => void assistant.acknowledge()}
+    secondaryLabel={DISMISS_LABEL} onSecondary={assistant.busy ? () => {} : () => assistant.askDismiss()}
+    onDismiss={() => { if (key) hideAssistantNotice(key); }} />;
 }
 
-/** Nova as a non-media entry for the call's people lists; null when it is not in this call. */
-export function useNovaRosterEntry(callId: string | null): string | null {
-  const nova = useMeetingAssistant(callId);
-  return nova.enabled && assistantPresent(nova.view) ? rosterEntry(nova.view) : null;
+/** Milo as a non-media entry for the call's people lists; null when it is not in this call. */
+export function useAssistantRosterEntry(callId: string | null): string | null {
+  const assistant = useMeetingAssistant(callId);
+  return assistant.enabled && assistantPresent(assistant.view) ? rosterEntry(assistant.view) : null;
 }
 
-/** Nova as the library roster's non-media entry (`RosterPanel extraEntries`); empty when it is not in this call. */
-export function useNovaRosterEntries(): RosterExtraEntry[] {
+/** Milo as the library roster's non-media entry (`RosterPanel extraEntries`); empty when it is not in this call. */
+export function useAssistantRosterEntries(): RosterExtraEntry[] {
   const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
-  return nova.enabled && assistantPresent(nova.view)
-    ? [{ id: 'assistant-nova', name: ASSISTANT_NAME, label: ASSISTANT_LABEL, status: nova.view.phase === 'paused' ? 'paused' : 'listening' }] : [];
+  const assistant = useMeetingAssistant(callId);
+  return assistant.enabled && assistantPresent(assistant.view)
+    ? [{ id: 'meeting-assistant', name: ASSISTANT_NAME, label: ASSISTANT_LABEL, status: assistant.view.phase === 'paused' ? 'paused' : 'listening' }] : [];
 }

@@ -1,9 +1,9 @@
-// What Nova puts in the call chat, as the portal reads it. The shapes mirror
+// What Milo puts in the call chat, as the portal reads it. The shapes mirror
 // middleware/src/lib/meeting-assistant/chat-types.ts; change both together.
 //
 // Trust: the BFF shows these keys only on a message whose stored author is the assistant's fixed identity
 // (lib/call-chat.ts `render`), and refuses them from a person on the way in, so a message that carries them here
-// is Nova's. This file still validates the shape so a malformed row renders as an ordinary message, not a broken card.
+// is Milo's. This file still validates the shape so a malformed row renders as an ordinary message, not a broken card.
 
 import { pokeTurns } from './meetingTurnsPoke.ts';
 import { PROPOSAL_STATES, type ProposalState } from './meetingProposals.ts';
@@ -12,7 +12,7 @@ export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expi
 const STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
 
 /** What a minutes notice counts; `decisions` includes those consented through the call's proposals (the server counts them). */
-export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** Nova added a later part of the call to minutes that existed. */ added?: boolean }
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** Milo added a later part of the call to minutes that existed. */ added?: boolean }
 export interface AssistantNotice {
   kind: 'assistant-notice';
   /** The meeting this notice closes; the chat links to its page. */
@@ -81,7 +81,7 @@ export function readAssistantMessage(metadata: Record<string, unknown> | undefin
   return null;
 }
 
-/** Is this chat message Nova's? The same gate as the cards: well-formed assistant metadata, which only Nova's stored messages carry. */
+/** Is this chat message Milo's? The same gate as the cards: well-formed assistant metadata, which only Milo's stored messages carry. */
 export const isAssistantChatMessage = (message: { metadata?: Record<string, unknown> }): boolean => readAssistantMessage(message.metadata) !== null;
 
 /** The minutes card's counts, each as its own short label: "2 decisions", "1 action item", "0 proposals". */
@@ -134,7 +134,7 @@ export const namesNoInitiative = (action: Pick<AssistantAction, 'tool' | 'detail
 // ---- the card's anatomy (one shape for the action, proposal and minutes cards) -------------------------------------------------
 
 /**
- * How big and loud a Nova card is, from its state and the viewer: `you` (it waits on the viewer: the full card, in Nova's accent),
+ * How big and loud a Milo card is, from its state and the viewer: `you` (it waits on the viewer: the full card, in Milo's accent),
  * `others` (it waits on someone else, or is running: the full card on the plain surface), `done` (one row with a success mark) and
  * `muted` (declined, expired, failed, not a decision...: one quiet row with the reason). A row can be opened to the full card.
  */
@@ -169,7 +169,7 @@ export function actionNeedsLine(action: Pick<AssistantAction, 'status' | 'askedB
 
 /**
  * The one row a finished or closed card collapses to: what was done ("Created “the login cookie bug”") or the headline with the
- * reason ("the nightly audit · Nova was dismissed before this was done."). Always carries the headline, so the row is found by it.
+ * reason ("the nightly audit · Milo was dismissed before this was done."). Always carries the headline, so the row is found by it.
  */
 export function actionRowText(action: Pick<AssistantAction, 'status' | 'title' | 'summary' | 'tool' | 'resultText' | 'askedByName'>): string {
   const title = actionTitle(action);

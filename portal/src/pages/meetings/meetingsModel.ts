@@ -2,6 +2,8 @@
 // middleware/src/routes/meeting-assistant.ts (`GET /api/calls/:id/assistant/minutes`, `GET /api/meetings`).
 // Pure functions only: the pages stay thin and these are unit tested.
 
+import { ASSISTANT_NAME } from '../../lib/meetingAssistantModel.ts';
+
 export interface MeetingListRow {
   callId: string;
   callName: string;
@@ -17,7 +19,7 @@ export interface MeetingListRow {
   waitingOnYou?: number;
   /** The summary's lead sentence (absent from an older server: read from `summary`). */
   summaryLead?: string;
-  /** Nova's listening time in seconds; null when the server no longer knows it, absent from an older server. */
+  /** Milo's listening time in seconds; null when the server no longer knows it, absent from an older server. */
   listenedSeconds?: number | null;
   /** What came out of the meeting, counted by the server: decisions (agreed proposals included), action items, proposals still open. */
   outcomes?: { decisions: number; actionItems: number; open: number };
@@ -72,11 +74,11 @@ export interface MinutesView {
   proposals?: MinutesProposal[];
   /** When the retention sweep removes the meeting (epoch ms), from the server's retention. Absent from an older server. */
   keptUntil?: number;
-  /** What Nova covered: its listening seconds, the rest of its time in the call, and how many people were not transcribed (a count). */
+  /** What Milo covered: its listening seconds, the rest of its time in the call, and how many people were not transcribed (a count). */
   coverage?: MinutesCoverage;
-  /** No draft (or an addition that could not be written): whether an attendee may ask Nova to try again. */
+  /** No draft (or an addition that could not be written): whether an attendee may ask Milo to try again. */
   rewrite?: { writing: boolean; possible: boolean; attemptsLeft: number };
-  /** Nova was invited back and is in the call now. Absent from an older server. */
+  /** Milo was invited back and is in the call now. Absent from an older server. */
   backInCall?: boolean;
   /** A later part of the call could not be added to these minutes yet. Absent from an older server. */
   additionOwed?: boolean;
@@ -85,16 +87,16 @@ export interface MinutesView {
 }
 
 /**
- * The one quiet sentence under the summary about a later part of the call: Nova is back in the call (what it hears is added when it
+ * The one quiet sentence under the summary about a later part of the call: Milo is back in the call (what it hears is added when it
  * leaves), it is adding it now, or it could not yet. Null when there is nothing to say.
  */
 export function additionNote(m: Pick<MinutesView, 'backInCall' | 'additionOwed' | 'rewrite'>): string | null {
-  if (m.backInCall) return 'Nova is back in this call. What it hears now is added to these minutes when it leaves.';
+  if (m.backInCall) return `${ASSISTANT_NAME} is back in this call. What it hears now is added to these minutes when it leaves.`;
   if (!m.additionOwed) return null;
-  if (m.rewrite?.writing) return 'Nova is adding the later part of this call to these minutes.';
+  if (m.rewrite?.writing) return `${ASSISTANT_NAME} is adding the later part of this call to these minutes.`;
   return m.rewrite && m.rewrite.attemptsLeft === 0
-    ? 'Nova could not add the later part of this call to these minutes and will not try again. The transcript below has all of it.'
-    : 'Nova could not add the later part of this call to these minutes yet. These minutes cover the earlier part, and Nova will try again.';
+    ? `${ASSISTANT_NAME} could not add the later part of this call to these minutes and will not try again. The transcript below has all of it.`
+    : `${ASSISTANT_NAME} could not add the later part of this call to these minutes yet. These minutes cover the earlier part, and ${ASSISTANT_NAME} will try again.`;
 }
 
 /** The page menu's retry, when one is possible: write failed minutes again, or add the later part again. Null when none. */
@@ -197,7 +199,7 @@ export const minutesWritten = (m: Pick<MinutesView, 'writer'>): boolean => m.wri
 export function goneCopy(failure: { status: number | null; code: string | null } | null): { title: string; description: string; writing: boolean } {
   if (failure?.code === 'MEETING_DELETED') return { title: 'Meeting deleted', description: 'This meeting\'s record was deleted.', writing: false };
   if (failure?.code === 'MEETING_EXPIRED') return { title: 'Meeting removed', description: 'This meeting\'s record was removed after the retention period.', writing: false };
-  if (failure?.code === 'MINUTES_WRITING') return { title: 'Nova is writing the minutes', description: 'They appear here when they are ready.', writing: true };
+  if (failure?.code === 'MINUTES_WRITING') return { title: `${ASSISTANT_NAME} is writing the minutes`, description: 'They appear here when they are ready.', writing: true };
   return { title: 'Meeting not found', description: 'There is no meeting record here. It may have been deleted, removed after the retention period, or you were not in that call.', writing: false };
 }
 
@@ -218,7 +220,7 @@ export function summaryOf(m: Pick<MinutesView, 'summary' | 'summaryLead' | 'summ
 /** The Meetings row's quiet second line: the summary's lead. */
 export const listLead = (r: Pick<MeetingListRow, 'summary' | 'summaryLead'>): string => summaryLine(r.summaryLead ?? summaryOf({ summary: r.summary }).lead, 160);
 
-/** "3 min" of Nova's listening; null when unknown. */
+/** "3 min" of Milo's listening; null when unknown. */
 export const listenedLabel = (seconds: number | null | undefined): string | null =>
   (typeof seconds === 'number' ? durationLabel(0, seconds * 1000) : null);
 
@@ -237,19 +239,19 @@ export function outcomesLabel(o: MeetingListRow['outcomes']): string | null {
 
 /** The header's one meta line, as words (the people are drawn as avatars between them by the page). */
 export function headerMeta(m: Pick<MinutesView, 'startedAt' | 'coverage' | 'invitedByName'>): { when: string; listened: string | null; invitedBy: string } {
-  const listened = m.coverage ? `Nova listened ${durationLabel(0, m.coverage.listenedSeconds * 1000)}` : null;
+  const listened = m.coverage ? `${ASSISTANT_NAME} listened ${durationLabel(0, m.coverage.listenedSeconds * 1000)}` : null;
   return { when: whenLabel(m.startedAt), listened, invitedBy: `invited by ${m.invitedByName}` };
 }
 
-/** The header's quieter second line: retention and who can delete sooner, then Nova's pause and how many people were not transcribed. */
+/** The header's quieter second line: retention and who can delete sooner, then Milo's pause and how many people were not transcribed. */
 export function quietMeta(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'youAreInviter' | 'coverage'>): string[] {
   const items: string[] = [];
   if (m.keptUntil) {
     items.push(`Kept until ${dayLabel(m.keptUntil)}`);
-    items.push(`${m.youAreInviter ? 'You' : m.invitedByName || 'The person who invited Nova'} can delete it sooner`);
+    items.push(`${m.youAreInviter ? 'You' : m.invitedByName || `The person who invited ${ASSISTANT_NAME}`} can delete it sooner`);
   }
   const c = m.coverage;
-  if (c && c.pausedSeconds >= 60) items.push(`Nova paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);
+  if (c && c.pausedSeconds >= 60) items.push(`${ASSISTANT_NAME} paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);
   if (c && c.untranscribed > 0) items.push(c.untranscribed === 1 ? '1 person was not transcribed' : `${c.untranscribed} people were not transcribed`);
   return items;
 }
@@ -333,7 +335,7 @@ export function actionText(text: string): string {
   const created = /^Created ([^:]+): (.+)$/.exec(text);
   if (created) return `Created ${created[1]!.replace(/^a /, '')} "${created[2]!}"`;
   const ran = /^Ran ([a-z_-]+)$/i.exec(text.trim());
-  if (ran) return TOOL_DONE[ran[1]!.toLowerCase()] ?? 'Nova carried out a request';
+  if (ran) return TOOL_DONE[ran[1]!.toLowerCase()] ?? `${ASSISTANT_NAME} carried out a request`;
   return text;
 }
 

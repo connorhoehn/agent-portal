@@ -7,12 +7,12 @@
 //   - A prompt never interrupts: it arrives without moving keyboard focus (`focusOnArrive: false`, announced politely instead), and
 //     its keys act only while focus is in the deck (`keypad: 'deck'`), so a stray digit or Enter on the call never answers.
 //   - 1 Consent (the executor's consent runs it only when it is the last one needed: "Consent and record" / "Consent and run"),
-//     2 Object… (a one-line reason, labelled as shared before it is sent), 3 "Not a decision" (or "Not needed") on a proposal Nova
+//     2 Object… (a one-line reason, labelled as shared before it is sent), 3 "Not a decision" (or "Not needed") on a proposal Milo
 //     raised from what it heard, "Drop it" for the asker of one they asked for. Someone not needed is told their answer is optional.
 //   - Once everyone needed has consented, the executor is asked "Ready: run it now"; only their click starts it. After a hand-back,
 //     the server's `you.canRun` offers "Run it myself" to whoever may take it over.
 //   - Esc hides it; the footer count or the card's "Answer" reopens it, and a NEW proposal waiting on this person reopens it too.
-//   - Once Nova has left, the footer asks no more: unfinished proposals move to the meeting page, which asks with the same prompt
+//   - Once Milo has left, the footer asks no more: unfinished proposals move to the meeting page, which asks with the same prompt
 //     (`inCall: false`) and without the dismiss option, which needs a seat.
 
 import { useEffect, useMemo } from 'react';
@@ -30,14 +30,14 @@ import { useLiveCallId } from '../../lib/liveCallId';
 /** The proposals this person's deck would ask about in the live call: those waiting on them first. */
 export function useProposalQueue(): { callId: string | null; queue: ProposalView[] } {
   const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
+  const assistant = useMeetingAssistant(callId);
   const { kept } = useProposalDeck(callId);
-  const present = assistantPresent(nova.view);
-  const queue = useMemo(() => (present ? deckQueue(nova.proposals, kept) : []), [present, nova.proposals, kept]);
+  const present = assistantPresent(assistant.view);
+  const queue = useMemo(() => (present ? deckQueue(assistant.proposals, kept) : []), [present, assistant.proposals, kept]);
   return { callId, queue };
 }
 
-/** "1 proposal" on Nova's footer mark: only proposals waiting on this person; it reopens the deck Esc hid. Null at none. */
+/** "1 proposal" on Milo's footer mark: only proposals waiting on this person; it reopens the deck Esc hid. Null at none. */
 export function proposalCountOf(queue: readonly ProposalView[]): string | null {
   return proposalCountWords(waitingCount(queue));
 }
@@ -127,7 +127,7 @@ export function proposalPrompt(callId: string, p: ProposalView, initiativeName: 
   };
 }
 
-export function NovaProposalAsk() {
+export function AssistantProposalAsk() {
   const { callId, queue } = useProposalQueue();
   const { hidden } = useProposalDeck(callId);
   const head = queue[0] ?? null;
@@ -135,8 +135,8 @@ export function NovaProposalAsk() {
   const named = useFetch<{ name?: string }>(initiativeId ? `/api/graph/projects/${encodeURIComponent(initiativeId)}` : null);
   const initiativeName = named.data?.name?.trim() || null;
   const prompts = useMemo<ComposerPrompt[]>(() => (callId && head
-    ? [proposalPrompt(callId, head, initiativeName, { inCall: true, scope: `nova-proposal:${callId}`, keep: (key) => keepProposalAnswer(callId, key) })] : []), [callId, head, initiativeName]);
-  const deck = useComposerPromptDeck(prompts, { scope: callId ? `nova-proposal:${callId}` : null });
+    ? [proposalPrompt(callId, head, initiativeName, { inCall: true, scope: `assistant-proposal:${callId}`, keep: (key) => keepProposalAnswer(callId, key) })] : []), [callId, head, initiativeName]);
+  const deck = useComposerPromptDeck(prompts, { scope: callId ? `assistant-proposal:${callId}` : null });
   // A new proposal waiting on this person shows the deck again, even after Esc (without taking focus).
   const waitingIds = queue.filter(waitingOnYou).map((p) => p.id).join(' ');
   useEffect(() => { if (callId && waitingIds) noteWaitingProposals(callId, waitingIds.split(' ')); }, [callId, waitingIds]);
@@ -145,5 +145,5 @@ export function NovaProposalAsk() {
   useEffect(() => { if (!hidden && deck.collapsed) deck.setCollapsed(false); }, [hidden, deck]);
   // Only a question is drawn: the card in the chat already shows what an answer changed, so no receipt row stays behind.
   if (!callId || !deck.active || deck.collapsed || hidden) return null;
-  return <ComposerPromptDeck deck={deck} className="mx-4 my-1" data-testid="nova-proposal-ask" />;
+  return <ComposerPromptDeck deck={deck} className="mx-4 my-1" data-testid="assistant-proposal-ask" />;
 }

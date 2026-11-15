@@ -18,7 +18,7 @@ const reported = new Set<string>();
 /** Whether this id has already been taken by the server for this call (a 200, or a 409 that will not change). */
 export const alreadyReported = (callId: string, id: string): boolean => reported.has(`${callId}\n${id}`);
 
-/** POSTs the id once per call and id. A refusal that will not change (409: Nova left, id taken) counts as done; a failed request does not. */
+/** POSTs the id once per call and id. A refusal that will not change (409: Milo left, id taken) counts as done; a failed request does not. */
 export async function reportMediaId(callId: string, id: string, request: typeof fetch = fetch): Promise<boolean> {
   if (alreadyReported(callId, id)) return true;
   try {

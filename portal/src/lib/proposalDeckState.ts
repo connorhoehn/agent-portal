@@ -1,7 +1,7 @@
 // What this browser remembers about the proposal prompt in the footer deck, per call: whether the person hid it (Esc), which
 // proposals they set aside ("Not now", "Skip": kept in sessionStorage, so a reload does not ask again in this tab), and which
 // proposals waiting on them it has already seen (a NEW one shows the deck again, even after Esc). Nothing here reaches the server.
-// The deck, the count on Nova's footer mark and the card's "Answer" all read or set it.
+// The deck, the count on Milo's footer mark and the card's "Answer" all read or set it.
 import { useSyncExternalStore } from 'react';
 
 interface CallDeck { hidden: boolean; kept: ReadonlySet<string>; seen: ReadonlySet<string> }
@@ -10,11 +10,13 @@ const decks = new Map<string, CallDeck>();
 const listeners = new Set<() => void>();
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
-const storageKey = (callId: string): string => `nova-proposal-kept:${callId}`;
+const storageKey = (callId: string): string => `assistant-proposal-kept:${callId}`;
+/** Where a tab kept them before the rename: read when the new key has nothing, never written. */
+const legacyStorageKey = (callId: string): string => `nova-proposal-kept:${callId}`;
 /** Storage can be missing or refuse (a private window, blocked site data): the deck then forgets on reload, nothing more. */
 function readKept(callId: string): Set<string> {
   try {
-    const raw = globalThis.sessionStorage?.getItem(storageKey(callId));
+    const raw = globalThis.sessionStorage?.getItem(storageKey(callId)) ?? globalThis.sessionStorage?.getItem(legacyStorageKey(callId));
     const list: unknown = raw ? JSON.parse(raw) : [];
     return new Set(Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string').slice(-200) : []);
   } catch { return new Set(); }

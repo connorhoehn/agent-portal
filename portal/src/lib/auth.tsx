@@ -31,7 +31,7 @@ export interface Session {
   availableRoles: string[];
   availableTenants: Tenant[];
   masquerading: { asUser: string; actor: string } | null;
-  /** The server's MEETING_ASSISTANT_ENABLED, advertised on /api/session/me; every Nova control hides when false. */
+  /** The server's MEETING_ASSISTANT_ENABLED, advertised on /api/session/me; every Milo control hides when false. */
   meetingAssistant?: boolean;
 }
 
