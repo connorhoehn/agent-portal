@@ -3,7 +3,7 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  Chip, CloseIcon, EntityCell, IconButton, Inline, MetaLine, Spinner, Stack,
+  Button, Chip, CloseIcon, EntityCell, IconButton, Inline, MetaLine, Spinner, Stack,
 } from '@connorhoehn/ui-components/shared';
 import {
   subscribeToasts,
@@ -42,6 +42,10 @@ export function ToastHost() {
             <EntityCell label={t.title} className="min-w-0" />
             {t.detail && (
               <MetaLine size="xs" className="leading-snug mt-0.5 break-words" items={[t.detail]} />
+            )}
+            {t.action && (
+              <Button variant="secondary" size="sm" className="mt-1.5 self-start" data-testid="toast-action"
+                onClick={() => { const run = t.action!.onSelect; dismissToast(t.id); run(); }}>{t.action.label}</Button>
             )}
           </Stack>
           <IconButton

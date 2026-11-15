@@ -17,12 +17,13 @@
 //                     who may not see the proposal sees the statement and its state only.
 // Library components only.
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Card, Chip, Inline, InlineAlert, Link, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
 import { answerProposal, raiseProposalAgain, useMeetingAssistant } from '../../lib/meetingAssistant';
+import { expiresWords } from '../../lib/meetingAssistantModel';
 import {
   blockedLine, expiryLine, eyebrowOf, heardText, isAnswerable, needsLine, optionalFor, outcomeLine, personChips, recordsLine, resultHref, stateLine, waitingOnYou,
   type ProposalState, type ProposalView,
@@ -47,10 +48,23 @@ function CallInitiativeLine({ callId }: { callId: string | null }) {
   return name ? <T size="xs" tone="secondary" wrap data-testid="assistant-action-initiative">{`Initiative: ${name}`}</T> : null;
 }
 
+/** "expires in 7 min" while the card waits, from the call's state (which says when each waiting card expires), kept current each half minute. */
+function useExpiresWords(callId: string | null, actionId: string, waiting: boolean): string | null {
+  const nova = useMeetingAssistant(waiting ? callId : null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [waiting]);
+  return waiting ? expiresWords(nova.view, actionId, now) : null;
+}
+
 export function AssistantActionCard({ action, viewerId, callId, decide = decideAssistantAction }: AssistantActionCardProps) {
   const [busy, setBusy] = useState<ActionDecision | null>(null);
   const [error, setError] = useState<string | null>(null);
   const view = actionCardView(action, viewerId);
+  const expires = useExpiresWords(callId, action.actionId, action.status === 'waiting');
   const choose = (decision: ActionDecision): void => {
     if (!callId || busy) return;
     setBusy(decision); setError(null);
@@ -59,7 +73,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
       .finally(() => setBusy(null));
   };
   return (
-    <Card tone="assistant" padding="sm" className="mt-1 max-w-md" data-testid="assistant-action-card" data-status={action.status}>
+    <Card tone="assistant" padding="sm" className="mt-1 max-w-md" data-testid="assistant-action-card" data-status={action.status} data-action-id={action.actionId}>
       <Stack gap="sm">
         <T size="sm" weight="medium" wrap data-testid="assistant-action-summary">{action.summary}</T>
         {action.detail.length > 0 && (
@@ -71,6 +85,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
         <Inline gap="sm" align="center" wrap>
           <StatusPill tone={view.tone} label={view.statusLabel} size="sm" data-testid="assistant-action-status" />
           {view.waitingNote && <T size="xs" tone="tertiary" data-testid="assistant-action-waiting-note">{view.waitingNote}</T>}
+          {expires && <T size="xs" tone="tertiary" data-testid="assistant-action-expires">{expires}</T>}
         </Inline>
         {action.resultText && <T size="xs" tone="secondary" wrap data-testid="assistant-action-result">{action.resultText}</T>}
         {view.canDecide && (

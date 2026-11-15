@@ -12,6 +12,8 @@ export interface Toast {
   title: string;
   detail?: string;
   createdAt: number;
+  /** One button on the toast (it closes the toast, then runs). */
+  action?: { label: string; onSelect: () => void };
 }
 
 let toasts: Toast[] = [];
@@ -91,6 +93,14 @@ export function toastSuccess(id: string | null, title: string, detail?: string):
 /** Resolve a pending toast (or fire a standalone one) as error. */
 export function toastError(id: string | null, title: string, detail?: string): string {
   return resolve(id, 'error', title, detail, ERROR_TTL_MS);
+}
+
+/** An informational toast that stays until it is closed, with an optional action. */
+export function toastSticky(title: string, detail?: string, action?: Toast['action']): string {
+  const id = `t-${++seq}`;
+  toasts = [...toasts, { id, kind: 'info', title, ...(detail !== undefined ? { detail } : {}), ...(action ? { action } : {}), createdAt: Date.now() }];
+  emit();
+  return id;
 }
 
 /** One-shot informational toast. */

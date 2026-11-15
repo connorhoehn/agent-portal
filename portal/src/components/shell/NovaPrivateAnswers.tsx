@@ -1,11 +1,15 @@
 // A private answer from Nova (budget, access request status: docs/meeting-assistant-design.md, decision 6) is sent to
 // one person's notification inbox, never the call chat. The bell alone is easy to miss in a call, so while this person
-// is in that call it also shows as a toast, marked "Only you can see this". Renders nothing.
+// is in that call it also shows as a toast, marked "Only you can see this". The toast stays until it is closed, and offers
+// "Open notifications", which opens the bell where the answer is kept. Renders nothing.
 
 import { useEffect, useRef } from 'react';
 import { useSharedNotificationsOptional } from './SharedNotifications';
 import { useLiveCallId } from './MeetingAssistantBar';
-import { toastInfo } from '../../lib/toastStore';
+import { toastSticky } from '../../lib/toastStore';
+
+/** Opens the header's activity bell (the library bell has no open prop; its button carries the bell's test id with `-button`). */
+const openNotifications = (): void => { document.querySelector<HTMLElement>('[data-testid="activity-bell-button"]')?.click(); };
 
 /** An answer older than this arrived before this person was looking (a replay on reconnect): the bell holds it, no toast. */
 const FRESH_MS = 30_000;
@@ -30,7 +34,7 @@ export function NovaPrivateAnswers() {
       const answer = privateAnswerOf(n as Parameters<typeof privateAnswerOf>[0], callId, Date.now());
       if (!answer) continue;
       shown.current.add(answer.id);
-      toastInfo('Nova: only you can see this', answer.text);
+      toastSticky('Nova: only you can see this', answer.text, { label: 'Open notifications', onSelect: openNotifications });
     }
   }, [callId, list]);
   return null;

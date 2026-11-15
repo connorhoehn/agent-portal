@@ -13,23 +13,44 @@ import { budgetConfirmOf } from './voice/client';
 import { budgetConfirmText } from './voice/controller';
 import { isAnswerable, parseProposals, type ProposalAnswer, type ProposalView } from './meetingProposals';
 import {
-  assistantPresent, ASSISTANT_POLL_MS, assistantControls, NO_ASSISTANT, parseAssistantState, type AssistantControls, type AssistantView,
+  assistantPresent, ASSISTANT_POLL_MS, assistantControls, errorStale, ERROR_CLEAR_MS, LOADING_ASSISTANT, NO_ASSISTANT, parseAssistantState,
+  type AssistantControls, type AssistantPhase, type AssistantView,
 } from './meetingAssistantModel';
 
 export type AssistantAction = 'invite' | 'pause' | 'resume' | 'dismiss' | 'ack' | 'extend';
 
 /** An over-budget refusal the person may confirm past: the action to send again and the sentence that asks. */
-export interface BudgetAsk { action: 'invite' | 'extend'; title: string; detail: string }
+export interface BudgetAsk { action: 'invite' | 'extend' | 'resume'; title: string; detail: string }
 
-interface Slot { view: AssistantView; error: string | null; ask: BudgetAsk | null; busy: boolean; proposals: ProposalView[]; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void> }
+interface Slot {
+  view: AssistantView; error: string | null; ask: BudgetAsk | null; busy: boolean;
+  /** "Dismiss Nova for everyone" was chosen and waits for its one confirmation (a deck prompt above the footer row). */
+  confirmingDismiss: boolean; proposals: ProposalView[]; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void>;
+  /** When the error was raised and the phase then: a refresh that shows the phase moved on, or ERROR_CLEAR_MS, clears it. */
+  errorRaised: { at: number; phase: AssistantPhase } | null;
+  errorTimer: ReturnType<typeof setTimeout> | null;
+}
 const slots = new Map<string, Slot>();
 
 const slotOf = (callId: string): Slot => {
   let slot = slots.get(callId);
-  if (!slot) { slot = { view: NO_ASSISTANT(callId), error: null, ask: null, busy: false, proposals: [], watchers: 0, timer: null, listeners: new Set() }; slots.set(callId, slot); }
+  if (!slot) { slot = { view: LOADING_ASSISTANT(callId), error: null, ask: null, busy: false, confirmingDismiss: false, proposals: [], watchers: 0, timer: null, listeners: new Set(), errorRaised: null, errorTimer: null }; slots.set(callId, slot); }
   return slot;
 };
-const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' | 'busy' | 'proposals'>>) => {
+const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' | 'busy' | 'proposals' | 'confirmingDismiss'>>) => {
+  if ('error' in patch) {
+    if (slot.errorTimer) { clearTimeout(slot.errorTimer); slot.errorTimer = null; }
+    slot.errorRaised = null;
+    if (patch.error) {
+      const raised = { at: Date.now(), phase: (patch.view ?? slot.view).phase };
+      slot.errorRaised = raised;
+      slot.errorTimer = setTimeout(() => { if (slot.errorRaised === raised) publish(slot, { error: null }); }, ERROR_CLEAR_MS);
+    }
+  } else if (patch.view && slot.error && slot.errorRaised && errorStale(slot.errorRaised, Date.now(), patch.view.phase)) {
+    // The call moved on since the refusal (someone else resumed Nova, say): the old sentence no longer describes it.
+    Object.assign(slot, { error: null, errorRaised: null });
+    if (slot.errorTimer) { clearTimeout(slot.errorTimer); slot.errorTimer = null; }
+  }
   Object.assign(slot, patch);
   for (const l of slot.listeners) l();
 };
@@ -85,11 +106,15 @@ export async function actOnAssistant(callId: string, action: AssistantAction, op
   const result = await writeJson<unknown>(`${base(callId)}/${action}`, 'POST', opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {});
   if (result.ok) { publish(slot, { busy: false, view: parseAssistantState(callId, result.data) }); return true; }
   const confirm = opts.mayConfirm && !opts.confirmOverUserBudget ? budgetConfirmOf(result.status, result.data) : null;
-  if (confirm && (action === 'invite' || action === 'extend')) {
+  if (confirm && (action === 'invite' || action === 'extend' || action === 'resume')) {
     const words = budgetConfirmText(confirm);
     publish(slot, { busy: false, ask: { action, title: words.title, detail: words.detail.replace(/ Start it anyway\?$/, ' Go ahead anyway?') } });
   }
-  else { publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' }); await refreshAssistant(callId); }
+  else {
+    // The phase the error is raised against is read first, so the refresh that follows does not clear it at once.
+    await refreshAssistant(callId);
+    publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
+  }
   return false;
 }
 
@@ -99,8 +124,8 @@ export async function setAssistantVoice(callId: string, on: boolean): Promise<bo
   publish(slot, { busy: true, error: null, ask: null });
   const result = await writeJson<unknown>(`${base(callId)}/voice`, 'POST', { on });
   if (result.ok) { publish(slot, { busy: false, view: parseAssistantState(callId, result.data) }); return true; }
-  publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
   await refreshAssistant(callId);
+  publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
   return false;
 }
 
@@ -123,18 +148,23 @@ export interface MeetingAssistantHandle {
   extend(): Promise<boolean>;
   /** The call's proposals this person may see, oldest first. */
   proposals: ProposalView[];
+  /** A dismissal waits for its confirmation (asked once, naming the effect). */
+  confirmingDismiss: boolean;
+  /** Ask the one question before dismissing; `answerDismiss(true)` dismisses, false drops it. */
+  askDismiss(): void;
+  answerDismiss(yes: boolean): Promise<boolean>;
   /** The inviter's switch: Nova speaks aloud in this call, or stops. */
   setVoice(on: boolean): Promise<boolean>;
   /** This person may use the voice switch. */
   canSetVoice: boolean;
 }
 
-const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask' | 'proposals'> }>();
+const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask' | 'proposals' | 'confirmingDismiss'> }>();
 const snapshotOf = (slot: Slot) => {
-  const key = `${slot.busy}|${slot.error}|${JSON.stringify(slot.ask)}|${JSON.stringify(slot.view)}|${JSON.stringify(slot.proposals)}`;
+  const key = `${slot.busy}|${slot.confirmingDismiss}|${slot.error}|${JSON.stringify(slot.ask)}|${JSON.stringify(slot.view)}|${JSON.stringify(slot.proposals)}`;
   const hit = cache.get(slot);
   if (hit && hit.key === key) return hit.value;
-  const value = { view: slot.view, busy: slot.busy, error: slot.error, ask: slot.ask, proposals: slot.proposals };
+  const value = { view: slot.view, busy: slot.busy, error: slot.error, ask: slot.ask, proposals: slot.proposals, confirmingDismiss: slot.confirmingDismiss };
   cache.set(slot, { key, value });
   return value;
 };
@@ -164,6 +194,7 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
   const snap = useSyncExternalStore(subscribe, () => snapshotOf(slot), () => snapshotOf(slot));
 
   const mayConfirm = !!session?.sub && snap.view.invitedBy === session.sub;
+  // Invite: the person inviting owns the budget. Extend and resume: the hold is the inviter's, so only the inviter is asked to confirm.
   const run = (action: AssistantAction) => (callId && enabled ? actOnAssistant(callId, action, { mayConfirm: action === 'invite' || mayConfirm }) : Promise.resolve(false));
   const view = active ? snap.view : NO_ASSISTANT(callId ?? '');
   return {
@@ -175,7 +206,11 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
     },
     controls: assistantControls({ enabled, inCall: !!callId, canInvite: can('InviteMeetingAssistant'), view }),
     invite: () => run('invite'), pause: () => run('pause'), resume: () => run('resume'),
-    dismiss: () => run('dismiss'), acknowledge: () => run('ack'), extend: () => run('extend'),
+    dismiss: () => run('dismiss'),
+    confirmingDismiss: active && snap.confirmingDismiss && assistantPresent(view),
+    askDismiss: () => publish(slot, { confirmingDismiss: true }),
+    answerDismiss: (yes) => { publish(slot, { confirmingDismiss: false }); return yes ? run('dismiss') : Promise.resolve(false); },
+    acknowledge: () => run('ack'), extend: () => run('extend'),
     setVoice: (on) => (callId && enabled ? setAssistantVoice(callId, on) : Promise.resolve(false)),
     canSetVoice: can('InviteMeetingAssistant'),
   };

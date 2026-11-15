@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ASSISTANT_POLL_MS, assistantControls, assistantPresent, assistantStateWords, noticeText, noticeVisible, NO_ASSISTANT, parseAssistantState, rosterEntry, markWords, timeLeftWords,
+  DISMISS_LABEL, DISMISS_QUESTION, ERROR_CLEAR_MS, errorStale, expiresWords, leftWords, LOADING_ASSISTANT, myWaitingActions, standingFacts, voiceWords, workingWords,
 } from '../meetingAssistantModel.ts';
 
 const view = (state: string, extra: Record<string, unknown> = {}) => parseAssistantState('c1', { state, invitedBy: 'u-a', invitedByName: 'Vera Lindqvist', youMustAck: false, ...extra });
@@ -13,7 +14,7 @@ test('a bad or missing body reads as no assistant', () => {
 
 test('the state is said in words and the poll is no faster than five seconds', () => {
   assert.equal(assistantStateWords(view('listening')), 'Nova is listening');
-  assert.equal(assistantStateWords(view('invited')), 'Nova is listening');
+  assert.equal(assistantStateWords(view('invited')), 'Nova is joining');
   assert.equal(assistantStateWords(view('paused')), 'Nova is paused');
   assert.equal(assistantStateWords(view('left')), 'Nova has left this call');
   assert.equal(assistantStateWords(NO_ASSISTANT('c1')), null);
@@ -98,4 +99,70 @@ test('S13: Meetings shows only while the session advertises the feature', async 
   for (const s of [{ meetingAssistant: false }, {}, null, undefined]) assert.equal(meetingsAdvertised(s), false);
   const row = PALETTE.pages.find((p) => p.path === '/iq/meetings') as { feature?: string } | undefined;
   assert.equal(row?.feature, 'meetingAssistant', 'the palette row is tied to the flag');
+});
+
+test('in-call 14: until the first read nothing is offered, not even Invite', () => {
+  const c = assistantControls({ enabled: true, inCall: true, canInvite: true, view: LOADING_ASSISTANT('c1') });
+  assert.equal(c.hidden, false);
+  assert.equal(c.invite || c.pause || c.resume || c.dismiss || c.left || c.extend || c.acknowledge, false);
+  assert.equal(assistantStateWords(LOADING_ASSISTANT('c1')), null);
+  assert.equal(parseAssistantState('c1', { state: 'loading' }).phase, 'none'); // only the client sets it
+});
+
+test('in-call 1: the mark says who Nova is working for, never what was asked; hearing trouble outranks it', () => {
+  const one = view('listening', { openRequests: [{ askerName: 'Una Okafor', kind: 'lookup', text: 'secret' }] });
+  assert.deepEqual(one.openRequests, [{ askerName: 'Una Okafor', kind: 'lookup' }]);
+  assert.equal(workingWords(one), 'Nova is looking that up for Una Okafor');
+  assert.equal(markWords(one, false), 'Nova is looking that up for Una Okafor');
+  const two = view('listening', { openRequests: [{ askerName: 'Una Okafor', kind: 'change' }, { askerName: 'Bo', kind: 'lookup' }, { kind: 'lookup' }] });
+  assert.equal(workingWords(two), "Nova is working on Una Okafor's request (+1 more)");
+  assert.equal(markWords(view('listening', { hearing: 'no-audio', openRequests: [{ askerName: 'Una', kind: 'lookup' }] }), false), 'Nova cannot hear the call');
+  assert.equal(workingWords(view('paused', { openRequests: [{ askerName: 'Una', kind: 'lookup' }] })), null);
+  assert.deepEqual(view('left', { openRequests: [{ askerName: 'Una', kind: 'lookup' }] }).openRequests, []);
+});
+
+test('in-call 6: invited reads as joining, and the bar says when Nova cannot hear', () => {
+  assert.equal(markWords(view('invited'), false), 'Nova is joining');
+  assert.equal(markWords(view('listening', { hearing: 'connecting' }), false), 'Nova is connecting');
+  assert.equal(markWords(view('listening', { hearing: 'no-audio' }), false), 'Nova cannot hear the call');
+  assert.equal(markWords(view('listening', { hearing: 'bogus' }), false), 'Nova is listening');
+});
+
+test('in-call 3 / around 1: dismissing names its effect, and the left chip says why and that Nova cannot rejoin', () => {
+  assert.equal(DISMISS_LABEL, 'Dismiss Nova for everyone');
+  assert.equal(DISMISS_QUESTION, 'Nova leaves for everyone and cannot be invited again in this call.');
+  assert.equal(leftWords(view('left', { leftBy: 'u-b', leftByName: 'Bo Berg' })), 'Bo Berg dismissed Nova. It cannot rejoin this call');
+  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 3600, ceilingSeconds: 3600 })), 'Nova reached its time limit. It cannot rejoin this call');
+  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Nova lost its connection. It cannot rejoin this call');
+});
+
+test('in-call 4: the cards waiting on this viewer, soonest first, and how long until each expires', () => {
+  const v = view('listening', { waitingActions: [{ actionId: 'a2', expiresAt: 900_000, mine: true }, { actionId: 'a1', expiresAt: 300_000, mine: true }, { actionId: 'a3', expiresAt: 100, mine: false }, { actionId: 'bad' }] });
+  assert.deepEqual(myWaitingActions(v).map((a) => a.actionId), ['a1', 'a2']);
+  assert.equal(expiresWords(v, 'a2', 0), 'expires in 15 min');
+  assert.equal(expiresWords(v, 'a1', 299_000), 'expires in 1 min');
+  assert.equal(expiresWords(v, 'a3', 10_000), 'expires in 1 min');
+  assert.equal(expiresWords(v, 'nope', 0), null);
+});
+
+test('in-call 8 and 9: the voice shows on the mark; the menu states who invited, the voice and who may pause or dismiss', () => {
+  assert.equal(voiceWords(view('listening', { voice: true }), false), 'Voice on');
+  assert.equal(voiceWords(view('listening', { voice: true }), true), 'Muted for you');
+  assert.equal(voiceWords(view('listening'), true), null);
+  assert.deepEqual(standingFacts(view('listening', { voice: true })), ['Invited by Vera Lindqvist', "Nova's voice is on in this call", 'Anyone here can pause or dismiss Nova']);
+  assert.match(standingFacts(view('paused'))[1]!, /voice is off/);
+  assert.deepEqual(standingFacts(view('left')), []);
+});
+
+test('in-call 7 / around 13: a bar error goes once the phase moves on, or after about twenty seconds', () => {
+  const raised = { at: 1000, phase: 'paused' as const };
+  assert.equal(errorStale(raised, 2000, 'paused'), false);
+  assert.equal(errorStale(raised, 2000, 'listening'), true);
+  assert.equal(errorStale(raised, 1000 + ERROR_CLEAR_MS, 'paused'), true);
+  assert.ok(ERROR_CLEAR_MS >= 15_000 && ERROR_CLEAR_MS <= 30_000);
+});
+
+test('the notice reads as the agreed banner copy', () => {
+  assert.equal(noticeText(view('listening', { youMustAck: true })).body,
+    'Nova is listening to this call. Nothing you say is kept until you acknowledge. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. Nova writes minutes for the people in the call.');
 });

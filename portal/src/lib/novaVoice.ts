@@ -1,7 +1,7 @@
 // Nova's voice in the browser: a thin WebAudio player over lib/novaVoiceModel.ts.
 // Frames come from the call-chat socket the page already has (`assistant-audio`); each is decoded and scheduled
 // on one AudioContext. The audio is only played: never recorded, stored, logged or re-sent. The only thing kept
-// across visits is the person's mute choice. Where no AudioContext can be made, frames are still counted as
+// across visits is the person's mute choice, per call: muting Nova in one call does not carry into the next. Where no AudioContext can be made, frames are still counted as
 // "would schedule" on a plain clock so the mark and the walk behave the same.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react';
@@ -10,6 +10,7 @@ import type { AssistantView } from './meetingAssistantModel';
 import { SPEAKING_HOLD_MS, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay, type AudioFrame } from './novaVoiceModel';
 
 const MUTE_KEY = 'orgiq.novaMuted';
+const muteKey = (callId: string) => `${MUTE_KEY}:${callId}`;
 
 export interface NovaVoiceSnapshot {
   muted: boolean;
@@ -24,7 +25,7 @@ export interface NovaVoiceSnapshot {
 
 interface Clock { currentTime: number; state?: string }
 
-const readMuted = (): boolean => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } };
+const readMuted = (callId: string): boolean => { if (!callId) return false; try { return localStorage.getItem(muteKey(callId)) === '1'; } catch { return false; } };
 
 class NovaPlayer {
   private ctx: AudioContext | null = null;
@@ -35,7 +36,8 @@ class NovaPlayer {
   private sources = new Set<AudioBufferSourceNode>();
   private hold: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
-  private snap: NovaVoiceSnapshot = { muted: readMuted(), speaking: false, needsGesture: false, framesPlayed: 0, framesIgnored: 0, lastSeq: 0 };
+  private callId = '';
+  private snap: NovaVoiceSnapshot = { muted: false, speaking: false, needsGesture: false, framesPlayed: 0, framesIgnored: 0, lastSeq: 0 };
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   getSnapshot = () => this.snap;
@@ -45,7 +47,7 @@ class NovaPlayer {
   }
 
   setMuted(muted: boolean) {
-    try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* private window: the choice lasts this visit only */ }
+    try { if (this.callId) localStorage.setItem(muteKey(this.callId), muted ? '1' : '0'); } catch { /* private window: the choice lasts this visit only */ }
     if (muted) this.stop();
     this.set({ muted });
   }
@@ -106,7 +108,7 @@ class NovaPlayer {
   }
 
   /** A new call starts counting from nothing; the server's `seq` is per call. */
-  resetCall() { this.runId = ''; this.stop(); this.set({ framesPlayed: 0, framesIgnored: 0, lastSeq: 0 }); }
+  resetCall(callId: string) { this.callId = callId; this.runId = ''; this.stop(); this.set({ muted: readMuted(callId), framesPlayed: 0, framesIgnored: 0, lastSeq: 0 }); }
 }
 
 const player = new NovaPlayer();
@@ -124,7 +126,7 @@ export function useNovaVoice(callId: string | null, view: AssistantView) {
 
   useEffect(() => {
     if (!callId) return undefined;
-    player.resetCall();
+    player.resetCall(callId);
     return gateway.onMessage((raw) => {
       const frame = parseAudioFrame(raw);
       if (!frame) return;
