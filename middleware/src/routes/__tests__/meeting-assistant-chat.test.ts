@@ -1,4 +1,4 @@
-// Nova in the call chat, package 2: notices from the routes, the action decision route, the dev poster, private delivery.
+// Milo in the call chat, package 2: notices from the routes, the action decision route, the dev poster, private delivery.
 // Harness: routes/__tests__/meeting-assistant.test.ts (CallChatRuntime over in-memory call, chat and state stores).
 const mockConfig = { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true },
   meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } };
@@ -80,8 +80,8 @@ describe('notices', () => {
     mockConfig.meetingAssistant.transcriptRetentionDays = 14;
     expect((await post('invite')).status).toBe(201);
     const [notice] = await chat();
-    expect(notice).toMatchObject({ userId: 'agent:nova', metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Nova' } });
-    expect(notice!.message).toBe("Nova joined at Alice Ames's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 14 days. Nova writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Nova, or dismiss it for everyone.");
+    expect(notice).toMatchObject({ userId: 'agent:meeting-assistant', metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Milo' } });
+    expect(notice!.message).toBe("Milo joined at Alice Ames's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 14 days. Milo writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Milo, or dismiss it for everyone.");
     await post('invite');
     expect(await chat()).toHaveLength(1);
   });
@@ -89,13 +89,13 @@ describe('notices', () => {
   it('names: the session name when there is one, else the directory name; the raw id only when nothing else exists', async () => {
     sessions.set('bob', mk('bob', { name: undefined }));
     await post('invite', 'alice'); await post('pause', 'bob'); await post('resume', 'carol');
-    expect((await texts()).slice(0, 3)).toEqual([expect.stringContaining("Nova joined at Alice Ames's invitation."), 'Bob Baker paused Nova. Nothing is being heard or stored.', 'carol resumed Nova. Nova is listening again.']);
+    expect((await texts()).slice(0, 3)).toEqual([expect.stringContaining("Milo joined at Alice Ames's invitation."), 'Bob Baker paused Milo. Nothing is being heard or stored.', 'carol resumed Milo. Milo is listening again.']);
   });
 
-  it('a refused pause after a dismiss says in plain words that Nova has left, with the same 409; an invite brings Nova back', async () => {
+  it('a refused pause after a dismiss says in plain words that Milo has left, with the same 409; an invite brings Milo back', async () => {
     await post('invite'); await post('dismiss', 'alice');
     const paused = await post('pause', 'bob');
-    expect([paused.status, paused.body.error]).toEqual([409, 'Nova has already left this call.']);
+    expect([paused.status, paused.body.error]).toEqual([409, 'Milo has already left this call.']);
     const again = await post('invite', 'bob');
     expect([again.status, again.body.state, again.body.invitedBy]).toEqual([200, 'listening', 'bob']);
     expect((await texts()).at(-1)).toBe(noticeText.rejoined('Bob Baker', 30, 60));
@@ -109,13 +109,13 @@ describe('notices', () => {
     expect((await texts()).slice(1)).toEqual([
       noticeText.paused('Bob Baker'), noticeText.resumed('carol'), noticeText.dismissed('Alice Ames', true),
     ]);
-    expect((await texts())[1]).toBe('Bob Baker paused Nova. Nothing is being heard or stored.');
-    expect((await texts())[3]).toBe('Alice Ames dismissed Nova. Nothing was recorded, so there are no minutes.');
-    // Nothing else after the dismissal; inviting Nova back posts the one notice that it is back.
+    expect((await texts())[1]).toBe('Bob Baker paused Milo. Nothing is being heard or stored.');
+    expect((await texts())[3]).toBe('Alice Ames dismissed Milo. Nothing was recorded, so there are no minutes.');
+    // Nothing else after the dismissal; inviting Milo back posts the one notice that it is back.
     expect(await chat()).toHaveLength(4);
     expect((await post('invite')).status).toBe(200);
     expect(await texts()).toHaveLength(5);
-    expect((await texts())[4]).toBe("Nova is back in this call at Alice Ames's invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for 30 days. Nova adds what it hears to the minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Nova, or dismiss it for everyone.");
+    expect((await texts())[4]).toBe("Milo is back in this call at Alice Ames's invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for 30 days. Milo adds what it hears to the minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Milo, or dismiss it for everyone.");
   });
 
   it('a failed post never fails the route', async () => {
@@ -190,10 +190,10 @@ describe('the dev poster', () => {
     expect((await dev(ACTION)).status).toBe(201);
     const again = await dev(ACTION);
     expect(again.status).toBe(200); expect(again.body.created).toBe(false);
-    expect((await dev({ kind: 'notice', text: 'Nova has 5 minutes left in this call.' })).status).toBe(201);
+    expect((await dev({ kind: 'notice', text: 'Milo has 5 minutes left in this call.' })).status).toBe(201);
     const rows = await chat();
     expect(rows.filter((m) => m.metadata?.['kind'] === 'assistant-action')).toHaveLength(1);
-    expect(rows.find((m) => m.metadata?.['kind'] === 'assistant-reply')).toMatchObject({ userId: 'agent:nova', message: 'The login bug is WI-AUTH-12.', metadata: { askedBy: 'bob', askedByName: 'Bob Baker', private: false } });
+    expect(rows.find((m) => m.metadata?.['kind'] === 'assistant-reply')).toMatchObject({ userId: 'agent:meeting-assistant', message: 'The login bug is WI-AUTH-12.', metadata: { askedBy: 'bob', askedByName: 'Bob Baker', private: false } });
     await decide('act-1', 'confirm');
     const done = await dev({ kind: 'action-status', actionId: 'act-1', to: 'done', resultText: 'Created WI-AUTH-13.' });
     expect(done.body.status).toBe('done');

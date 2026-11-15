@@ -4,8 +4,8 @@ jest.mock('../../../providers/projects.js', () => ({ getProject: jest.fn(), proj
 jest.mock('../../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
 jest.mock('../../role-registry.js', () => ({ roleRegistry: () => [{ id: 'participant', tenant: 'social', capabilities: ['ViewSocial', 'PostMessage'] }] }));
 
-// Nova in the call chat over the REAL gateway: a seatless server post reaches seats live, a status change updates the
-// same message, and no signed-in client can produce a Nova message. Harness: lib/__tests__/call-chat-gateway.test.ts.
+// Milo in the call chat over the REAL gateway: a seatless server post reaches seats live, a status change updates the
+// same message, and no signed-in client can produce a Milo message. Harness: lib/__tests__/call-chat-gateway.test.ts.
 import express from 'express';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -22,7 +22,7 @@ import { getProject } from '../../../providers/projects.js';
 import type { Session } from '../../session.js';
 import { setAssistantStore, MemoryAssistantStore, assistantStore } from '../index.js';
 import { postNotice, postReply, postAction, moveAction, postAsAssistant } from '../chat.js';
-import { NOVA_USER_ID } from '../chat-types.js';
+import { ASSISTANT_USER_ID, LEGACY_ASSISTANT_USER_IDS } from '../chat-types.js';
 import { VoiceRelay, voiceChannel } from '../voice.js';
 import { sendThreadFrame } from '../../social-chat.js';
 
@@ -32,7 +32,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, timeout = 4000) {
   const start = Date.now(); while (!check()) { if (Date.now() - start > timeout) throw new Error('Gateway condition timed out'); await sleep(10); }
 }
-const callId = 'nova-call-chat'; const lobbyName = 'orgiq:initiative:p-auth'; const channel = callChatChannel(callId);
+const callId = 'assistant-call-chat'; const lobbyName = 'orgiq:initiative:p-auth'; const channel = callChatChannel(callId);
 let sessions: Map<string, Session>; let app: express.Express; let server: http.Server;
 let handle: Awaited<ReturnType<typeof attachRealtimeGateway>>; let backend: ReturnType<typeof createMemorySocialChatBackend>;
 let clients: Client[]; let port: number; let previous: string | undefined; let warning: jest.SpyInstance;
@@ -58,7 +58,7 @@ const messageIn = (client: Client, action: string, pick: (m: Frame) => boolean) 
 
 beforeEach(async () => {
   previous = process.env['REALTIME_JWT_SECRET']; process.env['REALTIME_JWT_SECRET'] = SECRET;
-  sessions = new Map(['alice', 'bob', 'charlie', NOVA_USER_ID].map(sub => [sub, { sub, name: `${sub} cookie`, tenant: 'orgiq', role: 'member', epoch: 0,
+  sessions = new Map(['alice', 'bob', 'charlie', ASSISTANT_USER_ID, ...LEGACY_ASSISTANT_USER_IDS].map(sub => [sub, { sub, name: `${sub} cookie`, tenant: 'orgiq', role: 'member', epoch: 0,
     grants: { orgiq: ['member'] }, iat: Math.floor(Date.now() / 1000) } as Session]));
   jest.mocked(getUser).mockImplementation(async id => sessions.has(id) ? { id, displayName: `${id} Directory`, epoch: 0,
     email: null, personId: null, grants: sessions.get(id)!.grants } : null);
@@ -94,23 +94,23 @@ async function startCall() {
 const invite = (by = 'alice') => assistantStore().create({ callId, tenant: 'orgiq', lobby: lobbyName, initiativeId: 'p-auth', state: 'listening', invitedBy: by,
   invitedAt: Date.now(), pausedBy: null, leftAt: null, leftBy: null, acked: [by], attendees: [by], presentAtInvite: [by], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [] });
 
-it('posts as Nova without a seat: seats get it live with the assistant keys, an outsider gets nothing, the author is the fixed identity', async () => {
+it('posts as Milo without a seat: seats get it live with the assistant keys, an outsider gets nothing, the author is the fixed identity', async () => {
   const { alice, bob, charlie } = await startCall(); await join(alice); await join(bob);
   await invite();
-  const posted = await postNotice(callId, 'Nova joined at alice\'s invitation.');
-  expect(posted).toMatchObject({ userId: NOVA_USER_ID, channel, metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Nova' } });
+  const posted = await postNotice(callId, 'Milo joined at alice\'s invitation.');
+  expect(posted).toMatchObject({ userId: ASSISTANT_USER_ID, channel, metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Milo' } });
   await until(() => !!messageIn(bob, 'message', m => m.id === posted!.id));
-  expect(messageIn(bob, 'message', m => m.id === posted!.id)).toMatchObject({ userId: NOVA_USER_ID, message: 'Nova joined at alice\'s invitation.',
-    metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Nova' } });
+  expect(messageIn(bob, 'message', m => m.id === posted!.id)).toMatchObject({ userId: ASSISTANT_USER_ID, message: 'Milo joined at alice\'s invitation.',
+    metadata: { kind: 'assistant-notice', assistant: true, displayName: 'Milo' } });
   // A reader who reads later gets it from history, rendered with the keys.
   const replay = await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob');
   expect(replay.body.messages).toHaveLength(1);
-  expect(replay.body.messages[0]).toMatchObject({ userId: NOVA_USER_ID, metadata: { kind: 'assistant-notice', assistant: true } });
+  expect(replay.body.messages[0]).toMatchObject({ userId: ASSISTANT_USER_ID, metadata: { kind: 'assistant-notice', assistant: true } });
   await sleep(50);
   expect(charlie.frames.some(f => f.type === 'chat' && f.channel === channel && f.action === 'message')).toBe(false);
 });
 
-it('Nova\'s voice (assistant-audio) reaches only the sockets that joined the call chat, as a transient frame nothing stores', async () => {
+it('Milo\'s voice (assistant-audio) reaches only the sockets that joined the call chat, as a transient frame nothing stores', async () => {
   const { alice, bob, charlie } = await startCall(); await join(alice); await join(bob); // charlie holds no seat and never joined
   await invite();
   const sent: Frame[] = [];
@@ -134,7 +134,7 @@ it('Nova\'s voice (assistant-audio) reaches only the sockets that joined the cal
   expect(audio(bob)).toHaveLength(before);
 });
 
-it('Nova\'s voice stops for a seat whose grant was revoked after it subscribed (the router already refuses it; no extra seat check is needed), and keeps reaching the others', async () => {
+it('Milo\'s voice stops for a seat whose grant was revoked after it subscribed (the router already refuses it; no extra seat check is needed), and keeps reaching the others', async () => {
   const { alice, bob, charlie } = await startCall();
   out(charlie, { service: 'call', action: 'accepted', callId, lobbyName, callerId: 'charlie', userId: 'charlie', targetUserIds: ['alice'] });
   await until(() => alice.frames.some(frame => frame.type === 'call-chat' && frame.action === 'members' && (frame.participants as unknown[])?.length === 3));
@@ -168,7 +168,7 @@ it('an action card is one message: a status change reaches readers as messageUpd
   const moved = await moveAction(callId, 'act-1', { from: ['waiting'], to: 'confirmed', by: 'alice' });
   expect(moved).toMatchObject({ status: 'confirmed', decidedBy: 'alice', messageId: card!.message.id });
   await until(() => !!messageIn(bob, 'messageUpdated', m => m.id === card!.message.id));
-  expect(messageIn(bob, 'messageUpdated', m => m.id === card!.message.id)).toMatchObject({ userId: NOVA_USER_ID, metadata: { kind: 'assistant-action', status: 'confirmed', summary: 'Create work item "Login cookie bug"', askedBy: 'alice' } });
+  expect(messageIn(bob, 'messageUpdated', m => m.id === card!.message.id)).toMatchObject({ userId: ASSISTANT_USER_ID, metadata: { kind: 'assistant-action', status: 'confirmed', summary: 'Create work item "Login cookie bug"', askedBy: 'alice' } });
   const replay = await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'alice');
   expect(replay.body.messages).toHaveLength(1);
   expect(replay.body.messages[0].metadata).toMatchObject({ status: 'confirmed', detail: ['Assignee: Priya'] });
@@ -176,7 +176,7 @@ it('an action card is one message: a status change reaches readers as messageUpd
   expect(await moveAction(callId, 'act-1', { from: ['waiting'], to: 'declined', by: 'alice' })).toBeNull();
 });
 
-it('no signed-in client can produce a Nova message', async () => {
+it('no signed-in client can produce a Milo message', async () => {
   const { alice, bob } = await startCall(); await join(alice); await join(bob);
   await invite();
   // The keys are refused on the way in, whatever else the message carries.
@@ -188,19 +188,31 @@ it('no signed-in client can produce a Nova message', async () => {
     expect(String((frame.error as Frame).message)).toMatch(/assistant/);
   }
   expect(await backend.chatStore.listMessages(channel, 50)).toEqual([]);
-  // The author id: a connection signed in as the assistant's own id posts nothing and is told why.
-  const impostor = await connect(NOVA_USER_ID);
-  const refused = await refusal(impostor, () => send(impostor, 'I am Nova', { clientDeliveryId: 'nova-1' }));
-  expect(errorCode(refused)).toBe('HUDDLE_CHAT_DENIED');
-  expect(String((refused.error as Frame).message)).toBe('This author cannot post to a huddle conversation');
+  // The author id: a connection signed in as the assistant's own id (now, or the one it was stored under before) posts nothing and is told why.
+  for (const [i, id] of [ASSISTANT_USER_ID, ...LEGACY_ASSISTANT_USER_IDS].entries()) {
+    const impostor = await connect(id);
+    const refused = await refusal(impostor, () => send(impostor, 'I am Milo', { clientDeliveryId: `impostor-${i}` }));
+    expect(errorCode(refused)).toBe('HUDDLE_CHAT_DENIED');
+    expect(String((refused.error as Frame).message)).toBe('This author cannot post to a huddle conversation');
+  }
   expect(await backend.chatStore.listMessages(channel, 50)).toEqual([]);
   // Second lock, on the way out: a row a person authored that carries the keys (written straight to the store) renders without them.
   await backend.chatStore.putMessage({ id: 'forged-row', clientId: 'x', userId: 'alice', channel, message: 'forged', timestamp: new Date().toISOString(),
-    metadata: { kind: 'assistant-action', assistant: true, actionId: 'a', askedBy: 'alice', askedByName: 'A', summary: 's', tool: { name: 't', argsDigest: '' }, status: 'waiting', displayName: 'Nova' } });
+    metadata: { kind: 'assistant-action', assistant: true, actionId: 'a', askedBy: 'alice', askedByName: 'A', summary: 's', tool: { name: 't', argsDigest: '' }, status: 'waiting', displayName: 'Milo' } });
   const replay = await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob');
   const row = replay.body.messages.find((m: { id: string }) => m.id === 'forged-row');
   expect(row.userId).toBe('alice');
   expect(row.metadata.kind).toBeUndefined(); expect(row.metadata.assistant).toBeUndefined(); expect(row.metadata.status).toBeUndefined();
+});
+
+it('a message the assistant stored under its earlier author id and name still renders as the assistant\'s, under that name', async () => {
+  const { alice, bob } = await startCall(); await join(alice); await join(bob);
+  await invite();
+  await backend.chatStore.putMessage({ id: 'legacy-row', clientId: 'server:assistant', userId: LEGACY_ASSISTANT_USER_IDS[0]!, channel, message: 'Nova joined.',
+    timestamp: new Date().toISOString(), metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } });
+  const replay = await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob');
+  const row = replay.body.messages.find((m: { id: string }) => m.id === 'legacy-row');
+  expect(row).toMatchObject({ userId: 'agent:nova', message: 'Nova joined.', metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } });
 });
 
 it('posts only while an assistant record exists and is not left, except the leave notice', async () => {
@@ -212,7 +224,7 @@ it('posts only while an assistant record exists and is not left, except the leav
   expect(await postNotice(callId, 'now there is')).not.toBeNull();
   await assistantStore().transition(callId, { from: ['listening'], to: 'left', by: 'alice', at: Date.now() });
   expect(await postNotice(callId, 'after leaving')).toBeNull();
-  expect(await postAsAssistant(callId, { text: 'x', metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } })).toBeNull();
-  expect(await postNotice(callId, 'alice dismissed Nova.', { leaving: true })).not.toBeNull();
-  expect((await backend.chatStore.listMessages(channel, 50)).map(m => m.message)).toEqual(['now there is', 'alice dismissed Nova.']);
+  expect(await postAsAssistant(callId, { text: 'x', metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-notice' } })).toBeNull();
+  expect(await postNotice(callId, 'alice dismissed Milo.', { leaving: true })).not.toBeNull();
+  expect((await backend.chatStore.listMessages(channel, 50)).map(m => m.message)).toEqual(['now there is', 'alice dismissed Milo.']);
 });

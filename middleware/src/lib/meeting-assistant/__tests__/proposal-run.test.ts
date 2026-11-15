@@ -183,8 +183,8 @@ describe('the result', () => {
     expect(failedSentence('404 Not Found', update, 'Priya')).toBe('The record it changes was deleted or moved since, so nothing was changed.');
     expect(failedSentence('no such initiative', decision, 'Priya')).toBe('The initiative was deleted or moved since, so nothing was changed.');
     expect(failedSentence('409 version conflict', update, 'Priya')).toBe('The record changed since people consented, so nothing was changed.');
-    expect(failedSentence('TypeError: x is undefined', update, 'Priya')).toBe('Nova could not carry this out, so nothing was changed.');
-    expect(failedSentence(undefined, update, 'Priya')).toBe('Nova could not carry this out, so nothing was changed.');
+    expect(failedSentence('TypeError: x is undefined', update, 'Priya')).toBe('Milo could not carry this out, so nothing was changed.');
+    expect(failedSentence(undefined, update, 'Priya')).toBe('Milo could not carry this out, so nothing was changed.');
   });
 
   it('a decision recorded says whether it was decided or waits for the owner', async () => {

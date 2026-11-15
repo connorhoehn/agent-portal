@@ -1,4 +1,4 @@
-// What Nova costs, through the real holds, ledger and user budgets on their offline (MOCK_AURORA) stores (package 4a, decision 10).
+// What Milo costs, through the real holds, ledger and user budgets on their offline (MOCK_AURORA) stores (package 4a, decision 10).
 // "The hold is held" and "one ledger row" are read back from the tables. The harness is meeting-assistant-turns.test.ts.
 const mockConfig = { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true }, aurora: {},
   meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } };
@@ -110,7 +110,7 @@ describe('the invite reserves, the dismissal settles', () => {
     const res = await post('invite');
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ reason: 'budget', gate: 'user-cap', capUsd: 0.5 }); // the machine-readable fields are unchanged
-    expect(res.body.error).toBe("Nova can't join because the budget for this has reached its limit. Trying again won't help; ask an admin to raise it.");
+    expect(res.body.error).toBe("Milo can't join because the budget for this has reached its limit. Trying again won't help; ask an admin to raise it.");
     expect((await get('state')).body.state).toBe('none');
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
     expect(assistantIntake().isListening(CALL)).toBe(false);
@@ -122,7 +122,7 @@ describe('the invite reserves, the dismissal settles', () => {
     const refused = await post('invite');
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ reason: 'budget', confirmFlag: 'confirmOverUserBudget' });
-    expect(refused.body.error).toBe("This would put Nova's time over your budget.");
+    expect(refused.body.error).toBe("This would put Milo's time over your budget.");
     expect((await get('state')).body.state).toBe('none');
     const ok = await post('invite', 'alice', { confirmOverUserBudget: true });
     expect(ok.status).toBe(201);

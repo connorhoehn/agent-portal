@@ -1,7 +1,7 @@
 // The voice relay (order, size, burst guard, drops) and the echo guard (docs/meeting-assistant-design.md decision 4 and the Echo risk).
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}, cognito: {}, mock: { aurora: true }, meetingAssistant: { enabled: true } } }));
 import { callChatChannel } from '../../call-chat.js';
-import { NovaSpeech, VoiceRelay, voiceChannel, VOICE_ECHO_TAIL_MS, type AssistantAudioFrame } from '../voice.js';
+import { AssistantSpeech, VoiceRelay, voiceChannel, VOICE_ECHO_TAIL_MS, type AssistantAudioFrame } from '../voice.js';
 
 const frame = (n = 4800, fill = 7) => Buffer.alloc(n, fill);
 const tick = () => new Promise<void>((r) => setImmediate(r));
@@ -80,16 +80,16 @@ describe('VoiceRelay', () => {
   });
 });
 
-describe('NovaSpeech (the echo guard)', () => {
-  const nova = (frames: number[], said: string) => {
-    const s = new NovaSpeech();
+describe('AssistantSpeech (the echo guard)', () => {
+  const spoken = (frames: number[], said: string) => {
+    const s = new AssistantSpeech();
     s.noteText(frames[0]!, said, false);
     for (const t of frames) s.noteFrame(t);
     s.noteText(frames.at(-1)! + 200, said, true);
     return s;
   };
-  // Frames at 1000..1500 mean Nova is speaking from 1000 to 1500 + 100 + 1500 = 3100.
-  const speech = () => nova([1000, 1100, 1200, 1300, 1400, 1500], 'Here is the result for the budget.');
+  // Frames at 1000..1500 mean Milo is speaking from 1000 to 1500 + 100 + 1500 = 3100.
+  const speech = () => spoken([1000, 1100, 1200, 1300, 1400, 1500], 'Here is the result for the budget.');
 
   it('records the span: during the frames and for the tail after the last one, not before and not later', () => {
     const s = speech();
@@ -99,23 +99,23 @@ describe('NovaSpeech (the echo guard)', () => {
     expect(s.speakingAt(3101)).toBe(false);
   });
 
-  it('treats a caption entirely inside the span whose words are Nova\'s own as an echo (containment, or at least 80% of three or more words)', () => {
+  it('treats a caption entirely inside the span whose words are Milo\'s own as an echo (containment, or at least 80% of three or more words)', () => {
     const s = speech();
     expect(s.isEcho({ text: 'here is the result', startAt: 1100, endAt: 1900 })).toBe(true);
     expect(s.isEcho({ text: 'Here is, the RESULT for the budget!', startAt: 1100, endAt: 1950 })).toBe(true);
-    expect(s.isEcho({ text: 'the result is for budget', startAt: 1100, endAt: 1900 })).toBe(true); // 5 of 5 words are hers, out of order
+    expect(s.isEcho({ text: 'the result is for budget', startAt: 1100, endAt: 1900 })).toBe(true); // 5 of 5 words are Milo's, out of order
   });
 
-  it('keeps a person: different words, only partly overlapping words, a span that leaves Nova\'s, or no known span', () => {
+  it('keeps a person: different words, only partly overlapping words, a span that leaves Milo\'s, or no known span', () => {
     const s = speech();
-    expect(s.isEcho({ text: 'Nova what is the weather', startAt: 1100, endAt: 1900 })).toBe(false);
-    expect(s.isEcho({ text: 'the result looks wrong to me', startAt: 1100, endAt: 1900 })).toBe(false); // talks over her, 2 of 6 words hers
-    expect(s.isEcho({ text: 'here is the result', startAt: 2600, endAt: 4600 })).toBe(false); // mostly after her span
+    expect(s.isEcho({ text: 'Milo what is the weather', startAt: 1100, endAt: 1900 })).toBe(false);
+    expect(s.isEcho({ text: 'the result looks wrong to me', startAt: 1100, endAt: 1900 })).toBe(false); // talks over Milo, 2 of 6 words hers
+    expect(s.isEcho({ text: 'here is the result', startAt: 2600, endAt: 4600 })).toBe(false); // mostly after Milo's span
     expect(s.isEcho({ text: 'here is the result', startAt: 100, endAt: 1100 })).toBe(false); // mostly before it
     expect(s.isEcho({ text: 'here is the result', startAt: 5000, endAt: 5500 })).toBe(false);
     expect(s.isEcho({ text: 'result', startAt: 1100, endAt: 1900 })).toBe(false); // one word is never judged
     expect(s.isEcho(null)).toBe(false);
-    expect(new NovaSpeech().isEcho({ text: 'here is the result', startAt: 1100, endAt: 1900 })).toBe(false);
+    expect(new AssistantSpeech().isEcho({ text: 'here is the result', startAt: 1100, endAt: 1900 })).toBe(false);
   });
 
   it('an echo 400 ms or 900 ms late is caught, even when its end falls past the window; a real line one second after it is kept', () => {
@@ -136,7 +136,7 @@ describe('NovaSpeech (the echo guard)', () => {
   });
 
   it('words for held frames wait for them: they join the span the release opens, and a frame noted at its playout time extends it', () => {
-    const s = new NovaSpeech();
+    const s = new AssistantSpeech();
     s.noteText(1200, 'Two plus two', false, true);
     s.noteText(1600, 'Two plus two is four.', true, true); // final while still held
     // Released at 2000: six frames sent at once, noted at the times they play.
@@ -149,7 +149,7 @@ describe('NovaSpeech (the echo guard)', () => {
   });
 
   it('words for a withheld turn are forgotten: the next span does not carry them', () => {
-    const s = new NovaSpeech();
+    const s = new AssistantSpeech();
     s.noteText(1000, 'I can help with that whenever you are ready', false, true);
     s.forgetUnheard();
     s.noteFrame(1500);

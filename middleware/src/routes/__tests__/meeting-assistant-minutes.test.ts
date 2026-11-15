@@ -114,7 +114,7 @@ const talk = async () => {
 const finish = async () => { await post('dismiss', 'bob'); await minutesIdle(); };
 
 describe('writing the minutes', () => {
-  it('a dismissal writes the minutes once and Nova leaves one message with the summary, the counts and the page link', async () => {
+  it('a dismissal writes the minutes once and Milo leaves one message with the summary, the counts and the page link', async () => {
     await talk(); await finish();
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, \d{1,2} [A-Z][a-z]{2}$/), writer: 'scripted', lineCount: 3, youAreInviter: true });
@@ -209,7 +209,7 @@ describe('writing the minutes', () => {
     await talk(); await finish();
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ writer: 'none', decisions: [], actionItems: [] });
-    expect(m.summary).toMatch(/Nova could not write the minutes/);
+    expect(m.summary).toMatch(/Milo could not write the minutes/);
     expect(m.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 4 });
     expect(released).toEqual([['h1']]);
     expect((await get('transcript')).body.lines).toHaveLength(3);
@@ -327,16 +327,16 @@ describe('deleting', () => {
   });
 
   it('a delete whose chat step failed can be repeated by the inviter, and blanks the messages the second time', async () => {
-    const novaText = async () => (await chatStore.listMessages(callChatChannel(CALL), 100)).filter((m) => m.userId === 'agent:nova').map((m) => m.message);
-    const before = await novaText();
+    const assistantText = async () => (await chatStore.listMessages(callChatChannel(CALL), 100)).filter((m) => m.userId === 'agent:meeting-assistant').map((m) => m.message);
+    const before = await assistantText();
     expect(before.length).toBeGreaterThan(0);
     const spy = jest.spyOn(chatStore, 'listMessages').mockRejectedValueOnce(new Error('chat unavailable'));
     expect((await del('minutes', 'alice')).status).toBe(500);
     spy.mockRestore();
-    expect(await novaText()).toEqual(before);
+    expect(await assistantText()).toEqual(before);
     expect((await del('minutes', 'alice')).status).toBe(200);
-    for (const text of await novaText()) expect(text).toBe(DELETED_RECORD_LINE);
-    expect(await novaText()).not.toEqual(before);
+    for (const text of await assistantText()) expect(text).toBe(DELETED_RECORD_LINE);
+    expect(await assistantText()).not.toEqual(before);
     expect((await del('minutes', 'carol')).status).toBe(404);
   });
 
@@ -423,7 +423,7 @@ describe('writing failed minutes again', () => {
     expect(runs).toBe(5);
     const refused = await rewrite();
     expect(refused).toMatchObject({ status: 429, body: { code: 'MINUTES_ATTEMPTS' } });
-    expect(refused.body.error).toMatch(/^Nova has tried to write these minutes 5 times/);
+    expect(refused.body.error).toMatch(/^Milo has tried to write these minutes 5 times/);
     expect(runs).toBe(5);
     expect((await get('minutes')).body.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 0 });
   });
@@ -456,9 +456,9 @@ describe('writing failed minutes again', () => {
 });
 
 describe('what the meeting page is told', () => {
-  it('when the record goes, and what Nova covered: its listening time, the rest, and how many were not transcribed (a count, no names)', async () => {
+  it('when the record goes, and what Milo covered: its listening time, the rest, and how many were not transcribed (a count, no names)', async () => {
     const store = assistantStore();
-    // Fifteen minutes from the invite to Nova leaving, ten of them listening; Carol held a seat and never acknowledged.
+    // Fifteen minutes from the invite to Milo leaving, ten of them listening; Carol held a seat and never acknowledged.
     await store.create({ callId: 'call-cov', tenant: 'orgiq', lobby: LOBBY, initiativeId: null, state: 'listening', invitedBy: 'alice', invitedAt: clock - 15 * 60_000, pausedBy: null, leftAt: null,
       leftBy: null, acked: ['alice', 'bob'], attendees: ['alice', 'bob', 'carol'], presentAtInvite: ['alice', 'bob', 'carol'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
       session: { ...newAssistantSession(3600), listeningSeconds: 600 } });

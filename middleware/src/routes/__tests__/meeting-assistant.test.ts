@@ -183,7 +183,7 @@ describe('invite, pause, resume, dismiss', () => {
   });
 });
 
-describe('Nova\'s voice switch (package 7a)', () => {
+describe('Milo\'s voice switch (package 7a)', () => {
   const notices = async () => (await runtime.messages.listMessages(`orgiq:huddle:${CALL}`, 50)).map((m) => String(m.message)).filter((t) => /voice/.test(t));
   it('is off by default; an inviter turns it on and off, each with one notice in the call chat; a repeat is a quiet success', async () => {
     await post('invite');
@@ -193,7 +193,7 @@ describe('Nova\'s voice switch (package 7a)', () => {
     expect((await get('state', 'bob')).body).toMatchObject({ voice: true });
     expect((await assistantStore().get(CALL))!.voice).toBe(true);
     expect((await post('voice', 'bob', { on: false })).body).toMatchObject({ voice: false });
-    expect(await notices()).toEqual(["alice turned Nova's voice on. Each person can mute it for themselves.", "bob turned Nova's voice off."]);
+    expect(await notices()).toEqual(["alice turned Milo's voice on. Each person can mute it for themselves.", "bob turned Milo's voice off."]);
   });
   it('needs the invite right and a seat, a boolean, and an assistant that has not left', async () => {
     expect((await post('voice', 'alice', { on: true })).status).toBe(404); // no assistant yet
@@ -212,9 +212,9 @@ describe('lines, acknowledgement and the transcript', () => {
   it('lines are stored only after the speaker acknowledges; the request lands as pending in state', async () => {
     await post('invite');
     await inject({ userId: 'bob', text: 'bob says hello before acknowledging' });
-    await inject({ userId: 'alice', text: 'Nova, list the open work items.' });
+    await inject({ userId: 'alice', text: 'Milo, list the open work items.' });
     clock += 5000; await (await import('../../lib/meeting-assistant/index.js')).assistantIntake().tick();
-    expect((await get('transcript')).body.lines.map((l: { text: string }) => l.text)).toEqual(['Nova, list the open work items.']);
+    expect((await get('transcript')).body.lines.map((l: { text: string }) => l.text)).toEqual(['Milo, list the open work items.']);
     const s = (await get('state', 'bob')).body;
     expect(s.counters).toEqual({ requests: 1, linesStored: 1 });
     expect(s.pendingRequests[0]).toMatchObject({ askedBy: 'alice', text: 'list the open work items.' });
@@ -231,9 +231,9 @@ describe('lines, acknowledgement and the transcript', () => {
     await post('pause', 'bob');
     await inject({ userId: 'alice', text: 'said while paused' });
     await post('resume', 'bob');
-    await inject({ userId: 'alice', text: 'Nova, stop listening.' });
+    await inject({ userId: 'alice', text: 'Milo, stop listening.' });
     expect((await get('state')).body.state).toBe('paused');
-    expect((await get('transcript')).body.lines.map((l: { text: string }) => l.text)).toEqual(['Nova, stop listening.']);
+    expect((await get('transcript')).body.lines.map((l: { text: string }) => l.text)).toEqual(['Milo, stop listening.']);
   });
 
   it('the transcript is for people who hold or held a seat: never a stranger, another tenant or an admin', async () => {
@@ -258,7 +258,7 @@ describe('lines, acknowledgement and the transcript', () => {
     expect((await get('transcript', 'dave')).status).toBe(404);
   });
 
-  describe('attendance means an active seat while Nova was present (M1)', () => {
+  describe('attendance means an active seat while Milo was present (M1)', () => {
     const seat = async (user: string, clientId: string) => {
       contexts.set(clientId, ctx(mk(user)));
       await observeCallPageLifecycle(calls, () => null, () => runtime).registerParticipant(CALL, clientId, user, LOBBY, ['alice', 'bob', 'carol', 'dave']);
@@ -275,11 +275,11 @@ describe('lines, acknowledgement and the transcript', () => {
       expect((await assistantStore().get(CALL))!.attendees).not.toContain('dave');
     });
 
-    it('someone who joins after Nova left cannot read; someone who was there still can, after the call too', async () => {
+    it('someone who joins after Milo left cannot read; someone who was there still can, after the call too', async () => {
       await post('invite');
       await inject({ userId: 'alice', text: 'during the call' });
       await post('dismiss', 'bob');
-      await seat('dave', 'd'); // joins after Nova left, then asks for state like any seated person
+      await seat('dave', 'd'); // joins after Milo left, then asks for state like any seated person
       expect((await get('state', 'dave')).status).toBe(200);
       expect((await get('transcript', 'dave')).status).toBe(404);
       await runtime.finish(CALL);
@@ -287,7 +287,7 @@ describe('lines, acknowledgement and the transcript', () => {
       expect((await get('transcript', 'bob')).body.lines).toHaveLength(1);
     });
 
-    it('someone who was present at the invite and left while Nova was there is still an attendee', async () => {
+    it('someone who was present at the invite and left while Milo was there is still an attendee', async () => {
       await seat('dave', 'd');
       await post('invite'); // dave is present at the invite
       await leave('d');

@@ -31,7 +31,7 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { settleFinished } from '../../lib/meeting-assistant/spend.js';
 import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer, RESTART_NOTICE } from '../../lib/meeting-assistant/reconcile.js';
 import { minutesIdle, onCallEnded } from '../../lib/meeting-assistant/minutes-service.js';
-import { NOVA_USER_ID } from '../../lib/meeting-assistant/chat-types.js';
+import { ASSISTANT_USER_ID } from '../../lib/meeting-assistant/chat-types.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
@@ -83,7 +83,7 @@ afterEach(() => {
 });
 
 
-const novaTexts = async () => (await chat.listMessages(callChatChannel(CALL), 100)).filter((m) => m.userId === NOVA_USER_ID).map((m) => m.message);
+const assistantTexts = async () => (await chat.listMessages(callChatChannel(CALL), 100)).filter((m) => m.userId === ASSISTANT_USER_ID).map((m) => m.message);
 const freshRuntime = () => {
   const next = new AssistantRuntime({ store: assistantStore, intake: assistantIntake, clock: () => clock, makeSession: () => new ScriptedSession(() => clock), rolesOf: defaultRolesOf,
     onFinished: (e) => settleFinished(e, clock) }, { tickMs: 0 });
@@ -106,12 +106,12 @@ describe('a restart leaves a listening record behind', () => {
     expect(record.session).toMatchObject({ listeningSeconds: 60, listeningSince: null, settled: true });
     expect(entries()).toEqual([expect.objectContaining({ sourceId: 'ma:call-1', costUsd: 0.05 })]);
     expect(holds()[0]!.status).toBe('settled');
-    expect((await novaTexts()).filter((t) => t === RESTART_NOTICE)).toHaveLength(1);
+    expect((await assistantTexts()).filter((t) => t === RESTART_NOTICE)).toHaveLength(1);
 
     const second = await reconcileAfterRestart({ clock: () => clock + 1000, ...noTaps });
     expect(second).toEqual({ paused: 0, left: 0, settled: 0, tapsDeleted: 0 });
     expect(entries()).toHaveLength(1);
-    expect((await novaTexts()).filter((t) => t === RESTART_NOTICE)).toHaveLength(1);
+    expect((await assistantTexts()).filter((t) => t === RESTART_NOTICE)).toHaveLength(1);
     expect((await assistantStore().get(CALL))!.session!.listeningSeconds).toBe(60);
   });
 
@@ -149,16 +149,16 @@ describe('a restart leaves a listening record behind', () => {
     expect(view).toMatchObject({ listeningSeconds: 3000, ceilingSeconds: 3600 });
     expect(await assistantStore().get(CALL)).toMatchObject({ session: { settledListeningSeconds: 3000, listeningSeconds: 0 } });
     clock += 4 * 60_000; await rt2.tick(); await flush();
-    expect((await novaTexts()).some((t) => /leaves in 5 minutes/.test(t))).toBe(false);
+    expect((await assistantTexts()).some((t) => /leaves in 5 minutes/.test(t))).toBe(false);
     clock += 60_000; await rt2.tick(); await flush();
-    expect((await novaTexts()).filter((t) => /leaves in 5 minutes/.test(t))).toHaveLength(1);
+    expect((await assistantTexts()).filter((t) => /leaves in 5 minutes/.test(t))).toHaveLength(1);
     expect((await assistantStore().get(CALL))!.state).toBe('listening');
     clock += 5 * 60_000; await rt2.tick(); await flush();
     expect((await assistantStore().get(CALL))!.state).toBe('left');
-    expect((await novaTexts()).some((t) => /reached its 60-minute limit/.test(t))).toBe(true);
+    expect((await assistantTexts()).some((t) => /reached its 60-minute limit/.test(t))).toBe(true);
   });
 
-  it('the state says when Nova cannot hear: joining while invited, connecting between sessions, ok otherwise', () => {
+  it('the state says when Milo cannot hear: joining while invited, connecting between sessions, ok otherwise', () => {
     expect(hearingOf('invited', null, 'ok')).toBe('connecting');
     expect(hearingOf('listening', false, 'ok')).toBe('connecting');
     expect(hearingOf('listening', true, 'no-audio')).toBe('no-audio');
@@ -186,12 +186,12 @@ describe('a restart leaves a listening record behind', () => {
     expect(byBob.status).toBe(409);
     expect(byBob.body).toMatchObject({ reason: 'budget' });
     await post('resume', 'carol');                           // a second refusal in the window asks nobody again
-    const asks = (await novaTexts()).filter((t) => /alice, you can resume Nova/.test(t));
-    expect(asks).toEqual(["bob could not resume Nova because it would go past alice's budget. alice, you can resume Nova and confirm the cost."]);
+    const asks = (await assistantTexts()).filter((t) => /alice, you can resume Milo/.test(t));
+    expect(asks).toEqual(["bob could not resume Milo because it would go past alice's budget. alice, you can resume Milo and confirm the cost."]);
     expect((await assistantStore().get(CALL))!.state).toBe('paused');
     const refusedAlice = await post('resume', 'alice');
     expect(refusedAlice.status).toBe(409);
-    expect((await novaTexts()).filter((t) => /you can resume Nova/.test(t))).toHaveLength(1); // the inviter is asked by the deck, not the chat
+    expect((await assistantTexts()).filter((t) => /you can resume Milo/.test(t))).toHaveLength(1); // the inviter is asked by the deck, not the chat
     expect((await post('resume', 'alice', { confirmOverUserBudget: true })).status).toBe(200);
     expect((await assistantStore().get(CALL))!.state).toBe('listening');
   });
@@ -230,11 +230,11 @@ describe('records the reconcile does not move', () => {
   it('a paused record keeps its state and pauser and posts nothing; its spend is settled and its holds released', async () => {
     budget('alice');
     await post('invite'); clock += 20_000; await post('pause', 'bob');
-    const noticesBefore = (await novaTexts()).length;
+    const noticesBefore = (await assistantTexts()).length;
     freshRuntime(); clock += 3600_000;
     expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 0, left: 0, settled: 1 });
     expect(await assistantStore().get(CALL)).toMatchObject({ state: 'paused', pausedBy: 'bob' });
-    expect((await novaTexts()).length).toBe(noticesBefore);
+    expect((await assistantTexts()).length).toBe(noticesBefore);
     expect(entries()).toHaveLength(1); expect(holds()[0]!.status).toBe('settled');
   });
 
@@ -258,7 +258,7 @@ describe('a call that ended while the process was down', () => {
     expect(await assistantStore().getMinutes(CALL)).toMatchObject({ callId: CALL, lineCount: 1, writer: expect.any(String) });
     expect((await assistantStore().getMinutes(CALL))!.deleted).toBeUndefined();
     expect(entries().map((e) => e.sourceId).sort()).toEqual(['ma:call-1', 'ma:call-1:minutes']);   // the listening row once, plus the minutes' own
-    expect((await novaTexts()).filter((t) => t === RESTART_NOTICE)).toEqual([]);
+    expect((await assistantTexts()).filter((t) => t === RESTART_NOTICE)).toEqual([]);
   });
 });
 

@@ -77,7 +77,7 @@ describe('the limits', () => {
 });
 
 describe('the ceiling', () => {
-  it('starts counting when Nova starts listening and exposes the seconds', async () => {
+  it('starts counting when Milo starts listening and exposes the seconds', async () => {
     expect(sessionOf(await rec()).listeningSince).toBe(T0);
     now += 42_000;
     expect(listeningSecondsOf(await rec(), now)).toBe(42);
@@ -87,12 +87,12 @@ describe('the ceiling', () => {
     await advance(200);
     expect(mockPosts.notices).toEqual([]);
     await advance(101);                                  // 301 s of a 600 s ceiling: 299 s left
-    expect(mockPosts.notices).toEqual(["Nova leaves in 5 minutes. Anyone who can invite Nova can extend its time; if you can't, ask Alice."]);
+    expect(mockPosts.notices).toEqual(["Milo leaves in 5 minutes. Anyone who can invite Milo can extend its time; if you can't, ask Alice."]);
     await advance(100); await advance(100);              // still warned once
     expect(mockPosts.notices).toHaveLength(1);
     await advance(100);                                  // 601 s
     expect((await rec()).state).toBe('left');
-    expect(mockPosts.notices[1]).toMatch(/Nova left because this call reached its 10-minute limit/);
+    expect(mockPosts.notices[1]).toMatch(/Milo left because this call reached its 10-minute limit/);
     expect(mockPosts.notices[1]).not.toMatch(/again/);
     expect(runtime.isRunning(CALL)).toBe(false);
     expect(settled).toHaveLength(1);
@@ -109,14 +109,14 @@ describe('the ceiling', () => {
     expect((await rec()).state).toBe('listening');       // the store's state is the route's; the ceiling only watches a listening record
     await runtime.resume(CALL);
     await advance(450);                                  // 550 s of 600 s: warning, not leaving
-    expect(mockPosts.notices).toEqual(["Nova leaves in 5 minutes. Anyone who can invite Nova can extend its time; if you can't, ask Alice."]);
+    expect(mockPosts.notices).toEqual(["Milo leaves in 5 minutes. Anyone who can invite Milo can extend its time; if you can't, ask Alice."]);
     expect(runtime.isRunning(CALL)).toBe(true);
   });
 
   it('at the longest a call can be extended to, the warning says it cannot be extended further', async () => {
     await store.patchSession(CALL, { ceilingSeconds: 25 * 60 });   // the hard maximum in these tests
     await advance(20 * 60 + 1);
-    expect(mockPosts.notices).toEqual(['Nova leaves in 5 minutes; this call cannot be extended further.']);
+    expect(mockPosts.notices).toEqual(['Milo leaves in 5 minutes; this call cannot be extended further.']);
   });
 
   it('a lone ceiling shorter than the warning warns at once', async () => {
@@ -143,7 +143,7 @@ describe('extension', () => {
     expect(reserved[0]).toMatchObject({ callId: CALL, inviterId: ALICE, initiativeId: 'p-auth', seconds: 600, part: 1 });
     expect(sourceIdFor(CALL, 1)).toBe('ma:call-1:x1');
     expect(sessionOf(await rec())).toMatchObject({ ceilingSeconds: 1200, warned: false, holds: ['hold-1'], extensions: 1 });
-    expect(mockPosts.notices.at(-1)).toBe("Alice extended Nova's time by 10 minutes.");
+    expect(mockPosts.notices.at(-1)).toBe("Alice extended Milo's time by 10 minutes.");
     const second = await runtime.extend(CALL, { sub: ALICE });
     expect(second).toEqual({ ok: true, ceilingSeconds: 1500, addedSeconds: 300 });  // capped at 25 minutes
     expect(reserved[1]).toMatchObject({ seconds: 300, part: 2 });
@@ -165,14 +165,14 @@ describe('extension', () => {
 });
 
 describe('the request cap', () => {
-  it('past the cap Nova says so once and ignores further requests', async () => {
+  it('past the cap Milo says so once and ignores further requests', async () => {
     process.env['MEETING_ASSISTANT_MAX_REQUESTS'] = '2';
     const ask = async (text: string) => { await intake.handle(CALL, { userId: ALICE, text, at: now }); now += 5000; await intake.tick(); await flush(); };
-    await ask('Nova, what is two plus two?');
-    await ask('Nova, what is two plus two?');
+    await ask('Milo, what is two plus two?');
+    await ask('Milo, what is two plus two?');
     expect(mockPosts.replies).toEqual(['Four.', 'Four.']);
-    await ask('Nova, what is two plus two?');
-    await ask('Nova, what is two plus two?');
+    await ask('Milo, what is two plus two?');
+    await ask('Milo, what is two plus two?');
     expect(mockPosts.replies).toEqual(['Four.', 'Four.']);
     expect(mockPosts.notices.filter((n) => /reached its limit of 2 requests/.test(n))).toHaveLength(1);
     expect(sessionOf(await rec()).limitNoticed).toBe(true);
@@ -181,17 +181,17 @@ describe('the request cap', () => {
   it('a few requests before the cap the call is told once how many are left', async () => {
     process.env['MEETING_ASSISTANT_MAX_REQUESTS'] = '7';
     const ask = async (text: string) => { await intake.handle(CALL, { userId: ALICE, text, at: now }); now += 5000; await intake.tick(); await flush(); };
-    await ask('Nova, what is two plus two?');
+    await ask('Milo, what is two plus two?');
     expect(mockPosts.notices).toEqual([]);
-    await ask('Nova, what is two plus two?');
-    expect(mockPosts.notices).toEqual(['Nova can answer 5 more requests in this call, then it stops answering.']);
-    await ask('Nova, what is two plus two?');
+    await ask('Milo, what is two plus two?');
+    expect(mockPosts.notices).toEqual(['Milo can answer 5 more requests in this call, then it stops answering.']);
+    await ask('Milo, what is two plus two?');
     expect(mockPosts.notices).toHaveLength(1);
   });
 });
 
 describe('settlement', () => {
-  it('books once when Nova leaves: the session seconds, the listening seconds and the extension holds released', async () => {
+  it('books once when Milo leaves: the session seconds, the listening seconds and the extension holds released', async () => {
     await advance(30);
     await runtime.extend(CALL, { sub: ALICE });
     await advance(30);

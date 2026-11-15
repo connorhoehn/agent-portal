@@ -217,13 +217,13 @@ describe('after the call', () => {
     expect((await get('proposals', 'sam')).status).toBe(404);
   });
 
-  it('the inviter\'s delete leaves no proposal card in the call chat: Nova\'s fixed line once, and none of the statement', async () => {
+  it('the inviter\'s delete leaves no proposal card in the call chat: Milo\'s fixed line once, and none of the statement', async () => {
     await post('dismiss', 'priya');
     expect((await request(app).delete(url('minutes')).set('x-user', 'priya')).status).toBe(200);
     const rows = await rt.messages.listMessages(callChatChannel(CALL), 100);
     const shown = rows.filter((m) => !m.deletedAt && m.metadata?.['deleted'] !== true);
     expect(shown.filter((m) => m.metadata?.['kind'] === 'assistant-proposal')).toEqual([]);
-    expect(shown.filter((m) => m.userId === 'agent:nova').map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
+    expect(shown.filter((m) => m.userId === 'agent:meeting-assistant').map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
     expect(JSON.stringify(rows)).not.toContain('smallest tenants');
   });
 });
@@ -308,7 +308,7 @@ describe('the consent workflow repairs', () => {
     expect((await get('proposals', 'sam')).body.proposals[0]).toMatchObject({ you: { canRun: false } });
   });
 
-  it('the lines Nova heard go only to people who were in the call; a named person who was not sees who raised it, never the lines', async () => {
+  it('the lines Milo heard go only to people who were in the call; a named person who was not sees who raised it, never the lines', async () => {
     const store = assistantStore();
     const record = (await store.get(CALL))!;
     if (record.state !== 'listening') await store.transition(CALL, { from: [record.state], to: 'listening', by: 'priya', at: clock });

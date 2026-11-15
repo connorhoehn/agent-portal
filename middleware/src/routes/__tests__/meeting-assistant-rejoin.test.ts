@@ -1,4 +1,4 @@
-// Nova invited back into a call it left (POST /invite on a `left` record): a second listening period on the same record, its money,
+// Milo invited back into a call it left (POST /invite on a `left` record): a second listening period on the same record, its money,
 // its consent and its refusals, through the real holds, ledger and user budgets on their offline stores. Harness: meeting-assistant-spend.test.ts.
 const mockConfig = { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true }, aurora: {},
   meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } };
@@ -90,8 +90,8 @@ afterEach(() => {
 const record = async () => (await assistantStore().get(CALL))!;
 const texts = async () => (await rt.messages.listMessages(callChatChannel(CALL), 100)).map((m) => String(m.message));
 
-describe('inviting Nova back', () => {
-  it('anyone who may invite brings Nova back: a fresh hold against them under the next part, the whole call on the clock, acks reset, the voice off, the period kept', async () => {
+describe('inviting Milo back', () => {
+  it('anyone who may invite brings Milo back: a fresh hold against them under the next part, the whole call on the clock, acks reset, the voice off, the period kept', async () => {
     budget('alice'); budget('bob');
     const first = await post('invite', 'alice');
     expect(first.status).toBe(201);
@@ -117,7 +117,7 @@ describe('inviting Nova back', () => {
     expect(s).toMatchObject({ settled: false, ledgerPart: 1, extensions: 1, holds: [], listeningSeconds: 0, settledListeningSeconds: 600, ceilingSeconds: 4200, periodFrom: clock,
       periods: [{ invitedBy: 'alice', from: invitedAt, leftAt, leftBy: 'carol' }] });
     expect(holds().map((h) => [h.sourceId, h.actorId, h.status, h.amountUsd])).toEqual([['ma:call-1', 'alice', 'settled', 3], ['ma:call-1:x1', 'bob', 'held', 3]]);
-    expect((await texts()).at(-1)).toMatch(/^Nova is back in this call at bob's invitation and is listening again\./);
+    expect((await texts()).at(-1)).toMatch(/^Milo is back in this call at bob's invitation and is listening again\./);
     // The new period is billed to bob, under its own part; the first period's row is not touched.
     clock += 90_000; await post('dismiss', 'alice'); await flush();
     expect(entries().map((e) => [e.sourceId, e.actorId, e.costUsd])).toEqual([['ma:call-1', 'alice', 0.5], ['ma:call-1:x1', 'bob', 0.075]]);
@@ -161,7 +161,7 @@ describe('inviting Nova back', () => {
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
   });
 
-  it('with no session provider, or a session that does not start, Nova stays out and the hold goes back', async () => {
+  it('with no session provider, or a session that does not start, Milo stays out and the hold goes back', async () => {
     budget('alice'); budget('bob');
     await post('invite', 'alice'); await post('dismiss', 'alice'); await flush();
     setSessionFactory(() => null);
@@ -170,7 +170,7 @@ describe('inviting Nova back', () => {
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
     runtime.deps.makeSession = () => { throw new Error('provider down'); };
     const failed = await post('invite', 'bob');
-    expect([failed.status, failed.body.error]).toEqual([503, 'Nova could not start. Try again in a moment.']);
+    expect([failed.status, failed.body.error]).toEqual([503, 'Milo could not start. Try again in a moment.']);
     expect(holds().map((h) => [h.sourceId, h.status])).toEqual([['ma:call-1', 'settled'], ['ma:call-1:x1', 'released']]);
     expect((await record()).state).toBe('left');
     expect(assistantIntake().isListening(CALL)).toBe(false);
@@ -182,7 +182,7 @@ describe('inviting Nova back', () => {
     await post('invite', 'alice'); await post('dismiss', 'alice'); await flush();
     const refused = await post('invite', 'bob');
     expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ reason: 'budget', confirmFlag: 'confirmOverUserBudget', error: "This would put Nova's time over your budget." });
+    expect(refused.body).toMatchObject({ reason: 'budget', confirmFlag: 'confirmOverUserBudget', error: "This would put Milo's time over your budget." });
     expect((await record()).state).toBe('left');
     expect(assistantIntake().isListening(CALL)).toBe(false);
     const ok = await post('invite', 'bob', { confirmOverUserBudget: true });
@@ -203,7 +203,7 @@ describe('inviting Nova back', () => {
     expect(fresh.map((h) => h.status).sort()).toEqual(['held', 'released']);
     expect(fresh.find((h) => h.status === 'held')!.actorId).toBe(a.body.invitedBy);
     expect(sessionOf(await record()).periods).toHaveLength(1);
-    expect((await texts()).filter((t) => t.startsWith('Nova is back in this call'))).toHaveLength(1);
+    expect((await texts()).filter((t) => t.startsWith('Milo is back in this call'))).toHaveLength(1);
     expect(runtime.isRunning(CALL)).toBe(true);
   });
 
@@ -214,7 +214,7 @@ describe('inviting Nova back', () => {
     expect(d.status).toBe(200); expect([200, 201]).toContain(i.status);
     await flush();
     const r = await record(); const s = sessionOf(r);
-    // Either the invitation found Nova still there (nothing changed) or it brought Nova back after the dismissal (one new period).
+    // Either the invitation found Milo still there (nothing changed) or it brought Milo back after the dismissal (one new period).
     if (r.state === 'left') expect(s.periods ?? []).toEqual([]);
     else expect([r.state, s.periods?.length, r.invitedBy]).toEqual(['listening', 1, 'bob']);
     expect(holds().filter((h) => h.status === 'held')).toHaveLength(r.state === 'left' ? 0 : 1);
@@ -268,7 +268,7 @@ describe('inviting Nova back', () => {
     expect([back.status, back.body.listeningSeconds, back.body.ceilingSeconds]).toEqual([200, 120, 120 + 600]);
   });
 
-  it('the person who invited Nova in any period may delete the record afterwards; an attendee who never did gets 403', async () => {
+  it('the person who invited Milo in any period may delete the record afterwards; an attendee who never did gets 403', async () => {
     budget('alice'); budget('bob');
     await post('invite', 'alice'); await post('dismiss', 'alice'); await flush();
     await post('invite', 'bob'); await post('dismiss', 'bob'); await flush();
@@ -276,7 +276,7 @@ describe('inviting Nova back', () => {
     expect((await del('transcript', 'alice')).status).toBe(200);
   });
 
-  it('while Nova is back in the call the record cannot be deleted, by either inviter', async () => {
+  it('while Milo is back in the call the record cannot be deleted, by either inviter', async () => {
     budget('alice'); budget('bob');
     await post('invite', 'alice'); await post('dismiss', 'alice'); await flush();
     await post('invite', 'bob');
@@ -285,7 +285,7 @@ describe('inviting Nova back', () => {
   });
 });
 
-describe('inviting Nova back while its earlier period is still stopping', () => {
+describe('inviting Milo back while its earlier period is still stopping', () => {
   /** The dismissal's stop is held at its settlement until `open()`; the dismiss request answers only then. */
   const slowStop = () => {
     let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
@@ -316,7 +316,7 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1', 'ma:call-1:x1']);
   });
 
-  it('a stop that takes longer than the wait answers that Nova is still leaving, and nothing is held', async () => {
+  it('a stop that takes longer than the wait answers that Milo is still leaving, and nothing is held', async () => {
     budget('alice'); budget('bob');
     setRejoinWaitMs(40);
     await post('invite', 'alice'); clock += 600_000;
@@ -333,7 +333,7 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     expect((await post('invite', 'bob')).status).toBe(200);                 // once it has left, the invitation back goes through
   });
 
-  it('a stop that ends after Nova was invited back never changes the newer period\'s clock, usage or ledger', async () => {
+  it('a stop that ends after Milo was invited back never changes the newer period\'s clock, usage or ledger', async () => {
     budget('alice'); budget('bob');
     const invitedAt = (await post('invite', 'alice')).body.invitedAt as number;
     clock += 300_000;
@@ -353,7 +353,7 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
   });
 
-  it('an invitation back that finds Nova already back after its wait answers with the record and touches nothing of that period', async () => {
+  it('an invitation back that finds Milo already back after its wait answers with the record and touches nothing of that period', async () => {
     budget('alice'); budget('bob');
     const invitedAt = (await post('invite', 'alice')).body.invitedAt as number;
     clock += 600_000;
@@ -363,7 +363,7 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     const leftAt = (await record()).leftAt!;
     const back = post('invite', 'bob').then((r) => r);
     await flush();
-    // Meanwhile Nova is brought back elsewhere (another process): the second period is open and unsettled.
+    // Meanwhile Milo is brought back elsewhere (another process): the second period is open and unsettled.
     await assistantStore().rejoin(CALL, { leftAt, by: 'alice', at: clock, present: ['alice'], session: {
       settled: false, ledgerPart: 1, extensions: 1, holds: [], listeningSeconds: 0, listeningSince: clock, settledListeningSeconds: 600,
       periodFrom: clock, periods: [{ invitedBy: 'alice', from: invitedAt, leftAt, leftBy: 'carol' }] } });
@@ -412,12 +412,12 @@ describe('a delete racing an invitation back', () => {
     expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
   });
 
-  it('the invitation back first (between the delete\'s check and its erase): nothing is erased and the delete says Nova is back', async () => {
+  it('the invitation back first (between the delete\'s check and its erase): nothing is erased and the delete says Milo is back', async () => {
     budget('alice'); budget('bob');
     await post('invite', 'alice'); clock += 60_000; await post('dismiss', 'alice'); await flush();
     const store = assistantStore() as MemoryAssistantStore;
     const getMinutes = store.getMinutes.bind(store); let armed = true;
-    // The delete reads the record (left), then its minutes: at that moment someone invites Nova back.
+    // The delete reads the record (left), then its minutes: at that moment someone invites Milo back.
     store.getMinutes = async (id: string) => { if (armed) { armed = false; expect((await post('invite', 'bob')).status).toBe(200); } return getMinutes(id); };
     const refused = await del('transcript', 'alice');
     store.getMinutes = getMinutes;
@@ -425,20 +425,20 @@ describe('a delete racing an invitation back', () => {
     expect((await record()).state).toBe('listening');
     expect((await store.getMinutes(CALL))?.deleted).toBeUndefined();
     expect(sessionOf(await record()).erasedAt).toBeUndefined();
-    expect((await texts()).some((t) => t.startsWith('Nova is back in this call'))).toBe(true);   // the chat was not erased either
+    expect((await texts()).some((t) => t.startsWith('Milo is back in this call'))).toBe(true);   // the chat was not erased either
     expect(runtime.isRunning(CALL)).toBe(true);
   });
 });
 
 describe('the call ending during an invitation back', () => {
-  it('Nova leaves with the call at once: the new period is closed and settled, nothing stays held or running, and the person is told', async () => {
+  it('Milo leaves with the call at once: the new period is closed and settled, nothing stays held or running, and the person is told', async () => {
     budget('alice'); budget('bob');
     await post('invite', 'alice'); clock += 60_000; await post('dismiss', 'alice'); await flush();
     let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
     setAssistantSpend({ ...realSpend, reserve: async (i) => { await gate; return realSpend.reserve(i); } });
     const back = post('invite', 'bob').then((r) => r);
     await flush();
-    // The call ends while the invitation back is past its seat check: the end finds Nova still out and has nothing to stop.
+    // The call ends while the invitation back is past its seat check: the end finds Milo still out and has nothing to stop.
     jest.spyOn(rt, 'lobbyOf').mockResolvedValue(null);
     await onCallEnded(CALL, { stop: (id) => runtime.stop(id), stopIntake: (id) => assistantIntake().stop(id) });
     open();
@@ -456,7 +456,7 @@ describe('the call ending during an invitation back', () => {
 });
 
 describe('the meeting page coverage', () => {
-  it('counts listening across every period and Nova\'s time in the call as the sum of its periods (not the time it was away)', () => {
+  it('counts listening across every period and Milo\'s time in the call as the sum of its periods (not the time it was away)', () => {
     const t0 = 1_000_000;
     const r = { callId: CALL, tenant: 'orgiq', lobby: LOBBY, initiativeId: null, state: 'left' as const, invitedBy: 'bob', invitedAt: t0, pausedBy: null, leftAt: t0 + 1_500_000, leftBy: 'alice',
       acked: ['bob', 'alice'], attendees: ['alice', 'bob', 'carol'], presentAtInvite: ['alice', 'bob', 'carol'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],

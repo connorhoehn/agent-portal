@@ -1,4 +1,4 @@
-// Minutes when Nova is invited back into a call it left: what the later period hears is ADDED to the stored minutes (indices stay, work
+// Minutes when Milo is invited back into a call it left: what the later period hears is ADDED to the stored minutes (indices stay, work
 // items and done marks survive, repeats are dropped, nothing new changes nothing), a failed addition keeps the minutes and is retried
 // within the caps, and a leave during a running write waits for it. Harness: meeting-assistant-minutes.test.ts.
 const mockConfig = { region: 'us-east-1', auth: { sessionSigningSecretArn: '' }, cognito: { portalOrigin: '' }, mock: { aurora: true },
@@ -125,7 +125,7 @@ const backAndTalk = async (said: Array<{ userId: string; text: string }>, by = '
   if (said.length) await inject(said);
 };
 
-describe('adding to the minutes after Nova was invited back', () => {
+describe('adding to the minutes after Milo was invited back', () => {
   it('adds the later period after the earlier one: indices, work items and done marks stay, repeats are dropped, the chat and the bell say it once, cards only for new items', async () => {
     await talk(); await finish();
     const first = await minutes();
@@ -140,7 +140,7 @@ describe('adding to the minutes after Nova was invited back', () => {
     // Alice owes a new acknowledgement: what she says before giving it is not stored.
     await inject({ userId: 'alice', text: 'This is before I acknowledged again.' });
     expect((await lines()).some((l) => l.text.startsWith('This is before'))).toBe(false);
-    // The meeting page says Nova is back and that what it hears is added.
+    // The meeting page says Milo is back and that what it hears is added.
     expect(await minutes()).toMatchObject({ backInCall: true, additions: 0 });
     await post('ack', 'alice');
     await inject([
@@ -156,7 +156,7 @@ describe('adding to the minutes after Nova was invited back', () => {
     expect((await assistantStore().getMinutes(CALL))!.actionItems[1]!.workItemId).toBe('wi-1');
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.', 'We decided to keep the feature flag on until Monday.']);
     expect(m).toMatchObject({ lineCount: 6, additions: 1, backInCall: false, additionOwed: false, youAreInviter: true });
-    expect(m.summaryLead).toMatch(/^Two people met for under a minute\. After Nova was invited back, two people met for under a minute more\.$/);
+    expect(m.summaryLead).toMatch(/^Two people met for under a minute\. After Milo was invited back, two people met for under a minute more\.$/);
     expect((await minutes('bob')).youAreInviter).toBe(true);
     // One more minutes card in the chat, marked as an addition, counting the whole minutes.
     const notices = await minutesNotices();
@@ -167,7 +167,7 @@ describe('adding to the minutes after Nova was invited back', () => {
     // A card only for the new item (alice's, she is still in the call); the earlier ones are not offered again.
     const after = await cards();
     expect(after.slice(cardsBefore).map((c) => [c.askedBy, c.summary])).toEqual([['alice', 'Create a work item: write the release note']]);
-    // The cost of the addition is booked to the person who invited Nova back, under the addition's own id (the ledger books once per id).
+    // The cost of the addition is booked to the person who invited Milo back, under the addition's own id (the ledger books once per id).
     expect(ledger.filter((e) => String(e['sourceId']).startsWith(`ma:${CALL}:minutes`)).map((e) => [e['sourceId'], e['actorId']]))
       .toEqual([[`ma:${CALL}:minutes`, 'alice'], [`ma:${CALL}:minutes:1:1`, 'bob']]);
     // A second report of the same leave (the call ending) changes nothing.
@@ -316,7 +316,7 @@ describe('adding to the minutes after Nova was invited back', () => {
     expect(await minutes()).toMatchObject({ additions: 1, additionOwed: false });
   });
 
-  it('first minutes that failed are written again over the whole call when Nova leaves again', async () => {
+  it('first minutes that failed are written again over the whole call when Milo leaves again', async () => {
     let failing = true;
     setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input: MinutesInput) => { if (failing) throw new MinutesWriterError('provider answered 500'); return new ScriptedMinutesWriter().write(input); } }));
     setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });

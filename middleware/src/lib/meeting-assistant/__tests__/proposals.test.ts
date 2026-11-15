@@ -150,7 +150,7 @@ describe("the executor's click is the last step", () => {
 });
 
 describe('dismissing, undoing it, and raising it again', () => {
-  it('"Not a decision" by anyone on one Nova raised; on an asked one only the asker may drop it', () => {
+  it('"Not a decision" by anyone on one Milo raised; on an asked one only the asker may drop it', () => {
     expect(mayDismiss(base({ source: 'watcher' }), 'u-sam')).toBe(true);
     expect(mayDismiss(base({ source: 'dev' }), 'u-sam')).toBe(true);
     const asked = base({ source: 'asked', askedBy: 'u-dana', executor: 'u-dana' });

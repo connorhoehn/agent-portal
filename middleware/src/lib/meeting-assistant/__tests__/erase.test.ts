@@ -1,5 +1,5 @@
 // The inviter's delete removes every place that holds words (audit M2): the transcript, the minutes, the record's pending requests,
-// each turn's tool arguments, each action's result text, and Nova's own chat messages. People's messages are not touched.
+// each turn's tool arguments, each action's result text, and Milo's own chat messages. People's messages are not touched.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}, cognito: {}, mock: { aurora: true }, meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } } }));
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () => null) }));
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
@@ -25,8 +25,8 @@ import { MemoryAssistantStore, REMOVED_BY_INVITER } from '../store.js';
 import { SqlAssistantStore } from '../store-sql.js';
 import { setAssistantStore } from '../store-select.js';
 import { eraseCall } from '../erase.js';
-import { postAction, postAsAssistant } from '../chat.js';
-import { DELETED_RECORD_LINE, NOVA_USER_ID } from '../chat-types.js';
+import { eraseAssistantMessages, postAction, postAsAssistant } from '../chat.js';
+import { DELETED_RECORD_LINE, ASSISTANT_USER_ID, LEGACY_ASSISTANT_USER_IDS, LEGACY_DELETED_RECORD_LINES } from '../chat-types.js';
 import type { AssistantRecord } from '../types.js';
 
 const CALL = 'call-1';
@@ -45,9 +45,9 @@ async function seed(store: MemoryAssistantStore) {
   await store.createTurn({ turnId: 't1', callId: CALL, askedBy: 'u-vera', tool: { name: 'create_work_item', args: { title: `Fix the ${WORDS[3]}`, body: WORDS[4] } }, kind: 'write', status: 'done', actionId: 'a1', createdAt: 100, expiresAt: 900 });
   await store.createTurn({ turnId: 't2', callId: CALL, askedBy: 'u-vera', tool: { name: 'search', args: { q: WORDS[3] } }, kind: 'read', status: 'expired', createdAt: 100, expiresAt: 900 });
   // Lines are stored only while listening; seed one through a second record is not needed: the contract is the same.
-  await postAsAssistant(CALL, { text: `Nova joined; the ${WORDS[1]} topic`, metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice', meetingCallId: CALL, minutes: { decisions: 1, actionItems: 2, proposals: 0 } } }, { minutes: true });
+  await postAsAssistant(CALL, { text: `Milo joined; the ${WORDS[1]} topic`, metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-notice', meetingCallId: CALL, minutes: { decisions: 1, actionItems: 2, proposals: 0 } } }, { minutes: true });
   // The call is over, so the reply goes in as the minutes message does (the one exception postAsAssistant allows after leaving).
-  await postAsAssistant(CALL, { text: `The ${WORDS[2]} is ready`, metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-reply', askedBy: 'u-vera', askedByName: 'Vera', private: false } }, { minutes: true });
+  await postAsAssistant(CALL, { text: `The ${WORDS[2]} is ready`, metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-reply', askedBy: 'u-vera', askedByName: 'Vera', private: false } }, { minutes: true });
   await postAction(CALL, { actionId: 'a1', askedBy: 'u-vera', askedByName: 'Vera', summary: `Create work item: ${WORDS[3]}`, detail: [`Title: ${WORDS[3]}`, `Body: ${WORDS[4]}`], tool: { name: 'create_work_item', argsDigest: 'abc123' } }, { minutes: true });
   await store.decideAction(CALL, 'a1', { from: ['waiting'], to: 'done', by: 'u-vera', at: 500, resultText: `Created ${WORDS[3]}` });
   await chat.putMessage({ id: 'h1', clientId: 'c', userId: 'u-nora', channel: `orgiq:huddle:${CALL}`, message: `I like the ${WORDS[2]} idea`, timestamp: new Date(2000).toISOString() });
@@ -59,7 +59,7 @@ describe('the inviter delete (memory store)', () => {
 
   const everything = async () => JSON.stringify([
     await store.get(CALL), await store.lines(CALL, 0, 100), await store.getMinutes(CALL), await store.listTurns(CALL), await store.getAction(CALL, 'a1'),
-    (await chat.listMessages(`orgiq:huddle:${CALL}`, 100)).filter((m) => m.userId === NOVA_USER_ID),
+    (await chat.listMessages(`orgiq:huddle:${CALL}`, 100)).filter((m) => m.userId === ASSISTANT_USER_ID),
   ]);
 
   it('leaves none of the words in any stored field for the call', async () => {
@@ -68,7 +68,7 @@ describe('the inviter delete (memory store)', () => {
     await live.appendLine({ callId: CALL, userId: 'u-vera', participantId: 'p', speakerName: 'Vera', text: `Let us talk about the ${WORDS[0]}`, at: 100, captionId: 'c1' });
     expect(JSON.stringify(await live.lines(CALL, 0, 10))).toContain(WORDS[0]);
     expect(await everything()).toEqual(expect.stringContaining(WORDS[3]));
-    await live.transition(CALL, { from: ['listening'], to: 'left', by: 'u-vera', at: 9000 });   // the delete comes after Nova left
+    await live.transition(CALL, { from: ['listening'], to: 'left', by: 'u-vera', at: 9000 });   // the delete comes after Milo left
     await eraseCall(live, CALL, 'u-vera', 9500);
     expect(await live.lines(CALL, 0, 10)).toEqual([]);
 
@@ -91,22 +91,22 @@ describe('the inviter delete (memory store)', () => {
   // What a reader sees: the call chat's history drops soft-deleted messages (call-chat.ts `visible`).
   const shown = async (channel = `orgiq:huddle:${CALL}`) => (await chat.listMessages(channel, 5000)).filter((m) => !m.deletedAt && m.metadata?.['deleted'] !== true);
 
-  it("leaves the fixed line ONCE as a plain notice, hides Nova's other messages and cards, and leaves people's messages alone; a second erase changes nothing", async () => {
-    // More of Nova's notices and a second card, with people's messages in between.
+  it("leaves the fixed line ONCE as a plain notice, hides Milo's other messages and cards, and leaves people's messages alone; a second erase changes nothing", async () => {
+    // More of Milo's notices and a second card, with people's messages in between.
     await chat.putMessage({ id: 'h2', clientId: 'c', userId: 'u-vera', channel: `orgiq:huddle:${CALL}`, message: 'Sounds good', timestamp: new Date(3000).toISOString() });
-    await postAsAssistant(CALL, { text: 'Vera paused Nova.', metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } }, { minutes: true });
+    await postAsAssistant(CALL, { text: 'Vera paused Milo.', metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-notice' } }, { minutes: true });
     await postAction(CALL, { actionId: 'a9', askedBy: 'u-vera', askedByName: 'Vera', summary: `Create work item: ${WORDS[4]}`, detail: [`Title: ${WORDS[4]}`], tool: { name: 'create_work_item', argsDigest: 'def' } }, { minutes: true });
     for (let round = 0; round < 2; round += 1) {
       await eraseCall(store, CALL, 'u-vera', 9500 + round);
       const rows = await shown();
-      const nova = rows.filter((m) => m.userId === NOVA_USER_ID);
-      expect(nova).toHaveLength(1);
-      expect(nova[0]!.message).toBe(DELETED_RECORD_LINE);
-      expect(nova[0]!.metadata).toEqual({ assistant: true, displayName: 'Nova', kind: 'assistant-notice' });
+      const mine = rows.filter((m) => m.userId === ASSISTANT_USER_ID);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]!.message).toBe(DELETED_RECORD_LINE);
+      expect(mine[0]!.metadata).toEqual({ assistant: true, displayName: 'Milo', kind: 'assistant-notice' });
       expect(rows.filter((m) => m.metadata?.['kind'] === 'assistant-action' || m.metadata?.['kind'] === 'assistant-proposal')).toEqual([]);
-      expect(rows.filter((m) => m.userId !== NOVA_USER_ID).map((m) => [m.id, m.message])).toEqual([['h1', `I like the ${WORDS[2]} idea`], ['h2', 'Sounds good']]);
+      expect(rows.filter((m) => m.userId !== ASSISTANT_USER_ID).map((m) => [m.id, m.message])).toEqual([['h1', `I like the ${WORDS[2]} idea`], ['h2', 'Sounds good']]);
       // The hidden ones keep nothing of the meeting or the card's shape either.
-      const hidden = (await chat.listMessages(`orgiq:huddle:${CALL}`, 100)).filter((m) => m.userId === NOVA_USER_ID && m.metadata?.['deleted'] === true);
+      const hidden = (await chat.listMessages(`orgiq:huddle:${CALL}`, 100)).filter((m) => m.userId === ASSISTANT_USER_ID && m.metadata?.['deleted'] === true);
       expect(hidden).toHaveLength(4);
       for (const m of hidden) { expect(m.message).toBe(DELETED_RECORD_LINE); expect(m.metadata).toEqual({ deleted: true }); }
       if (round === 0) updates.length = 0;
@@ -114,16 +114,34 @@ describe('the inviter delete (memory store)', () => {
     expect(updates).toEqual([]);
   });
 
-  it("reaches Nova's messages that are the oldest of a 1,500-message chat", async () => {
+  it('erases the messages stored under the earlier author id too, and keeps a line erased before the rename as the one that stays', async () => {
+    const channel = `orgiq:huddle:${CALL}`;
+    const [legacyId] = LEGACY_ASSISTANT_USER_IDS; const [legacyLine] = LEGACY_DELETED_RECORD_LINES;
+    await chat.putMessage({ id: 'old-reply', clientId: 'server:assistant', userId: legacyId!, channel, message: `The ${WORDS[0]} is booked`,
+      timestamp: new Date(1500).toISOString(), metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-reply', askedBy: 'u-vera', askedByName: 'Vera' } });
+    await eraseCall(store, CALL, 'u-vera', 9500);
+    const all = await chat.listMessages(channel, 100);
+    expect(all.find((m) => m.id === 'old-reply')).toMatchObject({ message: DELETED_RECORD_LINE });
+    expect(JSON.stringify(all)).not.toContain(WORDS[0]);
+    // A chat erased before the rename: its kept line reads the old sentence under the old name, and an erase leaves it as it is.
+    (chat as unknown as { _reset(): void })._reset(); updates.length = 0;
+    await chat.putMessage({ id: 'kept-before', clientId: 'server:assistant', userId: legacyId!, channel, message: legacyLine!, timestamp: new Date(1500).toISOString(),
+      metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } });
+    expect(await eraseAssistantMessages(CALL)).toBe(0);
+    expect(updates).toEqual([]);
+    expect((await shown(channel)).map((m) => [m.id, m.message])).toEqual([['kept-before', legacyLine]]);
+  });
+
+  it("reaches Milo's messages that are the oldest of a 1,500-message chat", async () => {
     const channel = `orgiq:huddle:${CALL}`;
     for (let i = 0; i < 1500; i++) await chat.putMessage({ id: `bulk-${i}`, clientId: 'c', userId: 'u-nora', channel, message: `chatter ${i}`, timestamp: new Date(10_000 + i).toISOString() });
     const rows = await chat.listMessages(channel, 5000);
-    const nova = rows.filter((m) => m.userId === NOVA_USER_ID);
-    expect(nova).toHaveLength(3);
-    expect(rows.indexOf(nova[nova.length - 1]!)).toBeLessThan(10);
+    const mine = rows.filter((m) => m.userId === ASSISTANT_USER_ID);
+    expect(mine).toHaveLength(3);
+    expect(rows.indexOf(mine[mine.length - 1]!)).toBeLessThan(10);
     await eraseCall(store, CALL, 'u-vera', 9500);
-    for (const m of (await chat.listMessages(channel, 5000)).filter((x) => x.userId === NOVA_USER_ID)) expect(m.message).toBe(DELETED_RECORD_LINE);
-    expect((await shown(channel)).filter((x) => x.userId === NOVA_USER_ID)).toHaveLength(1);
+    for (const m of (await chat.listMessages(channel, 5000)).filter((x) => x.userId === ASSISTANT_USER_ID)) expect(m.message).toBe(DELETED_RECORD_LINE);
+    expect((await shown(channel)).filter((x) => x.userId === ASSISTANT_USER_ID)).toHaveLength(1);
     expect(updates).toHaveLength(3);
   });
 
@@ -139,7 +157,7 @@ describe('the inviter delete (memory store)', () => {
     expect(await store.moveTurn(CALL, 't3', { from: ['pending'], to: 'running' })).toBeNull();
   });
 
-  it('erases nothing while Nova is back in the call (invited back after the delete looked): not the record, the minutes or the chat', async () => {
+  it('erases nothing while Milo is back in the call (invited back after the delete looked): not the record, the minutes or the chat', async () => {
     const before = await everything();
     await store.rejoin(CALL, { leftAt: 9000, by: 'u-nora', at: 9400, present: ['u-nora'], session: { periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-vera' }] } });
     const back = await everything();

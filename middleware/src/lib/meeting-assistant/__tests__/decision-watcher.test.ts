@@ -142,7 +142,7 @@ function makeWatcher(over: Partial<WatcherDeps> = {}): DecisionWatcher {
     seated: async () => seated, nameOf: async (u) => NAMES[u] ?? u, ownerOf: async () => owner, initiativeName: async () => 'Auth Migration',
     model: () => model,
     spend: () => ({ allowed: (r, at) => budget && watcherBudgetLeft(r, at), record: async (row) => { spendRows.push(row); } }),
-    novaAnswering: () => answering, isEcho: (_c, l) => echoes.has(l.seq),
+    assistantAnswering: () => answering, isEcho: (_c, l) => echoes.has(l.seq),
     schedule: (fn, ms) => { const t = { due: now + ms, fn, cancelled: false }; timers.push(t); return () => { t.cancelled = true; }; },
     ...over,
   });
@@ -228,7 +228,7 @@ describe('the watcher', () => {
     expect(watcher.stats('call-1')['alone']).toBe(1);
   });
 
-  it("Nova's own echo neither triggers nor counts as the second person", async () => {
+  it("Milo's own echo neither triggers nor counts as the second person", async () => {
     await say('u-sam', "Let's cut over the smallest tenants first.");
     const echo = await store.appendLine({ callId: 'call-1', userId: 'u-priya', participantId: '', speakerName: 'u-priya', text: 'Agreed, cutting over the smallest tenants first.', at: now, captionId: 'echo' });
     echoes.add(echo!.seq); watcher.onLine(echo!);
@@ -246,16 +246,16 @@ describe('the watcher', () => {
     expect(now - T0).toBe(MAX_WAIT_MS);
   });
 
-  it('never checks while Nova is answering; still answering at the cap drops the wait', async () => {
+  it('never checks while Milo is answering; still answering at the cap drops the wait', async () => {
     answering = true;
     await say('u-sam', "Let's cut over the smallest tenants first."); await say('u-priya', 'Agreed.');
     await advance(MAX_WAIT_MS + 1000);
     expect(modelCalls).toBe(0);
-    expect(watcher.stats('call-1')['nova-busy']).toBe(1);
+    expect(watcher.stats('call-1')['assistant-busy']).toBe(1);
     expect(pending()).toHaveLength(0);
   });
 
-  it('waits out Nova and checks once she is done', async () => {
+  it('waits out Milo and checks once it is done', async () => {
     answering = true;
     await say('u-sam', "Let's cut over the smallest tenants first."); await say('u-priya', 'Agreed.');
     await advance(QUIET_MS);
@@ -297,7 +297,7 @@ describe('the watcher', () => {
     await advance(QUIET_MS);
     expect(await proposals()).toHaveLength(MAX_PER_CALL);
     expect(notices).toEqual([{ callId: 'call-1', text: capNotice() }]);
-    expect(capNotice()).toBe('Nova has raised 8 proposals in this call and will not raise more. You can still ask Nova to record a decision.');
+    expect(capNotice()).toBe('Milo has raised 8 proposals in this call and will not raise more. You can still ask Milo to record a decision.');
     // A ninth candidate, past the gap: no proposal, no second notice.
     await advance(MIN_GAP_MS);
     await say('u-lee', "So we'll freeze the schema."); await say('u-sam', 'Agreed.');

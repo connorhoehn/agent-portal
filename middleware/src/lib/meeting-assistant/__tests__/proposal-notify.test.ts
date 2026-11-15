@@ -81,7 +81,7 @@ it('a hand-back tells the executor, once per hand-back; a consented one waiting 
   expect(await notifyHandBack(p)).toEqual(['u-ada']);
   expect(await notifyHandBack(p)).toEqual([]);
   expect(await notifyHandBack({ ...p, run: { ...run, at: 11 } })).toEqual(['u-ada']);
-  expect(mockSent[0]!.input).toMatchObject({ title: 'Nova could not run a proposal from the Auth Migration call' });
+  expect(mockSent[0]!.input).toMatchObject({ title: 'Milo could not run a proposal from the Auth Migration call' });
   expect(JSON.stringify(mockSent)).not.toMatch(/smallest|not there|p1/);
 });
 

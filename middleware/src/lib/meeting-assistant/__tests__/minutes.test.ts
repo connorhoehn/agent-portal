@@ -44,7 +44,7 @@ describe('the scripted writer', () => {
     const done = await write([line('u-vera', 'Fine.')], [{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }]);
     expect(summaryParts(done.summary).points).toEqual(['Done in the call: created work item "Fix the login cookie".']);
     const ran = await write([line('u-vera', 'Fine.')], [{ text: 'Ran create', ownerUserId: 'u-nora' }]);
-    expect(summaryParts(ran.summary).points).toEqual(['Done in the call: Nova carried out a request.']);
+    expect(summaryParts(ran.summary).points).toEqual(['Done in the call: Milo carried out a request.']);
     const nothing = await write([line('u-vera', 'Chatter.')]);
     expect(summaryParts(nothing.summary).points).toEqual(['No decisions or next steps were recorded.']);
   });
@@ -113,7 +113,7 @@ describe('the scripted writer adding to minutes', () => {
     expect(out.decisions).toEqual(['We decided to keep the rollout flag.']);
     expect(out.actionItems).toEqual([{ text: 'book the rollout room', ownerUserId: 'u-nora', ownerName: 'Nora Diaz' }]);
     expect(out.topics).not.toContain('rollout');
-    expect(out.summary).toBe('Two people met for 3 minutes about Auth. After Nova was invited back, three people met for 2 minutes more.\n'
+    expect(out.summary).toBe('Two people met for 3 minutes about Auth. After Milo was invited back, three people met for 2 minutes more.\n'
       + '- Agreed 2 things: We decided to ship Thursday; We decided to keep the rollout flag.\n- 2 next steps: draft the rollout note; Nora Diaz to book the rollout room.\n'
       + '- Done in the call: created work item "Plan".');
   });

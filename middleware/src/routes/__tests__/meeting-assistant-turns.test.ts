@@ -60,7 +60,7 @@ async function ask(user: string, text: string) {
   await assistantIntake().tick();
   await flush();
 }
-const novaMessages = async (kind: string) => (await chat()).filter((m) => (m.metadata as { kind?: string } | undefined)?.kind === kind);
+const assistantRows = async (kind: string) => (await chat()).filter((m) => (m.metadata as { kind?: string } | undefined)?.kind === kind);
 
 beforeEach(async () => {
   clock = Date.parse('2026-11-13T12:00:00.000Z');
@@ -86,22 +86,22 @@ beforeEach(async () => {
 afterEach(() => { setAssistantRuntime(null); setSessionFactory(null); setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); setNotificationSink(null); rt.dispose(); setCallChatRuntime(null); });
 
 describe('a read in the call chat', () => {
-  it('"Nova, what is two plus two?" lands as a reply labelled with the asker', async () => {
+  it('"Milo, what is two plus two?" lands as a reply labelled with the asker', async () => {
     expect((await post('invite')).status).toBe(201);
-    await ask('alice', 'Nova, what is two plus two?');
-    const replies = await novaMessages('assistant-reply');
+    await ask('alice', 'Milo, what is two plus two?');
+    const replies = await assistantRows('assistant-reply');
     expect(replies.map((m) => [m.message, (m.metadata as { askedBy: string; askedByName: string }).askedBy, (m.metadata as { askedByName: string }).askedByName])).toEqual([['Four.', 'alice', 'Alice Ames']]);
   });
 
-  it('a search becomes a turn only the asker sees and can answer; the answer is shown by what Nova says, never the raw data', async () => {
+  it('a search becomes a turn only the asker sees and can answer; the answer is shown by what Milo says, never the raw data', async () => {
     await post('invite'); await post('ack', 'bob');
-    await ask('bob', 'Nova, find the Kubernetes experts');
+    await ask('bob', 'Milo, find the Kubernetes experts');
     const mine = (await get('turns?mine=1', 'bob')).body.turns;
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({ kind: 'read', status: 'pending', tool: { name: 'search', args: { query: 'the Kubernetes experts' } } });
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
     expect((await get('turns', 'alice')).body.turns).toEqual([]);
-    // Everyone sees that Nova is looking something up for Bob, and nothing of what (the working mark).
+    // Everyone sees that Milo is looking something up for Bob, and nothing of what (the working mark).
     expect((await get('state', 'alice')).body).toMatchObject({ openRequests: [{ askerName: 'Bob Baker', kind: 'lookup' }], waitingActions: [], hearing: 'ok' });
     expect(JSON.stringify((await get('state', 'alice')).body.openRequests)).not.toContain('Kubernetes');
     const id = mine[0].turnId;
@@ -125,20 +125,20 @@ describe('a read in the call chat', () => {
     await flush();
     expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: true, output: {} })).status).toBe(409);
     expect((await chat()).map((m) => m.message).join('\n')).not.toContain('RAW-DATA-ROW');
-    expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Here is the result.']);
+    expect((await assistantRows('assistant-reply')).map((m) => m.message)).toEqual(['Here is the result.']);
     expect((await get('state', 'alice')).body.openRequests).toEqual([]);
   });
 
   it('a private tool is answered to the asker alone: only the fixed line in the chat, one private notification', async () => {
     await post('invite');
-    await ask('alice', 'Nova, how much budget do I have');
+    await ask('alice', 'Milo, how much budget do I have');
     const [turn] = (await get('turns?mine=1', 'alice')).body.turns;
     expect(turn.kind).toBe('private-read');
     const { claimId } = (await post(`turns/${turn.turnId}/claim`, 'alice')).body;
     await post(`turns/${turn.turnId}/result`, 'alice', { claimId, ok: true, output: { spent: 3 } });
     await flush();
     // Audit B2: the call chat gets one fixed line and none of the answer.
-    expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Answered privately for Alice Ames.']);
+    expect((await assistantRows('assistant-reply')).map((m) => m.message)).toEqual(['Answered privately for Alice Ames.']);
     expect(notified.filter((n) => n.input.type === 'assistant-private-reply').map((n) => n.userId)).toEqual(['alice']);
   });
 });
@@ -146,8 +146,8 @@ describe('a read in the call chat', () => {
 describe('a write in the call chat', () => {
   it('shows a card for the asker; nothing reaches the browser until the asker confirms; another person cannot confirm', async () => {
     await post('invite');
-    await ask('alice', 'Nova, create a work item for the login cookie bug');
-    const cards = await novaMessages('assistant-action');
+    await ask('alice', 'Milo, create a work item for the login cookie bug');
+    const cards = await assistantRows('assistant-action');
     expect(cards).toHaveLength(1);
     const meta = cards[0]!.metadata as { actionId: string; askedBy: string; status: string; summary: string };
     expect(meta).toMatchObject({ askedBy: 'alice', status: 'waiting', summary: 'Create a work item titled "the login cookie bug"' });
@@ -179,8 +179,8 @@ describe('a write in the call chat', () => {
 
   it('a declined card leaves no turn for the browser', async () => {
     await post('invite');
-    await ask('alice', 'Nova, create a work item for the login cookie bug');
-    const meta = (await novaMessages('assistant-action'))[0]!.metadata as { actionId: string };
+    await ask('alice', 'Milo, create a work item for the login cookie bug');
+    const meta = (await assistantRows('assistant-action'))[0]!.metadata as { actionId: string };
     expect((await post(`actions/${meta.actionId}/decision`, 'alice', { decision: 'decline' })).status).toBe(200);
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
   });
@@ -222,14 +222,14 @@ describe('pause and dismiss reach the session', () => {
   it('while paused a request is not heard, and a dismissed assistant answers nothing more', async () => {
     await post('invite');
     await post('pause', 'bob');
-    await ask('alice', 'Nova, what is two plus two?');
-    expect(await novaMessages('assistant-reply')).toEqual([]);
+    await ask('alice', 'Milo, what is two plus two?');
+    expect(await assistantRows('assistant-reply')).toEqual([]);
     await post('resume', 'bob');
-    await ask('alice', 'Nova, what is two plus two?');
-    expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Four.']);
+    await ask('alice', 'Milo, what is two plus two?');
+    expect((await assistantRows('assistant-reply')).map((m) => m.message)).toEqual(['Four.']);
     await post('dismiss', 'alice');
-    await ask('alice', 'Nova, what is two plus two?');
-    expect((await novaMessages('assistant-reply')).length).toBe(1);
+    await ask('alice', 'Milo, what is two plus two?');
+    expect((await assistantRows('assistant-reply')).length).toBe(1);
   });
 
   it('an invite with no session available answers 503 and creates no record', async () => {

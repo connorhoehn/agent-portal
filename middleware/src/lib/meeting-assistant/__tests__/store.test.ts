@@ -322,7 +322,7 @@ describe('a caption that arrives twice at once (SQL store)', () => {
   });
 });
 
-describe('inviting Nova back (rejoin) and adding to the minutes', () => {
+describe('inviting Milo back (rejoin) and adding to the minutes', () => {
   const left = (over: Partial<AssistantRecord> = {}) => record({ state: 'left', leftAt: 9000, leftBy: 'u-raj', voice: true, acked: ['u-vera', 'u-raj'], attendees: ['u-vera', 'u-raj'], presentAtInvite: ['u-vera', 'u-raj'], ...over });
   const change = (over: Record<string, unknown> = {}) => ({ leftAt: 9000, by: 'u-raj', at: 12_000, present: ['u-raj', 'u-sam'], session: { ledgerPart: 1, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] }, ...over });
 
@@ -396,14 +396,14 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
     expect((await s.appendMinutes('call-1', null, addition()))!.throughSeq).toBe(7);
   });
 
-  it('a delete and an invitation back, in either order: the erased record is never joined again, and a record Nova is back in is not erased', async () => {
+  it('a delete and an invitation back, in either order: the erased record is never joined again, and a record Milo is back in is not erased', async () => {
     // The delete first: the invitation back finds the tombstone in its own step and moves nothing.
     const a = new MemoryAssistantStore(); await a.create(left()); await a.putMinutes(minutes());
     expect(await a.tombstoneMinutes('call-1', 'u-vera', 30_000)).toBe(0);
     expect(sessionOf((await a.get('call-1'))!).erasedAt).toBe(30_000);
     expect(await a.rejoin('call-1', change())).toBeNull();
     expect((await a.get('call-1'))!.state).toBe('left');
-    // The invitation back first: the erase finds Nova in the call and touches nothing (lines, minutes, record).
+    // The invitation back first: the erase finds Milo in the call and touches nothing (lines, minutes, record).
     const b = new MemoryAssistantStore(); await b.create(left()); await b.putMinutes(minutes());
     expect(await b.rejoin('call-1', change())).not.toBeNull();
     await b.appendLine(line());
@@ -447,7 +447,7 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
       expect(sql).toContain("WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz AND (session->>'erasedAt') IS NULL AND NOT EXISTS (SELECT 1 FROM meeting_minutes m WHERE m.call_id = :call AND m.deleted_at IS NOT NULL)");
     });
 
-    it('the erase locks the record and touches nothing while Nova is back in the call; it marks the record erased in the same statement', async () => {
+    it('the erase locks the record and touches nothing while Milo is back in the call; it marks the record erased in the same statement', async () => {
       rows = [{ removed: 3, go: false }];
       expect(await store().tombstoneMinutes('call-1', 'u-vera', 30_000)).toBeNull();
       const sql = norm(calls[0]!.sql);

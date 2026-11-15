@@ -7,7 +7,7 @@ describe('updateThreadMessage with no live service', () => {
     const rows: ChatMessage[] = [];
     const store = new RowsChatStore(() => rows);
     const channel = 'orgiq:huddle:c1';
-    await store.putMessage({ id: 'old', clientId: 'c', userId: 'nova', channel, message: 'first words', timestamp: new Date(1).toISOString(), metadata: { keep: 1, drop: 2 } });
+    await store.putMessage({ id: 'old', clientId: 'c', userId: 'agent:meeting-assistant', channel, message: 'first words', timestamp: new Date(1).toISOString(), metadata: { keep: 1, drop: 2 } });
     for (let i = 0; i < 500; i++) await store.putMessage({ id: `m${i}`, clientId: 'c', userId: 'u', channel, message: `m${i}`, timestamp: new Date(100 + i).toISOString() });
     const out = await updateThreadMessage(channel, 'old', { message: 'gone', metadata: { drop: undefined } }, store);
     expect(out).toMatchObject({ id: 'old', message: 'gone', metadata: { keep: 1 } });

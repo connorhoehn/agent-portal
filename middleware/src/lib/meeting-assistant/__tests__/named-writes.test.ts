@@ -72,8 +72,8 @@ beforeEach(async () => {
 afterEach(async () => { setAssistantRuntime(null); intake.dispose(); setAssistantStore(null); });
 
 describe('a write that names another person', () => {
-  it('a work item assigned to Bob is a proposal needing Bob, run by Alice: no card, no turn, Nova says whose consent it needs', async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook and assign it to Bob');
+  it('a work item assigned to Bob is a proposal needing Bob, run by Alice: no card, no turn, Milo says whose consent it needs', async () => {
+    await say(ALICE, 'Milo, create a work item for the cutover runbook and assign it to Bob');
     expect(mockPosts.actions).toEqual([]);
     expect(await store.listTurns(CALL)).toEqual([]);
     const [p] = await proposals();
@@ -89,21 +89,21 @@ describe('a write that names another person', () => {
   });
 
   it('assigned to the asker (by "me" or by name) keeps the asker\'s card', async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook and assign it to me');
-    await say(ALICE, 'Nova, create a work item for the release notes and assign it to Alice Moreau');
+    await say(ALICE, 'Milo, create a work item for the cutover runbook and assign it to me');
+    await say(ALICE, 'Milo, create a work item for the release notes and assign it to Alice Moreau');
     expect(mockPosts.actions.map((a) => a.askedBy)).toEqual([ALICE, ALICE]);
     expect(await proposals()).toEqual([]);
   });
 
   it('no assignee keeps the asker\'s card', async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook');
+    await say(ALICE, 'Milo, create a work item for the cutover runbook');
     expect(mockPosts.actions).toHaveLength(1);
     expect(mockPosts.actions[0]!.summary).toBe('Create a work item titled "the cutover runbook"');
     expect(await proposals()).toEqual([]);
   });
 
   it('a person not in the call is found in the directory: a proposal, and a notification with no words of it', async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook and assign it to Dana Reyes');
+    await say(ALICE, 'Milo, create a work item for the cutover runbook and assign it to Dana Reyes');
     const [p] = await proposals();
     expect(p).toMatchObject({ named: [DANA], executor: ALICE });
     await flush();
@@ -113,8 +113,8 @@ describe('a write that names another person', () => {
   });
 
   it('a name that matches nobody, or several people, is refused: no proposal, no card', async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook and assign it to Zed');
-    await say(ALICE, 'Nova, create a work item for the release notes and assign it to Dan');
+    await say(ALICE, 'Milo, create a work item for the cutover runbook and assign it to Zed');
+    await say(ALICE, 'Milo, create a work item for the release notes and assign it to Dan');
     expect(await proposals()).toEqual([]);
     expect(mockPosts.actions).toEqual([]);
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(2);
@@ -123,7 +123,7 @@ describe('a write that names another person', () => {
 
 describe('the consent it needs', () => {
   beforeEach(async () => {
-    await say(ALICE, 'Nova, create a work item for the cutover runbook and assign it to Bob');
+    await say(ALICE, 'Milo, create a work item for the cutover runbook and assign it to Bob');
     proposalsNow = await proposals();
   });
 
@@ -197,7 +197,7 @@ describe('the words of an asked write', () => {
     expect(updateStatement({ ref: 'work-item:wi-12', fields: {} })).toBe('Update a work item');
     expect(updateStatement({})).toBe('Update a record');
   });
-  it('Nova tells the asker their own consent is needed too, and where to answer', () => {
+  it('Milo tells the asker their own consent is needed too, and where to answer', () => {
     expect(consentStatus(['Priya'])).toBe("This needs your consent and Priya's. Answer in the prompt above the call controls.");
     expect(consentStatus(['Priya', 'Sam'])).toBe("This needs your consent, Priya's and Sam's. Answer in the prompt above the call controls.");
   });

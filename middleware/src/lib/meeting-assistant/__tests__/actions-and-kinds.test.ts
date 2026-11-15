@@ -3,7 +3,7 @@ jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true }, meeti
 import { MemoryAssistantStore } from '../store.js';
 import { SqlAssistantStore, actionFromRow } from '../store-sql.js';
 import type { AssistantAction } from '../types.js';
-import { claimsAssistant, parseAssistantMetadata, isAssistantKind, NOVA_USER_ID, NOVA_NAME } from '../chat-types.js';
+import { claimsAssistant, parseAssistantMetadata, isAssistantKind, isAssistantUserId, ASSISTANT_USER_ID, ASSISTANT_NAME } from '../chat-types.js';
 import { noticeText } from '../chat.js';
 
 const action = (over: Partial<AssistantAction> = {}): AssistantAction => ({
@@ -83,12 +83,23 @@ describe('message kinds', () => {
     expect(claimsAssistant({ assistant: true })).toBe(true);
     expect(claimsAssistant({ assistant: false })).toBe(true);
     for (const kind of ['assistant-notice', 'assistant-reply', 'assistant-action', 'assistant-whatever']) expect(claimsAssistant({ kind })).toBe(true);
-    for (const m of [undefined, null, {}, { kind: 'call' }, { kind: 'document' }, { displayName: 'Nova' }, { clientDeliveryId: 'x' }]) expect(claimsAssistant(m as never)).toBe(false);
+    for (const m of [undefined, null, {}, { kind: 'call' }, { kind: 'document' }, { displayName: 'Milo' }, { clientDeliveryId: 'x' }]) expect(claimsAssistant(m as never)).toBe(false);
     expect(isAssistantKind('assistant-notice')).toBe(true); expect(isAssistantKind('call')).toBe(false); expect(isAssistantKind(5)).toBe(false);
-    expect(NOVA_USER_ID).toBe('agent:nova'); expect(NOVA_NAME).toBe('Nova');
+    expect(ASSISTANT_USER_ID).toBe('agent:meeting-assistant'); expect(ASSISTANT_NAME).toBe('Milo');
+  });
+  it('the author id: the one written now and the one messages were stored under before the rename are both the assistant\'s', () => {
+    expect(isAssistantUserId(ASSISTANT_USER_ID)).toBe(true);
+    expect(isAssistantUserId('agent:nova')).toBe(true);
+    for (const id of ['alice', 'agent:milo', 'agent:', '', null, undefined]) expect(isAssistantUserId(id)).toBe(false);
+  });
+  it('a stored message keeps the name it was posted under; one without a usable name reads as the name now', () => {
+    expect(parseAssistantMetadata({ assistant: true, displayName: 'Nova', kind: 'assistant-notice' })).toEqual({ assistant: true, displayName: 'Nova', kind: 'assistant-notice' });
+    for (const displayName of [undefined, '', 42, 'x'.repeat(65)]) {
+      expect(parseAssistantMetadata({ assistant: true, displayName, kind: 'assistant-notice' })).toEqual({ assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice' });
+    }
   });
 
-  const base = { assistant: true, displayName: 'Nova' };
+  const base = { assistant: true, displayName: 'Milo' };
   it('parses the three kinds and drops anything outside the contract', () => {
     expect(parseAssistantMetadata({ ...base, kind: 'assistant-notice', extra: 1 })).toEqual({ ...base, kind: 'assistant-notice' });
     expect(parseAssistantMetadata({ ...base, kind: 'assistant-reply', askedBy: 'u', askedByName: 'Una', private: false, text: 'hidden' }))
@@ -116,9 +127,9 @@ describe('message kinds', () => {
   });
 
   it('the notice sentences are plain, name the person, and carry the configured retention', () => {
-    expect(noticeText.joined('Una', 30)).toBe("Nova joined at Una's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Nova, or dismiss it for everyone.");
-    expect(noticeText.paused('Una')).toBe('Una paused Nova. Nothing is being heard or stored.');
-    expect(noticeText.dismissed('Una')).toBe('Una dismissed Nova.');
+    expect(noticeText.joined('Una', 30)).toBe("Milo joined at Una's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo writes minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Milo, or dismiss it for everyone.");
+    expect(noticeText.paused('Una')).toBe('Una paused Milo. Nothing is being heard or stored.');
+    expect(noticeText.dismissed('Una')).toBe('Una dismissed Milo.');
     for (const text of [noticeText.joined('Una', 7), noticeText.paused('Una'), noticeText.resumed('Una'), noticeText.dismissed('Una')]) expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(noticeText.joined('Una', 7)).toContain('7 days');
   });

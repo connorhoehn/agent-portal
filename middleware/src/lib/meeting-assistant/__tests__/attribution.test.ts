@@ -206,19 +206,19 @@ describe('the provider\'s transcript lag', () => {
     expect(Math.abs(transcriptLag(samples) - (1_000 + Math.round((5_000 + 79 * 7_400) * 0.0217)))).toBeLessThan(400);
   });
 
-  it('moved back by it, a one-word "Nova?" lands on the person who said it', () => {
+  it('moved back by it, a one-word "Milo?" lands on the person who said it', () => {
     const intervals = [iv('mia', 25_389, 25_849), iv('vera', 37_544, 40_264)];
     expect(attribute(intervals, { startMs: 26_600 - 1_200, endMs: 26_800 - 1_200 }).userId).toBe('mia');
   });
   it('a word or two at the edge of a turn that the word times put on the neighbouring voice does not split it off', () => {
     const intervals = [iv('nora', 40_595, 42_995), iv('vera', 43_507, 45_287)];
-    const parts = [{ text: ' Nova, what', startMs: 42_800, endMs: 43_100 }, { text: ' is', startMs: 43_100, endMs: 43_400 }, { text: ' three plus', startMs: 43_400, endMs: 44_400 }, { text: ' three', startMs: 44_400, endMs: 45_400 }];
-    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Nova, what is three plus three', startMs: 42_800, endMs: 45_400 }]);
+    const parts = [{ text: ' Milo, what', startMs: 42_800, endMs: 43_100 }, { text: ' is', startMs: 43_100, endMs: 43_400 }, { text: ' three plus', startMs: 43_400, endMs: 44_400 }, { text: ' three', startMs: 44_400, endMs: 45_400 }];
+    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Milo, what is three plus three', startMs: 42_800, endMs: 45_400 }]);
   });
 
   it('a turn holding two voices splits where the voice changes', () => {
     const intervals = [iv('vera', 21_584, 24_664), iv('nora', 25_065, 27_585)];
-    const parts = [{ text: ' Nova, create', startMs: 21_600, endMs: 23_000 }, { text: ' a work item', startMs: 23_000, endMs: 24_600 }, { text: '. Nova, how is', startMs: 25_200, endMs: 26_400 }, { text: ' the weather', startMs: 26_400, endMs: 27_500 }];
-    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Nova, create a work item', startMs: 21_600, endMs: 24_600 }, { text: 'Nova, how is the weather', startMs: 25_200, endMs: 27_500 }]);
+    const parts = [{ text: ' Milo, create', startMs: 21_600, endMs: 23_000 }, { text: ' a work item', startMs: 23_000, endMs: 24_600 }, { text: '. Milo, how is', startMs: 25_200, endMs: 26_400 }, { text: ' the weather', startMs: 26_400, endMs: 27_500 }];
+    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Milo, create a work item', startMs: 21_600, endMs: 24_600 }, { text: 'Milo, how is the weather', startMs: 25_200, endMs: 27_500 }]);
   });
 });

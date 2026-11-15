@@ -1,5 +1,5 @@
 // A proposal's card in the call chat: one card per proposal whatever created it, kept at the proposal's state, carrying only the id and
-// state in its metadata (the statement is its text), and blanked by the erase like every other Nova message.
+// state in its metadata (the statement is its text), and blanked by the erase like every other Milo message.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}, cognito: {}, mock: { aurora: true }, meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } } }));
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () => null) }));
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
@@ -22,7 +22,7 @@ jest.mock('../../social-notify.js', () => ({ notify: async () => [] }));
 import { MemoryAssistantStore } from '../store.js';
 import { setAssistantStore } from '../store-select.js';
 import { eraseAssistantMessages, proposalCardId } from '../chat.js';
-import { DELETED_RECORD_LINE, NOVA_USER_ID, parseAssistantMetadata } from '../chat-types.js';
+import { DELETED_RECORD_LINE, ASSISTANT_USER_ID, parseAssistantMetadata } from '../chat-types.js';
 import { createProposal, respondToProposal } from '../proposals.js';
 import type { AssistantRecord } from '../types.js';
 
@@ -32,7 +32,7 @@ const record: AssistantRecord = {
   callId: CALL, tenant: 'orgiq', lobby: 'orgiq:initiative:p-auth', initiativeId: 'p-auth', state: 'listening', invitedBy: 'u-ada', invitedAt: 1000, pausedBy: null, leftAt: null, leftBy: null,
   acked: [], attendees: ['u-ada', 'u-ben', 'u-cal'], presentAtInvite: ['u-ada'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
 };
-const cards = async () => (await chat.listMessages(CHANNEL, 100)).filter((m) => m.userId === NOVA_USER_ID && m.metadata?.['kind'] === 'assistant-proposal');
+const cards = async () => (await chat.listMessages(CHANNEL, 100)).filter((m) => m.userId === ASSISTANT_USER_ID && m.metadata?.['kind'] === 'assistant-proposal');
 const make = (store: MemoryAssistantStore, id = 'p1') => createProposal(store, {
   id, callId: CALL, tenant: 'orgiq', statement: 'Cut over the smallest tenants first', outcome: { kind: 'decision', initiativeId: 'p-auth' },
   named: [], executor: 'u-ada', source: 'dev', at: 50_000,
@@ -49,7 +49,7 @@ describe('proposal cards', () => {
     expect(rest).toHaveLength(0);
     expect(card!.id).toBe(proposalCardId({ id: 'p1', createdAt: 50_000 }));
     expect(card!.message).toBe('Cut over the smallest tenants first');
-    expect(card!.metadata).toEqual({ assistant: true, displayName: 'Nova', kind: 'assistant-proposal', proposalId: 'p1', state: 'open' });
+    expect(card!.metadata).toEqual({ assistant: true, displayName: 'Milo', kind: 'assistant-proposal', proposalId: 'p1', state: 'open' });
   });
 
   it('follows the proposal: consented after two people including the executor, objected, back to open on withdrawal, dismissed', async () => {
@@ -80,13 +80,13 @@ describe('proposal cards', () => {
     await make(store);
     await eraseAssistantMessages(CALL);
     expect(await cards()).toEqual([]);
-    const nova = (await chat.listMessages(CHANNEL, 100)).filter((m) => m.userId === NOVA_USER_ID && m.metadata?.['deleted'] !== true);
-    expect(nova.map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
+    const mine = (await chat.listMessages(CHANNEL, 100)).filter((m) => m.userId === ASSISTANT_USER_ID && m.metadata?.['deleted'] !== true);
+    expect(mine.map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
     expect(JSON.stringify(await chat.listMessages(CHANNEL, 100))).not.toContain('smallest tenants');
   });
 
   it('parses the card metadata and refuses a bad state or a missing id', () => {
-    const base = { assistant: true, displayName: 'Nova', kind: 'assistant-proposal' };
+    const base = { assistant: true, displayName: 'Milo', kind: 'assistant-proposal' };
     expect(parseAssistantMetadata({ ...base, proposalId: 'p1', state: 'objected', statement: 'hidden' })).toEqual({ ...base, proposalId: 'p1', state: 'objected' });
     expect(parseAssistantMetadata({ ...base, proposalId: 'p1', state: 'maybe' })).toBeNull();
     expect(parseAssistantMetadata({ ...base, state: 'open' })).toBeNull();

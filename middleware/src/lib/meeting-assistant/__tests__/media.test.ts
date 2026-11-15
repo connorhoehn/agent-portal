@@ -93,7 +93,7 @@ describe('creating the tap', () => {
     expect(notices).toEqual([]);
   });
 
-  it('says in the chat after a minute that Nova cannot hear yet, once, and goes on arming every 30 s while she listens', async () => {
+  it('says in the chat after a minute that Milo cannot hear yet, once, and goes on arming every 30 s while it listens', async () => {
     behaviour.create = Array.from({ length: 100 }, () => ({ status: 409, body: { error: 'no audio producer in channel' } }));
     // The call is still being listened to for four slow retries; then the producer appears (the next create takes) .
     let slow = 0;
@@ -101,7 +101,7 @@ describe('creating the tap', () => {
     slowSleep.sleep = async (ms) => { sleeps.push(ms); now += ms; if (ms === 30_000 && (slow += 1) === 4) behaviour.create = []; };
     await armer.arm(CALL, ARN); await settle();
     expect(notices).toEqual([CANNOT_HEAR_NOTICE]);
-    expect(CANNOT_HEAR_NOTICE).toMatch(/^Nova cannot hear this call yet/);
+    expect(CANNOT_HEAR_NOTICE).toMatch(/^Milo cannot hear this call yet/);
     const before30 = sleeps.slice(0, sleeps.indexOf(30_000)).reduce((a, b) => a + b, 0);
     expect(before30).toBeGreaterThanOrEqual(60_000 - 8000);
     expect(before30).toBeLessThanOrEqual(60_000 + 8000);
@@ -199,7 +199,7 @@ describe('before anything starts (preflight)', () => {
   it('refuses the real path with a plain 503 for the person; the missing settings (never their values) go to the server log', async () => {
     mockConfig.meetingAssistant.media = { url: `http://127.0.0.1:${port}`, adminToken: '', sinkBaseUrl: '' };
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Nova isn't set up here. Ask an admin." });
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Milo isn't set up here. Ask an admin." });
     expect(warn.mock.calls.map((c) => String(c[0])).join(' ')).toMatch(/MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN, MEETING_ASSISTANT_SINK_BASE_URL/);
     warn.mockRestore();
     expect(missingMediaSettings()).toEqual(['MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN', 'MEETING_ASSISTANT_SINK_BASE_URL']);
@@ -255,7 +255,7 @@ describe('the sink secret gates arming (B4)', () => {
     await settle();
     expect(tapPosts()).toEqual([]);
     setChannelResolver({ channelOf: async () => ARN });
-    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Nova isn't set up here. Ask an admin." });
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: "Milo isn't set up here. Ask an admin." });
   });
 
   it('with a secret configured arming goes ahead; the secret never appears in a message', async () => {

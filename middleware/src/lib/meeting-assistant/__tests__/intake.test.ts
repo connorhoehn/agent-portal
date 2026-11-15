@@ -36,7 +36,7 @@ it('stores the inviter\'s lines at once, and nobody else\'s until they acknowled
 });
 
 it('a person who joined after the invite is held to the same gate, and the gate also hides them from the detector', async () => {
-  await inject('u-late', 'Nova, summarise the call please.');
+  await inject('u-late', 'Milo, summarise the call please.');
   now += 5000;
   await intake.tick();
   expect(await store.lines('call-1', 0, 10)).toEqual([]);
@@ -70,7 +70,7 @@ it('defaults the caption id, speaker name and time, and keeps offsets and overla
 });
 
 it('a request split across lines becomes one pending request once the speaker goes quiet', async () => {
-  await inject('u-vera', 'we are done. Nova, please.');
+  await inject('u-vera', 'we are done. Milo, please.');
   now += 1000;
   await inject('u-vera', 'write up a short incident summary and');
   now += 1000;
@@ -83,12 +83,12 @@ it('a request split across lines becomes one pending request once the speaker go
   expect(r.pendingRequests[0]).toMatchObject({ askedBy: 'u-vera', lines: [1, 2, 3], text: 'please. write up a short incident summary and assign it to Priya.' });
 });
 
-it('"Nova, stop listening" pauses as that speaker; "Nova, leave" dismisses and stops listening', async () => {
+it('"Milo, stop listening" pauses as that speaker; "Milo, leave" dismisses and stops listening', async () => {
   await store.ack('call-1', 'u-release');
-  await inject('u-release', 'Nova, stop listening.');
+  await inject('u-release', 'Milo, stop listening.');
   expect(await get()).toMatchObject({ state: 'paused', pausedBy: 'u-release' });
   await store.transition('call-1', { from: ['paused'], to: 'listening', by: 'u-vera', at: 1 });
-  await inject('u-release', 'Nova, leave.');
+  await inject('u-release', 'Milo, leave.');
   expect(await get()).toMatchObject({ state: 'left', leftBy: 'u-release' });
   expect(intake.isListening('call-1')).toBe(false);
   expect(await source.inject('call-1', { userId: 'u-vera', text: 'anyone there' })).toBe(0);

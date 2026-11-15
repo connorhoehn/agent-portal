@@ -12,7 +12,7 @@ const TOOL: ResponsesFunctionTool = {
   type: 'function', name: 'search', description: 'Search',
   parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
 };
-const START = { instructions: 'You are Nova.', tools: [TOOL], backendInstructions: 'Run functions.' };
+const START = { instructions: 'You are Milo.', tools: [TOOL], backendInstructions: 'Run functions.' };
 
 let server: WebSocketServer;
 let received: Array<Record<string, unknown>>;
@@ -68,7 +68,7 @@ describe('start', () => {
     expect(headers['openai-beta']).toBeUndefined();
     const start = received.find((e) => e['type'] === 'session.start') as { session: Record<string, any> };
     expect(start.session['model']).toBe('gpt-live-1');
-    expect(start.session['instructions']).toBe('You are Nova.');
+    expect(start.session['instructions']).toBe('You are Milo.');
     expect(start.session['audio']).toEqual({ output: { voice: 'marin' }, format: { type: 'audio/pcm', rate: 24000 } });
     expect(start.session['client']).toBeUndefined();
     expect(start.session['delegation'].type).toBe('responses');
@@ -114,31 +114,31 @@ describe('transcripts', () => {
   it('cuts input deltas into pieces at a sentence end and at a gap, with start and end offsets', async () => {
     const { s, seen } = make();
     await s.start(START);
-    for (const [d, a, b] of [[' Nova', 1800, 2000], [', what', 2000, 2200], [' is it?', 2200, 2400], [' ok', 5000, 5200], [' then', 5200, 5400]] as const) {
+    for (const [d, a, b] of [[' Milo', 1800, 2000], [', what', 2000, 2200], [' is it?', 2200, 2400], [' ok', 5000, 5200], [' then', 5200, 5400]] as const) {
       frame({ type: 'session.input_transcript.delta', start_ms: a, end_ms: b, delta: d });
     }
     await tick(120);
     expect(seen.inputTranscript).toEqual([
-      { text: 'Nova, what is it?', startMs: 1800, endMs: 2400, parts: [{ text: ' Nova', startMs: 1800, endMs: 2000 }, { text: ', what', startMs: 2000, endMs: 2200 }, { text: ' is it?', startMs: 2200, endMs: 2400 }] },
+      { text: 'Milo, what is it?', startMs: 1800, endMs: 2400, parts: [{ text: ' Milo', startMs: 1800, endMs: 2000 }, { text: ', what', startMs: 2000, endMs: 2200 }, { text: ' is it?', startMs: 2200, endMs: 2400 }] },
       { text: 'ok then', startMs: 5000, endMs: 5400, parts: [{ text: ' ok', startMs: 5000, endMs: 5200 }, { text: ' then', startMs: 5200, endMs: 5400 }] },
     ]);
     await s.close();
   });
 
   // The paid run (14 November): input deltas come a word at a time with no sentence end, so the 1.5 s idle flush stored a request
-  // after Nova's short answer to it had already ended; the answer then found no line. Nova's first output delta ends the turn.
-  it('stores the line being heard when Nova begins to speak, before that utterance is judged', async () => {
+  // after Milo's short answer to it had already ended; the answer then found no line. Milo's first output delta ends the turn.
+  it('stores the line being heard when Milo begins to speak, before that utterance is judged', async () => {
     const { s, seen } = make({ idleFlushMs: 5000 });
     await s.start(START);
     const order: string[] = [];
     s.on('inputTranscript', () => order.push('input'));
     s.on('outputTranscript', (e) => { if (e.final) order.push('output'); });
-    frame({ type: 'session.input_transcript.delta', start_ms: 16000, end_ms: 16200, delta: ' Nova' });
+    frame({ type: 'session.input_transcript.delta', start_ms: 16000, end_ms: 16200, delta: ' Milo' });
     frame({ type: 'session.input_transcript.delta', start_ms: 16400, end_ms: 16600, delta: ' what is' });
     frame({ type: 'session.output_transcript.delta', start_ms: 17600, end_ms: 17800, delta: ' Four.' });
     await tick(1000);
     expect(order).toEqual(['input', 'output']);
-    expect(seen.inputTranscript[0]).toMatchObject({ text: 'Nova what is', startMs: 16000, endMs: 16600 });
+    expect(seen.inputTranscript[0]).toMatchObject({ text: 'Milo what is', startMs: 16000, endMs: 16600 });
     await s.close();
   });
 
