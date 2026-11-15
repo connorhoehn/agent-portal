@@ -132,6 +132,13 @@ CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (creat
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS retryable BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS notified_at TIMESTAMPTZ;
+-- Nova can be invited back into a call it left; what it hears then is ADDED to the minutes (minutes-service.ts). `through_seq` is the last
+-- transcript line the minutes cover (NULL on an older row: the lines up to ended_at); `additions` counts the additions made; an addition
+-- that failed or was refused leaves `addition_owed` set, and `addition_attempts` counts its runs apart from `attempts`.
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS through_seq INTEGER;
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS additions INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS addition_owed BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS addition_attempts INTEGER NOT NULL DEFAULT 0;
 
 -- Package 7a: Nova speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;

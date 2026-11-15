@@ -321,3 +321,121 @@ describe('a caption that arrives twice at once (SQL store)', () => {
     await expect(broken.appendLine(line)).rejects.toThrow('connection lost');
   });
 });
+
+describe('inviting Nova back (rejoin) and adding to the minutes', () => {
+  const left = (over: Partial<AssistantRecord> = {}) => record({ state: 'left', leftAt: 9000, leftBy: 'u-raj', voice: true, acked: ['u-vera', 'u-raj'], attendees: ['u-vera', 'u-raj'], presentAtInvite: ['u-vera', 'u-raj'], ...over });
+  const change = (over: Record<string, unknown> = {}) => ({ leftAt: 9000, by: 'u-raj', at: 12_000, present: ['u-raj', 'u-sam'], session: { ledgerPart: 1, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] }, ...over });
+
+  it('moves left -> listening once, only from the leave the caller read, with the new inviter, fresh acks and the voice off', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left());
+    expect(await s.rejoin('call-1', change({ leftAt: 8999 }))).toBeNull();          // a different leave: someone else moved it
+    const [a, b] = await Promise.all([s.rejoin('call-1', change()), s.rejoin('call-1', change({ by: 'u-sam' }))]);
+    expect(b).toBeNull();
+    expect(a).toMatchObject({ state: 'listening', invitedBy: 'u-raj', invitedAt: 1000, leftAt: null, leftBy: null, pausedBy: null, acked: ['u-raj'], presentAtInvite: ['u-raj', 'u-sam'], voice: false });
+    expect(a!.attendees).toEqual(['u-vera', 'u-raj', 'u-sam']);
+    expect(sessionOf(a!)).toMatchObject({ ledgerPart: 1, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] });
+    expect(await s.rejoin('call-1', change())).toBeNull();                            // not left any more
+    // A line from the new period is stored again.
+    expect((await s.appendLine(line()))!.seq).toBe(1);
+  });
+
+  const minutes = (over: Record<string, unknown> = {}) => ({
+    callId: 'call-1', tenant: 'orgiq', lobby: 'l', initiativeId: 'p-auth', callName: 'Auth call', startedAt: 1000, endedAt: 9000, invitedBy: 'u-vera', attendees: ['u-vera'],
+    summary: 'First.', decisions: ['Ship Thursday'], actionItems: [{ text: 'Write the plan', ownerUserId: 'u-vera' }, { text: 'Done thing', done: true }], topics: ['rollout'],
+    lineCount: 4, truncated: false, writer: 'scripted' as const, createdAt: 9100, attempts: 1, retryable: false, notifiedAt: 9200, throughSeq: 4, ...over,
+  });
+  const addition = (over: Record<string, unknown> = {}) => ({ summary: 'Whole call.', decisions: ['Keep the flag'], actionItems: [{ text: 'Rehearse' }], topics: ['flag'], endedAt: 20_000, attendees: ['u-raj'], lineCount: 7, throughSeq: 7, truncated: false, added: true, ...over });
+
+  it('appends after the stored items in place (a work item recorded meanwhile stays), counts the addition and lets the bell ring again', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes());
+    expect(await s.setActionItemWorkItem('call-1', 0, 'wi-1')).toBe(true);
+    expect(await s.appendMinutes('call-1', 3, addition())).toBeNull();                 // another addition got there first
+    const m = (await s.appendMinutes('call-1', 4, addition()))!;
+    expect(m.actionItems).toEqual([{ text: 'Write the plan', ownerUserId: 'u-vera', workItemId: 'wi-1' }, { text: 'Done thing', done: true }, { text: 'Rehearse' }]);
+    expect(m).toMatchObject({ summary: 'Whole call.', decisions: ['Ship Thursday', 'Keep the flag'], topics: ['rollout', 'flag'], endedAt: 20_000, attendees: ['u-vera', 'u-raj'],
+      lineCount: 7, throughSeq: 7, additions: 1, notifiedAt: null, additionOwed: false, createdAt: 9100 });
+    expect(await s.appendMinutes('call-1', 4, addition())).toBeNull();                 // the same lines are never added twice
+    expect(await s.claimMinutesNotice('call-1', 30_000)).toBe(true);
+  });
+
+  it('nothing new moves only the end and the attendees: no addition is counted and the bell stays rung', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes());
+    const m = (await s.appendMinutes('call-1', 4, addition({ summary: null, decisions: [], actionItems: [], topics: [], lineCount: 4, throughSeq: 4, added: false })))!;
+    expect(m).toMatchObject({ summary: 'First.', decisions: ['Ship Thursday'], endedAt: 20_000, attendees: ['u-vera', 'u-raj'], notifiedAt: 9200, throughSeq: 4 });
+    expect(m.additions ?? 0).toBe(0);
+  });
+
+  it('an owed addition keeps the minutes, is listed for the retry sweep, and its runs are claimed apart from the first write', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes());
+    expect(await s.oweMinutesAddition('call-1', 4, { attempts: 1, endedAt: 20_000, attendees: ['u-raj'] })).toBe(true);
+    const owed = (await s.getMinutes('call-1'))!;
+    expect(owed).toMatchObject({ summary: 'First.', additionOwed: true, additionAttempts: 1, attempts: 1, endedAt: 20_000, attendees: ['u-vera', 'u-raj'] });
+    expect((await s.listRetryableMinutes(3, 10)).map((m) => m.callId)).toEqual(['call-1']);
+    expect(await s.claimMinutesAddition('call-1', 0, 3)).toBe(false);                 // not the count the caller read
+    expect(await s.claimMinutesAddition('call-1', 1, 3)).toBe(true);
+    expect(await s.claimMinutesAddition('call-1', 2, 3)).toBe(true);
+    expect(await s.claimMinutesAddition('call-1', 3, 3)).toBe(false);                 // the cap
+    expect(await s.listRetryableMinutes(3, 10)).toEqual([]);
+    expect(await s.claimMinutesAttempt('call-1', 1, 5)).toBe(false);                  // the first write's count is a different one
+    expect((await s.appendMinutes('call-1', 4, addition()))!).toMatchObject({ additionOwed: false, additionAttempts: 0, additions: 1 });
+  });
+
+  it('an older record without throughSeq is matched by null', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes({ throughSeq: undefined }));
+    expect(await s.appendMinutes('call-1', 4, addition())).toBeNull();
+    expect((await s.appendMinutes('call-1', null, addition()))!.throughSeq).toBe(7);
+  });
+
+  it('a deleted record takes no addition', async () => {
+    const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes());
+    await s.tombstoneMinutes('call-1', 'u-vera', 30_000);
+    expect(await s.appendMinutes('call-1', 4, addition())).toBeNull();
+    expect(await s.oweMinutesAddition('call-1', 4, { attempts: 1, endedAt: 1, attendees: [] })).toBe(false);
+  });
+
+  describe('SQL statements', () => {
+    const calls: { sql: string; params: { name?: string; value?: unknown }[] }[] = [];
+    let rows: Record<string, unknown>[];
+    const store = () => new SqlAssistantStore(async (sql, params = []) => { calls.push({ sql, params }); return rows; });
+    beforeEach(() => { calls.length = 0; rows = []; });
+    const norm = (sql: string) => sql.replace(/\s+/g, ' ');
+    const param = (name: string) => calls[0]!.params.find((p) => p.name === name)?.value;
+
+    it('rejoin is ONE conditional update on the leave that was read, merging the session and adding the seated as attendees', async () => {
+      expect(await store().rejoin('call-1', change())).toBeNull();
+      const sql = norm(calls[0]!.sql);
+      expect(sql).toContain("UPDATE meeting_assistants SET state = 'listening', invited_by = :by, left_at = NULL, left_by = NULL, paused_by = NULL");
+      expect(sql).toContain('acked = jsonb_build_array(:by::text), present_at_invite = :present::jsonb');
+      expect(sql).toContain('voice = false, session = session || :session::jsonb');
+      expect(sql).toContain("WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz");
+      expect(param('left')).toEqual({ stringValue: new Date(9000).toISOString() });
+      expect(JSON.parse((param('session') as { stringValue: string }).stringValue)).toMatchObject({ ledgerPart: 1 });
+      rows = [{ call_id: 'call-1', tenant: 'orgiq', lobby: 'l', state: 'listening', invited_by: 'u-raj', invited_at: '2026-11-13 10:00:00', session: '{"periods":[{"invitedBy":"u-vera","from":1,"leftAt":2,"leftBy":null}]}' }];
+      expect(sessionOf((await store().rejoin('call-1', change()))!).periods).toHaveLength(1);
+    });
+
+    it('an addition extends the stored lists in place under a compare on through_seq; an owed one and its claim are conditional too', async () => {
+      await store().appendMinutes('call-1', 4, addition());
+      let sql = norm(calls[0]!.sql);
+      expect(sql).toContain('decisions = decisions || :decisions::jsonb, action_items = action_items || :items::jsonb');
+      expect(sql).toContain('summary = COALESCE(:summary, summary)');
+      expect(sql).toContain("deleted_at IS NULL AND writer <> 'none' AND through_seq IS NOT DISTINCT FROM :expect");
+      expect(sql).toContain('notified_at = CASE WHEN :added THEN NULL ELSE notified_at END');
+      expect(param('expect')).toEqual({ longValue: 4 });
+      calls.length = 0;
+      await store().appendMinutes('call-1', null, addition({ summary: null }));
+      expect(param('expect')).toEqual({ isNull: true }); expect(param('summary')).toEqual({ isNull: true });
+      calls.length = 0;
+      await store().oweMinutesAddition('call-1', 4, { attempts: 1, endedAt: 20_000, attendees: ['u-raj'] });
+      sql = norm(calls[0]!.sql);
+      expect(sql).toContain('SET addition_owed = true, addition_attempts = :attempts');
+      expect(sql).toContain('through_seq IS NOT DISTINCT FROM :expect');
+      calls.length = 0;
+      await store().claimMinutesAddition('call-1', 1, 3);
+      expect(norm(calls[0]!.sql)).toContain('addition_owed AND addition_attempts = :expect AND addition_attempts < :max');
+      calls.length = 0;
+      await store().listRetryableMinutes(3, 10);
+      expect(norm(calls[0]!.sql)).toContain("OR (writer <> 'none' AND addition_owed AND addition_attempts < :max)");
+    });
+  });
+});

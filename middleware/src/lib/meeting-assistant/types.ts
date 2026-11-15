@@ -1,7 +1,10 @@
 // Shapes shared by the meeting assistant's store, intake and detector
 // (docs/meeting-assistant-design.md). Words are stored, audio never is.
 
-/** invited -> listening <-> paused -> left. `left` is final. */
+/**
+ * invited -> listening <-> paused -> left. `left` is not final: anyone who may invite Nova can invite it back (left -> listening, one
+ * conditional step, `AssistantStore.rejoin`), which starts another listening period on the same record (`session.periods`).
+ */
 export type AssistantState = 'invited' | 'listening' | 'paused' | 'left';
 
 /** One finished caption, attributed to a person. `seq` is the call's own line counter, from 1. */
@@ -109,7 +112,14 @@ export interface AssistantSession {
   unmappedChunks?: number;
   unackedChunks?: number;
   lateChunks?: number;
+  /** When the current period began: absent for the first (it began at `invitedAt`), set by each rejoin. */
+  periodFrom?: number;
+  /** The earlier periods of this call, oldest first: who invited Nova, when it came and when it left, and who dismissed it ('system' for its own leaving). */
+  periods?: AssistantPeriod[];
 }
+
+/** One closed period of Nova in a call, kept when it is invited back (the record's own fields then describe the new period). */
+export interface AssistantPeriod { invitedBy: string; from: number; leftAt: number; leftBy: string | null }
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
   refusedCalls: 0, listeningSeconds: 0, settledListeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
@@ -290,6 +300,14 @@ export interface MinutesRecord {
   attempts?: number;
   /** No draft, but a writer can run again (it failed or the budget refused it); false when no writer exists in this deployment. */
   retryable?: boolean;
-  /** When the attendees were told the minutes are ready (the bell), once per meeting; null or absent until then. */
+  /** When the attendees were told the minutes are ready (the bell), once per writing; null or absent until then. An addition sets it back to null. */
   notifiedAt?: number | null;
+  /** The last transcript line the minutes cover; absent on a record written before it (then the lines up to `endedAt`). */
+  throughSeq?: number;
+  /** How many times Nova added a later period of the call to these minutes. */
+  additions?: number;
+  /** A later period's addition failed or its budget refused it: the minutes stand as they are and the addition is tried again. */
+  additionOwed?: boolean;
+  /** Writer runs made for the owed addition (capped like `attempts`, counted apart from them); 0 or absent when none is owed. */
+  additionAttempts?: number;
 }

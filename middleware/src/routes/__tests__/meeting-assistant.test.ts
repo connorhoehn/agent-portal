@@ -155,7 +155,7 @@ describe('invite, pause, resume, dismiss', () => {
     } finally { attend.mockRestore(); }
   });
 
-  it('anyone with a seat can pause, resume and dismiss; repeats succeed; a dismissed assistant stays gone', async () => {
+  it('anyone with a seat can pause, resume and dismiss; repeats succeed; a dismissed assistant stays gone until it is invited back', async () => {
     await post('invite');
     expect((await post('pause', 'bob')).body).toMatchObject({ state: 'paused', pausedBy: 'bob' });
     expect((await post('pause', 'alice')).status).toBe(200);
@@ -164,8 +164,9 @@ describe('invite, pause, resume, dismiss', () => {
     expect((await post('dismiss', 'bob')).body).toMatchObject({ state: 'left', leftBy: 'bob', leftByName: expect.any(String), openRequests: [], waitingActions: [] });
     expect((await post('dismiss', 'alice')).status).toBe(200);
     expect((await post('resume')).status).toBe(409);
-    expect((await post('invite')).status).toBe(409);
     expect((await post('ack', 'bob')).status).toBe(409);
+    // An invitation is the only way back: a new period, with bob owing a new acknowledgement.
+    expect((await post('invite')).body).toMatchObject({ state: 'listening', invitedBy: 'alice', leftAt: null, mustAck: ['bob'] });
   });
 
   it('pause with no assistant is a 404', async () => {

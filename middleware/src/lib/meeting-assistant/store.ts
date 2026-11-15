@@ -8,14 +8,15 @@
 //  * One record per call. `create` on an existing call returns what is there, `created: false`.
 //  * `appendLine` stores a line only while the state is `listening`, assigns the next `seq` and
 //    bumps `linesStored` in one step, and stores a repeated `captionId` once (returns null).
-//  * Reads return copies. `left` is final.
+//  * Reads return copies. `left` ends a period, not the record: `rejoin` moves it back to `listening` once, only from the leave the
+//    caller read (its `leftAt`), so two invitations back at once make one new period.
 //  * An action is created once per (call, actionId); `decideAction` moves it only from the statuses
 //    named in `from` and returns null otherwise, so two clicks decide once. A turn (a tool call waiting on the asker's
 //    browser) is the same: created once per (call, turnId), `moveTurn` moves it only from the statuses named.
 //  * A proposal is created once per (call, id). `saveProposal` writes only when the stored version is the one the caller
 //    read, so of two responses at once one wins and the other reads again (lib/meeting-assistant/proposals.ts retries).
 //    Its statement, outcome, digest, named people and executor are never rewritten.
-import type { AssistantAction, AssistantRecord, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
+import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
 import { sessionOf } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 
@@ -30,6 +31,38 @@ export interface StateChange {
   to: AssistantState;
   by: string;
   at: number;
+}
+
+/** Nova is invited back into a call it left (`rejoin`): the person, the moment, who is seated now, and the session bookkeeping to write with it. */
+export interface RejoinChange {
+  /** The leave the caller read: the record must still be `left` from exactly this moment, or nothing changes. */
+  leftAt: number;
+  by: string;
+  at: number;
+  /** Seat holders now: they owe a new acknowledgement (all but `by`) and become attendees. */
+  present: readonly string[];
+  /** Merged over the stored session: the new period's money and clock, and the closed period appended to `periods`. */
+  session: Partial<AssistantSession>;
+}
+
+/**
+ * What a later period adds to minutes that already hold a draft (`appendMinutes`). The new decisions, action items and topics go AFTER
+ * the stored ones, which stay unchanged and in place (an index names an item: its card, its work item, its `done`).
+ */
+export interface MinutesAddition {
+  /** The whole call's summary now; null keeps the stored one (nothing new was heard). */
+  summary: string | null;
+  decisions: string[];
+  actionItems: MinutesActionItem[];
+  topics: string[];
+  endedAt: number;
+  /** Unioned with the stored attendees. */
+  attendees: string[];
+  lineCount: number;
+  throughSeq: number;
+  truncated: boolean;
+  /** A real addition: `additions` is counted, the bell may ring again (`notifiedAt` cleared) and any owed addition is settled. */
+  added: boolean;
 }
 
 export interface ActionChange {
@@ -52,6 +85,12 @@ export interface AssistantStore {
   get(callId: string): Promise<AssistantRecord | null>;
   create(record: AssistantRecord): Promise<{ record: AssistantRecord; created: boolean }>;
   transition(callId: string, change: StateChange): Promise<AssistantRecord | null>;
+  /**
+   * left -> listening, only while the record is `left` from `change.leftAt`: `invitedBy` becomes `by`, the leave and the pause are
+   * cleared, `acked` is just `by`, `presentAtInvite` is `present`, `attendees` gains them, the voice goes off, and `session` is merged
+   * in. `invitedAt` stays (the meeting's start). Null when the record moved on (another rejoin won, or it is gone).
+   */
+  rejoin(callId: string, change: RejoinChange): Promise<AssistantRecord | null>;
   /** Record that `userId` acknowledged the transcription notice (idempotent); null when there is no record. */
   ack(callId: string, userId: string): Promise<AssistantRecord | null>;
   /** Record that `userId` held an ACTIVE seat while the assistant was in the call (idempotent; ignored once the assistant has left, audit M1). */
@@ -106,8 +145,25 @@ export interface AssistantStore {
   claimMinutesAttempt(callId: string, expect: number, max: number): Promise<boolean>;
   /** Replace the content of minutes that have no draft (writer 'none', not deleted) with a new write; `attempts` and `notifiedAt` are kept. True when replaced. */
   rewriteMinutes(minutes: MinutesRecord): Promise<boolean>;
-  /** Minutes without a draft that may be written again, with fewer than `maxAttempts` runs, oldest first. */
+  /**
+   * Minutes that may be written again, oldest first: without a draft with fewer than `maxAttempts` runs, or owing an addition with fewer
+   * than `maxAttempts` runs of that addition.
+   */
   listRetryableMinutes(maxAttempts: number, limit: number): Promise<MinutesRecord[]>;
+  /**
+   * Add a later period to minutes that hold a draft (writer not 'none', not deleted), only when the stored `throughSeq` is still
+   * `expectThroughSeq` (null: none stored yet, an older record). The stored decisions, action items and topics stay in place and the
+   * new ones follow them; attendees are unioned. With `added`, `additions` counts one more, `notifiedAt` is cleared and an owed addition
+   * is settled. Returns the stored minutes, or null when they moved on (another addition won) or are not there.
+   */
+  appendMinutes(callId: string, expectThroughSeq: number | null, add: MinutesAddition): Promise<MinutesRecord | null>;
+  /**
+   * An addition could not be written (it failed, or its budget refused it): the minutes stay as they are, marked as owing it, with
+   * `attempts` runs of it made; the end and the attendees still move. Only while `throughSeq` is `expectThroughSeq`. True when marked.
+   */
+  oweMinutesAddition(callId: string, expectThroughSeq: number | null, owed: { attempts: number; endedAt: number; attendees: string[] }): Promise<boolean>;
+  /** Count one more run of an owed addition, only when its count is still `expect` and below `max`. True when counted. */
+  claimMinutesAddition(callId: string, expect: number, max: number): Promise<boolean>;
   /** Mark the attendees as told the minutes are ready; true only for the first caller (so the bell rings once, also across a restart). */
   claimMinutesNotice(callId: string, at: number): Promise<boolean>;
   /** Record the work item made for action item `index` of live minutes, only when that item has none yet. True when recorded. */
@@ -161,6 +217,18 @@ export class MemoryAssistantStore implements AssistantStore {
     if (change.to === 'paused') r.pausedBy = change.by;
     if (change.to === 'listening') r.pausedBy = null;
     if (change.to === 'left') { r.leftAt = change.at; r.leftBy = change.by; }
+    return copy(r);
+  }
+
+  async rejoin(callId: string, change: RejoinChange) {
+    // Read, compare and write in one synchronous step: of two rejoins at once only the first finds the leave it read.
+    const r = this.records.get(callId);
+    if (!r || r.state !== 'left' || r.leftAt !== change.leftAt) return null;
+    r.state = 'listening'; r.invitedBy = change.by; r.leftAt = null; r.leftBy = null; r.pausedBy = null;
+    r.acked = [change.by]; r.presentAtInvite = [...new Set(change.present)];
+    for (const u of change.present) addTo(r.attendees, u);
+    r.voice = false;
+    r.session = { ...sessionOf(r), ...copy(change.session) };
     return copy(r);
   }
 
@@ -359,8 +427,37 @@ export class MemoryAssistantStore implements AssistantStore {
   }
 
   async listRetryableMinutes(maxAttempts: number, limit: number) {
-    return [...this.minutes.values()].filter((m) => !m.deleted && m.writer === 'none' && m.retryable && (m.attempts ?? 1) < maxAttempts)
+    return [...this.minutes.values()].filter((m) => !m.deleted && ((m.writer === 'none' && m.retryable && (m.attempts ?? 1) < maxAttempts)
+      || (m.writer !== 'none' && m.additionOwed === true && (m.additionAttempts ?? 0) < maxAttempts)))
       .sort((a, b) => a.createdAt - b.createdAt || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
+  }
+
+  async appendMinutes(callId: string, expectThroughSeq: number | null, add: MinutesAddition) {
+    const m = this.minutes.get(callId);
+    if (!m || m.deleted || m.writer === 'none' || (m.throughSeq ?? null) !== expectThroughSeq) return null;
+    if (add.summary !== null) m.summary = add.summary;
+    m.decisions.push(...copy(add.decisions)); m.actionItems.push(...copy(add.actionItems)); m.topics.push(...copy(add.topics));
+    m.endedAt = add.endedAt; for (const u of add.attendees) addTo(m.attendees, u);
+    m.lineCount = add.lineCount; m.throughSeq = add.throughSeq; m.truncated = m.truncated || add.truncated;
+    if (add.added) { m.additions = (m.additions ?? 0) + 1; m.notifiedAt = null; m.additionOwed = false; m.additionAttempts = 0; }
+    return copy(m);
+  }
+
+  async oweMinutesAddition(callId: string, expectThroughSeq: number | null, owed: { attempts: number; endedAt: number; attendees: string[] }) {
+    const m = this.minutes.get(callId);
+    if (!m || m.deleted || m.writer === 'none' || (m.throughSeq ?? null) !== expectThroughSeq) return false;
+    m.additionOwed = true; m.additionAttempts = owed.attempts; m.endedAt = owed.endedAt;
+    for (const u of owed.attendees) addTo(m.attendees, u);
+    return true;
+  }
+
+  async claimMinutesAddition(callId: string, expect: number, max: number) {
+    const m = this.minutes.get(callId);
+    if (!m || m.deleted || m.writer === 'none' || !m.additionOwed) return false;
+    const n = m.additionAttempts ?? 0;
+    if (n !== expect || n >= max) return false;
+    m.additionAttempts = n + 1;
+    return true;
   }
 
   async claimMinutesNotice(callId: string, at: number) {

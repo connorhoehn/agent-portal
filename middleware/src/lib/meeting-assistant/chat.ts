@@ -80,7 +80,12 @@ export const noticeText = {
   joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
     `${NOVA_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
     `${NOVA_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
-    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone; a dismissed ${NOVA_NAME} cannot rejoin this call.`,
+    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone.`,
+  /** Nova was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges again. */
+  rejoined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
+    `${NOVA_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
+    `${NOVA_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes} minutes. ` +
+    `Anyone here can pause ${NOVA_NAME}, or dismiss it for everyone.`,
   paused: (name: string): string => `${name} paused ${NOVA_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${NOVA_NAME}. ${NOVA_NAME} is listening again.`,
   dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${NOVA_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,
