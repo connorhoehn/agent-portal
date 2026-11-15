@@ -9,12 +9,14 @@ by side, or strips stacked), a caption bar (chapter, title, one sentence), a nam
 each element just before it is clicked. The audio track places every spoken clip at the moment it was spoken in the
 recording (adelay), mixes them (amix, normalize=0), evens the level (loudnorm) and is muxed as AAC. This ffmpeg has no
 drawtext, so every caption, label and ring is a PNG drawn with Pillow and overlaid. --check also writes one frame per
-scene to <dir>/check/.
+scene to <dir>/check/. --final names the film file. For the live take, the timeline may carry its own title cards
+(`cards`), and <dir>/nova-audio.jsonl (Nova's voice frames as Vera's browser received them) is decoded and placed too.
 """
 import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,9 +33,16 @@ INK = (241, 245, 249)
 MUTED = (148, 163, 184)
 ACCENT = (245, 158, 11)
 FONT = '/System/Library/Fonts/Helvetica.ttc'
-TITLE_SECS = 2.4
-OPEN_SECS = 3.6
+TITLE_SECS = 0  # no card between scenes: the caption bar carries the chapter, the title and the sentence
+OPEN_SECS = 2.6
 GUTTER = 14
+# Pace: speech, the recorder's holds (a state shown on purpose) and the ring before each click play as they happened; any other
+# stretch where the picture does not change keeps its first FREEZE_KEEP seconds and plays the rest FREEZE_SPEED times faster;
+# the rest (menus opening, cards arriving, typing) plays ACTIVE_SPEED times faster.
+FREEZE_MIN = 1.0
+FREEZE_KEEP = 0.6
+FREEZE_SPEED = 8.0
+ACTIVE_SPEED = 2.5
 
 # Regions of a 1440x900 recording, by name (x, y, w, h). The recorder names them per view; tuned against its screenshots.
 CROPS = {
@@ -48,6 +57,7 @@ CROPS = {
     'notfound': (420, 44, 1020, 400),    # the meeting page's not-found message
     'lower': (0, 330, 1440, 570),        # the call card, the deck prompt and the footer
     'meeting': (60, 60, 980, 515),       # the meeting page's content, above the call card
+    'chat-pane': (960, 44, 480, 812),    # the whole call chat pane, header to composer
     'callcard': (96, 572, 848, 144),     # the page's call card: the viewer's own camera tile, the people count and the call controls
 }
 
@@ -165,7 +175,9 @@ def fit(crop, cell):
 
 
 def encode_shot(tl, out_dir, shot, scene, idx, tmp):
-    n_frames = frames((shot['to'] - shot['from']) / 1000)
+    # A shot marked with a speed (a wait where nothing changes) plays that many times faster.
+    sp = shot.get('speed', 1) or 1
+    n_frames = frames((shot['to'] - shot['from']) / 1000 / sp)
     dur = n_frames / FPS
     cells = LAYOUTS[shot['layout']]
     views = shot['views']
@@ -179,11 +191,11 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
         start = (shot['from'] - vid['startMs']) / 1000
         if start < 0:
             raise SystemExit(f'scene {scene["n"]}: shot starts before video {view["v"]} does')
-        inputs += ['-ss', f'{start:.3f}', '-t', f'{dur + 0.5:.3f}', '-i', os.path.join(out_dir, vid['file'])]
+        inputs += ['-ss', f'{start:.3f}', '-t', f'{dur * sp + 0.5:.3f}', '-i', os.path.join(out_dir, vid['file'])]
         crop = CROPS.get(view.get('crop')) or (0, 0, tl['size']['width'], tl['size']['height'])
         s, px, py, sw, sh = fit(crop, cell)
         cx, cy, cw, ch = crop
-        filters.append(f'[{k}:v]setpts=PTS-STARTPTS,fps={FPS},crop={cw}:{ch}:{cx}:{cy},scale={sw}:{sh}:flags=lanczos[v{k}]')
+        filters.append(f'[{k}:v]setpts=(PTS-STARTPTS)/{sp},fps={FPS},crop={cw}:{ch}:{cx}:{cy},scale={sw}:{sh}:flags=lanczos[v{k}]')
         filters.append(f'[{last}][v{k}]overlay={px}:{py}:eof_action=repeat[b{k}]')
         last = f'b{k}'
         placed.append((view, crop, s, px, py))
@@ -209,8 +221,8 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
         for view, crop, s, px, py in placed:
             if view['v'] != click['video']:
                 continue
-            t0 = (click['atMs'] - shot['from']) / 1000
-            t1 = t0 + click['leadMs'] / 1000 + 0.15
+            t0 = (click['atMs'] - shot['from']) / 1000 / sp
+            t1 = t0 + (click['leadMs'] / 1000 + 0.15) / sp
             if t1 < 0 or t0 > dur:
                 continue
             bx, by, bw, bh = click['box']
@@ -231,6 +243,77 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
     run(['ffmpeg', '-y', '-v', 'error', *inputs, '-filter_complex', ';'.join(filters), '-map', '[out]',
          '-frames:v', str(n_frames), '-r', str(FPS), '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-an', out])
     return out, n_frames
+
+
+def still_spans(mp4, dur):
+    """Stretches of at least FREEZE_MIN seconds where the picture does not change. A frame counts as changed when enough pixels
+    of a small grey copy move by a clear step: the recordings' codec refreshes (every couple of seconds) and a ticking call timer
+    stay under that, a card changing state or a menu opening do not."""
+    import numpy as np
+    w, h = 320, 180
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', mp4, '-vf', f'scale={w}:{h},format=gray', '-f', 'rawvideo', '-'],
+                         capture_output=True, check=True).stdout
+    a = np.frombuffer(raw, np.uint8).reshape(-1, h, w)[:, : int(h * AREA_H / H)].astype(np.int16)
+    if len(a) < 2:
+        return []
+    changed = (np.abs(np.diff(a, axis=0)) > 24).sum(axis=(1, 2)) > 12
+    spans, start = [], 0
+    for i, c in enumerate(changed):
+        if c:
+            if (i + 1 - start) / FPS >= FREEZE_MIN:
+                spans.append((start / FPS, (i + 1) / FPS))
+            start = i + 1
+    if (len(a) - start) / FPS >= FREEZE_MIN:
+        spans.append((start / FPS, min(dur, len(a) / FPS)))
+    return spans
+
+
+def squeeze(mp4, nf, protect):
+    """Re-times an encoded shot (see the pace settings above); `protect` holds the speech, in the shot's own seconds. Returns the
+    shot, its frame count and its segments [(from, to, factor)] in the shot's own seconds, for placing speech."""
+    dur = nf / FPS
+    freezes = still_spans(mp4, dur)
+    cuts = {0.0, dur}
+    for fs, fe in freezes:
+        cuts |= {fs, min(fe, fs + FREEZE_KEEP), fe}
+    for pa, pb in protect:
+        cuts |= {max(0.0, pa), min(dur, pb)}
+    pts = sorted(c for c in cuts if 0.0 <= c <= dur)
+
+    def factor(m):
+        if any(pa <= m < pb for pa, pb in protect):
+            return 1.0
+        for fs, fe in freezes:
+            if fs <= m < fe:
+                return 1.0 if m < fs + FREEZE_KEEP else FREEZE_SPEED
+        return ACTIVE_SPEED
+    segs = []
+    for x, y in zip(pts, pts[1:]):
+        if y - x < 1 / FPS:
+            continue
+        f = factor((x + y) / 2)
+        if segs and segs[-1][2] == f and abs(segs[-1][1] - x) < 1e-6:
+            segs[-1] = (segs[-1][0], y, f)
+        else:
+            segs.append((x, y, f))
+    if not segs or all(f == 1.0 for _, _, f in segs):
+        return mp4, nf, [(0.0, dur, 1.0)]
+    filt = ''.join(f'[0:v]trim=start={a:.3f}:end={b:.3f},setpts=(PTS-STARTPTS)/{f}[s{i}];' for i, (a, b, f) in enumerate(segs))
+    filt += ''.join(f'[s{i}]' for i in range(len(segs))) + f'concat=n={len(segs)}:v=1:a=0,fps={FPS}[out]'
+    out = mp4[:-4] + '-sq.mp4'
+    new_nf = frames(sum((b - a) / f for a, b, f in segs))
+    run(['ffmpeg', '-y', '-v', 'error', '-i', mp4, '-filter_complex', filt, '-map', '[out]', '-frames:v', str(new_nf), '-r', str(FPS),
+         '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', out])
+    return out, new_nf, segs
+
+
+def local_to_film(segs, x):
+    t = 0.0
+    for a, b, f in segs:
+        if x < b:
+            return t + max(0.0, x - a) / f
+        t += (b - a) / f
+    return t
 
 
 def nova_voice(out_dir):
@@ -274,6 +357,7 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--final', help='the film file (default <out>/nova-in-the-meeting.mp4)')
+    ap.add_argument('--no-squeeze', action='store_true', help='keep unchanged stretches at normal speed')
     a = ap.parse_args()
     out_dir = os.path.abspath(a.out)
     tl = json.load(open(os.path.join(out_dir, 'timeline.json')))
@@ -294,20 +378,30 @@ def main():
     t += n / FPS
     check_points = []
     for scene in tl['scenes']:
-        png = os.path.join(tmp, f'card-{scene["n"]:02d}.png')
-        card_png(png, str(scene['n']), scene['title'], scene['caption'])
-        n = frames(TITLE_SECS)
-        mp4 = os.path.join(tmp, f'card-{scene["n"]:02d}.mp4')
-        encode_card(png, n, mp4)
-        parts.append(mp4)
-        t += n / FPS
+        if TITLE_SECS > 0:
+            png = os.path.join(tmp, f'card-{scene["n"]:02d}.png')
+            card_png(png, str(scene['n']), scene['title'], scene['caption'])
+            n = frames(TITLE_SECS)
+            mp4 = os.path.join(tmp, f'card-{scene["n"]:02d}.mp4')
+            encode_card(png, n, mp4)
+            parts.append(mp4)
+            t += n / FPS
         longest = None
         for i, shot in enumerate(scene['shots']):
             if shot.get('to') is None or shot['to'] <= shot['from']:
                 continue
             mp4, nf = encode_shot(tl, out_dir, shot, scene, i, tmp)
+            spd = shot.get('speed', 1) or 1
+            protect = [((s['atMs'] - shot['from']) / 1000 / spd - 0.2, (s['atMs'] + s['durMs'] - shot['from']) / 1000 / spd + 0.2)
+                       for s in tl['speech'] if s['atMs'] < shot['to'] and s['atMs'] + s['durMs'] > shot['from']]
+            protect += [((h0 - shot['from']) / 1000 / spd, (h1 - shot['from']) / 1000 / spd)
+                        for h0, h1 in tl.get('holds', []) if h0 < shot['to'] and h1 > shot['from']]
+            shown = {v['v'] for v in shot['views']}
+            protect += [((c['atMs'] - shot['from']) / 1000 / spd, (c['atMs'] + c['leadMs'] - shot['from']) / 1000 / spd + 0.2)
+                        for c in tl['clicks'] if c['video'] in shown and shot['from'] <= c['atMs'] < shot['to']]
+            mp4, nf, segs = (mp4, nf, [(0.0, nf / FPS, 1.0)]) if a.no_squeeze else squeeze(mp4, nf, protect)
             parts.append(mp4)
-            shot_map.append((shot['from'], shot['to'], t, scene['n']))
+            shot_map.append((shot['from'], shot['to'], t, scene['n'], spd, segs))
             if longest is None or nf > longest[1]:
                 longest = (t, nf)
             t += nf / FPS
@@ -337,7 +431,7 @@ def main():
         if not hit:
             print(f'  speech not in any shot, left out: {sp["who"]}: {sp["text"][:60]}')
             continue
-        at = hit[2] + (sp['atMs'] - hit[0]) / 1000
+        at = hit[2] + local_to_film(hit[5], (sp['atMs'] - hit[0]) / 1000 / hit[4])
         if sp['atMs'] + sp['durMs'] > hit[1] + 300:
             nxt = next((m for m in shot_map if m[0] >= hit[1] - 5 and m[0] <= hit[1] + 5), None)
             if not nxt:

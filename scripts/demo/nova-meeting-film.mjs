@@ -6,16 +6,20 @@
 //
 // It starts its own mock middleware (:3945) and portal (:5145), refuses ports already in use, signs three fictional people
 // into one call on the Observability Platform initiative (the media server is stubbed exactly as
-// scripts/journeys/meeting-assistant.mjs does), records each person's browser at 1440x900 with Playwright, and drives
-// thirteen scenes at a viewer's pace. Every spoken line is synthesised with macOS `say` (one voice per person, one for
-// Nova) before it is "heard": the line is handed to the mock transcript injector when the speech ends. It writes
+// scripts/journeys/meeting-assistant.mjs does, or, with --real-call, the call joins the local social profile's platform-api
+// and media server and each camera is the person's portrait, as in --live below), records each person's browser at 1440x900
+// with Playwright, and drives thirteen scenes at a brisk pace (waits where nothing changes play faster in the film). Every
+// spoken line is synthesised with the provider's text-to-speech (one voice per person, one for Nova; the key from
+// middleware/.env, each line cached in <dir>/tts-cache) before it is "heard": the line is handed to the mock transcript
+// injector when the speech ends. It writes
 // <dir>/timeline.json (scenes, shots, which views, speech and click times, each in wall-clock ms and in ms on each
 // person's video), stops what it started, then runs scripts/demo/nova-film-compose.py to cut, caption and mix
 // <dir>/nova-in-the-meeting.mp4. Nothing is injected into the product pages: captions, labels and click rings exist
 // only in the edited video.
 //
 // Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --check (one frame per scene in <dir>/check), --max-minutes <n> (Nova's ceiling, so
-// the "min left" mark shows by scene 11; default 14.5). Env: FILM_OUT may stand in for --out.
+// the "min left" mark shows by scene 11; default 14.5), --real-call (needs FILM_SOCIAL_SETTINGS, below). Env: FILM_OUT may stand in
+// for --out; FILM_ENV_IS_COPY=1 says middleware/.env is a copy made for the run, removed once it has been read.
 //
 // What the mock world cannot say for itself: the scripted stand-in for the live model answers only fixed phrases
 // (middleware/src/lib/meeting-assistant/scripted-session.ts). So the one spoken question with a free answer (scene 4)
@@ -37,6 +41,7 @@
 // FILM_SINK_BASE_URL (http://127.0.0.1:3945, the origin the media node's LIVE_CAPTIONS_ORIGIN names), FILM_PLATFORM_PORT
 // (23001), FILM_GATEWAY_PORT (28080), FILM_VIDEO_PUBLIC_URL (http://localhost:3901), FILM_DEADMAN_MS (20 minutes).
 import { spawn, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -49,6 +54,8 @@ const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 
 const OUT = flag('--out') ?? process.env.FILM_OUT;
 if (!OUT) { console.error('usage: nova-meeting-film.mjs --out <dir> [--live [--until <n>]] [--record-only | --compose-only] [--max-minutes <n>]'); process.exit(2); }
 const LIVE = args.includes('--live');
+/** The call joins the local social profile's platform-api and media server (portraits as cameras) instead of a stub: --live, or --real-call with the scripted Nova. */
+const REAL_CALL = LIVE || args.includes('--real-call');
 const UNTIL = Number(flag('--until') ?? 99);
 /** Where this mode's work files go (the scripted film keeps its own in <dir>). */
 const DIR = LIVE ? path.join(OUT, 'live') : OUT;
@@ -142,20 +149,68 @@ const LIVE_SAY = {
   s12a: ['vera', 'That is everything. Thanks, Nova.', 28],
 };
 
-// ── Speech: every line synthesised once, before the recording starts, so its length paces the scene ──
+// ── Speech: every line synthesised once, before the recording starts, so its length paces the scene. The voices are the
+// provider's text-to-speech (one voice per person, and one for the scripted Nova); the key is read from middleware/.env and never
+// printed. Each line is kept in <out>/tts-cache by a hash of its voice and words, so a retake costs nothing; the cost of new lines
+// (an estimate from the audio's length) is added to <out>/tts-cache/cost.json. Every clip is 48 kHz mono PCM WAV with its
+// leading and trailing silence trimmed, so it can be laid into a microphone file and the lines follow each other briskly. ──
+const TTS_VOICE = { vera: 'shimmer', nora: 'coral', eli: 'ash', layla: 'ballad', nova: 'sage' };
+const TTS_MODELS = ['gpt-4o-mini-tts', 'tts-1-hd'];
+const TTS_STYLE = 'Speak naturally and briskly, like a colleague in a work meeting: conversational, clear, not theatrical.';
+const TTS_CACHE = path.join(OUT, 'tts-cache');
 const AUDIO = path.join(DIR, 'audio');
 fs.mkdirSync(AUDIO, { recursive: true });
+fs.mkdirSync(TTS_CACHE, { recursive: true });
+let ttsKey;
+function providerKey() {
+  if (ttsKey !== undefined) return ttsKey;
+  let text = '';
+  try { text = fs.readFileSync(path.join(ROOT, 'middleware', '.env'), 'utf8'); } catch { /* none */ }
+  const m = /^OPENAI_API_KEY=(.*)$/m.exec(text);
+  ttsKey = m ? m[1].trim().replace(/^(['"])(.*)\1$/, '$2') : null;
+  return ttsKey;
+}
+const ttsCost = { file: path.join(TTS_CACHE, 'cost.json'), usd: 0, lines: 0 };
+try { Object.assign(ttsCost, JSON.parse(fs.readFileSync(ttsCost.file, 'utf8')), { file: ttsCost.file }); } catch { /* first run */ }
+async function speechFile(who, text) {
+  const voice = TTS_VOICE[who];
+  const cached = path.join(TTS_CACHE, `${createHash('sha256').update(`${voice}\n${text}`).digest('hex').slice(0, 24)}.wav`);
+  if (fs.existsSync(cached)) return cached;
+  const key = providerKey();
+  if (!key) { console.error('film: the speech voices need OPENAI_API_KEY in middleware/.env (copy it for the run)'); process.exit(2); }
+  for (const model of TTS_MODELS) {
+    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, voice, input: text, response_format: 'wav', ...(model.startsWith('gpt-') ? { instructions: TTS_STYLE } : {}) }),
+    });
+    if (!res.ok) { console.log(`  speech: ${model} answered ${res.status}${model === TTS_MODELS.at(-1) ? '' : '; trying the next model'}`); continue; }
+    const raw = `${cached}.raw.wav`;
+    fs.writeFileSync(raw, Buffer.from(await res.arrayBuffer()));
+    execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', raw, '-af',
+      'silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse',
+      '-ar', '48000', '-ac', '1', '-c:a', 'pcm_s16le', cached]);
+    fs.rmSync(raw, { force: true });
+    const secs = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', cached]).toString().trim());
+    // gpt-4o-mini-tts: about $0.015 a minute of speech; tts-1-hd: $30 per million characters.
+    ttsCost.usd += model.startsWith('gpt-') ? (secs / 60) * 0.015 : (text.length / 1e6) * 30;
+    ttsCost.lines += 1;
+    fs.writeFileSync(ttsCost.file, JSON.stringify({ usd: Number(ttsCost.usd.toFixed(4)), lines: ttsCost.lines }));
+    return cached;
+  }
+  console.error('film: the speech provider refused every model; nothing was recorded');
+  process.exit(2);
+}
 let clipNo = 0;
-/** One clip of `say`; live clips are 48 kHz mono PCM WAV, so they can be laid into a microphone file. */
-function synth(who, text, { wav = false } = {}) {
+/** One spoken clip, copied out of the cache into this take's audio folder. */
+async function synth(who, text) {
   clipNo += 1;
-  const file = path.join(AUDIO, `${String(clipNo).padStart(3, '0')}-${who}.${wav ? 'wav' : 'aiff'}`);
-  execFileSync('say', ['-v', CAST[who].voice, '-r', '172', ...(wav ? ['--file-format=WAVE', '--data-format=LEI16@48000'] : []), '-o', file, text]);
+  const file = path.join(AUDIO, `${String(clipNo).padStart(3, '0')}-${who}.wav`);
+  fs.copyFileSync(await speechFile(who, text), file);
   const dur = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file]).toString().trim());
   return { file: path.relative(DIR, file), durMs: Math.round(dur * 1000) };
 }
 const CLIPS = {};
-if (!LIVE) for (const [id, [who, text]] of Object.entries(SAY)) CLIPS[id] = { who, text, ...synth(who, text) };
+if (!LIVE) for (const [id, [who, text]] of Object.entries(SAY)) CLIPS[id] = { who, text, ...await synth(who, text) };
 
 // ── Live: each line's place on the schedule, each person's microphone file (their lines with silence between, then a long
 // silence, as Chromium loops the file) and camera file (their portrait, a still repeated) ──
@@ -179,30 +234,38 @@ function wavFile(file, pcm) {
   h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40);
   fs.writeFileSync(file, Buffer.concat([h, pcm]));
 }
+let prevEnd = 0;
 if (LIVE) {
-  let prevEnd = 0;
   for (const [id, [who, text, when]] of Object.entries(LIVE_SAY)) {
-    const c = synth(who, text, { wav: true });
+    const c = await synth(who, text);
     const startMs = Math.round(Array.isArray(when) ? LINE[when[0]].startMs + LINE[when[0]].durMs + when[1] * 1000 : prevEnd + when * 1000);
     LINE[id] = { who, text, ...c, startMs };
     prevEnd = startMs + c.durMs;
   }
+}
+if (REAL_CALL) {
   const MEDIA = path.join(DIR, 'media');
   fs.mkdirSync(MEDIA, { recursive: true });
   const photos = process.env.FILM_PHOTOS ?? path.join(ROOT, 'portal', 'public', 'avatars', 'photos');
   const totalMs = prevEnd + 10 * 60_000;
   for (const key of ['vera', 'nora', 'eli']) {
-    const pcm = Buffer.alloc(Math.ceil((totalMs / 1000) * RATE) * 2);
-    for (const l of Object.values(LINE).filter((x) => x.who === key)) wavData(path.join(DIR, l.file)).copy(pcm, Math.round((l.startMs / 1000) * RATE) * 2);
-    const wav = path.join(MEDIA, `${key}.wav`);
-    wavFile(wav, pcm);
+    let wav = null;
+    if (LIVE) {
+      const pcm = Buffer.alloc(Math.ceil((totalMs / 1000) * RATE) * 2);
+      for (const l of Object.values(LINE).filter((x) => x.who === key)) wavData(path.join(DIR, l.file)).copy(pcm, Math.round((l.startMs / 1000) * RATE) * 2);
+      wav = path.join(MEDIA, `${key}.wav`);
+      wavFile(wav, pcm);
+    }
     const y4m = path.join(MEDIA, `${key}.y4m`);
     execFileSync('ffmpeg', ['-y', '-v', 'error', '-loop', '1', '-i', path.join(photos, `${CAST[key].personId}.jpg`), '-frames:v', '15', '-r', '15',
       '-vf', 'scale=640:640,crop=640:480:0:50,format=yuv420p', '-f', 'yuv4mpegpipe', y4m]);
     LIVE_MEDIA[key] = { wav, y4m };
   }
-  console.log(`film --live: ${Object.keys(LINE).length} lines over ${(prevEnd / 1000).toFixed(0)} s from the microphones opening`);
+  if (LIVE) console.log(`film --live: ${Object.keys(LINE).length} lines over ${(prevEnd / 1000).toFixed(0)} s from the microphones opening`);
 }
+console.log(`film: speech ready (new lines so far cost about $${ttsCost.usd.toFixed(3)} in all, ${ttsCost.lines} lines)`);
+// The scripted Nova needs no provider key: a copy made only for the speech goes before the server starts.
+if (!LIVE && process.env.FILM_ENV_IS_COPY === '1') { providerKey(); fs.rmSync(path.join(ROOT, 'middleware', '.env'), { force: true }); }
 
 // ── The stack: its own mock middleware and portal, as scripts/journeys/run-demo-moments.mjs starts them ──
 const answers = (port, host) => new Promise((resolve) => {
@@ -241,22 +304,12 @@ for (const [port, what] of [[MW_PORT, 'middleware'], [PORTAL_PORT, 'portal']]) {
  * Live: the social profile's middleware settings (scripts/social-documents.mjs `middlewareEnv`, with this middleware's port), Nova
  * on the provider's live session hearing the media server's taps, the dead-man preload and the film's scripted decision check.
  */
+const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film: set ${k} for a real call (see the header)`); process.exit(2); } return v; };
 function liveEnv() {
-  const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film --live: set ${k} (see the header)`); process.exit(2); } return v; };
-  const saved = JSON.parse(fs.readFileSync(need('FILM_SOCIAL_SETTINGS'), 'utf8'));
-  const platformPort = process.env.FILM_PLATFORM_PORT || '23001', gatewayPort = process.env.FILM_GATEWAY_PORT || '28080';
   if (UNTIL > 0 && !fs.existsSync(path.join(ROOT, 'middleware', '.env'))) { console.error('film --live: middleware/.env (the provider key) is missing'); process.exit(2); }
   const deadman = path.join(ROOT, 'scripts', 'meeting-assistant', 'lib', 'deadman.cjs');
   const preload = path.join(ROOT, 'scripts', 'demo', 'film-scripted-decisions.mjs');
   return {
-    INSECURE_DEV_MODE: 'true',
-    DOCUMENT_GRANT_ISSUER: saved.issuer, DOCUMENT_GRANT_KEY_ID: saved.keyId, DOCUMENT_GRANT_PRIVATE_KEY: saved.privateKey, DOCUMENT_POLICY_SECRET: saved.policySecret,
-    DOCUMENT_GATEWAY_PUBLIC_URL: `ws://127.0.0.1:${gatewayPort}`, DOCUMENT_GATEWAY_INTERNAL_URL: `ws://127.0.0.1:${gatewayPort}`,
-    DOCUMENT_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${platformPort}`,
-    REALTIME_GATEWAY_URL: `http://localhost:${MW_PORT}`, REALTIME_PLATFORM_PUBLIC_URL: `http://localhost:${platformPort}`,
-    REALTIME_VIDEO_PUBLIC_URL: process.env.FILM_VIDEO_PUBLIC_URL || 'http://localhost:3901',
-    DOCUMENT_COMMENT_IMPORT_TABLE: 'document-comments', DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: 'http://127.0.0.1:8000',
-    SOCIAL_CHAT_DYNAMODB_ENDPOINT: 'http://127.0.0.1:8000',
     MEETING_ASSISTANT_LIVE: '1',
     MEETING_ASSISTANT_MEDIA_URL: process.env.FILM_MEDIA_URL || 'http://127.0.0.1:3901',
     MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN: need('FILM_MEDIA_ADMIN_TOKEN'),
@@ -267,12 +320,28 @@ function liveEnv() {
     FILM_DECISION_MODULE: path.join(ROOT, 'middleware', 'src', 'lib', 'meeting-assistant', 'decision-model.ts'),
   };
 }
+/** The social profile's middleware settings (scripts/social-documents.mjs `middlewareEnv`, with this middleware's port). */
+function socialEnv() {
+  const saved = JSON.parse(fs.readFileSync(need('FILM_SOCIAL_SETTINGS'), 'utf8'));
+  const platformPort = process.env.FILM_PLATFORM_PORT || '23001', gatewayPort = process.env.FILM_GATEWAY_PORT || '28080';
+  return {
+    INSECURE_DEV_MODE: 'true',
+    DOCUMENT_GRANT_ISSUER: saved.issuer, DOCUMENT_GRANT_KEY_ID: saved.keyId, DOCUMENT_GRANT_PRIVATE_KEY: saved.privateKey, DOCUMENT_POLICY_SECRET: saved.policySecret,
+    DOCUMENT_GATEWAY_PUBLIC_URL: `ws://127.0.0.1:${gatewayPort}`, DOCUMENT_GATEWAY_INTERNAL_URL: `ws://127.0.0.1:${gatewayPort}`,
+    DOCUMENT_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${platformPort}`,
+    REALTIME_GATEWAY_URL: `http://localhost:${MW_PORT}`, REALTIME_PLATFORM_PUBLIC_URL: `http://localhost:${platformPort}`,
+    REALTIME_VIDEO_PUBLIC_URL: process.env.FILM_VIDEO_PUBLIC_URL || 'http://localhost:3901',
+    DOCUMENT_COMMENT_IMPORT_TABLE: 'document-comments', DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: 'http://127.0.0.1:8000',
+    SOCIAL_CHAT_DYNAMODB_ENDPOINT: 'http://127.0.0.1:8000',
+  };
+}
 const WORK = path.join(DIR, 'work');
 fs.rmSync(WORK, { recursive: true, force: true });
 fs.mkdirSync(WORK, { recursive: true });
 start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modules', '.bin', 'tsx'), 'src/index.ts'], path.join(ROOT, 'middleware'), {
   ...devMockEnv(), PORT: String(MW_PORT), VOICE_LOG_DIR: path.join(WORK, 'voice-log'), MOCK_PERSIST_PAIRINGS: '0',
   MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_MAX_MINUTES: String(MAX_MINUTES),
+  ...(REAL_CALL ? socialEnv() : {}),
   ...(LIVE ? liveEnv() : { MOCK_VOICE: '1' }),
 }, path.join(WORK, 'middleware.log'));
 start('portal', process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
@@ -293,7 +362,7 @@ const playwright = await import(pathToFileURL(req.resolve('playwright')).href);
 const chromium = playwright.chromium ?? playwright.default.chromium;
 
 // ── The timeline the compose step reads ──
-const timeline = { size: { width: 1440, height: 900 }, cast: {}, videos: {}, scenes: [], speech: [], clicks: [] };
+const timeline = { size: { width: 1440, height: 900 }, cast: {}, videos: {}, scenes: [], speech: [], clicks: [], holds: [] };
 for (const [k, c] of Object.entries(CAST)) timeline.cast[k] = { name: c.name, label: c.label ?? c.name, voice: c.voice };
 let scene = null;
 function beginScene(n, title, caption) { scene = { n, title, caption, shots: [] }; timeline.scenes.push(scene); console.log(`scene ${n}: ${title}`); }
@@ -312,8 +381,18 @@ function cut(layout, views, { at } = {}) {
 /** Ends the running shot without starting another: what follows until the next cut is left out of the film. */
 function skip() { const last = scene.shots.at(-1); if (last && last.to === null) last.to = Date.now(); }
 function endScene() { skip(); scene = null; }
-/** A pause for the viewer: the state on screen stays this long. */
-const hold = (ms = 3500) => sleep(ms);
+/**
+ * A pause for the viewer: an important state stays 1.5 to 2.5 s (the scenes ask for more or less; short settles pass through).
+ */
+function hold(ms = 2000) {
+  const d = ms <= 1200 ? ms : Math.min(2500, Math.max(1500, Math.round(ms * 0.5)));
+  // The edit plays a hold as recorded and speeds up other unchanged stretches, so each one is noted.
+  if (scene) timeline.holds.push([Date.now(), Date.now() + d]);
+  return sleep(d);
+}
+/** Plays what follows at `factor` times speed in the film: a wait where nothing changes on screen. normal() ends it. */
+function brisk(factor = 3) { const last = scene.shots.at(-1); cut(last.layout, last.views); scene.shots.at(-1).speed = factor; }
+function normal() { const last = scene.shots.at(-1); cut(last.layout, last.views); }
 
 const BROWSER_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'];
 const browser = await chromium.launch({ args: BROWSER_ARGS });
@@ -345,8 +424,9 @@ async function person(key, { call = true, video = key, nav = null } = {}) {
   const who = CAST[key];
   const dir = path.join(RAW, video);
   let b = browser;
-  if (LIVE && call && LIVE_MEDIA[key]) {
-    b = await chromium.launch({ args: [...BROWSER_ARGS, `--use-file-for-fake-video-capture=${LIVE_MEDIA[key].y4m}`, `--use-file-for-fake-audio-capture=${LIVE_MEDIA[key].wav}`] });
+  if (REAL_CALL && call && LIVE_MEDIA[key]) {
+    const m = LIVE_MEDIA[key];
+    b = await chromium.launch({ args: [...BROWSER_ARGS, `--use-file-for-fake-video-capture=${m.y4m}`, ...(m.wav ? [`--use-file-for-fake-audio-capture=${m.wav}`] : [])] });
     ownBrowsers.push(b);
   }
   const context = await b.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir, size: { width: 1440, height: 900 } } });
@@ -354,8 +434,9 @@ async function person(key, { call = true, video = key, nav = null } = {}) {
   must(login.status() === 200, `login ${who.userId}: ${login.status()}`);
   const role = await context.request.post(`${PORTAL}/api/session/role`, { data: { tenant: 'orgiq', role: who.role } });
   must(role.status() === 200, `role ${who.role}: ${role.status()}`);
-  if (call && LIVE) {
-    // Camera on at the join, microphone off: the three microphones open together later, so the three files share one clock.
+  if (call && REAL_CALL) {
+    // Camera on at the join, microphone off: live, the three microphones open together later, so the three files share one clock;
+    // with the scripted Nova they stay off (the lines reach it through the mock transcript, and the soundtrack carries them).
     await context.addInitScript(([k]) => localStorage.setItem(k, JSON.stringify({ micOn: false, cameraOn: true, remember: true })), [PRE_JOIN_KEY]);
     // Notes when each capture opens (the microphone file plays from its first sample then); it changes nothing else.
     await context.addInitScript(() => {
@@ -413,22 +494,22 @@ async function devPost(route, body) {
 const inject = (userId, text) => devPost('transcript-lines', { userId, text });
 
 /** A person speaks: the speech starts now and lasts its clip; the line is "heard" (injected) when it ends. */
-async function speak(p, id, { heard = true, after = 700 } = {}) {
+async function speak(p, id, { heard = true, after = 250 } = {}) {
   const c = CLIPS[id];
   must(c && c.who === p.key, `line ${id} is not ${p.key}'s`);
   timeline.speech.push({ who: p.key, text: c.text, file: c.file, atMs: Date.now(), durMs: c.durMs, heard });
   await sleep(c.durMs);
   if (heard) await inject(p.who.userId, c.text);
-  await sleep(after);
+  await sleep(Math.min(after, 600));
 }
 /** Nova speaks aloud (only once its voice is on in the product): the clip starts when the words reach the chat. */
-function novaSpeaks(text, atMs) {
-  const c = synth('nova', text);
+async function novaSpeaks(text, atMs) {
+  const c = await synth('nova', text);
   timeline.speech.push({ who: 'nova', text, file: c.file, atMs, durMs: c.durMs, heard: false });
   return c.durMs;
 }
 /** Shows the viewer what is about to be clicked: scroll into view, hover, a ring in the edited video, then the click. */
-async function press(p, locator, { lead = 1100, click = true } = {}) {
+async function press(p, locator, { lead = 700, click = true } = {}) {
   const el = locator.first();
   await el.waitFor({ state: 'visible', timeout: 30000 });
   await el.scrollIntoViewIfNeeded().catch(() => undefined);
@@ -449,8 +530,8 @@ async function watchSpeaking(p) {
   });
 }
 async function menu(p, item) {
-  await press(p, p.page.getByTestId('nova-mark'), { lead: 800 });
-  await press(p, p.page.getByRole('menuitem', { name: item }), { lead: 900 });
+  await press(p, p.page.getByTestId('nova-mark'), { lead: 550 });
+  await press(p, p.page.getByRole('menuitem', { name: item }), { lead: 650 });
 }
 async function openChat(p) {
   if (await p.page.getByTestId('huddle-thread').isVisible().catch(() => false)) return;
@@ -482,6 +563,10 @@ async function hidePrompt(p) {
   const deck = p.page.getByTestId('nova-proposal-ask');
   if (await deck.isVisible().catch(() => false)) { await deck.getByRole('button').first().focus().catch(() => undefined); await p.page.keyboard.press('Escape'); await sleep(600); }
 }
+/** Moves within the app as a link does, without a reload: a reload takes the person out of the call. */
+async function goInApp(p, href) {
+  await p.page.evaluate((h) => { window.history.pushState({}, '', h); window.dispatchEvent(new PopStateEvent('popstate')); }, href);
+}
 async function shotPng(p, name) { await p.page.screenshot({ path: path.join(DIR, 'shots', `${name}-${p.video}.png`) }).catch(() => undefined); }
 fs.mkdirSync(path.join(DIR, 'shots'), { recursive: true });
 
@@ -493,9 +578,11 @@ async function scriptedFilm() {
   must(reset.status === 200, `mock reset answered ${reset.status}`);
 
   // ── Before the film: everyone signed in, on the initiative page ──
+  // Everyone's browser is open from the start, so every recording runs before the shots that show it.
   vera = await person('vera', { nav: INITIATIVE });
   nora = await person('nora', { nav: INITIATIVE });
-  for (const p of [vera, nora]) await p.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
+  eli = await person('eli', { nav: INITIATIVE });
+  for (const p of [vera, nora, eli]) await p.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
   const me = await (await vera.api.get(`${PORTAL}/api/session/me`)).json();
   must(me.meetingAssistant === true, 'the assistant is not advertised (MEETING_ASSISTANT_ENABLED)');
   await sleep(2500);
@@ -505,22 +592,20 @@ async function scriptedFilm() {
   cut('full', [V('vera')]);
   await hold(2500);
   await press(vera, vera.page.getByTestId('initiative-start-call'));
-  await nora.page.getByRole('button', { name: 'Accept', exact: true }).click({ timeout: 30000 });
-  await vera.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
-  await nora.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
+  await Promise.all([accept(nora), accept(eli)]);
+  for (const p of [vera, nora, eli]) await p.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
   await waitFor(async () => callId, 15000, 'the call id on the wire');
   skip();
-  eli = await person('eli', { nav: INITIATIVE });
-  await eli.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
-  await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
-  await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
   await openChat(nora); await openChat(eli);
   following.add(nora); following.add(eli);
+  if (REAL_CALL) for (const p of [vera, nora, eli]) await waitFor(async () => (await cameras(p)) >= 3, 60000, `${p.key} seeing three cameras`);
   await sleep(2000);
   cut('full', [V('vera')]);
   await openChat(vera);
   following.add(vera);
   await hold(1500);
+  // On the real call each call card shows its viewer's own camera (the others fold into a count at this width): three portraits.
+  if (REAL_CALL) { cut('rows3', [V('vera', 'callcard'), V('nora', 'callcard'), V('eli', 'callcard')]); await hold(4000); cut('full', [V('vera')]); }
   await speak(vera, 'greet', { heard: false, after: 500 });
   await press(vera, vera.page.getByTestId('nova-invite'));
   await waitMark(vera, /^Nova is listening/);
@@ -544,8 +629,8 @@ async function scriptedFilm() {
 
   // ── 3. Nova listens ──
   beginScene(3, 'Nova listens', 'The team talks. Nova keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards) and stays quiet: nobody has asked it anything.');
-  cut('full', [V('eli')]);
-  await hold(1000);
+  cut(REAL_CALL ? 'rows3' : 'full', REAL_CALL ? [V('vera', 'callcard'), V('nora', 'callcard'), V('eli', 'callcard')] : [V('eli')]);
+  await hold(800);
   await speak(vera, 's3a');
   await speak(nora, 's3b');
   await speak(eli, 's3c');
@@ -557,9 +642,11 @@ async function scriptedFilm() {
   cut('split', [V('vera', 'chat-top'), V('nora', 'chat-top')]);
   await hold(800);
   await speak(vera, 's4q', { after: 0 });
+  brisk();
   await sleep(1800);
   await devPost('assistant-messages', { kind: 'reply', text: ANSWER_4, askedBy: CAST.vera.userId, askedByName: CAST.vera.name });
   await waitFor(async () => /Asked by Vera/.test(await nora.page.getByTestId('huddle-thread').innerText()), 15000, 'the answer on Nora\'s screen');
+  normal();
   await hold(4500);
   await speak(nora, 's4r', { after: 2000 });
   await shotPng(nora, 's04');
@@ -570,7 +657,9 @@ async function scriptedFilm() {
   cut('full', [V('nora', 'chat-top')]);
   await hold(600);
   await speak(nora, 's5q', { after: 0 });
+  brisk();
   await nora.page.getByText(/only you can see this/i).first().waitFor({ timeout: 30000 });
+  normal();
   await hold(800);
   await shotPng(nora, 's05');
   await hold(3400);
@@ -582,18 +671,22 @@ async function scriptedFilm() {
 
   // ── 6. An action only the asker confirms ──
   beginScene(6, 'An action card', 'Vera asks for a work item. Nova shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
-  cut('split', [V('vera', 'chat-mid'), V('nora', 'chat-mid')]);
+  cut('split', [V('vera', 'chat-pane'), V('nora', 'chat-pane')]);
   await hold(600);
   await speak(vera, 's6q', { after: 0 });
+  brisk();
   const card6 = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => /deploy latency/.test(m.metadata.summary ?? '')), 25000, 'the action card');
   const veraCard6 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   const noraCard6 = nora.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   await veraCard6.waitFor({ timeout: 20000 }); await noraCard6.waitFor({ timeout: 20000 });
+  normal();
   await hold(4500);
   await shotPng(vera, 's06a');
   await press(vera, veraCard6.getByTestId('assistant-action-confirm'));
+  brisk();
   await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card6.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
   await waitFor(async () => /Done/.test(await noraCard6.getByTestId('assistant-action-status').innerText()), 15000, 'Nora\'s card reading done');
+  normal();
   await hold(4000);
   await shotPng(vera, 's06b');
   endScene();
@@ -603,6 +696,7 @@ async function scriptedFilm() {
   cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
   await hold(600);
   await speak(vera, 's7q', { after: 0 });
+  brisk();
   const p7 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'asked' && /paging runbook/i.test(p.statement)), 25000, 'the asked proposal');
   await proposalCard(nora, p7.id).waitFor({ timeout: 20000 });
   for (const p of [vera, nora]) await deckOf(p).filter({ hasText: /paging runbook/i }).waitFor({ timeout: 20000 });
@@ -620,6 +714,7 @@ async function scriptedFilm() {
   await hold(2200);
   await shotPng(vera, 's07b');
   await press(vera, deckButton(vera, /^\s*1?\s*Consent\b/));
+  brisk();
   await cardState(vera, p7.id, 'done');
   await sleep(800);
   cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
@@ -686,7 +781,7 @@ async function scriptedFilm() {
   const input = deckOf(eli).getByRole('textbox');
   await input.waitFor({ timeout: 10000 });
   await hold(1200);
-  await input.pressSequentially(OBJECTION_9, { delay: 40 });
+  await input.pressSequentially(OBJECTION_9, { delay: 18 });
   await hold(1500);
   await shotPng(eli, 's09a');
   await input.press('Enter');
@@ -734,9 +829,9 @@ async function scriptedFilm() {
   if (!speakingAt) console.log('  WARN: the mark never read "Nova is speaking"');
   const markBox = await vera.page.getByTestId('nova-mark').first().boundingBox();
   if (speakingAt && markBox) timeline.clicks.push({ video: 'vera', atMs: speakingAt - 150, leadMs: 1600, box: [markBox.x, markBox.y, markBox.width, markBox.height].map(Math.round) });
-  const spoken = novaSpeaks(reply10.message, speakingAt ?? Date.now());
+  const spoken = await novaSpeaks(reply10.message, speakingAt ?? Date.now());
   await shotPng(vera, 's10b');
-  await hold(Math.max(3500, spoken + 1200));
+  await sleep(Math.max(1500, spoken + 500));
   const card10 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /on-call rota/ }).last();
   await press(vera, card10.getByTestId('assistant-action-confirm'));
   await waitFor(async () => /Done/.test(await card10.getByTestId('assistant-action-status').innerText()), 30000, 'the rota card going to done');
@@ -774,9 +869,11 @@ async function scriptedFilm() {
   await hold(800);
   await speak(vera, 's12a', { after: 400 });
   await menu(vera, 'Dismiss Nova');
+  brisk();
   await vera.page.getByTestId('nova-left').waitFor({ timeout: 20000 });
   const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
   await link.waitFor({ state: 'visible', timeout: 30000 });
+  normal();
   await hold(4000);
   await shotPng(vera, 's12a');
   await press(vera, link);
@@ -801,7 +898,7 @@ async function scriptedFilm() {
   await vera.page.mouse.wheel(0, 300);
   await hold(3500);
   skip();
-  await vera.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+  await goInApp(vera, '/iq/meetings');
   await vera.page.getByTestId('iq-meetings-table').waitFor({ timeout: 30000 });
   await sleep(1200);
   cut('full', [V('vera')]);
@@ -817,7 +914,7 @@ async function scriptedFilm() {
   await layla.page.getByTestId('meeting-not-found').waitFor({ timeout: 30000 });
   await hold(4500);
   await shotPng(layla, 's13a');
-  await vera.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+  await goInApp(vera, `/iq/meetings/${encodeURIComponent(callId)}`);
   await vera.page.getByTestId('meeting-delete').waitFor({ timeout: 30000 });
   await sleep(1500);
   await hidePrompt(vera);
@@ -831,6 +928,7 @@ async function scriptedFilm() {
   await press(vera, confirmDelete);
   await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 });
   await hold(3000);
+  skip();
   await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 30000, 'Nova\'s words leaving Nora\'s chat');
   cut('full', [V('nora', 'chat-end')]);
   await hold(6000);
@@ -892,7 +990,8 @@ async function readSpend() {
 }
 async function keepTranscript() {
   const lines = (await (await vera.api.get(asApi('transcript?limit=500'))).json().catch(() => ({}))).lines ?? [];
-  live.transcript = lines.map((l) => ({ userId: l.userId ?? null, speakers: l.speakers ?? null, text: l.text }));
+  live.transcript = lines.map((l) => ({ userId: l.userId ?? null, speakers: l.speakers ?? null, startMs: l.startMs ?? null, endMs: l.endMs ?? null, at: l.at ?? null, text: l.text }));
+  live.chat = (await chatMessages(vera).catch(() => [])).filter((m) => m.metadata?.kind?.startsWith('assistant-')).map((m) => ({ kind: m.metadata.kind, askedBy: m.metadata.askedBy ?? null, at: m.createdAt ?? m.timestamp ?? null, text: String(m.message ?? m.metadata.summary ?? '').slice(0, 160) }));
   note('transcript', { lines: lines.length, byUser: lines.reduce((m, l) => ({ ...m, [l.userId ?? 'none']: (m[l.userId ?? 'none'] ?? 0) + 1 }), {}) });
 }
 
@@ -1304,6 +1403,11 @@ try {
   if (scene) { skip(); console.error(`  (in scene ${scene.n})`); }
 } finally {
   clearInterval(follower);
+  if (REAL_CALL && !LIVE) {
+    timeline.cards = {
+      close: { title: 'Nova', eyebrow: 'A real call through the local media server; Nova\'s side scripted on the mock world: fictional people and data, synthetic voices', text: 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.' },
+    };
+  }
   if (LIVE) {
     // Nova still in the call (a failure, or --until): dismissed, so nothing more is billed, and what it cost read back.
     if (novaIn && vera && callId) {
