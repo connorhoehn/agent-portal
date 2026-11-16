@@ -1641,7 +1641,7 @@ async function main() {
       const api = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       check(api.coverage && typeof api.coverage.listenedSeconds === 'number', `the minutes carry no coverage: ${JSON.stringify(api.coverage)}`);
       const meta = (await veraM.page.getByTestId('meeting-meta').innerText()).replace(/\s+/g, ' ');
-      check(/Milo listened (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Milo listened: "${meta}"`);
+      check(/Milo listened for (less than a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Milo listened: "${meta}"`);
       const quiet = (await veraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ');
       if (api.coverage.pausedSeconds >= 60) check(/Milo paused for \d/.test(quiet), `Milo paused ${api.coverage.pausedSeconds}s but the quiet line says "${quiet}"`);
       const n = api.coverage.untranscribed;
@@ -1666,9 +1666,9 @@ async function main() {
       return 'no button; API 409 MINUTES_WRITTEN';
     });
 
-    await step('13a3: each attendee\'s bell holds one "Minutes from <meeting> are ready" that opens the meeting page', async () => {
+    await step('13a3: each attendee\'s bell holds one "Minutes are ready: <meeting>" that opens the meeting page', async () => {
       const api = await (await nora.api.get(asApi(nora, 'minutes'))).json();
-      const title = `Minutes from ${api.callName} are ready`;
+      const title = `Minutes are ready: ${api.callName}`;
       await noraM.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(noraM.page, 'activity-bell', 30000);
       let lines = [];
@@ -1679,7 +1679,7 @@ async function main() {
         await panel.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
         const all = panel.getByRole('tab', { name: /^All/ });
         if (await all.count()) await all.first().click().catch(() => undefined);
-        lines = (await panel.innerText().catch(() => '')).split('\n').map((l) => l.trim()).filter((l) => l.startsWith('Minutes from '));
+        lines = (await panel.innerText().catch(() => '')).split('\n').map((l) => l.trim()).filter((l) => l.startsWith('Minutes are ready: ') || l.startsWith('Minutes were updated: '));
         if (lines.length) break;
         await noraM.page.keyboard.press('Escape');
         await sleep(1500);
@@ -1742,8 +1742,14 @@ async function main() {
         check(r.row.top >= (r.scroller?.top ?? 0) - 1, `at ${width} the last proposal row is above its scroller: ${JSON.stringify(r)}`);
         clear.push(`${width}: row ends ${r.row.bottom}, transcript ${r.head.bottom}, deck ${r.deckTop}, scroller ${JSON.stringify(r.scroller)}, footer ${r.footTop}`);
       }
+      // While it waits, the summary says so; the bullets about proposals are read live, so once it is agreed it no longer does.
+      const waitingBefore = ((await (await vera.api.get(asApi(vera, 'minutes'))).json()).summaryPoints ?? []);
+      check(waitingBefore.some((b) => /^(Still waiting for answers|\d+ proposals still wait for answers): /.test(b)), `the summary does not say a proposal still waits: ${JSON.stringify(waitingBefore)}`);
       await digit(veraM, '1', deckM);
       await waitFor(async () => (await cardM.getAttribute('data-state').catch(() => null)) === 'done', 20000, 'the row reading done');
+      const pointsAfter = ((await (await vera.api.get(asApi(vera, 'minutes'))).json()).summaryPoints ?? []);
+      check(!pointsAfter.some((b) => /still wait/i.test(b) && b.includes(PROPOSAL_3)) && pointsAfter.some((b) => /^Agreed/.test(b)),
+        `after it was agreed on the meeting page the summary still says it waits: ${JSON.stringify(pointsAfter)}`);
       // The row opens its detail: how it ended, with its link.
       await cardM.click();
       const detail = veraM.page.getByTestId('meeting-proposal-detail');
@@ -1819,6 +1825,15 @@ async function main() {
       await seen(veraM.page, 'meeting-addition-note', 30000);
       const note = (await veraM.page.getByTestId('meeting-addition-note').innerText()).trim();
       check(note === 'Milo is back in this call. What it hears now is added to these minutes when it leaves.', `the meeting page says "${note}"`);
+      // Nobody can delete the meeting while Milo is back in the call: no Delete in the menu, and nobody is told they can delete it sooner.
+      const keptBack = (await veraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ');
+      check(!/can delete it sooner/.test(keptBack), `while Milo is back the page says "${keptBack}"`);
+      if (await veraM.page.getByTestId('meeting-actions').count()) {
+        await veraM.page.getByTestId('meeting-actions').click();
+        await sleep(400);
+        check(await veraM.page.getByTestId('meeting-delete').count() === 0, 'the inviter is offered Delete while Milo is back in the call');
+        await veraM.page.keyboard.press('Escape');
+      }
       for (const width of [1440, 1280]) await shot(veraM.page, 'R3-meeting-back', width);
       return 'before: absent; after: stored; page note shown';
     });
@@ -1849,6 +1864,17 @@ async function main() {
       const card = vera.page.getByTestId('assistant-minutes-card').last();
       await waitFor(async () => (await card.getByTestId('assistant-minutes-title').innerText().catch(() => '')).trim() === 'Milo added to the minutes', 20000, 'the chat card saying Milo added to the minutes');
       check((await card.getByTestId('assistant-minutes-status').innerText()).trim() === 'Updated', 'the added card is not marked Updated');
+      // The Updated card says what was added: the addition's own sentence, and counts of the new items only.
+      const addedText = (await card.getByTestId('assistant-minutes-summary').innerText()).replace(/\s+/g, ' ').trim();
+      check(/^After Milo was invited back, /.test(addedText), `the Updated card does not lead with the addition's own sentence: "${addedText}"`);
+      const addedCounts = (await card.getByTestId('assistant-minutes-counts').innerText()).replace(/\s+/g, ' ').trim();
+      check(/^\d+ new decisions? · \d+ new action items? · \d+ new proposals?$/.test(addedCounts) && cards[1].metadata.minutes.actionItems === items.length - rejoinBefore.length,
+        `the Updated card counts "${addedCounts}" (${JSON.stringify(cards[1].metadata.minutes)}) for ${items.length - rejoinBefore.length} new action items`);
+      // Nobody who acknowledged is counted as not transcribed: only the attendee who never acknowledged.
+      const neverAcked = m.attendees.filter((a) => a.userId !== VERA.userId && a.userId !== NORA.userId).length;
+      check(m.coverage.untranscribed === neverAcked, `${m.coverage.untranscribed} counted as not transcribed; ${neverAcked} attendees never acknowledged`);
+      // The page left open since R3 (not reloaded) follows the leave until the minutes cover it.
+      await waitFor(async () => /draft the rejoin summary/i.test(await veraM.page.getByTestId('meeting-action-items').innerText().catch(() => '')), 45000, 'the open meeting page showing the added action item');
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-action-items', 30000);
       check(/draft the rejoin summary/i.test(await veraM.page.getByTestId('meeting-action-items').innerText()), 'the meeting page does not show the new action item');
