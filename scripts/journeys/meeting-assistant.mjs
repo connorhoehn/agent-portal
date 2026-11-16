@@ -1273,7 +1273,18 @@ async function main() {
       return 'no frames with voice off';
     });
 
+    // One footer line: the footer row's height and the mark's top at 1280, read with the voice off, are kept with the voice chip shown.
+    const footerLine = (p) => p.page.evaluate(() => {
+      const row = document.querySelector('[data-testid="shell-footer-row"]')?.getBoundingClientRect();
+      const mark = document.querySelector('[data-testid="assistant-status-mark"]')?.getBoundingClientRect();
+      const chip = document.querySelector('[data-testid="assistant-voice-chip"]')?.getBoundingClientRect();
+      return { row: Math.round(row?.height ?? 0), markMid: mark ? Math.round(mark.top + mark.height / 2) : null, chipMid: chip ? Math.round(chip.top + chip.height / 2) : null };
+    });
+    let idleFooter = null;
+
     await step('7b-b: the inviter turns the voice on: both see the notice in the chat and the mark says so', async () => {
+      await nora.page.setViewportSize({ width: 1280, height: 900 }); await sleep(500);
+      idleFooter = await footerLine(nora);
       await assistantMenu(vera, "Turn Milo's voice on");
       for (const p of [vera, nora]) {
         await waitFor(async () => (await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice on`);
@@ -1281,12 +1292,16 @@ async function main() {
         const label = await p.page.getByTestId('assistant-status-mark').first().getAttribute('aria-label');
         check(/Milo's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
         // In-call 8: the voice is seen on the bar without opening the menu.
-        await waitFor(async () => (await p.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === 'Voice on', 10000, `${p.who.userId} seeing "Voice on" on the bar`);
+        // Sweep 4 in-call 5: the chip names Milo, so it never reads as the voice navigator's own "Voice off" beside it.
+        await waitFor(async () => (await p.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === "Milo's voice on", 10000, `${p.who.userId} seeing "Milo's voice on" on the bar`);
         // "Click to hear Milo" is decided before any reply: shown exactly when this browser holds sound until a click. Headless
         // Chromium after the walk's clicks lets sound start, so it is absent here; a browser that blocks would show it now.
         const blocks = await p.page.evaluate(async () => { const c = new AudioContext(); const s = c.state; await c.close(); return s === 'suspended'; });
         await waitFor(async () => (await p.page.getByTestId('assistant-enable-sound').count()) === (blocks ? 1 : 0), 5000, `${p.who.userId}: "Click to hear Milo" ${blocks ? 'missing' : 'shown'} before any reply, with sound ${blocks ? 'blocked' : 'allowed'}`);
       }
+      const on = await footerLine(nora);
+      check(idleFooter && on.row <= idleFooter.row + 1 && on.chipMid !== null && Math.abs(on.chipMid - (on.markMid ?? -99)) <= 4, `the footer with "Milo's voice on" is not one line at 1280: ${JSON.stringify({ idle: idleFooter, on })}`);
+      await barFits(nora.page, 'the bar with "Milo\'s voice on"', 1280);
       await vera.page.getByTestId('assistant-status-mark').click();
       check(await vera.page.getByRole('menuitem', { name: "Turn Milo's voice off" }).isVisible(), 'no "Turn Milo\'s voice off" item');
       check(await vera.page.getByRole('menuitem', { name: 'Mute Milo for me' }).isVisible(), 'no "Mute Milo for me" item');
@@ -1330,8 +1345,13 @@ async function main() {
       await assistantMenu(nora, 'Mute Milo for me');
       await waitFor(async () => (await voiceOf(nora)).muted, 5000, 'the mute');
       // In-call 8: the mute shows on the bar, and is kept for this call only (not for every later call).
-      await waitFor(async () => (await nora.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === 'Muted for you', 5000, '"Muted for you" on the bar');
-      check((await vera.page.getByTestId('assistant-voice-chip').innerText()).trim() === 'Voice on', 'the mute showed for the other person');
+      await waitFor(async () => (await nora.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === 'Milo muted for you', 5000, '"Milo muted for you" on the bar');
+      check((await vera.page.getByTestId('assistant-voice-chip').innerText()).trim() === "Milo's voice on", 'the mute showed for the other person');
+      // Sweep 4 in-call 5: the longer chip keeps the footer on one line at 1280.
+      await nora.page.setViewportSize({ width: 1280, height: 900 }); await sleep(500);
+      const muted = await footerLine(nora);
+      check(idleFooter && muted.row <= idleFooter.row + 1 && muted.chipMid !== null && Math.abs(muted.chipMid - (muted.markMid ?? -99)) <= 4, `the footer with "Milo muted for you" is not one line at 1280: ${JSON.stringify({ idle: idleFooter, muted })}`);
+      await barFits(nora.page, 'the bar with "Milo muted for you"', 1280);
       const keys = await nora.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('orgiq.assistantMuted')));
       check(keys.length === 1 && keys[0] === `orgiq.assistantMuted:${callId}`, `the mute is not kept per call: ${JSON.stringify(keys)}`);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);

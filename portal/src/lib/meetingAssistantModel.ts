@@ -154,7 +154,7 @@ export function expiresWords(v: AssistantView, actionId: string, now: number): s
 /** Milo's voice on the mark, so it can be seen without opening the menu: on for the call, and muted by this person. Null when off. */
 export function voiceWords(v: AssistantView, mutedForMe: boolean): string | null {
   if (!assistantPresent(v) || !v.voice) return null;
-  return mutedForMe ? 'Muted for you' : 'Voice on';
+  return mutedForMe ? `${ASSISTANT_NAME} muted for you` : `${ASSISTANT_NAME}'s voice on`;
 }
 
 /** The standing facts a late joiner missed in the chat, for the top of the menu. */

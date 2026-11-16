@@ -169,8 +169,8 @@ test('in-call 4: the cards waiting on this viewer, soonest first, and how long u
 });
 
 test('in-call 8 and 9: the voice shows on the mark; the menu states who invited, the voice and who may pause or dismiss', () => {
-  assert.equal(voiceWords(view('listening', { voice: true }), false), 'Voice on');
-  assert.equal(voiceWords(view('listening', { voice: true }), true), 'Muted for you');
+  assert.equal(voiceWords(view('listening', { voice: true }), false), "Milo's voice on");
+  assert.equal(voiceWords(view('listening', { voice: true }), true), 'Milo muted for you');
   assert.equal(voiceWords(view('listening'), true), null);
   assert.deepEqual(standingFacts(view('listening', { voice: true })), ['Invited by Vera Lindqvist', "Milo's voice is on in this call", 'Anyone here can pause or dismiss Milo']);
   assert.match(standingFacts(view('paused'))[1]!, /voice is off/);
