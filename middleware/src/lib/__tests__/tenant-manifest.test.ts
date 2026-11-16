@@ -23,14 +23,15 @@ const manifest = JSON.parse(readFileSync(join(root, 'tenants', 'manifest.json'),
 const rolesDir = join(root, 'middleware', 'seeds', 'roles');
 
 describe('session vocabulary', () => {
-  it('TENANTS and ROLES_BY_TENANT are the pre-manifest lists, in order', () => {
-    expect([...TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines', 'access']);
+  it('TENANTS and ROLES_BY_TENANT are the pre-manifest lists, in order, plus the interviews tenant', () => {
+    expect([...TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']);
     expect(ROLES_BY_TENANT).toEqual({
       orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'],
       assessment: ['assessor', 'lead-assessor', 'program-lead'],
       social: ['participant', 'moderator', 'community-admin'],
       pipelines: ['author', 'operator', 'pipeline-admin'],
       access: ['requester', 'approver', 'access-admin'],
+      interviews: ['recruiter', 'interviewer', 'hiring-manager'],
     });
   });
 
@@ -51,9 +52,9 @@ describe('session vocabulary', () => {
 });
 
 describe('capability subsets', () => {
-  it('keep their pre-manifest members', () => {
+  it('keep their pre-manifest members; interviews is a default-deny partition and nothing else yet', () => {
     expect([...HUDDLE_CHAT_TENANTS]).toEqual(['orgiq', 'assessment', 'social']);
-    expect([...TENANT_PARTITIONS]).toEqual(['orgiq', 'assessment', 'pipelines', 'access']);
+    expect([...TENANT_PARTITIONS]).toEqual(['orgiq', 'assessment', 'pipelines', 'access', 'interviews']);
     expect([...INDEXED_TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines', 'access']);
     expect([...ACCESS_TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines']);
   });

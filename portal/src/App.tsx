@@ -278,12 +278,12 @@ function Gate({ roles, children }: { roles: readonly string[]; children: React.R
  * Candidates. An interviewer or a hiring manager who arrives here — the tenant switch, the chooser —
  * goes on to their own desk (lib/tenantHome.ts ROLE_HOME); anyone else sees the no-access page.
  */
-function InterviewsFrontDoor() {
+function InterviewsFrontDoor({ children }: { children: React.ReactNode }) {
   const { session, isLoading } = useSession();
   if (isLoading) return <Loading />;
   const home = roleHome('interviews', session?.role);
   if (home !== TENANT_HOME.interviews) return <Navigate to={home} replace />;
-  return <Gate roles={['recruiter']}><Page element={<InterviewsCandidatesPage />} /></Gate>;
+  return <>{children}</>;
 }
 
 /** Meetings exist only while the server advertises the meeting assistant; with it off the routes are the ordinary not-found. */
@@ -544,7 +544,13 @@ export function App() {
             )}
           >
             <Route index element={<Navigate to="candidates" replace />} />
-            <Route path="candidates" element={<InterviewsFrontDoor />} />
+            <Route path="candidates" element={
+              <InterviewsFrontDoor>
+                <Gate roles={['recruiter']}>
+                  <Page element={<InterviewsCandidatesPage />} />
+                </Gate>
+              </InterviewsFrontDoor>
+            } />
             <Route path="my-interviews" element={
               <Gate roles={['interviewer']}>
                 <Page element={<InterviewsMyInterviewsPage />} />
