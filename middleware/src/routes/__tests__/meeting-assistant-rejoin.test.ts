@@ -31,7 +31,7 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { sessionOf } from '../../lib/meeting-assistant/types.js';
-import { CALL_ENDED, coverageOf, DELETE_WHILE_BACK, heardSoFar, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
+import { CALL_ENDED, coverageOf, DELETE_WHILE_BACK, heardSoFar, REJOIN_ALMOST, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, rejoinStandingByTime, setRejoinWaitMs } from '../meeting-assistant.js';
 import { settleFromRecord } from '../../lib/meeting-assistant/reconcile.js';
 import { minutesIdle, onCallEnded } from '../../lib/meeting-assistant/minutes-service.js';
 import { newAssistantSession } from '../../lib/meeting-assistant/types.js';
@@ -149,6 +149,56 @@ describe('inviting Milo back', () => {
     expect([refused.status, refused.body.error]).toEqual([409, REJOIN_LIMIT]);
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
     expect((await record()).state).toBe('left');
+  });
+
+  it('with less than five minutes of the call\'s listening time left, an invitation back is refused and the state says why (no button)', async () => {
+    process.env['MEETING_ASSISTANT_MAX_MINUTES'] = '10'; process.env['MEETING_ASSISTANT_HARD_MAX_MINUTES'] = '14';
+    budget('alice');
+    await post('invite', 'alice');
+    // While Milo is here the state says whether it could come back if it left now, so the dismissal question promises it only then.
+    expect((await get('state', 'bob')).body.rejoinLater).toBe('allowed');
+    clock += 570_000; await runtime.tick();
+    expect((await get('state', 'bob')).body).toMatchObject({ state: 'listening', rejoinLater: 'almost' });
+    clock += 30_000; await runtime.tick(); await flush();
+    expect((await get('state', 'bob')).body).toMatchObject({ state: 'left', rejoin: 'almost' });
+    expect((await get('state', 'bob')).body.rejoinLater).toBeUndefined();
+    const refused = await post('invite', 'alice');
+    expect([refused.status, refused.body.error]).toEqual([409, REJOIN_ALMOST]);
+    expect(REJOIN_ALMOST).toBe("Milo has almost used this call's listening time and cannot be invited back.");
+    expect(holds().filter((h) => h.status === 'held')).toEqual([]);
+    expect(rejoinStandingByTime(840, 840)).toBe('limit');
+    expect(rejoinStandingByTime(541, 840)).toBe('almost');
+    expect(rejoinStandingByTime(540, 840)).toBe('allowed');
+  });
+
+  it('the state says what one extend would add, and nothing at the hard maximum', async () => {
+    process.env['MEETING_ASSISTANT_MAX_MINUTES'] = '10'; process.env['MEETING_ASSISTANT_HARD_MAX_MINUTES'] = '15';
+    budget('alice');
+    await post('invite', 'alice');
+    expect((await get('state', 'bob')).body.extendSeconds).toBe(300);
+    expect((await post('extend', 'alice')).status).toBe(200);
+    expect((await get('state', 'bob')).body.extendSeconds).toBe(0);
+    await post('dismiss', 'alice');
+    expect((await get('state', 'bob')).body.extendSeconds).toBeUndefined();
+  });
+
+  it('an invitation back keeps who acknowledged before, counts its requests from zero and clears the limit notice; the call keeps its total', async () => {
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); await post('ack', 'bob');
+    await assistantStore().addRequest(CALL, { id: 'r1', askedBy: 'bob', at: clock, text: 'one' } as never);
+    await assistantStore().patchSession(CALL, { limitNoticed: true });
+    await post('dismiss', 'carol'); await flush();
+    expect((await post('invite', 'carol')).status).toBe(403);
+    mockInviters.add('carol');
+    expect((await post('invite', 'carol')).status).toBe(200);
+    const r = await record();
+    expect(sessionOf(r)).toMatchObject({ requestsBefore: 1, limitNoticed: false });
+    expect(r.requests).toBe(1);
+    expect(sessionOf(r).periods?.[0]?.acked?.sort()).toEqual(['alice', 'bob']);
+    // Alice invited the first period and Bob acknowledged in it: they acknowledge once more; Carol never did.
+    expect((await get('state', 'alice')).body).toMatchObject({ youMustAck: true, youAckedBefore: true });
+    expect((await get('state', 'bob')).body).toMatchObject({ youMustAck: true, youAckedBefore: true });
+    expect((await get('state', 'carol')).body).toMatchObject({ youMustAck: false, youAckedBefore: false });
   });
 
   it('a deleted record is never joined again, and the state says why', async () => {
@@ -327,9 +377,12 @@ describe('inviting Milo back while its earlier period is still stopping', () => 
     expect([refused.status, refused.body.error]).toEqual([409, REJOIN_STILL_LEAVING]);
     expect(holds().map((h) => h.sourceId)).toEqual(['ma:call-1']);
     expect(entries()).toEqual([]);
+    // Meanwhile the state says Milo is still leaving (the bar's "Milo is leaving…"), and no longer once it has.
+    expect((await get('state', 'bob')).body).toMatchObject({ state: 'left', leaving: true });
     open(); expect((await dismissed).status).toBe(200);
     expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
     expect((await record()).state).toBe('left');
+    expect((await get('state', 'bob')).body).toMatchObject({ state: 'left', leaving: false });
     expect((await post('invite', 'bob')).status).toBe(200);                 // once it has left, the invitation back goes through
   });
 

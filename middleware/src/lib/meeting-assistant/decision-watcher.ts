@@ -9,9 +9,9 @@
 //      (decision-model.ts) and reads a strict schema back (decision-prompt.ts).
 //   4. A proposal is posted only when: the answer says it is a decision with confidence >= MIN_CONFIDENCE; its evidence lines are in
 //      the window and come from two or more people; no watcher proposal of this call was posted in the last MIN_GAP_MS and fewer
-//      than MAX_PER_CALL were; no proposal of the call has the same normalised statement; and no dismissed ("Not a decision")
+//      than MAX_PER_CALL were in this listening period; no proposal of the call has the same normalised statement; and no dismissed ("Not a decision")
 //      proposal of the call is near it (word overlap >= NEAR_DISMISSED). The caps and the suppression are read from the stored
-//      proposals, so a restart keeps them. The proposal that reaches MAX_PER_CALL is followed by one notice to the call
+//      proposals, so a restart keeps them. The proposal that reaches MAX_PER_CALL is followed by one notice to the call (once a period)
 //      (capNotice): the count is read from the stored proposals, so it is said once, also across a restart.
 //   5. The server builds the outcome: a decision on the call's initiative, or the "create" work-item arguments the minutes use.
 //      The model's statement is shown, never executed. `named` keeps roster names only, mapped to user ids here.
@@ -31,7 +31,7 @@ import { makeDecisionModel, type DecisionModel, type ModelCheckResult } from './
 import { watcherSpend, type WatcherSpend } from './spend.js';
 import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
-import type { AssistantRecord, Proposal, ProposalOutcome, TranscriptLine } from './types.js';
+import { periodOf, type AssistantRecord, type Proposal, type ProposalOutcome, type TranscriptLine } from './types.js';
 
 /** The cheap trigger: the minutes' DECISION pattern, widened with the phrases people use when they settle something. */
 export const TRIGGER = new RegExp(`${DECISION.source}|\\blet'?s go with\\b|\\bso we'?ll\\b|\\bi'?ll take\\b|\\bcan you own\\b`, 'i');
@@ -43,18 +43,27 @@ export const MIN_CONFIDENCE = 0.8;
 export const MIN_GAP_MS = 2 * 60_000;
 export const MAX_PER_CALL = 8;
 export const NEAR_DISMISSED = 0.6;
-/** Said once in a call, by the proposal that reaches the cap (the watcher's own, or one raised again). */
-export const capNotice = (): string => `${ASSISTANT_NAME} has raised ${MAX_PER_CALL} proposals in this call and will not raise more. You can still ask ${ASSISTANT_NAME} to record a decision.`;
+/** Said once a listening period, by the proposal that reaches the cap (the watcher's own, or one raised again). */
+export const capNotice = (period = 1): string =>
+  `${ASSISTANT_NAME} has raised ${MAX_PER_CALL} proposals ${period > 1 ? 'since it was invited back' : 'in this call'} and will not raise more. You can still ask ${ASSISTANT_NAME} to record a decision.`;
 
 /**
- * After a proposal of `source` was stored: when it is the one that brought the call's count to exactly MAX_PER_CALL, post the cap
+ * When the current listening period began (0 for the first: all of it). The cap counts each period on its own, since each is paid for
+ * on its own: an invitation back may raise MAX_PER_CALL more.
+ */
+export const periodStart = (record: Pick<AssistantRecord, 'session'> | null): number => record?.session?.periodFrom ?? 0;
+
+/**
+ * After a proposal of `source` was stored: when it is the one that brought the period's count to exactly MAX_PER_CALL, post the cap
  * notice. Read from the stored proposals, so a restart neither repeats it nor forgets it.
  */
 export async function noticeIfCapReached(store: AssistantStore, callId: string, source: Proposal['source'], post: (callId: string, text: string) => Promise<void>): Promise<boolean> {
   if (source !== 'watcher') return false;
-  const count = (await store.listProposals(callId)).filter((p) => p.source === 'watcher').length;
+  const record = await store.get(callId).catch(() => null);
+  const from = periodStart(record);
+  const count = (await store.listProposals(callId)).filter((p) => p.source === 'watcher' && p.createdAt >= from).length;
   if (count !== MAX_PER_CALL) return false;
-  await post(callId, capNotice());
+  await post(callId, capNotice(record ? periodOf(record) : 1));
   return true;
 }
 
@@ -222,7 +231,8 @@ export class DecisionWatcher {
     const now = this.now();
     const existing = await store.listProposals(w.callId);
     const mine = existing.filter((p) => p.source === 'watcher');
-    if (mine.length >= MAX_PER_CALL) { this.finish(w, 'cap', 0); return; }
+    const from = periodStart(record);
+    if (mine.filter((p) => p.createdAt >= from).length >= MAX_PER_CALL) { this.finish(w, 'cap', 0); return; }
     if (mine.some((p) => now - p.createdAt < MIN_GAP_MS)) { this.finish(w, 'too-soon', 0); return; }
     const spend = (this.deps.spend ?? watcherSpend)();
     if (!spend.allowed(record, now)) { this.finish(w, 'budget', 0); return; }

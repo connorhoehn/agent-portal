@@ -82,11 +82,15 @@ export const noticeText = {
     `${ASSISTANT_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
     `${ASSISTANT_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
     `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
-  /** Milo was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges again. */
+  /**
+   * Milo was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges for the new
+   * period. Said to everyone, so it never says "again" (some never acknowledged); it says the voice is off, since an invitation back
+   * always turns it off, and "adds what it hears to the minutes", as the consent notice of a later period does.
+   */
   rejoined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
-    `${ASSISTANT_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
-    `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes} minutes. ` +
-    `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
+    `${ASSISTANT_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
+    `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes >= 1 ? `${minutes} minutes` : 'less than a minute'}. ` +
+    `${ASSISTANT_NAME}'s voice is off until someone turns it on. Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
   /**
    * Added to the join and the rejoin notice: of the seated people's display names, those whose first name is a way Milo's name is
    * heard (detector.ts `nameTwins`), in one sentence; nothing when there is nobody. Leads with a space so it can be appended.

@@ -115,7 +115,7 @@ describe('notices', () => {
     expect(await chat()).toHaveLength(4);
     expect((await post('invite')).status).toBe(200);
     expect(await texts()).toHaveLength(5);
-    expect((await texts())[4]).toBe("Milo is back in this call at Alice Ames's invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for 30 days. Milo adds what it hears to the minutes for the people in the call and leaves after 60 minutes. Anyone here can pause Milo, or dismiss it for everyone.");
+    expect((await texts())[4]).toBe("Milo is back in this call at Alice Ames's invitation and is listening again. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo adds what it hears to the minutes for the people in the call and leaves after 60 minutes. Milo's voice is off until someone turns it on. Anyone here can pause Milo, or dismiss it for everyone.");
   });
 
   it('a failed post never fails the route', async () => {

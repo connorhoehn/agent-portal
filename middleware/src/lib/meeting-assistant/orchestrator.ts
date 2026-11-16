@@ -47,7 +47,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { periodOf, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
+import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
 export const WRITE_TURN_TTL_MS = 10 * 60_000;
@@ -98,6 +98,13 @@ export interface StartContext {
    */
   period?: number;
 }
+
+/** Said once a period when its requests pass the cap: "for this call" in the first period, "since it was invited back" in later ones. */
+export const requestLimitNotice = (period: number): string =>
+  `${ASSISTANT_NAME} has reached its limit of ${assistantLimits().maxRequests} requests ${period > 1 ? 'since it was invited back' : 'for this call'} and will not answer more.`;
+/** Said once a period, a few requests before its cap. */
+export const requestsLeftNotice = (period: number): string =>
+  `${ASSISTANT_NAME} can answer ${REQUESTS_WARNING_LEFT} more requests ${period > 1 ? 'before it stops answering' : 'in this call, then it stops answering'}.`;
 
 /**
  * `start` found a run for the call that is stopping (or one of an earlier period that has yet to stop): the new run cannot start until it
@@ -575,6 +582,12 @@ export class AssistantRuntime {
       // A stop in flight is awaited; a live run whose record already left (its stop not begun yet) is looked at again shortly.
       await Promise.race([pending?.size ? Promise.allSettled([...pending]).then(() => undefined) : pause(25), pause(left)]);
     }
+  }
+
+  /** Without waiting: whether an earlier period's run (or its leave) is still finishing, as `settled` would wait for. The bar then says so. */
+  stillLeaving(callId: string, period?: number): boolean {
+    const run = this.runs.get(callId);
+    return (!!run && (run.finished || period === undefined || run.period < period)) || !!this.stopping.get(callId)?.size;
   }
 
   /** Track `work` as a stop or leave of the call that is still finishing, until it ends (whatever the outcome). */
@@ -1311,7 +1324,7 @@ export class AssistantRuntime {
       } else {
         // A plain answer with no tool call: whoever addressed Milo in the oldest line nothing has answered; no label when none says.
         const record = await this.store.get(run.ctx.callId);
-        if (record && record.requests > assistantLimits().maxRequests) { decide('drop.limit'); return; }
+        if (record && periodRequests(record) > assistantLimits().maxRequests) { decide('drop.limit'); return; }
         const delegated = await this.takeDelegatedAnswer(run, t);
         const found = delegated ? delegated.asker : await this.takeUnansweredAsker(run, tLines);
         // Nobody addressed Milo in the window: an unprompted remark is not posted as anyone's answer.
@@ -1334,18 +1347,19 @@ export class AssistantRuntime {
     if (!run) return;
     for (const e of events) {
       if (e.type === 'request') {
-        // Past the per-call cap Milo says so once and ignores further requests (the cap counts what the detector found).
+        // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
+        // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
         const record = await this.store.get(callId);
-        if (record && record.requests > assistantLimits().maxRequests) {
+        if (record && periodRequests(record) > assistantLimits().maxRequests) {
           if (!sessionOf(record).limitNoticed) {
             await this.store.patchSession(callId, { limitNoticed: true });
-            await postNoticeQuietly(callId, `${ASSISTANT_NAME} has reached its limit of ${assistantLimits().maxRequests} requests for this call and will not answer more.`);
+            await postNoticeQuietly(callId, requestLimitNotice(periodOf(record)));
           }
           continue;
         }
-        // A few requests before the cap, said once (the count only rises, so it equals this once).
-        if (record && record.requests === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) {
-          await postNoticeQuietly(callId, `${ASSISTANT_NAME} can answer ${REQUESTS_WARNING_LEFT} more requests in this call, then it stops answering.`);
+        // A few requests before the cap, said once a period (the count only rises, so it equals this once).
+        if (record && periodRequests(record) === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) {
+          await postNoticeQuietly(callId, requestsLeftNotice(periodOf(record)));
         }
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
@@ -1465,7 +1479,7 @@ export class AssistantRuntime {
     const { callId, tenant } = run.ctx;
     const record = await this.store.get(callId);
     if (!record || record.state !== 'listening') { this.answer(run, e.callId, { refused: 'not listening' }); return; }
-    if (record.requests > assistantLimits().maxRequests) { await this.refuse(run, e.callId, 'request limit reached'); return; }
+    if (periodRequests(record) > assistantLimits().maxRequests) { await this.refuse(run, e.callId, 'request limit reached'); return; }
     const atMs = run.session?.kind === 'scripted' ? this.now() : (judgedAt ?? run.sessionStartedAt + e.atMs);
     // (a) The asker: the server's own record of who spoke.
     // The asker judged at the delegation (audit S2) when there was one; otherwise the latest addressing line before the call.

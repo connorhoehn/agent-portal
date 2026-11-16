@@ -81,8 +81,10 @@ export interface AssistantSession {
   ceilingSeconds: number;
   /** The five-minute warning went out for the current ceiling. */
   warned: boolean;
-  /** The request cap notice went out. */
+  /** The request cap notice went out in the current period (an invitation back clears it: the cap counts per period). */
   limitNoticed: boolean;
+  /** The call's request count when the current period began (each period's requests are capped on their own; `requests` stays the call's total). */
+  requestsBefore?: number;
   /** Sessions started after the first because one closed unexpectedly or Milo resumed. */
   replacements: number;
   /** Spend hold ids of the extensions (the invite's own hold is settled by the ledger row and needs no id here). */
@@ -125,8 +127,13 @@ export interface AssistantSession {
 }
 
 /** One closed period of Milo in a call, kept when it is invited back (the record's own fields then describe the new period). */
-/** `part`: the ledger part the period began on (its listening rows book under it and any later part until the next period's); absent on older records. */
-export interface AssistantPeriod { invitedBy: string; from: number; leftAt: number; leftBy: string | null; part?: number }
+export interface AssistantPeriod {
+  invitedBy: string; from: number; leftAt: number; leftBy: string | null;
+  /** The ledger part the period began on (its listening rows book under it and any later part until the next period's); absent on older records. */
+  part?: number;
+  /** Who acknowledged in that period (its inviter did by inviting); absent on periods closed before this was kept. */
+  acked?: string[];
+}
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
   refusedCalls: 0, listeningSeconds: 0, settledListeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
@@ -137,6 +144,13 @@ export const newAssistantSession = (ceilingSeconds: number): AssistantSession =>
 /** The record's session bookkeeping with defaults for anything missing. */
 export const sessionOf = (record: Pick<AssistantRecord, 'session'>, fallbackCeilingSeconds = 3600): AssistantSession =>
   ({ ...newAssistantSession(fallbackCeilingSeconds), ...(record.session ?? {}) });
+
+/** Requests found in the current period only: the per-call cap counts each listening period on its own, since each is paid for on its own. */
+export const periodRequests = (record: Pick<AssistantRecord, 'requests' | 'session'>): number => Math.max(0, record.requests - (record.session?.requestsBefore ?? 0));
+
+/** Whether someone acknowledged Milo in an earlier period of this call (its inviter included). */
+export const ackedBefore = (record: Pick<AssistantRecord, 'session'>, userId: string): boolean =>
+  (record.session?.periods ?? []).some((p) => p.invitedBy === userId || (p.acked ?? []).includes(userId));
 
 /** Which period of Milo in this call the record describes now: 1 for the first, one more for each invitation back. */
 export const periodOf = (record: Pick<AssistantRecord, 'session'>): number => (Array.isArray(record.session?.periods) ? record.session.periods.length : 0) + 1;

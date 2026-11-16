@@ -70,7 +70,7 @@ import { retentionDays } from '../lib/meeting-assistant/retention.js';
 import { owedBy } from '../lib/meeting-assistant/proposal-notify.js';
 import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
-import { newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
+import { ackedBefore, newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
 import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js';
@@ -80,7 +80,7 @@ import {
   ANSWERABLE, cleanReason, closeProposals, isDue, listProposalsFor, mayDismiss, mayRaiseAgain, mayReopen, ProposalInputError, raiseAgain, respondToProposal, whatIsMissing, type ResponseKind,
 } from '../lib/meeting-assistant/proposals.js';
 import { decisionRecordedAs, mayRunProposal } from '../lib/meeting-assistant/proposal-run.js';
-import { MAX_PER_CALL, noticeIfCapReached } from '../lib/meeting-assistant/decision-watcher.js';
+import { MAX_PER_CALL, noticeIfCapReached, periodStart } from '../lib/meeting-assistant/decision-watcher.js';
 import { updateStatement } from '../lib/meeting-assistant/named-people.js';
 import type { MinutesRecord, Proposal, TranscriptLine } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
@@ -172,6 +172,12 @@ async function turnsView(callId: string, viewer: string, now: number) {
   };
 }
 
+/** What one extend adds to the ceiling now: the default minutes, up to the hard maximum (0 there), as the orchestrator's extend computes it. */
+export const extendSecondsOf = (record: AssistantRecord): number => {
+  const limits = assistantLimits(); const ceiling = recordSession(record, limits.maxSeconds).ceilingSeconds;
+  return Math.max(0, Math.min(limits.hardMaxSeconds, ceiling + limits.maxSeconds) - ceiling);
+};
+
 async function view(record: AssistantRecord | null, callId: string, session: Session) {
   if (!record) return { callId, state: 'none' as const };
   const runtime = assistantRuntime();
@@ -184,7 +190,18 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     // Who dismissed Milo, by name, so the bar can say why it left ('system' is Milo itself leaving: its time limit or a lost connection).
     leftByName: record.leftBy && record.leftBy !== 'system' ? await nameOf(record.leftBy).catch(() => null) : null,
     // After Milo left: whether it can be invited back, or why never in this call (the record was deleted, the call's listening time is used up).
-    ...(record.state === 'left' ? { rejoin: await rejoinStanding(record, runtime.deps.clock()) } : {}),
+    ...(record.state === 'left' ? {
+      rejoin: await rejoinStanding(record, runtime.deps.clock()),
+      // The earlier period's run is still finishing: an invitation back waits for it, and the bar says Milo is leaving.
+      leaving: runtime.stillLeaving(callId, periodOf(record) + 1),
+    } : {}),
+    // While Milo is here: whether it could be invited back if it left now (by the listening time; a record is never deleted while Milo
+    // is in the call), so the dismissal question promises an invitation back only when one would be allowed.
+    ...(present ? { rejoinLater: rejoinStandingByTime(listeningSecondsOf(record, runtime.deps.clock()), assistantLimits().hardMaxSeconds) } : {}),
+    // What "Extend time" would add now (0 at the hard maximum: it is then not offered).
+    ...(record.state === 'listening' || record.state === 'paused' ? { extendSeconds: extendSecondsOf(record) } : {}),
+    // This person acknowledged in an earlier period of this call: their notice says they acknowledge once more.
+    youAckedBefore: ackedBefore(record, session.sub),
     // Which period of Milo in this call this is (1 for the first); a notice closed in an earlier period shows again in a new one.
     period: (recordSession(record).periods?.length ?? 0) + 1,
     mustAck: owing, youMustAck: owing.includes(session.sub),
@@ -344,7 +361,10 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
 /** Why Milo cannot be invited back into a call it left, for good: the record was deleted, or the call used all the listening time it may have. */
 export const REJOIN_DELETED = `This call's record was deleted, so ${ASSISTANT_NAME} cannot join it again.`;
 export const REJOIN_LIMIT = `${ASSISTANT_NAME} has already listened to this call for as long as it can.`;
-export type RejoinStanding = 'allowed' | 'deleted' | 'limit';
+/** Less than REJOIN_MIN_SECONDS of the call's listening time is left: an invitation back would be over almost at once. */
+export const REJOIN_ALMOST = `${ASSISTANT_NAME} has almost used this call's listening time and cannot be invited back.`;
+export const REJOIN_MIN_SECONDS = 5 * 60;
+export type RejoinStanding = 'allowed' | 'deleted' | 'limit' | 'almost';
 /** Milo was dismissed a moment ago and is still leaving (its notice, its settlement and its session closing take a second or two). */
 export const REJOIN_STILL_LEAVING = `${ASSISTANT_NAME} is still leaving this call. Try again in a moment.`;
 /** How long an invitation back waits for Milo's earlier leave to finish before it answers REJOIN_STILL_LEAVING. Tests shorten it. */
@@ -363,10 +383,14 @@ export const heardSoFar = (record: AssistantRecord, now: number): number => {
   return listeningSecondsOf(record, Math.min(record.leftAt ?? now, now, Math.max(s.listeningSince, aliveAt)));
 };
 
-/** Whether a call Milo left may have it back: no for good once its record was deleted or its whole-call listening time is used up. */
+/** By the listening time alone: used up, less than REJOIN_MIN_SECONDS left, or enough for an invitation back. */
+export const rejoinStandingByTime = (heardSeconds: number, hardMaxSeconds: number): RejoinStanding =>
+  heardSeconds >= hardMaxSeconds ? 'limit' : hardMaxSeconds - heardSeconds < REJOIN_MIN_SECONDS ? 'almost' : 'allowed';
+
+/** Whether a call Milo left may have it back: no for good once its record was deleted, or its whole-call listening time is (almost) used up. */
 async function rejoinStanding(record: AssistantRecord, now: number): Promise<RejoinStanding> {
   if ((await assistantStore().getMinutes(record.callId).catch(() => null))?.deleted) return 'deleted';
-  return heardSoFar(record, now) >= assistantLimits().hardMaxSeconds ? 'limit' : 'allowed';
+  return rejoinStandingByTime(heardSoFar(record, now), assistantLimits().hardMaxSeconds);
 }
 
 /**
@@ -388,6 +412,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   const standing = await rejoinStanding(before, runtime.deps.clock());
   if (standing === 'deleted') throw new AppError(409, REJOIN_DELETED);
   if (standing === 'limit') throw new AppError(409, REJOIN_LIMIT);
+  if (standing === 'almost') throw new AppError(409, REJOIN_ALMOST);
   if (!sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
   // The earlier period's money is booked before a new one starts: a leave whose settlement did not finish is settled from the record now.
   let prior = before;
@@ -423,13 +448,16 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     throw new AppError(503, `${ASSISTANT_NAME} could not start. Try again in a moment.`);
   }
   const now = runtime.deps.clock();
-  const period = { invitedBy: prior.invitedBy, from: s.periodFrom ?? prior.invitedAt, leftAt: prior.leftAt, leftBy: prior.leftBy, part: s.periodPart ?? 0 };
+  // Who acknowledged in the period that closes is kept with it: their notice in the new period says they acknowledge once more.
+  const period = { invitedBy: prior.invitedBy, from: s.periodFrom ?? prior.invitedAt, leftAt: prior.leftAt, leftBy: prior.leftBy, part: s.periodPart ?? 0, acked: [...new Set([prior.invitedBy, ...prior.acked])] };
   const patch: Partial<AssistantSession> = {
     // A new ledger period, as a resume after a settlement starts one: what was heard stays on the call's clock, so the hard maximum
     // holds for the call as a whole, and the ceiling is what was heard plus this grant.
     settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: now, settledListeningSeconds: heard,
     ceilingSeconds: heard + grant, warned: false, replacements: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, lastAliveAt: now,
     periodFrom: now, periods: [...(s.periods ?? []), period], periodPart: part, ackedEver: [...new Set([...(s.ackedEver ?? []), prior.invitedBy, ...prior.acked])], // `acked` starts again; who acknowledged before stays known
+    // The request cap counts this period on its own (each period is paid for on its own), and its notices can be said again.
+    requestsBefore: prior.requests, limitNoticed: false,
   };
   let moved: AssistantRecord | null = null;
   try { moved = await store.rejoin(callId, { leftAt: prior.leftAt, by: session.sub, at: now, present, session: patch }); } catch (e) {
@@ -884,7 +912,7 @@ meetingAssistantRouter.post('/proposals/:proposalId/raise-again', asyncHandler(a
   const store = assistantStore();
   const existing = await store.getProposal(v.callId, id);
   if (!existing || !visibleTo(v, existing)) throw new NotFoundError('No such proposal');
-  const out = await raiseAgain(store, v.callId, id, v.session.sub, Date.now(), MAX_PER_CALL);
+  const out = await raiseAgain(store, v.callId, id, v.session.sub, Date.now(), MAX_PER_CALL, periodStart(v.record));
   if (!out.ok) {
     if (out.why === 'not-found') throw new NotFoundError('No such proposal');
     if (out.why === 'cap') throw new AppError(409, 'This call already has as many proposals as it can hold');

@@ -342,16 +342,16 @@ export const mayRaiseAgain = (p: Pick<Proposal, 'state' | 'run'>): boolean => (p
  * statement, outcome, named people, executor, source, asker and evidence, with no answers (earlier consents do not carry). The old one
  * is closed first, by a versioned save, so of two people raising it at once exactly one new proposal is made: an objected one moves
  * to `dismissed` (by the raiser), a failed one stays failed; both carry the new id (`run.raisedAs`). A raised copy counts toward the
- * call's cap for its source (`cap`), as the watcher's own proposals do.
+ * call's cap for its source (`cap`), counted from `since` (the current listening period's start), as the watcher's own proposals do.
  */
-export async function raiseAgain(store: AssistantStore, callId: string, id: string, userId: string, at: number, cap: number): Promise<RaiseResult> {
+export async function raiseAgain(store: AssistantStore, callId: string, id: string, userId: string, at: number, cap: number, since = 0): Promise<RaiseResult> {
   const newId = `p-${randomBytes(8).toString('hex')}`;
   for (let i = 0; i < SAVE_ATTEMPTS; i += 1) {
     const read = await store.getProposal(callId, id);
     if (!read) return { ok: false, why: 'not-found' };
     const p = await expireIfDue(store, read, at);
     if (!mayRaiseAgain(p)) return { ok: false, why: 'not-raisable', proposal: p };
-    if ((await store.listProposals(callId)).filter((x) => x.source === p.source).length >= cap) return { ok: false, why: 'cap', proposal: p };
+    if ((await store.listProposals(callId)).filter((x) => x.source === p.source && x.createdAt >= since).length >= cap) return { ok: false, why: 'cap', proposal: p };
     const note = 'Raised again as a new proposal.';
     // A failed run keeps whose it was and why; an objected one is closed by the person who raised it again.
     const run = p.state === 'failed' && p.run ? { ...p.run, raisedAs: newId } : { turnId: null, title: null, href: null, by: userId, at, note, raisedAs: newId };

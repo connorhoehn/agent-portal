@@ -22,7 +22,7 @@ import { ScriptedSession } from '../scripted-session.js';
 import { setAssistantStore } from '../store-select.js';
 import { assistantLimits } from '../limits.js';
 import { listeningSecondsOf, setAssistantSpend, settleFinished, sourceIdFor, type AssistantSpend, type ReserveInput, type SettleInput } from '../spend.js';
-import { newAssistantSession, sessionOf } from '../types.js';
+import { newAssistantSession, periodRequests, sessionOf } from '../types.js';
 
 const CALL = 'call-1'; const ALICE = 'u-alice';
 const T0 = Date.parse('2026-11-13T12:00:00.000Z');
@@ -176,6 +176,23 @@ describe('the request cap', () => {
     expect(mockPosts.replies).toEqual(['Four.', 'Four.']);
     expect(mockPosts.notices.filter((n) => /reached its limit of 2 requests/.test(n))).toHaveLength(1);
     expect(sessionOf(await rec()).limitNoticed).toBe(true);
+  });
+
+  it('the cap counts each listening period on its own: after an invitation back Milo answers again, and says the limit once more', async () => {
+    process.env['MEETING_ASSISTANT_MAX_REQUESTS'] = '2';
+    const ask = async (text: string) => { await intake.handle(CALL, { userId: ALICE, text, at: now }); now += 5000; await intake.tick(); await flush(); };
+    for (let i = 0; i < 3; i += 1) await ask('Milo, what is two plus two?');
+    expect(mockPosts.replies).toEqual(['Four.', 'Four.']);
+    expect(mockPosts.notices.filter((n) => /reached its limit/.test(n))).toEqual(['Milo has reached its limit of 2 requests for this call and will not answer more.']);
+    // What an invitation back writes (routes/meeting-assistant.ts rejoin): the call's count so far, the notice cleared, a period closed.
+    const before = await rec();
+    await store.patchSession(CALL, { requestsBefore: before.requests, limitNoticed: false, periodFrom: now, periods: [{ invitedBy: ALICE, from: before.invitedAt, leftAt: now - 1, leftBy: ALICE }] });
+    expect(periodRequests(await rec())).toBe(0);
+    for (let i = 0; i < 3; i += 1) await ask('Milo, what is two plus two?');
+    expect(mockPosts.replies).toEqual(['Four.', 'Four.', 'Four.', 'Four.']);
+    expect(mockPosts.notices.filter((n) => /reached its limit/.test(n)).at(-1)).toBe('Milo has reached its limit of 2 requests since it was invited back and will not answer more.');
+    // The whole call's total stays on the record for the meeting page.
+    expect((await rec()).requests).toBe(6);
   });
 
   it('a few requests before the cap the call is told once how many are left', async () => {

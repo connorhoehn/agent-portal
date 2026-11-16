@@ -316,6 +316,31 @@ describe('the watcher', () => {
     expect(notices).toHaveLength(1);
   });
 
+  it('the cap counts each listening period on its own: after an invitation back Milo may raise proposals again, and the notice says so once more', async () => {
+    const notices: Array<{ callId: string; text: string }> = [];
+    watcher.dispose();
+    watcher = makeWatcher({ notice: async (callId, text) => { notices.push({ callId, text }); } });
+    watcher.start('call-1');
+    for (let i = 0; i < MAX_PER_CALL; i += 1) {
+      await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: `Earlier decision ${i}`, outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'watcher', at: T0 - 3_600_000 });
+    }
+    // An invitation back began a new period an hour later (routes/meeting-assistant.ts rejoin writes periodFrom and the closed period).
+    await store.patchSession('call-1', { periodFrom: T0 - 60_000, periods: [{ invitedBy: 'u-sam', from: T0 - 7_200_000, leftAt: T0 - 120_000, leftBy: 'u-sam' }] });
+    await say('u-sam', "Let's cut over the smallest tenants first."); await say('u-priya', 'Agreed.');
+    await advance(QUIET_MS);
+    expect(await proposals()).toHaveLength(MAX_PER_CALL + 1);
+    expect(watcher.stats('call-1')['cap'] ?? 0).toBe(0);
+    // The period's own eighth proposal brings the notice, in the later period's words.
+    for (let i = 0; i < MAX_PER_CALL - 2; i += 1) {
+      await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: `Later decision ${i}`, outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'watcher', at: T0 });
+    }
+    expect(notices).toEqual([]);
+    await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: 'The last one', outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'watcher', at: T0 });
+    expect(await noticeIfCapReached(store, 'call-1', 'watcher', async (callId, text) => { notices.push({ callId, text }); })).toBe(true);
+    expect(notices).toEqual([{ callId: 'call-1', text: capNotice(2) }]);
+    expect(capNotice(2)).toBe('Milo has raised 8 proposals since it was invited back and will not raise more. You can still ask Milo to record a decision.');
+  });
+
   it('the cap notice counts the watcher\'s proposals only, and only the one that reaches the cap', async () => {
     const post = jest.fn(async () => undefined);
     await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: 'Asked for', outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'asked', at: T0 });
