@@ -62,6 +62,7 @@ test('the desk says what each interview waits for', () => {
   assert.equal(deskLabel(row({ bucket: 'to-accept', state: 'assigned', seat: 'panel' })), 'Panel: accept or decline');
   assert.equal(deskLabel(row({ state: 'ready' })), 'Prepared');
   assert.equal(deskLabel(row({ state: 'accepted' })), 'Choose questions');
+  assert.equal(deskLabel(row({ state: 'accepted', seat: 'panel' })), 'On the panel');
   assert.equal(deskLabel(row({ bucket: 'scorecard-due', state: 'ended' })), 'Scorecard due');
   assert.equal(deskLabel(row({ bucket: 'done', state: 'scored' })), 'Scorecard in');
 });

@@ -40,7 +40,7 @@ const COLUMNS: DataTableColumn<Row>[] = [
       ? <T size="sm" title={`${r.nextInterview.roundName} with ${r.nextInterview.lead.name}, ${whenLabel(r.nextInterview.scheduledAt)}`} className="block max-w-[16rem] truncate">{nextInterviewLine(r.nextInterview)}</T>
       : <Dash />),
   },
-  { key: 'result', header: 'Last result', width: '176px', render: (r) => <ResultChip result={r.lastResult} /> },
+  { key: 'result', header: 'Last result', width: '176px', render: (r) => <ResultChip result={r.lastResult} due={r.scorecardDue} /> },
   {
     key: 'since', header: 'In stage since', numeric: true, sortable: true, compare: (a, b) => a.stageChangedAt.localeCompare(b.stageChangedAt),
     render: (r) => <T size="sm" title={new Date(r.stageChangedAt).toLocaleString()}>{relativeTime(r.stageChangedAt)}</T>,

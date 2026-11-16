@@ -37,6 +37,7 @@ export interface PipelineEntry {
   stageChangedAt: string;
   nextInterview: InterviewBrief | null;
   lastResult: ResultBrief | null;
+  scorecardDue: boolean;
 }
 
 export interface OpeningRow {
@@ -113,6 +114,7 @@ export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>):
   if (row.bucket === 'done') return 'Scorecard in';
   if (row.bucket === 'closed') return row.state === 'declined' ? 'Declined' : 'Cancelled';
   if (row.state === 'live') return 'In progress';
+  if (row.seat === 'panel') return 'On the panel';
   return row.state === 'ready' ? 'Prepared' : 'Choose questions';
 }
 

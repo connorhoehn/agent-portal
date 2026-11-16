@@ -51,7 +51,8 @@ async function signIn(userId, width = 1440) {
 async function namesIn(page, tableId, cellId, expectOne) {
   const table = page.getByTestId(tableId);
   await table.getByText(expectOne, { exact: true }).first().waitFor({ timeout: 30_000 });
-  return (await table.getByTestId(cellId).allInnerTexts()).map((s) => s.trim());
+  // A person cell is the avatar (initials until a portrait lands) above the name: keep the name.
+  return (await table.getByTestId(cellId).allInnerTexts()).map((s) => s.trim().split('\n').pop().trim());
 }
 
 /** The geometry a dense home must keep: a table row above the fold and no sideways scroll. */
@@ -150,9 +151,13 @@ try {
     const names = await namesIn(page, 'interviews-my-openings-table', 'interviews-pipeline-candidate', 'Ingrid Solberg');
     const body = await page.getByTestId('interviews-my-openings').innerText();
     const iosCandidates = ['Aiko Tanaka', 'Ravi Menon', 'Chloé Martin', 'Samuel Adeyemi'];
-    const ok = names.length === 8 && iosCandidates.every((n) => !names.includes(n)) && /Senior Backend Engineer, Payments: /.test(body)
-      && /Engineering Manager, Platform: /.test(body) && !/iOS Engineer/.test(body) && names[0] === 'Ingrid Solberg';
-    record('I0.5f', ok, `hiring manager lands on ${new URL(page.url()).pathname}; ${names.length} candidates on her openings, debrief first (${names[0]}); none of the iOS opening's`);
+    const openings = await (await context.request.get(`${portal}/api/interviews/openings`)).json();
+    const titles = (openings.items ?? []).map((o) => o.title).sort();
+    const ios = await context.request.get(`${portal}/api/interviews/openings/op-ios`);
+    const ok = names.length === 8 && iosCandidates.every((n) => !names.includes(n)) && !/iOS Engineer/.test(body) && names[0] === 'Ingrid Solberg'
+      && /8 candidates on 2 openings/.test(body) && /Scorecard due/.test(body)
+      && JSON.stringify(titles) === JSON.stringify(['Engineering Manager', 'Senior Backend Engineer']) && ios.status() === 404;
+    record('I0.5f', ok, `hiring manager lands on ${new URL(page.url()).pathname}; ${names.length} candidates on her openings ${JSON.stringify(titles)}, debrief first (${names[0]}), a scorecard due shown; the iOS opening by address: ${ios.status()}`);
     homes.push({ name: 'hiring-manager-my-openings', shots: await shoot(page, 'hiring-manager-my-openings', 'interviews-my-openings-table') });
     await context.close();
   }

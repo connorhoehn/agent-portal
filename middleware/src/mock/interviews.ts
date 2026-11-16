@@ -26,7 +26,10 @@ import type {
 
 const DAY_MS = 86_400_000;
 
-/** `days` from today's UTC midnight, at `hour:minute` UTC. Negative days are in the past. */
+/**
+ * `days` from today's UTC midnight, at `hour:minute` UTC. Negative days are in the past. The seed keeps every
+ * interview between 13:00 and 18:00 UTC: a working afternoon in Europe and a working morning on the US east coast.
+ */
 function at(days: number, hour: number, minute = 0): string {
   const now = clock.now().getTime();
   const midnight = now - (now % DAY_MS);
@@ -240,23 +243,23 @@ export const interviewsFixture = defineFixture<Interview>({
       // Finished, with scorecards.
       interview({ id: 'iv-ingrid-coding', app: 'app-ingrid', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-9, 14), minutes: 60, state: 'reviewed',
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 15, ended: at(-9, 15) }),
-      interview({ id: 'iv-ingrid-together', app: 'app-ingrid', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 11), minutes: 45, state: 'reviewed',
-        questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 11, 45) }),
-      interview({ id: 'iv-mateo-coding', app: 'app-mateo', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-3, 10), minutes: 60, state: 'scored',
-        questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 11) }),
+      interview({ id: 'iv-ingrid-together', app: 'app-ingrid', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'reviewed',
+        questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 13, 45) }),
+      interview({ id: 'iv-mateo-coding', app: 'app-mateo', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 60, state: 'scored',
+        questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 15) }),
       interview({ id: 'iv-ravi-coding', app: 'app-ravi', round: 'rd-coding', type: 'technical', lead: WEN, start: at(-2, 15), minutes: 60, state: 'scored',
         questions: ['q-ios-feed', 'q-ios-debounce'], assignedDaysAgo: 7, ended: at(-2, 16) }),
       // Finished yesterday; Wen's scorecard is still due.
       interview({ id: 'iv-jonah-leadership', app: 'app-jonah', round: 'rd-leadership', type: 'behavioural', lead: WEN, start: at(-1, 16), minutes: 60, state: 'ended',
         questions: ['q-em-struggling', 'q-em-slip'], assignedDaysAgo: 6, ended: at(-1, 17) }),
       // Coming up.
-      interview({ id: 'iv-mateo-design', app: 'app-mateo', round: 'rd-design', type: 'technical', lead: HUGO, start: at(1, 10), minutes: 60, state: 'ready',
+      interview({ id: 'iv-mateo-design', app: 'app-mateo', round: 'rd-design', type: 'technical', lead: HUGO, start: at(1, 14), minutes: 60, state: 'ready',
         questions: ['q-be-ledger'], assignedDaysAgo: 2 }),
-      interview({ id: 'iv-aiko-coding', app: 'app-aiko', round: 'rd-coding', type: 'technical', lead: WEN, start: at(2, 9, 30), minutes: 60, state: 'ready',
+      interview({ id: 'iv-aiko-coding', app: 'app-aiko', round: 'rd-coding', type: 'technical', lead: WEN, start: at(2, 14, 30), minutes: 60, state: 'ready',
         questions: ['q-ios-feed', 'q-ios-debounce'], assignedDaysAgo: 4 }),
       interview({ id: 'iv-kwame-coding', app: 'app-kwame', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(3, 14), minutes: 60, state: 'assigned', assignedDaysAgo: 1 }),
       interview({ id: 'iv-ravi-together', app: 'app-ravi', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(4, 13), minutes: 45, state: 'assigned', assignedDaysAgo: 1 }),
-      interview({ id: 'iv-nadia-design', app: 'app-nadia', round: 'rd-design', type: 'technical', lead: HUGO, start: at(5, 11), minutes: 60, state: 'accepted', assignedDaysAgo: 3 }),
+      interview({ id: 'iv-nadia-design', app: 'app-nadia', round: 'rd-design', type: 'technical', lead: HUGO, start: at(5, 16), minutes: 60, state: 'accepted', assignedDaysAgo: 3 }),
       interview({ id: 'iv-nadia-leadership', app: 'app-nadia', round: 'rd-leadership', type: 'behavioural', lead: WEN, panel: [HUGO], start: at(6, 15), minutes: 60, state: 'accepted', assignedDaysAgo: 3 }),
     ],
     empty: () => [],
@@ -279,14 +282,14 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
           rate('code-quality', 4, 'Wrote the tests first and kept the clock out of the limiter so it could be tested.'),
         ] },
       { id: 'sc-ingrid-together', interviewId: 'iv-ingrid-together', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false,
-        submittedAt: at(-6, 13, 5),
+        submittedAt: at(-6, 15, 5),
         summary: 'Clear, honest examples. She owns her mistakes and follows up on disagreements with data rather than pressure.',
         ratings: [
           rate('communication', 3, 'Walked through a settlement outage in order and named what she would do differently.'),
           rate('collaboration', 3, 'Disagreed in a design review, accepted the call, and came back a month later with numbers.'),
         ] },
       { id: 'sc-mateo-coding', interviewId: 'iv-mateo-coding', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false,
-        submittedAt: at(-3, 12, 10),
+        submittedAt: at(-3, 16, 10),
         summary: 'A solid round. Correct and careful, a little slow to think about concurrency. Worth the system design round.',
         ratings: [
           rate('problem-solving', 3, 'Reached a working limiter in about thirty minutes; handled the burst case once asked.'),

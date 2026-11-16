@@ -39,6 +39,8 @@ export interface PipelineEntry {
   stageChangedAt: string;
   nextInterview: InterviewBrief | null;
   lastResult: ResultBrief | null;
+  /** A round has ended and its scorecard is not in yet. */
+  scorecardDue: boolean;
 }
 
 export interface OpeningRow {
@@ -218,6 +220,7 @@ export class WorldIndex {
           applicationId: a.id, candidate: { id: c.id, name: c.name, headline: c.headline }, stage: a.stage,
           stageChangedAt: a.history[a.history.length - 1]?.at ?? a.appliedAt,
           nextInterview: this.nextInterview(a.id), lastResult: this.lastResult(a.id),
+          scorecardDue: this.interviewsOf(a.id).some((i) => i.state === 'ended'),
         }];
       }),
     };
