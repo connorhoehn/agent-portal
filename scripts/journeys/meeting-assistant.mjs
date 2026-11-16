@@ -776,7 +776,7 @@ async function main() {
     });
 
     // ── 9g. A write whose record is not named exactly fails on its card, and nothing changes ──
-    await step('9g: a card for a write that names its record by position is confirmed, the runner refuses it ("Say the record\'s full name."), and the card reads Failed for both', async () => {
+    await step('9g: a card for a write that names its record by position is confirmed, the runner refuses it ("Milo needs the record\'s full name."), and the card reads Failed for both', async () => {
       await inject(VERA.userId, 'Milo, I need a hand with something else.');
       await sleep(1500);
       const before = (await itemsTitled(vera, 'login cookie bug'))[0];
@@ -785,11 +785,12 @@ async function main() {
       });
       check(res.status === 202, `the dev tool call answered ${res.status}`);
       const card = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'update' && m.metadata.status === 'waiting'), 20000, 'the update card');
+      check(card.metadata.summary === 'Set item 1 of the last list to cancelled', `the update card's headline is "${card.metadata.summary}", not the change in words`);
       const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: card.metadata.summary }).last();
       await veraCard.waitFor({ timeout: 20000 });
       await veraCard.getByTestId('assistant-action-confirm').click();
       const failed = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'failed'), 25000, 'the card going to failed');
-      check(/full name/i.test(failed.metadata.resultText ?? ''), `the failed card says "${failed.metadata.resultText}", not the exact-name sentence`);
+      check(failed.metadata.resultText === "Milo needs the record's full name. Ask again and name it.", `the failed card says "${failed.metadata.resultText}", not the exact-name sentence`);
       await waitFor(async () => /Failed/.test(await nora.page.getByTestId('assistant-action-card').filter({ hasText: card.metadata.summary }).last().getByTestId('assistant-action-status').innerText().catch(() => '')), 15000, 'the other person seeing Failed');
       const after = (await itemsTitled(vera, 'login cookie bug'))[0];
       check(before && after && before.id === after.id, 'the work item is gone or changed');

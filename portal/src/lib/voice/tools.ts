@@ -36,6 +36,7 @@ import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigat
 import { withNext } from './refusals.ts';
 import { accessNextStep, noAccessReason } from '../pageAccess.ts';
 import { plural } from '../plural.ts';
+import { ASSISTANT_NAME } from '../meetingAssistantModel.ts';
 import { decisionWaitedOn, derivedNextStep, type DerivedNextStep, type NextStepDecision } from '../workNextStep.ts';
 import { collectionOf, decisionSubtitle, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
@@ -280,8 +281,8 @@ export function pageRows(ctx: ToolContext): { page: PublishedPage; rows: readonl
   return { page, rows: page.rows.slice(0, PAGE_ROWS_MAX) };
 }
 
-/** What a card shows when a write from a call named no single record exactly. */
-export const STRICT_SENTENCE = "Say the record's full name.";
+/** What a card shows when a write from a call named no single record exactly (only a call's writes are strict). */
+export const STRICT_SENTENCE = `${ASSISTANT_NAME} needs the record's full name. Ask again and name it.`;
 
 /** A write from a call refuses a position ("2", "the second one"): the refusal sentence for a bare number, else null. */
 export function positionRefusal(ctx: ToolContext, said: string): ToolResult | null {

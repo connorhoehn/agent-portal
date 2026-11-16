@@ -778,6 +778,7 @@ test('S4: update, decide and attach refuse a position from a call', async () => 
   const { fetch } = fakeFetch([]);
   const strict = toolContext({ fetch, results: new ResultMemory(), strictTargets: true });
   assert.equal(positionRefusal(strict, ' 2 ')?.summary, STRICT_SENTENCE);
+  assert.equal(STRICT_SENTENCE, "Milo needs the record's full name. Ask again and name it.", 'the refusal has a subject and names Milo');
   assert.equal(positionRefusal(strict, 'work-item:w-2'), null);
   assert.equal(positionRefusal(toolContext({ fetch, results: new ResultMemory() }), '2'), null, 'the voice navigator keeps positions');
 });

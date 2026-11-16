@@ -180,6 +180,26 @@ describe('what a session is started with', () => {
     expect(status.does).toBeUndefined();
   });
 
+  it('says every other write from its own arguments, never the catalogue sample sentence (sweep 4 in-call 1)', () => {
+    expect(describeCall('update', { ref: 'Runbook refresh', fields: { status: 'cancelled' } }).summary).toBe('Set "Runbook refresh" to cancelled');
+    expect(describeCall('update', { ref: '1', fields: { status: 'in_progress' } }).summary).toBe('Set item 1 of the last list to in progress');
+    expect(describeCall('update', { ref: 'work-item:wi-12', fields: { assignee: 'Ada Brooks', sprint: 'next' } }).summary).toBe('Assign a work item to Ada Brooks and move a work item to the next sprint');
+    expect(describeCall('update', { ref: 'Nightly digest', fields: { paused: true } }).summary).toBe('Pause "Nightly digest"');
+    expect(describeCall('update', { ref: 'report:program', fields: { publish: true } }).summary).toBe('Publish the program report');
+    expect(describeCall('decide', { ref: 'request:r-9', decision: 'reject', note: 'not needed' }).summary).toBe('Reject an access request');
+    expect(describeCall('decide', { ref: 'Pipelines operator for Ada', decision: 'discard' }).summary).toBe('Discard "Pipelines operator for Ada"');
+    expect(describeCall('decide', { ref: 'review-item:g-1', decision: 'reject' }).summary).toBe('Revoke a standing grant');
+    expect(describeCall('decide', { ref: 'Choose a vendor', decision: 'resolve', option: 'Vendor B' }).summary).toBe('Resolve "Choose a vendor" with the option "Vendor B"');
+    expect(describeCall('queue_work', { kind: 'deck', target: 'Payments', focus: 'this sprint' }).summary).toBe('Build a status deck on "Payments", covering this sprint');
+    expect(describeCall('queue_work', { kind: 'bot-run', target: 'Doc gardener' }).summary).toBe('Run the bot "Doc gardener" now');
+    expect(describeCall('queue_work', { kind: 'dispatch', target: 'rows', rows: [1, 2], scope: 'this-page', model: 'Haiku' }).summary).toBe('Dispatch rows 1, 2 of the page in view to an agent on Haiku');
+    expect(describeCall('message', { target: { kind: 'channel', name: 'platform' }, text: 'Deploy is at five.' }).summary).toBe('Post in #platform: "Deploy is at five."');
+    for (const [name, args] of [['update', { ref: 'x', fields: {} }], ['decide', { ref: 'x', decision: 'reject' }], ['queue_work', { kind: 'sweep', target: 'all' }], ['message', {}]] as const) {
+      const said = voiceTool(name)!.says.replace(/ once you confirm\.?$/i, '').replace(/\.$/, '');
+      expect(describeCall(name, args).summary).not.toBe(said);
+    }
+  });
+
   it('lists every argument the tool will receive on the card, nested ones included (audit B7)', () => {
     const long = 'x'.repeat(400);
     const { summary, detail } = describeCall('create', {

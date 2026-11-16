@@ -401,9 +401,110 @@ export function describeCall(name: string, args: unknown): { summary: string; de
     const status = capText(a['status'], 20), message = capText(a['message'], 120);
     return { summary: `Set your status to ${status || 'a new value'}${message ? `: ${message}` : ''}`, detail };
   }
-  const tool = voiceTool(name);
-  const says = tool?.says?.replace(/ once you confirm\.?$/i, '').replace(/\.$/, '') ?? '';
-  return { summary: says || `Run ${name}`, detail };
+  // Every other write is said from its own arguments: what will change, on what, to what. The catalogue's `says` line is a
+  // sample sentence for the voice dock ("Approving the request"), so it is never the headline: a reject must read as a reject.
+  if (name === 'update') return { summary: updateSummary(a, fields), detail };
+  if (name === 'decide') return { summary: decideSummary(a), detail };
+  if (name === 'queue_work') return { summary: queueSummary(a), detail };
+  if (name === 'message') return { summary: messageSummary(a), detail };
+  return { summary: 'Make the change that was asked for', detail };
+}
+
+/** A record a write names, in words: a name in quotes, a position as a position, a typed reference by its kind only. */
+export function recordWords(ref: unknown): string {
+  const r = capText(ref, 120);
+  if (!r) return 'a record';
+  if (/^\d{1,2}$/.test(r)) return `item ${r} of the last list`;
+  if (r === 'report:program') return 'the program report';
+  const typed = /^([a-z][a-z-]*):[^\s]+$/i.exec(r);
+  if (typed) { const k = typed[1]!.toLowerCase(), label = REF_LABELS[k] ?? k.replace(/-/g, ' '); return `${/^[aeiou]/.test(label) ? 'an' : 'a'} ${label}`; }
+  return `"${r}"`;
+}
+const REF_LABELS: Readonly<Record<string, string>> = { ...KIND_LABELS, 'hitl-approval': 'pending transaction', 'review-item': 'standing grant', 'runbook-proposal': 'runbook proposal', request: 'access request', dm: 'direct message' };
+const shortQuote = (v: unknown, n = 80): string => { const t = capText(v, 2000); return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t; };
+const STATUS_WORDS: Readonly<Record<string, string>> = { in_progress: 'in progress', in_review: 'in review' };
+const lowerFirst = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+function joinClauses(parts: string[]): string {
+  const [first, ...rest] = parts;
+  if (!first) return '';
+  const tail = rest.map(lowerFirst);
+  return tail.length ? `${first}${tail.length > 1 ? `, ${tail.slice(0, -1).join(', ')}` : ''} and ${tail.at(-1)}` : first;
+}
+
+/** An update in words: "Set "Runbook" to cancelled", "Assign "Runbook" to Ada", "Pause "Nightly digest"". */
+function updateSummary(a: Record<string, unknown>, f: Record<string, unknown>): string {
+  const what = recordWords(a['ref']);
+  const parts: string[] = [];
+  const status = capText(f['status'], 20);
+  if (status) parts.push(`Set ${what} to ${STATUS_WORDS[status] ?? status.replace(/_/g, ' ')}`);
+  const assignee = capText(f['assignee'], 120);
+  if (assignee) parts.push(`Assign ${what} to ${/^me$/i.test(assignee) ? 'the person who asked' : assignee}`);
+  const sprint = capText(f['sprint'], 80);
+  if (sprint) parts.push(/^none$/i.test(sprint) ? `Take ${what} out of its sprint` : `Move ${what} to ${/^this$/i.test(sprint) ? 'the current sprint' : /^next$/i.test(sprint) ? 'the next sprint' : `the sprint "${sprint}"`}`);
+  if (typeof f['paused'] === 'boolean') parts.push(`${f['paused'] ? 'Pause' : 'Resume'} ${what}`);
+  const reviewed = capText(f['reviewed'], 10);
+  if (reviewed) parts.push(`${reviewed === 'reject' ? 'Reject' : 'Accept'} the result of ${what}`);
+  if (f['requeued'] === true) parts.push(`Run ${what} again`);
+  if (typeof f['member'] === 'boolean') parts.push(`${f['member'] ? 'Join' : 'Leave'} ${what}`);
+  if (f['read'] === true) parts.push(`Mark ${what} read`);
+  if (f['publish'] === true) parts.push(`Publish ${what}`);
+  if (capText(f['response'], 10) && !status) parts.push(`Answer ${what}`);
+  return joinClauses(parts) || `Change ${what}`;
+}
+
+const DECIDE_VERBS: Readonly<Record<string, string>> = { approve: 'Approve', reject: 'Reject', accept: 'Accept', discard: 'Discard', deliver: 'Deliver', resolve: 'Resolve' };
+/** A decision in words, the decision first: "Reject an access request" never reads as an approval. */
+function decideSummary(a: Record<string, unknown>): string {
+  const what = recordWords(a['ref']);
+  const decision = capText(a['decision'], 20).toLowerCase();
+  const option = capText(a['option'], 120);
+  // A standing grant in an access review: approve keeps it, reject revokes it.
+  const grant = /^review-item:/i.test(capText(a['ref'], 120));
+  const verb = grant && decision === 'approve' ? 'Keep' : grant && decision === 'reject' ? 'Revoke' : DECIDE_VERBS[decision];
+  if (!verb) return `Decide on ${what}`;
+  return `${verb} ${what}${option ? ` with the option "${option}"` : ''}`;
+}
+
+const QUEUE_WORDS: Readonly<Record<string, (t: string) => string>> = {
+  sweep: (t) => `Run the sweep ${t} now`,
+  'bot-run': (t) => `Run the bot ${t} now`,
+  pipeline: (t) => `Dry-run the runbook ${t}`,
+  job: (t) => `Queue the job ${t}`,
+  dispatch: (t) => `Dispatch ${t} to an agent`,
+  'finding-promote': (t) => `Turn the finding ${t} into a job`,
+  'finding-analyze': (t) => `Analyse the finding ${t}`,
+  'change-rereview': (t) => `Review the change ${t} again`,
+  'change-address': (t) => `Have an agent address the review comments on ${t}`,
+  deck: (t) => `Build a status deck on ${t}`,
+  summarize: (t) => `Summarise ${t}`,
+  diagram: (t) => `Draw a diagram of ${t}`,
+  doc: (t) => `Write a document from ${t}`,
+  'assessment-run': (t) => `Score the dimensions of ${t}`,
+  'draft-evidence': (t) => `Draft an evidence summary for ${t}`,
+  'draft-followups': (t) => `Draft follow-ups for ${t}`,
+};
+/** Queued work in words, by what is queued and on what: "Build a status deck on "Payments"", never the sample sweep. */
+function queueSummary(a: Record<string, unknown>): string {
+  const kind = capText(a['kind'], 40);
+  const rows = Array.isArray(a['rows']) ? a['rows'].filter((n): n is number => typeof n === 'number').slice(0, 10) : [];
+  const target = rows.length && a['scope'] === 'this-page' ? `${rows.length === 1 ? 'row' : 'rows'} ${rows.join(', ')} of the page in view` : recordWords(a['target']);
+  const base = (QUEUE_WORDS[kind] ?? ((t: string) => `Queue work on ${t}`))(target);
+  const model = kind === 'dispatch' ? capText(a['model'], 40) : '';
+  const focus = kind === 'deck' ? capText(a['focus'], 120) : '';
+  return `${base}${model ? ` on ${model}` : ''}${focus ? `, covering ${focus}` : ''}`;
+}
+
+/** A message in words: where it goes and its first words. */
+function messageSummary(a: Record<string, unknown>): string {
+  const text = shortQuote(a['text']);
+  const said = text ? `: "${text}"` : '';
+  if (capText(a['thread'], 200)) return `Reply in the thread${said}`;
+  const t = a['target'] && typeof a['target'] === 'object' && !Array.isArray(a['target']) ? a['target'] as Record<string, unknown> : {};
+  const kind = capText(t['kind'], 10), to = capText(t['name'], 120);
+  if (kind === 'dm' && to) return `Send ${to} a direct message${said}`;
+  if (kind === 'team' && to) return `Post to the team ${to}${said}`;
+  if (to) return `Post in #${to.replace(/^#/, '')}${said}`;
+  return `Send a message${said}`;
 }
 
 export class AssistantRuntime {
