@@ -82,7 +82,7 @@ import {
 import { decisionRecordedAs, mayRunProposal } from '../lib/meeting-assistant/proposal-run.js';
 import { MAX_PER_CALL, noticeIfCapReached } from '../lib/meeting-assistant/decision-watcher.js';
 import { updateStatement } from '../lib/meeting-assistant/named-people.js';
-import type { Proposal, TranscriptLine } from '../lib/meeting-assistant/types.js';
+import type { MinutesRecord, Proposal, TranscriptLine } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
 
@@ -429,9 +429,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     // holds for the call as a whole, and the ceiling is what was heard plus this grant.
     settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: now, settledListeningSeconds: heard,
     ceilingSeconds: heard + grant, warned: false, replacements: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, lastAliveAt: now,
-    periodFrom: now, periods: [...(s.periods ?? []), period], periodPart: part,
-    // Who acknowledged in the periods so far stays known (the meeting page counts who was never transcribed); `acked` starts again.
-    ackedEver: [...new Set([...(s.ackedEver ?? []), prior.invitedBy, ...prior.acked])],
+    periodFrom: now, periods: [...(s.periods ?? []), period], periodPart: part, ackedEver: [...new Set([...(s.ackedEver ?? []), prior.invitedBy, ...prior.acked])], // `acked` starts again; who acknowledged before stays known
   };
   let moved: AssistantRecord | null = null;
   try { moved = await store.rejoin(callId, { leftAt: prior.leftAt, by: session.sub, at: now, present, session: patch }); } catch (e) {
@@ -808,11 +806,7 @@ async function canRunNow(p: Proposal, record: AssistantRecord, viewer: string): 
 
 async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer, 'record' | 'seated' | 'attendee'>) {
   const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : []), ...(p.askedBy ? [p.askedBy] : [])])];
-  // Names with portraits, read the way the meeting's attendees are (`facesOf`), so someone the proposal names who was not in the call
-  // still shows their picture rather than initials.
-  const faces = await facesOf(people);
-  const names: Record<string, string> = Object.fromEntries(faces.map((f) => [f.userId, f.name]));
-  const avatarOf = (u: string): string | null => faces.find((f) => f.userId === u)?.avatarUrl ?? null;
+  const faces = await facesOf(people); const names: Record<string, string> = Object.fromEntries(faces.map((f) => [f.userId, f.name])); // portraits read as the attendees' are
   const mine = p.responses.find((r) => r.userId === viewer);
   const wasThere = v.seated || v.attendee;
   const answerable = ANSWERABLE.includes(p.state);
@@ -823,11 +817,10 @@ async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer,
     askedBy: p.askedBy ? { userId: p.askedBy, name: names[p.askedBy] } : null,
     evidence: wasThere ? p.evidence : [], heard: wasThere && p.source !== 'asked' ? await heardLines(p) : [],
     // A decision recorded as decided by its executor, or as waiting for the initiative owner's decision.
-    recordsAs,
-    state: p.state, executor: { userId: p.executor, name: names[p.executor], avatarUrl: avatarOf(p.executor) },
-    named: p.named.map((u) => ({ userId: u, name: names[u], avatarUrl: avatarOf(u) })),
+    recordsAs, state: p.state, executor: { userId: p.executor, name: names[p.executor], avatarUrl: avatarIn(faces, p.executor) },
+    named: p.named.map((u) => ({ userId: u, name: names[u], avatarUrl: avatarIn(faces, u) })), // a portrait for everyone it names, in the call or not
     // A reason is shared with everyone who can see the proposal, and labelled so.
-    responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], avatarUrl: avatarOf(r.userId), response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
+    responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], avatarUrl: avatarIn(faces, r.userId), response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
     missing: whatIsMissing(p), dismissedBy: p.dismissedBy, dismissedByName: p.dismissedBy ? names[p.dismissedBy] : null, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
     // The latest run (proposal-run.ts): running with its executor; done with what was made (`title`, and `href` for a decision record);
     // failed, or handed back to consented, with one sentence (`note`) the card shows.
@@ -1047,18 +1040,12 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     ...item, workItemCreated: item.done === true || !!workItemId || doneTurns.has(actionCardTurnId(callId, i)),
     workItemHref: workItemId && m.initiativeId ? workItemHref(m.initiativeId, workItemId) : null,
   }));
-  const live = await listProposalsFor(assistantStore(), callId, Date.now(), endedAt(record));
-  // The summary's lead sentence and its bullets (an older record's paragraph is all lead); the bullets about the proposals are built
-  // from them as they stand now, so a consent given on this page after the call is not contradicted by the summary.
-  const parts = summaryWithProposals(m, live);
-  // Everyone who invited Milo into this call, in the order of their periods, once each: the header names them all.
-  const inviterIds = [...new Set([...(recordSession(record).periods ?? []).map((p) => p.invitedBy), record.invitedBy].filter(Boolean))];
-  // Milo has left again but these minutes do not yet cover that leave: its addition (or rewrite) is due, whichever process runs it.
-  const additionDue = record.state === 'left' && (record.leftAt ?? 0) > m.endedAt && (m.writer !== 'none' || m.retryable === true);
+  const live = await listProposalsFor(assistantStore(), callId, Date.now(), endedAt(record)); // the proposals as they stand, read once
+  const parts = summaryWithProposals(m, live); // the summary's lead and bullets; the bullets about proposals are built from `live`, never stored
   res.json({
     proposals: await minutesProposals(live),
     callId, callName: meetingNameOf(m, attendees.map((a) => a.name)), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
-    invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), inviters: await namesOf(inviterIds), attendees, summary: m.summary, decisions: m.decisions,
+    invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), inviters: await namesOf(invitersOf(record)), attendees, summary: m.summary, decisions: m.decisions,
     summaryLead: parts.lead, summaryPoints: parts.points,
     actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
     // Anyone who invited Milo into this call, in any period, may delete its record.
@@ -1067,16 +1054,14 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     keptUntil: (record.leftAt ?? m.endedAt) + retentionDays() * DAY_MS,
     coverage: coverageOf(record, m.attendees),
     // No draft, or an addition that could not be written: whether an attendee may ask Milo to try again (a hard cap on runs, each of
-    // which may cost model money; an owed addition's runs are counted apart from the first write's).
-    // `autoRetrying`: the sweep will still try again by itself (it stops at AUTO_ATTEMPTS runs; an attendee may ask up to MAX_ATTEMPTS).
+    // which may cost model money; an owed addition's runs are counted apart from the first write's); `autoRetrying`: the sweep still will.
     rewrite: m.writer !== 'none' && m.additionOwed
       ? { writing: minutesWriting(callId), possible: true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - (m.additionAttempts ?? 0)), autoRetrying: (m.additionAttempts ?? 0) < AUTO_ATTEMPTS }
       : { writing: minutesWriting(callId), possible: m.writer === 'none' && m.retryable === true, attemptsLeft: Math.max(0, MAX_ATTEMPTS - attempts), autoRetrying: m.writer === 'none' && m.retryable === true && attempts < AUTO_ATTEMPTS },
     // Milo was invited back and is in the call now: what it hears is added to these minutes when it leaves.
     backInCall: record.state !== 'left',
     // A later part of the call could not be added yet: these minutes stand as they are until it is.
-    additionOwed: m.writer !== 'none' && m.additionOwed === true,
-    additionDue,
+    additionOwed: m.writer !== 'none' && m.additionOwed === true, additionDue: additionDueFor(record, m),
     additions: m.additions ?? 0,
   });
 }));
@@ -1149,11 +1134,7 @@ const deleteRecord = asyncHandler(async (req, res) => {
   const inviter = invitedAssistantHere(record, session.sub);
   if (deleted && !inviter) throw new NotFoundError('Not found');
   if (!inviter) throw new AppError(403, `Only the person who invited ${ASSISTANT_NAME} can delete this meeting.`);
-  if (record.state !== 'left') {
-    // Someone in the call can dismiss Milo; anyone else (the meeting page) is told the meeting can be deleted once it leaves.
-    const seated = (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.active && u.userId === session.sub);
-    throw new AppError(409, seated ? `${ASSISTANT_NAME} is back in this call. Dismiss ${ASSISTANT_NAME} before deleting this meeting.` : DELETE_WHILE_BACK);
-  }
+  if (record.state !== 'left') throw new AppError(409, (await seatedHere(callId, session.sub)) ? `${ASSISTANT_NAME} is back in this call. Dismiss ${ASSISTANT_NAME} before deleting this meeting.` : DELETE_WHILE_BACK);
   // The erase itself is conditional on Milo being out of the call: one invited back since the check above keeps everything.
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
   if (lines === null) throw new AppError(409, DELETE_WHILE_BACK);
@@ -1222,3 +1203,28 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   }));
   res.json({ meetings, next: rows.length === limit ? rows[rows.length - 1]!.endedAt : null });
 }));
+
+// ---- helpers declared last, so the routes above keep their line numbers (the voice inventory and the wire snapshots name them) ----
+
+/** A person's portrait among faces read by `facesOf`; null when none. */
+function avatarIn(faces: ReadonlyArray<{ userId: string; avatarUrl: string | null }>, userId: string): string | null {
+  return faces.find((f) => f.userId === userId)?.avatarUrl ?? null;
+}
+
+/** Everyone who invited Milo into this call, in the order of their periods, once each (the meeting page's header names them all). */
+function invitersOf(record: AssistantRecord): string[] {
+  return [...new Set([...(recordSession(record).periods ?? []).map((p) => p.invitedBy), record.invitedBy].filter(Boolean))];
+}
+
+/**
+ * Milo has left again and these minutes do not cover that leave yet: its addition (or the rewrite of failed minutes) is due. Read from
+ * the record, not from this process, so a page keeps reading while another process writes it.
+ */
+function additionDueFor(record: AssistantRecord, m: MinutesRecord): boolean {
+  return record.state === 'left' && (record.leftAt ?? 0) > m.endedAt && (m.writer !== 'none' || m.retryable === true);
+}
+
+/** Is this person seated in the running call (so they could dismiss Milo themselves)? */
+async function seatedHere(callId: string, userId: string): Promise<boolean> {
+  return (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.active && u.userId === userId);
+}
