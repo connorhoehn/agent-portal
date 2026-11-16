@@ -60,7 +60,7 @@ function MyOpeningsWorkspace() {
   const openings = data?.items ?? [];
   const all: Row[] = useMemo(() => openings
     .flatMap((o) => o.pipeline.map((p) => ({ ...p, opening: { id: o.id, title: o.title, team: o.team } })))
-    .sort((a, b) => a.opening.title.localeCompare(b.opening.title) || DECISION_ORDER.indexOf(a.stage) - DECISION_ORDER.indexOf(b.stage) || a.candidate.name.localeCompare(b.candidate.name)), [openings]);
+    .sort((a, b) => DECISION_ORDER.indexOf(a.stage) - DECISION_ORDER.indexOf(b.stage) || a.opening.title.localeCompare(b.opening.title) || a.candidate.name.localeCompare(b.candidate.name)), [openings]);
   const stages = DECISION_ORDER.filter((s) => all.some((r) => r.stage === s));
   const rows = all.filter((r) => (!stage || r.stage === stage) && (!opening || r.opening.id === opening)
     && matches(query, r.candidate.name, r.candidate.headline, r.opening.title, STAGE_LABELS[r.stage], nextInterviewLine(r.nextInterview), lastResultLine(r.lastResult)));
