@@ -1080,6 +1080,8 @@ Open after this run, in order of use to a real call: a remark Milo makes unpromp
 
 A demo film of Milo in a call can be re-recorded with `scripts/demo/assistant-meeting-film.mjs` (scripted or `--live`). Asked for next: a film of document collaboration, the whiteboard and the access tenant with live cursors, and livelier voices than the first take.
 
+**Planned next: an `interviews` tenant (16 November).** A plan with a ledger of 47 rows is in `docs/interviews-tenant-plan.md`: recruiters assign interviews, interviewers run them in a call with an outside candidate who joins through a candidate portal, Milo listens and suggests follow-up questions that it asks aloud only on the interviewer's approval, a technical round has a shared code pad with a run queue (mocked first), and scorecards, recordings and a debrief follow. Nothing is built. Its decisions marked "owner" are the ones to confirm before work starts.
+
 What needs the owner:
 
 1. A real call. Set `MEETING_ASSISTANT_ENABLED=true`, `MEETING_ASSISTANT_LIVE=1` (in the mock world the session is scripted and no tap is armed without it), the three media variables and `MEETING_ASSISTANT_SINK_SECRET` (and the matching `LIVE_CAPTIONS_SHARED_SECRET` and `LIVE_CAPTIONS_ORIGIN` on the media server), then hold a call with two people, invite Milo, and check: quiet until addressed over ten minutes, the right name on each line, an answer and a card, and, with the voice on, whether Milo's own speech comes back through a microphone.
