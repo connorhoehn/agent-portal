@@ -11,6 +11,7 @@
 //     own period (DE-38, lib/budget-periods.ts) for a one-initiative report.
 
 import { monthWindow } from './budget-periods.js';
+import { ASSISTANT_NAME } from './meeting-assistant/chat-types.js';
 
 export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger' | 'bot';
 export type ReportPeriod = 'month' | '7d' | '30d';
@@ -158,7 +159,56 @@ export const SOURCE_LABELS: Readonly<Record<string, string>> = {
   agent_loop: 'Agent loop',
   agent_project_run: 'Direct agent runs',
   bff_call: 'Platform model calls',
+  meeting_assistant: 'Meeting assistant',
 };
+
+// ─── The meeting assistant's rows (lib/meeting-assistant/spend.ts names their source ids) ──────────────
+
+/**
+ * What one meeting-assistant ledger row was, read from its source id: `ma:<call>` and `ma:<call>:x<part>` listening, `…:tokens` the
+ * requests answered while listening, `ma:<call>:minutes` and `ma:<call>:minutes:<addition>:<try>` the minutes, `ma:<call>:watch:<n>`
+ * a decision check. Null for anything else.
+ */
+export interface MeetingSpendRef { callId: string; kind: 'listening' | 'requests' | 'minutes' | 'watch'; part: number; addition: number; attempt: number }
+export function meetingSpendRef(sourceId: string): MeetingSpendRef | null {
+  const minutes = /^ma:(.+):minutes(?::(\d+):(\d+))?$/.exec(sourceId);
+  if (minutes) return { callId: minutes[1]!, kind: 'minutes', part: 0, addition: Number(minutes[2] ?? 0), attempt: Number(minutes[3] ?? 1) };
+  const watch = /^ma:(.+):watch:\d+$/.exec(sourceId);
+  if (watch) return { callId: watch[1]!, kind: 'watch', part: 0, addition: 0, attempt: 1 };
+  const listening = /^ma:(.+?)(?::x(\d+))?(:tokens)?$/.exec(sourceId);
+  if (listening) return { callId: listening[1]!, kind: listening[3] ? 'requests' : 'listening', part: Number(listening[2] ?? 0), addition: 0, attempt: 1 };
+  return null;
+}
+
+/**
+ * Which period of Milo in the call a ledger part belongs to: the last period that began on that part or before it. `periods` are the
+ * closed ones (each with the part it began on), `currentPart` the part the current period began on. Null when an older record did not
+ * keep the parts (only part 0, the first period, is known then).
+ */
+export function periodOfPart(periods: ReadonlyArray<{ part?: number }>, currentPart: number | undefined, part: number): number | null {
+  if (part === 0) return 1;
+  if (periods.some((p) => typeof p.part !== 'number')) return null;
+  const starts = [...periods.map((p) => p.part as number), periods.length ? currentPart ?? null : 0];
+  if (starts[starts.length - 1] === null) return null;
+  let period: number | null = null;
+  for (const [i, s] of starts.entries()) if (s !== null && s <= part) period = i + 1;
+  return period;
+}
+
+/**
+ * The "What it was" words for a meeting-assistant row: "Milo listening" ("…, period 2" from the second period on), "Milo answering
+ * requests", "Milo minutes" (", try 2" for a retry), "Milo minutes, addition 1", "Milo checking for decisions", then " · " and the call's
+ * name when it is known.
+ */
+export function meetingSpendWhat(ref: MeetingSpendRef, ctx: { period: number | null; callName: string | null }): string {
+  const period = ctx.period && ctx.period > 1 ? `, period ${ctx.period}` : '';
+  const tried = ref.attempt > 1 ? `, try ${ref.attempt}` : '';
+  const what = ref.kind === 'listening' ? `${ASSISTANT_NAME} listening${period}`
+    : ref.kind === 'requests' ? `${ASSISTANT_NAME} answering requests${period}`
+      : ref.kind === 'watch' ? `${ASSISTANT_NAME} checking for decisions`
+        : ref.addition > 0 ? `${ASSISTANT_NAME} minutes, addition ${ref.addition}${tried}` : `${ASSISTANT_NAME} minutes${tried}`;
+  return ctx.callName ? `${what} · ${ctx.callName}` : what;
+}
 
 export const TRIGGER_LABELS: Readonly<Record<string, string>> = {
   cron: 'Scheduled',

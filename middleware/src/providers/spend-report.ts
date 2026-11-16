@@ -36,7 +36,7 @@ import { listUserBudgetRowsAndSpenders, userBudgetView, userSpendThisPeriod } fr
 import { getProjectWorkItems } from './work-items.js';
 import { spendLedgerMode, type SpendLedgerMode } from './spend-ledger.js';
 import {
-  aggregateEntries, fitOpenItems, projectGroup, reportWindow, round4, SOURCE_LABELS, summarizeForecast, summarizeRuns,
+  aggregateEntries, fitOpenItems, meetingSpendRef, meetingSpendWhat, periodOfPart, projectGroup, reportWindow, round4, SOURCE_LABELS, summarizeForecast, summarizeRuns,
   totalOf, TRIGGER_LABELS, daysLeftInPeriod,
   type ForecastSummary, type OpenItemFit, type RawGroup, type ReportEntry, type ReportPeriod, type ReportWindow,
   type RunOutcomeInput, type RunOutcomes, type SpendGroupBy, groupKeyOf,
@@ -701,12 +701,13 @@ export async function listSpendEntries(opts: {
   let users: Array<{ id: string; displayName: string }> = [];
   if (page.some((e) => e.botId)) { try { bots = await listBots(); } catch { bots = []; } }
   if (page.some((e) => e.actorId)) { try { users = await listUsers(); } catch { users = []; } }
+  const meetingWhat = await meetingRowsWhat(page.filter((e) => e.source === 'meeting_assistant').map((e) => e.sourceId));
   const entries: SpendEntryRow[] = page.map((e) => {
     const botName = e.botId ? bots.find((b) => b.id === e.botId)?.name ?? null : null;
     return {
       ...e,
       sourceLabel: SOURCE_LABELS[e.source] ?? e.source,
-      what: botName ?? SOURCE_LABELS[e.source] ?? e.source,
+      what: botName ?? meetingWhat.get(e.sourceId) ?? SOURCE_LABELS[e.source] ?? e.source,
       actorName: e.actorId ? users.find((u) => u.id === e.actorId)?.displayName ?? displayNameForSubject(e.actorId) ?? e.actorId : null,
     };
   });
@@ -714,4 +715,33 @@ export async function listSpendEntries(opts: {
     groupBy: opts.groupBy, key: opts.key, period: opts.period, since: w.since.toISOString(), asOf: w.now.toISOString(),
     initiativeId, botId, total, limit, offset, entries,
   };
+}
+
+/**
+ * "What it was" for the meeting assistant's rows, by source id: which part of Milo's work (listening in which period, the minutes or an
+ * addition, a retry) and the call's name when the server still knows it (its minutes' name, else its initiative's). Best effort: a call
+ * whose record is gone keeps the words without the name.
+ */
+async function meetingRowsWhat(sourceIds: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const refs = sourceIds.map((id) => [id, meetingSpendRef(id)] as const).filter((r): r is readonly [string, NonNullable<ReturnType<typeof meetingSpendRef>>] => !!r[1]);
+  if (!refs.length) return out;
+  const calls = new Map<string, { periods: Array<{ part?: number }>; currentPart: number | undefined; callName: string | null }>();
+  try {
+    const { assistantStore } = await import('../lib/meeting-assistant/store-select.js');
+    const { getProject } = await import('./projects.js');
+    const store = assistantStore();
+    for (const callId of new Set(refs.map(([, r]) => r.callId))) {
+      const [record, minutes] = await Promise.all([store.get(callId).catch(() => null), store.getMinutes(callId).catch(() => null)]);
+      let callName = minutes && !minutes.deleted && minutes.callName && minutes.callName !== 'Call' ? minutes.callName : null;
+      if (!callName && record?.initiativeId) callName = await getProject(record.initiativeId).then((p) => (p?.name ? `${p.name} call` : null)).catch(() => null);
+      calls.set(callId, { periods: record?.session?.periods ?? [], currentPart: record?.session?.periodPart, callName });
+    }
+  } catch { /* no store in this deployment: the words alone */ }
+  for (const [id, ref] of refs) {
+    const c = calls.get(ref.callId);
+    const period = ref.kind === 'listening' || ref.kind === 'requests' ? (c ? periodOfPart(c.periods, c.currentPart, ref.part) : ref.part === 0 ? 1 : null) : null;
+    out.set(id, meetingSpendWhat(ref, { period, callName: c?.callName ?? null }));
+  }
+  return out;
 }

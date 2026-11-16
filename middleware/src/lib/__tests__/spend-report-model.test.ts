@@ -4,6 +4,7 @@
 import {
   aggregateEntries, daysLeftInPeriod, fitOpenItems, isBudgetSkip, itemForecast, projectGroup, reportWindow,
   summarizeForecast, summarizeRuns, withhold, type OpenItemInput, type ReportEntry,
+  meetingSpendRef, meetingSpendWhat, periodOfPart, SOURCE_LABELS,
 } from '../spend-report-model.js';
 
 const NOW = new Date('2026-10-29T12:00:00.000Z');
@@ -118,5 +119,31 @@ describe('summarizeRuns', () => {
 describe('withhold', () => {
   it('removes the keys rather than zeroing them', () => {
     expect(withhold({ a: 1, b: 2, c: 0 }, ['a', 'c'])).toEqual({ b: 2 });
+  });
+});
+
+describe("the meeting assistant's rows read as what Milo did", () => {
+  it('names the source and tells each row apart by its source id, with the call when known', () => {
+    expect(SOURCE_LABELS['meeting_assistant']).toBe('Meeting assistant');
+    const what = (id: string, period: number | null = null, callName: string | null = null) => meetingSpendWhat(meetingSpendRef(id)!, { period, callName });
+    expect(what('ma:call-1', 1, 'Observability Platform call')).toBe('Milo listening · Observability Platform call');
+    expect(what('ma:call-1:x2', 2)).toBe('Milo listening, period 2');
+    expect(what('ma:call-1:x2:tokens', 2)).toBe('Milo answering requests, period 2');
+    expect(what('ma:call-1:minutes')).toBe('Milo minutes');
+    expect(what('ma:call-1:minutes:0:2')).toBe('Milo minutes, try 2');
+    expect(what('ma:call-1:minutes:1:1')).toBe('Milo minutes, addition 1');
+    expect(what('ma:call-1:minutes:2:3', null, 'Call with Ana and Raj, 14 Nov')).toBe('Milo minutes, addition 2, try 3 · Call with Ana and Raj, 14 Nov');
+    expect(what('ma:call-1:watch:4')).toBe('Milo checking for decisions');
+    expect(meetingSpendRef('ma:call-1:x3:tokens')).toEqual({ callId: 'call-1', kind: 'requests', part: 3, addition: 0, attempt: 1 });
+    expect(meetingSpendRef('bot-run-7')).toBeNull();
+  });
+
+  it('finds the period a ledger part belongs to from the parts the periods began on', () => {
+    // Period 1 on part 0 (extended to part 1), period 2 on part 2, the current period 3 on part 4.
+    const periods = [{ part: 0 }, { part: 2 }];
+    expect([0, 1, 2, 3, 4, 5].map((part) => periodOfPart(periods, 4, part))).toEqual([1, 1, 2, 2, 3, 3]);
+    expect(periodOfPart([], undefined, 1)).toBe(1);                 // one period only: every part is the first
+    expect(periodOfPart([{}], undefined, 1)).toBeNull();            // an older record without the parts
+    expect(periodOfPart([{}], undefined, 0)).toBe(1);
   });
 });
