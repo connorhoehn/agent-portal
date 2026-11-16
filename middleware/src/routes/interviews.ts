@@ -11,13 +11,9 @@
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
-import { requireAction, resolveSession } from '../lib/authz.js';
-import { interviewsStore } from '../lib/interviews/store-select.js';
-import { loadWorld } from '../lib/interviews/store.js';
-import { visibleWorld, type Viewer } from '../lib/interviews/scope.js';
-import { WorldIndex, type People } from '../lib/interviews/views.js';
+import { requireAction } from '../lib/authz.js';
+import { indexFor, param } from '../lib/interviews/request.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
-import { listUsers } from '../providers/identity.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
 export function interviewsFlagGate(_req: Request, res: Response, next: NextFunction): void {
@@ -28,20 +24,10 @@ export function interviewsFlagGate(_req: Request, res: Response, next: NextFunct
 export const interviewsRouter = Router();
 interviewsRouter.use(requireAction('ViewInterviews'));
 
-async function peopleLookup(): Promise<People> {
-  const names = new Map((await listUsers()).map((u) => [u.id, u.displayName]));
-  return (id: string) => ({ id, name: names.get(id) ?? 'Someone without an account here' });
-}
+// A lane adds its routes as a sub-router in its own file under routes/interviews/ and mounts it with one line
+// here, after the ViewInterviews gate: interviewsRouter.use(myRouter). Request helpers (indexFor, peopleLookup,
+// param) are in lib/interviews/request.ts.
 
-/** The viewer's index over the rows they may read. */
-async function indexFor(req: Request): Promise<WorldIndex> {
-  const session = resolveSession(req)!;
-  const viewer: Viewer = { id: session.sub, role: session.role };
-  const [world, people] = await Promise.all([loadWorld(interviewsStore()), peopleLookup()]);
-  return new WorldIndex(visibleWorld(world, viewer), people, viewer);
-}
-
-const param = (req: Request, name: string): string => String(req.params[name] ?? '');
 
 interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
