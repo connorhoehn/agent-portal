@@ -1,6 +1,6 @@
 # Plan: the `interviews` tenant
 
-Status: a plan, written 16 November 2026. Nothing here is built. The ledger at the end is the list of work; each row says how it will be judged. The first row builds the judge, `scripts/validate-interviews.sh`, and from then on that script is the only judge, as `validate-learning-loop.sh` is for the learning loop.
+Status: a plan, written 16 November 2026 and audited the same day against the code and the sources (the audit's corrections are folded in; see "Audit" at the end). Nothing here is built. The ledger at the end is the list of work; each row says how it will be judged. The first row builds the judge, `scripts/validate-interviews.sh`, and from then on that script is the only judge, as `validate-learning-loop.sh` is for the learning loop.
 
 ## What this is
 
@@ -38,6 +38,9 @@ Read from the code on 16 November 2026.
 | Résumé upload | Upload links accept PDFs. There is no PDF viewer. |
 | Scheduling | Does not exist: no date picker, no calendar, no "upcoming" list. |
 | Assign and accept | The bell and "My work" exist; the access tenant's request and approve flow is the closest pattern. |
+| Shared editing in the mock world | Not available. Shared documents ride a separate socket to the real gateway, which only the social profile runs; the plain mock world, where the journeys walk, has none. |
+| Recordings in the mock world | Not available. Recordings come from the media stack. |
+| Packages | None of what the new pieces need is installed: an editor (CodeMirror with its Yjs binding), a PDF renderer, a speech client. Installs are not done in unattended runs here, so each is a step the owner runs or allows. |
 
 ## Decisions
 
@@ -45,34 +48,36 @@ Each is made here so the work can start. The ones marked "owner" are the ones mo
 
 1. **Tenant.** Id `interviews`, label "Interviews", API under `/api/interviews`, portal under `/interviews`, one server flag `INTERVIEWS_ENABLED`, off by default.
 2. **Roles.** Role ids are global, and `hr-admin` belongs to Work, so: `recruiter` (owns openings, candidates, assignment and scheduling; sees everything in the tenant), `interviewer` (sees only the interviews assigned to them), `hiring-manager` (sees their own openings: candidates, rounds, recordings, results; decides the stage). The cross-tenant `admin` passes as elsewhere.
-3. **The candidate is not a user.** An interview has an invite link carrying a signed token for that one interview, which expires. It mints a guest identity with no grants in any tenant. A guest can reach exactly four things: the candidate portal pages for that interview, the interview's call, its call chat and its code pad. Everything else is refused by default, and the tests start from a guest and try the rest.
+3. **The candidate is not a user.** An interview has an invite link carrying a signed token for that one interview, which expires. It mints a guest identity with no grants in any tenant. A guest can reach exactly five things: the candidate portal pages for that interview, the interview's call, its call chat, its code pad, and its runs (starting one and reading its output). Everything else is refused by default, and the tests start from a guest and try the rest. The token is exchanged for a session cookie on first load and removed from the address, and the interviewer admits the guest from a waiting room. The product does not verify who the candidate is.
 4. **Two sides of one record.** The panel side is the recruiter, the assigned interviewers and the opening's hiring manager. The candidate side is the candidate. The transcript, Milo's suggestions, notes, scorecards, the recap and the recording are panel-side only. This replaces the meeting assistant's rule that everyone who held a seat reads the record, for this tenant only.
-5. **Consent comes first and is separate.** Before the candidate can join, the portal shows a versioned notice and asks three things separately: recording, transcription, and Milo's assistance. Each answer is stored with its time and the notice version. Declining any of them is allowed and is not shown to the interviewer as a mark against the candidate: the interview runs without that part (no Milo, or no recording), and the recruiter is told so they can arrange what replaces it. Nothing of the candidate is recorded or transcribed before consent.
+5. **Consent comes first and is separate.** Before the candidate can join, the portal shows a versioned notice and asks three things separately: recording, transcription, and Milo's assistance. Milo's assistance needs transcription, so declining transcription declines both; the portal says so. Each answer is stored with its time and the notice version. Declining is allowed: the interview runs without that part (no Milo, or no recording), the interviewer is told only what is off, the recruiter is told so they can arrange what replaces it, and the choice appears nowhere on a scorecard or a debrief. Nothing of the candidate is recorded or transcribed before consent. Panel members are recorded too and see the same notice once, when they accept an assignment.
 6. **Milo is a listener and an adviser. It never scores.** Milo gathers evidence with a source on every claim (a transcript moment, a code snapshot, a run result). It never rates, ranks or recommends go or no-go, and it never infers anything from a face, a voice or a tone: transcript and code only. The person decides, and the record shows it.
-7. **Two engines behind one Milo.** The live session stays what it is today, the listener that produces the attributed transcript. A second, text-only "coach" on Bedrock (Amazon Nova) reads the transcript, the opening's kit, the résumé and the current pad, and produces suggestions, private answers to the interviewer and the recap. New model work is AWS-native; the coach has a scripted stand-in in the mock world, chosen the way `session-select.ts` chooses.
+7. **Two engines behind one Milo.** The live session stays what it is today, the listener that produces the attributed transcript. A second, text-only "coach" on Bedrock (Amazon Nova) reads the transcript, the opening's kit, the résumé and the current pad, and produces suggestions, private answers to the interviewer and the recap. New model work is AWS-native; the coach has a scripted stand-in in the mock world, chosen the way `session-select.ts` chooses. The cost of this choice: the live session is a speech-to-speech model, about $3 an hour by the meeting assistant's own design figures, used here only to listen. That is accepted for the first version because the attributed transcript already works on it; row I3.9 prices an interview end to end and designs a listener on Amazon Transcribe behind the same session interface, which would be cheaper and AWS-native. (owner)
 8. **Suggestions go to the interviewer only, in the footer prompt.** One at a time, tied to a competency from the kit, at most one every 90 seconds, never while one is waiting. Three answers: "I'll ask it" (marked as used), "Have Milo ask" (decision 9), "Skip". Every suggestion, whether it was shown, and the answer are written to an append-only log with the model id and prompt version.
-9. **Milo speaks only approved words.** In an interview nothing the live model says is relayed. What Milo says aloud is text the server already holds: a question the interviewer approved, or a repeat of it. The text is synthesised (Amazon Polly) and sent over the existing voice relay under a new gate reason, `approved`; the same words are posted in the call chat and logged before they are spoken. This makes a hint to the candidate impossible by construction. (owner: a second voice provider beside the live model; the alternative is the existing provider's speech synthesis, which keeps one voice and is not AWS-native.)
-10. **What the candidate may ask Milo.** "Milo, repeat the question" and questions about logistics (time left, how to run the code). Nothing about the problem itself, no internal data, no tools. (owner: or nothing at all.)
-11. **The code pad.** A new library component, a CodeMirror 6 editor bound to a shared text over the existing Yjs gateway provider, with remote carets and language modes (Python, Swift, JavaScript, TypeScript, Java, Go, C++). The interviewer can insert a question's prompt and starter code from the kit. Library first, then the portal.
+9. **Milo speaks only approved words.** In an interview nothing the live model says is relayed. What Milo says aloud is text the server already holds: a question the interviewer approved, or a repeat of it. The text is synthesised (Amazon Polly) and sent over the existing voice relay under a new gate reason, `approved`; the same words are posted in the call chat and logged before they are spoken. So Milo cannot say anything to the candidate that the interviewer did not approve. (owner: a second voice provider beside the live model; the alternative is the existing provider's speech synthesis, which keeps one voice and is not AWS-native.)
+10. **What the candidate may ask Milo.** Two fixed requests, each answered with text the server holds, never by a model: "Milo, repeat the question" (the last approved question again) and "Milo, how much time is left" (from the clock). Anything else from the candidate gets one fixed sentence saying what Milo can do for them. Nothing about the problem, no internal data, no tools. (owner: or nothing at all.)
+11. **The code pad.** A new library component, a CodeMirror 6 editor bound to a shared text over the existing Yjs gateway provider, with remote carets and language modes (Python, Swift, JavaScript, TypeScript, Java, Go, C++). The interviewer can insert a question's prompt and starter code from the kit, and "Have Milo ask" on a coding question does the same insert as Milo asks it. Library first, then the portal. The editor and its Yjs binding are new packages (see "What exists").
 12. **Pastes and edits are events, not accusations.** The pad records each paste (who, when, how many characters) and keeps a timed log of edits per person. The record page plays the code back beside the recording and shows pastes as plain markers. The product does not claim to detect outside help.
 13. **One run interface, a mock behind it first.** Run requests go to a queue and their output streams back to both people. The mock executor returns scripted, realistic results. Real backends come later behind the same interface: AgentCore Code Interpreter for Python, JavaScript and TypeScript; a container runner with no network for Swift, Java, Go and C++. The shape is below.
 14. **Rate first, then the recap.** After the call the interviewer rates each competency from their own judgement, then opens Milo's evidence recap, may ask the coach where something was said, and then finalises the go or no-go and submits. The record keeps whether a rating changed after the recap. A submitted scorecard cannot be edited; a correction is a new version with a reason. An interviewer cannot see another interviewer's scorecard for the same candidate until their own is in. (owner: this ordering limits anchoring on Milo's summary; the alternative is the recap first.)
 15. **Review.** The recruiter sees submissions as they arrive. A debrief page shows a candidate's rounds side by side: scorecards, recap, recording. The hiring manager decides the stage (advance, hold, reject) with a reason; the recruiter schedules what follows.
 16. **Scheduling is a time, not a calendar.** The recruiter sets a date and time on the interview; "Upcoming" is a table sorted by it. No availability, no calendar integration, no email in this plan. The interviewer's "you confirm it" is Accept or Decline (with a reason) on the assignment.
-17. **Retention.** Media (recording, transcript, code log) 90 days by default; decision records (scorecards, consents, the log of what Milo showed) four years by default; both set per deployment. A candidate's deletion request removes their media within 30 days and leaves a deletion log. (owner: the defaults.)
+17. **Retention.** Media (recording, transcript, code log) 90 days by default; decision records (scorecards, consents, the log of what Milo showed) four years by default; both set per deployment. A candidate's deletion request removes their media within 30 days and leaves a deletion log; the decision records stay for their period, with the candidate's contact details removed. (owner: the defaults.)
 18. **Money.** A new spend source, `interviews`. Milo's listening, the coach's calls, speech and runs are held against the opening, with a cap per interview. How an opening carries a budget is settled in the first phase (row I0.6).
-19. **Mock first.** Every behaviour walks headlessly in the mock world with the scripted session, the scripted coach and the mock executor, before anything touches a provider.
-20. **Panels.** One lead interviewer, and up to two more panel members from the same opening who may join the call. Only the lead gets Milo's prompts. Each panel member submits their own scorecard.
+19. **Mock first, with two known limits.** Every behaviour walks headlessly with the scripted session, the scripted coach and the mock executor before anything touches a provider. Two things do not exist in the plain mock world today: shared editing and recordings. Row I0.7 decides how the pad is carried and walked (over the middleware's own gateway, or a walk that starts a local gateway); the record page is walked on a seeded recording stand-in, and a real recording is checked by hand on the social profile.
+20. **Panels.** One lead interviewer, and up to two more panel members assigned to the same round who may join the call. Only the lead gets Milo's prompts. Each panel member submits their own scorecard.
 
 ### Why Milo is advisory (the rules this plan is built to)
 
 As researched in November 2026 from secondary sources; this is product planning, not legal advice, and several of these rules are still moving.
 
-- Where an automated tool substantially assists a hiring decision, some places require an independent bias audit and advance notice to candidates (New York City), notice of AI use (Illinois, in force since January 2026), or notice, explanation and human review (Colorado from January 2027, California's privacy rules from January 2027). An adviser that shows sourced evidence and leaves the rating to a person is the conservative position under all of them, and the notice and the log are built anyway.
+- Where an automated tool substantially assists a hiring decision, some places require an independent bias audit and advance notice to candidates (New York City), notice of AI use (Illinois, in force since January 2026), or notice and disclosure with limited rights for the person (Colorado's replacement law, for decisions from January 2027; its exact duties for hiring were not confirmed), or notice, opt-out and appeal (California's privacy rules from January 2027). An adviser that shows sourced evidence and leaves the rating to a person is the conservative position under all of them, and the notice and the log are built anyway.
 - The EU's AI Act treats recruitment as high-risk (obligations now due December 2027) and has banned inferring emotion at work, candidates included, since February 2025. Hence decision 6.
 - Several US states require every party's consent to record a call. Hence decision 5.
 - California's civil-rights rules expect four years of records for automated tools used in hiring. Hence decision 17.
 - Applicants are entitled to accommodation. Hence the alternative path in decision 5.
+
+Checked on 16 November 2026 against several summaries each: the EU date ([Lewis Silkin](https://www.lewissilkin.com/insights/2026/07/27/the-digital-omnibus-on-ai-enters-into-force-today-102nedo), [Shumaker](https://www.shumaker.com/insight/eu-ai-act-council-gives-final-green-light-to-the-digital-omnibus-on-ai/)), Colorado ([Goodwin](https://www.goodwinlaw.com/en/insights/publications/2026/06/alerts-technology-fs-colorado-enacts-law-repealing-replacing-landmark-ai-act), [Baker Botts](https://ourtake.bakerbotts.com/post/102msga/colorado-repeals-and-replaces-ai-act)), and Illinois, whose notice rules were withdrawn in June 2026 and not refiled as far as could be found ([Seyfarth](https://www.seyfarth.com/news-insights/illinois-department-of-human-rights-temporarily-withdraws-proposed-rules-on-use-of-artificial-intelligence-in-employment.html), [Burke](https://www.burkelaw.com/alert-illinois-department-of-human-rights-withdraws-proposed-ai-in-employment-rules)). The primary texts were not read. Re-check before any notice wording is written.
 
 ## The run interface
 
@@ -95,7 +100,7 @@ Defaults: 10 seconds, 256 MB, 64 KB of output, one run at a time per interview, 
 | Opening | title, level, hiring manager, state, the kit: rounds (type, length), competencies with rubric anchors, question bank (prompt, competency, starter code per language), budget cap |
 | Candidate | name, contact, résumé file, source, notes; never a user |
 | Application | candidate and opening, current stage, history of stage decisions |
-| Interview | application, round, type, lead and panel, time, state (`assigned → accepted → ready → live → ended → scored → reviewed`, or `declined`, `cancelled`), chosen questions, invite token hash, call id |
+| Interview | application, round, type, lead and panel, time, state (`assigned → accepted → ready → live → ended → scored → reviewed`, or `declined`, `cancelled`; `ready` is accepted with a time set and questions chosen; `scored` is every panel member's scorecard submitted), chosen questions, invite token hash, call id |
 | Consent | interview, notice version, three answers with times |
 | Scorecard | interview, interviewer, ratings and notes per competency, recommendation (strong no, no, yes, strong yes), versions, whether ratings changed after the recap |
 | Recap | interview, evidence per competency with sources, what was not covered; no score |
@@ -138,18 +143,19 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 
 ## Ledger
 
-Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited.
+Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited. The journey `journey:interviews` starts with I1.1 and gains a step with each row that names a walk step; it is not written at the end. Rows that change another repository say so: "library" is `ui-components`, "realtime" is `realtime-modules`, "media" is `platform-api`. Rows marked "install" need a package the owner installs first.
 
 ### Phase 0: the tenant exists
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
 | I0.1 | The judge, `scripts/validate-interviews.sh`, with `--quick` and `--phase`, phases nesting | it runs and prints every failing row | | S |
-| I0.2 | Registration: the manifest entry and regenerated files, Cedar files per role, actions, role rank and presentation, the mount, flags, nav, the context picker, tenant colours, route inventory | `check-tenant-manifest.mjs` passes; the judge greps each point | I0.1 | M |
+| I0.2 | Registration: the manifest entry and regenerated files, Cedar files per role, actions, role rank and presentation, the mount, channel families, notification labels, the voice tenant list and inventory, flags, nav, the context picker, tenant colours, route inventory, wire snapshots, the demo logins | `check-tenant-manifest.mjs` passes; the judge greps each point | I0.1 | L |
 | I0.3 | The model: `schema/interviews_schema.sql`, the in-memory store and the SQL store behaving the same | store tests in both | I0.2 | M |
 | I0.4 | The cast and the seed story in the mock world | mock floor and parity checks; the judge counts rows | I0.3 | M |
 | I0.5 | Read routes and the permission matrix: each role sees what decision 2 says and nothing else | `authz-matrix` rows for the three roles | I0.3 | M |
-| I0.6 | Spend source `interviews` and how an opening carries a cap | spend tests; a refused hold reads plainly | I0.3 | S |
+| I0.6 | Spend source `interviews` and how an opening carries a cap (holds are keyed to an initiative today) | spend tests; a refused hold reads plainly | I0.3 | M |
+| I0.7 | Spike: how the code pad is carried and walked without the social profile; how a guest gets a seat through the token bridge and the media stack. Ends in a short written answer and the rows it changes | the answer is in this document; a two-context proof of shared text runs in the chain | I0.2 | M |
 
 ### Phase 1: the desk (no call yet)
 
@@ -160,39 +166,43 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 | I1.3 | Openings and the kit editor | walk step; kit validation tests | I0.5 | M |
 | I1.4 | Assign a round; the bell; My interviews; Accept or Decline with a reason | walk steps as recruiter then interviewer | I1.2 | M |
 | I1.5 | A date-and-time field in the library; the time on an interview; Upcoming | library tests; walk step | I1.4 | M |
-| I1.6 | Résumé upload and a PDF viewer in the library | library tests; walk step | I1.2 | M |
+| I1.6 | Résumé upload and a PDF viewer in the library (library; install) | library tests; walk step | I1.2 | M |
 | I1.7 | Prepare page: résumé, kit, picking questions | walk step | I1.4, I1.6 | M |
+| I1.8 | Behavioural rounds: a kit of behavioural questions and competencies, a round with no code pad | kit tests; walk leg on a behavioural round | I1.3 | S |
 
 ### Phase 2: the candidate's door
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| I2.1 | Invite token and the guest identity (decision 3) | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
-| I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, the channel guard refusing a guest everywhere else | gateway authority tests starting from a guest | I2.1 | L |
+| I2.1 | Invite token and the guest identity (decision 3); the token leaves the address after first load | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
+| I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, a guest seat through the token bridge, the channel guard refusing a guest everywhere else (realtime, media) | gateway authority tests starting from a guest | I2.1, I0.7 | L |
 | I2.3 | Portal: landing, the notice and three consents, device check, waiting room, admitted by the interviewer | walk with a second browser context as the candidate | I2.2 | L |
 | I2.4 | The interview room for both sides; the candidate's layout has no shell | walk step; screenshots at 1440 and 1280 | I2.3 | M |
 | I2.5 | Declined consent: what the interview runs without, what the recruiter is told, nothing shown against the candidate | tests per combination; walk step | I2.3 | M |
-| I2.6 | Recording only with consent (a rule in the media stack for this lobby family) and panel-only playback | tests in the media stack and here | I2.3 | M |
+| I2.6 | Recording only with consent (a rule in the media stack for this lobby family) and panel-only playback (media) | tests in the media stack and here; one real recording checked by hand on the social profile | I2.3 | M |
+| I2.7 | Panel seats: up to two more panel members in the call; only the lead gets Milo's prompts | admission tests; walk step with a third context | I2.4 | S |
 
 ### Phase 3: Milo in the interview
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| I3.1 | A policy seam in the meeting assistant: who may invite, who reads, who pays, which tools, per lobby family. Work's behaviour unchanged | every existing meeting-assistant test, the walk and the scenario suite pass untouched | | L |
+| I3.1 | A policy seam in the meeting assistant: who may invite, who reads, who pays, which tools, per lobby family. Work's behaviour unchanged. Starts only after the fourth sweep's repairs to the same files are merged | every existing meeting-assistant test, the walk and the scenario suite pass untouched | | L |
 | I3.2 | The interviews policy: the lead invites; portal consent is the candidate's acknowledgement; panel-only reads; no tools and no data for the candidate; no bell and no Meetings list for a guest | policy tests; a guest reading the record gets nothing | I3.1, I2.3 | L |
 | I3.3 | The coach on Bedrock with a scripted stand-in: suggestions from transcript, kit, résumé and pad; the rate limit; the suggestion log | tests on fixed transcripts; the request body pinned as text; a malformed answer dropped | I3.2 | L |
 | I3.4 | The footer prompt: I'll ask it, Have Milo ask, Skip | walk step; log rows | I3.3 | M |
-| I3.5 | Milo asks aloud: synthesised speech over the voice relay under the `approved` reason; the same words in chat; nothing from the live model relayed in an interview | gate tests; a scenario where the live model speaks and nothing is heard | I3.4 | L |
+| I3.5 | Milo asks aloud: synthesised speech over the voice relay under the `approved` reason; the same words in chat; nothing from the live model relayed in an interview (install) | gate tests; a scenario where the live model speaks and nothing is heard | I3.4 | L |
 | I3.6 | "Milo for you": competencies covered so far, a time check, private questions typed to the coach | walk step; the candidate's page shows none of it | I3.3 | M |
 | I3.7 | The live transcript, panel side only | walk step from both sides | I3.2 | S |
-| I3.8 | The candidate's two allowed requests (decision 10) | scripted-session tests; a request for a hint is refused in plain words | I3.5 | S |
+| I3.8 | The candidate's two fixed requests and the one fixed refusal (decision 10) | detector tests; a request for a hint gets the fixed sentence and no model is called | I3.5 | S |
+| I3.9 | What an interview costs end to end (listener, coach, speech, runs), written here; and the design of a listener on Amazon Transcribe behind the session interface | the figures and the design are in this document | I3.3 | S |
+| I3.10 | The coach drafts a question plan on the Prepare page from the kit and the résumé, advisory, logged like a suggestion | tests on fixed inputs; walk step | I3.3, I1.7 | S |
 
 ### Phase 4: the code pad and runs
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| I4.1 | Library: a collaborative code editor (decision 11) | library tests: two clients converge, carets, language switch | | L |
-| I4.2 | The pad in the room: its channel and grants, language choice, inserting a question | walk with two contexts typing | I4.1, I2.4 | M |
+| I4.1 | Library: a collaborative code editor (decision 11) (library; install) | library tests: two clients converge, carets, language switch | | L |
+| I4.2 | The pad in the room: its channel and grants, language choice, inserting a question (by the interviewer, and by "Have Milo ask") | walk with two contexts typing, carried as I0.7 decided | I4.1, I2.4, I0.7 | M |
 | I4.3 | The pad log: timed edits per person, pastes, snapshots | tests; a paste by the candidate shows as an event on the panel side | I4.2 | M |
 | I4.4 | The run interface, the queue, the mock executor, the output stream, the output pane, limits and cancel | executor contract tests any backend must pass; walk step where both people see one run | I4.2 | L |
 | I4.5 | The coach reads the pad and the last run | tests on fixed inputs | I4.4, I3.3 | S |
@@ -202,7 +212,7 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| I5.1 | The interview record page: recording, transcript, code playback, markers | walk step on a seeded finished interview and on the walked one | I4.3, I2.6 | L |
+| I5.1 | The interview record page: recording, transcript, code playback, markers | walk step on a seeded finished interview (recording stand-in) and, for transcript, code and markers, on the walked one | I4.3, I2.6 | L |
 | I5.2 | The recap writer: evidence per competency with sources, what was not covered, no score | tests: every claim has a source; a rating or a recommendation in the output is rejected | I3.3 | M |
 | I5.3 | A rating input in the library; the scorecard: rate, recap, go or no-go, submit; versions; others hidden until yours is in | library tests; walk steps; permission tests | I5.2 | L |
 | I5.4 | Recruiter review and the debrief page | walk step | I5.3 | M |
@@ -222,14 +232,14 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| E1 | `journey:interviews`: recruiter assigns, interviewer accepts and prepares, candidate consents and joins, a suggestion is approved and asked, code is typed and run, scorecard, debrief, decision | every step green, in the verification chain | all | L |
-| E2 | Isolation walks: a guest and each role try every other tenant and every other interview | all refused | I2.2 | M |
+| E1 | The whole journey in one pass, technical then behavioural: recruiter assigns, interviewer accepts and prepares, candidate consents and joins, a suggestion is approved and asked, code is typed and run, scorecard, debrief, decision | every step green, in the verification chain | all | M |
+| E2 | Isolation walks: a guest and each role try every other tenant and every other interview | all refused | I2.2, I0.5 | M |
 | E3 | The DOM audit and the type-scale sweep over every new page, at 1440 and 1280 | no new failures | all pages | M |
 | E4 | A read-only audit sweep of the experience, as done for Milo, and its repairs | findings closed or decided | E1 | M |
 
 ### Order and what can be shown when
 
-Phases 0 and 1 give a desk that can be demonstrated without a call. I3.1 and I4.1 depend on nothing and can start on the first day beside phase 0. Phase 2 gives a call with a candidate in it. Phases 3 and 4 can run side by side after it. Phase 5 closes the loop. Forty-seven rows; eleven of them large.
+Phases 0 and 1 give a desk that can be demonstrated without a call. I4.1 depends on nothing but its install and can start on the first day beside phase 0; I3.1 can start as soon as the fourth sweep's repairs are merged. I0.7 comes before anything in phase 2 or the pad. Phase 2 gives a call with a candidate in it. Phases 3 and 4 can run side by side after it. Phase 5 closes the loop. Fifty-two rows; eleven of them large.
 
 ## What the judge cannot see
 
@@ -238,6 +248,26 @@ Phases 0 and 1 give a desk that can be demonstrated without a call. I3.1 and I4.
 - Real execution. The mock proves the contract; isolation of untrusted code is proven only against a real backend, which is not in this plan.
 - Speech quality and the gap between an approval and Milo speaking.
 - A candidate on a poor connection or a phone.
+
+## Audit (16 November 2026)
+
+The plan was checked against the code, the installed packages and the sources on the day it was written. What held: the tenant list and the manifest, the taken role id, the textarea editor, the Python-only synchronous run route, Milo's ties to Work, and the three legal dates that could be checked. What was wrong or missing, now corrected above:
+
+- "Mock first" was claimed for everything, but shared editing and recordings do not exist in the plain mock world. Decision 19 and rows I0.7, I2.6, I4.2 and I5.1 now say how each is proven.
+- The new packages are not installed and installs are not done unattended. Rows that need one are marked.
+- Work in other repositories was hidden inside local rows. Rows now name the repository.
+- The live session would be paid for as a listener only, and no interview was priced. Decision 7 and row I3.9.
+- Decisions 9 and 10 contradicted each other: nothing from the model is relayed, yet the candidate could ask open questions. The candidate's requests are now fixed and answered with stored text.
+- The three consents were not independent, declining could not be hidden from the interviewer, and panel members were not asked. Decision 5.
+- A guest's reach omitted runs, and the invite token stayed in the address. Decision 3.
+- The journey was written at the end although rows were judged by its steps. It now grows row by row.
+- No rows for behavioural rounds, panel seats, the coach's prepare-page plan, or Milo inserting a coding question. Rows I1.8, I2.7, I3.10 and I4.2.
+- "A hint is impossible" overclaimed. Reworded.
+- A deletion request against four-year records was not reconciled. Decision 17.
+- The refactor of Milo would have collided with repairs in progress. Row I3.1.
+- Two sizes were optimistic (I0.2, I0.6).
+
+Still unverified: Colorado's exact duties for hiring tools, whether Illinois's video-interview law covers live calls, speech pricing, and every size in the ledger.
 
 ## Not in this plan
 
