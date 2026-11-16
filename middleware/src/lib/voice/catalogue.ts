@@ -109,7 +109,8 @@ export interface VoiceTool {
   voiceAdds?: string;
 }
 
-/** Tenants that hold VoiceNavigate in the seeds (§6): all five (docs/voice-navigator-gaps.md Q1). */
+/** Tenants that hold VoiceNavigate in the seeds (§6): the first five (docs/voice-navigator-gaps.md Q1). The
+ * interviews tenant's roles hold no VoiceNavigate yet (docs/interviews-tenant-plan.md), so it is not listed. */
 export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'access'] as const;
 /**
  * Where the machine and people tools reach: the Computer Lab is orgiq's and

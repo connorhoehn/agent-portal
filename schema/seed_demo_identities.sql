@@ -4,7 +4,7 @@
 -- a plain `python3 schema/apply_all_seed.py`. Apply it on purpose with
 -- `python3 schema/apply_all_seed.py --with-demo-users` (refused for a
 -- production target; see schema/README.md). It includes
--- u-operator, which holds `admin` in all five tenants, and real-looking
+-- u-operator, which holds `admin` in all six tenants, and real-looking
 -- emails: never apply it to a shared or production cluster.
 --
 -- Needs the tables from identity_schema.sql. person_id subqueries resolve to
@@ -87,7 +87,13 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   ('u-omar',     'Omar Haddad',       'omar.haddad@orgiq.example',
      (SELECT id FROM people WHERE id = 'p-omar')),
   ('u-priya',    'Priya Venkataraman', 'priya.venkataraman@orgiq.example',
-     (SELECT id FROM people WHERE id = 'p-priya'))
+     (SELECT id FROM people WHERE id = 'p-priya')),
+  -- Interviews tenant cast (docs/interviews-tenant-plan.md §Cast): no linked
+  -- person; candidates are records in interviews_schema.sql, never users.
+  ('u-greta',    'Greta Lindqvist',   'greta.lindqvist@orgiq.example', NULL),
+  ('u-hugo',     'Hugo Marchetti',    'hugo.marchetti@orgiq.example', NULL),
+  ('u-wen',      'Wen Zhao',          'wen.zhao@orgiq.example', NULL),
+  ('u-amara',    'Amara Okafor',      'amara.okafor@orgiq.example', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
@@ -97,6 +103,7 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   ('u-operator', 'social',   'admin'),
   ('u-operator', 'pipelines', 'admin'),
   ('u-operator', 'access',   'admin'),
+  ('u-operator', 'interviews', 'admin'),
   -- OrgIQ-only users, one per role tier.
   ('u-theo',     'orgiq',    'member'),
   ('u-vera',     'orgiq',    'org-leader'),
@@ -193,5 +200,11 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- Auth Migration. Without a deciding role in Access every steward step
   -- escalated to Priya (docs/demo-content-audit.md, Access story-breaker 2).
   ('u-vera',     'access',   'approver'),
-  ('u-rachel',   'access',   'approver')
+  ('u-rachel',   'access',   'approver'),
+
+  -- Interviews tenant: a grant only in interviews (docs/interviews-tenant-plan.md §Cast).
+  ('u-greta',    'interviews', 'recruiter'),
+  ('u-hugo',     'interviews', 'interviewer'),
+  ('u-wen',      'interviews', 'interviewer'),
+  ('u-amara',    'interviews', 'hiring-manager')
 ON CONFLICT DO NOTHING;

@@ -289,6 +289,23 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     tenant: 'access',
     granted: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'ManageAccessCatalog', 'ManageAccessPolicy', 'ProvisionAccess', 'ManageUsers', 'VoiceNavigate'],
   },
+  // The interviews tenant (seeds/roles/interviews/, docs/interviews-tenant-plan.md
+  // decision 2): every role reads the tenant (which rows is a route rule,
+  // lib/interviews/scope.ts); the recruiter arranges, the interviewer conducts,
+  // the hiring manager decides, and none of them holds another's authority.
+  // No VoiceNavigate: the voice navigator is not offered in this tenant yet.
+  'interviews/recruiter': {
+    tenant: 'interviews',
+    granted: ['ViewInterviews', 'ManageCandidates', 'AssignInterviews'],
+  },
+  'interviews/interviewer': {
+    tenant: 'interviews',
+    granted: ['ViewInterviews', 'ConductInterview'],
+  },
+  'interviews/hiring-manager': {
+    tenant: 'interviews',
+    granted: ['ViewInterviews', 'DecideCandidate'],
+  },
   '*/admin': {
     tenant: null,
     granted: ['*'], // cross-tenant blanket permit
@@ -296,7 +313,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
 };
 
 describe('seed Cedar role -> capability matrix', () => {
-  test('exactly the eighteen seed roles exist', () => {
+  test('exactly the twenty-one seed roles exist', () => {
     expect(sorted([...roles.keys()])).toEqual(sorted(Object.keys(MATRIX)));
   });
 
@@ -416,13 +433,28 @@ describe('capability boundaries that must not regress', () => {
     }
   });
 
-  test('voice: every role of every tenant may mint a session, each scoped to its own tenant (gaps doc Q1)', () => {
-    for (const [key] of roles) {
+  test('voice: every role of every voice tenant may mint a session, each scoped to its own tenant (gaps doc Q1)', () => {
+    // The interviews tenant is not a voice tenant yet (middleware/src/lib/voice/catalogue.ts
+    // VOICE_TENANTS): none of its roles may mint a voice session.
+    for (const [key, r] of roles) {
       if (key === '*/admin') continue;
-      expect(has(key, 'VoiceNavigate')).toBe(true);
+      expect(has(key, 'VoiceNavigate')).toBe(r.tenant !== 'interviews');
     }
     for (const key of ['orgiq/member', 'social/participant', 'assessment/assessor', 'pipelines/author', 'access/requester']) {
       expect(role(key).cedar).toMatch(new RegExp(`principal\\.tenant == "${role(key).tenant}"`));
+    }
+  });
+
+  test('interviews: each role holds only its own authority, and no other tenant\'s role holds any of them', () => {
+    const ACTIONS = ['ViewInterviews', 'ManageCandidates', 'AssignInterviews', 'ConductInterview', 'DecideCandidate'];
+    expect(has('interviews/recruiter', 'ConductInterview') || has('interviews/recruiter', 'DecideCandidate')).toBe(false);
+    expect(has('interviews/interviewer', 'ManageCandidates') || has('interviews/interviewer', 'AssignInterviews') || has('interviews/interviewer', 'DecideCandidate')).toBe(false);
+    expect(has('interviews/hiring-manager', 'ManageCandidates') || has('interviews/hiring-manager', 'AssignInterviews') || has('interviews/hiring-manager', 'ConductInterview')).toBe(false);
+    for (const key of ['interviews/recruiter', 'interviews/interviewer', 'interviews/hiring-manager']) {
+      expect(role(key).cedar).toMatch(/principal\.tenant == "interviews"/);
+    }
+    for (const [key, spec] of Object.entries(MATRIX)) {
+      if (spec.tenant && spec.tenant !== 'interviews') for (const a of ACTIONS) expect([key, a, has(key, a)]).toEqual([key, a, false]);
     }
   });
 

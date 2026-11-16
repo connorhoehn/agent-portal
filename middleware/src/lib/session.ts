@@ -178,6 +178,7 @@ const ROLE_RANK: Record<string, number> = {
   participant: 0, moderator: 2, 'community-admin': 3,
   author: 0, operator: 1, 'pipeline-admin': 3,
   requester: 0, approver: 1, 'access-admin': 3,
+  interviewer: 0, 'hiring-manager': 2, recruiter: 2,
 };
 
 /**

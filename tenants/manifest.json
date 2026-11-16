@@ -81,6 +81,22 @@
       "governedByAccess": false,
       "channelPartition": true,
       "presenceLobby": false
+    },
+    {
+      "id": "interviews",
+      "displayName": "Interviews",
+      "roles": ["recruiter", "interviewer", "hiring-manager"],
+      "apiPrefix": "/api/interviews",
+      "portalRoot": "/interviews",
+      "home": "/interviews/candidates",
+      "featureFlag": "VITE_ENABLE_INTERVIEWS",
+      "demoGrant": false,
+      "huddleChat": false,
+      "discussions": false,
+      "searchIndexed": false,
+      "governedByAccess": false,
+      "channelPartition": true,
+      "presenceLobby": false
     }
   ]
 }

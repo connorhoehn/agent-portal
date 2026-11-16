@@ -724,6 +724,56 @@
             "Application"
           ]
         }
+      },
+      "ViewInterviews": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageCandidates": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "AssignInterviews": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ConductInterview": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "DecideCandidate": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

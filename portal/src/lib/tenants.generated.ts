@@ -2,8 +2,8 @@
 // Change the manifest, then run `node scripts/gen-tenants.mjs` (`--check` in CI).
 // Portal copy: auth Tenant, tenantHome, features, the switcher and the shell lists.
 
-export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access'] as const;
-export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access';
+export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews'] as const;
+export type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'interviews';
 
 export const ROLES_BY_TENANT = {
   orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'],
@@ -11,6 +11,7 @@ export const ROLES_BY_TENANT = {
   social: ['participant', 'moderator', 'community-admin'],
   pipelines: ['author', 'operator', 'pipeline-admin'],
   access: ['requester', 'approver', 'access-admin'],
+  interviews: ['recruiter', 'interviewer', 'hiring-manager'],
 } as const;
 export const CROSS_TENANT_ROLES = ['admin'] as const;
 
@@ -21,6 +22,7 @@ export const TENANT_HOME = {
   social: '/social/channels',
   pipelines: '/pipelines/runs',
   access: '/access/requests',
+  interviews: '/interviews/candidates',
 } as const;
 
 /** The product name a person sees for each tenant. */
@@ -30,6 +32,7 @@ export const TENANT_DISPLAY_NAMES = {
   social: 'Social',
   pipelines: 'Pipelines',
   access: 'Access',
+  interviews: 'Interviews',
 } as const;
 
 export const TENANT_MANIFEST = {
@@ -38,6 +41,7 @@ export const TENANT_MANIFEST = {
   social: { id: 'social', displayName: 'Social', portalRoot: '/social', home: '/social/channels', featureFlag: 'VITE_ENABLE_SOCIAL', discussions: false },
   pipelines: { id: 'pipelines', displayName: 'Pipelines', portalRoot: '/pipelines', home: '/pipelines/runs', featureFlag: 'VITE_ENABLE_PIPELINES', discussions: true },
   access: { id: 'access', displayName: 'Access', portalRoot: '/access', home: '/access/requests', featureFlag: 'VITE_ENABLE_ACCESS', discussions: false },
+  interviews: { id: 'interviews', displayName: 'Interviews', portalRoot: '/interviews', home: '/interviews/candidates', featureFlag: 'VITE_ENABLE_INTERVIEWS', discussions: false },
 } as const;
 
 /** Pages carry reader-cursor discussions (`discussions`). */

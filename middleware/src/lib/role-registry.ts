@@ -36,6 +36,9 @@ const PRESENTATION: Record<string, { label: string; summary: string }> = {
   requester: { label: 'Requester', summary: 'Browses the access catalog and requests access for themselves. Never decides a request.' },
   approver: { label: 'Approver', summary: 'A requester who also decides the approval steps they are eligible for — never their own request, never configuration or a hand-written grant.' },
   'access-admin': { label: 'Access Admin', summary: 'An approver plus the access catalog, separation-of-duties policies, manual revoke and the tenant\'s users.' },
+  recruiter: { label: 'Recruiter', summary: 'Owns openings, candidates, assignment and scheduling in the interviews tenant, and sees all of it. Never conducts an interview or decides a stage.' },
+  interviewer: { label: 'Interviewer', summary: 'Sees only the interviews assigned to them, with that candidate and opening, and conducts and scores them.' },
+  'hiring-manager': { label: 'Hiring Manager', summary: 'Sees their own openings and everything on them, and decides each candidate\'s next stage.' },
   admin: { label: 'Admin', summary: 'Cross-tenant platform operator. Full access; the only role that can masquerade.' },
 };
 

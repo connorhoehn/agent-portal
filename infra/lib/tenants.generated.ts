@@ -2,5 +2,5 @@
 // Change the manifest, then run `node scripts/gen-tenants.mjs` (`--check` in CI).
 // Infra copy: only where CDK already loops over tenants (memory-config.ts).
 
-export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access'] as const;
+export const TENANTS = ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews'] as const;
 export type Tenant = (typeof TENANTS)[number];

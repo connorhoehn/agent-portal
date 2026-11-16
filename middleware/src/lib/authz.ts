@@ -115,6 +115,14 @@ export const CAPABILITY_ACTIONS = [
   'ManageAccessCatalog',    // edit what can be requested — access-admin only
   'ManageAccessPolicy',     // SoD policies — access-admin only
   'ProvisionAccess',        // manual revoke, SoD override — access-admin only
+  // Interviews tenant — routes/interviews.ts, seeds/roles/interviews/*.cedar
+  // (docs/interviews-tenant-plan.md, decision 2). Which rows each role reads is
+  // a route rule (lib/interviews/scope.ts), not Cedar.
+  'ViewInterviews',         // reads: each role within its own scope
+  'ManageCandidates',       // openings, candidates, applications — recruiter only
+  'AssignInterviews',       // assign and schedule a round — recruiter only
+  'ConductInterview',       // accept, prepare, run, score an assigned round — interviewer only
+  'DecideCandidate',        // a candidate's next stage — hiring manager only
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];

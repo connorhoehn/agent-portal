@@ -60,7 +60,7 @@ const FALLBACK_TENANTS: TenantInfo[] = TENANTS.map((id) => ({ id, displayName: T
 // same sign-out-others / switch-invalidation semantics as Aurora.
 const FALLBACK_USERS: UserInfo[] = [
   { id: 'u-operator', displayName: 'Platform Operator', email: 'operator@orgiq.example', personId: null,
-    grants: { orgiq: ['admin'], assessment: ['admin'], social: ['admin'], pipelines: ['admin'], access: ['admin'] }, epoch: 0 },
+    grants: { orgiq: ['admin'], assessment: ['admin'], social: ['admin'], pipelines: ['admin'], access: ['admin'], interviews: ['admin'] }, epoch: 0 },
   { id: 'u-theo', displayName: 'Theo Chang', email: 'theo.chang@orgiq.example', personId: 'p-001',
     grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
   // Vera and Rachel also approve in Access: they steward Work's access steps
@@ -152,6 +152,17 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { access: ['approver'] }, epoch: 0 },
   { id: 'u-priya', displayName: 'Priya Venkataraman', email: 'priya.venkataraman@orgiq.example', personId: 'p-priya',
     grants: { access: ['access-admin'] }, epoch: 0 },
+  // Interviews tenant cast — see docs/interviews-tenant-plan.md §Cast. A grant
+  // only in interviews, so isolation walks start from someone with nothing
+  // else. Candidates are records (mock/interviews.ts), never users.
+  { id: 'u-greta', displayName: 'Greta Lindqvist', email: 'greta.lindqvist@orgiq.example', personId: null,
+    grants: { interviews: ['recruiter'] }, epoch: 0 },
+  { id: 'u-hugo', displayName: 'Hugo Marchetti', email: 'hugo.marchetti@orgiq.example', personId: null,
+    grants: { interviews: ['interviewer'] }, epoch: 0 },
+  { id: 'u-wen', displayName: 'Wen Zhao', email: 'wen.zhao@orgiq.example', personId: null,
+    grants: { interviews: ['interviewer'] }, epoch: 0 },
+  { id: 'u-amara', displayName: 'Amara Okafor', email: 'amara.okafor@orgiq.example', personId: null,
+    grants: { interviews: ['hiring-manager'] }, epoch: 0 },
 ];
 
 /**

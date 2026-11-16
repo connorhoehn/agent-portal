@@ -168,6 +168,11 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'rhea.castellanos@orgiq.example', name: 'Rhea Castellanos' },
       { email: 'omar.haddad@orgiq.example', name: 'Omar Haddad' },
       { email: 'priya.venkataraman@orgiq.example', name: 'Priya Venkataraman' },
+      // Interviews tenant cast (docs/interviews-tenant-plan.md §Cast).
+      { email: 'greta.lindqvist@orgiq.example', name: 'Greta Lindqvist' },
+      { email: 'hugo.marchetti@orgiq.example', name: 'Hugo Marchetti' },
+      { email: 'wen.zhao@orgiq.example', name: 'Wen Zhao' },
+      { email: 'amara.okafor@orgiq.example', name: 'Amara Okafor' },
     ];
     for (const u of seedUsers) {
       new cognito.CfnUserPoolUser(this, `SeedUser-${u.email.replace(/[^a-z0-9]/gi, '-')}`, {
