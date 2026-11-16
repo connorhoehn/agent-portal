@@ -415,6 +415,19 @@ async function main() {
       const heldBack = 'While paused: this must not be kept.';
       await inject(NORA.userId, heldBack);
       check(!(await stored(vera, heldBack, 3500)), 'a line was stored while Milo was paused');
+      // Sweep 4 in-call 11: a typed request while paused is answered once per person with "Milo is paused"; the grain is not a request.
+      const typed = async (who, text) => {
+        const r = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/typed-message`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: who.userId, text }) });
+        check(r.status === 202, `the typed-message injector answered ${r.status}`);
+      };
+      const pausedReplies = async () => (await assistantOf(vera, 'assistant-reply')).filter((m) => m.message === 'Milo is paused and did not take that. Ask again once it is listening.');
+      await typed(NORA, 'Milo grain prices are up again this week.');
+      await typed(NORA, 'Milo, what is two plus two?');
+      await typed(NORA, 'Milo, are you there?');
+      const told = await waitFor(async () => { const r = await pausedReplies(); return r.length ? r : null; }, 15000, 'the "Milo is paused" answer to a typed request');
+      await sleep(1500);
+      const toldNow = await pausedReplies();
+      check(toldNow.length === 1 && told[0].metadata?.askedBy === NORA.userId, `typed requests while paused were answered ${toldNow.length} times (asked by ${told[0].metadata?.askedBy})`);
       await barFits(vera.page, 'the bar while paused', 1280);
       // The pause notice is Milo speaking quietly: one row at the start under Milo's mark, its sentence in a tinted pill, not centred grey text.
       await seen(vera.page, 'huddle-thread');

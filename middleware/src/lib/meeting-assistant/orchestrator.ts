@@ -56,10 +56,14 @@ export { ASKER_WINDOW_MS };
 /** Tool calls one addressed request may make; the next is refused with "too many steps". */
 export const MAX_CALLS_PER_REQUEST = 3;
 export const TYPED_UNSUPPORTED_REPLY = `${ASSISTANT_NAME} only hears spoken requests in this call. Say "${ASSISTANT_NAME}" and ask aloud.`;
-const TYPED_START = new RegExp(`^\\s*@?(?:${NAME_ALTERNATION})(?:[,:\\s]|$)`, 'i');
+/** A typed request while Milo is paused: said once per person per pause. */
+export const TYPED_PAUSED_REPLY = `${ASSISTANT_NAME} is paused and did not take that. Ask again once it is listening.`;
 const TYPED_MENTION = new RegExp(`(^|[^\\w])@(?:${NAME_ALTERNATION})\\b`, 'i');
-/** A call chat message that addresses the assistant: it starts with the name and a comma, colon or space, or mentions @Milo. */
-export const addressesAssistant = (text: string): boolean => TYPED_START.test(text) || TYPED_MENTION.test(text);
+/**
+ * A call chat message that addresses the assistant: an @Milo mention, or the name as speech addresses it (detector.ts `findAddress`),
+ * so the typed path and the spoken one share one rule ("Milo grain prices are up" typed is not a request; "Hey Milo, ..." is).
+ */
+export const addressesAssistant = (text: string): boolean => TYPED_MENTION.test(text) || findAddress(text) !== null;
 export const MAX_REPLACEMENTS = 3;
 /** The provider's session is replaced this long before its `expires_at` (about two hours after it starts). */
 export const SESSION_EXPIRY_MARGIN_MS = 5 * 60_000;
@@ -265,7 +269,9 @@ interface CallRun {
   /** Tool calls made so far for each addressed request, keyed by asker and the line that addressed Milo (decision: a cap on chained calls). */
   requestCalls: Map<string, number>;
   /** People already told that typed requests are not heard in this call. */
+  /** Who was told this listening stretch that typed requests are not heard (cleared on resume), and who was told Milo is paused (this pause). */
   typedNoticed: Set<string>;
+  typedPausedNoticed: Set<string>;
   holding: Set<string>;
   /** The one current reply context, and each answered call's own (for a session that says which call its speech continues). */
   reply: ReplyContext | null;
@@ -601,7 +607,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
@@ -649,6 +655,7 @@ export class AssistantRuntime {
   async resume(callId: string): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
+    run.typedNoticed.clear(); run.typedPausedNoticed.clear(); // a new listening stretch: each person is told again, once
     await this.serial(run, async () => {
       if (run.session) return;
       await this.openSession(run, await this.recentLines(callId));
@@ -1364,13 +1371,21 @@ export class AssistantRuntime {
   /**
    * A seated person typed a message to Milo. A session that takes text (the scripted one) gets it as the person's own
    * line, so the detector and the name lock treat it like speech; one that cannot (the real one) is told once per person
-   * per call, in chat, that only spoken requests are heard.
+   * per listening stretch (again after a resume or an invitation back), in chat, that only spoken requests are heard. While
+   * Milo is paused the person is told so, once per pause.
    */
   async onTypedMessage(callId: string, userId: string, text: string): Promise<void> {
     const run = this.runs.get(callId);
-    if (!run?.session || run.finished || !addressesAssistant(text)) return;
+    if (!run || run.finished || !addressesAssistant(text)) return;
     const record = await this.store.get(callId);
-    if (!record || record.state !== 'listening') return;
+    if (!record) return;
+    if (record.state === 'paused') {
+      if (run.typedPausedNoticed.has(userId)) return;
+      run.typedPausedNoticed.add(userId);
+      await postReply(callId, { text: TYPED_PAUSED_REPLY, askedBy: userId, askedByName: await nameOf(userId) });
+      return;
+    }
+    if (!run.session || record.state !== 'listening') return;
     if (run.session.acceptsText) { await this.deps.intake().handle(callId, { userId, text, at: this.now() }); return; }
     if (run.typedNoticed.has(userId)) return;
     run.typedNoticed.add(userId);

@@ -35,7 +35,7 @@ import { voiceTool } from '../../voice/catalogue.js';
 import { meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { ASKER_WINDOW_MS, AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
+import { ASKER_WINDOW_MS, AssistantRuntime, startTurnSweep, TYPED_PAUSED_REPLY, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { VOICE_OPEN_TURN_GAP_MS, VOICE_PROMPT_WINDOW_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -441,6 +441,28 @@ describe('typed requests in the call chat', () => {
     await runtime.onTypedMessage(CALL, ALICE, '@Milo what is my budget');
     await runtime.onTypedMessage(CALL, BOB, 'hey @mylo search for x');
     expect(mockPosts.replies.map((r) => r.text)).toEqual([TYPED_UNSUPPORTED_REPLY, TYPED_UNSUPPORTED_REPLY]);
+  });
+  it('types by the speech rule, tells each person again after a resume, and says once per pause that Milo is paused (sweep 4 in-call 11)', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL); await store.transition(CALL, { from: ['listening'], to: 'listening', by: 'x', at: now });
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    await runtime.start(ctx);
+    await runtime.onTypedMessage(CALL, ALICE, 'Milo grain prices are up'); // the grain, not an address, as in speech
+    expect(mockPosts.replies).toEqual([]);
+    await runtime.onTypedMessage(CALL, ALICE, 'Hey Milo, find the login bug');
+    expect(mockPosts.replies.map((r) => [r.text, r.askedBy])).toEqual([[TYPED_UNSUPPORTED_REPLY, ALICE]]);
+    // Paused: one "Milo is paused" per person, however many requests are typed.
+    await store.transition(CALL, { from: ['listening'], to: 'paused', by: BOB, at: now });
+    await runtime.pause(CALL);
+    await runtime.onTypedMessage(CALL, ALICE, 'Milo, find the login bug');
+    await runtime.onTypedMessage(CALL, ALICE, 'Milo, are you there?');
+    expect(mockPosts.replies.slice(1).map((r) => [r.text, r.askedBy])).toEqual([[TYPED_PAUSED_REPLY, ALICE]]);
+    // Resumed: a new listening stretch, so Alice is told again (once).
+    await store.transition(CALL, { from: ['paused'], to: 'listening', by: BOB, at: now });
+    await runtime.resume(CALL);
+    await runtime.onTypedMessage(CALL, ALICE, 'Milo, find the login bug');
+    await runtime.onTypedMessage(CALL, ALICE, 'Milo, find it again');
+    expect(mockPosts.replies.slice(2).map((r) => r.text)).toEqual([TYPED_UNSUPPORTED_REPLY]);
   });
   it('the scripted session takes the typed text as the person\'s own line', async () => {
     await runtime.onTypedMessage(CALL, ALICE, 'Milo, what is two plus two');
