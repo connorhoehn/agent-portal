@@ -182,10 +182,11 @@ export function actionRowText(action: Pick<AssistantAction, 'status' | 'title' |
   }
 }
 
-/** The minutes card's counts as one line: "2 decisions · 3 action items · 1 proposal". */
+/** The minutes card's counts as one line: "2 decisions · 3 action items · 1 proposal"; an addition counts what it added, "0 new decisions · 1 new action item · 0 new proposals". */
 export function minutesCountLine(counts: MinutesCounts): string {
   const l = minutesCountLabels(counts);
-  return `${l.decisions} · ${l.actionItems} · ${l.proposals}`;
+  const line = [l.decisions, l.actionItems, l.proposals];
+  return (counts.added ? line.map((x) => x.replace(/^(\d+) /, '$1 new ')) : line).join(' · ');
 }
 
 /** A notice longer than this is a block with its first sentence showing and the rest behind "More"; a shorter one stays a pill. */

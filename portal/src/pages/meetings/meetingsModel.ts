@@ -57,6 +57,8 @@ export interface MinutesView {
   endedAt: number;
   invitedBy: string;
   invitedByName: string;
+  /** Everyone who invited Milo into the call, in the order of their periods, once each. Absent from an older server (`invitedByName` alone). */
+  inviters?: Array<{ userId: string; name: string }>;
   attendees: MinutesPerson[];
   summary: string;
   /** The summary split by the server: its lead sentence and up to four bullets. Absent from an older server (`summaryOf` reads `summary`). */
@@ -76,12 +78,17 @@ export interface MinutesView {
   keptUntil?: number;
   /** What Milo covered: its listening seconds, the rest of its time in the call, and how many people were not transcribed (a count). */
   coverage?: MinutesCoverage;
-  /** No draft (or an addition that could not be written): whether an attendee may ask Milo to try again. */
-  rewrite?: { writing: boolean; possible: boolean; attemptsLeft: number };
+  /**
+   * No draft (or an addition that could not be written): whether an attendee may ask Milo to try again. `autoRetrying`: Milo will still
+   * try again by itself (absent from an older server, read as true).
+   */
+  rewrite?: { writing: boolean; possible: boolean; attemptsLeft: number; autoRetrying?: boolean };
   /** Milo was invited back and is in the call now. Absent from an older server. */
   backInCall?: boolean;
   /** A later part of the call could not be added to these minutes yet. Absent from an older server. */
   additionOwed?: boolean;
+  /** Milo has left again and the minutes do not cover that yet: the addition is due (read again until it lands). Absent from an older server. */
+  additionDue?: boolean;
   /** How many times a later part of the call was added. Absent from an older server. */
   additions?: number;
 }
@@ -90,14 +97,19 @@ export interface MinutesView {
  * The one quiet sentence under the summary about a later part of the call: Milo is back in the call (what it hears is added when it
  * leaves), it is adding it now, or it could not yet. Null when there is nothing to say.
  */
-export function additionNote(m: Pick<MinutesView, 'backInCall' | 'additionOwed' | 'rewrite'>): string | null {
+export function additionNote(m: Pick<MinutesView, 'backInCall' | 'additionOwed' | 'additionDue' | 'rewrite'>): string | null {
   if (m.backInCall) return `${ASSISTANT_NAME} is back in this call. What it hears now is added to these minutes when it leaves.`;
-  if (!m.additionOwed) return null;
+  if (!m.additionOwed) return m.additionDue ? `${ASSISTANT_NAME} is adding the later part of this call to these minutes.` : null;
   if (m.rewrite?.writing) return `${ASSISTANT_NAME} is adding the later part of this call to these minutes.`;
-  return m.rewrite && m.rewrite.attemptsLeft === 0
-    ? `${ASSISTANT_NAME} could not add the later part of this call to these minutes and will not try again. The transcript below has all of it.`
+  if (m.rewrite && m.rewrite.attemptsLeft === 0) return `${ASSISTANT_NAME} could not add the later part of this call to these minutes and will not try again. The transcript below has all of it.`;
+  // "Will try again" only while the server's sweep still will; after that the page menu's retry is the way.
+  return m.rewrite?.autoRetrying === false
+    ? `${ASSISTANT_NAME} could not add the later part of this call to these minutes. These minutes cover the earlier part. You can ask ${ASSISTANT_NAME} to try again from the menu.`
     : `${ASSISTANT_NAME} could not add the later part of this call to these minutes yet. These minutes cover the earlier part, and ${ASSISTANT_NAME} will try again.`;
 }
+
+/** How long the meeting page keeps reading after Milo left again, waiting for the minutes to cover that leave. */
+export const ADDITION_FOLLOW_MS = 5 * 60_000;
 
 /** The page menu's retry, when one is possible: write failed minutes again, or add the later part again. Null when none. */
 export function retryLabel(m: Pick<MinutesView, 'writer' | 'additionOwed' | 'rewrite'>, written: boolean): string | null {
@@ -130,10 +142,10 @@ export const proposalsUrl = (callId: string): string => `/api/calls/${encodeURIC
 export const meetingHref = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
 export const TRANSCRIPT_PAGE = 100;
 
-/** "12 min" or "1 h 5 min"; under a minute reads "under a minute". */
+/** "12 min" or "1 h 5 min"; under a minute reads "less than a minute". */
 export function durationLabel(startedAt: number, endedAt: number): string {
   const minutes = Math.max(0, Math.round((endedAt - startedAt) / 60_000));
-  if (minutes < 1) return 'under a minute';
+  if (minutes < 1) return 'less than a minute';
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60), m = minutes % 60;
   return m ? `${h} h ${m} min` : `${h} h`;
@@ -237,18 +249,32 @@ export function outcomesLabel(o: MeetingListRow['outcomes']): string | null {
   return parts.length ? parts.join(' · ') : 'Nothing recorded';
 }
 
-/** The header's one meta line, as words (the people are drawn as avatars between them by the page). */
-export function headerMeta(m: Pick<MinutesView, 'startedAt' | 'coverage' | 'invitedByName'>): { when: string; listened: string | null; invitedBy: string } {
-  const listened = m.coverage ? `${ASSISTANT_NAME} listened ${durationLabel(0, m.coverage.listenedSeconds * 1000)}` : null;
-  return { when: whenLabel(m.startedAt), listened, invitedBy: `invited by ${m.invitedByName}` };
+/** Everyone who invited Milo, in order (the server's list, else the one name an older server sends). */
+const invitersOf = (m: Pick<MinutesView, 'invitedByName' | 'inviters'> & { invitedBy?: string }): Array<{ userId: string; name: string }> =>
+  (m.inviters?.length ? m.inviters : m.invitedByName ? [{ userId: m.invitedBy ?? '', name: m.invitedByName }] : []);
+
+/** The header's one meta line, as words (the people are drawn as avatars between them by the page): "invited by Vera Green, then Nora DaSilva". */
+export function headerMeta(m: Pick<MinutesView, 'startedAt' | 'coverage' | 'invitedByName' | 'inviters'> & { invitedBy?: string }): { when: string; listened: string | null; invitedBy: string } {
+  const listened = m.coverage ? `${ASSISTANT_NAME} listened for ${durationLabel(0, m.coverage.listenedSeconds * 1000)}` : null;
+  const names = invitersOf(m).map((i) => i.name);
+  return { when: whenLabel(m.startedAt), listened, invitedBy: `invited by ${names.length ? names.join(', then ') : m.invitedByName}` };
 }
 
-/** The header's quieter second line: retention and who can delete sooner, then Milo's pause and how many people were not transcribed. */
-export function quietMeta(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'youAreInviter' | 'coverage'>): string[] {
+/**
+ * The header's quieter second line: retention and who can delete sooner (every inviter, "You or Vera Green" for one of them; nobody
+ * while Milo is back in the call, when nobody can), then Milo's pause and how many people were not transcribed.
+ */
+export function quietMeta(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'inviters' | 'youAreInviter' | 'coverage' | 'backInCall'> & { invitedBy?: string }, viewerUserId: string | null = null): string[] {
   const items: string[] = [];
   if (m.keptUntil) {
     items.push(`Kept until ${dayLabel(m.keptUntil)}`);
-    items.push(`${m.youAreInviter ? 'You' : m.invitedByName || `The person who invited ${ASSISTANT_NAME}`} can delete it sooner`);
+    if (!m.backInCall) {
+      // An older server names one inviter: the viewer, when they are one.
+      const listed = m.inviters?.length ? m.inviters : m.youAreInviter ? [] : invitersOf(m);
+      const others = listed.filter((i) => !m.youAreInviter || i.userId !== viewerUserId).map((i) => i.name);
+      const who = [...(m.youAreInviter ? ['You'] : []), ...others];
+      items.push(`${who.length ? who.join(' or ') : `The person who invited ${ASSISTANT_NAME}`} can delete it sooner`);
+    }
   }
   const c = m.coverage;
   if (c && c.pausedSeconds >= 60) items.push(`${ASSISTANT_NAME} paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);

@@ -32,7 +32,7 @@ import {
 import {
   actionStatus, actionWaitsOn, canCreateFor, decisionRows, goneCopy, headerMeta, minutesWritten, orderProposals, proposalClosed, proposalPill,
   quietMeta, summaryOf, actionText, additionNote, retryLabel, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl, createWorkItemUrl, workItemLink,
-  MINUTES_UNAVAILABLE, type DecisionRow, type MinutesActionItem, type MinutesView,
+  MINUTES_UNAVAILABLE, ADDITION_FOLLOW_MS as FOLLOW_MS, type DecisionRow, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
 import { Faces, PersonName } from './Faces';
@@ -95,13 +95,19 @@ export default function MeetingPage() {
   const { session } = useSession();
   // Asked again every few seconds while Milo writes the minutes (the first write, or "Write the minutes again").
   const [writing, setWriting] = useState(false);
-  // While Milo is back in the call the page reads again now and then, so the later part shows once Milo leaves and adds it.
+  // While Milo is back in the call the page reads again now and then, so the later part shows once Milo leaves and adds it. After it
+  // leaves, the server says the addition is due until the minutes cover that leave: the page keeps reading until then, for at most
+  // FOLLOW_MS (a write that never lands does not poll forever).
   const [back, setBack] = useState(false);
-  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : back ? 15000 : undefined);
+  const [dueSince, setDueSince] = useState<number | null>(null);
+  const following = dueSince !== null && Date.now() - dueSince < FOLLOW_MS;
+  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : back ? 15000 : following ? 5000 : undefined);
   const nowWriting = minutes.data ? minutes.data.rewrite?.writing === true : goneCopy(minutes.failure).writing;
   if (nowWriting !== writing && !minutes.isLoading) setWriting(nowWriting);
   const nowBack = minutes.data?.backInCall === true;
   if (nowBack !== back && !minutes.isLoading) setBack(nowBack);
+  const nowDue = minutes.data?.additionDue === true;
+  if (nowDue !== (dueSince !== null) && !minutes.isLoading) setDueSince(nowDue ? Date.now() : null);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
   const writeAgain = useCallback(async () => {
     setRewriteError(null);
@@ -168,8 +174,9 @@ export default function MeetingPage() {
   const prompts = [...(deletePrompt ? [deletePrompt] : []), ...(proposalAsk ? [proposalAsk] : [])];
   const runner = callId && mayRunHere ? <MeetingTurnRunner afterCall={{ callId, initiativeId: m?.initiativeId ?? null, active: true }} /> : null;
   const detail = detailId ? proposals.find((p) => p.id === detailId) ?? null : null;
-  // Portraits come with the meeting's people from the server; anyone else draws initials.
-  const people = m?.attendees ?? [];
+  // Portraits come with the meeting's people and with everyone a proposal names (the server reads both the same way); anyone else
+  // draws initials.
+  const people = [...(m?.attendees ?? []), ...proposals.flatMap((p) => [p.executor, ...p.named, ...p.responses])];
   const drawer = <ProposalDrawer people={people} meetingInitiativeId={m?.initiativeId ?? null} p={detail} onClose={() => setDetailId(null)} onAsk={(p) => { setDetailId(null); ask(p); }} afterAct={refreshProposals} />;
 
   // The proposals table: statement · what it does · status · people with their answers · the row's one action. Open ones first.
@@ -224,7 +231,7 @@ export default function MeetingPage() {
   const rewrite = m.rewrite;
   const summary = summaryOf(m);
   const meta = headerMeta(m);
-  const quiet = quietMeta(m);
+  const quiet = quietMeta(m, viewer);
   const decisions = decisionRows(m, proposals);
   const waitingProposals = proposals.filter(waitingOnYou);
   const waitingItems = m.initiativeId ? m.actionItems.filter((i) => actionWaitsOn(i, viewer)) : [];
@@ -233,7 +240,8 @@ export default function MeetingPage() {
   const later = additionNote(m);
   const menu: DropdownMenuItem[] = [
     ...(retry ? [{ label: retry, onSelect: () => { void writeAgain(); }, 'data-testid': 'meeting-rewrite-button' }] : []),
-    ...(m.youAreInviter ? [{ label: 'Delete this meeting', danger: true, onSelect: () => setAsked((n) => Math.max(n, answered) + 1), 'data-testid': 'meeting-delete' }] : []),
+    // Not while Milo is back in the call: the meeting can be deleted once it has left again.
+    ...(m.youAreInviter && !m.backInCall ? [{ label: 'Delete this meeting', danger: true, onSelect: () => setAsked((n) => Math.max(n, answered) + 1), 'data-testid': 'meeting-delete' }] : []),
   ];
 
   const decisionColumns: DataTableColumn<DecisionRow>[] = [

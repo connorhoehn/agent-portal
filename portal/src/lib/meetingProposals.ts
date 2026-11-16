@@ -13,7 +13,8 @@ export const PROPOSAL_STATES: readonly ProposalState[] = ['open', 'consented', '
 export type ProposalResponseKind = 'consent' | 'object';
 export type ProposalAnswer = 'consent' | 'object' | 'withdraw' | 'not-a-decision' | 'reopen';
 
-export interface ProposalPerson { userId: string; name: string }
+/** `avatarUrl`: the person's portrait, read by the server the way the meeting's attendees are; absent or null draws initials. */
+export interface ProposalPerson { userId: string; name: string; avatarUrl?: string | null }
 export interface ProposalResponseView extends ProposalPerson { response: ProposalResponseKind; reason: string | null; at: number }
 /** `summary`: what will be written, in plain words, from the server ("Create a work item titled …, owned by Lee"). */
 export type ProposalOutcomeView = { kind: 'decision'; initiativeId: string | null; summary?: string } | { kind: 'tool'; name: string; summary?: string };
@@ -61,7 +62,7 @@ const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const rec = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
 const person = (v: unknown): ProposalPerson | null => {
   const r = rec(v);
-  return r && str(r['userId']) ? { userId: r['userId'], name: str(r['name']) ? r['name'] : r['userId'] } : null;
+  return r && str(r['userId']) ? { userId: r['userId'], name: str(r['name']) ? r['name'] : r['userId'], ...(str(r['avatarUrl']) ? { avatarUrl: r['avatarUrl'] } : {}) } : null;
 };
 
 /** A link is drawn only to a path inside the portal, never to whatever URL a field holds. */

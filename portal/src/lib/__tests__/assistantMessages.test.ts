@@ -131,6 +131,8 @@ test('state decides the card\'s size: waiting on you, on others, done as a row, 
 test('the minutes counts read as one line; a long notice splits at its first sentence, a short one stays a pill', async () => {
   const { isLongNotice, minutesCountLine, splitNotice } = await import('../assistantMessages.ts');
   assert.equal(minutesCountLine({ decisions: 2, actionItems: 1, proposals: 0 }), '2 decisions · 1 action item · 0 proposals');
+  // An addition's card counts what it added.
+  assert.equal(minutesCountLine({ decisions: 0, actionItems: 1, proposals: 1, added: true }), '0 new decisions · 1 new action item · 1 new proposal');
   const join = "Milo joined at Vera Green's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo writes minutes.";
   assert.equal(isLongNotice(join), true);
   assert.deepEqual(splitNotice(join), { first: "Milo joined at Vera Green's invitation.", rest: 'Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Milo writes minutes.' });

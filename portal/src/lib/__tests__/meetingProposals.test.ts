@@ -143,3 +143,11 @@ test('the proposal card\'s size follows its state and the viewer; each person\'s
   const chips = personChips(one({ responses: [{ userId: 'u-lee', name: 'Lee', response: 'consent', reason: null, at: 1 }] }));
   assert.deepEqual(chips.map(personLabel), ['Priya · waiting · runs it', 'Lee · consented']);
 });
+
+test('a proposal carries the portraits the server read for the people it names; a missing one draws initials', () => {
+  const p = one({ executor: { userId: 'u-priya', name: 'Priya', avatarUrl: '/avatars/priya.png' }, named: [{ userId: 'u-tc', name: 'Tess Cole', avatarUrl: '/avatars/tc.png' }],
+    responses: [{ userId: 'u-lee', name: 'Lee', avatarUrl: null, response: 'consent', reason: null, at: 1 }] });
+  assert.equal(p.executor.avatarUrl, '/avatars/priya.png');
+  assert.equal(p.named[0]!.avatarUrl, '/avatars/tc.png');
+  assert.equal('avatarUrl' in p.responses[0]!, false);
+});

@@ -6,7 +6,7 @@ import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegmen
   actionStatus, actionWaitsOn, createWorkItemUrl, workItemLink, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, additionNote, retryLabel, type MeetingListRow } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
-  assert.equal(durationLabel(0, 20_000), 'under a minute');
+  assert.equal(durationLabel(0, 20_000), 'less than a minute');
   assert.equal(durationLabel(0, 12 * 60_000), '12 min');
   assert.equal(durationLabel(0, 65 * 60_000), '1 h 5 min');
   assert.equal(durationLabel(0, 120 * 60_000), '2 h');
@@ -57,7 +57,7 @@ test('the meeting page asks for proposals again only while an answer or a run ca
 test('the header: one meta line (when, Milo listened, invited by) and a quieter line for retention, a pause and a count of people not transcribed', () => {
   const at = Date.UTC(2026, 11, 14, 12);
   const meta = headerMeta({ startedAt: at, coverage: { listenedSeconds: 180, pausedSeconds: 0, untranscribed: 0 }, invitedByName: 'Vera Green' });
-  assert.equal(meta.listened, 'Milo listened 3 min');
+  assert.equal(meta.listened, 'Milo listened for 3 min');
   assert.equal(meta.invitedBy, 'invited by Vera Green');
   assert.equal(headerMeta({ startedAt: at, invitedByName: 'Vera Green' }).listened, null);
   assert.deepEqual(quietMeta({ keptUntil: at, invitedByName: 'Vera Green', youAreInviter: false, coverage: { listenedSeconds: 600, pausedSeconds: 30, untranscribed: 1 } }),
@@ -170,6 +170,26 @@ test('an action item made into a work item from the meeting page reads created, 
   assert.equal(createWorkItemUrl('call 1', 2), '/api/calls/call%201/assistant/minutes/action-items/2/work-item');
 });
 
+test('every inviter is named in order, and everyone who can delete sooner; nobody is offered it while Milo is back in the call', () => {
+  const at = Date.UTC(2026, 11, 14, 12);
+  const inviters = [{ userId: 'vera', name: 'Vera Green' }, { userId: 'nora', name: 'Nora DaSilva' }];
+  const m = { startedAt: at, keptUntil: at, invitedBy: 'vera', invitedByName: 'Vera Green', inviters, youAreInviter: false };
+  assert.equal(headerMeta(m).invitedBy, 'invited by Vera Green, then Nora DaSilva');
+  assert.deepEqual(quietMeta(m, 'eli'), ['Kept until 14 Dec 2026', 'Vera Green or Nora DaSilva can delete it sooner']);
+  assert.deepEqual(quietMeta({ ...m, youAreInviter: true }, 'nora'), ['Kept until 14 Dec 2026', 'You or Vera Green can delete it sooner']);
+  assert.deepEqual(quietMeta({ ...m, youAreInviter: true }, 'vera'), ['Kept until 14 Dec 2026', 'You or Nora DaSilva can delete it sooner']);
+  assert.deepEqual(quietMeta({ ...m, youAreInviter: true, backInCall: true }, 'vera'), ['Kept until 14 Dec 2026']);
+  // An older server sends one inviter only.
+  assert.equal(headerMeta({ startedAt: at, invitedByName: 'Vera Green' }).invitedBy, 'invited by Vera Green');
+});
+
+test('after Milo leaves again the page says the later part is being added; "will try again" only while Milo still will', () => {
+  assert.equal(additionNote({ additionDue: true }), 'Milo is adding the later part of this call to these minutes.');
+  assert.match(additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 2, autoRetrying: true } })!, /and Milo will try again\.$/);
+  const stopped = additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 2, autoRetrying: false } })!;
+  assert.equal(stopped, 'Milo could not add the later part of this call to these minutes. These minutes cover the earlier part. You can ask Milo to try again from the menu.');
+});
+
 test('a later part of the call: Milo back in the call, adding it, or not yet; and the retry the menu offers', () => {
   assert.equal(additionNote({ backInCall: true }), 'Milo is back in this call. What it hears now is added to these minutes when it leaves.');
   assert.equal(additionNote({}), null);
@@ -181,4 +201,9 @@ test('a later part of the call: Milo back in the call, adding it, or not yet; an
   assert.equal(retryLabel({ writer: 'scripted', rewrite: { writing: false, possible: false, attemptsLeft: 5 } }, true), null);
   assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: true, possible: true, attemptsLeft: 2 } }, true), null);
   assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 0 } }, true), null);
+});
+
+test('faces for a proposal come from the people it names as well as the attendees', () => {
+  const people = [{ name: 'Vera Green', avatarUrl: '/a/vera.png' }, { name: 'Tess Cole', avatarUrl: '/a/tess.png' }];
+  assert.deepEqual(facesFor(['Tess Cole', 'Eli'], people), [{ name: 'Tess Cole', src: '/a/tess.png' }, { name: 'Eli' }]);
 });
