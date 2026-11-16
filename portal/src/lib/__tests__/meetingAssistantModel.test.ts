@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ASSISTANT_POLL_MS, assistantControls, assistantPresent, assistantStateWords, noticeText, noticeVisible, NO_ASSISTANT, parseAssistantState, rosterEntry, markWords, timeLeftWords,
-  DISMISS_LABEL, DISMISS_QUESTION, ERROR_CLEAR_MS, errorStale, expiresWords, leftWords, LOADING_ASSISTANT, myWaitingActions, standingFacts, voiceWords, workingWords,
-  INVITE_AGAIN_LABEL, INVITE_HINT, rejoinRefusedWords,
+  DISMISS_LABEL, dismissQuestion, ERROR_CLEAR_MS, errorStale, expiresWords, leftWords, LOADING_ASSISTANT, myWaitingActions, standingFacts, voiceWords, workingWords,
+  INVITE_AGAIN_LABEL, INVITE_HINT, rejoinRefusedWords, budgetAskWords, extendWords, inviteAgainLabel, LEAVING_LABEL,
 } from '../meetingAssistantModel.ts';
 
 const view = (state: string, extra: Record<string, unknown> = {}) => parseAssistantState('c1', { state, invitedBy: 'u-a', invitedByName: 'Vera Lindqvist', youMustAck: false, ...extra });
@@ -40,7 +40,7 @@ test('after dismissal the bar says Milo left, and a person who may invite gets "
   // Someone without the right to invite sees the chip and no button.
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: false, view: view('left', { rejoin: 'allowed' }) }).inviteAgain, false);
   // A standing refusal: no button, and the chip's tooltip says why.
-  for (const rejoin of ['deleted', 'limit']) assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left', { rejoin }) }).inviteAgain, false);
+  for (const rejoin of ['deleted', 'limit', 'almost']) assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left', { rejoin }) }).inviteAgain, false);
   // An older server that does not say: no button (the invite would have been refused).
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') }).inviteAgain, false);
   assert.equal(rejoinRefusedWords(view('left', { rejoin: 'deleted' })), "This call's record was deleted, so Milo cannot join it again.");
@@ -55,7 +55,7 @@ test('the period: 1 unless the server says Milo was invited back, and the notice
   assert.equal(view('listening').period, 1);
   assert.equal(view('listening', { period: 2 }).period, 2);
   assert.equal(view('listening', { period: 0 }).period, 1);
-  assert.equal(noticeText(view('listening', { period: 2, invitedByName: 'Bo Berg' })).title, 'Bo Berg invited Milo back into this call');
+  assert.equal(noticeText(view('listening', { period: 2, invitedByName: 'Bo Berg', youAckedBefore: true })).title, 'Bo Berg invited Milo back into this call');
   assert.equal(noticeText(view('listening')).title, 'Vera Lindqvist invited Milo to listen to this call');
 });
 
@@ -153,7 +153,7 @@ test('in-call 6: invited reads as joining, and the bar says when Milo cannot hea
 
 test('in-call 3 / around 1: dismissing names its effect, and the left chip says why (Milo can be invited back)', () => {
   assert.equal(DISMISS_LABEL, 'Dismiss Milo for everyone');
-  assert.equal(DISMISS_QUESTION, 'Milo leaves the call for everyone. Anyone who can invite Milo can invite it back later.');
+  assert.equal(dismissQuestion(view('listening', { rejoinLater: 'allowed' })), 'Milo leaves the call for everyone. Anyone who can invite Milo can invite it back later.');
   assert.equal(leftWords(view('left', { leftBy: 'u-b', leftByName: 'Bo Berg' })), 'Bo Berg dismissed Milo');
   assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 3600, ceilingSeconds: 3600 })), 'Milo reached its time limit');
   assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Milo lost its connection');
@@ -188,4 +188,54 @@ test('in-call 7 / around 13: a bar error goes once the phase moves on, or after 
 test('the notice reads as the agreed banner copy', () => {
   assert.equal(noticeText(view('listening', { youMustAck: true })).body,
     'Milo is listening to this call. Nothing you say is kept until you acknowledge. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. Milo writes minutes for the people in the call.');
+});
+
+test('consent 6: the dismissal question promises an invitation back only when one would be allowed; "almost" used time has its sentence', () => {
+  assert.equal(dismissQuestion(view('listening', { rejoinLater: 'almost' })), 'Milo leaves the call for everyone.');
+  assert.equal(dismissQuestion(view('listening', { rejoinLater: 'limit' })), 'Milo leaves the call for everyone.');
+  assert.equal(dismissQuestion(view('listening')), 'Milo leaves the call for everyone.');
+  assert.equal(view('listening', { rejoinLater: 'almost' }).rejoinLater, 'almost');
+  assert.equal(view('left', { rejoinLater: 'allowed' }).rejoinLater, null);
+  assert.equal(view('left', { rejoin: 'almost' }).rejoin, 'almost');
+  assert.equal(rejoinRefusedWords(view('left', { rejoin: 'almost' })), "Milo has almost used this call's listening time and cannot be invited back.");
+});
+
+test('consent 8: while an invitation back waits for Milo to finish leaving, the button says so', () => {
+  assert.equal(LEAVING_LABEL, 'Milo is leaving…');
+  assert.equal(inviteAgainLabel(view('left', { rejoin: 'allowed', leaving: true }), true), 'Milo is leaving…');
+  assert.equal(inviteAgainLabel(view('left', { rejoin: 'allowed', leaving: true }), false), 'Invite Milo again');
+  assert.equal(inviteAgainLabel(view('left', { rejoin: 'allowed', leaving: false }), true), 'Invite Milo again');
+  assert.equal(view('listening', { leaving: true }).leaving, false);
+});
+
+test('consent 9 / in-call 14: after an invitation back, "once more" only for people who acknowledged before; the voice is off; "adds to the minutes"', () => {
+  const before = noticeText(view('listening', { period: 2, invitedByName: 'Bo Berg', youMustAck: true, youAckedBefore: true }));
+  assert.equal(before.title, 'Bo Berg invited Milo back into this call');
+  assert.equal(before.body, "Milo is listening to this call again. Everyone acknowledges once more: nothing you say is kept until you do. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. Milo adds what it hears to the minutes for the people in the call. Milo's voice is off until someone turns it on.");
+  const fresh = noticeText(view('listening', { period: 2, invitedByName: 'Bo Berg', youMustAck: true }));
+  assert.equal(fresh.title, 'Bo Berg invited Milo to listen to this call');
+  assert.equal(fresh.body, "Milo is listening to this call. Nothing you say is kept until you acknowledge. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. Milo adds what it hears to the minutes for the people in the call. Milo's voice is off until someone turns it on.");
+  assert.doesNotMatch(fresh.body, /again|once more/);
+});
+
+test('in-call 10: Extend says what it adds and whose budget holds it, and is not offered at the hard maximum', () => {
+  const base = { enabled: true, inCall: true, canInvite: true };
+  assert.equal(assistantControls({ ...base, view: view('listening', { extendSeconds: 3600 }) }).extend, true);
+  assert.equal(assistantControls({ ...base, view: view('listening', { extendSeconds: 0 }) }).extend, false);
+  assert.equal(assistantControls({ ...base, view: view('listening') }).extend, true); // an older server that does not say
+  assert.equal(extendWords(view('listening', { extendSeconds: 3600 }), false), "Adds 60 minutes, held against Vera Lindqvist's budget");
+  assert.equal(extendWords(view('listening', { extendSeconds: 300 }), true), 'Adds 5 minutes, held against your budget');
+  assert.equal(extendWords(view('listening', { extendSeconds: 0 }), true), null);
+  assert.equal(view('left', { extendSeconds: 60 }).extendSeconds, null);
+});
+
+test('consent 11: the over-budget ask says what is bought, for how long and by how much it goes past the budget', () => {
+  assert.deepEqual(budgetAskWords('invite', { estimateUsd: 3, remainingUsd: 1.5, seconds: 3600 }),
+    { title: 'Over your budget', detail: 'Inviting Milo holds up to $3 of your budget for 60 minutes of listening, which goes past it by $1.50. Go ahead anyway?' });
+  assert.equal(budgetAskWords('invite', { estimateUsd: 0.4, remainingUsd: -2, seconds: 480 }).detail,
+    'Inviting Milo holds up to $0.40 of your budget for 8 minutes of listening, which goes past it by $0.40. Go ahead anyway?');
+  assert.equal(budgetAskWords('extend', { estimateUsd: 3, remainingUsd: 1, seconds: 3600 }).detail,
+    "Extending Milo's time holds up to $3 of your budget for 60 minutes of listening, which goes past it by $2. Go ahead anyway?");
+  assert.equal(budgetAskWords('invite', { estimateUsd: null, remainingUsd: null, seconds: null }).detail, 'Inviting Milo goes past your budget. Go ahead anyway?');
+  assert.doesNotMatch(budgetAskWords('resume', { estimateUsd: 1, remainingUsd: 0, seconds: 60 }).detail, /session/);
 });

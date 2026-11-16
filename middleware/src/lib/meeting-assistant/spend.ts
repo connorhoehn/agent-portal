@@ -66,7 +66,8 @@ export const realSpend: AssistantSpend = {
       ...(i.confirmOverUserBudget ? { confirmed: { userBudget: true } } : {}),
     });
     if (held.kind === 'held') return { ok: true, holdId: held.holdId };
-    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: p75 });
+    // The listening time being bought rides along, so the over-budget ask can say what it holds and for how long.
+    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: p75, listeningSeconds: i.seconds });
     return { ok: false, refusal: { status: out.status, body: out.body, ...(out.headers ? { headers: out.headers as Record<string, string> } : {}) } };
   },
 

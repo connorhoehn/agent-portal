@@ -233,6 +233,8 @@ describe('inviting Milo back', () => {
     const refused = await post('invite', 'bob');
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ reason: 'budget', confirmFlag: 'confirmOverUserBudget', error: "This would put Milo's time over your budget." });
+    // What is being bought rides along, so the ask can say it: the listening time of the new period, its estimate and the budget left.
+    expect(refused.body).toMatchObject({ listeningSeconds: 3600, estimateUsd: 3, userBudget: { remainingUsd: expect.any(Number) } });
     expect((await record()).state).toBe('left');
     expect(assistantIntake().isListening(CALL)).toBe(false);
     const ok = await post('invite', 'bob', { confirmOverUserBudget: true });

@@ -32,6 +32,7 @@ import {
   stateLine, waitingOnYou, type PersonChip, type ProposalState, type ProposalView,
 } from '../../lib/meetingProposals';
 import { bumpProposalPrompt, setProposalDeckHidden } from '../../lib/proposalDeckState';
+import { useLiveCallId } from '../../lib/liveCallId';
 import {
   actionCardView, actionDoesLine, actionHeader, actionLayout, actionNeedsLine, actionRowText, actionTitle, askedByLine, decideAssistantAction, isLongNotice,
   minutesCountLine, readAssistantMessage, splitNotice, type ActionDecision, type AssistantAction, type AssistantProposalCard, type CardLayout, type MinutesCounts,
@@ -289,6 +290,7 @@ export function ProposalCard({ proposalId, state, statement, view, surface: wher
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const callId = view?.callId ?? null;
+  const liveCallId = useLiveCallId();
   const act = (run: (id: string) => Promise<string | null>) => {
     if (!callId || busy) return;
     setBusy(true); setError(null);
@@ -327,8 +329,10 @@ export function ProposalCard({ proposalId, state, statement, view, surface: wher
   const blocked = live ? blockedLine(live) : null;
   const records = live ? recordsLine(live) : null;
   const expiry = live ? expiryLine(live) : null;
-  // Answer opens the deck in the call, where it is asked; it is offered only when the deck has a question for this person.
+  // Answer opens the deck in the call, where it is asked; it is offered only when the deck has a question for this person. Someone not
+  // in the running call (it ended, or they left it) has no deck: Answer takes them to the meeting page, which asks the same question.
   const answer = live && where === 'assistant' && callId && (waitingOnYou(live) || optionalFor(live));
+  const answerHere = !!callId && liveCallId === callId;
   const withdraw = live && callId && live.you.response !== null && isAnswerable(live);
   const hasMore = !!live && (live.heard.length > 0 || !!records);
   return (
@@ -360,8 +364,14 @@ export function ProposalCard({ proposalId, state, statement, view, surface: wher
       } : null}
       actions={live && (answer || withdraw || undo || raise || resultLink) ? (
         <>
-          {answer && (
+          {answer && answerHere && (
             <Button variant={waitingOnYou(live) ? 'primary' : 'secondary'} size="sm" onClick={() => setProposalDeckHidden(callId, false)} data-testid="assistant-proposal-answer">Answer</Button>
+          )}
+          {answer && !answerHere && (
+            <Link href={meetingHref(callId)} data-testid="assistant-proposal-answer-meeting"
+              onClick={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(meetingHref(callId)); } }}>
+              Answer on the meeting page
+            </Link>
           )}
           {undo}
           {raise}

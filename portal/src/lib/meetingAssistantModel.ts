@@ -41,11 +41,20 @@ export interface AssistantView {
    * the listening time it may have. Null while Milo is in the call (or none).
    */
   rejoin: RejoinStanding | null;
+  /** While Milo is here: whether it could be invited back if it left now (the dismissal question promises it only then); null when unknown. */
+  rejoinLater: RejoinStanding | null;
+  /** After Milo left: its earlier period is still finishing, so an invitation back waits for it ("Milo is leaving…"). */
+  leaving: boolean;
+  /** What one "Extend time" adds now, in seconds (0 at the call's hard maximum: not offered); null when the server has not said. */
+  extendSeconds: number | null;
+  /** This person acknowledged Milo in an earlier period of this call: their notice says everyone acknowledges once more. */
+  youAckedBefore: boolean;
   /** Which period of Milo in this call this is (1 for the first, 2 after it was invited back once, ...). */
   period: number;
 }
 
-export type RejoinStanding = 'allowed' | 'deleted' | 'limit';
+/** 'almost': less than five minutes of the call's listening time are left, too little for an invitation back. */
+export type RejoinStanding = 'allowed' | 'deleted' | 'limit' | 'almost';
 
 /** The state is refreshed this often while a call is live (docs: keep any poll at 5 s or slower). */
 export const ASSISTANT_POLL_MS = 5000;
@@ -58,7 +67,7 @@ export const ASSISTANT_LABEL = 'Assistant';
 
 const PHASES: readonly AssistantPhase[] = ['none', 'invited', 'listening', 'paused', 'left'];
 const HEARING: readonly AssistantHearing[] = ['ok', 'connecting', 'no-audio'];
-const REJOIN: readonly RejoinStanding[] = ['allowed', 'deleted', 'limit'];
+const REJOIN: readonly RejoinStanding[] = ['allowed', 'deleted', 'limit', 'almost'];
 const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
 const list = <T>(v: unknown, read: (r: Record<string, unknown>) => T | null): T[] =>
   Array.isArray(v) ? v.map((x) => { const r = record(x); return r ? read(r) : null; }).filter((x): x is T => x !== null) : [];
@@ -78,6 +87,10 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     voice: phase !== 'none' && phase !== 'left' && b['voice'] === true,
     hearing: HEARING.find((h) => h === b['hearing']) ?? 'ok',
     rejoin: phase === 'left' ? REJOIN.find((r) => r === b['rejoin']) ?? null : null,
+    rejoinLater: present(phase) ? REJOIN.find((r) => r === b['rejoinLater']) ?? null : null,
+    leaving: phase === 'left' && b['leaving'] === true,
+    extendSeconds: phase === 'listening' || phase === 'paused' ? seconds(b['extendSeconds']) : null,
+    youAckedBefore: b['youAckedBefore'] === true,
     period: typeof b['period'] === 'number' && Number.isInteger(b['period']) && b['period'] >= 1 ? b['period'] : 1,
     openRequests: present(phase) ? list(b['openRequests'], (r) => {
       const name = text(r['askerName']);
@@ -113,8 +126,13 @@ export function leftWords(v: AssistantView): string {
 export function rejoinRefusedWords(v: AssistantView): string | null {
   if (v.rejoin === 'deleted') return `This call's record was deleted, so ${ASSISTANT_NAME} cannot join it again.`;
   if (v.rejoin === 'limit') return `${ASSISTANT_NAME} has already listened to this call for as long as it can.`;
+  if (v.rejoin === 'almost') return `${ASSISTANT_NAME} has almost used this call's listening time and cannot be invited back.`;
   return null;
 }
+
+/** The invite-again button: while the invitation back waits for Milo's earlier leave to finish, it says so. */
+export const LEAVING_LABEL = `${ASSISTANT_NAME} is leaving…`;
+export const inviteAgainLabel = (v: AssistantView, busy: boolean): string => (busy && v.leaving ? LEAVING_LABEL : INVITE_AGAIN_LABEL);
 
 /** The button that brings Milo back into a call it left. */
 export const INVITE_AGAIN_LABEL = `Invite ${ASSISTANT_NAME} again`;
@@ -167,9 +185,31 @@ export function standingFacts(v: AssistantView): string[] {
   ];
 }
 
-/** The one question asked before a dismissal: it is for everyone. */
+/** The one question asked before a dismissal: it is for everyone. It promises an invitation back only when one would be allowed. */
 export const DISMISS_LABEL = `Dismiss ${ASSISTANT_NAME} for everyone`;
-export const DISMISS_QUESTION = `${ASSISTANT_NAME} leaves the call for everyone. Anyone who can invite ${ASSISTANT_NAME} can invite it back later.`;
+export const dismissQuestion = (v: AssistantView): string =>
+  `${ASSISTANT_NAME} leaves the call for everyone.${v.rejoinLater === 'allowed' ? ` Anyone who can invite ${ASSISTANT_NAME} can invite it back later.` : ''}`;
+
+/** "Adds 60 minutes, held against Vera Green's budget": what one extend buys and whose budget it is held against. */
+export function extendWords(v: AssistantView, mine: boolean): string | null {
+  if (v.extendSeconds === null || v.extendSeconds <= 0) return null;
+  const m = Math.round(v.extendSeconds / 60);
+  return `Adds ${m >= 1 ? `${m} ${m === 1 ? 'minute' : 'minutes'}` : 'less than a minute'}, held against ${mine ? 'your' : `${v.invitedByName ?? 'the inviter'}'s`} budget`;
+}
+
+const usd = (v: number): string => `$${v < 1 ? v.toFixed(2) : v.toFixed(2).replace(/\.00$/, '')}`;
+/**
+ * The over-budget ask for Milo's time, saying what is bought and by whom: "Inviting Milo holds up to $3 of your budget for 60 minutes of
+ * listening, which goes past it by $1.50. Go ahead anyway?" Missing figures drop their clause; the question stays.
+ */
+export function budgetAskWords(action: 'invite' | 'extend' | 'resume', b: { estimateUsd: number | null; remainingUsd: number | null; seconds: number | null }): { title: string; detail: string } {
+  const lead = action === 'invite' ? `Inviting ${ASSISTANT_NAME}` : action === 'extend' ? `Extending ${ASSISTANT_NAME}'s time` : `Resuming ${ASSISTANT_NAME}`;
+  const m = b.seconds !== null ? Math.round(b.seconds / 60) : null;
+  const time = m === null ? '' : ` for ${m >= 1 ? `${m} ${m === 1 ? 'minute' : 'minutes'}` : 'less than a minute'} of listening`;
+  const over = b.estimateUsd !== null && b.remainingUsd !== null ? Math.max(0, b.estimateUsd - Math.max(0, b.remainingUsd)) : null;
+  const holds = b.estimateUsd !== null ? `${lead} holds up to ${usd(b.estimateUsd)} of your budget${time}` : `${lead} goes past your budget${time}`;
+  return { title: 'Over your budget', detail: `${holds}${b.estimateUsd !== null && over !== null && over > 0 ? `, which goes past it by ${usd(over)}` : b.estimateUsd !== null ? ', which goes past it' : ''}. Go ahead anyway?` };
+}
 
 /** A bar error stays until a refresh shows the phase moved on since it was raised, or this long. */
 export const ERROR_CLEAR_MS = 20_000;
@@ -206,7 +246,8 @@ export function assistantControls(input: { enabled: boolean; inCall: boolean; ca
     resume: phase === 'paused',
     dismiss: assistantPresent(input.view),
     acknowledge: assistantPresent(input.view) && input.view.youMustAck,
-    extend: (phase === 'listening' || phase === 'paused') && input.canInvite,
+    // Not offered at the call's hard maximum, where it would only fail.
+    extend: (phase === 'listening' || phase === 'paused') && input.canInvite && input.view.extendSeconds !== 0,
     left: phase === 'left',
     inviteAgain: phase === 'left' && input.canInvite && input.view.rejoin === 'allowed',
   };
@@ -215,12 +256,25 @@ export function assistantControls(input: { enabled: boolean; inCall: boolean; ca
 /** The transcription notice shows to someone who still owes an acknowledgement while Milo is in the call. */
 export const noticeVisible = (enabled: boolean, v: AssistantView): boolean => enabled && assistantPresent(v) && v.youMustAck;
 
-/** The notice's sentences. Plain words: who invited, where speech goes, how long it is kept, what is kept before you agree. */
+/**
+ * The notice's sentences. Plain words: who invited, where speech goes, how long it is kept, what is kept before you agree. After an
+ * invitation back, someone who acknowledged before is told everyone acknowledges once more; anyone else gets the first invitation's
+ * words. Either way a later period says Milo adds what it hears to the minutes, and that its voice is off, as the chat notice does.
+ */
 export function noticeText(v: AssistantView): { title: string; body: string } {
   const who = v.invitedByName ?? 'A participant';
-  return {
-    title: v.period > 1 ? `${who} invited ${ASSISTANT_NAME} back into this call` : `${who} invited ${ASSISTANT_NAME} to listen to this call`,
-    body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. ${ASSISTANT_NAME} writes minutes for the people in the call.`,
+  const kept = 'After that your words are sent to the speech provider and kept as text for the retention period set by your organisation.';
+  if (v.period <= 1) return {
+    title: `${who} invited ${ASSISTANT_NAME} to listen to this call`,
+    body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. ${kept} ${ASSISTANT_NAME} writes minutes for the people in the call.`,
+  };
+  const later = `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call. ${ASSISTANT_NAME}'s voice is off until someone turns it on.`;
+  return v.youAckedBefore ? {
+    title: `${who} invited ${ASSISTANT_NAME} back into this call`,
+    body: `${ASSISTANT_NAME} is listening to this call again. Everyone acknowledges once more: nothing you say is kept until you do. ${kept} ${later}`,
+  } : {
+    title: `${who} invited ${ASSISTANT_NAME} to listen to this call`,
+    body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. ${kept} ${later}`,
   };
 }
 

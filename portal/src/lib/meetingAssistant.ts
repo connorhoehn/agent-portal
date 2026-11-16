@@ -2,18 +2,17 @@
 // transcription notice and the roster line all read it), refreshed every
 // ASSISTANT_POLL_MS while something is watching and straight after each action.
 // Nothing here talks while the server flag is off (`useSession().session.meetingAssistant`).
-// The call's proposals (docs/meeting-consent-design.md) ride the same tick: they are read only while Milo is in the call or a proposal
-// can still be answered, so a call without either costs no extra request.
+// The call's proposals (docs/meeting-consent-design.md) ride the same tick: they are read while Milo is in the call or has left it, or
+// a proposal can still be answered, so a call Milo never joined costs no extra request.
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useSession } from '../lib/auth';
 import { useCapabilities } from '../lib/capabilities';
 import { writeJson } from './writeJson';
 import { budgetConfirmOf } from './voice/client';
-import { budgetConfirmText } from './voice/controller';
 import { isAnswerable, parseProposals, type ProposalAnswer, type ProposalView } from './meetingProposals';
 import {
-  ASSISTANT_NAME, assistantPresent, ASSISTANT_POLL_MS, assistantControls, errorStale, ERROR_CLEAR_MS, LOADING_ASSISTANT, NO_ASSISTANT, parseAssistantState,
+  ASSISTANT_NAME, assistantPresent, ASSISTANT_POLL_MS, assistantControls, budgetAskWords, errorStale, ERROR_CLEAR_MS, LOADING_ASSISTANT, NO_ASSISTANT, parseAssistantState,
   type AssistantControls, type AssistantPhase, type AssistantView,
 } from './meetingAssistantModel';
 
@@ -29,12 +28,14 @@ interface Slot {
   /** When the error was raised and the phase then: a refresh that shows the phase moved on, or ERROR_CLEAR_MS, clears it. */
   errorRaised: { at: number; phase: AssistantPhase } | null;
   errorTimer: ReturnType<typeof setTimeout> | null;
+  /** A quicker read while Milo is still leaving (see refreshAssistant). */
+  leavingTimer: ReturnType<typeof setTimeout> | null;
 }
 const slots = new Map<string, Slot>();
 
 const slotOf = (callId: string): Slot => {
   let slot = slots.get(callId);
-  if (!slot) { slot = { view: LOADING_ASSISTANT(callId), error: null, ask: null, busy: false, confirmingDismiss: false, proposals: [], watchers: 0, timer: null, listeners: new Set(), errorRaised: null, errorTimer: null }; slots.set(callId, slot); }
+  if (!slot) { slot = { view: LOADING_ASSISTANT(callId), error: null, ask: null, busy: false, confirmingDismiss: false, proposals: [], watchers: 0, timer: null, listeners: new Set(), errorRaised: null, errorTimer: null, leavingTimer: null }; slots.set(callId, slot); }
   return slot;
 };
 const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' | 'busy' | 'proposals' | 'confirmingDismiss'>>) => {
@@ -65,8 +66,16 @@ export async function refreshAssistant(callId: string): Promise<void> {
     if (!res.ok) return;
     publish(slot, { view: parseAssistantState(callId, await res.json().catch(() => null)) });
   } catch { /* offline: keep the last view */ }
-  if (assistantPresent(slot.view) || slot.proposals.some(isAnswerable)) await refreshProposals(callId);
+  // Milo's earlier period is still finishing: look again in a second, so "Milo is leaving…" does not outstay the leave by a whole poll.
+  if (slot.view.phase === 'left' && slot.view.leaving && !slot.leavingTimer) {
+    slot.leavingTimer = setTimeout(() => { slot.leavingTimer = null; if (slot.watchers > 0) void refreshAssistant(callId); }, LEAVING_POLL_MS);
+  }
+  // Proposals are read while Milo is here, and also after it left: they stay answerable in the call (and on the meeting page).
+  if (assistantPresent(slot.view) || slot.view.phase === 'left' || slot.proposals.some(isAnswerable)) await refreshProposals(callId);
 }
+
+/** How soon the state is read again while Milo's earlier period is still leaving. */
+const LEAVING_POLL_MS = 1000;
 
 /** One read of the call's proposals; a 404 means none this person may see. A failure keeps the last list. */
 export async function refreshProposals(callId: string): Promise<void> {
@@ -107,8 +116,11 @@ export async function actOnAssistant(callId: string, action: AssistantAction, op
   if (result.ok) { publish(slot, { busy: false, view: parseAssistantState(callId, result.data) }); return true; }
   const confirm = opts.mayConfirm && !opts.confirmOverUserBudget ? budgetConfirmOf(result.status, result.data) : null;
   if (confirm && (action === 'invite' || action === 'extend' || action === 'resume')) {
-    const words = budgetConfirmText(confirm);
-    publish(slot, { busy: false, ask: { action, title: words.title, detail: words.detail.replace(/ Start it anyway\?$/, ' Go ahead anyway?') } });
+    // What is being bought and by whom: the hold, its listening time and how far past the budget it goes (the refusal carries them).
+    const body = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : {};
+    const seconds = typeof body['listeningSeconds'] === 'number' && Number.isFinite(body['listeningSeconds']) ? body['listeningSeconds'] : null;
+    const words = budgetAskWords(action, { estimateUsd: confirm.estimateUsd, remainingUsd: confirm.remainingUsd, seconds });
+    publish(slot, { busy: false, ask: { action, title: words.title, detail: words.detail } });
   }
   else {
     // The phase the error is raised against is read first, so the refresh that follows does not clear it at once.
@@ -157,6 +169,8 @@ export interface MeetingAssistantHandle {
   setVoice(on: boolean): Promise<boolean>;
   /** This person may use the voice switch. */
   canSetVoice: boolean;
+  /** This person invited Milo into the current period (holds and confirmations past the budget are theirs). */
+  youInvited: boolean;
 }
 
 const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask' | 'proposals' | 'confirmingDismiss'> }>();
@@ -213,5 +227,6 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
     acknowledge: () => run('ack'), extend: () => run('extend'),
     setVoice: (on) => (callId && enabled ? setAssistantVoice(callId, on) : Promise.resolve(false)),
     canSetVoice: can('InviteMeetingAssistant'),
+    youInvited: mayConfirm,
   };
 }

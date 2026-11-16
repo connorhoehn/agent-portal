@@ -14,8 +14,8 @@ import { useAssistantVoice } from '../../lib/assistantVoice';
 import { soundPromptShown } from '../../lib/assistantVoiceModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
-  assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
-  ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, DISMISS_QUESTION, INVITE_AGAIN_LABEL, INVITE_HINT,
+  assistantPresent, assistantStateWords, dismissQuestion, extendWords, inviteAgainLabel, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
+  ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, INVITE_HINT,
 } from '../../lib/meetingAssistantModel';
 import { proposalCountWords, waitingCount } from '../../lib/meetingProposals';
 import { useHuddleChat, useHuddleChatToggle } from './HuddleChat';
@@ -80,6 +80,7 @@ export function AssistantBarControls() {
   const voiceChip = voiceWords(view, voice.muted);
   const facts = standingFacts(view);
   const left = timeLeftWords(view);
+  const extend = extendWords(view, assistant.youInvited);
   // Before any reply: as soon as the voice is on and the browser still waits for a click (unless this person muted Milo).
   const soundPrompt = soundPromptShown({ present: !!words && !controls.left, voiceOn: view.voice, muted: voice.muted, needsGesture: voice.needsGesture });
   // Someone who cannot invite, with no Milo in the call, gets no bar at all (not an empty ruled slot).
@@ -92,12 +93,13 @@ export function AssistantBarControls() {
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite">Invite {ASSISTANT_NAME}</Button>
     </Tooltip>}
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}
-    {/* After Milo left: why (who dismissed it, its time limit, a lost connection); beside it, for people who may invite, the way back. */}
-    {state && controls.left && why && <Tooltip content={refused ? `${why} ${refused}` : why} placement="top">
+    {/* After Milo left, ONE control keeps the footer on its line: for people who may invite it back, "Invite Milo again" with why it left
+        (who dismissed it, its time limit, a lost connection) as its tooltip; otherwise one quiet chip saying why, and why it cannot come back. */}
+    {controls.inviteAgain && why ? <Tooltip content={why} placement="top" data-testid="assistant-left-why">
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite-again"
+        data-why={why} data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-leaving={String(view.leaving)}>{inviteAgainLabel(view, busy)}</Button>
+    </Tooltip> : state && controls.left && why && <Tooltip content={refused ? `${why} ${refused}` : why} placement="top" data-testid="assistant-left-why">
       <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={refused ? `${why} ${refused}` : why} data-testid="assistant-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-rejoin={view.rejoin ?? ''}>{why}</Chip>
-    </Tooltip>}
-    {controls.inviteAgain && <Tooltip content={INVITE_HINT} placement="top">
-      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite-again">{INVITE_AGAIN_LABEL}</Button>
     </Tooltip>}
     {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, ${ASSISTANT_NAME}'s voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss ${ASSISTANT_NAME}`} triggerTestId="assistant-status-mark"
       triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="assistant-menu"
@@ -108,7 +110,8 @@ export function AssistantBarControls() {
         ...(controls.resume ? [{ label: `Resume ${ASSISTANT_NAME}`, icon: <PlayCircleIcon size={14} />, onSelect: () => void assistant.resume() }] : []),
         ...(voiceMenu && assistant.canSetVoice ? [{ label: view.voice ? `Turn ${ASSISTANT_NAME}'s voice off` : `Turn ${ASSISTANT_NAME}'s voice on`, description: view.voice ? `${ASSISTANT_NAME}'s voice is on in this call` : `${ASSISTANT_NAME} answers aloud when asked`, icon: <SpeakerIcon size={14} />, onSelect: () => void assistant.setVoice(!view.voice) }] : []),
         ...(voiceMenu ? [{ label: voice.muted ? `Unmute ${ASSISTANT_NAME} for me` : `Mute ${ASSISTANT_NAME} for me`, description: 'Only for you, in this call', icon: <SpeakerIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
-        ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void assistant.extend() }] : []),
+        // What one extend buys and whose budget holds it; not offered at the call's hard maximum (controls.extend).
+        ...(controls.extend ? [{ label: 'Extend time', ...(extend ? { description: extend } : left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void assistant.extend() }] : []),
         // The live transcript: the call's pane opens (as Message opens it) on what Milo is hearing; again, back to the chat.
         ...(callId && (view.phase === 'listening' || view.phase === 'paused') ? [{ label: transcriptOn ? LIVE_HIDE_LABEL : LIVE_SHOW_LABEL, ...(transcriptOn ? {} : { description: LIVE_SHOW_DESCRIPTION }),
           icon: <DocumentIcon size={14} />, onSelect: () => {
@@ -153,11 +156,11 @@ export function AssistantBudgetAsk() {
   // Dismissing is for everyone, so it is asked once, naming that effect. Esc or Cancel keeps Milo.
   const dismissPrompts = useMemo<ComposerPrompt[]>(() => confirmingDismiss ? [{
     id: `assistant-dismiss:${callId}`, scope: `assistant-dismiss:${callId}`, kind: 'choice', eyebrow: ASSISTANT_NAME, title: `${DISMISS_LABEL}?`,
-    question: DISMISS_QUESTION,
+    question: dismissQuestion(assistant.view),
     options: [{ id: 'dismiss', label: DISMISS_LABEL, emphasis: 'danger' }, { id: 'keep', label: `Keep ${ASSISTANT_NAME}` }],
     onAnswer: async (a) => { await answerDismiss('optionId' in a && a.optionId === 'dismiss'); },
     onDismiss: () => { void answerDismiss(false); },
-  }] : [], [confirmingDismiss, callId, answerDismiss]);
+  }] : [], [confirmingDismiss, callId, answerDismiss, assistant.view]);
   return <>
     {ask && <ComposerPromptDeck prompts={prompts} scope={`assistant-budget:${callId}`} className="mx-4 my-1" data-testid="assistant-budget-ask" />}
     {confirmingDismiss && <ComposerPromptDeck prompts={dismissPrompts} scope={`assistant-dismiss:${callId}`} className="mx-4 my-1" data-testid="assistant-dismiss-ask" />}

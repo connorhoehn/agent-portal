@@ -12,8 +12,9 @@
 //   - Once everyone needed has consented, the executor is asked "Ready: run it now"; only their click starts it. After a hand-back,
 //     the server's `you.canRun` offers "Run it myself" to whoever may take it over.
 //   - Esc hides it; the footer count or the card's "Answer" reopens it, and a NEW proposal waiting on this person reopens it too.
-//   - Once Milo has left, the footer asks no more: unfinished proposals move to the meeting page, which asks with the same prompt
-//     (`inCall: false`) and without the dismiss option, which needs a seat.
+//   - While the call runs, a person's open proposals stay in their queue (and the footer keeps its count) whether or not Milo is in
+//     it, so Answer always opens a prompt. Once the call has ended (or for someone not in it), the card's Answer links to the meeting
+//     page instead, which asks with the same prompt (`inCall: false`) and without the dismiss option, which needs a seat.
 
 import { useEffect, useMemo } from 'react';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -23,17 +24,19 @@ import {
   blockedLine, consentLabel, deckQueue, dismissLabel, eyebrowOf, heardText, isNeeded, keptKey, mayTakeOver, needsLine, OBJECTION_SHARED, OPTIONAL_LINE, outcomeLine,
   proposalCountWords, recordsLine, RUN_HERE, RUN_NOW, waitingCount, waitingOnYou, type ProposalView,
 } from '../../lib/meetingProposals';
-import { assistantPresent } from '../../lib/meetingAssistantModel';
 import { keepProposalAnswer, noteWaitingProposals, proposalPromptGeneration, setProposalDeckHidden, useProposalDeck } from '../../lib/proposalDeckState';
 import { useLiveCallId } from '../../lib/liveCallId';
 
-/** The proposals this person's deck would ask about in the live call: those waiting on them first. */
+/**
+ * The proposals this person's deck would ask about in the live call: those waiting on them first. Whether or not Milo is in the call
+ * now (it may have been dismissed, or be between periods): the call runs, so they can still be answered here.
+ */
 export function useProposalQueue(): { callId: string | null; queue: ProposalView[] } {
   const callId = useLiveCallId();
   const assistant = useMeetingAssistant(callId);
   const { kept } = useProposalDeck(callId);
-  const present = assistantPresent(assistant.view);
-  const queue = useMemo(() => (present ? deckQueue(assistant.proposals, kept) : []), [present, assistant.proposals, kept]);
+  const known = assistant.view.phase !== 'loading' && assistant.view.phase !== 'none';
+  const queue = useMemo(() => (callId && known ? deckQueue(assistant.proposals, kept) : []), [callId, known, assistant.proposals, kept]);
   return { callId, queue };
 }
 
