@@ -95,7 +95,8 @@ export const noticeText = {
     const names = nameTwins(seated);
     if (!names.length) return '';
     const who = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
-    return ` ${who} ${names.length === 1 ? 'is' : 'are'} also in this call: say "${ASSISTANT_NAME}," and a request to reach the assistant.`;
+    const one = names.length === 1;
+    return ` ${who} ${one ? 'is' : 'are'} also in this call. ${ASSISTANT_NAME} takes anything said to "${ASSISTANT_NAME}" as a request for itself, so call ${one ? 'them by their last name' : 'them by their last names'}.`;
   },
   paused: (name: string): string => `${name} paused ${ASSISTANT_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${ASSISTANT_NAME}. ${ASSISTANT_NAME} is listening again.`,
