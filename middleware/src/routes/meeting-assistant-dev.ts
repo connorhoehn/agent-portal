@@ -18,11 +18,6 @@
 //   request, so a walk can send one that the rules would not (a call from someone who never said the name). It goes through
 //   every server check (asker, name lock, role, turn); it is not a shortcut around them. 409 with no scripted session.
 //
-//   POST /api/dev/calls/:callId/typed-message
-//   body: { userId, text }
-//   What a stored call chat message does for the assistant (lib/call-chat-send.ts): hands it to the runtime's typed path, so a walk
-//   can type to Milo without driving the composer. Nothing is stored in the chat by this route; Milo's own answer is. 202.
-//
 //   POST /api/dev/calls/:callId/assistant-proposals
 //   body: { statement, outcome: { kind: 'decision', initiativeId? } | { kind: 'tool', name, args }, executor, named?, evidence?, id? }
 //   Creates a proposal (source `dev`) exactly as the watcher will, through the same checks: nobody is consented, the outcome is frozen
@@ -179,16 +174,6 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-tool-call', gat
     res.status(202).json({ callId: id });
   }));
 
-meetingAssistantDevRouter.post('/api/dev/calls/:callId/typed-message', gate,
-  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
-  asyncHandler(async (req, res) => {
-    const callId = req.params['callId'];
-    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
-    const b = (req.body ?? {}) as Record<string, unknown>;
-    await assistantRuntime().onTypedMessage(callId, need(b['userId'], 'userId', 128), need(b['text'], 'text', 2000));
-    res.status(202).json({ callId });
-  }));
-
 meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-proposals', gate,
   requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
   asyncHandler(async (req, res) => {
@@ -212,4 +197,18 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-proposals', gat
       if (e instanceof ProposalInputError) throw new ValidationError(e.message);
       throw e;
     }
+  }));
+
+// POST /api/dev/calls/:callId/typed-message  body: { userId, text }
+// What a stored call chat message does for the assistant (lib/call-chat-send.ts): hands it to the runtime's typed path, so a walk can
+// type to Milo without driving the composer. Nothing is stored in the chat by this route; Milo's own answer is. 202. Declared last so
+// the routes above keep their lines.
+meetingAssistantDevRouter.post('/api/dev/calls/:callId/typed-message', gate,
+  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
+  asyncHandler(async (req, res) => {
+    const callId = req.params['callId'];
+    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    await assistantRuntime().onTypedMessage(callId, need(b['userId'], 'userId', 128), need(b['text'], 'text', 2000));
+    res.status(202).json({ callId });
   }));
