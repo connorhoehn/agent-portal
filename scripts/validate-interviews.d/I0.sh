@@ -3,7 +3,7 @@
 row_I0.1() {
   exists scripts/validate-interviews.sh "the judge is scripts/validate-interviews.sh"
   needF '--quick) QUICK=1' scripts/validate-interviews.sh "it takes --quick"
-  needF 'phase_rank "$1" ' scripts/validate-interviews.sh "phases nest by rank"
+  needF 'PR=$(phase_rank "$PHASE")' scripts/validate-interviews.sh "phases nest by rank"
   ok "it runs: every failing check prints with its row, and the last line is the count"
 }
 
