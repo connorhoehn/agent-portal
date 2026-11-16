@@ -19,8 +19,8 @@ const manifest = JSON.parse(readFileSync(new URL('../../../../tenants/manifest.j
 };
 
 test('tenant order and the switcher/masquerade labels are unchanged', () => {
-  assert.deepEqual([...TENANTS], ['orgiq', 'assessment', 'social', 'pipelines', 'access']);
-  assert.deepEqual({ ...TENANT_DISPLAY_NAMES }, { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access' });
+  assert.deepEqual([...TENANTS], ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']);
+  assert.deepEqual({ ...TENANT_DISPLAY_NAMES }, { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access', interviews: 'Interviews' });
   // TenantSwitcher walks Object.keys(LABELS): that order is the switcher's tile order.
   assert.deepEqual(Object.keys(TENANT_DISPLAY_NAMES), [...TENANTS]);
 });
@@ -32,6 +32,7 @@ test('front doors are unchanged', () => {
     social: '/social/channels',
     pipelines: '/pipelines/runs',
     access: '/access/requests',
+    interviews: '/interviews/candidates',
   });
   assert.equal(tenantHome('nope'), '/workspaces');
 });
@@ -40,15 +41,15 @@ test('every tenant is enabled with no VITE_ENABLE_* set; unknown ids stay enable
   for (const t of TENANTS) assert.equal(tenantEnabled(t), true, t);
   assert.equal(tenantEnabled('admin'), true);
   assert.deepEqual(TENANTS.map(t => TENANT_MANIFEST[t].featureFlag),
-    [null, 'VITE_ENABLE_ASSESSMENT', 'VITE_ENABLE_SOCIAL', 'VITE_ENABLE_PIPELINES', 'VITE_ENABLE_ACCESS']);
+    [null, 'VITE_ENABLE_ASSESSMENT', 'VITE_ENABLE_SOCIAL', 'VITE_ENABLE_PIPELINES', 'VITE_ENABLE_ACCESS', 'VITE_ENABLE_INTERVIEWS']);
 });
 
 test('discussion tenants are unchanged', () => {
   assert.deepEqual([...DISCUSSION_TENANTS], ['orgiq', 'assessment', 'pipelines']);
 });
 
-test('the authz log filters gain access and keep the orgiq role list', () => {
-  assert.deepEqual(['', ...TENANTS], ['', 'orgiq', 'assessment', 'social', 'pipelines', 'access']);
+test('the authz log filters gain access and interviews and keep the orgiq role list', () => {
+  assert.deepEqual(['', ...TENANTS], ['', 'orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']);
   assert.deepEqual(['', ...ROLES_BY_TENANT.orgiq, ...CROSS_TENANT_ROLES], ['', 'member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin']);
 });
 

@@ -175,6 +175,9 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'audit', tenants: ['access'] },
   { id: 'access-configuration', tenants: ['access'], roles: ['access-admin'] },
   { id: 'access-settings', tenants: ['access'] },
+  { id: 'candidates', tenants: ['interviews'], roles: ['recruiter'] },
+  { id: 'my-openings', tenants: ['interviews'], roles: ['hiring-manager'] },
+  { id: 'my-interviews', tenants: ['interviews'], roles: ['interviewer'] },
   { id: 'workspaces', tenants: ['*'] },
 ];
 

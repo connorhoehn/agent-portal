@@ -62,6 +62,8 @@ const DATA_KEYS = [
   'chat.session.explore',
   // The access tenant's prefix (docs/access-tenant-goal.md row 12).
   'access.requestDraft',
+  // The interviews tenant's prefix (docs/interviews-tenant-plan.md row I0.2).
+  'interviews.deskView',
 ];
 
 const PREF_KEYS = ['orgiq:preferences:v1', 'projects-view'];

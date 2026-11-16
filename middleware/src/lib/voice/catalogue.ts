@@ -240,6 +240,10 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'audit', path: '/access/audit', tenants: ['access'] },
   { id: 'access-configuration', path: '/access/configuration', tenants: ['access'], roles: ['access-admin'] },
   { id: 'access-settings', path: '/access/settings', tenants: ['access'] },
+  // The interviews tenant's pages mirror the palette; it is not a voice tenant yet (VOICE_TENANTS), so no session offers them.
+  { id: 'candidates', path: '/interviews/candidates', tenants: ['interviews'], roles: ['recruiter'] },
+  { id: 'my-openings', path: '/interviews/my-openings', tenants: ['interviews'], roles: ['hiring-manager'] },
+  { id: 'my-interviews', path: '/interviews/my-interviews', tenants: ['interviews'], roles: ['interviewer'] },
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
 

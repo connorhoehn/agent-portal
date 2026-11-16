@@ -179,7 +179,8 @@ describe('tenant scoping (§6)', () => {
     expect(pages('orgiq', 'member')).toContain('computers');
     expect(pages('orgiq', 'sme')).toEqual(expect.arrayContaining(['bots', 'computers']));
     expect(pages('orgiq', 'admin')).toEqual(pages('orgiq'));
-    expect(NAVIGATE_PAGES.length).toBe(110);
+    // 109 palette pages, the three interviews homes (offered to no session until it is a voice tenant), the workspace picker.
+    expect(NAVIGATE_PAGES.length).toBe(113);
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
     for (const tenant of VOICE_TENANTS) expect(new Set(pages(tenant)).size).toBe(pages(tenant).length);
   });

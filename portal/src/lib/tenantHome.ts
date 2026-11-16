@@ -28,6 +28,19 @@ import type { Session } from './auth';
  *  ledger (§5.3), access on a person's own requests (access design §6). */
 export const TENANT_HOME: Record<string, string> = { ...MANIFEST_TENANT_HOME };
 
+/** Where a role lands when its tenant has a home per role (docs/interviews-tenant-plan.md
+ *  "Pages"): the interviews tenant's front door is the recruiter's Candidates, and
+ *  its interviewer and hiring manager each land on their own desk instead. A role
+ *  not listed lands on its tenant's home. */
+export const ROLE_HOME: Record<string, Record<string, string>> = {
+  interviews: { interviewer: '/interviews/my-interviews', 'hiring-manager': '/interviews/my-openings' },
+};
+
+/** The home of this role in this tenant: its own desk where it has one, else the tenant's front door. */
+export function roleHome(tenant: string, role: string | undefined): string {
+  return (role && ROLE_HOME[tenant]?.[role]) || tenantHome(tenant);
+}
+
 /** The workspace chooser. Where an identity goes when no single home fits. */
 export const CHOOSER = '/workspaces';
 
@@ -53,7 +66,7 @@ export function resolveHome(session: Session | null): string {
   if (usable === 0) return CHOOSER;
   if (usable > 1 && !session.masquerading && !hasChosenContext(session.sub ?? '')) return CHOOSER;
   if (!tenantEnabled(session.tenant)) return TENANT_HOME.orgiq;
-  return TENANT_HOME[session.tenant] ?? CHOOSER;
+  return TENANT_HOME[session.tenant] ? roleHome(session.tenant, session.role) : CHOOSER;
 }
 
 /** The tenant's front door, ignoring the chooser step. Used by the tenant

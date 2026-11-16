@@ -110,6 +110,7 @@
   --color-tenant-social: #7c3aed;
   --color-tenant-pipelines: #2f6b57;
   --color-tenant-access: #a0522d;
+  --color-tenant-interviews: #9d2a5c;
 }
 
 :root {
@@ -150,6 +151,7 @@ html[data-theme="dark"] {
   --color-tenant-social: #a78bfa;
   --color-tenant-pipelines: #6fc2a3;
   --color-tenant-access: #e0a07a;
+  --color-tenant-interviews: #e58bb3;
   --color-brand: #8b91ff;
   --color-brand-hover: #a5aaff;
   --color-brand-ink: #c7d2fe;
@@ -498,6 +500,31 @@ html[data-theme="dark"] [data-tenant="access"] {
   --color-primary: #e0a07a;
   --color-primary-hover: #ebbb9c;
   --color-primary-soft: #3a1f12;
+}
+/* The interviews tenant (docs/interviews-tenant-plan.md): a berry — warm and
+   human, clear of access's sienna, social's violet and orgiq's indigo. Brand
+   family only, like the others (docs/branding.md "Adding a tenant"). White on
+   #9d2a5c is 7.2:1. */
+[data-tenant="interviews"] {
+  --color-brand: #9d2a5c;            /* berry */
+  --color-brand-hover: #82214b;
+  --color-brand-ink: #3a0c20;
+  --color-brand-soft: #f8e8ef;
+  --background-image-brand-gradient: linear-gradient(90deg, #9d2a5c 0%, #c2477c 55%, #e0a3bf 100%);
+  --color-primary: #9d2a5c;
+  --color-primary-hover: #82214b;
+  --color-primary-soft: #f8e8ef;
+}
+html[data-theme="dark"][data-tenant="interviews"],
+html[data-theme="dark"] [data-tenant="interviews"] {
+  --color-brand: #e58bb3;
+  --color-brand-hover: #eda6c6;
+  --color-brand-ink: #f8d9e7;
+  --color-brand-soft: #3d1426;
+  --background-image-brand-gradient: linear-gradient(90deg, #e58bb3 0%, #eba2c3 55%, #f4c9dc 100%);
+  --color-primary: #e58bb3;
+  --color-primary-hover: #eda6c6;
+  --color-primary-soft: #3d1426;
 }
 
 /* A code block's Copy button is absolutely positioned inside the block and

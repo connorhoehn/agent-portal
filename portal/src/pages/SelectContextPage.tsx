@@ -50,6 +50,7 @@ const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string
   social: { label: 'Social', blurb: 'Channels, direct messages, calls and rooms — the people you work with', accent: 'var(--color-tenant-social)' },
   pipelines: { label: 'Pipelines', blurb: 'Definitions, runs and approvals — what the fleet ran, and for whom', accent: 'var(--color-tenant-pipelines)' },
   access: { label: 'Access', blurb: 'Request, approve and audit access — roles and memberships across every workspace', accent: 'var(--color-tenant-access)' },
+  interviews: { label: 'Interviews', blurb: 'Openings, candidates and interview rounds — from assignment to the hiring decision', accent: 'var(--color-tenant-interviews)' },
 };
 
 const ROLE_META: Record<string, { label: string; hint: string }> = {
@@ -71,6 +72,9 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
   requester: { label: 'Requester', hint: 'Request access for yourself and follow its approvals' },
   approver: { label: 'Approver', hint: 'Decide requests from your reports and the resources you steward' },
   'access-admin': { label: 'Access Admin', hint: 'Approver plus the catalog, separation-of-duties policies and provisioning' },
+  recruiter: { label: 'Recruiter', hint: 'Openings, candidates, assigning and scheduling interviews' },
+  interviewer: { label: 'Interviewer', hint: 'Conduct and score the interviews assigned to you' },
+  'hiring-manager': { label: 'Hiring Manager', hint: 'Your openings and each candidate\'s next stage' },
 };
 
 /**
@@ -118,6 +122,12 @@ const CURATED: Array<{ id: string; persona: string }> = [
   { id: 'u-rhea', persona: 'Requester — asks for roles and memberships, never decides them' },
   { id: 'u-omar', persona: "Approver — Rhea's manager; decides requests, never configures or grants by hand" },
   { id: 'u-priya', persona: 'Access admin — the catalog, separation-of-duties policies and provisioning' },
+  // Interviews tenant cast — one per role, two interviewers (docs/interviews-tenant-plan.md §Cast),
+  // each holding a grant only in interviews.
+  { id: 'u-greta', persona: 'Recruiter — openings, candidates, assigning and scheduling rounds' },
+  { id: 'u-hugo', persona: 'Interviewer — backend and system design rounds' },
+  { id: 'u-wen', persona: 'Interviewer — iOS and behavioural rounds' },
+  { id: 'u-amara', persona: 'Hiring manager — decides the Payments and Platform candidates' },
 ];
 
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
@@ -131,6 +141,7 @@ const TENANT_MARK_TINT: Record<Tenant, string> = {
   social: 'border-tenant-social bg-tenant-social/10 text-tenant-social',
   pipelines: 'border-tenant-pipelines bg-tenant-pipelines/10 text-tenant-pipelines',
   access: 'border-tenant-access bg-tenant-access/10 text-tenant-access',
+  interviews: 'border-tenant-interviews bg-tenant-interviews/10 text-tenant-interviews',
 };
 
 /** Inline tenant mark — a tinted rounded badge with a per-tenant glyph. No

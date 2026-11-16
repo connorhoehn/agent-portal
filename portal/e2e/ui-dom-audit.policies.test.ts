@@ -103,6 +103,14 @@ test('runbooks policy: the library, proposals and their records require the comp
   }
 });
 
+test('interviews policy: each role\'s home is a collection that requires the composer, with no exemption', () => {
+  for (const path of ['/interviews/candidates', '/interviews/my-interviews', '/interviews/my-openings']) {
+    assert.deepEqual(tenantComposerPolicy({ tenant: 'interviews', path, kind: 'list' }, {}), { mode: 'required' }, path);
+    assert.deepEqual(tenantComposerPolicy({ tenant: 'interviews', path, kind: 'list' }, { form: true, placeholder: true, settingsSurface: true }), { mode: 'required' }, path);
+  }
+  assert.equal(tenantComposerPolicy({ tenant: 'interviews', path: '/interviews/unknown', kind: 'list' }, {}), undefined);
+});
+
 test('access policy: every list route and the request record require the composer, even with no evidence', () => {
   for (const path of ['/access/catalog', '/access/requests', '/access/approvals', '/access/policies', '/access/reviews', '/access/audit']) {
     assert.deepEqual(tenantComposerPolicy({ tenant: 'access', path, kind: 'list' }, {}), { mode: 'required' }, path);

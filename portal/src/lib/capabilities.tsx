@@ -89,7 +89,13 @@ export type Action =
   | 'DecideAccess'
   | 'ManageAccessCatalog'
   | 'ManageAccessPolicy'
-  | 'ProvisionAccess';
+  | 'ProvisionAccess'
+  // Interviews tenant (docs/interviews-tenant-plan.md, decision 2) — in CAPABILITY_ACTIONS server-side
+  | 'ViewInterviews'
+  | 'ManageCandidates'
+  | 'AssignInterviews'
+  | 'ConductInterview'
+  | 'DecideCandidate';
 
 interface CapabilitiesPayload {
   role: string;

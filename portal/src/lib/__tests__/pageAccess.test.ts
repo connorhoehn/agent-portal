@@ -103,12 +103,12 @@ test('another workspace\'s URL names the workspace, and offers the switch only w
 });
 
 test('the other-workspace page never names the page, and every tenant tree falls back to it', () => {
-  for (const t of ['orgiq', 'assessment', 'social', 'pipelines', 'access']) {
+  for (const t of ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']) {
     const r = otherWorkspaceRefusal({ tenant: 'social', availableTenants: ['social'] }, t);
     // Only the workspace and the viewer's own workspace appear: no path, no page label.
     assert.doesNotMatch(`${r.title} ${r.description}`, /\/|budget|catalog|project/i);
   }
   const app = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
   assert.equal((app.match(/<RequireTenant tenant="\w+" fallback=\{<HomeRedirect \/>\}>/g) ?? []).length, 0);
-  assert.equal((app.match(/<RequireTenant tenant="(\w+)" fallback=\{<OtherWorkspace tenant="\1" \/>\}>/g) ?? []).length, 6);
+  assert.equal((app.match(/<RequireTenant tenant="(\w+)" fallback=\{<OtherWorkspace tenant="\1" \/>\}>/g) ?? []).length, 7);
 });

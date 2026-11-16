@@ -42,6 +42,16 @@ export function toPaletteGroups(tenant: PaletteTenant, rows: readonly Row[]): Pa
 }
 
 /** A stable `searchRecords` for the palette (hand it to CommandPalette through useMemo keyed on the tenant). */
+const SEARCH_INDEXED: ReadonlySet<string> = new Set<PaletteTenant>(['orgiq', 'assessment', 'social', 'pipelines', 'access']);
+
+/** No record section: a tenant with no search index yet (interviews) lists pages only. */
+export const NO_RECORDS: SearchPaletteRecords = async () => [];
+
+/** The record search for the tenant the session stands in, or none where that tenant has no index. */
+export function paletteRecordSearchFor(tenant: string): SearchPaletteRecords {
+  return SEARCH_INDEXED.has(tenant) ? createPaletteRecordSearch(tenant as PaletteTenant) : NO_RECORDS;
+}
+
 export function createPaletteRecordSearch(tenant: PaletteTenant, request: typeof fetch = (...args) => fetch(...args)): SearchPaletteRecords {
   return async (query, { signal }) => {
     const response = await request(paletteSearchUrl(tenant, query), { credentials: 'include', headers: { Accept: 'application/json' }, signal });

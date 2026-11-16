@@ -5,8 +5,8 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, features, tenantEnabled } from './lib/features';
-import { CHOOSER, resolveHome, tenantHome } from './lib/tenantHome';
+import { ACCESS_ENABLED, ASSESSMENT_ENABLED, INTERVIEWS_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, features, tenantEnabled } from './lib/features';
+import { CHOOSER, TENANT_HOME, resolveHome, roleHome, tenantHome } from './lib/tenantHome';
 import { computersRedirect } from './pages/computers/computersModel';
 import type { Tenant } from './lib/tenants.generated';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
@@ -87,6 +87,10 @@ const AccessReviewsPage = lazy(() => import('./pages/access/ReviewsPage'));
 const AccessReviewRecordPage = lazy(() => import('./pages/access/ReviewRecordPage'));
 const AccessAuditPage = lazy(() => import('./pages/access/AuditPage'));
 const AccessConfigurationPage = lazy(() => import('./pages/access/ConfigurationPage'));
+const InterviewsLayout = lazy(() => import('./pages/interviews/InterviewsLayout'));
+const InterviewsCandidatesPage = lazy(() => import('./pages/interviews/CandidatesPage'));
+const InterviewsMyInterviewsPage = lazy(() => import('./pages/interviews/MyInterviewsPage'));
+const InterviewsMyOpeningsPage = lazy(() => import('./pages/interviews/MyOpeningsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const NoAccessPage = lazy(() => import('./pages/NoAccessPage'));
 const OtherWorkspacePage = lazy(() => import('./pages/NoAccessPage').then((m) => ({ default: m.OtherWorkspacePage })));
@@ -240,7 +244,7 @@ function HomeRedirect() {
   // workspace they are already in — the tenant's front door, not the workspace chooser
   // (docs/work-journeys-goal.md, refusals). The root and a signed-out visit still resolve as before.
   const inTenant = !!session?.tenant && pathname !== '/' && tenantEnabled(session.tenant) && tenantHome(session.tenant) !== CHOOSER;
-  const home = inTenant ? tenantHome(session!.tenant) : resolveHome(session);
+  const home = inTenant ? roleHome(session!.tenant, session!.role) : resolveHome(session);
   if (home === pathname) return <Page element={<NotFoundPage />} />;
   return <Navigate to={home} replace />;
 }
@@ -267,6 +271,19 @@ function OtherWorkspace({ tenant }: { tenant: Tenant }) {
  */
 function Gate({ roles, children }: { roles: readonly string[]; children: React.ReactNode }) {
   return <RequireRole roles={roles} fallback={<Page element={<NoAccessPage roles={roles} />} />}>{children}</RequireRole>;
+}
+
+/**
+ * The interviews tenant's front door (TENANT_HOME.interviews, /interviews/candidates): the recruiter's
+ * Candidates. An interviewer or a hiring manager who arrives here — the tenant switch, the chooser —
+ * goes on to their own desk (lib/tenantHome.ts ROLE_HOME); anyone else sees the no-access page.
+ */
+function InterviewsFrontDoor() {
+  const { session, isLoading } = useSession();
+  if (isLoading) return <Loading />;
+  const home = roleHome('interviews', session?.role);
+  if (home !== TENANT_HOME.interviews) return <Navigate to={home} replace />;
+  return <Gate roles={['recruiter']}><Page element={<InterviewsCandidatesPage />} /></Gate>;
 }
 
 /** Meetings exist only while the server advertises the meeting assistant; with it off the routes are the ordinary not-found. */
@@ -508,6 +525,39 @@ export function App() {
           </Route>
         ) : (
           <Route path="access/*" element={<Navigate to="/" replace />} />
+        )}
+
+        {/* ── /interviews/* — the sixth tenant (docs/interviews-tenant-plan.md).
+             Flag ON by default (INTERVIEWS_ENABLED); the server's own
+             INTERVIEWS_ENABLED gates the API. Each role has its own home, a
+             collection on the shared command composer: Candidates is the
+             recruiter's (and the tenant's front door, which sends the other
+             two roles on to theirs), My interviews the interviewer's, My
+             openings the hiring manager's — rail, palette and routes agree. ── */}
+        {INTERVIEWS_ENABLED ? (
+          <Route
+            path="interviews"
+            element={(
+              <RequireTenant tenant="interviews" fallback={<OtherWorkspace tenant="interviews" />}>
+                <Page element={<InterviewsLayout />} />
+              </RequireTenant>
+            )}
+          >
+            <Route index element={<Navigate to="candidates" replace />} />
+            <Route path="candidates" element={<InterviewsFrontDoor />} />
+            <Route path="my-interviews" element={
+              <Gate roles={['interviewer']}>
+                <Page element={<InterviewsMyInterviewsPage />} />
+              </Gate>
+            } />
+            <Route path="my-openings" element={
+              <Gate roles={['hiring-manager']}>
+                <Page element={<InterviewsMyOpeningsPage />} />
+              </Gate>
+            } />
+          </Route>
+        ) : (
+          <Route path="interviews/*" element={<Navigate to="/" replace />} />
         )}
 
         {/* ── /iq/* — OrgIQ tenant pages. Guarded like the other two trees:

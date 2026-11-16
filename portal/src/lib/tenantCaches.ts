@@ -52,6 +52,7 @@ const LOCAL_KEYS: readonly string[] = [
 const LOCAL_PREFIXES: readonly string[] = [
   'chat.session.',            // lib/chatSessions.ts STORAGE_PREFIX — per-surface chat session pointers
   'access.',                  // pages/access/* — any access-tenant draft or view cache (docs/access-tenant-goal.md row 12)
+  'interviews.',              // pages/interviews/* — any interviews-tenant view cache (docs/interviews-tenant-plan.md row I0.2)
 ];
 
 // Additive: sessionStorage keys that cache USER-scoped data (not tenant data

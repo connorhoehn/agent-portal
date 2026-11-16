@@ -31,6 +31,15 @@ export const ACCESS_ENABLED =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
     .env?.VITE_ENABLE_ACCESS !== 'false';
 
+// INTERVIEWS_ENABLED — the sixth tenant (openings, candidates, interview rounds;
+// see docs/interviews-tenant-plan.md). ON in the portal by default like the
+// others; set VITE_ENABLE_INTERVIEWS=false to park its tile, rail and
+// /interviews tree. The server has its own flag (INTERVIEWS_ENABLED, on in the
+// mock world): with it off every /api/interviews read is a 404.
+export const INTERVIEWS_ENABLED =
+  (import.meta as unknown as { env?: Record<string, string | undefined> })
+    .env?.VITE_ENABLE_INTERVIEWS !== 'false';
+
 /**
  * VOICE_NAVIGATOR — the voice dock in the footer (docs/voice-navigator-spec.md
  * §5, §8). `VITE_VOICE_NAVIGATOR=1|true` turns it on, `0|false` off; unset it

@@ -57,7 +57,7 @@ import { FleetIndicator } from './FleetIndicator';
 import { ActivityBell } from './ActivityBell';
 import { useOrgiqShellPolls, useRefreshSessionOnDeny } from './orgiqShellPolls';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
-import { createPaletteRecordSearch, isAppPath } from '../../lib/paletteRecords';
+import { isAppPath, paletteRecordSearchFor } from '../../lib/paletteRecords';
 import { useDiscussionUnread } from './useDiscussionUnread';
 import { useSharedNotifications } from './SharedNotifications';
 import { navigationActivity } from './navActivity';
@@ -90,7 +90,7 @@ interface WorkSummary {
   findings: { open: number; critical: number; warning: number };
 }
 
-type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin';
+type Tenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'interviews' | 'admin';
 type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal'; group?: string; /** Listed only while the server advertises the meeting assistant. */ needsMeetingAssistant?: boolean };
 
 // The app is an SDLC agent platform first — agents that link codebases, run in
@@ -240,6 +240,13 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/access/reviews',       label: 'Reviews',       tenant: 'access', group: 'Govern' },
   { path: '/access/audit',         label: 'Audit',         tenant: 'access', group: 'Govern' },
   { path: '/access/configuration', label: 'Configuration', tenant: 'access', group: 'System', requireRoles: ['access-admin', 'admin'] },
+  // The interviews tenant (docs/interviews-tenant-plan.md "Pages"): each role's
+  // own home. HIRE is the recruiter's Candidates and the hiring manager's
+  // openings; INTERVIEW is the interviewer's desk. `admin` is listed because
+  // the tenant-nav filter has no admin bypass.
+  { path: '/interviews/candidates',    label: 'Candidates',    tenant: 'interviews', group: 'Hire', requireRoles: ['recruiter', 'admin'] },
+  { path: '/interviews/my-openings',   label: 'My openings',   tenant: 'interviews', group: 'Hire', requireRoles: ['hiring-manager', 'admin'] },
+  { path: '/interviews/my-interviews', label: 'My interviews', tenant: 'interviews', group: 'Interview', requireRoles: ['interviewer', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
   // Logging (G37; the voice sessions of G20 are one source): dev server + the voice navigator flag, like its route.
   ...(features.voiceLog ? [{ path: '/iq/logging', label: 'Logging', tenant: 'orgiq' as const, group: 'System' }] : []),
@@ -281,6 +288,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
   social: 'Social',
   pipelines: 'Pipelines',
   access: 'Access',
+  interviews: 'Interviews',
   admin: 'Admin',
 };
 
@@ -377,7 +385,7 @@ function ShellLayout() {
   // into the palette via useRegisterCommand, so they're untouched by this.
   const [paletteScope, setPaletteScope] = useState<PaletteScope>('all');
   // The record section (ui-components 2.457.0): one search per tenant, a stable reference per tenant.
-  const recordSearch = useMemo(() => createPaletteRecordSearch(session?.tenant ?? 'orgiq'), [session?.tenant]);
+  const recordSearch = useMemo(() => paletteRecordSearchFor(session?.tenant ?? 'orgiq'), [session?.tenant]);
   const openRecord = useCallback((record: PaletteRecord) => { if (isAppPath(record.href)) navigate(record.href); }, [navigate]);
   const scopeCommand = useCallback(
     (c: Command): Command => ({

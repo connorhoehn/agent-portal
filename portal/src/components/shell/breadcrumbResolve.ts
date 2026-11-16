@@ -60,6 +60,9 @@ const ACCESS_LABELS: Record<string, string> = {
   catalog: 'Catalog', requests: 'Requests', approvals: 'Approvals', policies: 'Policies',
   reviews: 'Reviews', audit: 'Audit', configuration: 'Configuration', settings: 'Access settings',
 };
+// The interviews tenant's rail (Layout.tsx NAV_ITEMS, docs/interviews-tenant-plan.md "Pages").
+const INTERVIEWS_GROUPS: Record<string, string> = { candidates: 'Hire', 'my-openings': 'Hire', 'my-interviews': 'Interview' };
+const INTERVIEWS_LABELS: Record<string, string> = { candidates: 'Candidates', 'my-openings': 'My openings', 'my-interviews': 'My interviews' };
 const ASSESSMENT_GROUPS: Record<string, string> = {
   teams: 'Assess', submissions: 'Assess', communication: 'Assess',
   reports: 'Analyze', decks: 'Analyze', activity: 'Analyze', feedback: 'Analyze',
@@ -277,6 +280,11 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     // registers `<id> · <title>`); without this its trail stopped at "Reviews".
     if (b && (page === 'policies' || page === 'reviews')) return [...trail, { label, path: `/access/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];
+  }
+
+  if (root === 'interviews') {
+    const page = a ?? 'candidates';
+    return [{ label: INTERVIEWS_GROUPS[page] ?? 'Interviews' }, { label: INTERVIEWS_LABELS[page] ?? page }];
   }
 
   if (root === 'settings') return [{ label: 'System' }, { label: 'Settings' }];

@@ -25,6 +25,7 @@ export const ROLE_ORDER = [
   'participant', 'moderator', 'community-admin',
   'author', 'operator', 'pipeline-admin',
   'requester', 'approver', 'access-admin',
+  'interviewer', 'hiring-manager', 'recruiter',
   'admin',
 ] as const;
 
@@ -46,6 +47,7 @@ export const roleItemId = (tenant: string, role: string): string => `role:${tena
 /** Who to ask when nothing can be switched to or requested. */
 const ASK_WHOM: Readonly<Record<string, string>> = {
   orgiq: 'an org-leader', assessment: 'a program lead', social: 'a Social moderator', pipelines: 'a pipeline admin', access: 'an access admin',
+  interviews: 'a recruiter',
 };
 
 export interface AccessSession {

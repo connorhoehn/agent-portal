@@ -23,7 +23,7 @@ import { commandKeywords } from './commandKeywords';
 import { features } from '../../lib/features';
 import { offerPage } from '../../lib/pageAccess';
 
-export type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
+export type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'interviews' | 'admin' | 'universal';
 
 export interface PageEntry {
   label: string;
@@ -88,6 +88,9 @@ export const GROUP_ORDER_BY_TENANT: Record<string, string[]> = {
   // docs/access-tenant-design.md §6 — ask for access, decide what waits on
   // you, govern what was granted, then configuration.
   access: ['Request', 'Approve', 'Govern', 'System'],
+  // docs/interviews-tenant-plan.md "Pages" — hiring (candidates, openings),
+  // then the interviewer's own desk.
+  interviews: ['Hire', 'Interview', 'System'],
 };
 export function groupRank(tenant: string, group?: string): number {
   const order = GROUP_ORDER_BY_TENANT[tenant] ?? GROUP_ORDER_BY_TENANT['orgiq']!;
@@ -350,6 +353,14 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['configuration', 'duration', 'steward', 'sensitive'] },
   { label: 'Access settings',    hint: 'Your request notifications and views', path: '/access/settings',                           tenant: 'access', group: 'System', pageId: 'access-settings',
     keywords: ['settings', 'preferences', 'notifications'] },
+  // Interviews tenant — each role's own home (docs/interviews-tenant-plan.md
+  // "Pages"), mirroring NAV_ITEMS in Layout.tsx and the routes' Gates.
+  { label: 'Candidates',         hint: 'Every candidate, their stage and next interview', path: '/interviews/candidates',            tenant: 'interviews', group: 'Hire', pageId: 'candidates', roles: ['recruiter'],
+    keywords: ['candidate', 'applicant', 'pipeline', 'stage', 'hiring'] },
+  { label: 'My openings',        hint: 'Your openings and their candidates by stage', path: '/interviews/my-openings',              tenant: 'interviews', group: 'Hire', pageId: 'my-openings', roles: ['hiring-manager'],
+    keywords: ['opening', 'role', 'requisition', 'candidates', 'stage', 'decide'] },
+  { label: 'My interviews',      hint: 'Interviews to accept, coming up and to score', path: '/interviews/my-interviews',           tenant: 'interviews', group: 'Interview', pageId: 'my-interviews', roles: ['interviewer'],
+    keywords: ['interview', 'schedule', 'accept', 'scorecard', 'upcoming'] },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;

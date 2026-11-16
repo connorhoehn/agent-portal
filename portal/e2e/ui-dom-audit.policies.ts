@@ -95,7 +95,7 @@ export interface TenantViewEvidence {
 
 export interface TenantRouteSpec { tenant: string; path: string; kind?: string; judges?: readonly string[]; pattern?: string }
 
-const TENANTS = new Set(['orgiq', 'assessment', 'social', 'access']);
+const TENANTS = new Set(['orgiq', 'assessment', 'social', 'access', 'interviews']);
 
 /** Reviewed collections that render an empty state in the seeded mock, so no table is visible to prove them. */
 const REVIEWED_COLLECTIONS = new Set(['/iq/work/changes', '/admin/changes', '/admin/projects', '/admin/observability/sessions', '/admin/observability/capability-events']);
@@ -137,6 +137,19 @@ function accessComposerPolicy(pathname: string, view: TenantViewEvidence): Compo
 }
 
 /**
+ * The interviews tenant (docs/interviews-tenant-plan.md "Pages"): each role's
+ * home is a collection on the shared command composer — the recruiter's
+ * Candidates, the interviewer's My interviews, the hiring manager's My
+ * openings — so all three are required, with no exemption. A route not named
+ * here stays unclassified.
+ */
+const INTERVIEWS_COLLECTIONS = /^\/interviews\/(?:candidates|my-interviews|my-openings)$/;
+function interviewsComposerPolicy(pathname: string, view: TenantViewEvidence): ComposerPolicy | undefined {
+  if (INTERVIEWS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
+  return undefined;
+}
+
+/**
  * The reviewed policy for the three non-pipelines tenants. Order matters: a
  * list page, a searchable table or a visible composer is `required` before
  * any exemption is considered, so an exemption can never hide a collection
@@ -150,6 +163,7 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   const pathname = url.pathname;
   const record = spec.kind === 'record' || spec.kind === 'editor';
   if (spec.tenant === 'access') return accessComposerPolicy(pathname, view);
+  if (spec.tenant === 'interviews') return interviewsComposerPolicy(pathname, view);
   // Runbooks: the library, the proposals and the briefs are each a
   // list rail whose shared command composer docks under the column — on the record pages too, so a missing
   // record keeps it. No evidence can exempt one.

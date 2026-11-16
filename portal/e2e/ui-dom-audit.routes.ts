@@ -32,6 +32,7 @@ export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: strin
   { pattern: /^\/assessment$/, target: '/assessment/teams', why: 'tenant root opens Teams' },
   { pattern: /^\/social$/, target: '/social/channels', why: 'tenant root opens Channels' },
   { pattern: /^\/access$/, target: '/access/requests', why: 'tenant root opens Requests' },
+  { pattern: /^\/interviews$/, target: '/interviews/candidates', why: 'tenant root opens Candidates, the recruiter\'s front door (an interviewer or a hiring manager goes on to their own desk)' },
   { pattern: /^\/admin\/identity$/, target: '/admin/identity/roles', why: 'section index opens Roles' },
   { pattern: /^\/admin\/observability$/, target: '/admin/observability/summary', why: 'section index opens Summary' },
   // Logging opens its first offered source (Voice), and a source with records opens its newest one, so the

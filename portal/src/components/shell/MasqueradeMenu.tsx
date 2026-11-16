@@ -30,6 +30,10 @@ const ROLE_LABELS: Record<string, string> = {
   requester: 'Requester',
   approver: 'Approver',
   'access-admin': 'Access Admin',
+  // The interviews tenant's roles (docs/interviews-tenant-plan.md, decision 2).
+  recruiter: 'Recruiter',
+  interviewer: 'Interviewer',
+  'hiring-manager': 'Hiring Manager',
 };
 
 const ROLE_HINTS: Record<string, string> = {
@@ -51,6 +55,9 @@ const ROLE_HINTS: Record<string, string> = {
   requester: 'Request access for yourself.',
   approver: 'Decide requests from reports and stewarded resources.',
   'access-admin': 'Approver plus the catalog, policies and provisioning.',
+  recruiter: 'Openings, candidates, assigning and scheduling interviews.',
+  interviewer: 'Conducts and scores the interviews assigned to them.',
+  'hiring-manager': 'Their openings, and each candidate\'s next stage.',
 };
 
 const TENANT_LABELS: Record<string, string> = TENANT_DISPLAY_NAMES;
