@@ -4,7 +4,7 @@
 //   1 Invite Milo is offered to a person in a call    2 inviting: "Milo is listening" for both, Milo in the roster
 //   3 the notice shows to the second person only      4 nothing stored before the acknowledgement, lines after it
 //   5 pause and resume from the second person         7 nothing clipped or scrolling in the call bar at 1280 (run before 6)
-//   6 dismiss: the mark goes, the chip says why, "Invite Milo again" beside it (Milo can be invited back)
+//   6 dismiss: the mark goes, one control stays: "Invite Milo again" with why as its tooltip; the open proposal is still asked in the call
 //   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
 //     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
 //     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
@@ -20,7 +20,7 @@
 //   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
 //     what Milo covered and how long the meeting is kept (13a), written minutes cannot be written again (13a2), the bell (13a3),
 //     a person who was not there gets 404 and a neutral not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
-//   R1 to R4 (Milo invited back, run after 13b): a third person joins again; "Invite Milo again" beside the left chip on one footer line
+//   R1 to R4 (Milo invited back, run after 13b): a third person joins again; "Invite Milo again" alone on one footer line
 //     with three people; the inviter uses it, the chat says Milo is back, the others owe the acknowledgement again and their words are
 //     not kept until they give it; something is said; Milo is dismissed; the minutes hold both periods, the earlier items in place;
 //     16b: the second period and the minutes addition are each billed once under entries of their own.
@@ -108,6 +108,32 @@ async function barFits(page, label, width) {
     const bad = [];
     const scrollX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
     const rr = rect(row), dr = rect(dock);
+    // The footer ROW stays one line: every slot on it shares the line (a wrapped slot starts below the others' bottom), and the row is
+    // no taller than its own one-line floor plus a little (a wrap makes it about twice as tall).
+    const slots = [...row.children].map(rect).filter((b) => b.width > 0 && b.height > 0);
+    const lineBottom = Math.min(...slots.map((b) => b.bottom));
+    const wrapped = slots.filter((b) => b.top >= lineBottom - 2).length;
+    if (wrapped) bad.push(`the footer row wraps (${wrapped} slot${wrapped > 1 ? 's' : ''} on a second line)`);
+    const floor = parseFloat(getComputedStyle(row).minHeight) || 44;
+    if (rr.height > floor + 12) bad.push(`the footer row is ${Math.round(rr.height)}px tall (one line is ${Math.round(floor)}px)`);
+    if (dr.height > rr.height + 1) bad.push(`the call bar is ${Math.round(dr.height)}px tall in a ${Math.round(rr.height)}px row`);
+    // The call's name truncates with an ellipsis, never cut: when it does not fit, its own box ends it with "…", and no box around it
+    // clips it short of its own edge.
+    const name = dock.querySelector('[data-testid="shell-call-dock-name"]');
+    let title = null;
+    if (name) {
+      const nb = rect(name); const cs = getComputedStyle(name);
+      const overflows = name.scrollWidth > name.clientWidth + 1;
+      // A flex or grid box never draws text-overflow's ellipsis (its text sits in an anonymous item): it must be a block that clips.
+      if (overflows && (cs.textOverflow !== 'ellipsis' || cs.overflow === 'visible' || /flex|grid/.test(cs.display))) bad.push(`the call's name is cut without an ellipsis (${name.scrollWidth}px in ${name.clientWidth}px, display ${cs.display})`);
+      for (let a = name.parentElement; a && a !== row.parentElement; a = a.parentElement) {
+        if (getComputedStyle(a).overflow === 'visible') continue;
+        const ab = rect(a);
+        if (nb.right > ab.right + 1 || nb.left < ab.left - 1) { bad.push(`the call's name is clipped by ${a.getAttribute('data-testid') ?? a.tagName.toLowerCase()} (${Math.round(nb.left)}..${Math.round(nb.right)} in ${Math.round(ab.left)}..${Math.round(ab.right)})`); break; }
+      }
+      if (nb.width < 24) bad.push(`the call's name is squeezed to ${Math.round(nb.width)}px`);
+      title = { shown: Math.round(nb.width), full: name.scrollWidth, ellipsis: overflows };
+    }
     if (dr.right > rr.right + 1) bad.push(`dock ends at ${Math.round(dr.right)}, row at ${Math.round(rr.right)}`);
     if (dock.scrollWidth > dock.clientWidth + 1) bad.push(`dock scrolls by ${dock.scrollWidth - dock.clientWidth}px`);
     for (const el of dock.querySelectorAll('button')) {
@@ -122,7 +148,7 @@ async function barFits(page, label, width) {
         if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible') bad.push(`${el.getAttribute('data-testid')} is cut off`);
       }
     }
-    return { scrollX, bad, barHeight: Math.round(rr.height), rowHeight: Math.round(rr.height), assistantWidth: assistant ? Math.round(rect(assistant).width) : 0 };
+    return { scrollX, bad, barHeight: Math.round(rr.height), rowHeight: Math.round(rr.height), assistantWidth: assistant ? Math.round(rect(assistant).width) : 0, title };
   });
   check(!r.missing, `${label}: ${r.missing} is not on the page`);
   check(r.scrollX <= 1, `${label} scrolls sideways at ${width} by ${r.scrollX}px`);
@@ -323,6 +349,16 @@ async function main() {
       const facts = (await nora.page.getByTestId('assistant-facts').innerText().catch(() => '')).replace(/\s+/g, ' ');
       await nora.page.keyboard.press('Escape');
       check(/Invited by .+/.test(facts) && /voice is off/.test(facts) && /Anyone here can pause or dismiss Milo/.test(facts), `the menu does not state who invited, the voice and who may pause or dismiss: "${facts}"`);
+      // In-call 10: "Extend time" says what it adds and whose budget holds it (the inviter's, by name for anyone else).
+      const extendOf = async (p) => {
+        await p.page.getByTestId('assistant-status-mark').click();
+        const t = (await p.page.getByRole('menuitem', { name: /Extend time/ }).innerText().catch(() => '')).replace(/\s+/g, ' ');
+        await p.page.keyboard.press('Escape');
+        return t;
+      };
+      const mine = await extendOf(vera); const theirs = await extendOf(nora);
+      check(/Adds \d+ minutes, held against your budget/.test(mine), `the inviter's "Extend time" reads "${mine}"`);
+      check(/Adds \d+ minutes, held against .+'s budget/.test(theirs) && !/your budget/.test(theirs), `another person's "Extend time" reads "${theirs}"`);
       return `marks "${a}" and "${b}"; roster "${line.trim().slice(0, 120)}"`;
     });
 
@@ -1468,7 +1504,7 @@ async function main() {
       return 'open, waiting for the executor';
     });
 
-    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, the bar says who dismissed Milo and offers "Invite Milo again" beside it (Milo can be invited back)', async () => {
+    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, and one control stays: "Invite Milo again", whose tooltip says who dismissed Milo (Milo can be invited back); the open proposal still waits on its executor in the call', async () => {
       // In-call 3: the dismissal is asked once, naming its effect; keeping Milo changes nothing.
       await assistantMenu(nora, 'Dismiss Milo for everyone');
       await seen(nora.page, 'assistant-dismiss-ask');
@@ -1481,12 +1517,13 @@ async function main() {
       check((await stateOf(nora)).state === 'listening', 'keeping Milo dismissed it');
       await assistantMenu(nora, 'Dismiss Milo for everyone');
       await nora.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
-      await seen(nora.page, 'assistant-left');
-      await seen(vera.page, 'assistant-left');
+      await seen(nora.page, 'assistant-invite-again');
+      await seen(vera.page, 'assistant-invite-again');
       for (const p of [vera, nora]) {
-        // Around 1: the chip says who dismissed Milo (and no longer that it cannot come back); beside it, the way back.
-        const why = (await p.page.getByTestId('assistant-left').innerText()).trim();
-        check(/^.+ dismissed Milo\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Milo: "${why}"`);
+        // Consent 7: one control after Milo left: "Invite Milo again", its tooltip saying who dismissed Milo; no chip beside it.
+        const why = (await p.page.getByTestId('assistant-invite-again').getAttribute('data-why')) ?? '';
+        check(/^.+ dismissed Milo\.$/.test(why) && !why.startsWith('Someone'), `the button does not say who dismissed Milo: "${why}"`);
+        check(await p.page.getByTestId('assistant-left').count() === 0, 'a chip still sits beside "Invite Milo again"');
         check(await p.page.getByTestId('assistant-status-mark').count() === 0, 'the listening mark stayed');
         check(await p.page.getByTestId('assistant-invite').count() === 0, 'the first "Invite Milo" came back');
         check(await p.page.getByTestId('assistant-menu').count() === 0, 'Milo controls stayed');
@@ -1497,13 +1534,31 @@ async function main() {
       const standing = (await stateOf(vera)).rejoin;
       check(standing === 'allowed', `the state says rejoin ${standing}, not allowed`);
       check(await vera.page.getByTestId('assistant-roster-entry').count() === 0, 'Milo stayed in the roster');
-      await barFits(vera.page, 'the bar after dismissal', 1280);
-      await shot(vera.page, '6-left');
-      // An unfinished proposal moves to the meeting page: the footer asks no more, and it waits 72 hours.
+      // The reason is the button's tooltip, read on hover.
+      await vera.page.getByTestId('assistant-invite-again').hover();
+      const tip = (await vera.page.getByTestId('assistant-left-why').innerText({ timeout: 5000 }).catch(() => '')).trim();
+      check(/dismissed Milo\./.test(tip), `the tooltip of "Invite Milo again" reads "${tip}"`);
+      await vera.page.mouse.move(5, 5);
+      // Consent 1: while the call runs the open proposal stays in its executor's queue without Milo: the deck still asks, the footer
+      // keeps its count, and the card's Answer opens the prompt again after Esc. It also waits 72 hours for the meeting page.
+      await askFor(vera, PROPOSAL_3);
+      await deckOf(vera).getByRole('button').first().focus();
+      await vera.page.keyboard.press('Escape');
       await gone(vera.page, 'assistant-proposal-ask');
+      const owed = vera.page.getByTestId('assistant-proposal-count');
+      check((await owed.getAttribute('aria-label').catch(() => null)) === '1 proposal', `after the dismissal the footer count reads "${await owed.getAttribute('aria-label').catch(() => null)}"`);
+      await card(vera, p3).getByTestId('assistant-proposal-answer').click();
+      await askFor(vera, PROPOSAL_3);
+      check(await card(vera, p3).getByTestId('assistant-proposal-answer-meeting').count() === 0, 'a person in the call is sent to the meeting page to answer');
+      await deckOf(vera).getByRole('button').first().focus();
+      await vera.page.keyboard.press('Escape');
+      await gone(vera.page, 'assistant-proposal-ask');
+      await barFits(vera.page, 'the bar after dismissal', 1280);
+      await barFits(vera.page, 'the bar after dismissal', 1440);
+      await shot(vera.page, '6-left');
       const open = (await proposalsOf(vera)).find((p) => p.id === p3);
       check(open?.state === 'open' && typeof open.expiresAt === 'number' && open.expiresAt - Date.now() > 71 * 3600_000, `the open proposal after the dismissal: ${JSON.stringify({ state: open?.state, expiresAt: open?.expiresAt })}`);
-      return 'left; "Invite Milo again" offered; the open proposal expires in 72 h';
+      return `left; one control ("${tip}"); the open proposal still asked in the call, counted, and expiring in 72 h`;
     });
 
     await step('6b: with Milo dismissed the unconfirmed card reads Expired for both, says Milo was dismissed (not that its asker failed to confirm), and nothing was created', async () => {
@@ -1825,25 +1880,27 @@ async function main() {
 
     // ── R. Milo invited back into the call it left (after the first period's minutes steps, which read the first period) ──
     let rejoinBefore = null;
-    await step('R1: a third person joins again; each person sees why Milo left and "Invite Milo again" beside it, and the footer is one line at 1440 and 1280 with three people (screenshots)', async () => {
+    await step('R1: a third person joins again; each person sees one control, "Invite Milo again" with why Milo left as its tooltip, and the footer is one line, the call\'s name ending in an ellipsis if it is cut, at 1440 and 1280 with three people (screenshots)', async () => {
       eli = await person({ userId: 'u-eli', role: 'sme' });
       await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
       await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
       for (const p of [vera, nora, eli]) {
-        await seen(p.page, 'assistant-left', 20000);
         await seen(p.page, 'assistant-invite-again', 20000);
-        const why = (await p.page.getByTestId('assistant-left').innerText()).trim();
-        check(/^.+ dismissed Milo\.$/.test(why) && !/cannot rejoin/.test(why), `${p.who.userId}'s chip reads "${why}"`);
+        const why = (await p.page.getByTestId('assistant-invite-again').getAttribute('data-why')) ?? '';
+        check(/^.+ dismissed Milo\.$/.test(why) && !/cannot rejoin/.test(why), `${p.who.userId}'s button says "${why}"`);
+        check(await p.page.getByTestId('assistant-left').count() === 0, `${p.who.userId} still sees a chip beside "Invite Milo again"`);
       }
+      const titles = [];
       for (const width of [1440, 1280]) {
         const r = await barFits(vera.page, 'the bar after the dismissal with three people', width);
         await shot(vera.page, 'R1-left-invite-again', width);
         check(r.assistantWidth > 0, `Milo's controls are not on the footer row at ${width}`);
+        titles.push(`${width}: row ${r.rowHeight}px, name ${r.title ? `${r.title.shown}/${r.title.full}px${r.title.ellipsis ? ' with an ellipsis' : ''}` : 'absent'}`);
       }
       const m = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       rejoinBefore = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
       check(rejoinBefore.length >= 1, 'the first minutes hold no action items to keep in place');
-      return `three people; ${rejoinBefore.length} earlier action items`;
+      return `three people; ${titles.join('; ')}; ${rejoinBefore.length} earlier action items`;
     });
 
     await step('R2: the inviter uses "Invite Milo again": Milo listens again for everyone, the chat has one notice that it is back at her invitation, and the others owe the acknowledgement again (the notice shows again, saying Milo was invited back)', async () => {
@@ -1856,10 +1913,17 @@ async function main() {
       check(st.voice === false, 'the voice did not reset to off');
       const back = await waitFor(async () => (await assistantOf(vera, 'assistant-notice')).filter((m) => /^Milo is back in this call at .+'s invitation and is listening again\./.test(m.message)), 15000, 'the notice that Milo is back');
       check(back.length === 1, `${back.length} notices say Milo is back`);
+      // Consent 9 / in-call 14: said to everyone, so no "again" for the acknowledgement; the voice is off until someone turns it on.
+      check(!/acknowledge again/.test(back[0].message) && /Milo's voice is off until someone turns it on\./.test(back[0].message) && /adds what it hears to the minutes/.test(back[0].message), `the notice that Milo is back reads "${back[0].message}"`);
       // Nora had closed the first notice in 3b: a new period shows it again.
       await seen(nora.page, 'assistant-consent-notice', 20000);
       const title = (await nora.page.getByTestId('assistant-consent-notice').innerText()).replace(/\s+/g, ' ');
       check(/invited Milo back into this call/.test(title), `the notice does not say Milo was invited back: "${title.slice(0, 160)}"`);
+      // She acknowledged in the first period: everyone acknowledges once more. Eli never did: the first invitation's words, no "once more".
+      check(/Everyone acknowledges once more/.test(title) && /Milo's voice is off until someone turns it on/.test(title) && /adds what it hears to the minutes/.test(title), `the second person's notice reads "${title}"`);
+      await seen(eli.page, 'assistant-consent-notice', 20000);
+      const eliNotice = (await eli.page.getByTestId('assistant-consent-notice').innerText()).replace(/\s+/g, ' ');
+      check(/invited Milo to listen to this call/.test(eliNotice) && !/once more|back into/.test(eliNotice) && /voice is off/.test(eliNotice), `the notice for someone who never acknowledged reads "${eliNotice}"`);
       check((await stateOf(nora)).youMustAck === true, 'the second person does not owe a new acknowledgement');
       await shot(nora.page, 'R2-notice-again');
       return `"${back[0].message.slice(0, 120)}"`;
@@ -1920,7 +1984,7 @@ async function main() {
     await step('R4: Milo is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Milo added to them', async () => {
       await assistantMenu(vera, 'Dismiss Milo for everyone');
       await vera.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
-      await seen(vera.page, 'assistant-left', 20000);
+      await seen(vera.page, 'assistant-invite-again', 20000);
       const m = await waitFor(async () => { const r = await (await vera.api.get(asApi(vera, 'minutes'))).json(); return r.additions === 1 ? r : null; }, 30000, 'the minutes being added to');
       const items = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
       check(JSON.stringify(items.slice(0, rejoinBefore.length)) === JSON.stringify(rejoinBefore), `the earlier action items moved or changed: ${JSON.stringify(rejoinBefore)} then ${JSON.stringify(items.slice(0, rejoinBefore.length))}`);
@@ -1972,7 +2036,7 @@ async function main() {
       check(await stored(vera, last, 10000), 'the line before the third dismissal was not stored');
       await assistantMenu(nora, 'Dismiss Milo for everyone');
       await nora.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
-      await seen(nora.page, 'assistant-left', 20000);
+      await seen(nora.page, 'assistant-invite-again', 20000);
       await panel.locator('[data-seg-index]').filter({ hasText: last }).waitFor({ state: 'visible', timeout: 10000 })
         .catch(() => { throw new StepFailure('after Milo left again the open transcript never showed the last line said before'); });
       const after = await head();

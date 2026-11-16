@@ -131,7 +131,9 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
     // The call bar takes three parts of the row's free width to the today strip's one: shared evenly, at 1280 with three people,
     // Milo's mark and a proposal count its last control (React) dropped under Message and the bar grew to two lines.
-    className="shell-collaboration-bar shrink-0 grow-[3] basis-[14rem] border-l border-border"
+    // The call's name ends in an ellipsis when it is cut: the library draws it as a flex box, where text-overflow never shows, so it is
+    // made a block here (reported to the library: HuddleBar should pass T's `truncate` prop rather than the `truncate` class).
+    className="shell-collaboration-bar shrink-0 grow-[3] basis-[14rem] border-l border-border [&_[data-testid=shell-call-dock-name]]:block"
     data-testid="shell-call-dock"
   />;
 }
