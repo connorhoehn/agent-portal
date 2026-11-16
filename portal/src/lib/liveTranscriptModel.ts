@@ -1,8 +1,8 @@
 // The live transcript in the call's pane: what Milo is hearing, as it hears it. Pure, so node:test covers it; the hook
 // (liveTranscript.ts) and the view (components/shell/LiveTranscript.tsx) only follow what these functions decide.
 
-import type { AssistantPhase } from './meetingAssistantModel';
-import { ASSISTANT_NAME } from './meetingAssistantModel.ts';
+import type { AssistantPhase, AssistantView } from './meetingAssistantModel';
+import { ASSISTANT_NAME, assistantStateWords } from './meetingAssistantModel.ts';
 
 /** The newest lines read when the view opens, and each "Load earlier lines" page. */
 export const LIVE_TAIL = 100;
@@ -19,6 +19,13 @@ export const liveTailUrl = (callId: string, before?: number | null): string =>
 /** Each poll: the lines after the newest one held. */
 export const liveAfterUrl = (callId: string, after: number): string =>
   `/api/calls/${encodeURIComponent(callId)}/assistant/transcript?after=${after}&limit=500`;
+/**
+ * A poll's read: the lines after the newest one held, or the newest lines again while nothing is held (a first read that failed
+ * or found nothing), so a poll never reads forward from the oldest line (sweep 4 in-call 15).
+ */
+export function livePollRead(callId: string, held: readonly LiveLine[]): { url: string; mode: 'tail' | 'after' } {
+  return held.length ? { url: liveAfterUrl(callId, newestSeq(held)), mode: 'after' } : { url: liveTailUrl(callId), mode: 'tail' };
+}
 
 /**
  * What the hook does next, from whether the view is on, Milo's phase and whether the last read after Milo left was made:
@@ -86,15 +93,19 @@ export function mergeSpeakers(held: ReadonlyMap<string, LiveSpeaker>, incoming: 
   return next;
 }
 
-/** The quiet state after "Live transcript". */
-export function liveStateWords(phase: AssistantPhase): string {
-  if (phase === 'paused') return `${ASSISTANT_NAME} is paused, nothing is being transcribed`;
-  if (phase === 'left') return `${ASSISTANT_NAME} has left; this is what it heard`;
-  return `${ASSISTANT_NAME} is listening`;
+/**
+ * The quiet state after "Live transcript": the footer mark's own words while Milo is joining or listening ("Milo is connecting",
+ * "Milo cannot hear the call"), so the two never disagree (sweep 4 in-call 6); the transcript's own words once paused or gone.
+ */
+export function liveStateWords(view: Pick<AssistantView, 'phase' | 'hearing'>): string {
+  if (view.phase === 'paused') return `${ASSISTANT_NAME} is paused, nothing is being transcribed`;
+  if (view.phase === 'left') return `${ASSISTANT_NAME} has left; this is what it heard`;
+  return assistantStateWords(view as AssistantView) ?? `${ASSISTANT_NAME} is listening`;
 }
 
 export const LIVE_EMPTY = `${ASSISTANT_NAME} has not heard anything yet.`;
-export const LIVE_NOT_ACKED = `Your own words are not transcribed until you acknowledge ${ASSISTANT_NAME}'s notice.`;
+export const LIVE_NOT_ACKED = 'Your own words are not transcribed until you acknowledge.';
+export const LIVE_ACK_LABEL = 'Acknowledge';
 export const LIVE_SHOW_LABEL = 'Show transcript';
 export const LIVE_HIDE_LABEL = 'Hide transcript';
 export const LIVE_SHOW_DESCRIPTION = `What ${ASSISTANT_NAME} is hearing, as it hears it`;

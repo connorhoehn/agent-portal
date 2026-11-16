@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AssistantPhase } from './meetingAssistantModel';
 import {
-  LIVE_READS_START, livePlan, liveAfterUrl, liveTailUrl, mergeLines, mergeSpeakers, newestSeq, oldestSeq, readEnded, readStarted, readToStart,
+  LIVE_READS_START, livePlan, livePollRead, liveTailUrl, mergeLines, mergeSpeakers, oldestSeq, readEnded, readStarted, readToStart,
   readsAtPhase, type LiveLine, type LiveReads, type LiveSpeaker,
 } from './liveTranscriptModel.ts';
 
@@ -97,8 +97,9 @@ export function useLiveTranscript(callId: string | null, on: boolean, phase: Ass
     if (!callId) return;
     reads.current = readStarted(reads.current, kind);
     try {
-      const a = await read(liveAfterUrl(callId, newestSeq(held.current)));
-      if (mine === generation.current) take(a, 'after');
+      const next = livePollRead(callId, held.current);
+      const a = await read(next.url);
+      if (mine === generation.current) take(a, next.mode);
     } catch (e) {
       if (mine === generation.current) setError(e instanceof Error ? e.message : String(e));
     } finally {

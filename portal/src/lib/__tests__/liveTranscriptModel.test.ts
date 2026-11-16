@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_READS_START, LIVE_TAIL, liveAfterUrl, lineTimes, livePlan, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
+  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_READS_START, LIVE_TAIL, liveAfterUrl, lineTimes, livePlan, livePollRead, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
   newestSeq, oldestSeq, readEnded, readStarted, readToStart, readsAtPhase, type LiveLine, type LiveReads,
 } from '../liveTranscriptModel.ts';
 import { liveTranscriptOn, setLiveTranscript } from '../liveTranscript.ts';
@@ -55,9 +55,18 @@ test('a line is placed by its clock time after a pause or a new session, its off
 });
 
 test('the state after "Live transcript"', () => {
-  assert.equal(liveStateWords('listening'), 'Milo is listening');
-  assert.equal(liveStateWords('paused'), 'Milo is paused, nothing is being transcribed');
-  assert.equal(liveStateWords('left'), 'Milo has left; this is what it heard');
+  assert.equal(liveStateWords({ phase: 'listening', hearing: 'ok' }), 'Milo is listening');
+  assert.equal(liveStateWords({ phase: 'paused', hearing: 'ok' }), 'Milo is paused, nothing is being transcribed');
+  assert.equal(liveStateWords({ phase: 'left', hearing: 'ok' }), 'Milo has left; this is what it heard');
+  // Sweep 4 in-call 6: the header says what the footer mark says while Milo joins or cannot hear.
+  assert.equal(liveStateWords({ phase: 'invited', hearing: 'ok' }), 'Milo is joining');
+  assert.equal(liveStateWords({ phase: 'listening', hearing: 'connecting' }), 'Milo is connecting');
+  assert.equal(liveStateWords({ phase: 'listening', hearing: 'no-audio' }), 'Milo cannot hear the call');
+});
+
+test('a poll reads after the newest line held, and the newest lines again while nothing is held (sweep 4 in-call 15)', () => {
+  assert.deepEqual(livePollRead('c', []), { url: liveTailUrl('c'), mode: 'tail' });
+  assert.deepEqual(livePollRead('c', [line(7), line(9)]), { url: liveAfterUrl('c', 9), mode: 'after' });
 });
 
 test('the view is on for one call at a time and turns off per call', () => {

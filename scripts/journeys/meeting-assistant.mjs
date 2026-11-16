@@ -373,8 +373,13 @@ async function main() {
       check(/What Milo is hearing, as it hears it/.test(await item.innerText()), `Show transcript does not say what it shows: "${await item.innerText()}"`);
       await item.click();
       await seen(nora.page, 'live-transcript');
-      const note = (await nora.page.getByTestId('live-transcript-not-acked').innerText()).trim();
-      check(note === 'Your own words are not transcribed until you acknowledge Milo\'s notice.', `the not-acknowledged sentence reads "${note}"`);
+      const noteRow = nora.page.getByTestId('live-transcript-not-acked');
+      const note = (await noteRow.innerText()).replace(/\s+/g, ' ').trim();
+      // Sweep 4 in-call 13: one quiet sentence with the acknowledgement beside it, not a ruled row of its own.
+      check(note === 'Your own words are not transcribed until you acknowledge. Acknowledge', `the not-acknowledged sentence reads "${note}"`);
+      check(await noteRow.getByTestId('live-transcript-acknowledge').isVisible(), 'no Acknowledge beside the not-acknowledged sentence');
+      const ruled = await noteRow.evaluate((el) => ['Top', 'Bottom'].some((side) => parseFloat(getComputedStyle(el)[`border${side}Width`]) > 0));
+      check(!ruled, 'the not-acknowledged sentence is a ruled row');
       const state = (await nora.page.getByTestId('live-transcript-state').innerText()).trim();
       check(state === 'Milo is listening', `the transcript's state reads "${state}"`);
       await nora.page.getByTestId('live-transcript-back').click();
@@ -1929,8 +1934,11 @@ async function main() {
       await waitMark(vera.page, /^Milo is listening$/, 20000);
       await waitFor(async () => /Milo is listening/.test(await head()), 20000, 'the open transcript listening again');
       await seen(nora.page, 'assistant-consent-notice', 20000);
-      await nora.page.getByTestId('assistant-consent-notice-acknowledge').click();
+      // Sweep 4 in-call 13: the open transcript's own Acknowledge does the acknowledgement (the notice goes with it).
+      await seen(nora.page, 'live-transcript-acknowledge', 20000);
+      await nora.page.getByTestId('live-transcript-acknowledge').click();
       await gone(nora.page, 'assistant-consent-notice');
+      await gone(nora.page, 'live-transcript-not-acked');
       const last = `Third period: the rollout note goes out with build ${Date.now() % 100000}.`;
       await inject(NORA.userId, last);
       check(await stored(vera, last, 10000), 'the line before the third dismissal was not stored');
