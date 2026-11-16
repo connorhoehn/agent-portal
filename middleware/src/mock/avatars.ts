@@ -37,6 +37,15 @@ export const UNLINKED_USER_IDS = [
   'u-ines', 'u-kofi', 'u-dara', 'u-tomas',
 ] as const;
 
+/**
+ * Unlinked app users who have no commissioned portrait yet: the interviews
+ * cast (docs/interviews-tenant-plan.md, row I0.4). They hold no avatar row, so
+ * every surface shows their initials; generate-local.mjs never substitutes a
+ * face. When a portrait lands in photos/personas.json, move the id to
+ * UNLINKED_USER_IDS; the test refuses an id that is in both or in neither.
+ */
+export const PORTRAIT_PENDING_USER_IDS = ['u-greta', 'u-hugo', 'u-wen', 'u-amara'] as const;
+
 // One generated index owns portrait selection for the fixture and portal.
 /** The served portrait path; generate-local.mjs preserves this selection. */
 export function localAvatarPath(subjectId: string): string | null {

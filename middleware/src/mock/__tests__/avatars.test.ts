@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fixtureRegistry } from '../core/index.js';
-import { avatars, mockAvatarUrl, UNLINKED_USER_IDS } from '../avatars.js';
+import { avatars, mockAvatarUrl, PORTRAIT_PENDING_USER_IDS, UNLINKED_USER_IDS } from '../avatars.js';
 import { seededPeople } from '../people.js';
 import { listUsers, cloneIdentity } from '../../providers/identity.js';
 import { userAvatars } from '../../providers/user-avatars.js';
@@ -28,7 +28,14 @@ describe('mock avatars', () => {
     for (const person of seededPeople) expect(ids.has(person.id)).toBe(true);
     expect(ids.has('demo-user')).toBe(true);
     const unlinked = (await listUsers()).filter((user) => user.personId === null).map((user) => user.id).sort();
-    expect([...UNLINKED_USER_IDS].sort()).toEqual(unlinked);
+    expect([...UNLINKED_USER_IDS, ...PORTRAIT_PENDING_USER_IDS].sort()).toEqual(unlinked);
+  });
+
+  it('gives a user awaiting a portrait no row, so they show initials and never another face', () => {
+    for (const id of PORTRAIT_PENDING_USER_IDS) {
+      expect((UNLINKED_USER_IDS as readonly string[]).includes(id)).toBe(false);
+      expect(mockAvatarUrl(id)).toBeNull();
+    }
   });
 
   it('names a checked-in file for every row, and the generator index agrees', () => {
@@ -46,7 +53,9 @@ describe('mock avatars', () => {
       hashes.add(hash);
       expect(indexed.get(row.subjectId)).toBe(row.url);
     }
-    expect(indexed.size).toBe(avatars.rows().length);
+    // The generator indexes a user awaiting a portrait too, with no photo.
+    for (const id of PORTRAIT_PENDING_USER_IDS) expect([id, indexed.has(id), indexed.get(id)]).toEqual([id, true, null]);
+    expect(indexed.size).toBe(avatars.rows().length + PORTRAIT_PENDING_USER_IDS.length);
   });
 
   it('answers null outside the cast and under the empty scenario', () => {

@@ -429,6 +429,30 @@
       "url": "/avatars/photos/u-tomas.jpg"
     },
     {
+      "id": "u-greta",
+      "kind": "user",
+      "name": "Greta Lindqvist",
+      "url": null
+    },
+    {
+      "id": "u-hugo",
+      "kind": "user",
+      "name": "Hugo Marchetti",
+      "url": null
+    },
+    {
+      "id": "u-wen",
+      "kind": "user",
+      "name": "Wen Zhao",
+      "url": null
+    },
+    {
+      "id": "u-amara",
+      "kind": "user",
+      "name": "Amara Okafor",
+      "url": null
+    },
+    {
       "id": "demo-user",
       "kind": "demo",
       "name": "Demo User",
