@@ -160,7 +160,13 @@ BEGIN
       ('access_delegations',           'public.app_tenant_visible(''access'')'),
       ('pipeline_config',              'public.app_tenant_visible(''pipelines'')'),
       ('pipeline_run_decks',           'public.app_tenant_visible(''pipelines'')'),
-      ('pipeline_run_deck_revisions',  'public.app_tenant_visible(''pipelines'')')
+      ('pipeline_run_deck_revisions',  'public.app_tenant_visible(''pipelines'')'),
+      -- The interviews tenant's tables carry no tenant column: all of them are its own.
+      ('interview_openings',           'public.app_tenant_visible(''interviews'')'),
+      ('interview_candidates',         'public.app_tenant_visible(''interviews'')'),
+      ('interview_applications',       'public.app_tenant_visible(''interviews'')'),
+      ('interviews',                   'public.app_tenant_visible(''interviews'')'),
+      ('interview_scorecards',         'public.app_tenant_visible(''interviews'')')
     ) AS t(tbl, predicate)
     UNION ALL
     -- Every other assessment_* base table belongs to the assessment tenant.

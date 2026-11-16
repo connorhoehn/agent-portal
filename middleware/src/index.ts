@@ -60,6 +60,7 @@ import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
+import { interviewsFlagGate, interviewsRouter } from './routes/interviews.js';
 import { runsFacadeRouter } from './routes/runs.js';
 import { runReportsRouter } from './routes/run-reports.js';
 import { initiativeDecksRouter } from './routes/initiative-decks.js';
@@ -399,6 +400,9 @@ app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);
 // At the mount — no machine callback of its own; every route adds its Cedar action.
 app.use('/api/access/search', requireTenant('access'), requireAction('ViewAccess'), tenantSearchRouter('access'));
 app.use('/api/access', requireTenant('access'), accessRouter);
+// The interviews tenant (docs/interviews-tenant-plan.md): openings, candidates, interviews, scorecards.
+// Reads only in phase 0; INTERVIEWS_ENABLED (lib/interviews/flag.ts) gates the whole mount, on in the mock world.
+app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
 // The in-tenant quick request (routes/access-requests-quick.ts): a session
 // floor, NOT requireTenant('access') — a Work reader asks for the budgets tier
 // from the Initiatives page. It files through the same submit path; it limits

@@ -455,4 +455,54 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockRows: async () => (await assessment()).allRubricDimensions(),
     mockId: (d: { rubric_version: string; id: string }) => `${d.rubric_version}/${d.id}`,
   },
+
+  // ── the interviews tenant (schema/interviews_schema.sql — DDL, no seed) ────
+  // docs/interviews-tenant-plan.md row I0.4: the registered fixtures in
+  // mock/interviews.ts ARE the seed story, so the DDL's columns, NOT NULLs and
+  // CHECK vocabularies are what they are held to (the assessment pattern).
+  {
+    name: 'interview_openings',
+    fixture: 'interviews.openings',
+    describes: 'Three openings with their kits: rounds, competencies with rubric anchors, the question bank.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_openings',
+    mockRows: async () => (await import('../../interviews.js')).interviewOpeningsFixture.rows('default'),
+    mockId: (o: { id: string }) => o.id,
+  },
+  {
+    name: 'interview_candidates',
+    fixture: 'interviews.candidates',
+    describes: 'Twelve fictional candidates. Records, never users: no app_users row, no grant.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_candidates',
+    mockRows: async () => (await import('../../interviews.js')).interviewCandidatesFixture.rows('default'),
+    mockId: (c: { id: string }) => c.id,
+  },
+  {
+    name: 'interview_applications',
+    fixture: 'interviews.applications',
+    describes: 'One candidate on one opening, its stage and the history of stage decisions.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_applications',
+    mockRows: async () => (await import('../../interviews.js')).interviewApplicationsFixture.rows('default'),
+    mockId: (a: { id: string }) => a.id,
+  },
+  {
+    name: 'interviews',
+    fixture: 'interviews.interviews',
+    describes: 'Six interviews coming up, four finished and scored, one finished whose scorecard is due.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interviews',
+    mockRows: async () => (await import('../../interviews.js')).interviewsFixture.rows('default'),
+    mockId: (i: { id: string }) => i.id,
+  },
+  {
+    name: 'interview_scorecards',
+    fixture: 'interviews.scorecards',
+    describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_scorecards',
+    mockRows: async () => (await import('../../interviews.js')).interviewScorecardsFixture.rows('default'),
+    mockId: (s: { id: string }) => s.id,
+  },
 ];
