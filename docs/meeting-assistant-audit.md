@@ -223,6 +223,14 @@ Built the same day, each in its own lane, then reviewed as one change before mer
 
 A review of the combined change found five defects, all repaired before the merge, each with a test that fails without its repair: inviting Milo back while it was still leaving billed the earlier period twice and left Milo shown as listening with no session (the invitation now waits for the departure, and a late departure cannot touch the newer period); the gate cut long spoken answers between sentences and could drop a held opening sentence early (decisions now cover a speaking turn); a minutes addition's cost was never booked (every minutes run has its own ledger entry); a delete racing an invitation back could leave a deleted meeting listening (both stores now refuse either order); and a call ending during an invitation back could leave Milo listening to nothing (it now leaves with the call). Two smaller ones were repaired with them: released audio is counted as heard when it plays, and the live transcript reads once more after every leave.
 
+### Fifth pass (16 November): a sweep of the experience after the rename
+
+Three auditors walked the call, the pages around it, and consent and the invitation back, at 1280 and 1440, and reported 41 findings, 35 of them distinct. 33 were repaired in three lanes and checked together before the merge; the other two were decided as they are (below: text stored before the rename, and people from a later listening period reading the whole record).
+
+- **In the call.** Change cards say the change from the request itself ("Set "Runbook" to cancelled"), not the catalogue's sample sentence. Transcript times stay on the call's own timeline, counted from Milo's first invitation, live and on the meeting page. Milo is heard from its first word: browsers keep up to a second of early voice frames, and the speaking mark lasts until playback ends. The voice gate uses the chat's 20-second window (one constant). Typed requests follow the spoken address rule and are answered once per listening stretch ("Milo only hears spoken requests"; "Milo is paused…" once per pause). The voice chip reads "Milo's voice on" / "Milo muted for you". The live transcript's header agrees with the footer, shows read errors, and ends with an "Acknowledge" link for someone who has not. A seated person whose first name is heard as Milo is named in the join notice.
+- **Around the call.** A retried minutes addition keeps what was said in the later period. "Not transcribed" counts only people who never acknowledged in any period. The summary's lines about proposals are built when the page is read, so one agreed after the call no longer reads as waiting. Under Budgets, Milo's charges read as what it did ("Milo listening, period 2", "Milo minutes, addition 1, try 2") with the call's name. The Updated card quotes the addition's own sentence and counts only new items; a repeated action item is not added twice. The page says "will try again" only while the sweep will, follows Milo's leave without a reload (for at most five minutes), names every inviter and everyone who can delete sooner, and shows portraits for everyone a proposal names. Delete is not offered while Milo is back in the call. The bell reads "Minutes are ready: <meeting>".
+- **Consent and the invitation back.** Open proposals stay answerable in the footer for the whole call, with or without Milo; a card for a call the person is not in links to the meeting page. The request and proposal caps count per listening period, and their notices can be said again in a later one. An invitation back needs at least five minutes of the call's listening time left; otherwise it is refused, and the dismiss question no longer promises one. After Milo leaves, the footer keeps one control, "Invite Milo again", with why it left as its tooltip ("Milo is leaving…" while the leave finishes); people who cannot bring it back see one quiet chip. The footer stays on one line, and the call's name ends in an ellipsis. The invited-back notices say "once more" only to people who acknowledged before and say the voice is off. "Extend time" says how many minutes it adds and whose budget holds them, and is not offered at the maximum. The over-budget ask names the hold, the minutes and the overage.
+
 ### Decided
 
 - Milo can be invited back into a call it left (fourth pass, above). Until then it could not.
@@ -230,6 +238,11 @@ A review of the combined change found five defects, all repaired before the merg
 - A tombstone tells only attendees that a record was deleted or expired. Once the sweep has removed the call, nobody can be told apart, so everyone gets the neutral sentence.
 - The minutes page counts the people who were not transcribed and does not name them.
 - Evidence lines are for people who were in the call. A named person who was not sees the statement and who raised it.
+- People who were only in a later listening period can read and delete the whole record, like everyone else in it (fifth pass).
+- Text stored before the rename keeps "Nova"; it is not rewritten.
+- A seated person named Milo or Mylo is named in the join notice and nothing else changes: "Milo, …" said to them still counts as a request.
+- Typed messages follow the spoken address rule. A request typed while Milo is joining is ignored silently.
+- Caps (60 requests, 8 proposals) count per listening period; the record keeps the whole call's total.
 
 ### Still open
 
@@ -239,4 +252,6 @@ A review of the combined change found five defects, all repaired before the merg
 - The meeting page's "Create work item" now makes a story at once, titled with the action item's text; the earlier path opened the initiative's form first. Two presses at the same moment on two servers could make two work items, of which one is recorded.
 - The meeting page is not in the DOM geometry audit's route list.
 - From the real-provider runs: the voice gate (fourth pass) is proven on the fake provider; a short paid run to prove it on the real provider (`scenarios.mjs --scenario quiet-long,personal-read --minutes 2 --yes`, worst case $0.27) could not start on 15 November because the provider rejected the API key, so it is not yet proven there; the two-askers case was relaxed and not re-run against the provider; the echo guard is unproven on a long call; the attribution fix has not yet been seen on a live call.
-
+- Covered by unit tests only (fifth pass): several inviters on one meeting (the walk's script has one inviter per period), the "Milo is leaving…" wait, the over-budget ask's wording, "Extend time" hidden at the maximum, and the retry wording after the sweep stops.
+- Proposal bells still say "the <call> call"; the minutes bell names the meeting after a colon.
+- The library's call bar passes `truncate` as a class to `T`, which draws a flex box where an ellipsis never shows; the footer forces the name to a block until the library is fixed.

@@ -141,6 +141,15 @@ Four seed users with a grant only in `interviews`, so isolation walks start from
 
 Seed content, one coherent story: three openings (a backend engineer, an iOS engineer, an engineering manager), about twelve candidates spread over the stages, six upcoming interviews, and four finished ones with scorecards, a recording stand-in, a transcript and a code log, so every table and page has real-looking rows on first load.
 
+## Built so far
+
+**16 November: phase 0 and the first page.** I0.1 to I0.5 are built, judged by `bash scripts/validate-interviews.sh --phase I0` and the walk `npm run journey:interviews` (in `portal/`). I1.1 (Candidates) is built, along with read-only versions of My interviews and My openings so each role lands on a real home; assigning, accepting and the bell (the rest of I1.4) are not. I0.6 and I0.7 are not started.
+
+- The tenant is on in the mock world and off elsewhere unless `INTERVIEWS_ENABLED` is set; when it is off, `/api/interviews` answers 404. A record outside the viewer's scope also answers 404, so a URL cannot confirm that a record exists.
+- No interviews role can use the voice navigator yet. The channel partition refuses everything until the call phases add channel families. The palette has no record search for the tenant.
+- The seed story has 11 interviews rather than 10: one finished round has its scorecard still due, so that state can be seen. The iOS opening has no hiring manager, so Amara Okafor does not see it.
+- The cast shows initials until portraits are made; their ids are listed as waiting for portraits.
+
 ## Ledger
 
 Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited. The journey `journey:interviews` starts with I1.1 and gains a step with each row that names a walk step; it is not written at the end. Rows that change another repository say so: "library" is `ui-components`, "realtime" is `realtime-modules`, "media" is `platform-api`. Rows marked "install" need a package the owner installs first.
