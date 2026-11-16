@@ -23,6 +23,7 @@ import { notify } from '../social-notify.js';
 import { postThreadMessage, updateThreadMessage } from '../social-chat.js';
 import { assistantStore } from './store-select.js';
 import { assistantLimits } from './limits.js';
+import { nameTwins } from './detector.js';
 import { onProposalChanged } from './proposals.js';
 import type { Proposal } from './types.js';
 import {
@@ -86,6 +87,16 @@ export const noticeText = {
     `${ASSISTANT_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge again, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
     `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes} minutes. ` +
     `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
+  /**
+   * Added to the join and the rejoin notice: of the seated people's display names, those whose first name is a way Milo's name is
+   * heard (detector.ts `nameTwins`), in one sentence; nothing when there is nobody. Leads with a space so it can be appended.
+   */
+  nameTwins: (seated: readonly string[]): string => {
+    const names = nameTwins(seated);
+    if (!names.length) return '';
+    const who = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+    return ` ${who} ${names.length === 1 ? 'is' : 'are'} also in this call: say "${ASSISTANT_NAME}," and a request to reach the assistant.`;
+  },
   paused: (name: string): string => `${name} paused ${ASSISTANT_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${ASSISTANT_NAME}. ${ASSISTANT_NAME} is listening again.`,
   dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${ASSISTANT_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,

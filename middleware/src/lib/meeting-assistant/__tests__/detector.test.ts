@@ -1,7 +1,7 @@
 // The detector, built from captions observed in the 13 November measurement run
 // (docs/meeting-assistant-design.md, "Spike result"). Time is a hand-driven clock: no sleeping.
 import {
-  RequestDetector, DETECTOR_LIMITS, nameLock, findAddress, isFillerSliver, looksCut, parseCommand, appendText, NAME_FORMS, NAME_SPELLINGS,
+  RequestDetector, DETECTOR_LIMITS, nameLock, findAddress, isFillerSliver, looksCut, parseCommand, appendText, NAME_FORMS, NAME_SPELLINGS, nameTwins,
   type DetectorEvent,
 } from '../detector.js';
 import type { TranscriptLine } from '../types.js';
@@ -47,6 +47,11 @@ describe('name matching', () => {
     }
     expect(findAddress("Mylo's notes please")?.rest).toBe('notes please');
     expect(findAddress('Mylos will join later')).toBeNull();
+  });
+
+  it('names the seated people whose first name is a way the name is heard (sweep 4 in-call 12)', () => {
+    expect(nameTwins(['Vera Green', 'Milo Park', 'mylo chen', 'Camilo Ortiz', 'Milos Kovac', 'Milo Park', 'Ada Milo'])).toEqual(['Milo Park', 'mylo chen']);
+    expect(nameTwins(['Vera Green'])).toEqual([]);
   });
 
   it('the old name is no longer an address', () => {

@@ -86,6 +86,19 @@ export const NAME_FORMS: Readonly<Record<string, { spellings: readonly string[];
 const forms = NAME_FORMS[ASSISTANT_NAME.toLowerCase()];
 /** Every way the name is heard, lower case: the name itself first. */
 export const NAME_SPELLINGS: readonly string[] = [...new Set([ASSISTANT_NAME.toLowerCase(), ...(forms?.spellings ?? [])])];
+/**
+ * The people whose first name is a way the assistant's name is heard ("Milo Park", "Mylo Chen"): the detector cannot tell "Milo, ..."
+ * said to them from a request, so the join notice names them (an open limit: nothing else changes). Display names, in order, once each.
+ */
+export function nameTwins(names: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const n of names) {
+    const first = (n ?? '').trim().split(/\s+/)[0]?.toLowerCase().replace(/[^\p{L}]+$/u, '') ?? '';
+    if (first && NAME_SPELLINGS.includes(first) && !out.includes(n.trim())) out.push(n.trim());
+  }
+  return out;
+}
+
 /** The spellings as a regular-expression alternation, each escaped so it matches as written. */
 export const NAME_ALTERNATION = NAME_SPELLINGS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 const NAME = new RegExp(`(^|[^\\p{L}\\p{N}_])(${NAME_ALTERNATION})(?:['’]s)?(?![\\p{L}\\p{N}_]|-\\p{L})`, 'giu');

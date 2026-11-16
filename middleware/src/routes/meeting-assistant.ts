@@ -280,7 +280,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
       const started = await startSession(callId, current, session).then(() => true, () => false);
       if (started) await armAudio(callId, pre);
     }
-    if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
+    if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays) + noticeText.nameTwins(await Promise.all([...new Set([...current.presentAtInvite, session.sub])].map((u) => nameOf(u)))));
     res.json(await view((await store.get(callId)) ?? current, callId, session)); return;
   }
   if (!sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
@@ -337,7 +337,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   }
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
   await armAudio(callId, pre);
-  await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
+  await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays) + noticeText.nameTwins(names));
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
 
@@ -458,7 +458,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   runtime.setVoice(callId, false);
   await armAudio(callId, pre);
   await assistantAudio().refresh(callId).catch(() => undefined); // only the person inviting Milo back is heard until the others acknowledge
-  await postNoticeQuietly(callId, noticeText.rejoined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, Math.round(grant / 60)));
+  await postNoticeQuietly(callId, noticeText.rejoined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, Math.round(grant / 60)) + noticeText.nameTwins(names));
   res.json(await view(moved, callId, session));
 }
 
