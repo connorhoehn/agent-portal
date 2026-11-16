@@ -100,15 +100,27 @@ export const LIVE_HIDE_LABEL = 'Hide transcript';
 export const LIVE_SHOW_DESCRIPTION = `What ${ASSISTANT_NAME} is hearing, as it hears it`;
 
 /**
+ * A line's place on the call's own timeline: always from its clock time (`at`, when it ended) less `since`, its media offsets
+ * used only for how long it lasted. Offsets a session reported restart at 0 after a pause, a replaced session or an invitation
+ * back, so they never place a line (sweep 4 in-call 4). With no `since` yet, the stored offsets stand.
+ */
+export function lineTimes(l: { at: number; startMs?: number; endMs?: number }, since: number | null): { startMs: number; endMs: number } {
+  const lasted = l.startMs !== undefined && l.endMs !== undefined && l.endMs >= l.startMs ? l.endMs - l.startMs : null;
+  if (since === null) { const startMs = l.startMs ?? 0; return { startMs, endMs: l.endMs ?? startMs + 1000 }; }
+  const startMs = Math.max(0, l.at - since - (lasted ?? 0));
+  return { startMs, endMs: startMs + (lasted ?? 1000) };
+}
+
+/**
  * The rows the library's TranscriptPanel draws: the speaker's name and portrait from the answer's speakers (the line's own name
  * otherwise, "Unknown" for an unattributed line with none, as the meeting page reads it), and the time since Milo joined.
  */
 export function liveSegments(lines: readonly LiveLine[], speakers: ReadonlyMap<string, LiveSpeaker>, since: number | null) {
   return lines.map((l) => {
-    const startMs = l.startMs ?? Math.max(0, l.at - (since ?? l.at));
+    const { startMs, endMs } = lineTimes(l, since);
     const who = l.userId ? speakers.get(l.userId) : undefined;
     return {
-      id: String(l.seq), startMs, endMs: l.endMs ?? startMs + 1000, ...(l.userId ? { speakerId: l.userId } : {}),
+      id: String(l.seq), startMs, endMs, ...(l.userId ? { speakerId: l.userId } : {}),
       speakerLabel: who?.name || l.speakerName || 'Unknown', speakerAvatarUrl: who?.avatarUrl ?? null, text: l.text,
     };
   });

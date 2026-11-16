@@ -237,6 +237,11 @@ interface CallRun {
   unsubscribers: Array<() => void>;
   /** Session timeline start on the wall clock, and a counter that makes caption ids unique across sessions. */
   sessionStartedAt: number;
+  /**
+   * The call's own timeline start on the wall clock (the record's `invitedAt`, which an invitation back keeps): a stored line's
+   * `startMs`/`endMs` are offsets on it, so they never restart at 0 after a pause, a replaced session or a later period.
+   */
+  callStartedAt: number;
   sessionNo: number;
   pieceNo: number;
   /** The latest end time of a line this session stored (epoch ms, on the audio timeline the lines use). */
@@ -507,6 +512,13 @@ function messageSummary(a: Record<string, unknown>): string {
   return `Send a message${said}`;
 }
 
+/** A piece's session-relative times as offsets on the call's own timeline (CallRun.callStartedAt), never below 0. */
+export function callOffsets(run: { sessionStartedAt: number; callStartedAt: number }, e: { startMs: number; endMs: number }): { startMs: number; endMs: number } {
+  const shift = run.sessionStartedAt - run.callStartedAt;
+  const startMs = Math.max(0, e.startMs + shift);
+  return { startMs, endMs: Math.max(startMs, e.endMs + shift) };
+}
+
 export class AssistantRuntime {
   private readonly runs = new Map<string, CallRun>();
   /** Per call, the stops and leaves still finishing (a run's `stop`, a dismissal's follow-up): `settled` waits for them. */
@@ -588,7 +600,7 @@ export class AssistantRuntime {
     if (existing || this.stopping.get(ctx.callId)?.size) throw new RunStillStopping(ctx.callId);
     this.watchIntake();
     const run: CallRun = {
-      ctx, period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
+      ctx, period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
@@ -600,6 +612,7 @@ export class AssistantRuntime {
     try {
       const record = await this.store.get(ctx.callId);
       run.voice = record?.voice === true;
+      if (record) run.callStartedAt = record.invitedAt;
       if (ctx.period === undefined && record) run.period = periodOf(record);
     } catch { /* off, period 1 */ }
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
@@ -1114,7 +1127,7 @@ export class AssistantRuntime {
     }
     run.pieceNo += 1;
     const outcome = await this.deps.intake().handle(run.ctx.callId, {
-      userId: who.userId, text: e.text, at: run.sessionStartedAt + e.endMs, startMs: e.startMs, endMs: e.endMs,
+      userId: who.userId, text: e.text, at: run.sessionStartedAt + e.endMs, ...callOffsets(run, e),
       captionId: `live:${run.sessionNo}:${run.pieceNo}`,
       ...(who.speakers.length > 1 ? { speakers: who.speakers } : {}),
     });

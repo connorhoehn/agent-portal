@@ -1850,7 +1850,18 @@ async function main() {
       const head = (await nora.page.getByTestId('live-transcript-panel').locator('header').first().innerText()).replace(/\s+/g, ' ').trim();
       check(/^Live transcript/.test(head) && /Milo is listening/.test(head), `the transcript's header reads "${head}"`);
       await waitFor(async () => Number(await nora.page.getByTestId('live-transcript').getAttribute('data-lines')) > 0, 10000, 'the stored lines in the second person\'s transcript');
-      return `"${head}"`;
+      // Sweep 4 in-call 4: a line whose session offsets restarted at 0 (a new session in a later period) is placed by its clock time,
+      // so its time follows the earlier lines' instead of reading 00:00.
+      const restarted = `Second period check: offsets restart at ${Date.now() % 100000}.`;
+      const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/transcript-lines`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify([{ userId: VERA.userId, text: restarted, startMs: 0, endMs: 1000 }]) });
+      check(res.status < 300, `the injector answered ${res.status}`);
+      const panel = nora.page.getByTestId('live-transcript-panel');
+      await panel.locator('[data-seg-index]').filter({ hasText: restarted }).waitFor({ state: 'visible', timeout: 10000 }).catch(() => { throw new StepFailure('the line with restarted offsets did not appear'); });
+      const times = await panel.evaluate((el) => [...el.querySelectorAll('[data-seg-index]')].map((r) => r.querySelector('.font-mono')?.textContent?.trim() ?? ''));
+      const secs = (t) => t.split(':').reduce((a, x) => a * 60 + Number(x), 0);
+      const last = times.at(-1) ?? '', prev = times.at(-2) ?? '';
+      check(times.length >= 2 && secs(last) > 0 && secs(last) >= secs(prev), `the line with restarted offsets reads ${last} after ${prev}`);
+      return `"${head}"; the restarted line reads ${last} after ${prev}`;
     });
 
     await step('R4: Milo is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Milo added to them', async () => {

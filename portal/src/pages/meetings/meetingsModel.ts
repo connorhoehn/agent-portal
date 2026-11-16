@@ -172,13 +172,15 @@ export function summaryLine(summary: string, max = 140): string {
 
 /**
  * Transcript segments for the library's TranscriptPanel: speaker names come from the minutes' roster (the line only holds what
- * the source called the speaker, which can be an id), and a line with no media offsets is placed by its clock time.
+ * the source called the speaker, which can be an id), and every line is placed by its clock time (sweep 4 around 8).
  */
 export function transcriptSegments(lines: readonly TranscriptLineView[], roster: readonly MinutesPerson[], startedAt: number) {
   return lines.map((l) => {
-    const startMs = l.startMs ?? Math.max(0, l.at - startedAt);
+    // From its clock time on the meeting's own timeline; the media offsets only say how long it lasted (they restart per session).
+    const lasted = l.startMs !== undefined && l.endMs !== undefined && l.endMs >= l.startMs ? l.endMs - l.startMs : null;
+    const startMs = Math.max(0, l.at - startedAt - (lasted ?? 0));
     const label = (l.userId ? roster.find((p) => p.userId === l.userId)?.name : undefined) ?? l.speakerName;
-    return { startMs, endMs: l.endMs ?? startMs + 1000, ...(l.userId ? { speakerId: l.userId } : {}), speakerLabel: label || 'Unknown', text: l.text };
+    return { startMs, endMs: startMs + (lasted ?? 1000), ...(l.userId ? { speakerId: l.userId } : {}), speakerLabel: label || 'Unknown', text: l.text };
   });
 }
 

@@ -35,7 +35,7 @@ import { voiceTool } from '../../voice/catalogue.js';
 import { meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { VOICE_OPEN_TURN_GAP_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -643,6 +643,21 @@ describe('what the real session hears', () => {
     const lines = await store.lines(CALL, 0, 10);
     expect(lines.map((l) => [l.userId, l.text])).toEqual([[BOB, 'The cookie is set too early.'], [null, 'Who was that?']]);
     expect(lines[0]).toMatchObject({ startMs: 100, endMs: 900 });
+  });
+
+  it('stores a line\'s times on the call\'s own timeline, so a session opened later does not start again at 0 (sweep 4 in-call 4)', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL);
+    now += 125_000; // the record was written at T0; this session opens two minutes later (a resume, a replacement, a later period)
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], audio: audioTap }, { tickMs: 0 });
+    await runtime.start(ctx);
+    now += 3000;
+    fake().hear('After the break, the rollout is on.', 2000, 3000);
+    await flush();
+    const line = (await store.lines(CALL, 0, 10)).find((l) => l.text.startsWith('After the break'))!;
+    expect(line).toMatchObject({ startMs: 127_000, endMs: 128_000 });
+    expect(line.at - T0 - (line.endMs! - line.startMs!)).toBe(line.startMs);
+    expect(callOffsets({ sessionStartedAt: 5000, callStartedAt: 9000 }, { startMs: 1000, endMs: 6000 })).toEqual({ startMs: 0, endMs: 2000 });
   });
 
   it('nothing is handed to the audio tap once the session is paused', async () => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_READS_START, LIVE_TAIL, liveAfterUrl, livePlan, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
+  LIVE_POLL_LISTENING_MS, LIVE_POLL_PAUSED_MS, LIVE_READS_START, LIVE_TAIL, liveAfterUrl, lineTimes, livePlan, liveSegments, liveStateWords, liveTailUrl, mergeLines, mergeSpeakers,
   newestSeq, oldestSeq, readEnded, readStarted, readToStart, readsAtPhase, type LiveLine, type LiveReads,
 } from '../liveTranscriptModel.ts';
 import { liveTranscriptOn, setLiveTranscript } from '../liveTranscript.ts';
@@ -45,6 +45,13 @@ test('rows name the speaker with the portrait the answer carried; an unattribute
   assert.deepEqual(rows.map((r) => [r.id, r.speakerLabel, r.speakerAvatarUrl]), [['1', 'Ada Park', 'https://x/ada.png'], ['2', 'Unknown', null], ['3', 'Sam', null]]);
   assert.equal(rows[0]!.startMs, 1000);
   assert.equal('speakerId' in rows[1]!, false);
+});
+
+test('a line is placed by its clock time after a pause or a new session, its offsets only saying how long it lasted (sweep 4 in-call 4)', () => {
+  const rows = liveSegments([line(1, { at: 760_000, startMs: 756_000, endMs: 759_000 }), line(2, { at: 790_000, startMs: 2000, endMs: 3500 })], new Map(), 1_000);
+  assert.deepEqual(rows.map((r) => [r.startMs, r.endMs]), [[756_000, 759_000], [787_500, 789_000]]);
+  assert.deepEqual(lineTimes({ at: 5000 }, 1000), { startMs: 4000, endMs: 5000 });
+  assert.deepEqual(lineTimes({ at: 5000, startMs: 200, endMs: 700 }, null), { startMs: 200, endMs: 700 });
 });
 
 test('the state after "Live transcript"', () => {

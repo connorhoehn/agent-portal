@@ -31,7 +31,13 @@ test('segments name speakers from the roster and place lines without media offse
     { seq: 2, userId: null, speakerName: 'Someone', text: 'yo', at: 6_000, startMs: 4000, endMs: 4500 },
   ], roster, 1_000);
   assert.deepEqual(seg[0], { startMs: 4000, endMs: 5000, speakerId: 'u-1', speakerLabel: 'Vera Green', text: 'hi' });
-  assert.deepEqual(seg[1], { startMs: 4000, endMs: 4500, speakerLabel: 'Someone', text: 'yo' });
+  assert.deepEqual(seg[1], { startMs: 4500, endMs: 5000, speakerLabel: 'Someone', text: 'yo' });
+  // A later period's line whose session offsets restarted at 0 still follows the earlier one (sweep 4 around 8).
+  const later = transcriptSegments([
+    { seq: 3, userId: null, speakerName: 'A', text: 'before', at: 251_000, startMs: 248_000, endMs: 250_000 },
+    { seq: 4, userId: null, speakerName: 'A', text: 'after', at: 400_000, startMs: 3000, endMs: 5000 },
+  ], [], 1_000);
+  assert.deepEqual(later.map((x) => [x.startMs, x.endMs]), [[248_000, 250_000], [397_000, 399_000]]);
 });
 
 test('a work item can be created from an item that is the viewer\'s own or nobody\'s', () => {
