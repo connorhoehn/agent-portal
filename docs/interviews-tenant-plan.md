@@ -1,6 +1,6 @@
 # Plan: the `interviews` tenant
 
-Status: a plan, written 16 November 2026 and audited the same day against the code and the sources (the audit's corrections are folded in; see "Audit" at the end). Nothing here is built. The ledger at the end is the list of work; each row says how it will be judged. The first row builds the judge, `scripts/validate-interviews.sh`, and from then on that script is the only judge, as `validate-learning-loop.sh` is for the learning loop.
+Status: a plan, written 16 November 2026 and audited the same day against the code (the audit's corrections are folded in; see "Audit" at the end). Nothing here is built. The ledger at the end is the list of work; each row says how it will be judged. The first row builds the judge, `scripts/validate-interviews.sh`, and from then on that script is the only judge, as `validate-learning-loop.sh` is for the learning loop.
 
 ## What this is
 
@@ -67,17 +67,17 @@ Each is made here so the work can start. The ones marked "owner" are the ones mo
 19. **Mock first, with two known limits.** Every behaviour walks headlessly with the scripted session, the scripted coach and the mock executor before anything touches a provider. Two things do not exist in the plain mock world today: shared editing and recordings. Row I0.7 decides how the pad is carried and walked (over the middleware's own gateway, or a walk that starts a local gateway); the record page is walked on a seeded recording stand-in, and a real recording is checked by hand on the social profile.
 20. **Panels.** One lead interviewer, and up to two more panel members assigned to the same round who may join the call. Only the lead gets Milo's prompts. Each panel member submits their own scorecard.
 
-### Why Milo is advisory (the rules this plan is built to)
+### Safeguards the product has
 
-As researched in November 2026 from secondary sources; this is product planning, not legal advice, and several of these rules are still moving.
+These are features, each with a ledger row, not background reading.
 
-- Where an automated tool substantially assists a hiring decision, some places require an independent bias audit and advance notice to candidates (New York City), notice of AI use (Illinois, in force since January 2026), or notice and disclosure with limited rights for the person (Colorado's replacement law, for decisions from January 2027; its exact duties for hiring were not confirmed), or notice, opt-out and appeal (California's privacy rules from January 2027). An adviser that shows sourced evidence and leaves the rating to a person is the conservative position under all of them, and the notice and the log are built anyway.
-- The EU's AI Act treats recruitment as high-risk (obligations now due December 2027) and has banned inferring emotion at work, candidates included, since February 2025. Hence decision 6.
-- Several US states require every party's consent to record a call. Hence decision 5.
-- California's civil-rights rules expect four years of records for automated tools used in hiring. Hence decision 17.
-- Applicants are entitled to accommodation. Hence the alternative path in decision 5.
-
-Checked on 16 November 2026 against several summaries each: the EU date ([Lewis Silkin](https://www.lewissilkin.com/insights/2026/07/27/the-digital-omnibus-on-ai-enters-into-force-today-102nedo), [Shumaker](https://www.shumaker.com/insight/eu-ai-act-council-gives-final-green-light-to-the-digital-omnibus-on-ai/)), Colorado ([Goodwin](https://www.goodwinlaw.com/en/insights/publications/2026/06/alerts-technology-fs-colorado-enacts-law-repealing-replacing-landmark-ai-act), [Baker Botts](https://ourtake.bakerbotts.com/post/102msga/colorado-repeals-and-replaces-ai-act)), and Illinois, whose notice rules were withdrawn in June 2026 and not refiled as far as could be found ([Seyfarth](https://www.seyfarth.com/news-insights/illinois-department-of-human-rights-temporarily-withdraws-proposed-rules-on-use-of-artificial-intelligence-in-employment.html), [Burke](https://www.burkelaw.com/alert-illinois-department-of-human-rights-withdraws-proposed-ai-in-employment-rules)). The primary texts were not read. Re-check before any notice wording is written.
+- Consent before joining, asked separately for recording, transcription and Milo, stored with its time and the notice version (I2.3, I6.1).
+- An interview can run without Milo or without recording when the candidate declines (I2.5).
+- Milo shows evidence with a source on every claim and never rates or recommends (I5.2).
+- Nothing is inferred from a face, a voice or a tone: transcript and code only (I3.3, I5.2).
+- Milo says aloud only words the interviewer approved (I3.5).
+- A log of everything Milo suggested, showed and said, with an export (I3.3, I6.2).
+- Retention periods and deletion on request, with a deletion log (I6.3).
 
 ## The run interface
 
@@ -244,14 +244,14 @@ Phases 0 and 1 give a desk that can be demonstrated without a call. I4.1 depends
 ## What the judge cannot see
 
 - Whether the coach's suggestions are any good on a real interview. The scripted stand-in proves the plumbing; quality needs real calls and people's opinions.
-- Whether the notice wording is right for a given place. The product stores what was shown; the words need a lawyer.
+- The wording of the candidate notice. The product stores what was shown.
 - Real execution. The mock proves the contract; isolation of untrusted code is proven only against a real backend, which is not in this plan.
 - Speech quality and the gap between an approval and Milo speaking.
 - A candidate on a poor connection or a phone.
 
 ## Audit (16 November 2026)
 
-The plan was checked against the code, the installed packages and the sources on the day it was written. What held: the tenant list and the manifest, the taken role id, the textarea editor, the Python-only synchronous run route, Milo's ties to Work, and the three legal dates that could be checked. What was wrong or missing, now corrected above:
+The plan was checked against the code and the installed packages on the day it was written. What held: the tenant list and the manifest, the taken role id, the textarea editor, the Python-only synchronous run route, and Milo's ties to Work. What was wrong or missing, now corrected above:
 
 - "Mock first" was claimed for everything, but shared editing and recordings do not exist in the plain mock world. Decision 19 and rows I0.7, I2.6, I4.2 and I5.1 now say how each is proven.
 - The new packages are not installed and installs are not done unattended. Rows that need one are marked.
@@ -267,7 +267,7 @@ The plan was checked against the code, the installed packages and the sources on
 - The refactor of Milo would have collided with repairs in progress. Row I3.1.
 - Two sizes were optimistic (I0.2, I0.6).
 
-Still unverified: Colorado's exact duties for hiring tools, whether Illinois's video-interview law covers live calls, speech pricing, and every size in the ledger.
+Still unverified: speech pricing, and every size in the ledger.
 
 ## Not in this plan
 
