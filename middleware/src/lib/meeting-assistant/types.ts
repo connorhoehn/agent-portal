@@ -116,12 +116,17 @@ export interface AssistantSession {
   periodFrom?: number;
   /** The earlier periods of this call, oldest first: who invited Milo, when it came and when it left, and who dismissed it ('system' for its own leaving). */
   periods?: AssistantPeriod[];
+  /** The ledger part the current period began on (absent for the first: part 0); each rejoin sets it, and the closed period keeps it as `part`. */
+  periodPart?: number;
+  /** Everyone who acknowledged in an earlier period of this call: an invitation back starts `acked` again, never this (absent until then). */
+  ackedEver?: string[];
   /** When the call's words were erased (the inviter's delete, or retention): the record is never joined again. Written in the erase's own step. */
   erasedAt?: number;
 }
 
 /** One closed period of Milo in a call, kept when it is invited back (the record's own fields then describe the new period). */
-export interface AssistantPeriod { invitedBy: string; from: number; leftAt: number; leftBy: string | null }
+/** `part`: the ledger part the period began on (its listening rows book under it and any later part until the next period's); absent on older records. */
+export interface AssistantPeriod { invitedBy: string; from: number; leftAt: number; leftBy: string | null; part?: number }
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
   refusedCalls: 0, listeningSeconds: 0, settledListeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,

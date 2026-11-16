@@ -22,10 +22,10 @@ import { voiceProviderConfigured } from '../voice/openai.js';
 import { callChatRuntime } from '../call-chat.js';
 import { notify } from '../social-notify.js';
 import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } from './chat.js';
-import { ASSISTANT_NAME } from './chat-types.js';
+import { ASSISTANT_NAME, type MinutesCounts } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
-  capTranscript, chatSummary, minutesCounts, withoutHeld, withoutStored, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
+  additionSentence, capTranscript, chatSummary, minutesCounts, withoutHeld, withoutStored, withoutStoredItems, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSourceId, minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
@@ -105,7 +105,7 @@ async function callNameOf(record: AssistantRecord, roster: readonly RosterEntry[
 export const MINUTES_READY_TYPE = 'meeting-minutes-ready';
 
 /**
- * The bell for written minutes: one notification per attendee, "Minutes from <call> are ready", linking to the meeting page. It carries
+ * The bell for written minutes: one notification per attendee, "Minutes are ready: <call>", linking to the meeting page. It carries
  * no content of the meeting (the notification service cannot delete, and the inviter's delete must leave nothing behind). Sent once per
  * meeting: the store marks it before sending, so a restart or a second writer never rings it again. Never throws.
  */
@@ -117,7 +117,8 @@ export async function notifyMinutesReady(minutes: MinutesRecord, now: number = D
     const name = meetingNameOf(minutes, names);
     return await notify(minutes.attendees, {
       // Once per writing: an addition (Milo was invited back and heard more) clears the claim, and its bell says the minutes changed.
-      type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes from ${name} were updated` : `Minutes from ${name} are ready`,
+      // The meeting's name after a colon, as the page titles it: "Minutes are ready: Observability Platform call".
+      type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes were updated: ${name}` : `Minutes are ready: ${name}`,
       action: { label: 'Open the meeting', href: meetingPagePath(minutes.callId) },
       payload: { tenant: minutes.tenant, kind: MINUTES_READY_TYPE, callId: minutes.callId },
     });
@@ -270,12 +271,9 @@ async function composeMinutes(callId: string, record: AssistantRecord, attempts:
   // A dismissed one ("Not a decision", or raised again as a new one) holds nothing: a real decision dismissed by mistake still
   // reaches the minutes as a decision line.
   const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
-  const held = {
-    statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence),
-    // For the scripted summary's bullets: decisions agreed through a proposal, and proposals still waiting for answers.
-    agreed: proposals.filter((p) => p.outcome.kind === 'decision' && ['consented', 'running', 'done'].includes(p.state)).map((p) => p.statement),
-    open: proposals.filter((p) => ['open', 'objected', 'consented'].includes(p.state) && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement),
-  };
+  // What the proposals decided and what still waits for answers is not stored in the summary: the minutes route builds those bullets
+  // from the proposals as they stand when the page asks (`summaryWithProposals`), so an answer given afterwards never leaves them stale.
+  const held = { statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence) };
 
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
@@ -381,11 +379,42 @@ async function rewriteRun(callId: string, record: AssistantRecord, current: Minu
   if (!composed) return null;
   if (!(await store.rewriteMinutes(composed.minutes))) return null;
   const stored = await store.getMinutes(callId);
-  if (stored && composed.draft) await notifyMinutesReady(stored);
+  if (stored && composed.draft) {
+    // The chat last said the minutes could not be written: while the call still runs, it now gets the minutes card the first write
+    // would have posted (after the call, the bell alone says it).
+    if (await callRunning(callId)) {
+      const counts = minutesCounts(stored, await store.listProposals(callId).catch(() => composed.proposals));
+      await postMinutesCard(callId, chatSummary(stored.summary), counts);
+    }
+    await notifyMinutesReady(stored);
+  }
   return stored;
 }
 
-const ADDITION_FAILED = `${ASSISTANT_NAME} could not add what it heard after it was invited back to the minutes. The minutes so far are unchanged, ${ASSISTANT_NAME} will try again, and the transcript is kept for the people who were in the call.`;
+/** Is the call still going (its chat open to the people in it)? */
+async function callRunning(callId: string): Promise<boolean> {
+  try { return !!(await callChatRuntime().lobbyOf(callId)); } catch { return false; }
+}
+
+/** The minutes card in the call chat: `text` is what the card shows under its title, the counts ride on the message. Never throws. */
+async function postMinutesCard(callId: string, text: string, counts: MinutesCounts): Promise<void> {
+  await postAsAssistant(callId, { text: text.replace(/\s+/g, ' ').trim() || NOTES.onPage, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', meetingCallId: callId, minutes: counts } }, { minutes: true })
+    .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
+}
+
+/**
+ * The chat notice when an addition a leave started could not be written. It promises another try only while the sweep will make one
+ * (`attempt` runs made, under AUTO_ATTEMPTS); after that an attendee can still ask from the meeting page, within MAX_ATTEMPTS.
+ */
+export function additionFailedNotice(attempt: number): string {
+  const head = `${ASSISTANT_NAME} could not add the later part of the call to the minutes.`;
+  const kept = 'the transcript is kept for the people who were in the call';
+  if (attempt < AUTO_ATTEMPTS) return `${head} The minutes so far are unchanged, ${ASSISTANT_NAME} will try again, and ${kept}.`;
+  if (attempt < MAX_ATTEMPTS) return `${head} The minutes so far are unchanged, and ${kept}. Anyone who was in the call can ask ${ASSISTANT_NAME} to try again from the meeting page.`;
+  return `${head} The minutes so far are unchanged, and ${kept}.`;
+}
+/** The plain sentence an addition's card shows when its own summary has no new sentence to quote. */
+const ADDED_PLAIN = `${ASSISTANT_NAME} added the later part of the call to the minutes.`;
 
 /**
  * Add what Milo heard since the minutes were written (it was invited back) to minutes that hold a draft. The writer reads only the newer
@@ -399,6 +428,9 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   const expect = current.throughSeq ?? null;
   const lines = await allLines(callId);
   const fresh = expect !== null ? lines.filter((l) => l.seq > expect) : lines.filter((l) => l.at > current.endedAt);
+  // Where the stored minutes end: their last line. Not `endedAt`, which an owed addition already moved to the later leave, so a retry
+  // that read it would find no later period and leave out what was done in the call then.
+  const coveredUntil = expect !== null ? lines.reduce((n, l) => (l.seq <= expect ? Math.max(n, l.at) : n), 0) : current.endedAt;
   const attendees = [...new Set([...record.attendees, ...lines.flatMap((l) => (l.userId ? [l.userId] : []))])];
   const endedAt = record.leftAt ?? Date.now();
   if (!fresh.length) {
@@ -410,16 +442,12 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   // Writes done in the call in its later periods (the earlier ones are in the minutes already; one run from the meeting page between
   // periods was not done in the call).
   const s = sessionOf(record);
-  const later = [...(s.periods ?? []), { from: s.periodFrom ?? record.invitedAt, leftAt: endedAt }].filter((p) => p.leftAt > current.endedAt);
+  const later = [...(s.periods ?? []), { from: s.periodFrom ?? record.invitedAt, leftAt: endedAt }].filter((p) => p.from > coveredUntil);
   const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
-  const doneActions = turns.filter((t) => t.kind === 'write' && t.createdAt > current.endedAt && later.some((p) => t.createdAt >= p.from && t.createdAt <= p.leftAt))
+  const doneActions = turns.filter((t) => t.kind === 'write' && t.createdAt > coveredUntil && later.some((p) => t.createdAt >= p.from && t.createdAt <= p.leftAt))
     .map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
   const proposals = (await store.listProposals(callId).catch(() => [])).filter((p) => p.state !== 'dismissed');
-  const held = {
-    statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence),
-    agreed: proposals.filter((p) => p.outcome.kind === 'decision' && ['consented', 'running', 'done'].includes(p.state)).map((p) => p.statement),
-    open: proposals.filter((p) => ['open', 'objected', 'consented'].includes(p.state) && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement),
-  };
+  const held = { statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence) };
   const earlier = { summary: current.summary, decisions: current.decisions, topics: current.topics,
     actionItems: current.actionItems.map((i) => ({ text: i.text, ...(i.ownerName ? { ownerName: i.ownerName } : {}), ...(i.done ? { done: true } : {}) })) };
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
@@ -434,22 +462,25 @@ async function addToMinutes(callId: string, record: AssistantRecord, current: Mi
   if (!result.draft) {
     // The minutes so far stay exactly as they are; the addition is owed and the sweep (or an attendee) tries it again within the caps.
     const marked = await store.oweMinutesAddition(callId, expect, { attempts: attempt, endedAt, attendees });
-    if (marked && fromLeave && writer) await postNoticeQuietly(callId, ADDITION_FAILED, { minutes: true });
+    if (marked && fromLeave && writer) await postNoticeQuietly(callId, additionFailedNotice(attempt), { minutes: true });
     return store.getMinutes(callId);
   }
   const draft = result.draft;
   const decisions = withoutStored(withoutHeld(draft.decisions, held), current.decisions);
   const topics = draft.topics.filter((t) => !current.topics.includes(t));
+  // A commitment said again after Milo was invited back is the same action item: it is not added (or offered as a card) twice.
+  const actionItems = withoutStoredItems(draft.actionItems, current.actionItems);
   const stored = await store.appendMinutes(callId, expect, {
-    summary: draft.summary || current.summary, decisions, actionItems: draft.actionItems, topics, endedAt, attendees,
+    summary: draft.summary || current.summary, decisions, actionItems, topics, endedAt, attendees,
     lineCount: current.lineCount + fresh.length, throughSeq: fresh[fresh.length - 1]!.seq, truncated: draft.truncated, added: true,
   });
   if (!stored) return null; // another addition of the same lines won
-  const fromIndex = stored.actionItems.length - draft.actionItems.length;
-  const counts = { ...minutesCounts(stored, await store.listProposals(callId).catch(() => proposals)), added: true };
-  const text = chatSummary(stored.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
-  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', meetingCallId: callId, minutes: counts } }, { minutes: true })
-    .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
+  const fromIndex = stored.actionItems.length - actionItems.length;
+  // The card announces the change: the addition's own sentence, and counts of what is NEW (its decision lines and action items, and the
+  // proposals raised in the later part, with those of them already agreed counted as decisions too).
+  const raised = (await store.listProposals(callId).catch(() => proposals)).filter((p) => p.createdAt > coveredUntil);
+  const counts: MinutesCounts = { ...minutesCounts({ decisions, actionItems }, raised), added: true };
+  await postMinutesCard(callId, chatSummary(additionSentence(current.summary, stored.summary)) || ADDED_PLAIN, counts);
   await notifyMinutesReady(stored);
   await offerCards(record, stored, initiativeName, fromIndex).catch((e: unknown) => console.warn('[meeting-assistant] action cards not offered', (e as Error).message));
   return stored;

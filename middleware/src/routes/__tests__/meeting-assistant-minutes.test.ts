@@ -122,7 +122,7 @@ describe('writing the minutes', () => {
     expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker', workItemCreated: false, workItemHref: null }, { text: 'update the runbook', workItemCreated: false, workItemHref: null }]));
     // The summary is a lead and bullets, sent split as well; never a speaker-by-speaker echo.
     expect(m.summary).not.toMatch(/said:/);
-    expect(m.summaryLead).toBe('Two people met for under a minute.');
+    expect(m.summaryLead).toBe('Two people met for less than a minute.');
     expect(m.summaryPoints).toEqual(['Agreed: Thanks for joining. We decided to cut over on Thursday.', '2 next steps: Bob Baker to rehearse the rollback; update the runbook.']);
     const leaving = await minutesNotices();
     expect(leaving).toHaveLength(1);
@@ -152,6 +152,21 @@ describe('writing the minutes', () => {
     // The minutes' own decision line stays one; the two consented decision proposals are added to it, nothing else is.
     expect(m.decisions).toHaveLength(1);
     expect((await minutesNotices())[0]!.minutes).toEqual({ decisions: 3, actionItems: 2, proposals: 5 });
+  });
+
+  it('the summary bullets about proposals are read live: one agreed on the meeting page after the call no longer reads as waiting', async () => {
+    await talk();
+    const store = assistantStore();
+    await store.createProposal(proposal('p-open', { statement: 'Freeze schema changes during the cutover.', state: 'open' }));
+    await finish();
+    expect((await get('minutes')).body.summaryPoints).toContain('Still waiting for answers: Freeze schema changes during the cutover.');
+    // Nothing about the proposal is stored in the summary itself.
+    expect((await store.getMinutes(CALL))!.summary).not.toMatch(/Freeze schema/);
+    const p = (await store.getProposal(CALL, 'p-open'))!;
+    await store.saveProposal({ ...p, state: 'done' }, p.version);
+    const after = (await get('minutes')).body.summaryPoints as string[];
+    expect(after[0]).toBe('Agreed 2 things: Freeze schema changes during the cutover; Thanks for joining. We decided to cut over on Thursday.');
+    expect(after.some((b) => /Still waiting/.test(b))).toBe(false);
   });
 
   it('a summary longer than the chat allows ends at a whole word with an ellipsis', () => {
@@ -210,7 +225,7 @@ describe('writing the minutes', () => {
     const m = (await get('minutes')).body;
     expect(m).toMatchObject({ writer: 'none', decisions: [], actionItems: [] });
     expect(m.summary).toMatch(/Milo could not write the minutes/);
-    expect(m.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 4 });
+    expect(m.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 4, autoRetrying: true });
     expect(released).toEqual([['h1']]);
     expect((await get('transcript')).body.lines).toHaveLength(3);
   });
@@ -288,7 +303,7 @@ describe('who can read them', () => {
     const mine = (await meetings('alice')).body;
     expect(mine.meetings).toHaveLength(1);
     expect(mine.meetings[0]).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, /), waitingOnYou: 0, initiativeId: null, lobby: LOBBY, attendees: ['Alice Archer', 'Bob Baker'], decisionCount: 1, actionItemCount: 2 });
-    expect(mine.meetings[0]).toMatchObject({ summaryLead: 'Two people met for under a minute.', outcomes: { decisions: 1, actionItems: 2, open: 0 } });
+    expect(mine.meetings[0]).toMatchObject({ summaryLead: 'Two people met for less than a minute.', outcomes: { decisions: 1, actionItems: 2, open: 0 } });
     expect(typeof mine.meetings[0].listenedSeconds).toBe('number');
     // The people with their portraits (the directory's; null draws initials), in the order of the names.
     expect(mine.meetings[0].people.map((p: { name: string }) => p.name)).toEqual(['Alice Archer', 'Bob Baker']);
@@ -381,7 +396,7 @@ describe('the bell when the minutes are written', () => {
     expect(mockBell).toHaveLength(1);
     const [bell] = mockBell;
     expect(bell!.users.sort()).toEqual(['alice', 'bob']);
-    expect(bell!.input).toMatchObject({ type: 'meeting-minutes-ready', title: expect.stringMatching(/^Minutes from Call with Alice and Bob, .+ are ready$/), action: { href: `/iq/meetings/${CALL}` }, payload: { tenant: 'orgiq', callId: CALL } });
+    expect(bell!.input).toMatchObject({ type: 'meeting-minutes-ready', title: expect.stringMatching(/^Minutes are ready: Call with Alice and Bob, .+$/), action: { href: `/iq/meetings/${CALL}` }, payload: { tenant: 'orgiq', callId: CALL } });
     expect(JSON.stringify(bell!.input)).not.toMatch(/cut over|rollback|runbook/);
     // A second finish, and a fresh process reading the same store (the mark is stored), ring nothing more.
     await runtime.finish(CALL); await minutesIdle();
@@ -425,7 +440,7 @@ describe('writing failed minutes again', () => {
     expect(refused).toMatchObject({ status: 429, body: { code: 'MINUTES_ATTEMPTS' } });
     expect(refused.body.error).toMatch(/^Milo has tried to write these minutes 5 times/);
     expect(runs).toBe(5);
-    expect((await get('minutes')).body.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 0 });
+    expect((await get('minutes')).body.rewrite).toEqual({ writing: false, possible: true, attemptsLeft: 0, autoRetrying: false });
   });
 
   it('one run at a time: a second press while one runs is refused and starts nothing', async () => {

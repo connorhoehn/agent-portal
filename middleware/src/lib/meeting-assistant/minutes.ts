@@ -198,6 +198,57 @@ export function summaryParts(summary: string): { lead: string; points: string[] 
   return { lead: lead || points[0] || '', points: lead ? points : points.slice(1) };
 }
 
+/** Action items not already in the stored minutes (the same words, ignoring case, spacing and a closing full stop): an addition never adds one twice. */
+export function withoutStoredItems<I extends { text: string }>(items: readonly I[], stored: ReadonlyArray<{ text: string }>): I[] {
+  const key = (t: string): string => t.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '');
+  const seen = new Set(stored.map((i) => key(i.text)));
+  return items.filter((i) => { const k = key(i.text); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+const sentencesOf = (text: string): string[] => (text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) ?? []).map((s) => s.trim()).filter(Boolean);
+
+/**
+ * What an addition says about itself in the chat: the first sentence of the new summary's lead that the stored lead did not have (the
+ * scripted writer appends "After Milo was invited back, …"; a model rewrites the lead, so the first sentence it did not have before).
+ * Empty when there is none; the caller then says plainly that the later part was added.
+ */
+export function additionSentence(before: string, after: string): string {
+  const old = summaryParts(before).lead; const lead = summaryParts(after).lead;
+  if (old && lead.startsWith(old)) return sentencesOf(lead.slice(old.length))[0] ?? '';
+  const known = new Set(sentencesOf(old));
+  return sentencesOf(lead).find((s) => !known.has(s)) ?? '';
+}
+
+const SCRIPTED_DECIDED = /^Agreed(?: \d+ things)?: /;
+const SCRIPTED_WAITING = /^(?:Still waiting for answers|\d+ proposals still wait for answers): /;
+const NOTHING_RECORDED = 'No decisions or next steps were recorded.';
+const waitingBullet = (open: readonly string[]): string =>
+  `${open.length === 1 ? 'Still waiting for answers' : `${open.length} proposals still wait for answers`}: ${listWords(open, 2)}.`;
+const agreedBullet = (decided: readonly string[]): string => `${decided.length === 1 ? 'Agreed' : `Agreed ${decided.length} things`}: ${listWords(decided, 2)}.`;
+
+/**
+ * The summary as the meeting page shows it. What the call's proposals say changes after the minutes are written (people answer on the
+ * meeting page), so the bullets about them are built here from the proposals as they stand, never stored: the decisions agreed (with the
+ * scripted writer's own decision lines, in one bullet, as it always wrote them) and the proposals still waiting for answers. A bullet a
+ * record stored before this rule is dropped and built again. A model's bullets are its own words and stay first.
+ */
+export function summaryWithProposals(m: Pick<MinutesRecord, 'summary' | 'writer' | 'decisions'>, proposals: ReadonlyArray<Pick<Proposal, 'statement' | 'outcome' | 'state'>>): { lead: string; points: string[] } {
+  const parts = summaryParts(m.summary);
+  if (m.writer === 'none') return parts;
+  const live = proposals.filter((p) => p.state !== 'dismissed');
+  const agreed = live.filter((p) => p.outcome.kind === 'decision' && AGREED.includes(p.state)).map((p) => p.statement);
+  const open = live.filter((p) => (p.state === 'open' || p.state === 'objected' || p.state === 'consented') && !(p.outcome.kind === 'decision' && p.state === 'consented')).map((p) => p.statement);
+  const waiting = open.length ? [waitingBullet(open)] : [];
+  if (m.writer === 'scripted') {
+    const own = parts.points.filter((p) => !SCRIPTED_DECIDED.test(p) && !SCRIPTED_WAITING.test(p) && p !== NOTHING_RECORDED);
+    const decided = [...agreed, ...m.decisions];
+    const points = [...(decided.length ? [agreedBullet(decided)] : []), ...own, ...waiting];
+    return { lead: parts.lead, points: (points.length ? points : [NOTHING_RECORDED]).slice(0, MAX_SUMMARY_POINTS) };
+  }
+  const extra = [...(agreed.length ? [`Agreed through ${agreed.length === 1 ? 'a proposal' : 'proposals'}: ${listWords(agreed, 2)}.`] : []), ...waiting];
+  return { lead: parts.lead, points: [...parts.points.slice(0, Math.max(0, MAX_SUMMARY_POINTS - extra.length)), ...extra] };
+}
+
 /** Decisions not already in the stored minutes (the same words, ignoring case and spacing): an addition never writes one twice. */
 export function withoutStored(decisions: readonly string[], stored: readonly string[]): string[] {
   const key = (d: string): string => d.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -208,7 +259,7 @@ export function withoutStored(decisions: readonly string[], stored: readonly str
 const NUMBER_WORDS = ['No one', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
 const minutesWords = (ms: number): string => {
   const m = Math.round(ms / 60_000);
-  return m < 1 ? 'under a minute' : m === 1 ? '1 minute' : m < 60 ? `${m} minutes` : `${Math.floor(m / 60)} h ${m % 60} min`.replace(/ 0 min$/, '');
+  return m < 1 ? 'less than a minute' : m === 1 ? '1 minute' : m < 60 ? `${m} minutes` : `${Math.floor(m / 60)} h ${m % 60} min`.replace(/ 0 min$/, '');
 };
 const listWords = (parts: readonly string[], max: number): string => {
   const shown = parts.slice(0, max).map((p) => p.replace(/[.!?]+$/, ''));
@@ -227,7 +278,7 @@ export function scriptedSummary(input: { people: number; spanMs: number; callNam
   const lead = `${who} for ${minutesWords(input.spanMs)}${topic ? ` about ${topic}` : ''}.`;
   const points: string[] = [];
   const decided = [...input.agreed, ...input.decisions];
-  if (decided.length) points.push(`${decided.length === 1 ? 'Agreed' : `Agreed ${decided.length} things`}: ${listWords(decided, 2)}.`);
+  if (decided.length) points.push(agreedBullet(decided));
   // Open items read as who will do them; things already done in the call read as what happened ("Created work item: X").
   const open = input.items.filter((i) => !i.done);
   const done = input.items.filter((i) => i.done);
@@ -238,8 +289,8 @@ export function scriptedSummary(input: { people: number; spanMs: number; callNam
   // "Ran <tool>" (an action with no title) never reaches a person as is.
   const doneWords = (t: string): string => (/^Ran \S+$/.test(t) ? `${ASSISTANT_NAME} carried out a request` : t.replace(/^Created ([^:]+): (.+)$/, (_m, kind: string, title: string) => `created ${kind.replace(/^a /, '')} "${title}"`));
   if (done.length) points.push(`Done in the call: ${listWords(done.map((i) => doneWords(i.text)), 2)}.`);
-  if (input.open.length) points.push(`${input.open.length === 1 ? 'Still waiting for answers' : `${input.open.length} proposals still wait for answers`}: ${listWords(input.open, 2)}.`);
-  if (!points.length) points.push('No decisions or next steps were recorded.');
+  if (input.open.length) points.push(waitingBullet(input.open));
+  if (!points.length) points.push(NOTHING_RECORDED);
   return { lead, points };
 }
 

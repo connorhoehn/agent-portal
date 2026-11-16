@@ -9,6 +9,7 @@ import { SqlAssistantStore, minutesFromRow } from '../store-sql.js';
 import {
   buildMinutesRequest, capTranscript, MAX_MINUTES_BYTES, MAX_MINUTES_LINES, MinutesWriterError, OpenAiMinutesWriter, parseMinutesResponse, resolveOwner,
   ScriptedMinutesWriter, heldByProposal, withoutHeld, summaryParts, composeSummary, chatSummary, type RosterEntry,
+  additionSentence, summaryWithProposals, withoutStoredItems,
 } from '../minutes.js';
 import type { AssistantRecord, MinutesRecord, TranscriptLine } from '../types.js';
 
@@ -39,7 +40,7 @@ describe('the scripted writer', () => {
       held: { statements: ['Freeze schema changes', 'Keep tenants read-only'], evidence: [], agreed: ['Freeze schema changes'], open: ['Keep tenants read-only', 'Page the on-call', 'Move the review'] },
     });
     const { lead, points } = summaryParts(out.summary);
-    expect(lead).toBe('Two people met for under a minute.');
+    expect(lead).toBe('Two people met for less than a minute.');
     expect(points).toEqual(['Agreed: Freeze schema changes.', '3 proposals still wait for answers: Keep tenants read-only; Page the on-call; and 1 more.']);
     const done = await write([line('u-vera', 'Fine.')], [{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }]);
     expect(summaryParts(done.summary).points).toEqual(['Done in the call: created work item "Fix the login cookie".']);
@@ -367,5 +368,42 @@ describe('minutes in the store', () => {
     expect(await store.sweepMinutes(1)).toBe(4);
     expect(minutesFromRow(row)).toMatchObject({ callId: 'c1', decisions: ['d'], actionItems: [{ text: 'a', ownerUserId: 'v', ownerName: 'V' }], lineCount: 3, writer: 'openai', startedAt: Date.parse('2026-11-13T12:00:00Z') });
     expect(minutesFromRow({ ...row, deleted_at: '2026-11-14T00:00:00Z', deleted_by: 'u' }).deleted).toEqual({ at: Date.parse('2026-11-14T00:00:00Z'), by: 'u' });
+  });
+});
+
+describe('what the minutes say after Milo was invited back, and what the page builds live', () => {
+  const prop = (statement: string, state: string, kind: 'decision' | 'tool' = 'decision') => ({ statement, state, outcome: kind === 'decision' ? { kind, initiativeId: null } : { kind, name: 'create', args: {} } }) as never;
+
+  it('an action item said again after the invitation back is not added twice (case, spacing and a closing stop ignored)', () => {
+    const stored = [{ text: 'Rehearse the rollback' }, { text: 'update the runbook.' }];
+    expect(withoutStoredItems([{ text: 'rehearse  the rollback.' }, { text: 'Update the runbook' }, { text: 'Book the room' }, { text: 'book the room' }], stored))
+      .toEqual([{ text: 'Book the room' }]);
+  });
+
+  it("an addition's card quotes its own new sentence, never the whole meeting's lead", () => {
+    const before = 'Two people met for 3 minutes about Auth.\n- Agreed: Ship Thursday.';
+    const after = 'Two people met for 3 minutes about Auth. After Milo was invited back, three people met for less than a minute more.\n- Agreed: Ship Thursday.';
+    expect(additionSentence(before, after)).toBe('After Milo was invited back, three people met for less than a minute more.');
+    // A model rewrites the lead: the first sentence it did not have before.
+    expect(additionSentence('The team planned the cutover.', 'The team planned the cutover in two parts. Later they booked the rehearsal.')).toBe('The team planned the cutover in two parts.');
+    expect(additionSentence('Same.', 'Same.')).toBe('');
+  });
+
+  it('the bullets about proposals are built from the proposals as they stand, not from what was stored', () => {
+    // Stored when the proposal still waited; it has been agreed on the meeting page since.
+    const stored = 'Two people met for 3 minutes.\n- Agreed: Ship Thursday.\n- Next step: Bob to rehearse.\n- Still waiting for answers: Freeze schema changes.';
+    const m = { summary: stored, writer: 'scripted' as const, decisions: ['Ship Thursday'] };
+    expect(summaryWithProposals(m, [prop('Freeze schema changes', 'done')]).points)
+      .toEqual(['Agreed 2 things: Freeze schema changes; Ship Thursday.', 'Next step: Bob to rehearse.']);
+    expect(summaryWithProposals(m, [prop('Freeze schema changes', 'open'), prop('Page the on-call', 'objected', 'tool'), prop('Old', 'dismissed')]).points)
+      .toEqual(['Agreed: Ship Thursday.', 'Next step: Bob to rehearse.', '2 proposals still wait for answers: Freeze schema changes; Page the on-call.']);
+    // Nothing at all reads as one bullet saying so.
+    expect(summaryWithProposals({ summary: 'One person talked with Milo for 1 minute.\n- No decisions or next steps were recorded.', writer: 'scripted', decisions: [] }, [prop('Freeze', 'open')]).points)
+      .toEqual(['Still waiting for answers: Freeze.']);
+    // A model's own bullets stay first; the proposals' bullets follow, within four.
+    const model = { summary: 'Lead.\n- One.\n- Two.\n- Three.\n- Four.', writer: 'openai' as const, decisions: [] };
+    expect(summaryWithProposals(model, [prop('Freeze', 'consented'), prop('Page', 'open')]).points)
+      .toEqual(['One.', 'Two.', 'Agreed through a proposal: Freeze.', 'Still waiting for answers: Page.']);
+    expect(summaryWithProposals({ summary: 'Could not.', writer: 'none', decisions: [] }, [prop('Page', 'open')])).toEqual({ lead: 'Could not.', points: [] });
   });
 });

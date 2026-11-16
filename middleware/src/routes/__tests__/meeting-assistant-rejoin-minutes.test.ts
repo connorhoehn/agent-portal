@@ -26,6 +26,8 @@ jest.mock('../../lib/authz.js', () => ({
 const ledger: Array<Record<string, unknown>> = [];
 const mockBell: Array<{ users: string[]; input: { type: string; title: string; action?: { href: string }; payload?: Record<string, unknown> } }> = [];
 jest.mock('../../lib/social-notify.js', () => ({ ...jest.requireActual('../../lib/social-notify.js'), notify: async (users: string[], input: never) => { mockBell.push({ users, input }); return users; } }));
+// Portraits: only dave (named in a proposal, never in the call) has one.
+jest.mock('../../providers/user-avatars.js', () => ({ userAvatars: async (users: Array<{ id: string }>) => new Map(users.map((u) => [u.id, u.id === 'dave' ? '/avatars/dave.png' : null])) }));
 jest.mock('../../providers/spend-ledger.js', () => ({ recordSpend: jest.fn(async (e: Record<string, unknown>) => { ledger.push(e); }) }));
 
 import express from 'express';
@@ -40,7 +42,7 @@ import { CallChatRuntime, callChatChannel, setCallChatRuntime } from '../../lib/
 import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle } from '../../lib/call-pages.js';
 import { assistantStore, setAssistantStore, setAssistantIntake, LineIntake, MemoryAssistantStore, setTranscriptSource, MockTranscriptSource } from '../../lib/meeting-assistant/index.js';
-import { AUTO_ATTEMPTS, MAX_ATTEMPTS, minutesIdle, retryFailedMinutes, setMinutesWriterFactory } from '../../lib/meeting-assistant/minutes-service.js';
+import { additionFailedNotice, AUTO_ATTEMPTS, MAX_ATTEMPTS, minutesIdle, retryFailedMinutes, setMinutesWriterFactory } from '../../lib/meeting-assistant/minutes-service.js';
 import type { MinutesInput } from '../../lib/meeting-assistant/minutes.js';
 import { chatSummary, MinutesWriterError, ScriptedMinutesWriter } from '../../lib/meeting-assistant/minutes.js';
 import { minutesSourceId, setMinutesSpend, type MinutesSpend } from '../../lib/meeting-assistant/spend.js';
@@ -117,6 +119,7 @@ const finish = async () => { await post('dismiss', 'bob'); await minutesIdle(); 
 
 const lines = async () => (await get('transcript?limit=500')).body.lines as Array<{ seq: number; userId: string; text: string }>;
 const minutes = async (user = 'alice') => (await get('minutes', user)).body;
+const summaryPoints = (m: { summaryPoints?: string[] }): string[] => m.summaryPoints ?? [];
 const cards = async () => (await chatStore.listMessages(callChatChannel(CALL), 200)).filter((m) => (m.metadata as { kind?: string } | undefined)?.kind === 'assistant-action')
   .map((m) => (m.metadata as { summary: string; askedBy: string }));
 const backAndTalk = async (said: Array<{ userId: string; text: string }>, by = 'bob') => {
@@ -156,14 +159,15 @@ describe('adding to the minutes after Milo was invited back', () => {
     expect((await assistantStore().getMinutes(CALL))!.actionItems[1]!.workItemId).toBe('wi-1');
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.', 'We decided to keep the feature flag on until Monday.']);
     expect(m).toMatchObject({ lineCount: 6, additions: 1, backInCall: false, additionOwed: false, youAreInviter: true });
-    expect(m.summaryLead).toMatch(/^Two people met for under a minute\. After Milo was invited back, two people met for under a minute more\.$/);
+    expect(m.summaryLead).toMatch(/^Two people met for less than a minute\. After Milo was invited back, two people met for less than a minute more\.$/);
     expect((await minutes('bob')).youAreInviter).toBe(true);
-    // One more minutes card in the chat, marked as an addition, counting the whole minutes.
+    // One more minutes card in the chat, marked as an addition: its own sentence, and counts of what it added.
     const notices = await minutesNotices();
     expect(notices).toHaveLength(2);
-    expect(notices[1]!.minutes).toEqual({ decisions: 2, actionItems: 3, proposals: 0, added: true });
+    expect(notices[1]!.minutes).toEqual({ decisions: 1, actionItems: 1, proposals: 0, added: true });
+    expect(notices[1]!.text).toBe('After Milo was invited back, two people met for less than a minute more.');
     // The bell rings once more, saying the minutes changed.
-    expect(mockBell.map((b) => b.input.title)).toEqual([expect.stringMatching(/ are ready$/), expect.stringMatching(/^Minutes from .* were updated$/)]);
+    expect(mockBell.map((b) => b.input.title)).toEqual([expect.stringMatching(/^Minutes are ready: /), expect.stringMatching(/^Minutes were updated: /)]);
     // A card only for the new item (alice's, she is still in the call); the earlier ones are not offered again.
     const after = await cards();
     expect(after.slice(cardsBefore).map((c) => [c.askedBy, c.summary])).toEqual([['alice', 'Create a work item: write the release note']]);
@@ -213,7 +217,7 @@ describe('adding to the minutes after Milo was invited back', () => {
     const owed = await minutes();
     expect(owed).toMatchObject({ additionOwed: true, additions: 0, summary: before.summary, rewrite: { possible: true, attemptsLeft: MAX_ATTEMPTS - 1 } });
     expect(owed.actionItems).toHaveLength(2);
-    expect((await chat()).some((c) => /could not add what it heard after it was invited back/.test(c.text))).toBe(true);
+    expect((await chat()).some((c) => /^Milo could not add the later part of the call to the minutes\. The minutes so far are unchanged, Milo will try again,/.test(c.text))).toBe(true);
     for (let i = 0; i < 4; i += 1) await retryFailedMinutes();
     expect(runs).toBe(AUTO_ATTEMPTS);
     expect((await post('minutes/rewrite', 'alice')).status).toBe(202); await minutesIdle();
@@ -237,7 +241,7 @@ describe('adding to the minutes after Milo was invited back', () => {
     const m = await minutes();
     expect(m).toMatchObject({ additionOwed: false, additions: 1 });
     expect(m.actionItems.map((i: { text: string }) => i.text)).toEqual(['rehearse the rollback', 'update the runbook', 'book the room']);
-    expect(mockBell.map((b) => b.input.title)).toEqual([expect.stringMatching(/are ready$/), expect.stringMatching(/were updated$/)]);
+    expect(mockBell.map((b) => b.input.title)).toEqual([expect.stringMatching(/^Minutes are ready: /), expect.stringMatching(/^Minutes were updated: /)]);
   });
 
   it('a budget that refuses the addition keeps the minutes and owes it', async () => {
@@ -330,4 +334,121 @@ describe('adding to the minutes after Milo was invited back', () => {
     expect(m.actionItems.map((i: { text: string }) => i.text)).toEqual(['rehearse the rollback', 'update the runbook', 'book the room']);
   });
 
+  it('a retried addition keeps what was done in the call during the later period', async () => {
+    await talk(); await finish();
+    let failing = true;
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input: MinutesInput) => { if (input.earlier && failing) throw new MinutesWriterError('provider answered 500'); return new ScriptedMinutesWriter().write(input); } }));
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });
+    clock += 1000;
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    await assistantStore().createTurn({ turnId: 't-later', callId: CALL, askedBy: 'bob', tool: { name: 'create', args: { kind: 'work-item', fields: { title: 'Book the venue' } } },
+      kind: 'write', status: 'done', createdAt: (await assistantStore().get(CALL))!.session!.periodFrom!, expiresAt: clock + 60_000 });
+    clock += 1000; await post('dismiss', 'bob'); await minutesIdle();
+    expect(await minutes()).toMatchObject({ additionOwed: true });
+    failing = false;
+    expect(await retryFailedMinutes()).toBe(1);
+    const m = (await assistantStore().getMinutes(CALL))!;
+    expect(m.actionItems.map((i) => [i.text, i.done === true])).toEqual([
+      ['rehearse the rollback', false], ['update the runbook', false], ['book the room', false], ['Created work item: Book the venue', true]]);
+    expect(summaryPoints(await minutes())).toContainEqual(expect.stringMatching(/^Done in the call: created work item "Book the venue"\.$/));
+  });
+
+  it('an action item said again after the invitation back is not added again, nor offered again as a card', async () => {
+    await talk(); await finish();
+    const cardsBefore = (await cards()).length;
+    await backAndTalk([{ userId: 'alice', text: 'Action item: update the runbook.' }, { userId: 'bob', text: 'Bob Baker will rehearse the rollback.' }, { userId: 'bob', text: 'Bob Baker will book the room.' }]);
+    clock += 1000; await post('dismiss', 'alice'); await minutesIdle();
+    const m = await minutes();
+    expect(m.actionItems.map((i: { text: string }) => i.text)).toEqual(['rehearse the rollback', 'update the runbook', 'book the room']);
+    expect((await minutesNotices())[1]!.minutes).toMatchObject({ actionItems: 1, added: true });
+    expect((await cards()).slice(cardsBefore).map((c) => c.summary)).toEqual(['Create a work item: book the room']);
+  });
+
+  it('first minutes that failed and are written when Milo leaves again post the minutes card in the call that is still running', async () => {
+    let failing = true;
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input: MinutesInput) => { if (failing) throw new MinutesWriterError('provider answered 500'); return new ScriptedMinutesWriter().write(input); } }));
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });
+    await talk(); await finish();
+    expect(await minutesNotices()).toHaveLength(0);
+    failing = false;
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    clock += 1000; await post('dismiss', 'alice'); await minutesIdle();
+    const notices = await minutesNotices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.minutes).toEqual({ decisions: 1, actionItems: 3, proposals: 0 });
+    expect(notices[0]!.meetingCallId).toBe(CALL);
+  });
+
+  it('the failure notice promises another try only while the sweep will make one', () => {
+    expect(additionFailedNotice(1)).toBe('Milo could not add the later part of the call to the minutes. The minutes so far are unchanged, Milo will try again, and the transcript is kept for the people who were in the call.');
+    expect(additionFailedNotice(AUTO_ATTEMPTS)).toBe('Milo could not add the later part of the call to the minutes. The minutes so far are unchanged, and the transcript is kept for the people who were in the call. Anyone who was in the call can ask Milo to try again from the meeting page.');
+    expect(additionFailedNotice(MAX_ATTEMPTS)).not.toMatch(/try again/);
+  });
+
+  it('the page knows when the sweep has stopped trying an owed addition', async () => {
+    await talk(); await finish();
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async (input: MinutesInput) => { if (input.earlier) throw new MinutesWriterError('provider answered 500'); return new ScriptedMinutesWriter().write(input); } }));
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async () => undefined, record: async () => undefined });
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    clock += 1000; await post('dismiss', 'bob'); await minutesIdle();
+    expect((await minutes()).rewrite).toMatchObject({ possible: true, autoRetrying: true });
+    for (let i = 0; i < AUTO_ATTEMPTS; i += 1) await retryFailedMinutes();
+    expect((await minutes()).rewrite).toMatchObject({ possible: true, autoRetrying: false, attemptsLeft: MAX_ATTEMPTS - AUTO_ATTEMPTS });
+  });
+
+  it('after an invitation back: every inviter is named in order, and nobody who acknowledged in an earlier period counts as not transcribed', async () => {
+    // alice invites, bob acknowledges; bob invites Milo back and alice does not acknowledge this time.
+    await talk(); await finish();
+    expect((await post('invite', 'bob')).status).toBe(200);
+    await inject({ userId: 'bob', text: 'Action item: book the room.' });
+    clock += 1000; await post('dismiss', 'bob'); await minutesIdle();
+    const m = await minutes('carol').catch(() => null);
+    expect(m).toBeTruthy();
+    const mine = await minutes();
+    expect(mine.inviters).toEqual([{ userId: 'alice', name: 'Alice Archer' }, { userId: 'bob', name: 'Bob Baker' }]);
+    expect(mine.coverage.untranscribed).toBe(0);
+    // The acknowledgements of the earlier period are kept in the session, never reset by the invitation back.
+    expect((await assistantStore().get(CALL))!.session!.ackedEver).toEqual(expect.arrayContaining(['alice', 'bob']));
+    // Each period keeps the ledger part it began on, so the spend report can say which period a listening row was.
+    const session = (await assistantStore().get(CALL))!.session!;
+    expect(session.periods![0]!.part).toBe(0);
+    expect(session.periodPart).toBeGreaterThan(0);
+  });
+
+  it('a proposal shows the portrait of everyone it names, read the way the attendees are, even someone who was not in the call', async () => {
+    await talk();
+    await assistantStore().createProposal(proposal('p-dave', { named: ['dave'], executor: 'alice' }));
+    await finish();
+    const p = (await get('proposals')).body.proposals[0];
+    expect(p.executor).toEqual({ userId: 'alice', name: 'Alice Archer', avatarUrl: null });
+    expect(p.named).toEqual([{ userId: 'dave', name: 'dave', avatarUrl: '/avatars/dave.png' }]);
+  });
+
+  it('while Milo is back in the call the meeting cannot be deleted; a person outside the call is told it can be once Milo leaves', async () => {
+    await talk(); await finish();
+    await backAndTalk([]);
+    const seated = await del('minutes', 'alice');
+    expect(seated.status).toBe(409);
+    expect(seated.body.error).toBe('Milo is back in this call. Dismiss Milo before deleting this meeting.');
+    const spy = jest.spyOn(runtime, 'seatedUsers').mockResolvedValue([]);
+    const away = await del('minutes', 'alice');
+    spy.mockRestore();
+    expect(away.status).toBe(409);
+    expect(away.body.error).toBe('Milo is back in this call. The meeting can be deleted after it leaves.');
+    expect((await minutes()).backInCall).toBe(true);
+  });
+
+  it('after Milo leaves again the page is told the addition is due until the minutes cover that leave, in whichever process writes it', async () => {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    setMinutesWriterFactory(() => ({ kind: 'scripted', write: async (input: MinutesInput) => { if (input.earlier) await gate; return new ScriptedMinutesWriter().write(input); } }));
+    await talk(); await finish();
+    expect((await minutes()).additionDue).toBe(false);
+    await backAndTalk([{ userId: 'bob', text: 'Action item: book the room.' }]);
+    expect((await minutes()).additionDue).toBe(false);   // back in the call: not due yet
+    clock += 1000; await post('dismiss', 'alice');
+    for (let i = 0; i < 5; i += 1) await new Promise<void>((r) => setImmediate(r));
+    expect(await minutes()).toMatchObject({ backInCall: false, additionDue: true });
+    release(); await minutesIdle();
+    expect(await minutes()).toMatchObject({ additionDue: false, additions: 1 });
+  });
 });
