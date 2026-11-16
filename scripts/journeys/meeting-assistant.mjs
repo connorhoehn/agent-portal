@@ -1399,6 +1399,21 @@ async function main() {
       return 'nothing scheduled with voice off';
     });
 
+    await step('7b-g: the voice turned on and a question asked at once: the other person\'s page plays the answer from its first frame although its own state read had not caught up yet', async () => {
+      const n0 = await voiceOf(nora);
+      check(!n0.on, 'the second person\'s page already reads voice on');
+      const res = await vera.api.post(asApi(vera, 'voice'), { data: { on: true } });
+      check(res.ok(), `turning the voice on answered ${res.status()}`);
+      await ask();
+      await waitFor(async () => (await voiceOf(nora)).frames > n0.frames, 20000, 'the second person\'s page playing the answer');
+      await sleep(2500);
+      const n1 = await voiceOf(nora);
+      check(n1.ignored === n0.ignored, `the second person's page dropped ${n1.ignored - n0.ignored} frames before its state read caught up`);
+      await assistantMenu(vera, "Turn Milo's voice off");
+      for (const p of [vera, nora]) await waitFor(async () => !(await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice off again`);
+      return `${n1.frames - n0.frames} frames played, none dropped`;
+    });
+
     // ── 6. Dismiss ──
     let expiryCard = null;
     await step('6a: a write card nobody confirms stays waiting for both people', async () => {

@@ -7,12 +7,13 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useGatewayFrames } from './gatewayFrames';
 import type { AssistantView } from './meetingAssistantModel';
-import { SPEAKING_HOLD_MS, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, type AudioFrame } from './assistantVoiceModel';
+import { EARLY_BUFFER_TTL_MS, keepEarly, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, speakingHoldMs, type AudioFrame, type EarlyBuffer } from './assistantVoiceModel';
+import { refreshAssistant } from './meetingAssistant';
 
 
 export interface AssistantVoiceSnapshot {
   muted: boolean;
-  /** Frames are arriving now (back to false SPEAKING_HOLD_MS after the last one). */
+  /** Milo is audible now: back to false SPEAKING_HOLD_MS after the scheduled playout of the last frame ends. */
   speaking: boolean;
   /** The browser has not allowed sound yet (no click on the page): known as soon as the voice is on, before any frame. */
   needsGesture: boolean;
@@ -108,7 +109,8 @@ class AssistantVoicePlayer {
       src.start(d.startAt);
     }
     if (this.hold) clearTimeout(this.hold);
-    this.hold = setTimeout(() => { this.hold = null; this.set({ speaking: false }); }, SPEAKING_HOLD_MS);
+    // The mark stays on until what is scheduled has played: a released hold arrives as one burst and plays out after it (in-call 8).
+    this.hold = setTimeout(() => { this.hold = null; this.set({ speaking: false }); }, speakingHoldMs(clock.currentTime, this.nextStart));
     this.set({ speaking: true, framesPlayed: this.snap.framesPlayed + 1, lastSeq: frame.seq, needsGesture: this.ctx?.state === 'suspended' });
   }
 
@@ -121,6 +123,8 @@ class AssistantVoicePlayer {
     // `needsGesture` is the browser's state, not the playback's: it stays (the prompt itself hides when the voice is off or muted).
     if (this.snap.speaking) this.set({ speaking: false });
   }
+
+  runIdNow(): string { return this.runId; }
 
   /** The server started a new run (a restart): its `seq` begins again at 1, so the last sequence seen is forgotten. */
   noteRun(frame: AudioFrame) {
@@ -147,19 +151,48 @@ export function useAssistantVoice(callId: string | null, view: AssistantView) {
   live.current = { callId, voice: view.voice, listening: view.phase === 'listening' || view.phase === 'invited', muted: snap.muted };
   const shouldSound = !!callId && view.voice && live.current.listening && !snap.muted;
 
+  // Frames that came while this browser still believed the voice was off (its poll had not caught up with someone turning it on or
+  // resuming Milo): at most a second of them, played once the state read says the voice is on, never while muted (in-call 7).
+  const early = useRef<EarlyBuffer | null>(null);
+  const refreshing = useRef(false);
+  const gate = (frame: AudioFrame) => {
+    const cur = live.current;
+    return shouldPlay({ callId: cur.callId ?? '', frameCallId: frame.callId, seq: frame.seq, lastSeq: player.getSnapshot().lastSeq, muted: cur.muted, voice: cur.voice, listening: cur.listening });
+  };
+  const flushEarly = () => {
+    const buf = early.current;
+    if (!buf) return;
+    early.current = null;
+    const fresh = Date.now() - buf.startedAt <= EARLY_BUFFER_TTL_MS;
+    for (const f of buf.frames) { if (fresh && gate(f)) player.play(f); else if (f.seq > player.getSnapshot().lastSeq) player.ignored(); }
+  };
+  const flushRef = useRef(flushEarly);
+  flushRef.current = flushEarly;
+
   useEffect(() => {
     if (!callId) return undefined;
     player.resetCall(callId);
+    early.current = null;
     return gateway.onMessage((raw) => {
       const frame = parseAudioFrame(raw);
       if (!frame) return;
       const cur = live.current;
       if (frame.callId !== cur.callId) return;
+      if (runChanged(player.runIdNow(), frame)) early.current = null;
       player.noteRun(frame);
-      if (shouldPlay({ callId: cur.callId ?? '', frameCallId: frame.callId, seq: frame.seq, lastSeq: player.getSnapshot().lastSeq, muted: cur.muted, voice: cur.voice, listening: cur.listening })) player.play(frame);
-      else if (frame.seq > player.getSnapshot().lastSeq) player.ignored();
+      const lastSeq = player.getSnapshot().lastSeq;
+      if (gate(frame)) { flushRef.current(); player.play(frame); return; }
+      if (frame.seq <= lastSeq) return;
+      // The server relays only while the voice is on and Milo listens: a frame here means this browser's view is behind. Keep it
+      // and read the state now instead of at the next poll.
+      const kept = !cur.voice || !cur.listening ? keepEarly(early.current, frame, { muted: cur.muted, lastSeq, now: Date.now() }) : null;
+      if (!kept) { player.ignored(); return; }
+      early.current = kept;
+      if (!refreshing.current && cur.callId) { refreshing.current = true; void refreshAssistant(cur.callId).catch(() => undefined).finally(() => { refreshing.current = false; }); }
     });
   }, [callId, gateway.onMessage]);
+  // The state read said the voice is on: play what was kept, in order. Muted: drop it.
+  useEffect(() => { if (shouldSound) flushRef.current(); else if (snap.muted && early.current) { early.current = null; } }, [shouldSound, snap.muted]);
 
   // Pause, leave, voice off, mute, call end: nothing more is played and what is scheduled is cancelled.
   useEffect(() => { if (!shouldSound) player.stop(); }, [shouldSound]);

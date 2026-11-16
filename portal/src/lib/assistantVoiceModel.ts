@@ -91,3 +91,35 @@ export function scheduleFrame(i: ScheduleInput): ScheduleDecision {
   const startAt = Math.max(wanted, floor);
   return { play: true, startAt, nextStartTime: startAt + i.frameSeconds };
 }
+
+/**
+ * How long the speaking mark stays on after a frame is scheduled: until the scheduled playout ends (`nextStartTime`, on the audio
+ * clock) plus SPEAKING_HOLD_MS, so a released hold that arrives as one burst keeps the mark on while Milo is still audible (sweep 4
+ * in-call 8).
+ */
+export function speakingHoldMs(currentTime: number, nextStartTime: number): number {
+  return Math.max(0, Math.round((nextStartTime - currentTime) * 1000)) + SPEAKING_HOLD_MS;
+}
+
+/** At most this much of Milo's voice is kept while a browser that believes the voice is off asks the server again (in-call 7). */
+export const EARLY_BUFFER_S = 1;
+/** Kept frames not played within this long of the first are dropped: the refresh said the voice is off, or did not answer. */
+export const EARLY_BUFFER_TTL_MS = 3000;
+
+export interface EarlyBuffer { frames: AudioFrame[]; seconds: number; startedAt: number }
+/** The seconds of audio one frame carries (16-bit mono PCM, base64). */
+export const frameSeconds = (f: Pick<AudioFrame, 'pcm' | 'sampleRate'>): number => Math.floor((f.pcm.length * 3) / 4 / 2) / (f.sampleRate || VOICE_SAMPLE_RATE);
+
+/**
+ * A frame that arrived while this browser believed the voice was off (or Milo not listening), kept for when the state read says
+ * otherwise: never while muted, never twice, and never more than EARLY_BUFFER_S in all. Null when it is not kept.
+ */
+export function keepEarly(buf: EarlyBuffer | null, frame: AudioFrame, g: { muted: boolean; lastSeq: number; now: number }): EarlyBuffer | null {
+  if (g.muted || frame.seq <= g.lastSeq) return null;
+  const live = buf && g.now - buf.startedAt <= EARLY_BUFFER_TTL_MS ? buf : null;
+  if (live?.frames.some((f) => f.seq === frame.seq)) return null;
+  const secs = frameSeconds(frame);
+  const seconds = (live?.seconds ?? 0) + secs;
+  if (seconds > EARLY_BUFFER_S + 1e-9) return null;
+  return { frames: [...(live?.frames ?? []), frame], seconds, startedAt: live?.startedAt ?? g.now };
+}

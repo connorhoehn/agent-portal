@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, soundPromptShown } from '../assistantVoiceModel.ts';
+import { EARLY_BUFFER_S, EARLY_BUFFER_TTL_MS, JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, SPEAKING_HOLD_MS, frameSeconds, keepEarly, speakingHoldMs, muteKey, parseAudioFrame, pcm16ToFloat32, readMutedFrom, runChanged, scheduleFrame, shouldPlay, soundPromptShown } from '../assistantVoiceModel.ts';
 
 test('the mute choice is read under its key, or under the key it was kept under before the rename', () => {
   const store = (entries: Record<string, string>) => ({ getItem: (k: string) => entries[k] ?? null });
@@ -72,4 +72,28 @@ test('"Click to hear Milo" shows as soon as the voice is on and the browser wait
   assert.equal(soundPromptShown({ ...on, voiceOn: false }), false); // the voice turned off
   assert.equal(soundPromptShown({ ...on, muted: true }), false); // this person muted Milo
   assert.equal(soundPromptShown({ ...on, present: false }), false); // Milo not in the call (left, or not invited)
+});
+
+test('the speaking mark lasts until the scheduled playout ends, plus the hold (sweep 4 in-call 8)', () => {
+  assert.equal(speakingHoldMs(10, 10), SPEAKING_HOLD_MS);
+  // A released hold of two seconds arrives as one burst: the mark stays on for the two seconds it takes to play.
+  assert.equal(speakingHoldMs(10, 12), 2000 + SPEAKING_HOLD_MS);
+  assert.equal(speakingHoldMs(10, 9), SPEAKING_HOLD_MS, 'nothing scheduled ahead: the hold alone');
+});
+
+test('frames that come while the voice is believed off are kept, up to one second, never while muted (sweep 4 in-call 7)', () => {
+  // 0.25 s of 24 kHz 16-bit mono: 6000 samples, 12000 bytes, 16000 base64 characters.
+  const quarter = (seq: number) => ({ callId: 'c', runId: 'r', seq, sampleRate: 24000, pcm: 'A'.repeat(16000), last: false });
+  assert.equal(frameSeconds(quarter(1)), 0.25);
+  assert.equal(keepEarly(null, quarter(1), { muted: true, lastSeq: 0, now: 0 }), null, 'never kept for someone who muted Milo');
+  assert.equal(keepEarly(null, quarter(3), { muted: false, lastSeq: 3, now: 0 }), null, 'never a frame already played');
+  let buf = keepEarly(null, quarter(1), { muted: false, lastSeq: 0, now: 100 });
+  assert.ok(buf);
+  for (const seq of [2, 3, 4]) buf = keepEarly(buf, quarter(seq), { muted: false, lastSeq: 0, now: 200 }) ?? buf;
+  assert.deepEqual(buf!.frames.map((f) => f.seq), [1, 2, 3, 4]);
+  assert.equal(buf!.seconds, EARLY_BUFFER_S);
+  assert.equal(keepEarly(buf, quarter(5), { muted: false, lastSeq: 0, now: 300 }), null, 'past one second nothing more is kept');
+  assert.equal(keepEarly(buf, quarter(2), { muted: false, lastSeq: 0, now: 300 }), null, 'a frame is kept once');
+  const later = keepEarly(buf, quarter(9), { muted: false, lastSeq: 0, now: 100 + EARLY_BUFFER_TTL_MS + 1 });
+  assert.deepEqual(later!.frames.map((f) => f.seq), [9], 'a stale buffer starts over');
 });
