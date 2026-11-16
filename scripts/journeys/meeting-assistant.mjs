@@ -1391,11 +1391,16 @@ async function main() {
       await waitFor(async () => (await badge.getAttribute('data-cards').catch(() => null)) === '1', 15000, 'the asker\'s footer count including the card');
       check(/1 card waiting for your confirmation/.test((await badge.getAttribute('aria-label')) ?? ''), `the count does not say a card waits: "${await badge.getAttribute('aria-label')}"`);
       check((await nora.page.getByTestId('assistant-proposal-count').getAttribute('data-cards').catch(() => '0')) !== '1', 'the other person\'s count includes a card that waits on the asker');
+      // Sweep 4 in-call 3: with the live transcript showing (it hides the thread, kept mounted), the count gives the pane back to the chat.
+      await assistantMenu(vera, /Show transcript/);
+      await seen(vera.page, 'live-transcript');
       await badge.click();
+      await gone(vera.page, 'live-transcript', 5000);
       const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
       await waitFor(async () => veraCard.getByTestId('assistant-action-confirm').evaluate((el) => el === document.activeElement).catch(() => false), 5000, 'the count jumping to the card\'s Confirm');
+      check(await veraCard.isVisible(), 'the card the count jumped to is not visible');
       await shot(vera.page, '6a-card-waiting-count');
-      return 'waiting for both; expiry shown; the count jumps to the card';
+      return 'waiting for both; expiry shown; the count turns the transcript off and jumps to the card';
     });
 
     const PROPOSAL_3 = 'Freeze schema changes during the cutover';

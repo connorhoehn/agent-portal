@@ -35,15 +35,23 @@ export function waitingWords(cards: number, proposals: number): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
-/** Brings a waiting card into view: the chat opens (it may be closed), then the card scrolls in and its Confirm takes the focus. */
-function jumpToCard(actionId: string, openChat: (() => void) | null): void {
-  const find = () => document.querySelector<HTMLElement>(`[data-testid="assistant-action-card"][data-action-id="${CSS.escape(actionId)}"]`);
+/**
+ * Brings a waiting card into view: the live transcript gives the pane back to the chat (it hides the thread but keeps it mounted),
+ * the chat opens (it may be closed), then the card scrolls in and its Confirm takes the focus. A card inside a hidden ancestor is
+ * not found, so the transcript never swallows the click.
+ */
+function jumpToCard(callId: string, actionId: string, openChat: (() => void) | null): void {
+  const selector = `[data-testid="assistant-action-card"][data-action-id="${CSS.escape(actionId)}"]`;
+  const visible = (el: HTMLElement) => !el.closest('[hidden]') && el.getClientRects().length > 0;
+  const find = () => { const el = document.querySelector<HTMLElement>(selector); return el && visible(el) ? el : null; };
   const go = (tries: number) => {
     const card = find();
     if (card) { card.scrollIntoView({ block: 'center', behavior: 'smooth' }); card.querySelector<HTMLElement>('[data-testid="assistant-action-confirm"]')?.focus({ preventScroll: true }); return; }
     if (tries > 0) setTimeout(() => go(tries - 1), 150);
   };
-  if (!find()) openChat?.();
+  const mounted = !!document.querySelector(selector);
+  setLiveTranscript(callId, false);
+  if (!mounted) openChat?.();
   go(10);
 }
 
@@ -116,7 +124,7 @@ export function AssistantBarControls() {
         name and tooltip, keeps the footer on one line at 1280 with three people in the call. */}
     {waiting && callId && <Tooltip content={waiting} placement="top">
       <Button variant="ghost" size="sm" className="px-1" aria-label={waiting} data-cards={cards.length} data-proposals={owed}
-        onClick={() => { if (cards[0]) jumpToCard(cards[0].actionId, chat?.toggle ?? null); else setProposalDeckHidden(callId, false); }} data-testid="assistant-proposal-count">
+        onClick={() => { if (cards[0]) jumpToCard(callId, cards[0].actionId, chat?.toggle ?? null); else setProposalDeckHidden(callId, false); }} data-testid="assistant-proposal-count">
         <Badge variant="count" value={cards.length + owed} color="accent" aria-label={waiting} />
       </Button>
     </Tooltip>}
