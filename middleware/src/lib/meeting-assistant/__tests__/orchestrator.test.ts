@@ -35,9 +35,9 @@ import { voiceTool } from '../../voice/catalogue.js';
 import { meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
+import { ASKER_WINDOW_MS, AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
-import { VOICE_OPEN_TURN_GAP_MS } from '../voice-gate.js';
+import { VOICE_OPEN_TURN_GAP_MS, VOICE_PROMPT_WINDOW_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
@@ -1433,10 +1433,19 @@ describe('Milo\'s voice goes out only for speech someone asked for (the voice ga
     expect(stats()).toMatchObject({ voiceFramesWithheld: 0, voiceUtterancesWithheld: 0 });
   });
 
-  it('a request ten seconds old no longer opens the gate', async () => {
+  it('a request up to twenty seconds old opens the gate, the same window the chat uses for its asker (sweep 4 in-call 9)', async () => {
+    expect(VOICE_PROMPT_WINDOW_MS).toBe(ASKER_WINDOW_MS);
     const s = await gateRuntime();
     s.hear('Milo, what is two plus two?', 0, 1500); await flush();
-    now = t0 + 1500 + 10_001;
+    now = t0 + 1500 + 15_000;
+    await utter(s, 3);
+    expect(sent).toEqual([1, 2, 3]);
+  });
+
+  it('a request twenty seconds old no longer opens the gate', async () => {
+    const s = await gateRuntime();
+    s.hear('Milo, what is two plus two?', 0, 1500); await flush();
+    now = t0 + 1500 + ASKER_WINDOW_MS + 1;
     await utter(s, 25);
     expect(sent).toEqual([]);
   });
@@ -1522,7 +1531,7 @@ describe('Milo\'s voice goes out only for speech someone asked for (the voice ga
     runtime.setVoice(CALL, false); runtime.setVoice(CALL, true);
     s.hear('Milo, what is two plus two?', 500, 1900); await flush();
     expect(sent).toEqual([]); // the held frames were forgotten, not released
-    now += 11_000;
+    now += ASKER_WINDOW_MS + 1000;
     await utter(s, 4, 5, false); // held again (the request is old now)
     s.drop(); await flush();
     const next = fake();

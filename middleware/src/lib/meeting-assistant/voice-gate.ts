@@ -20,8 +20,13 @@
 // Held audio lives only in this object's memory: never on disk, never logged, gone when released, withheld or cleared. Pure: the
 // clock and the timer are injected; the caller does the sending (and notes when Milo was heard).
 
-/** A heard line that addressed Milo opens the gate for a turn that begins within this long after the line ended. */
-export const VOICE_PROMPT_WINDOW_MS = 10_000;
+/**
+ * How far back from a tool call or an answer its asker is looked for (decision 3; orchestrator.ts re-exports it). One constant
+ * for the chat and the voice: an answer posted as "Asked by X" is never withheld from X's ears for being 10 to 20 s late.
+ */
+export const ASKER_WINDOW_MS = 20_000;
+/** A heard line that addressed Milo opens the gate for a turn that begins within this long after the line ended (= ASKER_WINDOW_MS). */
+export const VOICE_PROMPT_WINDOW_MS = ASKER_WINDOW_MS;
 /** How long a turn nobody asked for is held, from its first frame, waiting for the reason to arrive. */
 export const VOICE_GATE_HOLD_MS = 2000;
 /** A withheld turn ends when no frame has come for longer than this: the next frame begins a new turn, decided afresh. */

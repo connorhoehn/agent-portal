@@ -25,7 +25,7 @@ import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meet
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
-import { VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
+import { ASKER_WINDOW_MS, VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
 import { findAddress, NAME_ALTERNATION, nameLock, parseCommand, type DetectorEvent } from './detector.js';
@@ -51,8 +51,8 @@ import { periodOf, sessionOf, type TranscriptLine, type AssistantRecord, type As
 
 export const READ_TURN_TTL_MS = 90_000;
 export const WRITE_TURN_TTL_MS = 10 * 60_000;
-/** How far back from a tool call the asker is looked for and the name lock reads (decision 3). */
-export const ASKER_WINDOW_MS = 20_000;
+/** How far back from a tool call the asker is looked for and the name lock reads (decision 3); the voice gate's prompt window too. */
+export { ASKER_WINDOW_MS };
 /** Tool calls one addressed request may make; the next is refused with "too many steps". */
 export const MAX_CALLS_PER_REQUEST = 3;
 export const TYPED_UNSUPPORTED_REPLY = `${ASSISTANT_NAME} only hears spoken requests in this call. Say "${ASSISTANT_NAME}" and ask aloud.`;
