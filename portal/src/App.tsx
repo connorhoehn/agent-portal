@@ -91,6 +91,11 @@ const InterviewsLayout = lazy(() => import('./pages/interviews/InterviewsLayout'
 const InterviewsCandidatesPage = lazy(() => import('./pages/interviews/CandidatesPage'));
 const InterviewsMyInterviewsPage = lazy(() => import('./pages/interviews/MyInterviewsPage'));
 const InterviewsMyOpeningsPage = lazy(() => import('./pages/interviews/MyOpeningsPage'));
+// slot 1: a lane adds its entries just below this line
+// slot 2: a lane adds its entries just below this line
+// slot 3: a lane adds its entries just below this line
+// slot 4: a lane adds its entries just below this line
+// slot 5: a lane adds its entries just below this line
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const NoAccessPage = lazy(() => import('./pages/NoAccessPage'));
 const OtherWorkspacePage = lazy(() => import('./pages/NoAccessPage').then((m) => ({ default: m.OtherWorkspacePage })));
@@ -561,6 +566,11 @@ export function App() {
                 <Page element={<InterviewsMyOpeningsPage />} />
               </Gate>
             } />
+            {/* slot 1: a lane adds its routes just below this line */}
+            {/* slot 2: a lane adds its routes just below this line */}
+            {/* slot 3: a lane adds its routes just below this line */}
+            {/* slot 4: a lane adds its routes just below this line */}
+            {/* slot 5: a lane adds its routes just below this line */}
           </Route>
         ) : (
           <Route path="interviews/*" element={<Navigate to="/" replace />} />

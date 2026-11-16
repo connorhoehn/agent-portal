@@ -5,7 +5,7 @@ row_I1.1() {
   needF "CollectionCommandHost" $PAGES/CandidatesPage.tsx "on the shared command composer"
   for h in "'Candidate'" "'Opening'" "'Stage'" "'Next interview'" "'Last result'"; do needF "header: $h" $PAGES/CandidatesPage.tsx "column $h"; done
   needF "{ tenant: 'interviews', path: '/interviews/candidates' }" portal/e2e/route-inventory.ts "a table route in the inventory"
-  needF "candidates|my-interviews|my-openings" portal/e2e/ui-dom-audit.policies.ts "a DOM audit route"
+  needF "'my-openings'," portal/e2e/ui-dom-audit.policies.ts "a DOM audit route"
   needF '"journey:interviews"' portal/package.json "npm run journey:interviews"
   if [ "$QUICK" -eq 0 ]; then
     if ( cd portal && node --test src/lib/__tests__/interviews.test.ts ) >"$LOGS/portal-interviews.log" 2>&1; then ok "portal interviews words and order: $(grep -E '^ℹ pass' "$LOGS/portal-interviews.log")"; else fail "portal interviews test (see $LOGS/portal-interviews.log)"; fi

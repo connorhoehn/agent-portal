@@ -143,7 +143,17 @@ function accessComposerPolicy(pathname: string, view: TenantViewEvidence): Compo
  * openings — so all three are required, with no exemption. A route not named
  * here stays unclassified.
  */
-const INTERVIEWS_COLLECTIONS = /^\/interviews\/(?:candidates|my-interviews|my-openings)$/;
+const INTERVIEWS_COLLECTION_PAGES = [
+  'candidates',
+  'my-interviews',
+  'my-openings',
+  // slot 1: a lane adds its entries just below this line
+  // slot 2: a lane adds its entries just below this line
+  // slot 3: a lane adds its entries just below this line
+  // slot 4: a lane adds its entries just below this line
+  // slot 5: a lane adds its entries just below this line
+];
+const INTERVIEWS_COLLECTIONS = new RegExp(`^/interviews/(?:${INTERVIEWS_COLLECTION_PAGES.join('|')})$`);
 function interviewsComposerPolicy(pathname: string, view: TenantViewEvidence): ComposerPolicy | undefined {
   if (INTERVIEWS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
   return undefined;

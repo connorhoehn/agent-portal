@@ -61,8 +61,27 @@ const ACCESS_LABELS: Record<string, string> = {
   reviews: 'Reviews', audit: 'Audit', configuration: 'Configuration', settings: 'Access settings',
 };
 // The interviews tenant's rail (Layout.tsx NAV_ITEMS, docs/interviews-tenant-plan.md "Pages").
-const INTERVIEWS_GROUPS: Record<string, string> = { candidates: 'Hire', 'my-openings': 'Hire', 'my-interviews': 'Interview' };
-const INTERVIEWS_LABELS: Record<string, string> = { candidates: 'Candidates', 'my-openings': 'My openings', 'my-interviews': 'My interviews' };
+// One entry per line; a lane adds its own below one of the slot comments.
+const INTERVIEWS_GROUPS: Record<string, string> = {
+  candidates: 'Hire',
+  'my-openings': 'Hire',
+  'my-interviews': 'Interview',
+  // slot 1: a lane adds its entries just below this line
+  // slot 2: a lane adds its entries just below this line
+  // slot 3: a lane adds its entries just below this line
+  // slot 4: a lane adds its entries just below this line
+  // slot 5: a lane adds its entries just below this line
+};
+const INTERVIEWS_LABELS: Record<string, string> = {
+  candidates: 'Candidates',
+  'my-openings': 'My openings',
+  'my-interviews': 'My interviews',
+  // slot 1: a lane adds its entries just below this line
+  // slot 2: a lane adds its entries just below this line
+  // slot 3: a lane adds its entries just below this line
+  // slot 4: a lane adds its entries just below this line
+  // slot 5: a lane adds its entries just below this line
+};
 const ASSESSMENT_GROUPS: Record<string, string> = {
   teams: 'Assess', submissions: 'Assess', communication: 'Assess',
   reports: 'Analyze', decks: 'Analyze', activity: 'Analyze', feedback: 'Analyze',

@@ -247,6 +247,11 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/interviews/candidates',    label: 'Candidates',    tenant: 'interviews', group: 'Hire', requireRoles: ['recruiter', 'admin'] },
   { path: '/interviews/my-openings',   label: 'My openings',   tenant: 'interviews', group: 'Hire', requireRoles: ['hiring-manager', 'admin'] },
   { path: '/interviews/my-interviews', label: 'My interviews', tenant: 'interviews', group: 'Interview', requireRoles: ['interviewer', 'admin'] },
+  // slot 1: a lane adds its entries just below this line
+  // slot 2: a lane adds its entries just below this line
+  // slot 3: a lane adds its entries just below this line
+  // slot 4: a lane adds its entries just below this line
+  // slot 5: a lane adds its entries just below this line
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
   // Logging (G37; the voice sessions of G20 are one source): dev server + the voice navigator flag, like its route.
   ...(features.voiceLog ? [{ path: '/iq/logging', label: 'Logging', tenant: 'orgiq' as const, group: 'System' }] : []),
