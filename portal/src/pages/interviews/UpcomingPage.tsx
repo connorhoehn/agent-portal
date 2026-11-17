@@ -48,7 +48,7 @@ function InviteCell({ row, status, link }: { row: InterviewRow; status: InviteSt
     <Stack gap="none">
       <Inline gap="xs" align="center" wrap={false}>
         {status && status.state !== 'none'
-          ? <T size="xs" tone="secondary" className="block max-w-[15rem] truncate" title={inviteLine(status, sentence)} data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>
+          ? <T size="xs" tone="secondary" className="block max-w-[14rem] truncate" title={inviteLine(status, sentence)} data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>
           : <T size="xs" tone="tertiary">No link yet</T>}
         {link && <CopyIdButton value={link} label={`Copy the invite link for ${row.candidate.name}`} data-testid="interviews-upcoming-copy" />}
       </Inline>
@@ -61,7 +61,7 @@ function InviteCell({ row, status, link }: { row: InterviewRow; status: InviteSt
 function TimeCell({ row, done, error }: { row: InterviewRow; done: string | undefined; error: string | null }) {
   return (
     <Stack gap="none">
-      <T size="sm" tone={row.scheduledAt ? undefined : 'secondary'} className="block max-w-[11rem] truncate" title={row.scheduledAt ? new Date(row.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(row.scheduledAt)}</T>
+      <T size="sm" tone={row.scheduledAt ? undefined : 'secondary'} className="block" title={row.scheduledAt ? new Date(row.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(row.scheduledAt)}</T>
       {done && <T size="xs" tone="secondary" data-testid="interviews-upcoming-saved">{done}</T>}
       {error && <T size="xs" tone="danger">{error}</T>}
     </Stack>
@@ -184,33 +184,35 @@ function UpcomingWorkspace() {
     {
       key: 'round', header: 'Opening and round',
       render: (r) => (
-        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[18rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
+        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[12rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
       ),
     },
     { key: 'people', header: 'Lead and panel', render: (r) => <PanelCell lead={r.lead} panel={r.panel} /> },
     {
-      key: 'state', header: 'State', width: '112px',
-      render: (r) => { const s = roundStatus(r.state); return isLive(r) ? <Chip tone="success" size="xs" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>; },
-    },
-    ...(withConsent ? [{
-      key: 'consent', header: 'Consent', width: '168px',
-      render: (r: InterviewRow) => {
+      key: 'state', header: withConsent ? 'State and consent' : 'State', width: withConsent ? '150px' : '112px',
+      render: (r) => {
+        const s = roundStatus(r.state);
         const c = consentOf.get(r.id);
-        const label = consents.data ? consentColumnLabel(c) : '—';
-        return <T size="sm" tone={!c?.answered ? 'secondary' : undefined} data-testid="interviews-upcoming-consent">{label}</T>;
+        return (
+          <Stack gap="none">
+            {isLive(r) ? <Chip tone="success" size="xs" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>}
+            {withConsent && <T size="xs" tone={!c?.answered ? 'secondary' : undefined} className="block max-w-[8.5rem] truncate" title={consents.data ? consentColumnLabel(c) : undefined} data-testid="interviews-upcoming-consent">{consents.data ? consentColumnLabel(c) : '—'}</T>}
+          </Stack>
+        );
       },
-    }] : []),
-    {
-      key: 'when', header: `Time (${zone})`, width: '188px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
-      render: (r) => (isTimeable(r.state)
-        ? <TimeCell row={r} done={saved.get(r.id)} error={rowError?.id === r.id ? rowError.text : null} />
-        : <T size="sm" tone="secondary" className="block max-w-[11rem] truncate" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>),
     },
     {
-      key: 'invite', header: 'Invite link', width: '200px',
-      render: (r) => (r.scheduledAt && isTimeable(r.state)
-        ? <InviteStatusLoader row={r} override={statuses.get(r.id)} link={links.get(r.id)} />
-        : <T size="xs" tone="tertiary">{r.scheduledAt ? '—' : 'Set a time first'}</T>),
+      key: 'when', header: 'Time and invite link', width: '210px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
+      render: (r) => (isTimeable(r.state)
+        ? (
+          <Stack gap="none">
+            <TimeCell row={r} done={saved.get(r.id)} error={rowError?.id === r.id ? rowError.text : null} />
+            {r.scheduledAt
+              ? <InviteStatusLoader row={r} override={statuses.get(r.id)} link={links.get(r.id)} />
+              : <T size="xs" tone="tertiary">Set a time first</T>}
+          </Stack>
+        )
+        : <T size="sm" tone="secondary" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>),
     },
   ];
 

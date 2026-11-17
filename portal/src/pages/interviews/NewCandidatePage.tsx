@@ -11,6 +11,7 @@ import { CollectionCommandHost } from '../../components/collections/CollectionCo
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, candidateHref, type ItemsResponse, type OpeningRow } from '../../lib/interviews';
 import { BLANK_CANDIDATE, candidateChanged, createCandidate, type NewCandidate } from '../../lib/interviewsCandidates';
 import { problemsByPath } from '../../lib/interviewsKit';
@@ -20,6 +21,7 @@ const LIST = '/interviews/candidates';
 export default function NewCandidatePage() {
   const navigate = useNavigate();
   const [search] = useSearchParams();
+  useCrumbLabel('new', 'Add a candidate');
   const base = useFlushTrailItems();
   const at = base ? base.findIndex((i) => i.label === 'Candidates') : -1;
   const trail = base && at >= 0 ? [...base.slice(0, at), { ...base[at]!, href: LIST }, { label: 'Add a candidate' }] : base;
