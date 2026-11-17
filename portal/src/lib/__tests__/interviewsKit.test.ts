@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  blankQuestion, changesLine, kitChanges, kitLine, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
+  blankQuestion, changesLine, kitChanges, kitLine, kitTitle, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
   type OpeningKit,
 } from '../interviewsKit.ts';
 
@@ -21,13 +21,13 @@ test('a behavioural round has no code pad', () => {
   assert.equal(padLine('behavioural'), 'No code pad');
 });
 
-test('kitLine says rounds and questions by kind, in words', () => {
+test('kitLine says rounds and questions; kitTitle the kinds, the competencies and the rounds', () => {
   const row = (t: number, b: number, rounds = KIT.rounds) => ({ rounds, kitSize: { competencies: 1, questions: { technical: t, behavioural: b } } });
-  assert.equal(kitLine(row(4, 2)), '2 rounds · 4 technical, 2 behavioural questions');
-  assert.equal(kitLine(row(0, 1)), '2 rounds · 1 behavioural question');
-  assert.equal(kitLine(row(3, 0)), '2 rounds · 3 technical questions');
+  assert.equal(kitLine(row(4, 2)), '2 rounds · 6 questions');
+  assert.equal(kitLine(row(0, 1)), '2 rounds · 1 question');
   assert.equal(kitLine(row(0, 0)), '2 rounds · no questions');
   assert.equal(kitLine(row(0, 0, [])), 'No kit yet');
+  assert.equal(kitTitle(row(4, 2)), '4 technical and 2 behavioural questions; 1 competency. Coding 60 min · Leadership 45 min');
 });
 
 test('starterLine names the languages in the pad\'s order', () => {

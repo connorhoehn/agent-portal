@@ -65,14 +65,17 @@ export const detailsOf = (o: OpeningRecord): OpeningDetails => ({
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** "3 rounds · 4 technical, 2 behavioural questions" — the Openings table's kit cell. */
+/** "3 rounds · 6 questions" — the Openings table's kit cell; kitTitle says the rest. */
 export function kitLine(row: Pick<OpeningListRow, 'rounds' | 'kitSize'>): string {
   if (row.rounds.length === 0) return 'No kit yet';
   const { technical, behavioural } = row.kitSize.questions;
-  const qs = technical + behavioural === 0 ? 'no questions'
-    : technical && behavioural ? `${technical} technical, ${behavioural} behavioural ${behavioural + technical === 1 ? 'question' : 'questions'}`
-      : plural(technical + behavioural, technical ? 'technical question' : 'behavioural question');
-  return `${plural(row.rounds.length, 'round')} · ${qs}`;
+  return `${plural(row.rounds.length, 'round')} · ${technical + behavioural ? plural(technical + behavioural, 'question') : 'no questions'}`;
+}
+
+/** "4 technical and 2 behavioural questions; 5 competencies. Coding 60 min · …" — the kit cell's title. */
+export function kitTitle(row: Pick<OpeningListRow, 'rounds' | 'kitSize'>): string {
+  const { technical, behavioural } = row.kitSize.questions;
+  return `${technical} technical and ${behavioural} behavioural ${technical + behavioural === 1 ? 'question' : 'questions'}; ${plural(row.kitSize.competencies, 'competency', 'competencies')}. ${roundsLine(row.rounds)}`;
 }
 
 /** "Coding 60 min · System design 60 min" for a title attribute. */

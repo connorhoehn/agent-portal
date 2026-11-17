@@ -15,7 +15,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { ofTotal } from '../../lib/plural';
 import { relativeTime } from '../../lib/relativeTime';
 import { INTERVIEWS_API, byStageLine, matches, type ItemsResponse } from '../../lib/interviews';
-import { OPENING_STATE_LABELS, kitLine, roundsLine, type OpeningListRow, type OpeningState } from '../../lib/interviewsKit';
+import { OPENING_STATE_LABELS, kitLine, kitTitle, type OpeningListRow, type OpeningState } from '../../lib/interviewsKit';
 import { Dash, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -37,7 +37,7 @@ const COLUMNS: DataTableColumn<OpeningListRow>[] = [
     render: (r) => (r.candidates ? <T size="sm" title={byStageLine(r.byStage)} className="block max-w-[18rem] truncate">{byStageLine(r.byStage)}</T> : <Dash />),
   },
   {
-    key: 'kit', header: 'Kit', render: (r) => <T size="sm" title={roundsLine(r.rounds)} className="block max-w-[18rem] truncate" data-testid="interviews-opening-kit">{kitLine(r)}</T>,
+    key: 'kit', header: 'Kit', render: (r) => <T size="sm" title={kitTitle(r)} className="block max-w-[14rem] truncate" data-testid="interviews-opening-kit">{kitLine(r)}</T>,
   },
   {
     key: 'opened', header: 'Opened', numeric: true, sortable: true, compare: (a, b) => a.openedAt.localeCompare(b.openedAt),
@@ -59,7 +59,7 @@ function OpeningsWorkspace() {
   const all = data?.items ?? [];
   const states = useMemo(() => STATES.filter((s) => all.some((r) => r.state === s)), [all]);
   const rows = all.filter((r) => (!state || r.state === state)
-    && matches(query, r.title, r.level, r.team, r.location, r.hiringManager?.name, kitLine(r), ...r.rounds.map((x) => x.name)));
+    && matches(query, r.title, r.level, r.team, r.location, r.hiringManager?.name, kitLine(r), kitTitle(r)));
   const adapter = interviewsCollectionAdapter('openings', { setQuery, setFilter: setState, refresh });
 
   return (

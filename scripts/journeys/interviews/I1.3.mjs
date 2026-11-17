@@ -24,7 +24,7 @@ export default async function run({ portal, out, path, record, signIn, shoot, re
     const text = await table.innerText();
     const shots = await shoot(page, 'recruiter-openings', 'interviews-openings-table');
     const ok = titles.length === 3 && ['Engineering Manager', 'iOS Engineer', 'Senior Backend Engineer'].every((t) => titles.includes(t))
-      && kits.includes('3 rounds · 4 technical, 2 behavioural questions') && /Not named yet/.test(text) && /Interviewing \d/.test(text)
+      && kits.includes('3 rounds · 6 questions') && /Not named yet/.test(text) && /Interviewing \d/.test(text)
       && !/\b(op|rd|q)-[a-z]/.test(text) && shots.every((s) => s.ok);
     record('I1.3a', ok, `recruiter's Openings: ${JSON.stringify(titles)}; kits ${JSON.stringify(kits)}; ${shotLine(shots)}`);
   } catch (e) {
@@ -62,7 +62,7 @@ export default async function run({ portal, out, path, record, signIn, shoot, re
     const deck = page.getByTestId('collection-command-composer-prompts');
     await deck.getByText(/Save these changes\?/).waitFor({ timeout: 10_000 });
     const asked = await deck.innerText();
-    await deck.getByRole('button', { name: /^(\d\s*)?Save$/ }).click();
+    await deck.getByRole('button', { name: /\bSave\b/ }).first().click();
     await page.getByTestId('interviews-opening-editor').getByText('Saved', { exact: true }).waitFor({ timeout: 15_000 });
     // Reload the opening as anyone would: the question is in the saved kit.
     await page.goto(`${portal}/interviews/openings/op-backend`, { waitUntil: 'domcontentloaded' });

@@ -32,7 +32,12 @@ const stateTone = (s: OpeningRecord['state']) => (s === 'open' ? 'success' : s =
 export default function OpeningPage({ editing = false }: { editing?: boolean }) {
   const { id = '' } = useParams();
   const { session } = useSession();
-  return <OpeningWorkspace key={`${id}:${session?.sub}:${session?.role}:${editing}`} id={id} editing={editing} />;
+  // Flush: the page's own header draws the one trail, with the opening's title on it (Breadcrumbs.tsx).
+  return (
+    <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
+      <OpeningWorkspace key={`${id}:${session?.sub}:${session?.role}:${editing}`} id={id} editing={editing} />
+    </Stack>
+  );
 }
 
 /** The shell's trail (Hire › Openings) with the opening, and "Edit kit" on the editor, after it. */

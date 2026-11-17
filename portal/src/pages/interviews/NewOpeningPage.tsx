@@ -2,7 +2,7 @@
 // details, then its kit on the opening's editor. Creating is asked in the composer's prompt deck, never a
 // dialog; the server checks the details and answers each problem on its field.
 
-import { Button, Inline, PageFrame } from '@connorhoehn/ui-components/shared';
+import { Button, Inline, PageFrame, Stack } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -56,7 +56,7 @@ export default function NewOpeningPage() {
   }), []);
 
   return (
-    <>
+    <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
       <PageFrame title="New opening" description="Name the opening and who decides it. You add the rounds, competencies and questions next."
         breadcrumbs={trail} data-testid="interviews-new-opening-page"
         actions={(
@@ -70,6 +70,6 @@ export default function NewOpeningPage() {
         <OpeningDetailsForm details={details} onChange={setDetails} problems={problems} />
       </PageFrame>
       <CollectionCommandHost adapter={adapter} prompts={prompts} />
-    </>
+    </Stack>
   );
 }
