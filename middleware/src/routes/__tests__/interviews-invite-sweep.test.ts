@@ -261,3 +261,27 @@ describe('lane RUNS (rows I4.4, I4.5): the runs routes and a guest', () => {
     }
   });
 });
+
+describe('lane DESK-B (Add a candidate): the route against a guest', () => {
+  let guest = '';
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    const login = await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-greta' }) });
+    const staff = cookieOf(login, 'orgiq.session');
+    const made = await fetch(`${base}/api/interviews/interviews/${OWN}/invite`, { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: '{}' });
+    const token = String(((await made.json()) as { linkPath: string }).linkPath).split('#')[1];
+    const opened = await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+    guest = cookieOf(opened, 'interviews.guest');
+  }, 60_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  it('refuses the guest, and writes no candidate', async () => {
+    const body = { name: 'Guest Made', email: 'guest.made@mail.example', openingId: 'op-backend' };
+    expect((await call('POST', '/api/interviews/candidates', guest, body)).status).toBeGreaterThanOrEqual(400);
+    const login = await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-greta' }) });
+    const list = await fetch(`${base}/api/interviews/candidates`, { headers: { cookie: cookieOf(login, 'orgiq.session') } });
+    expect(JSON.stringify(await list.json())).not.toContain('guest.made@mail.example');
+  });
+});

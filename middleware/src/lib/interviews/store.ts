@@ -96,6 +96,8 @@ export interface InterviewsStore extends OpeningWrites, InterviewWrites, Scoreca
   /** One interview by id, or null: the gateway's per-delivery seat checks (the pad, the lobby) read this, not the whole table. */
   getInterview(id: string): Promise<Interview | null>;
   listScorecards(): Promise<Scorecard[]>;
+  /** Add a candidate and their application to an opening together (UI round 2, DESK-B). Ids are chosen by the route and never reused; a taken id is `null`. */
+  createCandidate(candidate: Candidate, application: Application): Promise<{ candidate: Candidate; application: Application } | null>;
 }
 
 /** The order every store returns: the SQL statements' ORDER BY clauses, in code. */
@@ -197,6 +199,13 @@ export class MemoryInterviewsStore implements InterviewsStore {
     row.history.push(structuredClone(change));
     row.stage = change.stage;
     return { ok: true, row: structuredClone(row) };
+  }
+
+  async createCandidate(candidate: Candidate, application: Application): Promise<{ candidate: Candidate; application: Application } | null> {
+    if (interviewCandidatesFixture.rows().some((c) => c.id === candidate.id) || interviewApplicationsFixture.rows().some((a) => a.id === application.id)) return null;
+    interviewCandidatesFixture.rows().push(structuredClone(candidate));
+    interviewApplicationsFixture.rows().push(structuredClone(application));
+    return { candidate: structuredClone(candidate), application: structuredClone(application) };
   }
 }
 

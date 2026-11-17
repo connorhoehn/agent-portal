@@ -35,6 +35,7 @@ import { miloRouter } from './interviews/milo.js';
 import { padRouter } from './interviews/pad.js';
 import { assignmentsRouter } from './interviews/assignments.js';
 import { runsRouter } from './interviews/runs.js';
+import { candidatesRouter } from './interviews/candidates.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
 export function interviewsFlagGate(_req: Request, res: Response, next: NextFunction): void {
@@ -73,6 +74,7 @@ interviewsRouter.use(resumeRouter); // lane RESUME (row I1.6): a candidate's ré
 interviewsRouter.use(recordsRouter); // lane RECORDS (rows I6.1, I6.2): consent records and the export of what Milo showed
 
 interviewsRouter.use(consentEffectsRouter); // lane DECLINED (row I2.5): what each round runs without, for the recruiter
+interviewsRouter.use(candidatesRouter); // lane DESK-B (Add a candidate)
 interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   res.setHeader('Cache-Control', 'no-store');

@@ -332,6 +332,27 @@ export class SqlInterviewsStore implements InterviewsStore {
     return now ? { ok: false, reason: 'stale', row: applicationFromRow(now) } : { ok: false, reason: 'not-found' };
   }
 
+  /** The candidate and their application in one statement, so neither is written alone; a taken id inserts nothing and returns no row. */
+  static readonly CREATE_CANDIDATE_SQL = `WITH c AS (
+    INSERT INTO interview_candidates (id, name, email, headline, location, source, resume_file_id, notes, created_at)
+    VALUES (:candidate_id, :name, :email, :headline, :location, :source, NULL, '', CAST(:created_at AS TIMESTAMPTZ))
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id)
+  INSERT INTO interview_applications (id, candidate_id, opening_id, stage, applied_at, history)
+  SELECT :application_id, c.id, :opening_id, :stage, CAST(:applied_at AS TIMESTAMPTZ), CAST(:history AS JSONB) FROM c
+  ON CONFLICT (id) DO NOTHING
+  RETURNING ${SqlInterviewsStore.APPLICATION_COLUMNS}`;
+
+  async createCandidate(candidate: Candidate, application: Application): Promise<{ candidate: Candidate; application: Application } | null> {
+    const rows = await this.exec(SqlInterviewsStore.CREATE_CANDIDATE_SQL, [
+      textParam('candidate_id', candidate.id), textParam('name', candidate.name), textParam('email', candidate.email), textParam('headline', candidate.headline),
+      textParam('location', candidate.location), textParam('source', candidate.source), textParam('created_at', candidate.createdAt),
+      textParam('application_id', application.id), textParam('opening_id', application.openingId), textParam('stage', application.stage),
+      textParam('applied_at', application.appliedAt), textParam('history', JSON.stringify(application.history)),
+    ]);
+    return rows[0] ? { candidate: structuredClone(candidate), application: applicationFromRow(rows[0]) } : null;
+  }
+
   /** cas() for an interview. */
   private async casInterview(id: string, written: Record<string, unknown>[]): Promise<WriteResult<Interview>> {
     if (written[0]) return { ok: true, row: interviewFromRow(written[0]) };
