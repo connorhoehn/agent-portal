@@ -11,7 +11,7 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-17T16:13:00.056Z",
+  "capturedAt": "2026-11-17T18:29:43.123Z",
   "serverHandlerSha": "0fd190805d97cbec3f7a1a692038822e6bb23b5c1377718edf56740f2749b954"
  },
  "summary": {

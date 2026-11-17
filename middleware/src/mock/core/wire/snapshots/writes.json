@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-17T16:13:00.056Z",
+  "capturedAt": "2026-11-17T18:29:43.123Z",
   "serverHandlerSha": "0fd190805d97cbec3f7a1a692038822e6bb23b5c1377718edf56740f2749b954",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
