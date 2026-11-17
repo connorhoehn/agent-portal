@@ -149,14 +149,15 @@ export default async function run(ctx) {
     await seen(p, 'interviews-scorecard-mine');
     const text = squash(await p.getByTestId('interviews-scorecard').innerText());
     const correct = await p.getByTestId('interviews-scorecard-correct').count();
+    const lockedWhy = await p.getByTestId("interviews-scorecard-reviewed-line").count() ? squash(await p.getByTestId("interviews-scorecard-reviewed-line").innerText()) : "";
     const shots = await shootPage(p, 'scorecard-reviewed');
     await p.close();
     const checks = {
       reviewed: read.interview.state === 'reviewed', cannotSubmit: read.canSubmit === false, status409: refused.status === 409, sentence: /can no longer be corrected/.test(refused.body?.error ?? ''),
-      noButton: correct === 0, doneChip: /\bDone\b/.test(text), shots: shots.every((s) => s.ok),
+      noButton: correct === 0, doneChip: /\bDone\b/.test(text), saysWhy: lockedWhy === 'This round has been reviewed, so its scorecards can no longer be corrected.', shots: shots.every((s) => s.ok),
     };
     record('I5.5e', Object.values(checks).every(Boolean),
-      `[failing: ${failing(checks)}] after the decision the round is ${read.interview.state}; the route answers ${refused.status} "${refused.body?.error ?? ''}"; the page offers ${correct} "Correct it"; ${widths(shots)}`);
+      `[failing: ${failing(checks)}] after the decision the round is ${read.interview.state}; the route answers ${refused.status} "${refused.body?.error ?? ''}"; the page offers ${correct} "Correct it" and says "${lockedWhy}"; ${widths(shots)}`);
   } catch (e) { record('I5.5e', false, `correction after the decision: ${why(e)}`); }
 
   await page.close().catch(() => undefined);

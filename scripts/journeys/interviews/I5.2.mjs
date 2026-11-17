@@ -141,7 +141,8 @@ export default async function run(ctx) {
     const answer = squash(await p.getByTestId('interviews-recap-ask-answer').first().innerText());
     const hugoOwn = await recapApi(hugo, I.kwameLive);
     await p.close();
-    record('I5.2d', ended.status === 200 && refusedBefore.status === 404 && /without a transcript/.test(state) && answer.includes(NO_LINES) && hugoOwn.status === 404,
+    // Nothing was said, so the recap is `no-transcript`; a seat reads it as `none` (hardening H4: the panel is not told why).
+    record('I5.2d', ended.status === 200 && refusedBefore.status === 404 && /Milo could not write a recap/.test(state) && !/transcript/i.test(state) && answer.includes(NO_LINES) && hugoOwn.status === 404,
       `the panel member's ask before opening: ${refusedBefore.status}; after opening her own: "${state.slice(0, 60)}…" and her ask is answered "${NO_LINES.slice(0, 40)}…"; the lead has not opened his: ${hugoOwn.status}`);
   } catch (e) { record('I5.2d', false, `panel member: ${why(e)}`); }
 
@@ -178,6 +179,13 @@ export default async function run(ctx) {
     const noTranscript = await recapStepOf(wen, I.aikoCoding);
     const none = await recapStepOf(hugo, I.nadiaDesign);
     const readerStates = [(await recapApi(greta, I.aikoCoding)).body?.recap?.state, (await recapApi(greta, I.nadiaDesign)).body?.recap?.state];
+    // The recruiter may know why (the profile's Consents are hers); the line on the page still names no answer.
+    const rp = await greta.newPage();
+    await rp.goto(`${portal}/interviews/rounds/${I.aikoCoding}/scorecard`, { waitUntil: 'domcontentloaded' });
+    await seen(rp, 'interviews-recap-state');
+    const readerLine = squash(await rp.getByTestId('interviews-recap-state').innerText());
+    await shootPage(rp, 'recap-no-transcript');
+    await rp.close();
     // The budget: the server's answer to an open is replaced, as a refused hold would answer it (the mock cannot set a cap below one recap's cost).
     await hold(hugo, I.mateoDesign, { recording: true, transcription: true, milo: true });
     const paused = await recapStepOf(hugo, I.mateoDesign, { recap: { state: 'paused', paused: 'budget', writtenAt: null, competencies: [], notCovered: [] } });
@@ -187,9 +195,11 @@ export default async function run(ctx) {
       basedOn: (await api(amara, 'GET', `/api/interviews/candidates/${SEED.candidates.ingrid}/debrief`)).body.debrief.applications[0].basedOn,
     });
     const reviewedAsk = await askApi(hugo, I.ingridCoding, GUEST_ASK);
-    const ok = /ran without a transcript/.test(noTranscript) && /Milo could not write a recap for this interview/.test(none) && readerStates[0] === 'no-transcript' && readerStates[1] === 'none'
+    // A seat cannot tell the transcript declined from Milo declined: the same line for both, naming no answer.
+    const ok = noTranscript === none && !/transcript|declin|chose/i.test(noTranscript) && /Milo could not write a recap for this interview/.test(none) && readerStates[0] === 'no-transcript' && readerStates[1] === 'none'
+      && readerLine === 'Milo has no recap for this round.'
       && /interview budget is used up/.test(paused) && amaraDecide.status === 201 && reviewedAsk.status === 404 && /no recap here that you can open/i.test(reviewedAsk.body?.error ?? '');
-    record('I5.2e', ok, `no transcript "${noTranscript.slice(0, 50)}…" (readers: ${readerStates[0]}); none "${none.slice(0, 45)}…" (readers: ${readerStates[1]}); paused "${paused.slice(0, 40)}…"; a reviewed round's ask: ${reviewedAsk.status} "${reviewedAsk.body?.error ?? ''}"`);
+    record('I5.2e', ok, `no transcript, as the seat reads it "${noTranscript.slice(0, 50)}…" (recruiter: ${readerStates[0]}, "${readerLine}"); none "${none.slice(0, 45)}…" (readers: ${readerStates[1]}); paused "${paused.slice(0, 40)}…"; a reviewed round's ask: ${reviewedAsk.status} "${reviewedAsk.body?.error ?? ''}"`);
   } catch (e) { record('I5.2e', false, `states: ${why(e)}`); }
 
   for (const c of open) await c.close().catch(() => undefined);

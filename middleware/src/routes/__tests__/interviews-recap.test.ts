@@ -197,6 +197,14 @@ describe('reading the recap', () => {
     for (const as of [GRETA, AMARA, OPERATOR]) expect((await readAs(as)).status).toBe(404);
   });
 
+  it('the transcript declined: an interviewer reads "none", as for Milo declined or a recap that failed; only the recruiter, the hiring manager and the admin read why', async () => {
+    setRecapDeps({ consents: async () => ({ transcription: false, milo: false }) });
+    const opened = await openAs(WEN);
+    expect([opened.status, opened.body.recap.state]).toEqual([200, 'none']);
+    expect((await readAs(WEN)).body.recap.state).toBe('none');
+    for (const as of [GRETA, AMARA, OPERATOR]) expect((await readAs(as)).body.recap.state).toBe('no-transcript');
+  });
+
   it('another opening\'s hiring manager and another round\'s interviewer: not found', async () => {
     await openAs(WEN);
     expect((await readAs(OTHER_HM)).status).toBe(404);

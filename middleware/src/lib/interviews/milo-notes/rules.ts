@@ -177,7 +177,8 @@ export function decideAfterCallAsk(f: AfterCallFacts): AfterCallDecision {
 
 export const AFTER_CALL_REFUSAL_LINES: Record<AfterCallRefusal, string> = {
   'not-ended': 'The interview has not ended yet, so there is no recap to ask about.',
-  'no-consent': 'Milo is off for this interview, so it cannot answer questions about it.',
+  // Neutral on purpose: read from the scorecard's recap, it must not tell which of the candidate's answers turned Milo off.
+  'no-consent': 'Milo cannot answer questions about this round.',
   'at-max': 'Milo has answered as many of your questions as it can for this interview.',
   'too-soon': 'Milo needs a few seconds between questions. Ask again in a moment.',
   'in-flight': 'Milo is still answering your last question.',

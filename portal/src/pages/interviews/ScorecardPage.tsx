@@ -30,7 +30,7 @@ import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/in
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
-  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, previousStep, recommendationVerdict, recapStateLine, recapUrl, saveDraft, scaleOf, submitScorecard,
+  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
@@ -225,8 +225,10 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
 
   const form = draft.step === 'recap' ? recapStep : draft.step === 'decide' ? decideStep : rateStep;
 
+  const lockedLine = reviewedLine(interview.state, mine !== null);
   const mineTab = editing ? form : mine ? (
     <Stack gap="md">
+      {lockedLine && <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-reviewed-line">{lockedLine}</T>}
       <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />
       <ScorecardReadout card={mine} competencies={competencies} testId="interviews-scorecard-mine" />
     </Stack>

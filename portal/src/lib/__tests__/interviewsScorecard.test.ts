@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
-  previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, saveDraft, scaleOf, scorecardPath,
+  previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
 
@@ -115,7 +115,8 @@ test('the draft resumes a step past the ratings only when the recap was opened f
 
 test('Milo\'s recap: one sentence when there is nothing to show, and the evidence per competency', () => {
   assert.equal(recapStateLine({ state: 'ready' }), null);
-  assert.match(recapStateLine({ state: 'no-transcript' })!, /without a transcript/);
+  assert.equal(recapStateLine({ state: 'no-transcript' }), 'Milo has no recap for this round.');
+  assert.doesNotMatch(recapStateLine({ state: 'no-transcript' })!, /transcript|consent|declin|chose/i);
   assert.match(recapStateLine({ state: 'paused' })!, /budget/);
   assert.match(recapStateLine({ state: 'none' })!, /could not write/);
   assert.match(recapStateLine({ state: 'none' }, true)!, /no recap for this interview yet/);
@@ -143,4 +144,10 @@ test('a submitted scorecard states its recommendation as a go or no-go in words'
 
 test('the three steps of a scorecard each have a plain label, in the order of the flow', () => {
   assert.deepEqual(SCORECARD_STEPS.map((s) => SCORECARD_STEP_LABELS[s]), ['Rate each competency', "Read Milo's recap", 'Recommend']);
+});
+
+test('a reviewed round says why its scorecard has no "Correct it"; any other state, or no scorecard of mine, says nothing', () => {
+  assert.equal(reviewedLine('reviewed', true), 'This round has been reviewed, so its scorecards can no longer be corrected.');
+  assert.equal(reviewedLine('reviewed', false), null);
+  assert.equal(reviewedLine('scored', true), null);
 });

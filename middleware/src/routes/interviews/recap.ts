@@ -18,6 +18,9 @@
 //                                     until it is reviewed: body `{ question }` → the room ask's answer body (contract F1).
 //                                     Everyone else, a seat that has not opened the recap, the recruiter, the hiring manager,
 //                                     the admin and a guest: 404. Not ended: 409. A missing or over-long question: 400.
+// The candidate's consent answers are the recruiter's and the hiring manager's to read (the profile's Consents), and appear
+// on no scorecard (decision 4). `no-transcript` tells the reader the transcript was declined (or nothing was said), so an
+// interviewer, seated or not, reads it as `none`: the same answer as Milo declined or a recap that failed (hardening H4).
 // Everyone else (another round's interviewer otherwise, another opening's hiring manager, a guest, another tenant) gets
 // the tenant's not-found: 404, never 403, as phase 0 does. A role without ConductInterview posting an open is refused at
 // the action (403), as the scorecard's submit is. An open before the interview has ended is 409; ratings that do not
@@ -54,6 +57,11 @@ function refIn(world: Pick<InterviewsWorld, 'interviews' | 'applications' | 'ope
   return interview && opening ? { interview, opening } : null;
 }
 
+/** The recap as an interviewer reads it: nothing that tells which of the candidate's answers left it without one. */
+export function forInterviewer<B extends { state: string }>(body: B): B {
+  return body.state === 'no-transcript' ? { ...body, state: 'none' } : body;
+}
+
 /** The interview's recap reference when the viewer may read the recap now; null otherwise (answered as not-found). */
 async function readable(req: Request): Promise<RecapRef | null> {
   const session = resolveSession(req)!;
@@ -83,7 +91,9 @@ recapRouter.get('/interviews/:id/recap', asyncHandler(async (req, res) => {
   const ref = await readable(req);
   if (!ref) throw new NotFoundError(NO_RECAP);
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ recap: await readRecap(ref) });
+  const reach = reachOf(resolveSession(req)!.role);
+  const recap = await readRecap(ref);
+  res.json({ recap: reach === 'everything' || reach === 'own-openings' ? recap : forInterviewer(recap) });
 }));
 
 recapRouter.post('/interviews/:id/recap/open', conduct, asyncHandler(async (req, res) => {
@@ -95,7 +105,7 @@ recapRouter.post('/interviews/:id/recap/open', conduct, asyncHandler(async (req,
   if (!ENDED.has(ref.interview.state)) { res.status(409).json({ error: NOT_ENDED }); return; }
   const ratings = checkOpenRatings(req.body, ref.opening);
   if (!ratings) { res.status(400).json({ error: RATE_ALL, fields: [{ field: 'ratings', message: RATE_ALL }] }); return; }
-  res.json({ recap: await openRecap(ref, { userId: session.sub }, ratings) });
+  res.json({ recap: forInterviewer(await openRecap(ref, { userId: session.sub }, ratings)) });
 }));
 
 recapRouter.post('/interviews/:id/recap/ask', asyncHandler(async (req, res) => {

@@ -193,9 +193,15 @@ export function openBodyOf(d: Pick<Draft, 'ratings'>, competencies: readonly Kit
   return { ratings: competencies.map((c) => ({ competencyId: c.id, rating: d.ratings[c.id]! })) };
 }
 
+/** Why a seat's submitted scorecard has no "Correct it": the round was reviewed. Null otherwise. */
+export function reviewedLine(state: InterviewState, hasMine: boolean): string | null {
+  return state === 'reviewed' && hasMine ? 'This round has been reviewed, so its scorecards can no longer be corrected.' : null;
+}
+
 /** One sentence for a recap that has nothing to show; null when it is ready. */
 export function recapStateLine(r: Pick<RecapBody, 'state'>, forReaders = false): string | null {
-  if (r.state === 'no-transcript') return 'This interview ran without a transcript, so Milo has no recap for it.';
+  // Neutral on purpose: it must not tell the panel which of the candidate's answers left the round without a transcript.
+  if (r.state === 'no-transcript') return 'Milo has no recap for this round.';
   if (r.state === 'paused') return 'Milo could not write the recap because this opening\'s interview budget is used up. Your scorecard does not need it.';
   if (r.state === 'none') return forReaders ? 'Milo has no recap for this interview yet.' : 'Milo could not write a recap for this interview. Your scorecard does not need it.';
   return null;
