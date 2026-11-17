@@ -106,7 +106,7 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(ios.status).toBe(200);
     expect(ios.body.opening).toMatchObject({ title: 'iOS Engineer', hiringManager: null, recruiter: { name: 'Greta Lindqvist' } });
     expect(ios.body.opening.competencies.map((c: { name: string }) => c.name)).toContain('Swift and SwiftUI');
-    expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(11);
+    expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(12);
     const aiko = await GRETA('/api/interviews/interviews/iv-c3k8w2ma');
     expect(aiko.body.interview).toMatchObject({ candidate: { name: 'Aiko Tanaka' }, lead: { name: 'Wen Zhao' }, state: 'ready', seat: null });
     const ingrid = await GRETA('/api/interviews/candidates/cand-ingrid');
@@ -127,11 +127,11 @@ describe('the recruiter reads everything in the tenant', () => {
 });
 
 describe('an interviewer reads only the interviews assigned to them', () => {
-  it('GET /interviews: Hugo\'s six, with his desk buckets; none of Wen\'s alone', async () => {
+  it('GET /interviews: Hugo\'s seven, with his desk buckets; none of Wen\'s alone', async () => {
     const res = await HUGO('/api/interviews/interviews');
     expect(res.status).toBe(200);
     const ids = res.body.items.map((i: { id: string }) => i.id).sort();
-    expect(ids).toEqual(['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq']);
+    expect(ids).toEqual(['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
     expect(res.body.items.find((i: { id: string }) => i.id === 'iv-h4m7c3vu').bucket).toBe('to-accept');
   });
 

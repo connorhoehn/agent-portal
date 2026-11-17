@@ -405,16 +405,16 @@ describe('the panel\'s notice asked again after it changes (row I6.4; F2)', () =
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.body).toEqual({
       notice: { version: CONSENT_NOTICE.version, title: CONSENT_NOTICE.title, text: CONSENT_NOTICE.paragraphs.join('\n\n'), panelLine: expect.stringMatching(/applies to you too/) },
-      acknowledged: false, pendingRounds: 3, roundId: 'iv-k1p5w8ra',
+      acknowledged: false, pendingRounds: 4, roundId: 'iv-s4e8u2zk',
     });
     expect((await HUGO.post(`/interviews/${res.body.roundId}/panel-notice`, { version: CONSENT_NOTICE.version })).status).toBe(201);
-    expect((await read(HUGO)).body).toMatchObject({ acknowledged: true, pendingRounds: 3 });
+    expect((await read(HUGO)).body).toMatchObject({ acknowledged: true, pendingRounds: 4 });
     expect((await rowOf(HUGO, 'iv-m8t3h6ng')).myAnswer).toBe('accepted');
     expect((await rowOf(HUGO, 'iv-k1p5w8ra')).state).toBe('ready');
   });
 
   it('acknowledged: reads so, with the rounds still counted', async () => {
-    expect((await read(WEN)).body).toMatchObject({ acknowledged: true, pendingRounds: 2, roundId: 'iv-c3k8w2ma' });
+    expect((await read(WEN)).body).toMatchObject({ acknowledged: true, pendingRounds: 3, roundId: 'iv-s4e8u2zk' });
   });
 
   it('no pending rounds: zero and no round, whatever was acknowledged', async () => {

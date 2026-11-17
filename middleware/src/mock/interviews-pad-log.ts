@@ -6,6 +6,7 @@
 // candidate's id is the records stand-in's (`guest:iv-j6x2d9sb`). Registered from its own module
 // (lib/interviews/pad/log/store.ts imports it). Times follow mock/interviews.ts's `at()`: days from today's UTC midnight.
 import { clock, defineFixture } from './core/index.js';
+import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 import type { PadEventRecord } from '../lib/interviews/pad/log/store.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -24,6 +25,12 @@ const none = { from: null, inserted: null, deleted: null, length: null, lines: n
 
 function rowsOf(interviewId: string, days: number, hour: number, rows: Row[]): PadEventRecord[] {
   return rows.map(({ s, ...r }, i) => ({ ...r, interviewId, seq: i + 1, at: atFor(days, hour, s), clientAt: atFor(days, hour, s) }));
+}
+
+/** The same rows for a round that started at `start` (an instant), as a live round's do. */
+function rowsOfAt(interviewId: string, start: string, rows: Row[]): PadEventRecord[] {
+  const t = (s: number) => new Date(Date.parse(start) + s * 1000).toISOString();
+  return rows.map(({ s, ...r }, i) => ({ ...r, interviewId, seq: i + 1, at: t(s), clientAt: t(s) }));
 }
 
 // ── Mateo (iv-j6x2d9sb, -3d 14:00) ──
@@ -86,10 +93,27 @@ const RAVI_ROWS: Row[] = [
   { ...none, s: 2480, whoId: RAVI, side: 'candidate', kind: 'snapshot', length: SWIFT_DEBOUNCE.length, language: 'swift', text: SWIFT_DEBOUNCE },
 ];
 
+// ── Kwame's coding round (LIVE_INTERVIEW_ID, live now, Hugo leads): the limiter, first with the off-by-one, then fixed ──
+const KWAME = `guest:${LIVE_INTERVIEW_ID}`;
+const K_BUCKET = 'class RateLimiter:\n    def __init__(self, capacity: int, refill_per_second: float):\n        self.capacity = capacity\n        self.rate = refill_per_second\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now: float) -> bool:\n        self.tokens += (now - self.last) * self.rate\n        self.last = now\n        if self.tokens > 1:\n            self.tokens -= 1\n            return True\n        return False\n';
+const K_CLAMP = '\ndef clamp(value, low, high):\n    return max(low, min(high, value))\n';
+const K_FIXED = K_BUCKET.replace('self.tokens += (now - self.last) * self.rate', 'self.tokens = clamp(self.tokens + (now - self.last) * self.rate, 0, self.capacity)').replace('self.tokens > 1', 'self.tokens >= 1') + K_CLAMP;
+const KWAME_ROWS: Row[] = [
+  { ...none, s: 45, whoId: HUGO, side: 'panel', kind: 'insert', questionId: 'q-be-ratelimit', from: 0, inserted: STARTER.length, length: STARTER.length, language: 'python' },
+  { ...none, s: 47, whoId: HUGO, side: 'panel', kind: 'language', language: 'python' },
+  { ...none, s: 150, whoId: KWAME, side: 'candidate', kind: 'edit', from: 92, inserted: 110, deleted: 4, length: STARTER.length + 106 },
+  { ...none, s: 215, whoId: KWAME, side: 'candidate', kind: 'edit', from: 200, inserted: 190, deleted: 0, length: K_BUCKET.length },
+  { ...none, s: 255, whoId: KWAME, side: 'candidate', kind: 'snapshot', length: K_BUCKET.length, language: 'python', text: K_BUCKET },
+  { ...none, s: 340, whoId: KWAME, side: 'candidate', kind: 'edit', from: 280, inserted: 60, deleted: 2, length: K_BUCKET.length + 58 },
+  { ...none, s: 375, whoId: KWAME, side: 'candidate', kind: 'paste', from: K_BUCKET.length, inserted: K_CLAMP.length, lines: 3, via: 'paste', length: K_BUCKET.length + K_CLAMP.length },
+  { ...none, s: 450, whoId: KWAME, side: 'candidate', kind: 'snapshot', length: K_FIXED.length, language: 'python', text: K_FIXED },
+];
+
 export const interviewPadLogFixture = defineFixture<PadEventRecord>({
   key: 'interviews.pad-log',
   scenarios: {
-    default: () => [...rowsOf(IV, -3, 14, MATEO_ROWS), ...rowsOf('iv-d7q4n9xe', -9, 14, INGRID_ROWS), ...rowsOf('iv-p2v7j4ye', -2, 15, RAVI_ROWS)],
+    default: () => [...rowsOf(IV, -3, 14, MATEO_ROWS), ...rowsOf('iv-d7q4n9xe', -9, 14, INGRID_ROWS), ...rowsOf('iv-p2v7j4ye', -2, 15, RAVI_ROWS),
+      ...rowsOfAt(LIVE_INTERVIEW_ID, liveStart(), KWAME_ROWS)],
     empty: () => [],
   },
 });

@@ -7,6 +7,7 @@
 // it), so mock/interviews.ts is untouched. `POST /api/__mock/reset` resets it like every other fixture.
 import { clock, defineFixture } from './core/index.js';
 import type { RunRecord } from '../lib/interviews/runs/store.js';
+import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 import type { RunLanguage, RunResult, RunStatus } from '../lib/interviews/runs/executor.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -18,14 +19,15 @@ function atFor(days: number, hour: number, seconds: number): string {
 }
 
 interface Seed {
-  interviewId: string; days: number; hour: number; runId: string; language: RunLanguage; entrypoint: string;
+  interviewId: string; days: number; hour: number; /** When set, `s` counts from this instant instead of `days` / `hour`. */ base?: string; runId: string; language: RunLanguage; entrypoint: string;
   by: { id: string; name: string; side: 'panel' | 'candidate' }; s: number; status: RunStatus;
   stdout: string; stderr: string; exitCode: number; timeMs: number; version: string; source: string;
 }
 
 function run(x: Seed): RunRecord {
-  const queuedAt = atFor(x.days, x.hour, x.s);
-  const endedAt = atFor(x.days, x.hour, x.s + Math.ceil(x.timeMs / 1000) + 1);
+  const from = (seconds: number) => (x.base ? new Date(Date.parse(x.base) + seconds * 1000).toISOString() : atFor(x.days, x.hour, seconds));
+  const queuedAt = from(x.s);
+  const endedAt = from(x.s + Math.ceil(x.timeMs / 1000) + 1);
   const result: RunResult = {
     status: x.status, exitCode: x.exitCode, compileOutput: '', stdout: x.stdout, stderr: x.stderr, truncated: { stdout: false, stderr: false },
     timeMs: x.timeMs, peakMemoryMb: 28, backend: 'mock', runtimeVersion: x.version,
@@ -45,6 +47,8 @@ const cand = (interviewId: string, name: string) => ({ id: `guest:${interviewId}
 
 const LIMITER_FAILS = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow("key-a", 0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint("ok")\n';
 const LIMITER_PASSES = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow("key-a", 0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint(results)\nprint("ok")\n';
+const LIMITER_KEYLESS = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow(0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint("ok")\n';
+const LIMITER_KEYLESS_OK = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow(0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint(results)\nprint("ok")\n';
 const RETRY_CHECK = 'provider = FlakyProvider(fail_first=2)\nprint(charge_with_retry(provider, 4200, "tok_test"))\nprint(provider.calls)\n';
 
 export const interviewRunsFixture = defineFixture<RunRecord>({
@@ -68,6 +72,13 @@ export const interviewRunsFixture = defineFixture<RunRecord>({
         stdout: '', stderr: 'main.swift:12: Fatal error: page 2 was requested twice\n', exitCode: 1, timeMs: 620, version: SWIFT, source: 'let model = FeedModel()\nmodel.loadMoreIfNeeded(after: model.items[0])\nmodel.loadMoreIfNeeded(after: model.items[0])\n' }),
       run({ interviewId: 'iv-p2v7j4ye', days: -2, hour: 15, runId: 'run-ravi-02', language: 'swift', entrypoint: 'main.swift', by: WEN, s: 2520, status: 'succeeded',
         stdout: 'search "swi" cancelled\nsearch "swift" returned 3 results\n', stderr: '', exitCode: 0, timeMs: 710, version: SWIFT, source: 'let model = SearchModel()\nmodel.queryChanged("swi")\nmodel.queryChanged("swift")\n' }),
+      // Kwame's coding round, live now (mock/interviews.ts LIVE_INTERVIEW_ID): the first run fails the five-call check
+      // (the bucket lets only two through), the second passes after the one-character fix.
+      run({ interviewId: LIVE_INTERVIEW_ID, days: 0, hour: 0, base: liveStart(), runId: 'run-kwame-01', language: 'python', entrypoint: 'main.py', by: cand(LIVE_INTERVIEW_ID, 'Kwame'), s: 270, status: 'failed',
+        stdout: '', stderr: 'Traceback (most recent call last):\n  File "main.py", line 3, in <module>\n    assert results == [True, True, True, False, False], results\nAssertionError: [True, True, False, False, False]\n',
+        exitCode: 1, timeMs: 130, version: PY, source: LIMITER_KEYLESS }),
+      run({ interviewId: LIVE_INTERVIEW_ID, days: 0, hour: 0, base: liveStart(), runId: 'run-kwame-02', language: 'python', entrypoint: 'main.py', by: cand(LIVE_INTERVIEW_ID, 'Kwame'), s: 470, status: 'succeeded',
+        stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 140, version: PY, source: LIMITER_KEYLESS_OK }),
     ],
     empty: () => [],
   },

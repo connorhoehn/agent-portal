@@ -45,7 +45,7 @@ describe('assigning a round', () => {
 
   it('a declined or cancelled round does not hold it: it may be assigned again', () => {
     const w = world();
-    w.interviews = w.interviews.map((i) => (i.id === 'iv-h4m7c3vu' ? { ...i, state: 'declined' as const } : i));
+    w.interviews = w.interviews.map((i) => (i.id === 'iv-h4m7c3vu' || i.id === 'iv-s4e8u2zk' ? { ...i, state: 'declined' as const } : i));
     expect(checkAssignment({ ...good, applicationId: 'app-kwame' }, w, INTERVIEWERS).ok).toBe(true);
   });
 

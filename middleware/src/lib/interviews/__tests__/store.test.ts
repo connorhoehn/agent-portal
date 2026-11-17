@@ -72,11 +72,11 @@ describe.each([
   let world: InterviewsWorld;
   beforeEach(async () => { world = await loadWorld(make()); });
 
-  it('reads the seed story: three openings, twelve candidates and applications, eleven interviews, four scorecards', () => {
+  it('reads the seed story: three openings, twelve candidates and applications, twelve interviews, four scorecards', () => {
     expect(world.openings).toHaveLength(3);
     expect(world.candidates).toHaveLength(12);
     expect(world.applications).toHaveLength(12);
-    expect(world.interviews).toHaveLength(11);
+    expect(world.interviews).toHaveLength(12);
     expect(world.scorecards).toHaveLength(4);
   });
 

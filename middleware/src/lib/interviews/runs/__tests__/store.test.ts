@@ -138,8 +138,8 @@ describe('D6: eraseRuns', () => {
     expect(interviewRunsFixture.rows().map((r) => r.runId)).toEqual(['r-3']);
     expect(await eraseRuns([])).toBe(0);
   });
-  it('the seed holds runs only for the finished technical rounds (row I5.1)', () => {
+  it('the seed holds runs only for the finished technical rounds and the round live now (row I5.1)', () => {
     fixtureRegistry.resetAll('default');
-    expect([...new Set(interviewRunsFixture.rows('default').map((r) => r.interviewId))].sort()).toEqual(['iv-d7q4n9xe', 'iv-j6x2d9sb', 'iv-p2v7j4ye']);
+    expect([...new Set(interviewRunsFixture.rows('default').map((r) => r.interviewId))].sort()).toEqual(['iv-d7q4n9xe', 'iv-j6x2d9sb', 'iv-p2v7j4ye', 'iv-s4e8u2zk']);
   });
 });

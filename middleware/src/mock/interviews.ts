@@ -38,6 +38,10 @@ function at(days: number, hour: number, minute = 0): string {
   return new Date(midnight + days * DAY_MS + (hour * 60 + minute) * 60_000).toISOString();
 }
 
+/** The round that is live now: Kwame's coding round with Hugo and Wen, started twelve minutes ago by the mock clock. */
+export const LIVE_INTERVIEW_ID = 'iv-s4e8u2zk';
+export const liveStart = (): string => new Date(clock.now().getTime() - 12 * 60_000).toISOString();
+
 export const GRETA = 'u-greta';
 export const HUGO = 'u-hugo';
 export const WEN = 'u-wen';
@@ -260,12 +264,15 @@ export const interviewsFixture = defineFixture<Interview>({
       // Finished yesterday; Wen's scorecard is still due.
       interview({ id: 'iv-g9r1y8lp', app: 'app-jonah', round: 'rd-leadership', type: 'behavioural', lead: WEN, start: at(-1, 16), minutes: 60, state: 'ended',
         questions: ['q-em-struggling', 'q-em-slip'], assignedDaysAgo: 6, ended: at(-1, 17) }),
+      // Live now: Kwame's first round, started twelve minutes ago (nobody has joined a call yet; Hugo opens the room).
+      interview({ id: LIVE_INTERVIEW_ID, app: 'app-kwame', round: 'rd-coding', type: 'technical', lead: HUGO, panel: [WEN], start: liveStart(), minutes: 60, state: 'live',
+        questions: ['q-be-ratelimit'], assignedDaysAgo: 2 }),
       // Coming up.
       interview({ id: 'iv-k1p5w8ra', app: 'app-mateo', round: 'rd-design', type: 'technical', lead: HUGO, start: at(1, 14), minutes: 60, state: 'ready',
         questions: ['q-be-ledger'], assignedDaysAgo: 2 }),
       interview({ id: 'iv-c3k8w2ma', app: 'app-aiko', round: 'rd-coding', type: 'technical', lead: WEN, start: at(2, 14, 30), minutes: 60, state: 'ready',
         questions: ['q-ios-feed', 'q-ios-debounce'], assignedDaysAgo: 4 }),
-      interview({ id: 'iv-h4m7c3vu', app: 'app-kwame', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(3, 14), minutes: 60, state: 'assigned', assignedDaysAgo: 1 }),
+      interview({ id: 'iv-h4m7c3vu', app: 'app-kwame', round: 'rd-design', type: 'technical', lead: HUGO, start: at(3, 14), minutes: 60, state: 'assigned', assignedDaysAgo: 1 }),
       interview({ id: 'iv-r6d1k9wt', app: 'app-ravi', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(4, 13), minutes: 45, state: 'assigned', assignedDaysAgo: 1 }),
       interview({ id: 'iv-m8t3h6ng', app: 'app-nadia', round: 'rd-design', type: 'technical', lead: HUGO, start: at(5, 16), minutes: 60, state: 'accepted', assignedDaysAgo: 3 }),
       interview({ id: 'iv-n5z9f2cq', app: 'app-nadia', round: 'rd-leadership', type: 'behavioural', lead: WEN, panel: [HUGO], start: at(6, 15), minutes: 60, state: 'accepted', assignedDaysAgo: 3 }),

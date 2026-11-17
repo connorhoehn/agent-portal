@@ -180,3 +180,25 @@ describe('starting and ending', () => {
     expect((await as.post(`/interviews/${id}/end`, { revision: 1 })).status).toBe(status);
   });
 });
+
+// The round that is live now has no call yet: the lead opens the room and joins it as it is (mock/interviews.ts LIVE_INTERVIEW_ID).
+describe('the seeded round that is live now', () => {
+  const LIVE = 'iv-s4e8u2zk';
+
+  it('both seats read the room: Kwame\'s technical round, live, with both seats accepted', async () => {
+    for (const seat of [HUGO, WEN]) {
+      const res = await roomOf(seat, LIVE);
+      expect(res.status).toBe(200);
+      expect(res.body.room).toMatchObject({ id: LIVE, state: 'live', lobbyName: `interviews:interview:${LIVE}`, round: { type: 'technical' } });
+    }
+    expect((await roomOf(HUGO, LIVE)).body.room.seats).toEqual([{ person: { id: 'u-hugo', name: 'Hugo Marchetti' }, seat: 'lead' }, { person: { id: 'u-wen', name: 'Wen Zhao' }, seat: 'panel' }]);
+  });
+
+  it('the lead may start it again with no call (nothing written); the panel may not', async () => {
+    const room = (await roomOf(HUGO, LIVE)).body.room;
+    const again = await HUGO.post(`/interviews/${LIVE}/start`, { revision: room.revision });
+    expect(again.status).toBe(200);
+    expect(again.body.interview).toMatchObject({ state: 'live', revision: room.revision });
+    expect((await WEN.post(`/interviews/${LIVE}/start`, { revision: room.revision })).status).toBe(403);
+  });
+});

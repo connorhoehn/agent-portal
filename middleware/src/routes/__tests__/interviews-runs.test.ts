@@ -390,3 +390,20 @@ describe('the event stream (both people see one run)', () => {
     expect((await reading).ended).toBe(true);
   });
 });
+
+// The round that is live now (mock/interviews.ts LIVE_INTERVIEW_ID): Kwame's coding round with Hugo leading and Wen on the panel.
+describe('the seeded round that is live now', () => {
+  const LIVE = 'iv-s4e8u2zk';
+
+  it('its two earlier runs read to both seats: the first failed with exit code 1, the second passed', async () => {
+    for (const seat of [HUGO, WEN]) {
+      const list = await seat.get(`${API}/${LIVE}/runs`);
+      expect(list.status).toBe(200);
+      expect(list.body.runs.map((r: { runId: string }) => r.runId)).toEqual(['run-kwame-02', 'run-kwame-01']);
+    }
+    const first = (await HUGO.get(`${API}/${LIVE}/runs/run-kwame-01`)).body.run;
+    expect(first).toMatchObject({ status: 'failed', result: { exitCode: 1 } });
+    expect(first.result.stderr).toContain('AssertionError');
+    expect((await HUGO.get(`${API}/${LIVE}/runs/run-kwame-02`)).body.run).toMatchObject({ status: 'succeeded', result: { exitCode: 0 } });
+  });
+});

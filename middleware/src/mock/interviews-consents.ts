@@ -7,6 +7,7 @@
 import { clock, defineFixture } from './core/index.js';
 import { CONSENT_NOTICE } from '../lib/interviews/consent/notice.js';
 import type { ConsentRecord } from '../lib/interviews/consent/store.js';
+import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -37,6 +38,8 @@ export const interviewConsentsFixture = defineFixture<ConsentRecord>({
       accepted('iv-j6x2d9sb', at(-3, 13, 40)),
       accepted('iv-p2v7j4ye', at(-2, 14, 40)),
       accepted('iv-g9r1y8lp', at(-1, 15, 40)),
+      // Kwame's round, live now: his three answers (all yes) were given twenty minutes before it started.
+      accepted(LIVE_INTERVIEW_ID, new Date(Date.parse(liveStart()) - 20 * 60_000).toISOString()),
     ],
   },
 });

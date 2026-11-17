@@ -33,10 +33,10 @@ describe('reach by role', () => {
 describe('an interviewer', () => {
   it('reads the interviews they lead or sit on the panel of, and nothing of another interviewer\'s', () => {
     expect(ids(as('u-hugo', 'interviewer').interviews)).toEqual(
-      ['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq']);
+      ['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
     expect(ids(as('u-hugo', 'interviewer').interviews)).not.toContain('iv-c3k8w2ma');
     expect(ids(as('u-wen', 'interviewer').interviews)).toEqual(
-      ['iv-c3k8w2ma', 'iv-f2b6t5zh', 'iv-g9r1y8lp', 'iv-n5z9f2cq', 'iv-p2v7j4ye', 'iv-r6d1k9wt']);
+      ['iv-c3k8w2ma', 'iv-f2b6t5zh', 'iv-g9r1y8lp', 'iv-n5z9f2cq', 'iv-p2v7j4ye', 'iv-r6d1k9wt', 'iv-s4e8u2zk']);
   });
 
   it('reads, through those interviews, only those candidates and openings', () => {
@@ -102,14 +102,14 @@ describe('the wire shapes', () => {
     };
     expect(desk('u-hugo')).toEqual({
       'done': ['Ingrid Solberg', 'Mateo Álvarez'],
-      'upcoming': ['Mateo Álvarez', 'Nadia Petrova'],
+      'upcoming': ['Kwame Asante', 'Mateo Álvarez', 'Nadia Petrova'],
       'to-prepare': ['Nadia Petrova'],
       'to-accept': ['Kwame Asante'],
     });
     expect(desk('u-wen')).toEqual({
       'done': ['Ingrid Solberg', 'Ravi Menon'],
       'scorecard-due': ['Jonah Whitaker'],
-      'upcoming': ['Aiko Tanaka'],
+      'upcoming': ['Kwame Asante', 'Aiko Tanaka'],
       'to-prepare': ['Nadia Petrova'],
       'to-accept': ['Ravi Menon'],
     });

@@ -89,8 +89,8 @@ describe.each([
 });
 
 describe('the seed', () => {
-  it('holds consents for the finished interviews and none for the upcoming ones', () => {
-    const finished = interviewsFixture.rows('default').filter((i) => ['ended', 'scored', 'reviewed'].includes(i.state)).map((i) => i.id).sort();
+  it('holds consents for the finished interviews and the one live now, and none for the upcoming ones', () => {
+    const finished = interviewsFixture.rows('default').filter((i) => ['ended', 'scored', 'reviewed', 'live'].includes(i.state)).map((i) => i.id).sort();
     const rows = interviewConsentsFixture.rows('default');
     expect(rows.map((r) => r.interviewId).sort()).toEqual(finished);
     for (const r of rows) {
