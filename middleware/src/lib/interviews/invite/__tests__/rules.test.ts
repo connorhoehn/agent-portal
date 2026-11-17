@@ -19,7 +19,8 @@ const interview = (over: Partial<Interview> = {}): Interview => ({
 });
 const invite = (over: Partial<Invite> = {}): Invite => ({
   id: 'inv-1', interviewId: 'iv-1', tokenHash: hashInviteToken(newInviteToken()), issuedBy: 'u-rec', issuedAt: T0, expiresAt: inviteCeiling(T0),
-  revokedAt: null, revokedBy: null, firstOpenedAt: null, lastOpenedAt: null, openCount: 0, sessionHash: null, ...over,
+  revokedAt: null, revokedBy: null, firstOpenedAt: null, lastOpenedAt: null, openCount: 0, sessionHash: null,
+  admissionState: 'not-knocked', knockedAt: null, admissionDecidedAt: null, ...over,
 });
 
 describe('expiry', () => {

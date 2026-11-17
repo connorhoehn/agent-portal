@@ -52,8 +52,8 @@ describe('session vocabulary', () => {
 });
 
 describe('capability subsets', () => {
-  it('keep their pre-manifest members; interviews is a default-deny partition and nothing else yet', () => {
-    expect([...HUDDLE_CHAT_TENANTS]).toEqual(['orgiq', 'assessment', 'social']);
+  it('keep their pre-manifest members; interviews is a default-deny partition, and its interview call carries a huddle (row I2.2)', () => {
+    expect([...HUDDLE_CHAT_TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'interviews']);
     expect([...TENANT_PARTITIONS]).toEqual(['orgiq', 'assessment', 'pipelines', 'access', 'interviews']);
     expect([...INDEXED_TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines', 'access']);
     expect([...ACCESS_TENANTS]).toEqual(['orgiq', 'assessment', 'social', 'pipelines']);

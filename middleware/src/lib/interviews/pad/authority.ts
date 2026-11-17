@@ -6,7 +6,10 @@
 // interview's call: the lead and the panel (decision 20). The recruiter and the
 // hiring manager read the interview over REST but hold no seat on the live pad;
 // a behavioural round has no pad (decision 11). Row I2.2 adds the candidate:
-// a guest principal whose invite names this interview, and only this one.
+// a guest principal whose invite names this interview, and only this one, once
+// the lead has admitted it from the waiting room (lib/interviews/lobby.ts
+// `guestHoldsInterviewSeat`; the guest is read from its invite, never the
+// directory).
 //
 // Every subscribe, every write and every fan-out to a recipient asks this,
 // fresh: the principal reloaded from the directory, the socket's tenant, the
@@ -20,6 +23,7 @@ import type { Session } from '../../session.js';
 import { interviewsEnabled } from '../flag.js';
 import { interviewsStore } from '../store-select.js';
 import { padInterviewId } from './channel.js';
+import { claimsGuest, guestHoldsInterviewSeat } from '../lobby.js';
 
 const TENANT = 'interviews';
 
@@ -41,6 +45,8 @@ export async function padSeatHolds(session: Session, interviewId: string): Promi
 export async function admitPadChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
   const interviewId = padInterviewId(base);
   if (!interviewId || args.channel !== base || !interviewsEnabled()) return false;
+  // The candidate's seat: its own interview's pad, a technical round, admitted, its invite read twice.
+  if (claimsGuest(args.ctx)) return guestHoldsInterviewSeat(args.ctx, interviewId, { pad: true });
   try {
     const first = await getLivePrincipal(args.ctx);
     if (!await padSeatHolds(first.session, interviewId)) return false;

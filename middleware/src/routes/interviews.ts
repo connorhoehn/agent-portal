@@ -15,6 +15,7 @@ import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { resumeRouter } from './interviews/resume.js';
 import { resumeRows } from '../lib/interviews/resume/service.js';
 import { requireAction } from '../lib/authz.js';
+import { admissionRouter } from './interviews/admission.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
@@ -42,6 +43,8 @@ interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ items: ix.world.openings.map((o) => ix.openingRow(o)) });
 }));
+
+interviewsRouter.use(admissionRouter); // lane SEAT (row I2.2): the candidate's waiting room, the panel's side
 
 interviewsRouter.get('/openings/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

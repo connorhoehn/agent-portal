@@ -10,9 +10,10 @@
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { isoOf, type SqlExec } from '../store-sql.js';
 import type { Invite, InviteStore, NewInvite } from './store.js';
+import { ADMISSION_STATES, type AdmissionState } from './admission.js';
 import { newInviteId } from './token.js';
 
-const COLUMNS = 'id, interview_id, token_hash, issued_by, issued_at, expires_at, revoked_at, revoked_by, first_opened_at, last_opened_at, open_count, session_hash';
+const COLUMNS = 'id, interview_id, token_hash, issued_by, issued_at, expires_at, revoked_at, revoked_by, first_opened_at, last_opened_at, open_count, session_hash, admission_state, knocked_at, admission_decided_at';
 
 export const ISSUE_INVITE_SQL = `WITH revoked AS (
     UPDATE interview_invites SET revoked_at = CAST(:issued_at AS TIMESTAMPTZ), revoked_by = :issued_by
@@ -31,15 +32,24 @@ export const REVOKE_INVITE_SQL = `UPDATE interview_invites SET revoked_at = CAST
   WHERE interview_id = :interview_id AND revoked_at IS NULL`;
 export const RECORD_OPENING_SQL = `UPDATE interview_invites
   SET first_opened_at = COALESCE(first_opened_at, CAST(:at AS TIMESTAMPTZ)), last_opened_at = CAST(:at AS TIMESTAMPTZ),
-    open_count = open_count + 1, session_hash = :session_hash
+    open_count = open_count + 1, session_hash = :session_hash,
+    admission_state = 'not-knocked', knocked_at = NULL, admission_decided_at = NULL
   WHERE id = :id AND revoked_at IS NULL
+  RETURNING ${COLUMNS}`;
+// The waiting room's compare-and-set: the guest session and the admission it was decided against.
+export const SET_ADMISSION_SQL = `UPDATE interview_invites
+  SET admission_state = :admission_state, knocked_at = CAST(:knocked_at AS TIMESTAMPTZ),
+    admission_decided_at = CAST(:admission_decided_at AS TIMESTAMPTZ)
+  WHERE id = :id AND revoked_at IS NULL AND session_hash = :session_hash AND admission_state = :was
   RETURNING ${COLUMNS}`;
 
 export const INVITE_STATEMENTS = [
-  ISSUE_INVITE_SQL, FIND_INVITE_BY_HASH_SQL, GET_INVITE_SQL, LATEST_INVITE_SQL, REVOKE_INVITE_SQL, RECORD_OPENING_SQL,
+  ISSUE_INVITE_SQL, FIND_INVITE_BY_HASH_SQL, GET_INVITE_SQL, LATEST_INVITE_SQL, REVOKE_INVITE_SQL, RECORD_OPENING_SQL, SET_ADMISSION_SQL,
 ] as const;
 
 const text = (name: string, value: string): SqlParameter => ({ name, value: { stringValue: value } });
+const textOrNull = (name: string, value: string | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : text(name, value));
+const admissionOf = (v: unknown): AdmissionState => (ADMISSION_STATES.includes(v as AdmissionState) ? v as AdmissionState : 'not-knocked');
 const strOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 const isoOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : isoOf(v));
 
@@ -50,6 +60,7 @@ export function inviteFromRow(r: Record<string, unknown>): Invite {
     revokedAt: isoOrNull(r['revoked_at']), revokedBy: strOrNull(r['revoked_by']),
     firstOpenedAt: isoOrNull(r['first_opened_at']), lastOpenedAt: isoOrNull(r['last_opened_at']),
     openCount: Number(r['open_count'] ?? 0), sessionHash: strOrNull(r['session_hash']),
+    admissionState: admissionOf(r['admission_state']), knockedAt: isoOrNull(r['knocked_at']), admissionDecidedAt: isoOrNull(r['admission_decided_at']),
   };
 }
 
@@ -84,5 +95,12 @@ export class SqlInviteStore implements InviteStore {
 
   async recordOpening(id: string, at: string, sessionHash: string): Promise<Invite | null> {
     return first(await this.exec(RECORD_OPENING_SQL, [text('id', id), text('at', at), text('session_hash', sessionHash)]));
+  }
+
+  async setAdmission(id: string, sessionHash: string, was: AdmissionState, next: Pick<Invite, 'admissionState' | 'knockedAt' | 'admissionDecidedAt'>): Promise<Invite | null> {
+    return first(await this.exec(SET_ADMISSION_SQL, [
+      text('id', id), text('session_hash', sessionHash), text('was', was), text('admission_state', next.admissionState),
+      textOrNull('knocked_at', next.knockedAt), textOrNull('admission_decided_at', next.admissionDecidedAt),
+    ]));
   }
 }

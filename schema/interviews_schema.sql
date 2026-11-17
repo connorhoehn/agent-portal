@@ -167,7 +167,16 @@ CREATE TABLE IF NOT EXISTS interview_invites (
   first_opened_at  TIMESTAMPTZ,
   last_opened_at   TIMESTAMPTZ,
   open_count       INTEGER NOT NULL DEFAULT 0 CHECK (open_count >= 0),
-  session_hash     TEXT
+  session_hash     TEXT,
+  -- The waiting room for the current guest session (row I2.2; lib/interviews/invite/admission.ts): a new exchange resets it.
+  admission_state  TEXT NOT NULL DEFAULT 'not-knocked' CHECK (admission_state IN ('not-knocked', 'waiting', 'admitted', 'turned-away')),
+  knocked_at       TIMESTAMPTZ,
+  admission_decided_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS interview_invites_interview_idx ON interview_invites (interview_id, issued_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS interview_invites_one_live_idx ON interview_invites (interview_id) WHERE revoked_at IS NULL;
+
+-- Row I2.2 (round 3): the waiting room's columns, for a database made before them.
+ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS admission_state TEXT NOT NULL DEFAULT 'not-knocked' CHECK (admission_state IN ('not-knocked', 'waiting', 'admitted', 'turned-away'));
+ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS knocked_at TIMESTAMPTZ;
+ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS admission_decided_at TIMESTAMPTZ;

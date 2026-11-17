@@ -20,6 +20,8 @@ import { bearerSubprotocolAuth } from '@connorhoehn/realtime-modules/server';
 import { isAllowedBrowserOrigin } from '../browser-origin.js';
 import { upgradeScheme } from '../trusted-proxy.js';
 import { claimableAvatarUrl, realtimeSigningSecret, verifyRealtimeToken, type RealtimeTokenClaims } from '../realtime-token.js';
+import { GUEST_ROLE } from '../interviews/invite/guest.js';
+import { guestRealtimeEnabled } from '../interviews/invite/realtime.js';
 
 export interface RealtimeGatewayAuth {
   userId: string;
@@ -61,7 +63,12 @@ const bearerAuth = bearerSubprotocolAuth<RealtimeGatewayAuth>({
   verify: async token => {
     const secret = realtimeSigningSecret();
     if (!secret) throw new Error('realtime token verification unavailable');
-    return gatewayAuthFromClaims(await verifyRealtimeToken(token, secret));
+    const auth = gatewayAuthFromClaims(await verifyRealtimeToken(token, secret));
+    // The interview's candidate (lib/interviews/lobby.ts): a guest token is accepted only while guest realtime
+    // is on (lib/interviews/invite/realtime.ts guestRealtimeEnabled), and its socket is then loaded from its
+    // invite, never the directory, by every decision lib/gateway/authority.ts makes.
+    if ((auth.role === GUEST_ROLE || auth['guest'] !== undefined) && !guestRealtimeEnabled()) throw new Error('guest realtime is off');
+    return auth;
   },
 });
 
@@ -92,7 +99,18 @@ export function gatewayAuthFromClaims(claims: RealtimeTokenClaims): RealtimeGate
     // Presence and chat stamp `avatarUrl` off this context (the library's
     // default resolveSender), so a peer's face comes from the signed token.
     ...(claimableAvatarUrl(claims.avatarUrl) ? { avatarUrl: claimableAvatarUrl(claims.avatarUrl) } : {}),
+    // An interview guest's claim (lib/interviews/invite/realtime.ts), as signed: the gateway's authority loads
+    // such a context from its invite (lib/interviews/lobby.ts guestOfContext) and refuses it everything else.
+    ...(guestClaim(claims) ? { guest: guestClaim(claims) } : {}),
   };
+}
+
+/** The signed `guest` claim's three strings, or undefined (a staff token has none). */
+function guestClaim(claims: RealtimeTokenClaims): { interviewId: string; inviteId: string; session: string } | undefined {
+  const g = (claims as unknown as { guest?: Record<string, unknown> }).guest;
+  if (!g || typeof g !== 'object') return undefined;
+  const { interviewId, inviteId, session } = g;
+  return typeof interviewId === 'string' && typeof inviteId === 'string' && typeof session === 'string' ? { interviewId, inviteId, session } : undefined;
 }
 
 /** The verified token's `exp` claim (seconds since the epoch), or undefined. */

@@ -9,16 +9,22 @@ import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './sess
 import { insecureDevMode } from './insecure-dev-mode.js';
 import { SOCIAL_CONVERSATION_ID, tenantChannelFamily } from './tenant-channels.js';
 import { TENANTS_WITH_HUDDLE_CHAT } from './tenants.generated.js';
+import { INTERVIEW_LOBBY_PREFIX, interviewOfLobby, sessionHoldsInterviewSeat } from './interviews/lobby.js';
+import { GUEST_ROLE } from './interviews/invite/guest.js';
+import { GUEST_DISPLAY_NAME } from './interviews/invite/realtime.js';
 
 export interface CallAuthority { displayName: string; grants: Grants }
 /** The tenants whose sockets page pins (OrgIQ only) and huddle chat resolve. */
-export type CallTenant = typeof TENANTS_WITH_HUDDLE_CHAT[number];
+export type CallTenant = typeof TENANTS_WITH_HUDDLE_CHAT[number] | 'interviews';
 const ORGIQ_ONLY: readonly CallTenant[] = ['orgiq'];
 /** Huddle chat follows accepted Work, Assessment and Social calls (manifest `huddleChat`). */
-export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = TENANTS_WITH_HUDDLE_CHAT;
+// Plus an interview's call (docs/interviews-tenant-plan.md I2.2): its chat is a huddle like any page lobby's, and
+// its seats are lib/interviews/lobby.ts's (the lead, the panel, and the admitted candidate).
+export const HUDDLE_CHAT_TENANTS: readonly CallTenant[] = [...TENANTS_WITH_HUDDLE_CHAT, 'interviews'];
 /** The tenant a huddle-bearing lobby belongs to, or null (pipelines, malformed). */
 export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
   if (lobbyName.startsWith('orgiq:')) return 'orgiq';
+  if (lobbyName.startsWith(INTERVIEW_LOBBY_PREFIX)) return interviewOfLobby(lobbyName) ? 'interviews' : null;
   if (SOCIAL_CONVERSATION_ID.test(lobbyName)) return 'social';
   const family = tenantChannelFamily(lobbyName)?.id;
   return family === 'assessment:team' || family === 'assessment:doc' ? 'assessment' : null;
@@ -26,6 +32,11 @@ export function huddleLobbyTenant(lobbyName: string): CallTenant | null {
 export async function currentCallAuthority(session: Session, tenants: readonly CallTenant[] = ORGIQ_ONLY): Promise<CallAuthority> {
   if (!tenants.includes(session.tenant as CallTenant)) {
     throw new AppError(403, tenants.length === 1 ? 'This call requires an OrgIQ session' : 'This session does not support call conversations');
+  }
+  // The interview's candidate is not in the directory: its invite and admission are its authority (lib/interviews/lobby.ts).
+  if ((session.role as string) === GUEST_ROLE) {
+    if (session.tenant !== 'interviews' || !session.sub.startsWith('guest:')) throw new AppError(401, 'The session is no longer current. Sign in again.');
+    return { displayName: GUEST_DISPLAY_NAME, grants: { interviews: [GUEST_ROLE] } };
   }
   try {
     const isDemo = session.sub === DEMO_SUB && insecureDevMode() && demoFallbackAllowed();
@@ -136,6 +147,11 @@ export async function currentCallChatGrant(session: Session, authority: CallAuth
   lobbyName: string): Promise<boolean> {
   const tenant = huddleLobbyTenant(lobbyName);
   if (!tenant || session.tenant !== tenant || !authority.grants[tenant]?.includes(session.role)) return false;
+  // An interview's call: its seats, read now (the guest's invite and admission, or the lead and panel).
+  if (tenant === 'interviews') {
+    const interviewId = interviewOfLobby(lobbyName);
+    return !!interviewId && sessionHoldsInterviewSeat(session, interviewId);
+  }
   if (tenant === 'social') {
     // Social keeps its current action and conversation membership rules. The
     // call runtime additionally requires this exact connected seat.

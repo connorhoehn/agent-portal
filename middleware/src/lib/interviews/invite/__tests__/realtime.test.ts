@@ -19,7 +19,7 @@ import { GUEST_DISPLAY_NAME, guestRealtimeClaims, mintGuestRealtimeToken } from 
 
 const SECRET = 'guest-realtime-test-secret';
 const guest: GuestPrincipal = {
-  kind: 'interview-guest', inviteId: 'inv-1', interviewId: 'iv-mateo-design', role: GUEST_ROLE, tenant: null, grants: {}, since: '2026-11-16T10:00:00.000Z',
+  kind: 'interview-guest', inviteId: 'inv-1', interviewId: 'iv-mateo-design', role: GUEST_ROLE, tenant: null, grants: {}, since: '2026-11-16T10:00:00.000Z', sessionTag: 'tag-1',
 };
 
 beforeEach(() => {

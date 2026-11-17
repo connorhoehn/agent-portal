@@ -14,7 +14,10 @@
 // here prints them, the answers say `Referrer-Policy: no-referrer`, and the link carries the token in the
 // fragment, which the portal page reads and removes. With INTERVIEWS_ENABLED off both are not-found.
 //
-// The other four things decision 3 lets a guest reach (the call, its chat, the pad, runs) are later rows.
+// Row I2.2 adds three more, at the end of the file: the guest's realtime token (only while guest realtime is
+// on, lib/interviews/invite/realtime.ts), and the waiting room's knock and its answer
+// (lib/interviews/invite/admission.ts). The call, its chat and the pad are then reached over the gateway with
+// that token (lib/interviews/lobby.ts). Runs are a later row.
 
 import express, { Router, type Request, type Response } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
@@ -26,6 +29,9 @@ import { inviteDeadReason, inviteExpiresAt } from '../lib/interviews/invite/rule
 import { inviteStore } from '../lib/interviews/invite/store.js';
 import { hashInviteToken, wellFormedToken } from '../lib/interviews/invite/token.js';
 import { interviewsFlagGate } from './interviews.js';
+import { realtimeSigningSecret } from '../lib/realtime-token.js';
+import { guestRealtimeEnabled, mintGuestRealtimeToken } from '../lib/interviews/invite/realtime.js';
+import { admissionOf, applyAdmission } from '../lib/interviews/invite/admission.js';
 
 export const interviewInviteRouter: Router = Router();
 
@@ -126,4 +132,31 @@ interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyn
   const view = interview ? await guestView(interview) : null;
   if (!view) { res.status(404).json(GUEST_REFUSAL); return; }
   res.json({ interview: view });
+}));
+
+// ── Row I2.2 (lane SEAT): the guest's realtime token and the waiting room ────────────────────────────────────
+
+const NOT_YET = 'Finish the steps on this page before you ask to join.';
+
+/** The guest's realtime token. Not-found while guest realtime is off: platform-api would take it as an identity (realtime.ts). */
+interviewInviteRouter.get('/realtime-token', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  const secret = realtimeSigningSecret();
+  if (!guestRealtimeEnabled() || !secret) { res.status(404).json(GUEST_REFUSAL); return; }
+  res.json(await mintGuestRealtimeToken(req.guest!, secret));
+}));
+
+/** Knock: ask the lead to be let in. Allowed when the steps before it are done (admission.ts knockPrecondition). */
+interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  const written = await applyAdmission(req.guest!.inviteId, { kind: 'knock' });
+  if (written.ok) { res.json({ admission: written.admission }); return; }
+  if (written.reason === 'no-guest') { res.status(404).json(GUEST_REFUSAL); return; }
+  res.status(409).json({ error: written.reason === 'precondition' ? NOT_YET : 'Something changed on this page. Try again.' });
+}));
+
+/** The guest's own admission, for the waiting page to read. */
+interviewInviteRouter.get('/admission', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  res.json({ admission: admissionOf(await inviteStore().getInvite(req.guest!.inviteId)) });
 }));

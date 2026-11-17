@@ -13,6 +13,7 @@
 // a moment with two.
 
 import { config } from '../../../config.js';
+import type { AdmissionState } from './admission.js';
 import { interviewInvitesFixture } from '../../../mock/interviews-invites.js';
 import { newInviteId, sameHash } from './token.js';
 import { SqlInviteStore } from './store-sql.js';
@@ -33,6 +34,10 @@ export interface Invite {
   openCount: number;
   /** SHA-256 of the current guest session's id: a new exchange replaces it, ending the guest session before. */
   sessionHash: string | null;
+  /** The waiting room for the CURRENT guest session (admission.ts): a new exchange starts it again at not-knocked. */
+  admissionState: AdmissionState;
+  knockedAt: string | null;
+  admissionDecidedAt: string | null;
 }
 
 export type NewInvite = Pick<Invite, 'interviewId' | 'tokenHash' | 'issuedBy' | 'issuedAt' | 'expiresAt'>;
@@ -49,6 +54,11 @@ export interface InviteStore {
   revokeInvite(interviewId: string, at: string, by: string): Promise<Invite | null>;
   /** Record an opening and make `sessionHash` the one live guest session. Null when revoked or gone. */
   recordOpening(id: string, at: string, sessionHash: string): Promise<Invite | null>;
+  /**
+   * The waiting room's one write (admission.ts): move the live invite's admission from `was` to `next`, only while
+   * `sessionHash` is still its guest session and the admission is still `was`. Null when any of that changed.
+   */
+  setAdmission(id: string, sessionHash: string, was: AdmissionState, next: Pick<Invite, 'admissionState' | 'knockedAt' | 'admissionDecidedAt'>): Promise<Invite | null>;
 }
 
 /** Latest first: issued_at DESC, id DESC — the SQL statements' ORDER BY, in code. */
@@ -65,6 +75,7 @@ export class MemoryInviteStore implements InviteStore {
     const row: Invite = {
       id: newInviteId(), ...structuredClone(input),
       revokedAt: null, revokedBy: null, firstOpenedAt: null, lastOpenedAt: null, openCount: 0, sessionHash: null,
+      admissionState: 'not-knocked', knockedAt: null, admissionDecidedAt: null,
     };
     this.rows().push(row);
     return structuredClone(row);
@@ -95,6 +106,18 @@ export class MemoryInviteStore implements InviteStore {
     r.lastOpenedAt = at;
     r.openCount += 1;
     r.sessionHash = sessionHash;
+    r.admissionState = 'not-knocked';
+    r.knockedAt = null;
+    r.admissionDecidedAt = null;
+    return structuredClone(r);
+  }
+
+  async setAdmission(id: string, sessionHash: string, was: AdmissionState, next: Pick<Invite, 'admissionState' | 'knockedAt' | 'admissionDecidedAt'>): Promise<Invite | null> {
+    const r = this.rows().find((x) => x.id === id);
+    if (!r || r.revokedAt !== null || r.sessionHash !== sessionHash || (r.admissionState ?? 'not-knocked') !== was) return null;
+    r.admissionState = next.admissionState;
+    r.knockedAt = next.knockedAt;
+    r.admissionDecidedAt = next.admissionDecidedAt;
     return structuredClone(r);
   }
 }

@@ -50,6 +50,10 @@ import { pageResourceVisible, type PageResourceKind } from '../page-resources.js
 import { inDocumentNamespace } from '../interviews/pad/channel.js';
 import { admitPadChannel } from '../interviews/pad/authority.js';
 import {
+  claimsGuest, guestCallSession, guestContextCurrent, guestHoldsInterviewSeat, guestOfContext, interviewLobbyName, interviewOfLobby,
+  sessionHoldsInterviewSeat, staffHoldsInterviewSeat,
+} from '../interviews/lobby.js';
+import {
   TENANT_CHANNEL_FAMILIES, TENANT_PARTITIONS, channelAuthorityFor, tenantChannelFamily,
   type ChannelAuthority, type TenantChannelFamily,
 } from '../tenant-channels.js';
@@ -170,8 +174,10 @@ const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
 function huddleChatShape(auth: LibraryGuardAuth, channel: string, bare: string): boolean {
   const org = str(auth.org); const tenants = list(auth.tenants);
   return !!huddleCallId(bare) && (channel === bare || channel === `reactions:${bare}`) && !!str(auth.userId)
-    && TENANTS_WITH_HUDDLE_CHAT.some(tenant => org === tenant || tenants.includes(tenant));
+    && HUDDLE_SHAPE_TENANTS.some(tenant => org === tenant || tenants.includes(tenant));
 }
+/** The manifest's huddle tenants, and an interview's call (lib/call-access.ts HUDDLE_CHAT_TENANTS; the seat is the runtime's). */
+const HUDDLE_SHAPE_TENANTS: readonly string[] = [...TENANTS_WITH_HUDDLE_CHAT, 'interviews'];
 
 const GATEWAY_FAMILIES = defineChannelFamilies<ChannelAuthority, GatewayFamily>(GATEWAY_FAMILY_TABLE, {
   partitions: TENANT_PARTITIONS,
@@ -243,7 +249,7 @@ export function channelGuard(auth: GuardAuth | null, channel: string, kind: 'sub
 const engineGuards: LiveChannelGuards = {
   guard: (auth, channel, kind) => asEither(auth as GuardAuth, a => GATEWAY_FAMILIES.guard(a, channel, kind)),
   baseChannel,
-  decide: args => AUTHORITY.authorizeChannel(args),
+  decide: args => admitChannel(args),
 };
 
 type Step<Q> = Q extends 'channel' ? ChannelStep<LiveGatewayPrincipal> : CallStep<LiveGatewayPrincipal>;
@@ -269,6 +275,15 @@ const socialCallStep: Step<'call'> = async (principal, q) => {
   const membership = await currentSocialMembershipProof(q.lobby, principal.session.sub);
   if (!membership.allows()) { membership.dispose(); return false; }
   return { recheck: latest => !!latest.session.grants.social?.includes(role) && membership.allows(), dispose: membership.dispose };
+};
+
+/** An interview's call lobby (lib/interviews/lobby.ts): the lead and the panel of THAT interview, now; the
+ * family's ViewInterviews read follows in the engine, and the reload must still be the same person there. */
+const interviewCallStep: Step<'call'> = async (principal, q) => {
+  if (!q.lobby?.startsWith('interviews:interview:')) return undefined;
+  const interviewId = interviewOfLobby(q.lobby);
+  if (!interviewId || !await staffHoldsInterviewSeat(principal.session, interviewId)) return false;
+  return { recheck: latest => latest.session.sub === principal.session.sub && latest.session.tenant === 'interviews' };
 };
 
 const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority, GatewayFamily>({
@@ -302,16 +317,78 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
       channel: args => authorizeHuddleChannel(args, args.base, engineGuards) },
     // A `doc:` name is an interview's code pad or nothing: its lead and panel, now (lib/interviews/pad/authority.ts).
     { id: 'interview-pad', match: base => inDocumentNamespace(base), channel: args => admitPadChannel(args, args.base) },
+    // An interview's call lobby (its presence): the lead and the panel of that interview, now (lib/interviews/lobby.ts).
+    { id: 'interview-lobby', match: base => base.startsWith('interviews:interview:'), channel: args => admitInterviewLobbyChannel(args, args.base) },
   ],
   channelSteps: [socialChannelStep],
-  callSteps: [workGraphLobbyStep, socialCallStep],
+  callSteps: [workGraphLobbyStep, socialCallStep, interviewCallStep],
 });
+
+/** `presence:interviews:interview:<id>`: the shape (the family offers presence only), then the seat, between two reloads. */
+async function admitInterviewLobbyChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
+  const interviewId = interviewOfLobby(base);
+  if (!interviewId || !channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
+  try {
+    const first = await getLivePrincipal(args.ctx);
+    if (!await staffHoldsInterviewSeat(first.session, interviewId)) return false;
+    const latest = await getLivePrincipal(args.ctx);
+    return latest.session.sub === first.session.sub && channelGuard(latest.auth as GuardAuth, args.channel, args.kind);
+  } catch { return false; }
+}
+
+// ── The interview's candidate (lib/interviews/lobby.ts; docs/interviews-tenant-plan.md row I2.2) ─────────────
+//
+// A context that claims to be a guest never reaches the engine (whose first act is a directory read) or any
+// family, namespace or rule above: every decision below answers it here, and only three things can pass, all for
+// its one interview and only once the lead has admitted it: the lobby (its presence, its call frames, the call
+// service's `call-lobby:` and `meeting:` watch channels), that lobby's call chat (`orgiq:huddle:<callId>` of a
+// call in that lobby, the huddle runtime's seat rule on top), and the pad in a technical round
+// (lib/interviews/pad/authority.ts). Everything else is false without a line of its own gate changing.
+
+/** Call frames a guest never sends: it joins and leaves a call, it does not run one. */
+const GUEST_REFUSED_CALL_ACTIONS: ReadonlySet<string> = new Set([
+  'invite', 'mute-participant', 'remove-participant', 'transfer-host', 'set-title', 'set-documents', 'present', 'forget',
+]);
+
+async function guestChannel(args: LiveChannelAuthorization): Promise<boolean> {
+  const guest = guestOfContext(args.ctx);
+  if (!guest || !args || (args.kind !== 'subscribe' && args.kind !== 'publish') || typeof args.channel !== 'string') return false;
+  const base = baseChannel(args.channel);
+  if (inDocumentNamespace(base)) return admitPadChannel(args, base);
+  const lobby = interviewLobbyName(guest.interviewId);
+  const seat = () => guestHoldsInterviewSeat(args.ctx, guest.interviewId);
+  if (base === lobby) return args.channel === `presence:${lobby}` && seat();
+  if (lobbyForCallLobbyChannel(base) === lobby || base === `${MEETING_CHANNEL_PREFIX}${lobby}`) {
+    return args.kind === 'subscribe' && args.channel === base && seat();
+  }
+  const callId = huddleCallId(base);
+  if (!callId || (args.channel !== base && args.channel !== `reactions:${base}`) || !meetingRooms) return false;
+  try {
+    if (await meetingRooms.lobbyOfCall(callId) !== lobby || !await seat()) return false;
+    const { callChatRuntime } = await import('../call-chat.js');
+    await callChatRuntime().assertChannelAccess(callId, args.clientId, guestCallSession(guest), args.kind === 'publish');
+    return await meetingRooms.lobbyOfCall(callId) === lobby && await seat();
+  } catch { return false; }
+}
+
+async function guestCall(ctx: Context, action: string, payload: Record<string, unknown>, getLobby: LiveCallGuards['getLobby'], receiving: boolean): Promise<boolean> {
+  const guest = guestOfContext(ctx);
+  if (!guest || (!receiving && GUEST_REFUSED_CALL_ACTIONS.has(action))) return false;
+  try {
+    const flat = normalizeCallPayload(payload);
+    const explicit = str(flat['lobbyName']) || null;
+    const callId = str(flat['callId']) || null;
+    const stored = callId ? await getLobby(callId) : null;
+    if (stored && explicit && stored !== explicit) return false;
+    return (stored ?? explicit) === interviewLobbyName(guest.interviewId) && await guestHoldsInterviewSeat(ctx, guest.interviewId);
+  } catch { return false; }
+}
 
 /** `call-lobby:<lobby>`: the shape (a subscribe, on a call lobby), then the page lobby's read decision (a lobby no page owns: the call join decision), asked now. */
 async function admitCallLobbyChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
   const lobby = lobbyForCallLobbyChannel(base);
   if (!lobby || !channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
-  const read = await AUTHORITY.authorizeLobby(args.ctx, lobby, 'read');
+  const read = await admitLobbyRead(args.ctx, lobby);
   if (read === 'ok') return true;
   // A DM or other call lobby no page owns: whoever may join its call may see who is in it.
   return read === 'not-a-lobby' && admitCall(args.ctx, 'join', { lobbyName: lobby }, callGuards(noStoredCall));
@@ -372,6 +449,7 @@ export type LobbyReadVerdict = LobbyVerdict;
  * the family's Cedar action and page resource, a second reload.
  */
 export function admitChannel(args: LiveChannelAuthorization): Promise<boolean> {
+  if (claimsGuest(args?.ctx)) return guestChannel(args);
   return AUTHORITY.authorizeChannel(args);
 }
 
@@ -402,6 +480,7 @@ export function admitCursor(ctx: Context, channel: string, kind: ChannelKind, op
  */
 export async function admitCall(ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
   const flat = normalizeCallPayload(payload);
+  if (claimsGuest(ctx)) return guestCall(ctx, action, payload, guards.getLobby, false);
   const lobby = typeof flat['lobbyName'] === 'string' ? flat['lobbyName'] : '';
   const room = splitMeetingRoom(lobby);
   if (room === null) return AUTHORITY.authorizeCall(ctx, action, payload, { getLobby: guards.getLobby });
@@ -437,6 +516,7 @@ export async function meetingOrganizer(ctx: Context, meetingId: string, call: { 
 
 /** A call frame about to be DELIVERED to this socket: the recipient's own fresh authority. */
 export function admitCallRecipient(ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
+  if (claimsGuest(ctx)) return guestCall(ctx, 'receive', data, guards.getLobby, true);
   return AUTHORITY.authorizeCallRecipient(ctx, data, { getLobby: guards.getLobby });
 }
 
@@ -445,7 +525,22 @@ export function admitCallRecipient(ctx: Context, data: Record<string, unknown>, 
  * the plane's Active now): the family's read, the page existing now, the
  * partition rule. `'not-a-lobby'` is a name no tenant family lists as a lobby.
  */
-export function admitLobbyRead(ctx: Context, lobby: string): Promise<LobbyReadVerdict> {
+export async function admitLobbyRead(ctx: Context, lobby: string): Promise<LobbyReadVerdict> {
+  if (claimsGuest(ctx)) {
+    const guest = guestOfContext(ctx);
+    return guest && lobby === interviewLobbyName(guest.interviewId) && await guestHoldsInterviewSeat(ctx, guest.interviewId) ? 'ok' : 'denied';
+  }
+  const interviewId = interviewOfLobby(lobby);
+  if (interviewId) {
+    // An interview's lobby is read by its seats only (lib/interviews/lobby.ts), not by every ViewInterviews holder.
+    const verdict = await AUTHORITY.authorizeLobby(ctx, lobby, 'read');
+    if (verdict !== 'ok') return verdict;
+    try {
+      const first = await getLivePrincipal(ctx);
+      if (!await staffHoldsInterviewSeat(first.session, interviewId)) return 'denied';
+      return (await getLivePrincipal(ctx)).session.sub === first.session.sub ? 'ok' : 'denied';
+    } catch { return 'denied'; }
+  }
   return AUTHORITY.authorizeLobby(ctx, lobby, 'read');
 }
 
@@ -463,6 +558,8 @@ export async function admitLobbyReadFor(session: Session, lobby: string, opts: {
   try {
     if (!await holdsChannelAuthority(session, family.read)) return 'denied';
     if (family.lobbyResource && !await pageResourceVisible(family.lobbyResource, lobby)) return 'gone';
+    const interviewId = interviewOfLobby(lobby);
+    if (interviewId && !await sessionHoldsInterviewSeat(session, interviewId)) return 'denied';
     return 'ok';
   } catch { return 'denied'; }
 }
@@ -514,6 +611,8 @@ export function admitReader(userId: string, channel: string, scope?: AuthoritySc
  * gateway's principal revalidation (lib/realtime-gateway.ts).
  */
 export function admitPrincipal(ctx: Context): Promise<boolean> {
+  // A guest is current while its invite and guest session are, admitted or still waiting (lib/interviews/lobby.ts).
+  if (claimsGuest(ctx)) return guestContextCurrent(ctx);
   return AUTHORITY.current(ctx);
 }
 
@@ -553,5 +652,7 @@ export function holdsFamilyAuthority(session: Session, channel: string, kind: Ch
 export function verdictCacheable(channel: string): boolean {
   const base = baseChannel(channel);
   return !inSocialDeckNamespace(base) && !inFlowRunNamespace(base)
-    && !base.includes(BREAKOUT_LOBBY_SEPARATOR) && !base.startsWith(MEETING_CHANNEL_PREFIX) && !base.startsWith(CALL_LOBBY_CHANNEL_PREFIX);
+    && !base.includes(BREAKOUT_LOBBY_SEPARATOR) && !base.startsWith(MEETING_CHANNEL_PREFIX) && !base.startsWith(CALL_LOBBY_CHANNEL_PREFIX)
+    // An interview's lobby and pad: the seat hangs on the interview row and the guest's admission, which no invalidation is keyed by.
+    && !base.startsWith('interviews:interview:') && !inDocumentNamespace(base);
 }

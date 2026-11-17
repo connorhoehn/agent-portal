@@ -47,6 +47,8 @@ export interface GuestPrincipal {
   grants: Record<string, never>;
   /** When this guest session began (the exchange). */
   since: string;
+  /** A one-way tag of the guest session (guestSessionTag): its realtime token carries it, so a newer exchange ends that token too. */
+  sessionTag: string;
 }
 
 interface GuestCookie { k: typeof KIND; inv: string; sid: string; iat: number }
@@ -59,6 +61,8 @@ declare module 'express-serve-static-core' {
 }
 
 export const hashGuestSession = (sid: string): string => createHash('sha256').update(sid).digest('hex');
+/** The tag a guest session's realtime token carries: a hash of the stored session hash, never the session id. */
+export const guestSessionTag = (sessionHash: string): string => createHash('sha256').update(`tag:${sessionHash}`).digest('hex').slice(0, 32);
 
 /** Start a guest session for `invite`: a fresh session id whose hash the exchange stores on the invite. */
 export function newGuestSession(): { sid: string; sessionHash: string } {
@@ -92,14 +96,24 @@ export async function loadGuest(raw: string | undefined, now = new Date()):
   if (!c || c.k !== KIND || typeof c.inv !== 'string' || typeof c.sid !== 'string' || typeof c.iat !== 'number') return null;
   const age = now.getTime() / 1000 - c.iat;
   if (age < -60 || age > GUEST_SESSION_MAX_AGE_S) return null;
+  return loadGuestSession(c.inv, (invite) => !!invite.sessionHash && sameHash(invite.sessionHash, hashGuestSession(c.sid!)),
+    new Date(c.iat * 1000).toISOString(), now);
+}
+
+/**
+ * The guest an invite's CURRENT session stands for, read now: the invite live (rules.ts), its interview open, and
+ * `sameSession` true of the stored row. Shared by the cookie (above) and the realtime token (lib/interviews/lobby.ts).
+ */
+export async function loadGuestSession(inviteId: string, sameSession: (invite: Invite) => boolean, since: string, now = new Date()):
+  Promise<{ principal: GuestPrincipal; invite: Invite; interview: Interview } | null> {
   return runWithDbTenant(INTERVIEWS_TENANT, async () => {
-    const invite = await inviteStore().getInvite(c.inv!);
-    if (!invite || !invite.sessionHash || !sameHash(invite.sessionHash, hashGuestSession(c.sid!))) return null;
+    const invite = await inviteStore().getInvite(inviteId);
+    if (!invite || !invite.sessionHash || !sameSession(invite)) return null;
     const interview = (await interviewsStore().listInterviews()).find((i) => i.id === invite.interviewId) ?? null;
     if (inviteDeadReason(invite, interview, now) !== null || !interview) return null;
     const principal: GuestPrincipal = {
       kind: 'interview-guest', inviteId: invite.id, interviewId: interview.id, role: GUEST_ROLE, tenant: null, grants: {},
-      since: new Date(c.iat! * 1000).toISOString(),
+      since, sessionTag: guestSessionTag(invite.sessionHash),
     };
     return { principal, invite, interview };
   });

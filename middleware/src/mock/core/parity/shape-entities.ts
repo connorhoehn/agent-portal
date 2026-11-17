@@ -515,7 +515,8 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockRows: async () => [
       ...(await import('../../interviews-invites.js')).interviewInvitesFixture.rows('default'),
       { id: 'inv-sample', interviewId: 'iv-sample', tokenHash: 'a'.repeat(64), issuedBy: 'u-greta', issuedAt: '2026-11-16T09:00:00.000Z', expiresAt: '2026-11-30T09:00:00.000Z',
-        revokedAt: '2026-11-16T12:00:00.000Z', revokedBy: 'u-greta', firstOpenedAt: '2026-11-16T10:00:00.000Z', lastOpenedAt: '2026-11-16T10:00:00.000Z', openCount: 1, sessionHash: null },
+        revokedAt: '2026-11-16T12:00:00.000Z', revokedBy: 'u-greta', firstOpenedAt: '2026-11-16T10:00:00.000Z', lastOpenedAt: '2026-11-16T10:00:00.000Z', openCount: 1, sessionHash: null,
+        admissionState: 'not-knocked', knockedAt: null, admissionDecidedAt: null },
     ],
     mockId: (i: { id: string }) => i.id,
   },

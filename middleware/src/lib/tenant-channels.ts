@@ -50,6 +50,12 @@
 // |                               |   read rule for THIS reader, now (requester, beneficiary,     |                            |
 // |                               |   manager, live approver / past decider, access-admin) — the  |                            |
 // |                               |   `access-request` channelResource (lib/access/thread.ts)     |                            |
+// | interviews:interview:<id>     | the interview's call (docs/interviews-tenant-plan.md I2.2):    | presence only              |
+// |                               |   tenant + ViewInterviews, then the SEAT (the lead and panel   |                            |
+// |                               |   of that interview while it is accepted/ready/live), asked by |                            |
+// |                               |   lib/gateway/authority.ts through lib/interviews/lobby.ts;   |                            |
+// |                               |   the candidate (a guest) only there, once admitted. Its chat  |                            |
+// |                               |   is the call's huddle chat (`orgiq:huddle:<callId>`)          |                            |
 // | <tenant>:lobby                | /api/people/shared: a current grant in <tenant>                | presence only              |
 // | social|assessment:flowrun:<id>| the run's own REST read + requester (lib/flow-runs/channel.ts) | none (server emitEvent)    |
 // | social:deck:<id>            | /api/chat/decks/:id: owner or CURRENT member of the source chat | presence only              |
@@ -74,7 +80,7 @@ import type { PageResourceKind } from './page-resources.js';
 import { TENANTS_CHANNEL_PARTITIONED, TENANTS_WITH_PRESENCE_LOBBY } from './tenants.generated.js';
 
 /** `social` appears ONLY for the `social:workgraph` family (it is not a partition tenant: TENANT_PARTITIONS stays three, and every other `social:` name keeps its own rules). */
-export type PartitionTenant = 'orgiq' | 'assessment' | 'pipelines' | 'social' | 'access';
+export type PartitionTenant = 'orgiq' | 'assessment' | 'pipelines' | 'social' | 'access' | 'interviews';
 export type ChannelService = 'chat' | 'presence' | 'typing' | 'cursor' | 'reactions' | 'activity' | 'pins';
 
 /** Who may act: the active (signed) session tenant must be `tenant` unless
@@ -189,6 +195,10 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
   { id: 'access:req', tenant: 'access', pattern: /^access:req:req-[A-Za-z0-9-]{1,64}$/, services: DISCUSSION, lobby: false, cursors: true,
     channelResource: 'access-request',
     read: tenantOnly('access', 'ViewAccess'), write: tenantOnly('access', 'ViewAccess') },
+  // An interview's call (lib/interviews/lobby.ts): a call lobby with presence. The family's read is only the
+  // floor; the gateway's authority asks the seat on every decision, and its chat is the call's huddle chat.
+  { id: 'interviews:interview', tenant: 'interviews', pattern: /^interviews:interview:[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/, services: PRESENCE, lobby: true,
+    read: tenantOnly('interviews', 'ViewInterviews'), write: null },
   // The shell presence lobby of each tenant whose manifest entry says `presenceLobby`.
   ...TENANTS_WITH_PRESENCE_LOBBY.map((tenant): TenantChannelFamily => ({
     id: `${tenant}:lobby`, tenant, pattern: new RegExp(`^${tenant}:lobby$`), services: PRESENCE, lobby: false,
