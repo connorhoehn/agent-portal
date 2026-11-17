@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
+  SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
+  suggestionReadBudgetMs, suggestionWaitMs,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
 
@@ -77,4 +79,48 @@ test('the call\'s name and the code block\'s language', () => {
   assert.equal(codeBlockLanguage('typescript'), 'ts');
   assert.equal(codeBlockLanguage('javascript'), 'js');
   assert.equal(codeBlockLanguage('swift'), 'text');
+});
+
+const SG = { id: 's1', text: 'Tell me about a time you disagreed.', competency: { id: 'c1', name: 'Collaboration' }, basedOn: 'the migration story', shownAt: 'x' };
+const reply = (status: number, body?: unknown) => (async () => new Response(JSON.stringify(body ?? {}), { status })) as unknown as typeof fetch;
+
+test('the room asks for a suggestion only for the live lead in the call with none waiting', () => {
+  assert.equal(pollsSuggestion('lead', 'live', true, null), true);
+  assert.equal(pollsSuggestion('panel', 'live', true, null), false);
+  assert.equal(pollsSuggestion(null, 'live', true, null), false);
+  assert.equal(pollsSuggestion('lead', 'ready', true, null), false);
+  assert.equal(pollsSuggestion('lead', 'live', false, null), false);
+  assert.equal(pollsSuggestion('lead', 'live', true, SG), false);
+});
+
+test('the wait is the server\'s, between 10 seconds and 2 minutes; the budget is the round plus half an hour', () => {
+  assert.equal(suggestionWaitMs(500), 10_000);
+  assert.equal(suggestionWaitMs(45_000), 45_000);
+  assert.equal(suggestionWaitMs(9_999_999), 120_000);
+  assert.equal(suggestionWaitMs(undefined), 30_000);
+  assert.equal(suggestionReadBudgetMs(60), 90 * 60_000);
+  assert.equal(suggestionPath('iv 1'), '/api/interviews/interviews/iv%201/suggestion');
+  assert.equal(suggestionPromptId('iv-1', 's1'), 'interview-suggestion:iv-1:s1');
+});
+
+test('reading a suggestion: the shape, a budget pause, and not-found or failure as nothing', async () => {
+  const ok = await readSuggestion('iv-1', reply(200, { suggestion: SG, paused: null, retryAfterMs: 90_000 }));
+  assert.equal(ok.suggestion?.competency.name, 'Collaboration');
+  assert.equal(ok.retryAfterMs, 90_000);
+  const paused = await readSuggestion('iv-1', reply(200, { suggestion: null, paused: 'budget', retryAfterMs: 1 }));
+  assert.equal(paused.paused, 'budget');
+  assert.equal(paused.retryAfterMs, 10_000);
+  assert.equal((await readSuggestion('iv-1', reply(404))).suggestion, null);
+  assert.equal((await readSuggestion('iv-1', (async () => { throw new Error('x'); }) as unknown as typeof fetch)).suggestion, null);
+  assert.equal((await readSuggestion('iv-1', reply(200, { suggestion: { id: 1 } }))).suggestion, null);
+});
+
+test('a panel member never sees a paused line; the lead sees it only for the budget; the receipt does not promise speech', () => {
+  assert.equal(pausedLine('lead', 'budget'), SUGGESTIONS_PAUSED_LINE);
+  assert.equal(pausedLine('panel', 'budget'), null);
+  assert.equal(pausedLine('lead', null), null);
+  assert.equal(SUGGESTION_RECEIPTS['milo-ask'], 'Sent to the call chat');
+  assert.equal(readsConsents('panel', true), true);
+  assert.equal(readsConsents('lead', false), false);
+  assert.equal(readsConsents(null, true), false);
 });

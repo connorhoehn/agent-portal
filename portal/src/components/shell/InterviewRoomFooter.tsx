@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Button, Inline, T } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { knockPromptId, roomStartMs, timeLeftLabel, timeLeftTone, type Admission } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, knockPromptId, roomStartMs, suggestionPromptId, timeLeftLabel, timeLeftTone, type Admission, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -21,6 +21,11 @@ export interface InterviewRoomFooterState {
   admission: Admission | null;
   end(): Promise<{ error?: string }>;
   answerKnock(admit: boolean): Promise<{ error?: string }>;
+  /** D7: Milo's suggestion waiting for the lead; null for everyone else and when none is waiting. */
+  suggestion: SuggestionView | null;
+  /** The quiet line when the budget paused suggestions (the lead's only; null otherwise). */
+  pausedLine: string | null;
+  answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string }>;
 }
 
 // One registration at a time: the room page that is mounted.
@@ -66,7 +71,8 @@ export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName:
   const left = timeLeftLabel(roomStartMs(room.scheduledAt, callStartedAt), room.minutes, now);
   return <Inline gap="sm" align="center" wrap={false} data-testid="interview-room-bar">
     {left && <T size="xs" weight="medium" tone={timeLeftTone(left)} className="whitespace-nowrap" data-testid="interview-time-left">{left}</T>}
-    {room.lead && room.offLine && <T size="xs" tone="secondary" truncate className="max-w-[16rem]" data-testid="interview-consent-off">{room.offLine}</T>}
+    {room.pausedLine && <T size="xs" tone="secondary" truncate className="max-w-[20rem]" data-testid="interview-suggestions-paused">{room.pausedLine}</T>}
+    {room.offLine && <T size="xs" tone="secondary" truncate className="max-w-[16rem]" data-testid="interview-consent-off">{room.offLine}</T>}
     {room.lead && <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>}
   </Inline>;
 }
@@ -104,12 +110,27 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
         return { receipt: admit ? 'Admitted' : 'Not yet' };
       },
     });
+    const sg = room.lead ? room.suggestion : null;
+    if (sg) list.push({
+      ...base, id: suggestionPromptId(room.interviewId, sg.id), kind: 'choice', eyebrow: 'Milo suggests', title: sg.competency.name,
+      question: sg.text, ...(sg.basedOn ? { fields: [{ label: 'Based on', value: sg.basedOn, tone: 'neutral' as const }] } : {}),
+      options: [{ id: 'ask', label: 'I’ll ask it', emphasis: 'primary' }, { id: 'milo-ask', label: 'Have Milo ask' }, { id: 'skip', label: 'Skip' }],
+      onAnswer: async (a) => {
+        const answer: SuggestionAnswerId = 'optionId' in a && (a.optionId === 'milo-ask' || a.optionId === 'skip') ? a.optionId : 'ask';
+        const out = await room.answerSuggestion(sg.id, answer);
+        if (out.error) return { error: out.error };
+        return { receipt: SUGGESTION_RECEIPTS[answer] };
+      },
+    });
     return list;
-  }, [room, scope, asked, knock]);
+  }, [room, scope, asked, knock, room?.suggestion]);
   const deck = useComposerPromptDeck(prompts, { scope });
   // A new knock asks again even after Esc hid the deck.
   const knockId = room && knock ? knockPromptId(room.interviewId, knock) : null;
   useEffect(() => { if (knockId && deck.collapsed) deck.setCollapsed(false); }, [knockId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Esc hides a suggestion without answering; the next one comes back.
+  const suggestionId = room?.lead ? room.suggestion?.id ?? null : null;
+  useEffect(() => { if (suggestionId && deck.collapsed) deck.setCollapsed(false); }, [suggestionId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Esc on the End question is "Keep going".
   useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);
   if (!room || !deck.active || deck.collapsed) return null;

@@ -27,7 +27,8 @@ import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { PAD_LANGUAGE_LABELS } from '../../lib/interviewsKit';
 import {
-  MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, codeBlockLanguage, consentOffLine, consentsPath, endInterview, pollsWaiting, readAdmission,
+  MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents,
+  suggestionReadBudgetMs, type SuggestionAnswerId, type SuggestionView, codeBlockLanguage, consentOffLine, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
 } from '../../lib/interviewsRoom';
 
@@ -80,8 +81,38 @@ function InterviewRoom({ id }: { id: string }) {
   }, [polling, id]);
 
   // C4: one quiet line of what the candidate turned off; not found shows nothing.
-  const consents = useFetch<{ answered: boolean; off: ConsentPart[] }>(room?.seat === 'lead' && open ? consentsPath(id) : null);
+  // Any seat reads it: the interviewer is told what is off (decision 5).
+  const consents = useFetch<{ answered: boolean; off: ConsentPart[] }>(readsConsents(room?.seat ?? null, open) ? consentsPath(id) : null);
   const offLine = consents.error ? null : consentOffLine(consents.data?.off);
+
+  // D7: Milo's suggestion, for the lead only, read on the server's wait while the interview is live and the lead is in the call.
+  const [suggestion, setSuggestion] = useState<SuggestionView | null>(null);
+  const [paused, setPaused] = useState<'budget' | null>(null);
+  const asking = pollsSuggestion(room?.seat ?? null, room?.state ?? null, joined, suggestion);
+  const roundMinutes = room?.round.minutes ?? 0;
+  const suggestionDeadline = useRef<number | null>(null);
+  useEffect(() => {
+    if (!asking) return;
+    suggestionDeadline.current ??= Date.now() + suggestionReadBudgetMs(roundMinutes);
+    let live = true;
+    let timer: number | undefined;
+    const read = async () => {
+      if (!live || Date.now() > (suggestionDeadline.current ?? 0)) return;
+      const out = await readSuggestion(id);
+      if (!live) return;
+      setPaused(out.paused);
+      if (out.suggestion) { setSuggestion(out.suggestion); return; }
+      timer = window.setTimeout(() => { void read(); }, out.retryAfterMs);
+    };
+    void read();
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [asking, id, roundMinutes]);
+  const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string }> => {
+    const out = await answerSuggestion(id, suggestionId, answer);
+    if (!out.ok && !out.gone) return { error: out.error };
+    setSuggestion((s) => (s?.id === suggestionId ? null : s));
+    return {};
+  }, [id]);
 
   const leave = host?.call.leave;
   const end = useCallback(async (): Promise<{ error?: string }> => {
@@ -101,7 +132,10 @@ function InterviewRoom({ id }: { id: string }) {
   const footer = useMemo<InterviewRoomFooterState | null>(() => (room && lobbyName ? {
     interviewId: room.id, lobbyName, lead: room.seat === 'lead', scheduledAt: room.scheduledAt, minutes: room.round.minutes,
     offLine, admission, end, answerKnock: knock,
-  } : null), [room, lobbyName, offLine, admission, end, knock]);
+    suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
+    pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,
+    answerSuggestion: answerAsk,
+  } : null), [room, lobbyName, offLine, admission, end, knock, suggestion, paused, answerAsk]);
   useRegisterInterviewRoomFooter(footer);
 
   if (error && !room) {

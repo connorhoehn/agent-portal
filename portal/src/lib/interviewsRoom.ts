@@ -146,3 +146,82 @@ export function consentOffLine(off: readonly ConsentPart[] | null | undefined): 
 /** The pad's language as the library's read-only code block names it; the rest are plain text. */
 export const codeBlockLanguage = (language: PadLanguage): 'ts' | 'js' | 'text' =>
   language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : 'text';
+
+// ── D7: Milo's suggestion for the lead (COACH builds the routes; decisions 8, 20 and 21) ──
+export type SuggestionAnswerId = 'ask' | 'milo-ask' | 'skip';
+export interface SuggestionView {
+  id: string;
+  text: string;
+  competency: { id: string; name: string };
+  basedOn: string | null;
+  shownAt: string;
+}
+export interface SuggestionRead { suggestion: SuggestionView | null; paused: 'budget' | null; retryAfterMs: number }
+const SUGGESTION_RETRY_DEFAULT = 30_000;
+export const NO_SUGGESTION: SuggestionRead = { suggestion: null, paused: null, retryAfterMs: SUGGESTION_RETRY_DEFAULT };
+/** The wait between reads is the server's, held between 10 seconds and 2 minutes. */
+export const SUGGESTION_MIN_WAIT_MS = 10_000;
+export const SUGGESTION_MAX_WAIT_MS = 120_000;
+
+export const suggestionPath = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/suggestion`;
+const suggestionAnswerPath = (interviewId: string, suggestionId: string): string =>
+  `${suggestionPath(interviewId)}/${encodeURIComponent(suggestionId)}/answer`;
+
+export function suggestionWaitMs(retryAfterMs: number | null | undefined): number {
+  const n = typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) ? retryAfterMs : SUGGESTION_RETRY_DEFAULT;
+  return Math.min(SUGGESTION_MAX_WAIT_MS, Math.max(SUGGESTION_MIN_WAIT_MS, n));
+}
+
+/** How long the room keeps reading: the round's length plus half an hour. */
+export const suggestionReadBudgetMs = (roundMinutes: number): number => (Math.max(0, roundMinutes) + 30) * 60_000;
+
+/**
+ * The room asks only for the lead (a panel member never gets a suggestion, decision 20), while the interview is
+ * live, once the lead has joined the call, and not while one is already waiting in the deck.
+ */
+export const pollsSuggestion = (
+  seat: 'lead' | 'panel' | null, state: RoomState | null, joined: boolean, waiting: SuggestionView | null,
+): boolean => seat === 'lead' && state === 'live' && joined && !waiting;
+
+/** One read. Not found (not the lead, or no route) and any failure read as no suggestion. */
+export async function readSuggestion(interviewId: string, fetcher: typeof fetch = fetch): Promise<SuggestionRead> {
+  try {
+    const res = await fetcher(suggestionPath(interviewId), { credentials: 'include' });
+    if (!res.ok) return NO_SUGGESTION;
+    const body = (await res.json()) as Partial<SuggestionRead>;
+    const s = body.suggestion;
+    const valid = !!s && typeof s.id === 'string' && typeof s.text === 'string' && !!s.competency && typeof s.competency.name === 'string';
+    return {
+      suggestion: valid ? { id: s.id, text: s.text, competency: s.competency, basedOn: s.basedOn ?? null, shownAt: s.shownAt ?? '' } : null,
+      paused: body.paused === 'budget' ? 'budget' : null,
+      retryAfterMs: suggestionWaitMs(body.retryAfterMs),
+    };
+  } catch {
+    return NO_SUGGESTION;
+  }
+}
+
+/** The answer; `gone` is a 409 (answered elsewhere, or the interview ended): the prompt clears quietly. */
+export async function answerSuggestion(
+  interviewId: string, suggestionId: string, answer: SuggestionAnswerId,
+): Promise<{ ok: true } | { ok: false; gone: boolean; error: string }> {
+  const r = await writeJson<{ suggestion?: null }>(suggestionAnswerPath(interviewId, suggestionId), 'POST', { answer });
+  if (r.ok) return { ok: true };
+  return { ok: false, gone: r.status === 409, error: r.error ?? 'That did not go through. Try again.' };
+}
+
+/** One prompt per suggestion. */
+export const suggestionPromptId = (interviewId: string, suggestionId: string): string => `interview-suggestion:${interviewId}:${suggestionId}`;
+
+/** What the receipt says; Milo's words are posted to the call chat, not spoken. */
+export const SUGGESTION_RECEIPTS: Record<SuggestionAnswerId, string> = {
+  ask: 'You will ask it', 'milo-ask': 'Sent to the call chat', skip: 'Skipped',
+};
+
+/** The one quiet line when the budget has paused suggestions: the lead's only. */
+export const SUGGESTIONS_PAUSED_LINE = 'Milo’s suggestions are paused: this interview has reached its budget.';
+export const pausedLine = (seat: 'lead' | 'panel' | null, paused: 'budget' | null | undefined): string | null =>
+  seat === 'lead' && paused === 'budget' ? SUGGESTIONS_PAUSED_LINE : null;
+
+/** The consents line is for any seat on the interview (decision 5). */
+export const readsConsents = (seat: 'lead' | 'panel' | null, open: boolean): boolean => seat !== null && open;
