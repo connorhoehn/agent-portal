@@ -57,6 +57,23 @@ function InviteCell({ row, status, link, busy, onMake, onRevoke }: {
   );
 }
 
+/** One round's time: what it is and the way to change it. The field itself opens above the table, not in the cell. */
+function TimeCell({ row, done, error, onEdit, onClear }: {
+  row: InterviewRow; done: string | undefined; error: string | null; onEdit(): void; onClear(): void;
+}) {
+  return (
+    <Stack gap="none">
+      <Inline gap="xs" align="center" wrap={false}>
+        <T size="sm" tone={row.scheduledAt ? undefined : 'secondary'} title={row.scheduledAt ? new Date(row.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(row.scheduledAt)}</T>
+        <Button size="sm" variant="ghost" data-testid="interviews-upcoming-set-time" onClick={onEdit}>{row.scheduledAt ? 'Change…' : 'Set time…'}</Button>
+        {row.scheduledAt && <Button size="sm" variant="ghost" data-testid="interviews-upcoming-clear-time" onClick={onClear}>Clear…</Button>}
+      </Inline>
+      {done && <T size="xs" tone="secondary" data-testid="interviews-upcoming-saved">{done}</T>}
+      {error && <T size="xs" tone="danger">{error}</T>}
+    </Stack>
+  );
+}
+
 /** Reads a row's invite status once the row has a time. */
 function InviteStatusLoader({ row, override, link, busy, onMake, onRevoke }: {
   row: InterviewRow; override: InviteStatus | undefined; link: string | undefined; busy: boolean; onMake(status: InviteStatus | null): void; onRevoke(): void;
@@ -170,31 +187,10 @@ function UpcomingWorkspace() {
     }] : []),
     {
       key: 'when', header: `Time (${zone})`, width: '280px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
-      render: (r) => {
-        const done = saved.get(r.id);
-        if (!isTimeable(r.state)) return <T size="sm" tone="secondary" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>;
-        if (editing === r.id) {
-          return (
-            <Stack gap="none">
-              <DateTimeField label={`Time for ${r.round.name} with ${r.candidate.name}`} value={r.scheduledAt} min={nowIso} minMessage="Choose a time in the future."
-                hint={`Shown in ${zone}`} data-testid="interviews-upcoming-time-field"
-                onChange={(iso) => ask({ kind: 'time', row: r, iso })} />
-              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-            </Stack>
-          );
-        }
-        return (
-          <Stack gap="none">
-            <Inline gap="xs" align="center" wrap={false}>
-              <T size="sm" tone={r.scheduledAt ? undefined : 'secondary'} title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(r.scheduledAt)}</T>
-              <Button size="sm" variant="ghost" data-testid="interviews-upcoming-set-time" onClick={() => { setRowError(null); setEditing(r.id); }}>{r.scheduledAt ? 'Change…' : 'Set time…'}</Button>
-              {r.scheduledAt && <Button size="sm" variant="ghost" data-testid="interviews-upcoming-clear-time" onClick={() => ask({ kind: 'time', row: r, iso: null })}>Clear…</Button>}
-            </Inline>
-            {done && <T size="xs" tone="secondary" data-testid="interviews-upcoming-saved">{done}</T>}
-            {rowError?.id === r.id && <T size="xs" tone="danger">{rowError.text}</T>}
-          </Stack>
-        );
-      },
+      render: (r) => (isTimeable(r.state)
+        ? <TimeCell row={r} done={saved.get(r.id)} error={rowError?.id === r.id ? rowError.text : null}
+            onEdit={() => { setRowError(null); setEditing(r.id); }} onClear={() => ask({ kind: 'time', row: r, iso: null })} />
+        : <T size="sm" tone="secondary" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>),
     },
     {
       key: 'invite', header: 'Invite link', width: '260px',
@@ -206,6 +202,7 @@ function UpcomingWorkspace() {
   ];
 
   const all = [...(data?.items ?? [])].filter((r) => r.state !== 'declined' && r.state !== 'cancelled').sort(upcomingOrder);
+  const editingRow = editing ? all.find((r) => r.id === editing) ?? null : null;
   const rows = all.filter((r) => (timeFilter === '' || (timeFilter === 'timed') === (r.scheduledAt !== null))
     && matches(query, r.candidate.name, r.candidate.headline, r.opening.title, r.opening.team, r.round.name, r.lead.name, ...r.panel.map((p) => p.name)));
 
@@ -229,6 +226,14 @@ function UpcomingWorkspace() {
             summary: data ? ofTotal(rows.length, all.length, 'round') : undefined,
             onRefresh: refresh, refreshing: isLoading,
           }} />
+          {editingRow && (
+            <Inline gap="sm" align="end" data-testid="interviews-upcoming-editor">
+              <DateTimeField label={`Time for ${editingRow.round.name} with ${editingRow.candidate.name}`} value={editingRow.scheduledAt} min={nowIso} minMessage="Choose a time in the future."
+                hint={`Shown in ${zone}`} data-testid="interviews-upcoming-time-field"
+                onChange={(iso) => ask({ kind: 'time', row: editingRow, iso })} />
+              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+            </Inline>
+          )}
           {error ? (
             <UnavailableNotice error={error} what="the rounds" source="Rounds are read from the interviews assigned in this tenant" onRetry={refresh} />
           ) : (
