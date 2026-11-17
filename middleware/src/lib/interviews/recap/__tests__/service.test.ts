@@ -1,0 +1,186 @@
+// Milo's recap (lib/interviews/recap/service.ts; row I5.2, contract E3): the open stores the ratings first, the first open
+// writes the recap once, consent and money come before any call, at most three attempts, one in flight, reads never write.
+jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
+import { fixtureRegistry } from '../../../../mock/core/index.js';
+import { interviewApplicationsFixture, interviewOpeningsFixture, interviewsFixture } from '../../../../mock/interviews.js';
+import { interviewRecapOpensFixture, interviewRecapsFixture } from '../../../../mock/interviews-recaps.js';
+import type { CoachModelResult } from '../../coach/model.js';
+import type { CoachTranscript } from '../../coach/transcript.js';
+import { ScriptedRecapModel, type RecapModel } from '../model.js';
+import type { RecapInput } from '../prompt.js';
+import { checkOpenRatings, openRecap, ratingsAtRecap, readRecap, RECAP_MAX_ATTEMPTS, resetRecapAttempts, setRecapDeps, type RecapDeps, type RecapRef } from '../service.js';
+import { MemoryRecapStore } from '../store.js';
+
+// Nadia's leadership round, made to have ended: the Engineering Manager kit (behavioural).
+const IV = 'iv-nadia-leadership';
+const WEN = { userId: 'u-wen' };
+const HUGO = { userId: 'u-hugo' };
+
+function refOf(): RecapRef {
+  // The lead chose the people-leadership question for it.
+  const interview = { ...interviewsFixture.rows().find((i) => i.id === IV)!, state: 'ended' as const, questionIds: ['q-em-struggling'] };
+  const app = interviewApplicationsFixture.rows().find((a) => a.id === interview.applicationId)!;
+  return { interview, opening: interviewOpeningsFixture.rows().find((o) => o.id === app.openingId)! };
+}
+const ratings = (rating: 1 | 2 | 3 | 4 = 3) => refOf().opening.kit.competencies.map((c) => ({ competencyId: c.id, rating }));
+const firstQuestion = () => refOf().opening.kit.questions.find((q) => q.id === 'q-em-struggling')!;
+
+let transcript: CoachTranscript | null;
+let consent: { transcription: boolean; milo: boolean } | null;
+let deps: { [K in keyof RecapDeps]: jest.Mock };
+const store = new MemoryRecapStore();
+
+/** A model that answers what it is given, in order. */
+const answering = (...raws: (string | 'timeout')[]): RecapModel => {
+  let n = 0;
+  return {
+    kind: 'bedrock', modelId: 'amazon.nova-pro-v1:0',
+    write: jest.fn(async (_i: RecapInput): Promise<CoachModelResult> => {
+      const raw = raws[Math.min(n++, raws.length - 1)]!;
+      return raw === 'timeout' ? { raw: null, code: 'timeout', sent: true, usage: null } : { raw, code: 'ok', sent: true, usage: { inputTokens: 5000, outputTokens: 500 } };
+    }),
+  };
+};
+
+beforeEach(() => {
+  fixtureRegistry.resetAll('default');
+  interviewRecapsFixture.rows().splice(0);
+  interviewRecapOpensFixture.rows().splice(0);
+  resetRecapAttempts();
+  consent = { transcription: true, milo: true };
+  const q = firstQuestion();
+  transcript = { callId: 'call-1', lastSeq: 2, lines: [
+    { seq: 1, side: 'panel', text: q.prompt },
+    { seq: 2, side: 'candidate', text: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.' },
+  ] };
+  deps = {
+    store: jest.fn(() => store),
+    consents: jest.fn(async () => consent),
+    transcript: jest.fn(async () => transcript),
+    taken: jest.fn(async () => []),
+    model: jest.fn(() => new ScriptedRecapModel()),
+    reserve: jest.fn(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `iv:op:${IV}:coach:${i.key}`, amountUsd: i.estimateUsd })),
+    settle: jest.fn(async () => undefined),
+    release: jest.fn(async () => undefined),
+    now: jest.fn(() => Date.UTC(2026, 11, 1, 16, 0)),
+    suffix: jest.fn(() => 'abcd'),
+  };
+  setRecapDeps(deps as unknown as RecapDeps);
+});
+afterAll(() => setRecapDeps(null));
+
+describe('the first open', () => {
+  it('stores the ratings, then writes the recap once from the scripted stand-in, held and settled at zero', async () => {
+    const body = await openRecap(refOf(), WEN, ratings(3));
+    const q = firstQuestion();
+    expect(body.state).toBe('ready');
+    expect(body.competencies).toEqual([{
+      id: q.competencyId, name: refOf().opening.kit.competencies.find((c) => c.id === q.competencyId)!.name,
+      evidence: [{ text: 'The candidate said: “One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.”',
+        source: { kind: 'transcript', seq: 2, quote: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.' } }],
+    }]);
+    expect(body.notCovered.map((c) => c.id)).toEqual(refOf().opening.kit.competencies.map((c) => c.id).filter((id) => id !== q.competencyId));
+    expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(3));
+    expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'recap-1-abcd' }));
+    expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0, provider: 'local' }));
+    const row = await store.getRecap(IV);
+    expect(row).toMatchObject({ state: 'ready', attempts: 1, droppedCodes: [], modelId: 'scripted-recap', promptVersion: 'recap-2026-11-17.1' });
+  });
+
+  it('a later open stores that person\'s ratings, never changes the first, and makes no second call', async () => {
+    await openRecap(refOf(), WEN, ratings(3));
+    await openRecap(refOf(), WEN, ratings(1));
+    await openRecap(refOf(), HUGO, ratings(2));
+    expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(3));
+    expect(await ratingsAtRecap(IV, 'u-hugo')).toEqual(ratings(2));
+    expect(deps.reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('two opens at once make one call', async () => {
+    const [a, b] = await Promise.all([openRecap(refOf(), WEN, ratings()), openRecap(refOf(), HUGO, ratings())]);
+    expect(a).toEqual(b);
+    expect(deps.reserve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('before any call', () => {
+  it('no transcript accepted: no-transcript, nothing read, no hold', async () => {
+    consent = { transcription: false, milo: false };
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('no-transcript');
+    expect(deps.transcript).not.toHaveBeenCalled();
+    expect(deps.reserve).not.toHaveBeenCalled();
+    expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings());
+  });
+
+  it('Milo declined: none, nothing read, no hold', async () => {
+    consent = { transcription: true, milo: false };
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('none');
+    expect(deps.transcript).not.toHaveBeenCalled();
+    expect(deps.reserve).not.toHaveBeenCalled();
+  });
+
+  it('no lines: no-transcript, no hold', async () => {
+    transcript = null;
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('no-transcript');
+    expect(deps.reserve).not.toHaveBeenCalled();
+  });
+
+  it('a refused hold: paused for the budget, no call, nothing stored, the next open tries again', async () => {
+    const model = answering('{"competencies":[],"notCovered":[]}');
+    deps.model.mockReturnValue(model);
+    deps.reserve.mockResolvedValueOnce({ ok: false, refusal: { status: 402, body: {} } });
+    expect(await openRecap(refOf(), WEN, ratings())).toMatchObject({ state: 'paused', paused: 'budget' });
+    expect(model.write).not.toHaveBeenCalled();
+    expect(await store.getRecap(IV)).toBeNull();
+    expect((await openRecap(refOf(), HUGO, ratings())).state).toBe('ready');
+  });
+});
+
+describe('attempts', () => {
+  it('a judging answer is dropped by code and the next attempt writes it; the code is kept, not the text', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const judging = JSON.stringify({ competencies: [{ id: firstQuestion().competencyId, evidence: [{ text: 'A strong answer.', seq: 2, quote: 'One engineer kept missing reviews' }] }], notCovered: [] });
+    deps.model.mockReturnValue(answering(judging, '{"competencies":[],"notCovered":[]}'));
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('ready');
+    expect(await store.getRecap(IV)).toMatchObject({ attempts: 2, droppedCodes: ['judges'] });
+    expect(JSON.stringify(await store.getRecap(IV))).not.toContain('strong');
+    expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ provider: 'bedrock', inputTokens: 5000, outputTokens: 500 }));
+    warn.mockRestore();
+  });
+
+  it(`stops after ${RECAP_MAX_ATTEMPTS} attempts with a failed row, and readers see none`, async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const model = answering('not json', 'timeout', 'still not json');
+    deps.model.mockReturnValue(model);
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('none');
+    expect(model.write).toHaveBeenCalledTimes(3);
+    expect(await store.getRecap(IV)).toMatchObject({ state: 'failed', attempts: 3, droppedCodes: ['malformed', 'timeout', 'malformed'] });
+    expect((await openRecap(refOf(), HUGO, ratings())).state).toBe('none');
+    expect(model.write).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
+  });
+});
+
+describe('reading', () => {
+  it('never writes: none before an open, no-transcript when the transcript was declined, the recap once written', async () => {
+    expect((await readRecap(refOf())).state).toBe('none');
+    expect(deps.reserve).not.toHaveBeenCalled();
+    consent = { transcription: false, milo: false };
+    expect((await readRecap(refOf())).state).toBe('no-transcript');
+    consent = { transcription: true, milo: true };
+    await openRecap(refOf(), WEN, ratings());
+    expect((await readRecap(refOf())).state).toBe('ready');
+  });
+});
+
+describe('the ratings an open takes', () => {
+  it('every competency of the kit once, 1 to 4, put in the kit\'s order', () => {
+    const ref = refOf();
+    expect(checkOpenRatings({ ratings: [...ratings(2)].reverse() }, ref.opening)).toEqual(ratings(2));
+    expect(checkOpenRatings({ ratings: ratings(2).slice(1) }, ref.opening)).toBeNull();
+    expect(checkOpenRatings({ ratings: [...ratings(2), ratings(2)[0]] }, ref.opening)).toBeNull();
+    expect(checkOpenRatings({ ratings: ratings(2).map((r, n) => (n ? r : { ...r, rating: 5 })) }, ref.opening)).toBeNull();
+    expect(checkOpenRatings({ ratings: [...ratings(2).slice(1), { competencyId: 'charisma', rating: 2 }] }, ref.opening)).toBeNull();
+    expect(checkOpenRatings({}, ref.opening)).toBeNull();
+  });
+});

@@ -40,7 +40,9 @@ import { requireTenant } from '../../lib/authz.js';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
-import { interviewsFixture } from '../../mock/interviews.js';
+import { interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
+import { setCoachModelFactory, ScriptedCoachModel } from '../../lib/interviews/coach/index.js';
+import { setRecapDeps } from '../../lib/interviews/recap/index.js';
 import type { Session } from '../../lib/session.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -232,5 +234,43 @@ describe('others hidden until yours is in', () => {
     await submit(WEN, NADIA);
     await submit(HUGO, NADIA);
     expect((await read(HUGO, NADIA)).body.scorecard).toMatchObject({ othersHidden: true, others: [] });
+  });
+});
+
+describe('changed after the recap is the server\'s fact (row I5.2, E3)', () => {
+  // The recap itself is written by the scripted stand-in over no transcript here: what matters is the stored open.
+  beforeAll(() => { setCoachModelFactory(() => new ScriptedCoachModel()); setRecapDeps({ transcript: async () => null }); });
+  afterAll(() => { setCoachModelFactory(null); setRecapDeps(null); });
+  const openWith = async (as: Who, id: string) => {
+    const body = await complete(as, id);
+    return as.post(`/interviews/${id}/recap/open`, { ratings: (body.ratings as Array<{ competencyId: string; rating: number }>).map(({ competencyId, rating }) => ({ competencyId, rating })) });
+  };
+  const stored = (author: string) => interviewScorecardsFixture.rows().filter((c) => c.interviewId === NADIA && c.interviewerId === author).sort((a, b) => a.version - b.version);
+
+  it('unchanged ratings after the open: false', async () => {
+    expect((await openWith(WEN, NADIA)).status).toBe(200);
+    expect((await submit(WEN, NADIA)).status).toBe(201);
+    expect(stored('u-wen').map((c) => c.changedAfterRecap)).toEqual([false]);
+  });
+
+  it('a rating changed after the open: true, whatever the request says', async () => {
+    await openWith(WEN, NADIA);
+    const body = await complete(WEN, NADIA);
+    const ratings = (body.ratings as Array<{ rating: number }>).map((r, n) => (n === 0 ? { ...r, rating: r.rating === 4 ? 1 : r.rating + 1 } : r));
+    expect((await WEN.post(`/interviews/${NADIA}/scorecard`, { ...body, ratings })).status).toBe(201);
+    expect(stored('u-wen').map((c) => c.changedAfterRecap)).toEqual([true]);
+    // The request cannot carry its own answer.
+    expect((await WEN.post(`/interviews/${NADIA}/scorecard`, { ...body, basedOn: 1, reason: 'Fix.', changedAfterRecap: false })).status).toBe(400);
+  });
+
+  it('never opened: false; a correction compares against the same stored open', async () => {
+    expect((await submit(HUGO, NADIA)).status).toBe(201);
+    expect(stored('u-hugo').map((c) => c.changedAfterRecap)).toEqual([false]);
+    await openWith(WEN, NADIA);
+    await submit(WEN, NADIA);
+    const body = await complete(WEN, NADIA, { basedOn: 1, reason: 'Second thoughts on the first competency.' });
+    const ratings = (body.ratings as Array<{ rating: number }>).map((r, n) => (n === 0 ? { ...r, rating: r.rating === 4 ? 1 : r.rating + 1 } : r));
+    expect((await WEN.post(`/interviews/${NADIA}/scorecard`, { ...body, ratings })).status).toBe(201);
+    expect(stored('u-wen').map((c) => c.changedAfterRecap)).toEqual([false, true]);
   });
 });
