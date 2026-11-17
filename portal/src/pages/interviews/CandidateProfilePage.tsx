@@ -173,6 +173,7 @@ function CandidateProfile({ id }: { id: string }) {
   const resume = useResumeState(id, profile?.candidate.name ?? '', manages);
   const [tab, setTab] = useState<ProfileTab>('rounds');
 
+  // The dock floats over the foot of the column: the room under the last section lets the rows and a prompt's receipt scroll clear of it (pb-56 below).
   // The résumé's and the deletion's prompts live in the page's dock, whichever tab is open.
   const dock = manages ? <CollectionCommandHost inPlace adapter={resume.adapter} prompts={[...resume.prompts, ...deletions.prompts]} /> : undefined;
 
@@ -200,7 +201,7 @@ function CandidateProfile({ id }: { id: string }) {
   return (
     <ProfileFrame id={id} role={role} footer={dock} listVersion={deletions.done}>
       {!framed && <PageHeader density="compact" title={candidate.name} description={candidate.headline} badge={first ? <StageChip stage={first.stage} /> : undefined} />}
-      <Stack gap="md" className={framed ? undefined : 'px-[var(--ui-page-gutter)] pb-4'} data-testid="interviews-candidate-profile">
+      <Stack gap="md" className={framed ? 'pb-56' : 'px-[var(--ui-page-gutter)] pb-4'} data-testid="interviews-candidate-profile">
         <ProfileHead framed={framed} name={candidate.name} headline={candidate.headline} stage={first?.stage}>
           <Inline gap="md" align="start" wrap={false} data-testid="interviews-profile-header">
             <Avatar name={candidate.name} size={48} />
