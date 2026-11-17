@@ -81,14 +81,27 @@ export interface MicrovmNetworkStackProps extends cdk.StackProps {
 /** The region's ECR image-layer bucket objects (the AgentCore VPC guide's S3 gateway policy). */
 export const ecrLayerBucketArn = (region: string): string => `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`;
 
-/** The names a VPC-mode runtime resolves to start: ECR, its layer bucket and CloudWatch Logs. */
+/**
+ * The bucket AgentCore's in-session agent ships the runtime's logs to. Not in the VPC guide: found in the VPC's
+ * query log on the first deploy, retried hundreds of times while the session failed to initialise.
+ */
+export const agentcoreLogsBucketArn = (region: string): string => `arn:aws:s3:::kepler-ola-${region}-prod-logs-bucket/*`;
+
+/**
+ * The names a VPC-mode runtime resolves to start: ECR, CloudWatch Logs and S3. S3 is every regional name, because
+ * the buckets answer through CNAMEs (`…starport-layer-bucket.s3.<region>` → `s3-r-w.<region>`) and DNS Firewall
+ * checks each name in the chain. Resolving a bucket gives no access: S3's addresses route to the gateway endpoint,
+ * whose policy names the two buckets above.
+ */
 export function microvmStartupNames(region: string, account: string): string[] {
   return [
     `api.ecr.${region}.amazonaws.com`,
     `${account}.dkr.ecr.${region}.amazonaws.com`,
-    `prod-${region}-starport-layer-bucket.s3.${region}.amazonaws.com`,
-    `prod-${region}-starport-layer-bucket.s3.amazonaws.com`,
     `logs.${region}.amazonaws.com`,
+    `s3.${region}.amazonaws.com`,
+    `*.s3.${region}.amazonaws.com`,
+    `s3-r-w.${region}.amazonaws.com`,
+    `prod-${region}-starport-layer-bucket.s3.amazonaws.com`,
   ];
 }
 
@@ -300,8 +313,9 @@ export class MicrovmNetworkStack extends cdk.Stack {
     // health check and wrote no log. ECR and Logs are interface endpoints with
     // AWS's default policy: the execution role already limits the pull to the
     // devbox repository and the writes to this runtime's log groups. S3 is a
-    // gateway endpoint limited to the region's ECR layer bucket, so the box
-    // reaches no other bucket through it. None of them crosses Network Firewall.
+    // gateway endpoint limited to reading the region's ECR layer bucket and
+    // writing AgentCore's own log bucket, so the box reaches no bucket of ours
+    // or anyone else's through it. None of them crosses Network Firewall.
     for (const [id, service] of [
       ['EcrApiEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR],
       ['EcrDockerEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER],
@@ -326,6 +340,12 @@ export class MicrovmNetworkStack extends cdk.Stack {
       principals: [new iam.AnyPrincipal()],
       actions: ['s3:GetObject'],
       resources: [ecrLayerBucketArn(this.region)],
+    }));
+    s3Endpoint.addToPolicy(new iam.PolicyStatement({
+      sid: 'AgentCoreRuntimeLogs',
+      principals: [new iam.AnyPrincipal()],
+      actions: ['s3:PutObject'],
+      resources: [agentcoreLogsBucketArn(this.region)],
     }));
 
     // ── DNS Firewall: allow the list, NXDOMAIN for everything else ──────────

@@ -172,6 +172,9 @@ export class MicrovmRuntimeStack extends cdk.Stack {
       environmentVariables: {
         AGENT_NAME: 'devbox',
         ORGIQ_RUNNER: 'microvm',
+        // The lab broker's socket (agents/devbox/main.py). Not its default, /run/orgiq: /run is root's in the
+        // image and the runtime user cannot create a directory there. /tmp is where the workspace already lives.
+        LAB_BROKER_SOCKET: '/tmp/orgiq-lab/lab.sock',
         PROJECT_PREFIX: prefix,
         CLAUDE_CODE_USE_BEDROCK: '1',
         ANTHROPIC_MODEL: modelId,

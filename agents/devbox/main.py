@@ -1227,6 +1227,9 @@ async def _mvm_boot(payload: dict) -> dict:
     try:
         await broker.start()
     except OSError as err:
+        # The path and errno, never the payload: the refusal itself names only the error type.
+        log.warning("microvm boot: lab broker failed at %s: %s errno=%s on %s", broker.socket_path,
+                    type(err).__name__, err.errno, err.filename)
         return _Refusal("broker-failed", type(err).__name__).result()
     run = _MicrovmRun(run_ref=run_ref, brief_ref=brief_ref, library_sha=library_sha, repo=full_name, ref=ref,
                       home=home, target=target, base_sha="", git_config=git_config, broker=broker,

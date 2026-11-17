@@ -140,6 +140,11 @@ describe('the runtime (design §2, §7)', () => {
     assert.ok(!Object.keys(env).some((k) => k.startsWith('LAB_CALLBACK_SECRET')));
   });
 
+  test('the lab broker listens under /tmp, which the runtime user can write in a session', () => {
+    const [r] = microvmRuntime(runtime);
+    assert.equal(r.Properties.EnvironmentVariables.LAB_BROKER_SOCKET, '/tmp/orgiq-lab/lab.sock');
+  });
+
   test('a plaintext lab callback secret is refused', () => {
     assert.throws(() => runtimeStack({}, { labCallbackSecret: 'value' }), /plaintextCallbackSecrets/);
   });
@@ -278,13 +283,17 @@ describe('network (design §5)', () => {
     }
     const s3 = eps.find((e) => service(e).includes('.s3"'));
     assert.equal(s3.Properties.VpcEndpointType, 'Gateway');
-    const [st, ...rest] = s3.Properties.PolicyDocument.Statement;
-    assert.equal(rest.length, 0);
-    assert.deepEqual([st.Effect, st.Action], ['Allow', 's3:GetObject']);
-    assert.match(JSON.stringify(st.Resource), /prod-.*-starport-layer-bucket\/\*/);
-    const inVpc = network.findResources('AWS::Route53Resolver::FirewallDomainList')['DnsAllowInVpc'].Properties.Domains;
-    assert.equal(microvmStartupNames('us-east-1', '647757222309').length, 5);
-    assert.ok(JSON.stringify(inVpc).includes('starport-layer-bucket') && JSON.stringify(inVpc).includes('api.ecr.'));
+    // Through S3: read the ECR layers, write AgentCore's own runtime logs, nothing else.
+    const sts = s3.Properties.PolicyDocument.Statement.map((st: any) => [st.Sid, st.Effect, st.Action, JSON.stringify(st.Resource)]);
+    assert.equal(sts.length, 2);
+    assert.deepEqual(sts[0].slice(0, 3), ['EcrImageLayers', 'Allow', 's3:GetObject']);
+    assert.match(sts[0][3], /prod-.*-starport-layer-bucket\/\*/);
+    assert.deepEqual(sts[1].slice(0, 3), ['AgentCoreRuntimeLogs', 'Allow', 's3:PutObject']);
+    assert.match(sts[1][3], /kepler-ola-.*-prod-logs-bucket\/\*/);
+    const inVpc = JSON.stringify(network.findResources('AWS::Route53Resolver::FirewallDomainList')['DnsAllowInVpc'].Properties.Domains);
+    // The layer bucket answers through a CNAME to s3-r-w.<region>; DNS Firewall checks every name in the chain.
+    assert.ok(microvmStartupNames('us-east-1', '647757222309').includes('s3-r-w.us-east-1.amazonaws.com'));
+    assert.ok(inVpc.includes('api.ecr.') && inVpc.includes('*.s3.') && inVpc.includes('s3-r-w.'));
   });
 
   test('DNS Firewall allows the GitHub names (and the two in-VPC names) and blocks everything else', () => {
