@@ -27,6 +27,7 @@ import { roomRouter } from './interviews/room.js';
 import { recordRouter } from './interviews/record.js';
 import { consentEffectsRouter } from './interviews/consent-effects.js';
 import { openingsRouter } from './interviews/openings.js';
+import { recordsRouter } from './interviews/records.js';
 import { consentsRouter } from './interviews/consents.js';
 import { coachRouter } from './interviews/coach.js';
 import { miloRouter } from './interviews/milo.js';
@@ -66,6 +67,7 @@ interviewsRouter.get('/openings/:id', asyncHandler(async (req, res) => {
 }));
 
 interviewsRouter.use(resumeRouter); // lane RESUME (row I1.6): a candidate's résumé file
+interviewsRouter.use(recordsRouter); // lane RECORDS (rows I6.1, I6.2): consent records and the export of what Milo showed
 
 interviewsRouter.use(consentEffectsRouter); // lane DECLINED (row I2.5): what each round runs without, for the recruiter
 interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
