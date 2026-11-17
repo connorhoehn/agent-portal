@@ -13,6 +13,10 @@
 // Row I2.3 adds the steps after the landing, one at a time in the same quiet layout (pages/join/steps.ts):
 // the notice and the three consents, the device check, the waiting room, and "let in" (pages/join/JoinRoom.tsx,
 // which round 4 fills with the call). Where the page opens comes from the stored answers and the admission.
+//
+// Row I2.4 (the candidate's side): once let in, the room fills the window (JoinRoom, no page frame); when the
+// interview ends, or the candidate is turned away mid-call, the ended page says thank you and how to ask for
+// deletion in the notice's own words. Nothing about a result.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, EmptyState, Inline, KeyValue, LoadingState, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -20,13 +24,15 @@ import { ConsentStep } from './join/ConsentStep';
 import { DeviceCheckStep } from './join/DeviceCheckStep';
 import JoinRoom, { type GuestInterview } from './join/JoinRoom';
 import { WaitingStep } from './join/WaitingStep';
-import { LinkDead, readAdmission, readConsents } from './join/guestApi.ts';
+import { LinkDead, readAdmission, readConsents, readRoom } from './join/guestApi.ts';
 import { landingStep, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
 
 type View =
   | { kind: 'loading' }
   | { kind: 'ready'; interview: GuestInterview; consents: GuestConsents; step: JoinStep }
-  | { kind: 'dead' } | { kind: 'busy' } | { kind: 'failed' };
+  | { kind: 'dead' } | { kind: 'busy' } | { kind: 'failed' }
+  /** A reload after the interview ended: only the room's read (D1) still answers, with `ended`. */
+  | { kind: 'ended' };
 
 const API = '/api/interview-invite';
 
@@ -50,6 +56,12 @@ function noReferrer(): void {
 
 async function load(token: string | null): Promise<View> {
   const init: RequestInit = { credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer' };
+  // A reload after the interview ended: every other guest read is not-found (and drops the cookie), only the room
+  // (D1) still answers, with `ended`. So the room is asked first.
+  if (!token) {
+    const room = await readRoom();
+    if (room.kind === 'room' && room.room.state === 'ended') return { kind: 'ended' };
+  }
   const res = token
     ? await fetch(`${API}/exchange`, { ...init, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) })
     : await fetch(`${API}/interview`, init);
@@ -78,6 +90,7 @@ const STEP_TITLES: Record<JoinStep, string> = {
   devices: 'Check your camera and microphone',
   waiting: 'Waiting to be let in',
   admitted: 'Your interview',
+  ended: 'Your interview has ended',
 };
 
 export default function JoinPage() {
@@ -87,6 +100,7 @@ export default function JoinPage() {
   const go = useCallback((step: JoinStep) => setView((v) => (v.kind === 'ready' ? { ...v, step } : v)), []);
   const onAdmitted = useCallback(() => go('admitted'), [go]);
   const onAnswersNeeded = useCallback(() => go('consents'), [go]);
+  const onEnded = useCallback(() => go('ended'), [go]);
 
   useEffect(() => {
     noReferrer();
@@ -106,6 +120,8 @@ export default function JoinPage() {
     );
   }
 
+  if (view.kind === 'ended') return <PageFrame title={STEP_TITLES.ended} data-testid="join-page"><InterviewEnded /></PageFrame>;
+
   if (view.kind === 'busy' || view.kind === 'failed') {
     return (
       <PageFrame title="Your interview" data-testid="join-page">
@@ -119,6 +135,8 @@ export default function JoinPage() {
   }
 
   const { interview, consents, step } = view;
+  // The room fills the window (row I2.4, decision 21): no page frame around the call.
+  if (step === 'admitted') return <JoinRoom interview={interview} onEnded={onEnded} />;
   return (
     <PageFrame title={STEP_TITLES[step]} description={interview.opening.title} data-testid="join-page">
       {step === 'landing' && (
@@ -154,7 +172,24 @@ export default function JoinPage() {
       {step === 'waiting' && (
         <WaitingStep onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onChangeAnswers={() => go('consents')} />
       )}
-      {step === 'admitted' && <JoinRoom interview={interview} />}
+      {step === 'ended' && <InterviewEnded />}
     </PageFrame>
+  );
+}
+
+/** The ended page: thanks, that it is over, and how to ask for deletion in the notice's own words. Nothing about a result. */
+function InterviewEnded() {
+  return (
+    <Stack gap="md" className="max-w-xl" data-testid="join-ended">
+      <Card padding="lg">
+        <Stack gap="sm">
+          <T size="base" weight="semibold" as="p">Thank you for your time.</T>
+          <T size="sm" as="p">The interview is over and its call has closed. You can close this page.</T>
+        </Stack>
+      </Card>
+      <T size="sm" tone="secondary" as="p" data-testid="join-ended-deletion">
+        To have your recording and transcript deleted, ask the person who sent you your interview link. They are removed within 30 days.
+      </T>
+    </Stack>
   );
 }

@@ -1,12 +1,12 @@
 // The candidate's steps (docs/interviews-tenant-plan.md row I2.3; decision 5): the pure model behind /join.
 //
-//   landing → consents → devices → waiting → admitted
+//   landing → consents → devices → waiting → admitted (the room, row I2.4) → ended
 //
 // One step at a time. Which step a guest lands on comes from what the server holds: the answers stored under
 // the current notice (C4) and the admission (C2). Nothing here is defaulted to yes: an unanswered question is
 // null, and Milo goes back to unanswered (never to yes) when the transcript is turned back on.
 
-export type JoinStep = 'landing' | 'consents' | 'devices' | 'waiting' | 'admitted';
+export type JoinStep = 'landing' | 'consents' | 'devices' | 'waiting' | 'admitted' | 'ended';
 
 export type ConsentPart = 'recording' | 'transcription' | 'milo';
 export type ConsentChoices = Record<ConsentPart, boolean | null>;
@@ -71,4 +71,51 @@ export function waitingView(admission: Admission | null): 'waiting' | 'turned-aw
   if (admission?.state === 'admitted') return 'admitted';
   if (admission?.state === 'turned-away') return 'turned-away';
   return 'waiting';
+}
+
+// ── The room (row I2.4, the candidate's side; contract D1) ─────────────────────────────────────────────────────
+
+/** D1's answer to GET /api/interview-invite/room. */
+export interface GuestRoom {
+  interviewId: string;
+  lobbyName: string;
+  self: { userId: string; displayName: string };
+  round: { name: string; type: 'technical' | 'behavioural'; minutes: number };
+  scheduledAt: string | null;
+  startedAt: string | null;
+  state: 'open' | 'ended';
+}
+
+/** One read of the room: its answer, not-found (not let in now, or the link died), or no answer at all. */
+export type RoomRead = { kind: 'room'; room: GuestRoom } | { kind: 'gone' } | { kind: 'failed' };
+
+/** How often the room asks whether the interview is still on, and the bound: the round's length and an hour more. */
+export const ROOM_POLL_MS = 5000;
+export function roomMaxPolls(minutes: number): number {
+  const length = Number.isFinite(minutes) && minutes > 0 ? minutes : 60;
+  return Math.ceil(((length + 60) * 60_000) / ROOM_POLL_MS);
+}
+
+/**
+ * Where a read of the room sends the candidate. `ended` and not-found both end the room: the interview is over,
+ * the lead turned them away mid-call, or the link was taken back; the page leaves the call and shows the ended
+ * page (it says nothing about why). A failed read changes nothing: the next read decides.
+ */
+export function roomStepAfterRead(read: RoomRead): 'admitted' | 'ended' | null {
+  if (read.kind === 'gone') return 'ended';
+  if (read.kind === 'room') return read.room.state === 'ended' ? 'ended' : 'admitted';
+  return null;
+}
+
+/**
+ * What the room shows while it is open. `unavailable`: guest realtime is off in this deployment (the token route is
+ * not found), a plain line, never an error page. Before joining, and after leaving, the call is offered: `join`
+ * the first time, `rejoin` after Leave. `call` once the candidate is in it.
+ */
+export type RoomView = 'loading' | 'unavailable' | 'join' | 'rejoin' | 'call';
+export function roomView(f: { token: 'loading' | 'ready' | 'off'; joined: boolean; left: boolean }): RoomView {
+  if (f.token === 'off') return 'unavailable';
+  if (f.token === 'loading') return 'loading';
+  if (f.joined) return 'call';
+  return f.left ? 'rejoin' : 'join';
 }

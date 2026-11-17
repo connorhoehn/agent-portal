@@ -52,3 +52,34 @@ test('a missing admission is still waiting, never an error', () => {
   assert.equal(waitingView(adm('turned-away')), 'turned-away');
   assert.equal(waitingView(adm('admitted')), 'admitted');
 });
+
+// ── The room (row I2.4, the candidate's side; contract D1) ──
+import { ROOM_POLL_MS, roomMaxPolls, roomStepAfterRead, roomView, type GuestRoom } from '../steps.ts';
+
+const ROOM: GuestRoom = {
+  interviewId: 'iv-1', lobbyName: 'interviews:interview:iv-1', self: { userId: 'guest:inv-1', displayName: 'Candidate' },
+  round: { name: 'System design', type: 'technical', minutes: 60 }, scheduledAt: null, startedAt: null, state: 'open',
+};
+
+test('a read of the room: open stays in the room; ended or not-found opens the ended page; a failed read changes nothing', () => {
+  assert.equal(roomStepAfterRead({ kind: 'room', room: ROOM }), 'admitted');
+  assert.equal(roomStepAfterRead({ kind: 'room', room: { ...ROOM, state: 'ended' } }), 'ended');
+  assert.equal(roomStepAfterRead({ kind: 'gone' }), 'ended');
+  assert.equal(roomStepAfterRead({ kind: 'failed' }), null);
+});
+
+test('the room asks every few seconds for the round\'s length and an hour more, and no longer', () => {
+  assert.equal(roomMaxPolls(60) * ROOM_POLL_MS, 120 * 60_000);
+  assert.equal(roomMaxPolls(45) * ROOM_POLL_MS, 105 * 60_000);
+  assert.equal(roomMaxPolls(0), roomMaxPolls(60));
+  assert.equal(roomMaxPolls(Number.NaN), roomMaxPolls(60));
+});
+
+test('what the room shows: a plain line when the call cannot open here; join, the call, then rejoin after Leave', () => {
+  assert.equal(roomView({ token: 'off', joined: false, left: false }), 'unavailable');
+  assert.equal(roomView({ token: 'off', joined: true, left: true }), 'unavailable');
+  assert.equal(roomView({ token: 'loading', joined: false, left: false }), 'loading');
+  assert.equal(roomView({ token: 'ready', joined: false, left: false }), 'join');
+  assert.equal(roomView({ token: 'ready', joined: true, left: false }), 'call');
+  assert.equal(roomView({ token: 'ready', joined: false, left: true }), 'rejoin');
+});

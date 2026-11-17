@@ -1,6 +1,6 @@
 // The guest's calls (docs/interviews-tenant-plan.md row I2.3): the consents (C4) and the waiting room (C2), all
 // under /api/interview-invite, on the guest cookie only. No Referer, nothing cached.
-import type { Admission, ConsentChoices, GuestConsents } from './steps.ts';
+import type { Admission, ConsentChoices, GuestConsents, GuestRoom, RoomRead } from './steps.ts';
 
 export const GUEST_API = '/api/interview-invite';
 const INIT: RequestInit = { credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer' };
@@ -46,4 +46,16 @@ export async function knock(): Promise<{ admission: Admission | null; refused: b
   if (res.status === 409) return { admission: null, refused: true };
   if (!res.ok) return { admission: null, refused: false };
   return { admission: ((await res.json()) as { admission: Admission }).admission, refused: false };
+}
+
+/** D1. The room while the lead has let the guest in (or `ended` after); not-found otherwise. */
+export async function readRoom(): Promise<RoomRead> {
+  try {
+    const res = await fetch(`${GUEST_API}/room`, INIT);
+    if (res.status === 404) return { kind: 'gone' };
+    if (!res.ok) return { kind: 'failed' };
+    return { kind: 'room', room: ((await res.json()) as { room: GuestRoom }).room };
+  } catch {
+    return { kind: 'failed' };
+  }
 }
