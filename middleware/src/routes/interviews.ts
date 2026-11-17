@@ -20,6 +20,7 @@ import { indexFor, param } from '../lib/interviews/request.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { openingsRouter } from './interviews/openings.js';
+import { consentsRouter } from './interviews/consents.js';
 import { assignmentsRouter } from './interviews/assignments.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
@@ -62,6 +63,7 @@ interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
   res.json({ items: ix.candidateRows() });
 }));
 
+interviewsRouter.use(consentsRouter); // lane CONSENT (row I2.3): what the panel is told about the candidate's consents
 interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const c = ix.candidates.get(param(req, 'id'));

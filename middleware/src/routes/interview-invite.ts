@@ -20,6 +20,7 @@
 // that token (lib/interviews/lobby.ts). Runs are a later row.
 
 import express, { Router, type Request, type Response } from 'express';
+import { consentGuestRouter } from './interview-invite-consents.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { runWithDbTenant } from '../providers/db-tenant.js';
 import { interviewsStore } from '../lib/interviews/store-select.js';
@@ -126,6 +127,7 @@ interviewInviteRouter.post('/exchange', interviewsFlagGate, rateLimit, asyncHand
   res.json({ interview: opened.view });
 }));
 
+interviewInviteRouter.use(consentGuestRouter);
 interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
   const interview = (await interviewsStore().listInterviews()).find((i) => i.id === req.guest!.interviewId);
