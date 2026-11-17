@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T13:01:34.175Z",
-  "serverHandlerSha": "2672ca936dab5f0c53560ec36e5b3eec3b9e7d80ff5dca0131c492001e71b1db",
+  "capturedAt": "2026-11-17T14:00:16.988Z",
+  "serverHandlerSha": "65c301621dce197d42aef3c9d7dfbfbb7cc0f3538057892db08919c501d755b8",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5032,6 +5032,15 @@
     "GET /api/interview-invite/room": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
+    "GET /api/interview-invite/runs": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/interview-invite/runs/:runId": {
+      "skipped": "no value found for :runId under /api/interview-invite/runs (orgiq/admin); no value found for :runId under /api/interview-invite/runs (assessment/admin); no value found for :runId under /api/interview-invite/runs (anonymous)"
+    },
+    "GET /api/interview-invite/runs/events": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
     "GET /api/interviews/candidates": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5567,6 +5576,9 @@
     "GET /api/interviews/interviews/:id/milo-notes": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
+    "GET /api/interviews/interviews/:id/pad/log": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
     "GET /api/interviews/interviews/:id/recap": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5589,6 +5601,15 @@
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/room": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/runs": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/runs/:runId": {
+      "skipped": "no value found for :runId under /api/interviews/interviews/iv-d7q4n9xe/runs (orgiq/admin); no value found for :runId under /api/interviews/interviews/iv-d7q4n9xe/runs (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/runs/events": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/scorecard": {

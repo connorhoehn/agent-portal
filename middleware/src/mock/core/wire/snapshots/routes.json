@@ -2333,7 +2333,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:180"
+      "source": "src/routes/interview-invite.ts:184"
     },
     {
       "method": "GET",
@@ -2348,27 +2348,57 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:104"
+      "source": "src/routes/interview-invite.ts:106"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:134"
+      "source": "src/routes/interview-invite.ts:138"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:166"
+      "source": "src/routes/interview-invite.ts:170"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/pad/events",
+      "source": "src/routes/interview-invite-pad.ts:28"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:148"
+      "source": "src/routes/interview-invite.ts:152"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:191"
+      "source": "src/routes/interview-invite.ts:195"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/runs",
+      "source": "src/routes/interview-invite-runs.ts:49"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/runs",
+      "source": "src/routes/interview-invite-runs.ts:43"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/runs/:runId",
+      "source": "src/routes/interview-invite-runs.ts:66"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/runs/:runId/cancel",
+      "source": "src/routes/interview-invite-runs.ts:73"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/runs/events",
+      "source": "src/routes/interview-invite-runs.ts:55"
     },
     {
       "method": "POST",
@@ -2378,12 +2408,12 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:74"
+      "source": "src/routes/interviews.ts:76"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:83"
+      "source": "src/routes/interviews.ts:85"
     },
     {
       "method": "GET",
@@ -2443,7 +2473,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:96"
+      "source": "src/routes/interviews.ts:100"
     },
     {
       "method": "POST",
@@ -2453,7 +2483,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:107"
+      "source": "src/routes/interviews.ts:111"
     },
     {
       "method": "POST",
@@ -2506,6 +2536,16 @@
       "source": "src/routes/interviews/milo.ts:54"
     },
     {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/pad/events",
+      "source": "src/routes/interviews/pad.ts:45"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/pad/log",
+      "source": "src/routes/interviews/pad.ts:58"
+    },
+    {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/panel",
       "source": "src/routes/interviews/assignments.ts:194"
@@ -2549,6 +2589,31 @@
       "method": "GET",
       "path": "/api/interviews/interviews/:id/room",
       "source": "src/routes/interviews/room.ts:47"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/runs",
+      "source": "src/routes/interviews/runs.ts:120"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/runs",
+      "source": "src/routes/interviews/runs.ts:111"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/runs/:runId",
+      "source": "src/routes/interviews/runs.ts:134"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/runs/:runId/cancel",
+      "source": "src/routes/interviews/runs.ts:142"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/runs/events",
+      "source": "src/routes/interviews/runs.ts:126"
     },
     {
       "method": "GET",
@@ -2598,7 +2663,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:54"
+      "source": "src/routes/interviews.ts:56"
     },
     {
       "method": "POST",
@@ -2608,7 +2673,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:62"
+      "source": "src/routes/interviews.ts:64"
     },
     {
       "method": "PUT",
