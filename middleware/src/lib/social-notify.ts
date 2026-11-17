@@ -881,3 +881,37 @@ export async function notifyInterviewStartingSoon(ev: InterviewStartingSoonEvent
     return [];
   }
 }
+
+export interface InterviewConsentOffEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The recruiter who owns the opening. */
+  recruiterId: string;
+  /** What is off now, in plain words ("no recording, no Milo"); empty when everything is back on. */
+  offLabel: string;
+}
+
+/**
+ * The candidate's answers leave a part of a round off, or change what is off → the opening's recruiter, so they can arrange what
+ * replaces it (decision 5, row I2.5). Names the opening, the round and the parts; never the candidate or why.
+ */
+export async function notifyInterviewConsentOff(ev: InterviewConsentOffEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const round = `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`;
+    return await notify([ev.recruiterId], {
+      id: `interview-consent:${roundKey(ev.interviewId)}:${ev.recruiterId}:${Date.now().toString(36)}`,
+      type: 'system',
+      title: ev.offLabel ? `${round} runs with ${ev.offLabel}` : `${round} runs with everything on again`,
+      body: ev.offLabel
+        ? 'The interview goes ahead without that part. Open Upcoming to arrange what replaces it.'
+        : 'The recording, the transcript and Milo are all on for this round now.',
+      payload: { tenant: 'interviews', kind: 'interview-consent-off', audience: 'recruiter' },
+      action: { label: 'Open Upcoming', href: '/interviews/upcoming' },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] interview-consent-off producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}

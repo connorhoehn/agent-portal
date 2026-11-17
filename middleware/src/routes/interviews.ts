@@ -21,6 +21,7 @@ import { indexFor, param } from '../lib/interviews/request.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { roomRouter } from './interviews/room.js';
+import { consentEffectsRouter } from './interviews/consent-effects.js';
 import { openingsRouter } from './interviews/openings.js';
 import { consentsRouter } from './interviews/consents.js';
 import { assignmentsRouter } from './interviews/assignments.js';
@@ -60,6 +61,7 @@ interviewsRouter.get('/openings/:id', asyncHandler(async (req, res) => {
 
 interviewsRouter.use(resumeRouter); // lane RESUME (row I1.6): a candidate's résumé file
 
+interviewsRouter.use(consentEffectsRouter); // lane DECLINED (row I2.5): what each round runs without, for the recruiter
 interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   res.setHeader('Cache-Control', 'no-store');

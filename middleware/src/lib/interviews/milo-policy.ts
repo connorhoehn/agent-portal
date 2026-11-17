@@ -86,12 +86,24 @@ export async function onPanelSide(person: { userId: string; tenant: string; role
 }
 
 /**
- * The lead's refusal from the candidate's answers (row I2.5), or null when Milo may be invited. No source, a failing source and
- * no answers all read as "nothing answered": nothing runs before consent.
+ * The stored answers, read straight from the consents store: what the lead's invite asks when no source is set. (The module's
+ * own wiring, lib/interviews/consent/index.ts, sets `consentsFor` as the source; until something imports it, this keeps the
+ * invite on the real answers rather than refusing every interview.) Milo needs the transcript, held here too.
+ */
+async function storedAnswers(interviewId: string): Promise<{ recording: boolean; transcription: boolean; milo: boolean } | null> {
+  const { consentStore } = await import('./consent/store.js');
+  const { runWithDbTenant } = await import('../../providers/db-tenant.js');
+  const record = await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId));
+  return record ? { recording: record.recording, transcription: record.transcription, milo: record.transcription && record.milo } : null;
+}
+
+/**
+ * The lead's refusal from the candidate's answers (row I2.5), or null when Milo may be invited. A failing read and no answers
+ * both read as "nothing answered": nothing runs before consent.
  */
 export async function miloRefusalForConsent(interviewId: string): Promise<string | null> {
-  const source = consentSource;
-  const answer = source ? await source(interviewId).catch(() => null) : null;
+  const source = consentSource ?? storedAnswers;
+  const answer = await source(interviewId).catch(() => null);
   const runs = interviewRunsWith(answer && { recording: answer.recording === true, transcription: answer.transcription, milo: answer.milo });
   if (runs.miloMayBeInvited) return null;
   return answer ? MILO_OFF_NO_TRANSCRIPT : MILO_OFF_NOT_ANSWERED;

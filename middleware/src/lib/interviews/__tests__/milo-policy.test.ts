@@ -9,6 +9,7 @@ jest.mock('../../../config.js', () => ({
 
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import { interviewOpeningsFixture, interviewsFixture } from '../../../mock/interviews.js';
+import { interviewConsentsFixture } from '../../../mock/interviews-consents.js';
 import { spendHolds } from '../../../mock/spend-holds.js';
 import { spendEntries } from '../../../mock/spend-ledger.js';
 import { userSpendThisPeriod } from '../../../providers/user-budgets.js';
@@ -101,13 +102,23 @@ describe('inviteRefusal: the candidate\'s answers (row I2.5)', () => {
     expect(asked).toEqual([IV]);
   });
 
-  it('with nothing answered, no source or a failing source, the lead is refused: nothing runs before consent', async () => {
+  it('with nothing answered or a failing source, the lead is refused: nothing runs before consent', async () => {
     setInterviewConsentSource(async () => null);
     expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
-    setInterviewConsentSource(null);
+    setInterviewConsentSource(null); // no source: the stored answers, and the seed has none for this round
     expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
     setInterviewConsentSource(async () => { throw new Error('down'); });
     expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
+  });
+
+  it('with no source set, the stored answers decide', async () => {
+    const now = new Date().toISOString();
+    const row = (transcription: boolean) => ({ interviewId: IV, noticeVersion: 'v', recording: false, recordingAt: now, transcription, transcriptionAt: now,
+      milo: false, miloAt: now, answeredAt: now, changedAt: now, history: [], revision: 1 });
+    interviewConsentsFixture.rows().push(row(true));
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBeNull();
+    interviewConsentsFixture.rows().splice(-1, 1, row(false));
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NO_TRANSCRIPT);
   });
 
   it('someone who is not the lead still gets the lead sentence, never the candidate\'s answer', async () => {
