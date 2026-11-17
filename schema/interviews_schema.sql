@@ -128,6 +128,30 @@ CREATE TABLE IF NOT EXISTS interviews (
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);
 
+-- ── consents (row I2.3) ─────────────────────────────────────────────────────
+-- The candidate's three answers (decision 5): one current row per interview.
+-- Each answer has the time it last took its present value; `notice_version` is
+-- the notice the current answers were given under. `history` is append-only,
+-- one entry per answer sent: [{ at, noticeVersion, recording, transcription,
+-- milo, miloForcedOff }]. Milo needs the transcript, so the row cannot say yes
+-- to Milo and no to the transcript. Nothing here is defaulted to yes. A write
+-- names the revision it was made against (compare-and-set).
+CREATE TABLE IF NOT EXISTS interview_consents (
+  interview_id      TEXT PRIMARY KEY REFERENCES interviews(id),
+  notice_version    TEXT NOT NULL,
+  recording         BOOLEAN NOT NULL,
+  recording_at      TIMESTAMPTZ NOT NULL,
+  transcription     BOOLEAN NOT NULL,
+  transcription_at  TIMESTAMPTZ NOT NULL,
+  milo              BOOLEAN NOT NULL,
+  milo_at           TIMESTAMPTZ NOT NULL,
+  answered_at       TIMESTAMPTZ NOT NULL,
+  changed_at        TIMESTAMPTZ NOT NULL,
+  history           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  revision          INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  CHECK (transcription OR NOT milo)
+);
+
 -- ── scorecards ──────────────────────────────────────────────────────────────
 -- One interviewer's judgement of one interview. A submitted scorecard is never
 -- edited: a correction is a new version (decision 14). `ratings` is

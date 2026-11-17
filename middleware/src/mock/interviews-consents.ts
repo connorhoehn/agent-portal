@@ -1,0 +1,42 @@
+// The consents fixture (docs/interviews-tenant-plan.md decision 5, row I2.3): the mock world's interview_consents.
+//
+// The five finished interviews in mock/interviews.ts carry a consent record (all three accepted under the
+// current notice, given twenty minutes before the call); the upcoming ones carry none, so the staff read shows
+// both cases. Registered from its own module (lib/interviews/consent/store.ts imports it), so mock/interviews.ts
+// is untouched. Times follow mock/interviews.ts's `at()`: days from today's UTC midnight, computed on read.
+import { clock, defineFixture } from './core/index.js';
+import { CONSENT_NOTICE } from '../lib/interviews/consent/notice.js';
+import type { ConsentRecord } from '../lib/interviews/consent/store.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function at(days: number, hour: number, minute = 0): string {
+  const now = clock.now().getTime();
+  const midnight = now - (now % DAY_MS);
+  return new Date(midnight + days * DAY_MS + (hour * 60 + minute) * 60_000).toISOString();
+}
+
+function accepted(interviewId: string, given: string): ConsentRecord {
+  const version = CONSENT_NOTICE.version;
+  return {
+    interviewId, noticeVersion: version,
+    recording: true, recordingAt: given, transcription: true, transcriptionAt: given, milo: true, miloAt: given,
+    answeredAt: given, changedAt: given,
+    history: [{ at: given, noticeVersion: version, recording: true, transcription: true, milo: true, miloForcedOff: false }],
+    revision: 1,
+  };
+}
+
+export const interviewConsentsFixture = defineFixture<ConsentRecord>({
+  key: 'interviews.consents',
+  scenarios: {
+    default: () => [
+      // Twenty minutes before each finished interview's start (mock/interviews.ts).
+      accepted('iv-ingrid-coding', at(-9, 13, 40)),
+      accepted('iv-ingrid-together', at(-6, 12, 40)),
+      accepted('iv-mateo-coding', at(-3, 13, 40)),
+      accepted('iv-ravi-coding', at(-2, 14, 40)),
+      accepted('iv-jonah-leadership', at(-1, 15, 40)),
+    ],
+  },
+});

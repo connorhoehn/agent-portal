@@ -497,6 +497,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (a: { id: string }) => a.id,
   },
   {
+    name: 'interview_consents',
+    fixture: 'interviews.consents',
+    describes: 'The candidate\'s three answers per interview: the five finished interviews said yes to all three under the current notice; the upcoming ones have none yet.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_consents',
+    mockRows: async () => (await import('../../interviews-consents.js')).interviewConsentsFixture.rows('default'),
+    mockId: (c: { interviewId: string }) => c.interviewId,
+  },
+  {
     name: 'interviews',
     fixture: 'interviews.interviews',
     describes: 'Six interviews coming up, four finished and scored, one finished whose scorecard is due.',
