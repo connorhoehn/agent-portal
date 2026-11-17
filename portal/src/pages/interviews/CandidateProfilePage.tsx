@@ -105,7 +105,6 @@ function CandidateProfile({ id }: { id: string }) {
           <Avatar name={candidate.name} size={48} />
           <KeyValue layout="grid" items={[
             { label: 'Applied for', value: <T size="sm" data-testid="interviews-profile-opening">{applications.length ? applications.map((a) => `${a.opening.title}, ${a.opening.team}`).join(' · ') : '—'}</T> },
-            { label: 'Stage', value: first ? <StageChip stage={first.stage} /> : <Dash /> },
             { label: 'Applied', value: <T size="sm" data-testid="interviews-profile-applied" title={first?.history[0] ? new Date(first.history[0].at).toLocaleString() : undefined}>{first?.history[0] ? relativeTime(first.history[0].at) : '—'}</T> },
             { label: 'Came from', value: <T size="sm" data-testid="interviews-profile-source">{candidate.source || '—'}</T> },
             { label: 'Based in', value: <T size="sm">{candidate.location || '—'}</T> },
@@ -125,15 +124,15 @@ function ApplicationSection({ app, several }: { app: ProfileApplication; several
   return (
     <Stack gap="md" className="px-[var(--ui-page-gutter)]" data-testid="interviews-profile-application">
       <DetailSection variant="heading" first title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage">
-        <Stack gap="sm">
-          <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
-          <DataTable narrow data-testid="interviews-profile-history" aria-label="Stage history" data={moves} columns={MOVE_COLUMNS}
-            keyField={(m) => `${m.stage}:${m.at}`} staticRows="Each move between stages, read in place" emptyMessage="No stage changes yet." />
-        </Stack>
+        <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
       </DetailSection>
       <DetailSection variant="heading" title={several ? `Rounds, ${app.opening.title}` : 'Rounds'} hint={plural(rounds.length, 'round')} data-testid="interviews-profile-rounds-section">
         <DataTable narrow data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds} columns={ROUND_COLUMNS}
           keyField={(r) => r.id} emptyMessage="No round has been assigned yet." />
+      </DetailSection>
+      <DetailSection variant="heading" title="Stage history" hint={plural(moves.length, 'move')} data-testid="interviews-profile-history-section">
+        <DataTable narrow data-testid="interviews-profile-history" aria-label="Stage history" data={moves} columns={MOVE_COLUMNS}
+          keyField={(m) => `${m.stage}:${m.at}`} staticRows="Each move between stages, read in place" emptyMessage="No stage changes yet." />
       </DetailSection>
     </Stack>
   );
