@@ -203,11 +203,11 @@ function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boo
   // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
   return (
     <Stack gap="md" className="min-h-0 flex-1 overflow-auto" data-testid="interview-room-idle">
-      <PageHeader density="compact" title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'}
-        description={live ? 'Join it from the bar at the bottom of the window.'
-          : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-            : 'You can join the call from the bar at the bottom of the window.'} />
+      <PageHeader density="compact" title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'} />
       <Stack gap="md" className="px-[var(--ui-page-gutter)]">
+        <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
+          : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
+            : 'You can join the call from the bar at the bottom of the window.'}</T>
         <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
       </Stack>
     </Stack>
