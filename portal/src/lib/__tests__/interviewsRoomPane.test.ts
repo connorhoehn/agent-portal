@@ -28,8 +28,23 @@ test('a tab id the round does not have keeps the current tab', () => {
 });
 
 test('the pane is wide enough for code in a technical round and narrow otherwise', () => {
-  assert.deepEqual(roomPaneWidth('technical'), { min: 560, max: 760 });
-  assert.deepEqual(roomPaneWidth('behavioural'), { min: 360, max: 460 });
+  assert.deepEqual(roomPaneWidth('technical'), { min: 562, max: 760 });
+  assert.deepEqual(roomPaneWidth('behavioural'), { min: 362, max: 460 });
+});
+
+// The shell's split sets the page's share as a flex-basis rounded to 0.1% (ratio = 1 - min / width, then
+// Math.round(ratio * 1000) / 1000). The pane's column is what is left; at every container width a 1280 or 1440 window
+// can give the room it stays on or over decision 21's floor (I2.4o measured 559 at 1440 before the margin).
+test('after the split rounds the page\'s share, the pane column holds the floor at every room width', () => {
+  for (const type of ['technical', 'behavioural'] as const) {
+    const floor = type === 'technical' ? 560 : 360;
+    const { min } = roomPaneWidth(type);
+    for (let width = 1000; width <= 1440; width += 1) {
+      const share = Math.round((1 - min / width) * 1000) / 1000;
+      const column = Math.round(width - share * width);
+      assert.ok(column >= floor, `${type} at ${width}: ${column} px`);
+    }
+  }
 });
 
 test('the round’s crumb names the candidate, then the round', () => {

@@ -14,9 +14,7 @@ row_I2_4() {
   refuses_404 I2.4
   if [ "$QUICK" -eq 0 ]; then
     run_journey
-    for s in a b c d e f g h; do journey_step "I2.4$s"; done
-    # I2.4o is a finding (the technical pane's column is 559 px at 1440, one under decision 21's 560): pending until it holds.
-    if grep -q "^PASS I2.4o:" "$JOURNEY_LOG"; then ok "walk step I2.4o"; else pending "I2.4o a finding for the lead: $(grep -E '^(FAIL|PASS) I2.4o:' "$JOURNEY_LOG" | head -1 | cut -c1-150)"; fi
+    for s in a b c d e f g h o; do journey_step "I2.4$s"; done
   fi
 }
 built_row I2.4 row_I2_4

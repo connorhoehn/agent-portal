@@ -18,7 +18,7 @@
 //   I2.4f  turned away after being let in: the candidate's page moves to the ended page
 //   I2.4g  two tabs of one link in one window: the second opening is the window's session, and both tabs stay in
 //   I2.4h  guest realtime off (INTERVIEWS_GUEST_REALTIME=false in the environment): the room's cannot-open line
-//   I2.4o  the technical pane is 560 to 760 px wide at 1440 (FAILS today by one pixel: 559; a finding)
+//   I2.4o  the technical pane's column is 560 to 760 px wide at 1440 and at 1280
 //   I2.4i…  (a call only) both in the call, "2 joined" on both bars, tiles carry names, the chat both ways, Leave →
 //          "You left the call" → Join, the chrome folded while live and back after End, End through the deck with
 //          Keep going and Esc, Join while the gateway is still connecting
@@ -89,9 +89,17 @@ export default async function run(ctx) {
     return { ok, detail: `"${title}"; tabs ${tabs.join('/')} (technical, column ${width} px, card ${card} px), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
   });
 
-  // The technical pane's width (decision 21: 560 to 760 px at 1440), its own step: today the shell gives it 559 px, one
-  // pixel under the floor (a finding for the lead; the judge shows it as pending until it holds).
-  record('I2.4o', !!widthSeen && widthSeen.width >= 560 && widthSeen.width <= 760, `the technical pane's column at 1440: ${widthSeen ? `${widthSeen.width} px (card ${widthSeen.card} px)` : 'not measured'}; want 560 to 760`);
+  // The technical pane's width (decision 21: 560 to 760 px), its own step, measured on the column the shell gives it at
+  // 1440 (from I2.4a) and again at 1280.
+  await step('I2.4o', async () => {
+    await lead.setViewportSize({ width: 1280, height: 900 });
+    await lead.waitForTimeout(300);
+    const at1280 = Math.round((await lead.getByTestId('shell-split-secondary').boundingBox())?.width ?? 0);
+    await lead.setViewportSize({ width: 1440, height: 900 });
+    const inRange = (w) => w >= 560 && w <= 760;
+    return { ok: !!widthSeen && inRange(widthSeen.width) && inRange(at1280),
+      detail: `the technical pane's column: ${widthSeen ? `${widthSeen.width} px at 1440 (card ${widthSeen.card} px)` : 'not measured at 1440'}, ${at1280} px at 1280; want 560 to 760` };
+  });
 
   await step('I2.4b', async () => {
     const invite = await mintInvite(greta, iv);

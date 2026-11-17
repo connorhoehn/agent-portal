@@ -345,9 +345,16 @@ export const ROOM_MESSAGE_TAB: RoomTabId = 'chat';
 export function roomTabOf(type: RoundType, id: string, current: RoomTabId): RoomTabId {
   return (roomTabIds(type) as string[]).includes(id) ? (id as RoomTabId) : current;
 }
-/** The pane's width (U1): code needs room; Milo's context stays narrow. */
-export const roomPaneWidth = (type: RoundType): { min: number; max: number } =>
-  (type === 'technical' ? { min: 560, max: 760 } : { min: 360, max: 460 });
+/** The pane's floor and ceiling (U1, decision 21): code needs room; Milo's context stays narrow. */
+export const ROOM_PANE_FLOOR = { technical: { min: 560, max: 760 }, behavioural: { min: 360, max: 460 } } as const;
+/** The shell's split rounds the page's share to a tenth of a percent, which can take up to 0.05% of the window
+ *  (under 1 px at 1440) off the pane: the pane asks for this much more so its column never lands under the floor. */
+export const ROOM_PANE_ROUNDING_PX = 2;
+/** The width the room asks the shell for: the floor plus the rounding margin, the same ceiling. */
+export const roomPaneWidth = (type: RoundType): { min: number; max: number } => {
+  const { min, max } = ROOM_PANE_FLOOR[type === 'technical' ? 'technical' : 'behavioural'];
+  return { min: min + ROOM_PANE_ROUNDING_PX, max };
+};
 
 /** The round's crumb (U6): "Mateo Álvarez, System design". */
 export const roundCrumbLabel = (room: Pick<RoomView, 'round' | 'candidate'>): string => `${room.candidate.name}, ${room.round.name}`;
