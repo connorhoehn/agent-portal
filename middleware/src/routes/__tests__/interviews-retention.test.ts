@@ -179,3 +179,44 @@ describe('reading the deletion log', () => {
     expect((await GRETA.log('cand-mateo')).status).toBe(404);
   });
 });
+
+// Lane H5 (OWED O-174, O-177): what a deletion leaves room for afterwards.
+describe('after a deletion', () => {
+  const add = (body: object) => request(app).post(`${API}/candidates`).set('x-user', 'u-greta').set('x-tenant', 'interviews').send(body);
+  const decide = (appId: string, body: object) => request(app).post(`${API}/applications/${appId}/stage`).set('x-user', 'u-amara').set('x-tenant', 'interviews').send(body);
+
+  it('the candidate can apply again: the same address on the same opening is a new candidate, whole, and the old row stays redacted', async () => {
+    const email = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.email;
+    // Before the deletion the same address on the same opening is the duplicate it is.
+    expect((await add({ name: 'Mateo Álvarez', email: email.toUpperCase(), openingId: 'op-backend' })).status).toBe(409);
+    expect((await GRETA.ask('cand-mateo')).body.created).toBe(true);
+    const res = await add({ name: 'Mateo Álvarez', email, openingId: 'op-backend', source: 'Careers page' });
+    expect(res.status).toBe(201);
+    expect(res.body.candidate.id).not.toBe('cand-mateo');
+    expect(res.body.candidate).toMatchObject({ name: 'Mateo Álvarez', email });
+    expect(res.body.application).toMatchObject({ openingId: 'op-backend', stage: 'applied' });
+    const old = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!;
+    expect(old).toMatchObject({ name: 'Name removed', email: '' });
+    // The new candidate has a log of their own: nothing of the old deletion is shown on them.
+    expect((await GRETA.log(res.body.candidate.id)).body.items).toEqual([]);
+    // Asking again for the old one changes nothing; the new one is untouched by it.
+    expect((await GRETA.ask('cand-mateo')).body.created).toBe(false);
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === res.body.candidate.id)!.name).toBe('Mateo Álvarez');
+  });
+
+  it('a stage reason written after the deletion is kept as written, and asking again does not take it out (pinned; a question for the lead)', async () => {
+    expect((await GRETA.ask('cand-mateo')).body.created).toBe(true);
+    const before = structuredClone(interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history);
+    expect(before.every((h) => h.reason === null || h.reason === 'Reason removed.')).toBe(true);
+    const reason = 'Held while the panel finishes the design round.';
+    const res = await decide('app-mateo', { decision: 'hold', reason, basedOn: before.length });
+    expect(res.status).toBe(201);
+    const after = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
+    expect(after).toHaveLength(before.length + 1);
+    expect(after[after.length - 1]!.reason).toBe(reason);
+    expect(after.slice(0, -1).map((h) => h.reason)).toEqual(before.map((h) => h.reason));
+    const again = await GRETA.ask('cand-mateo');
+    expect(again.body.created).toBe(false);
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history.at(-1)!.reason).toBe(reason);
+  });
+});

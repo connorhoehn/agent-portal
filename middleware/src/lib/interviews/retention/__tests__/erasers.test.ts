@@ -61,3 +61,89 @@ describe('the pad log\'s eraser (row I4.3; decision 17)', () => {
     fixtureRegistry.resetAll('default');
   });
 });
+
+// Lane H5 (OWED O-269): the said log (`interview_said_log`, lib/interviews/speak) is a decision record. Only its eraser is
+// the real one here; every other kind is a counting stand-in, so the test reads which class ran when.
+describe('the said log\'s eraser (row I3.5; decision 17)', () => {
+  const END_MS = Date.parse('2026-01-10T15:00:00.000Z');
+  const DAY = 86_400_000;
+  const saidRow = (interviewId: string, id: string) => ({
+    id, interviewId, callId: null, kind: 'question' as const, source: 'kit' as const, questionId: 'q-1', suggestionId: null,
+    text: 'Walk me through the limiter.', askedBy: 'u-lead', saidAt: '2026-01-10T14:10:00.000Z', spoken: true,
+  });
+  const iv = (id: string, state: string) => ({
+    id, applicationId: 'app-x', roundId: 'rd', type: 'technical', leadId: 'u-lead', panelIds: [], scheduledAt: '2026-01-10T14:00:00.000Z', minutes: 60,
+    state, questionIds: [], assignedBy: 'u-r', assignedAt: '2026-01-01T09:00:00.000Z', callId: null,
+    endedAt: state === 'ended' ? new Date(END_MS).toISOString() : null, acceptances: [], declines: [], revision: 1,
+  });
+  const world = {
+    openings: [], scorecards: [],
+    candidates: [{ id: 'cand-x', name: 'Test Person', email: 'test.person@example.test', headline: '', location: '', source: '', resumeFileId: null, notes: '', createdAt: '2026-01-01T00:00:00.000Z' }],
+    applications: [{ id: 'app-x', candidateId: 'cand-x', openingId: 'op', stage: 'interviewing', appliedAt: '2026-01-01T00:00:00.000Z', history: [] }],
+    interviews: [iv('iv-done', 'ended'), iv('iv-open', 'ready')],
+  };
+  const OTHERS = ['recording', 'transcript-and-minutes', 'pad-log', 'runs', 'consents', 'scorecards', 'suggestions', 'recaps', 'coach-log'];
+
+  let saved: import('../registry.js').Eraser[] = [];
+  let ran: string[] = [];
+  beforeEach(async () => {
+    const { MemorySaidStore, setSaidStore } = await import('../../speak/index.js');
+    const { setDeletionStore } = await import('../store.js');
+    setSaidStore(new MemorySaidStore());
+    setDeletionStore(null);
+    saved = OTHERS.map((k) => eraserFor(k)!).filter(Boolean);
+    ran = [];
+    for (const e of saved) registerEraser({ kind: e.kind, class: e.class, erase: async (ids) => { ran.push(e.kind); return ids.length; } });
+  });
+  afterEach(async () => {
+    const { setSaidStore } = await import('../../speak/index.js');
+    const { setDeletionStore } = await import('../store.js');
+    for (const e of saved) registerEraser(e);
+    setSaidStore(null);
+    setDeletionStore(null);
+  });
+
+  const deps = (nowMs: number) => ({
+    now: () => nowMs, load: async () => world as never, enabled: () => true, periods: () => ({ mediaDays: 90, recordYears: 4, deletionDays: 30 }),
+    removeResume: async () => false, revokeInvite: async () => false, ringOverdue: async () => 0,
+    records: () => ({ eraseConsents: async () => 0, eraseScorecards: async () => 0, redactCandidate: async () => 0, redactStageReasons: async () => 0 }),
+  });
+
+  it('is registered as a record, so the media sweep at 91 days leaves it', async () => {
+    const { saidStore } = await import('../../speak/index.js');
+    const { sweep } = await import('../service.js');
+    expect(eraserFor('said-log')?.class).toBe('record');
+    await saidStore().append(saidRow('iv-done', 'said-1'));
+    expect((await sweep(deps(END_MS + 91 * DAY))).media).toBe(1);
+    expect(ran).toEqual(expect.arrayContaining(['recording', 'pad-log', 'runs']));
+    expect(await saidStore().list('iv-done')).toHaveLength(1);
+  });
+
+  it('runs in the record sweep just over four years after the end, for that interview only; an open one keeps its rows', async () => {
+    const { saidStore } = await import('../../speak/index.js');
+    const { sweep, deletionsOf } = await import('../service.js');
+    await saidStore().append(saidRow('iv-done', 'said-1'));
+    await saidStore().append(saidRow('iv-done', 'said-2'));
+    await saidStore().append(saidRow('iv-open', 'said-3'));
+    const fourYears = new Date(END_MS); fourYears.setUTCFullYear(fourYears.getUTCFullYear() + 4);
+    await sweep(deps(fourYears.getTime() - 60_000));
+    expect(await saidStore().list('iv-done')).toHaveLength(2);
+    await sweep(deps(fourYears.getTime() + 60_000));
+    expect(await saidStore().list('iv-done')).toEqual([]);
+    expect(await saidStore().list('iv-open')).toHaveLength(1);
+    const record = (await deletionsOf('cand-x')).find((r) => r.reason === 'record-period');
+    expect(record!.removed).toContainEqual({ kind: 'said-log', count: 2 });
+  });
+
+  it('a candidate\'s deletion request runs the media erasers and keeps the said log for its record period, as it keeps the consents', async () => {
+    const { saidStore } = await import('../../speak/index.js');
+    const { deleteCandidateMedia } = await import('../service.js');
+    await saidStore().append(saidRow('iv-done', 'said-1'));
+    const { row } = await deleteCandidateMedia('cand-x', 'u-r', deps(END_MS + DAY));
+    expect(row.doneAt).not.toBeNull();
+    expect(ran).toEqual(expect.arrayContaining(['recording', 'transcript-and-minutes', 'pad-log', 'runs']));
+    expect(ran).not.toContain('consents');
+    expect(row.removed.map((r) => r.kind)).not.toContain('said-log');
+    expect(await saidStore().list('iv-done')).toHaveLength(1);
+  });
+});

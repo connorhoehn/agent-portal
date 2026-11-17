@@ -41,3 +41,34 @@ describe('interviewsSettings', () => {
     }
   });
 });
+
+// Lane H5 (OWED O-180): the deletion period and the flag.
+describe('the deletion period (INTERVIEWS_DELETION_WITHIN_DAYS)', () => {
+  it('is 30 days with the flag off and the setting unset, and a bad value falls back to 30', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const off = byName({ INTERVIEWS_ENABLED: 'false' });
+      expect(off['INTERVIEWS_ENABLED']!.value).toBe(false);
+      expect(off['INTERVIEWS_DELETION_WITHIN_DAYS']).toMatchObject({ value: 30, default: 30 });
+      for (const bad of ['0', '91', '30.5', '-30', 'thirty', ' ']) {
+        expect(byName({ INTERVIEWS_ENABLED: 'false', INTERVIEWS_DELETION_WITHIN_DAYS: bad })['INTERVIEWS_DELETION_WITHIN_DAYS']!.value).toBe(30);
+      }
+      // The setting is read whatever the flag: a deployment that turns the tenant on later keeps its period.
+      expect(byName({ INTERVIEWS_ENABLED: 'false', INTERVIEWS_DELETION_WITHIN_DAYS: '45' })['INTERVIEWS_DELETION_WITHIN_DAYS']!.value).toBe(45);
+      expect(byName({ INTERVIEWS_DELETION_WITHIN_DAYS: '1' })['INTERVIEWS_DELETION_WITHIN_DAYS']!.value).toBe(1);
+      expect(byName({ INTERVIEWS_DELETION_WITHIN_DAYS: '90' })['INTERVIEWS_DELETION_WITHIN_DAYS']!.value).toBe(90);
+      // No warning names another setting's value.
+      for (const [line] of warn.mock.calls) expect(String(line)).not.toMatch(/thirty|30\.5/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('sets how long a request may take: its due date is that many days after it was asked', async () => {
+    const { deletionDueByMs } = await import('../retention/rules.js');
+    const { retentionPeriods } = await import('../retention/periods.js');
+    const asked = Date.parse('2026-11-17T10:00:00.000Z');
+    expect(deletionDueByMs(asked, retentionPeriods({ INTERVIEWS_ENABLED: 'false' }))).toBe(asked + 30 * 86_400_000);
+    expect(deletionDueByMs(asked, retentionPeriods({ INTERVIEWS_DELETION_WITHIN_DAYS: '7' }))).toBe(asked + 7 * 86_400_000);
+  });
+});

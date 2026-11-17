@@ -27,3 +27,78 @@ describe('the export service', () => {
     expect(doc.exportedAt).toBe('2026-11-17T10:00:00.000Z');
   });
 });
+
+// Lane H5 (OWED O-164, O-270): the export over the mock world's seeded stores, with the sections as the route registers them.
+describe('the export of a seeded interview (row I6.2)', () => {
+  const MATEO_CODING = 'iv-j6x2d9sb';
+  const SAID_TEXT = 'Milo asked this out loud: describe the bucket refill.';
+  let doc: (id: string) => Promise<import('../service.js').MiloExport>;
+
+  beforeEach(async () => {
+    const { fixtureRegistry } = await import('../../../../mock/core/index.js');
+    fixtureRegistry.resetAll('default');
+    const { exportNotices, exportSuggestions } = await import('../sections.js');
+    const { exportRecap } = await import('../../recap/index.js');
+    const { exportCoachLog } = await import('../../milo-notes/index.js');
+    const { exportPanelNotices } = await import('../../consent/panel-notice.js');
+    clearExportSections();
+    registerExportSection({ key: 'suggestions', read: exportSuggestions });
+    registerExportSection({ key: 'notices', read: exportNotices });
+    registerExportSection({ key: 'recap', read: exportRecap });
+    registerExportSection({ key: 'milo-for-you', read: exportCoachLog });
+    registerExportSection({ key: 'panel-notices', read: exportPanelNotices });
+    const { interviewsStore } = await import('../../store-select.js');
+    doc = async (id) => {
+      const iv = (await interviewsStore().listInterviews()).find((i) => i.id === id)!;
+      return buildMiloExport({ interview: iv, candidateId: 'cand-mateo', openingId: 'op-backend', roundName: 'Coding' }, new Date('2026-11-17T10:00:00Z'));
+    };
+  });
+  afterEach(async () => {
+    const { fixtureRegistry } = await import('../../../../mock/core/index.js');
+    const { setSaidStore } = await import('../../speak/index.js');
+    fixtureRegistry.resetAll('default');
+    setSaidStore(null);
+  });
+
+  it('an erased interview exports every section by name, each empty; the staff\'s own notice acknowledgements stay', async () => {
+    const before = await doc(MATEO_CODING);
+    expect((before.sections['suggestions'] as { suggestions: unknown[] }).suggestions.length).toBeGreaterThan(0);
+    expect((before.sections['notices'] as { answers: unknown }).answers).not.toBeNull();
+    await import('../../retention/service.js');
+    const { erasersOf } = await import('../../retention/registry.js');
+    for (const e of [...erasersOf('record'), ...erasersOf('media').filter((m) => m.kind === 'pad-log' || m.kind === 'runs')]) await e.erase([MATEO_CODING]);
+    const after = await doc(MATEO_CODING);
+    expect(Object.keys(after.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
+    expect(after.sections['suggestions']).toEqual({ suggestions: [], dropped: {} });
+    expect(after.sections['notices']).toEqual({ notice: null, answers: null });
+    expect(after.sections['recap']).toEqual({ recap: null, opens: [] });
+    expect(after.sections['milo-for-you']).toEqual({ rows: [] });
+    // The panel's acknowledgements are the staff's own record of reading the notice, not the candidate's: no eraser takes them.
+    expect(after.sections['panel-notices']).toMatchObject({ interviewId: MATEO_CODING });
+    expect(after.interview).toMatchObject({ id: MATEO_CODING, candidateId: 'cand-mateo' });
+    expect(JSON.stringify(after)).not.toMatch(/Mateo/);
+  });
+
+  it('a notice answered under an older version keeps its version and day, with textKept false and no text (O-162)', async () => {
+    const { interviewConsentsFixture } = await import('../../../../mock/interviews-consents.js');
+    const row = interviewConsentsFixture.rows().find((c) => c.interviewId === MATEO_CODING)!;
+    row.noticeVersion = '2025-03-01.2';
+    const notices = (await doc(MATEO_CODING)).sections['notices'] as { notice: Record<string, unknown>; answers: unknown };
+    expect(notices.notice).toEqual({ version: '2025-03-01.2', title: null, paragraphs: null, textKept: false });
+    expect(notices.answers).not.toBeNull();
+  });
+
+  it('pins today\'s shape: what Milo said aloud (the said log) is in no section of the export (O-270, a finding for the lead)', async () => {
+    const { MemorySaidStore, setSaidStore, saidStore } = await import('../../speak/index.js');
+    setSaidStore(new MemorySaidStore());
+    await saidStore().append({
+      id: 'said-x', interviewId: MATEO_CODING, callId: null, kind: 'question', source: 'kit', questionId: 'q-limiter', suggestionId: null,
+      text: SAID_TEXT, askedBy: 'u-hugo', saidAt: '2026-11-14T14:12:00.000Z', spoken: true,
+    });
+    expect(await saidStore().list(MATEO_CODING)).toHaveLength(1);
+    const out = await doc(MATEO_CODING);
+    expect(Object.keys(out.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
+    expect(JSON.stringify(out)).not.toContain(SAID_TEXT);
+    expect(JSON.stringify(out)).not.toContain('said-x');
+  });
+});
