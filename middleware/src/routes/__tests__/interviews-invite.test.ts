@@ -174,12 +174,31 @@ describe('the exchange and the guest\'s read', () => {
     expect(res.headers['referrer-policy']).toBe('no-referrer');
     const iv = interviewsFixture.rows().find((i) => i.id === IV)!;
     expect(res.body.interview).toEqual({ opening: { title: expect.any(String) }, round: { name: 'System design', minutes: iv.minutes }, scheduledAt: iv.scheduledAt });
+    // Nothing of the panel or the candidate's record in the exchange.
+    for (const name of ['Hugo', 'Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-']) expect(JSON.stringify(res.body)).not.toContain(name);
     const read = await readAsGuest(guestCookie(res));
     expect(read.status).toBe(200);
-    expect(read.body).toEqual(res.body);
-    // Nothing of the panel or the candidate's record.
+    // The read adds who the candidate is meeting: the lead's display name and how many others sit on the panel.
+    expect(read.body).toEqual({ interview: { ...res.body.interview, panel: { lead: 'Hugo Marchetti', others: iv.panelIds.length } } });
+    // Nothing else of the panel's or the candidate's record: no ids, no emails, no other names.
     const text = JSON.stringify(read.body);
-    for (const name of ['Hugo', 'Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-']) expect(text).not.toContain(name);
+    for (const name of ['Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-', '@']) expect(text).not.toContain(name);
+  });
+
+  it('the guest\'s read counts the other interviewers and names no one the directory does not know', async () => {
+    const cookie = guestCookie(await exchange(await issue()));
+    (listUsers as jest.Mock).mockResolvedValue(USERS.filter((x) => x.id !== 'u-hugo'));
+    expect((await readAsGuest(cookie)).body.interview.panel).toEqual({ lead: null, others: 0 });
+    (listUsers as jest.Mock).mockRejectedValue(new Error('directory down'));
+    expect((await readAsGuest(cookie)).body.interview.panel).toEqual({ lead: null, others: 0 });
+
+    (listUsers as jest.Mock).mockResolvedValue(USERS);
+    const withPanel = interviewsFixture.rows().find((i) => i.id === 'iv-n5z9f2cq')!;
+    expect(withPanel.panelIds.length).toBeGreaterThan(0);
+    const read = await readAsGuest(guestCookie(await exchange(await issue(withPanel.id))));
+    expect(read.status).toBe(200);
+    expect(read.body.interview.panel).toEqual({ lead: 'Wen Zhao', others: withPanel.panelIds.length });
+    for (const name of ['Hugo', ...withPanel.panelIds]) expect(JSON.stringify(read.body)).not.toContain(name);
   });
 
   it('answers a wrong, malformed, revoked, expired or closed link the same way, no sooner than the floor', async () => {

@@ -139,8 +139,13 @@ interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyn
   guestHeaders(res);
   const interview = (await interviewsStore().listInterviews()).find((i) => i.id === req.guest!.interviewId);
   const view = interview ? await guestView(interview) : null;
-  if (!view) { res.status(404).json(GUEST_REFUSAL); return; }
-  res.json({ interview: view });
+  if (!interview || !view) { res.status(404).json(GUEST_REFUSAL); return; }
+  // Who the candidate is meeting (lane GUEST): the lead's display name and how many others sit on the panel. Nothing
+  // else of the panel's (decision 4): no ids, no emails, no other names. A lead the directory does not know is null.
+  const { listUsers } = await import('../providers/identity.js');
+  const users = await listUsers().catch(() => []);
+  const lead = users.find((u) => u.id === interview.leadId)?.displayName ?? null;
+  res.json({ interview: { ...view, panel: { lead, others: interview.panelIds.length } } });
 }));
 
 // ── Row I2.2 (lane SEAT): the guest's realtime token and the waiting room ────────────────────────────────────
