@@ -164,6 +164,8 @@ BEGIN
       -- The interviews tenant's tables carry no tenant column: all of them are its own.
       ('interview_openings',           'public.app_tenant_visible(''interviews'')'),
       ('interview_candidates',         'public.app_tenant_visible(''interviews'')'),
+      ('interview_recaps',             'public.app_tenant_visible(''interviews'')'),
+      ('interview_recap_opens',        'public.app_tenant_visible(''interviews'')'),
       ('interview_resumes',            'public.app_tenant_visible(''interviews'')'),
       ('interview_applications',       'public.app_tenant_visible(''interviews'')'),
       ('interview_consents',           'public.app_tenant_visible(''interviews'')'),

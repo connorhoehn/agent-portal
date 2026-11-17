@@ -23,6 +23,7 @@ import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
 import { seatOf } from '../../lib/interviews/assign.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
+import { ratingsAtRecap } from '../../lib/interviews/recap/index.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
 import {
   NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
@@ -154,8 +155,8 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
   const row = newScorecardVersion({
     id: `sc-${randomUUID()}`, interviewId: i.id, authorId: session.sub, version: move.version, input, reason,
     at: new Date().toISOString(),
-    // RECAP STEP (row I5.2, round 5): the ratings as they stood when the recap was opened go here.
-    ratingsAtRecap: null,
+    // RECAP STEP (row I5.2): the ratings as they stood when this person first opened the recap (E3), never the request's.
+    ratingsAtRecap: await ratingsAtRecap(i.id, session.sub),
   });
   const out = await store.addScorecardVersion(row);
   if (!out.ok) {

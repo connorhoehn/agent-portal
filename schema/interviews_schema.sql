@@ -183,6 +183,36 @@ CREATE TABLE IF NOT EXISTS interview_suggestions (
 );
 CREATE INDEX IF NOT EXISTS interview_suggestions_interview_idx ON interview_suggestions (interview_id, made_at);
 
+-- ── Milo's recap (row I5.2) ──────────────────────────────────────────────────
+-- One per interview, written once at the first open and kept: evidence per
+-- competency, each statement with the transcript line it rests on and a quote
+-- of it, and the competencies nothing bore on. Never a rating (decision 6).
+-- `content` is { competencies: [{ id, evidence: [{ text, seq, quote }] }],
+-- notCovered: [id] }. `failed` when every attempt was dropped: no content.
+-- `dropped_codes` holds only the codes of the dropped attempts, never text.
+CREATE TABLE IF NOT EXISTS interview_recaps (
+  interview_id    TEXT PRIMARY KEY REFERENCES interviews(id),
+  state           TEXT NOT NULL CHECK (state IN ('ready', 'failed')),
+  content         JSONB NOT NULL DEFAULT '{"competencies": [], "notCovered": []}'::jsonb,
+  written_at      TIMESTAMPTZ NOT NULL,
+  model_id        TEXT NOT NULL,
+  prompt_version  TEXT NOT NULL,
+  attempts        INTEGER NOT NULL CHECK (attempts BETWEEN 1 AND 3),
+  dropped_codes   TEXT[] NOT NULL DEFAULT '{}',
+  dropped_claims  INTEGER NOT NULL DEFAULT 0 CHECK (dropped_claims >= 0)
+);
+
+-- Who opened the recap, with their ratings as they stood (rate first,
+-- decision 14). The first open wins; the scorecard's changed_after_recap
+-- compares against it. `ratings` is [{ competencyId, rating 1..4 }].
+CREATE TABLE IF NOT EXISTS interview_recap_opens (
+  interview_id    TEXT NOT NULL REFERENCES interviews(id),
+  interviewer_id  TEXT NOT NULL REFERENCES app_users(id),
+  ratings         JSONB NOT NULL,
+  opened_at       TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (interview_id, interviewer_id)
+);
+
 -- ── scorecards ──────────────────────────────────────────────────────────────
 -- One interviewer's judgement of one interview. A submitted scorecard is never
 -- edited: a correction is a new version (decision 14). `ratings` is

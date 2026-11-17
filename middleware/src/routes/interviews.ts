@@ -21,6 +21,7 @@ import { admissionRouter } from './interviews/admission.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { scorecardsRouter } from './interviews/scorecards.js';
+import { recapRouter } from './interviews/recap.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { roomRouter } from './interviews/room.js';
 import { consentEffectsRouter } from './interviews/consent-effects.js';
@@ -94,6 +95,7 @@ interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
 interviewsRouter.use(prepareRouter); // lane PREPARE (row I1.7): the lead chooses a round's questions
 
 interviewsRouter.use(scorecardsRouter); // lane SCORE (row I5.3): the scorecard, D8
+interviewsRouter.use(recapRouter); // lane RECAP (row I5.2): Milo's recap, opened between the ratings and the recommendation, E3
 interviewsRouter.get('/interviews/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const i = ix.world.interviews.find((x) => x.id === param(req, 'id'));

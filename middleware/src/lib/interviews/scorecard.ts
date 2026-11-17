@@ -15,9 +15,10 @@
 //   hidden   who reads whose scorecard is scope.ts (`othersRevealed`): an interviewer reads the others' on a
 //            candidate only once their own is in.
 //
-// RECAP STEP (row I5.2, round 5): the recap is opened between rating and the recommendation. When it exists, the
-// page records the ratings as they stood when the recap was opened (`ratingsAtRecap`) and sends them with the
-// submit; `changedAfterRecap` below compares them. Until then the route passes null and it stays false.
+// RECAP STEP (row I5.2): the recap is opened between rating and the recommendation. The server stores the ratings
+// as they stood when each person first opened it (lib/interviews/recap, POST …/recap/open); the submit's route reads
+// that stored open (`ratingsAtRecap`), never the request, and `changedAfterRecap` below compares against it, for the
+// first version and for every correction alike. Never opened: null, and it stays false.
 
 import { seatOf } from './assign.js';
 import type { CompetencyRating, Interview, InterviewState, KitCompetency, Recommendation, Scorecard } from './types.js';
@@ -151,9 +152,9 @@ export function checkScorecard(body: unknown, competencies: readonly KitCompeten
 
 /**
  * Whether a rating changed after the recap was opened (decision 14). `ratingsAtRecap` is what round 5 records when
- * the recap is opened (RECAP STEP above); null means it was never opened, so nothing changed after it.
+ * the recap is first opened (RECAP STEP above); null means it was never opened, so nothing changed after it.
  */
-export function changedAfterRecap(ratingsAtRecap: readonly CompetencyRating[] | null, ratings: readonly CompetencyRating[]): boolean {
+export function changedAfterRecap(ratingsAtRecap: readonly Pick<CompetencyRating, 'competencyId' | 'rating'>[] | null, ratings: readonly CompetencyRating[]): boolean {
   if (!ratingsAtRecap) return false;
   const before = new Map(ratingsAtRecap.map((r) => [r.competencyId, r.rating]));
   return ratings.some((r) => before.get(r.competencyId) !== r.rating);
@@ -161,7 +162,7 @@ export function changedAfterRecap(ratingsAtRecap: readonly CompetencyRating[] | 
 
 /** The row to insert: the route gives the id and the time; the author is always the signed-in person. */
 export function newScorecardVersion(args: {
-  id: string; interviewId: string; authorId: string; version: number; input: ScorecardInput; reason: string | null; at: string; ratingsAtRecap: readonly CompetencyRating[] | null;
+  id: string; interviewId: string; authorId: string; version: number; input: ScorecardInput; reason: string | null; at: string; ratingsAtRecap: readonly Pick<CompetencyRating, 'competencyId' | 'rating'>[] | null;
 }): Scorecard {
   return {
     id: args.id,
