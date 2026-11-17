@@ -33,7 +33,7 @@ describe('the recording eraser (D5)', () => {
 describe('the registry (D6)', () => {
   afterEach(() => unregisterEraser('other-module'));
   it('holds this module\'s own erasers, takes another module\'s, and refuses a malformed one', () => {
-    expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes']);
+    expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes', 'pad-log']);
     // The coach's suggestion log is registered with the module's own (round 4 combine).
     expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log']);
     expect(eraserFor('suggestions')?.class).toBe('record');
@@ -41,5 +41,21 @@ describe('the registry (D6)', () => {
     expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log', 'other-module']);
     expect(() => registerEraser({ kind: '', class: 'media', erase: async () => 0 })).toThrow(TypeError);
     expect(() => registerEraser({ kind: 'x', class: 'other' as 'media', erase: async () => 0 })).toThrow(TypeError);
+  });
+});
+
+describe('the pad log\'s eraser (row I4.3; decision 17)', () => {
+  it('is media, and removes the interviews\' pad events and nothing else', async () => {
+    const { interviewPadLogFixture } = await import('../../../../mock/interviews-pad-log.js');
+    const { fixtureRegistry } = await import('../../../../mock/core/index.js');
+    fixtureRegistry.resetAll('default');
+    const eraser = eraserFor('pad-log')!;
+    expect(eraser.class).toBe('media');
+    const seeded = interviewPadLogFixture.rows().filter((r) => r.interviewId === 'iv-j6x2d9sb').length;
+    expect(seeded).toBeGreaterThan(0);
+    expect(await eraser.erase(['iv-f2b6t5zh'])).toBe(0);
+    expect(await eraser.erase(['iv-j6x2d9sb'])).toBe(seeded);
+    expect(interviewPadLogFixture.rows()).toEqual([]);
+    fixtureRegistry.resetAll('default');
   });
 });

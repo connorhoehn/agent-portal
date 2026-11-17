@@ -506,6 +506,17 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (r: { id: string }) => r.id,
   },
   {
+    name: 'interview_pad_events',
+    fixture: 'interviews.pad-log',
+    describes: 'Mateo\'s finished coding round as a pad log: the lead inserts the question and sets the language, the candidate\'s edits as counts only, one paste, and two snapshots carrying the text.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_pad_events',
+    // `from` and `length` are column names Postgres reads as keywords or functions, so the columns are from_pos and doc_length.
+    mockRows: async () => (await import('../../interviews-pad-log.js')).interviewPadLogFixture.rows('default')
+      .map(({ from, length, ...r }) => ({ ...r, fromPos: from, docLength: length })),
+    mockId: (r: { interviewId: string; seq: number }) => `${r.interviewId}#${r.seq}`,
+  },
+  {
     name: 'interview_consents',
     fixture: 'interviews.consents',
     describes: 'The candidate\'s three answers per interview: the five finished interviews said yes to all three under the current notice; the upcoming ones have none yet.',

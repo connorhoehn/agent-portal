@@ -176,3 +176,45 @@ describe('a guest against every route the server mounts', () => {
     expect((await call('GET', `/api/interviews/interviews/${OWN}`, guest)).status).toBe(401);
   });
 });
+
+// Lane PADLOG (row I4.3): the pad log's two staff routes refuse a guest on its own interview and on another, and its
+// one guest route refuses a guest the lead has not admitted (and a staff session). That a guest of another interview
+// writes only its own interview's log, and only while that one is live, is in interviews-pad.test.ts (it needs a live,
+// admitted guest, which this server's walk does not make).
+describe('the pad log against a guest', () => {
+  let staff = '';
+  let guest = '';
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    const login = await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-greta' }) });
+    staff = cookieOf(login, 'orgiq.session');
+    const made = await fetch(`${base}/api/interviews/interviews/${OWN}/invite`, { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: '{}' });
+    const token = String(((await made.json()) as { linkPath: string }).linkPath).split('#')[1];
+    const opened = await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+    guest = cookieOf(opened, 'interviews.guest');
+  }, 60_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  const EVENTS = { events: [{ kind: 'paste', clientAt: '2026-11-17T10:00:00.000Z', from: 0, inserted: 10, lines: 1, via: 'paste' }] };
+
+  it('refuses the guest the staff routes, on its own interview and on another', async () => {
+    for (const id of [OWN, OTHER]) {
+      expect((await call('POST', `/api/interviews/interviews/${id}/pad/events`, guest, EVENTS)).status).toBeGreaterThanOrEqual(400);
+      expect((await call('GET', `/api/interviews/interviews/${id}/pad/log`, guest)).status).toBeGreaterThanOrEqual(400);
+    }
+  });
+
+  it('refuses the guest route to a guest not admitted, to a staff session and to no cookie, with the one not-found', async () => {
+    const asGuest = await call('POST', '/api/interview-invite/pad/events', guest, EVENTS);
+    expect(asGuest.status).toBe(404);
+    expect(JSON.parse(asGuest.body)).toEqual({ error: 'This link no longer works.' });
+    expect((await call('POST', '/api/interview-invite/pad/events', staff, EVENTS)).status).toBe(404);
+    expect((await call('POST', '/api/interview-invite/pad/events', null, EVENTS)).status).toBe(404);
+    // No read for the guest: there is no guest route that answers the log.
+    expect((await call('GET', '/api/interview-invite/pad/events', guest)).status).toBeGreaterThanOrEqual(400);
+    // The guest's cookie still works, so these were refusals of a live guest.
+    expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
+  });
+});
