@@ -1,0 +1,6 @@
+# Row I3.8, the candidate's two fixed requests (lane H8): POST /api/interview-invite/milo/request answers only the admitted
+# guest of a live interview (walk step I3.8a on); everyone else reads its one not-found: no session, staff, a guest not let
+# in (the default interview is ready; Kwame's round is live but its link here is never admitted), a guest of another
+# interview.
+POST /api/interview-invite/milo/request | anon guest guest:kwameLive guest:aikoCoding recruiter interviewer hiringManager | | {"request":"time"}
+POST /api/interview-invite/milo/request | anon guest guest:kwameLive | | {"request":"repeat"}
