@@ -10,18 +10,23 @@
 // /api/interview-invite/exchange). A reload has no token and reads the interview on that cookie (GET
 // /api/interview-invite/interview). A dead link, whatever the reason, shows one plain page.
 //
-// Consents, the device check and the waiting room are row I2.3.
+// Row I2.3 adds the steps after the landing, one at a time in the same quiet layout (pages/join/steps.ts):
+// the notice and the three consents, the device check, the waiting room, and "let in" (pages/join/JoinRoom.tsx,
+// which round 4 fills with the call). Where the page opens comes from the stored answers and the admission.
 
-import { useEffect, useState } from 'react';
-import { Card, EmptyState, KeyValue, LoadingState, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, Card, EmptyState, Inline, KeyValue, LoadingState, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ConsentStep } from './join/ConsentStep';
+import { DeviceCheckStep } from './join/DeviceCheckStep';
+import JoinRoom, { type GuestInterview } from './join/JoinRoom';
+import { WaitingStep } from './join/WaitingStep';
+import { LinkDead, readAdmission, readConsents } from './join/guestApi.ts';
+import { landingStep, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
 
-interface GuestInterview {
-  opening: { title: string };
-  round: { name: string; minutes: number };
-  scheduledAt: string | null;
-}
-
-type View = { kind: 'loading' } | { kind: 'ready'; interview: GuestInterview } | { kind: 'dead' } | { kind: 'busy' } | { kind: 'failed' };
+type View =
+  | { kind: 'loading' }
+  | { kind: 'ready'; interview: GuestInterview; consents: GuestConsents; step: JoinStep }
+  | { kind: 'dead' } | { kind: 'busy' } | { kind: 'failed' };
 
 const API = '/api/interview-invite';
 
@@ -48,7 +53,15 @@ async function load(token: string | null): Promise<View> {
   const res = token
     ? await fetch(`${API}/exchange`, { ...init, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) })
     : await fetch(`${API}/interview`, init);
-  if (res.ok) return { kind: 'ready', interview: ((await res.json()) as { interview: GuestInterview }).interview };
+  if (res.ok) {
+    const interview = ((await res.json()) as { interview: GuestInterview }).interview;
+    try {
+      const [consents, admission] = await Promise.all([readConsents(), readAdmission().catch(() => null)]);
+      return { kind: 'ready', interview, consents, step: landingStep(consents.answers, admission) };
+    } catch (error) {
+      return error instanceof LinkDead ? { kind: 'dead' } : { kind: 'failed' };
+    }
+  }
   if (res.status === 404) return { kind: 'dead' };
   if (res.status === 429) return { kind: 'busy' };
   return { kind: 'failed' };
@@ -59,8 +72,21 @@ function when(iso: string | null): string {
   return new Date(iso).toLocaleString(undefined, { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
 }
 
+const STEP_TITLES: Record<JoinStep, string> = {
+  landing: 'Your interview',
+  consents: 'Before you join',
+  devices: 'Check your camera and microphone',
+  waiting: 'Waiting to be let in',
+  admitted: 'Your interview',
+};
+
 export default function JoinPage() {
   const [view, setView] = useState<View>({ kind: 'loading' });
+  // The device check runs once per visit; going back to change an answer returns straight to waiting.
+  const [devicesChecked, setDevicesChecked] = useState(false);
+  const go = useCallback((step: JoinStep) => setView((v) => (v.kind === 'ready' ? { ...v, step } : v)), []);
+  const onAdmitted = useCallback(() => go('admitted'), [go]);
+  const onAnswersNeeded = useCallback(() => go('consents'), [go]);
 
   useEffect(() => {
     noReferrer();
@@ -92,24 +118,43 @@ export default function JoinPage() {
     );
   }
 
-  const { interview } = view;
+  const { interview, consents, step } = view;
   return (
-    <PageFrame title="Your interview" description={interview.opening.title} data-testid="join-page">
-      <Stack gap="md" className="max-w-xl">
-        <Card padding="lg" data-testid="join-interview">
-          <KeyValue
-            items={[
-              { label: 'Role', value: interview.opening.title },
-              { label: 'Round', value: interview.round.name },
-              { label: 'Length', value: `${interview.round.minutes} minutes` },
-              { label: 'When', value: when(interview.scheduledAt) },
-            ]}
-          />
-        </Card>
-        <T size="sm" tone="secondary" data-testid="join-next">
-          A few minutes before the start, open your link again and your interviewer will let you in.
-        </T>
-      </Stack>
+    <PageFrame title={STEP_TITLES[step]} description={interview.opening.title} data-testid="join-page">
+      {step === 'landing' && (
+        <Stack gap="md" className="max-w-xl">
+          <Card padding="lg" data-testid="join-interview">
+            <KeyValue
+              items={[
+                { label: 'Role', value: interview.opening.title },
+                { label: 'Round', value: interview.round.name },
+                { label: 'Length', value: `${interview.round.minutes} minutes` },
+                { label: 'When', value: when(interview.scheduledAt) },
+              ]}
+            />
+          </Card>
+          <T size="sm" tone="secondary" data-testid="join-next">
+            Before you join, you will read how the call is recorded and transcribed, answer three questions, and check your camera and microphone.
+          </T>
+          <Inline gap="sm">
+            <Button variant="primary" onClick={() => go('consents')} data-testid="join-continue">Continue</Button>
+          </Inline>
+        </Stack>
+      )}
+      {step === 'consents' && (
+        <ConsentStep
+          consents={consents}
+          onLinkDead={() => setView({ kind: 'dead' })}
+          onSaved={(saved) => setView((v) => (v.kind === 'ready' ? { ...v, consents: saved, step: stepAfterConsents(devicesChecked) } : v))}
+        />
+      )}
+      {step === 'devices' && (
+        <DeviceCheckStep onBack={() => go('consents')} onContinue={() => { setDevicesChecked(true); go('waiting'); }} />
+      )}
+      {step === 'waiting' && (
+        <WaitingStep onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onChangeAnswers={() => go('consents')} />
+      )}
+      {step === 'admitted' && <JoinRoom interview={interview} />}
     </PageFrame>
   );
 }
