@@ -16,7 +16,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
 import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
-import { capabilityParameterNames, interviewRunsInterpreterName } from './agentcore-capabilities-stack';
+import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import { microvmLabApiBase } from './microvm-network-stack';
 import { SFU_PORTS, sfuParameterNames } from './social-media-stack';
@@ -1349,24 +1349,20 @@ export class MiddlewareServiceStack extends cdk.Stack {
           actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${props.interviewResumesBucketArn}/*`],
         }),
-        // A candidate's Run (lib/interviews/runs/agentcore-executor.ts): one session per run on the tenant's own
-        // interpreter (OrgIQ-AgentCoreCapabilities with the same flag), scoped by its name.
-        ...(props.capabilityParameters ? [new iam.PolicyStatement({
+        // A candidate's Run (lib/interviews/runs/agentcore-executor.ts): one session per run on AWS's built-in
+        // interpreter. Not a custom one: a custom interpreter serves its execution role's credentials on the
+        // sandbox's metadata endpoint, and a candidate's stdout comes back to the candidate (found live,
+        // 2026-11-17). The built-in has no execution role, so there is nothing to serve.
+        new iam.PolicyStatement({
           sid: 'InterviewRunSessions',
           actions: [
             'bedrock-agentcore:StartCodeInterpreterSession',
             'bedrock-agentcore:InvokeCodeInterpreter',
             'bedrock-agentcore:StopCodeInterpreterSession',
           ],
-          resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:code-interpreter-custom/${interviewRunsInterpreterName(prefix)}-*`],
-        })] : []),
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:aws:code-interpreter/${INTERVIEWS_CODE_INTERPRETER}`],
+        }),
       ]);
-      if (props.capabilityParameters) {
-        containerSecrets['INTERVIEWS_CODE_INTERPRETER_ID'] = ecs.Secret.fromSsmParameter(
-          ssm.StringParameter.fromStringParameterName(this, 'InterviewRunsInterpreterIdParameter', capabilityParameterNames(prefix).interviewRunsInterpreterId));
-      } else {
-        featureWarn('interviews=true without the capability parameters: a candidate\'s Run answers "not set up".');
-      }
       // A candidate joins the call on this task's gateway with a guest realtime token. It needs the gateway,
       // and platform-api and the social gateway at the commits that refuse a guest outside its own interview
       // (scripts/docker/document-workspace-sources.json socialSources).
@@ -1380,6 +1376,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
         INTERVIEWS_ENABLED: 'true',
         INTERVIEWS_RESUME_BUCKET: props.interviewResumesBucketName,
         INTERVIEWS_GUEST_REALTIME: String(guestRealtime),
+        INTERVIEWS_CODE_INTERPRETER_ID: INTERVIEWS_CODE_INTERPRETER,
         ...interviewsSettingsEnv(this.node.tryGetContext('interviewsSettings')),
       });
     }
@@ -1908,6 +1905,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
   }
 }
+
+/** AWS's built-in code interpreter, which candidate code runs on (see InterviewRunSessions). */
+export const INTERVIEWS_CODE_INTERPRETER = 'aws.codeinterpreter.v1';
 
 /**
  * `-c interviewsSettings='{"INTERVIEWS_INTERVIEW_CAP_USD":"6"}'`: the tenant's optional settings

@@ -4,7 +4,6 @@ import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
-import { contextFlag } from './context-flags';
 
 /**
  * SSM parameters holding the capability ids the deployed middleware needs
@@ -13,16 +12,12 @@ import { contextFlag } from './context-flags';
  * export freeze) and a rebuilt capability's fresh id reaches the next task
  * instead of rotting the way middleware/.env.aws does (CLAUDE.md).
  */
-export function capabilityParameterNames(prefix: string): { codeInterpreterId: string; browserProfileId: string; interviewRunsInterpreterId: string } {
+export function capabilityParameterNames(prefix: string): { codeInterpreterId: string; browserProfileId: string } {
   return {
     codeInterpreterId: `/${prefix}/capabilities/code-interpreter-id`,
     browserProfileId: `/${prefix}/capabilities/browser-profile-id`,
-    interviewRunsInterpreterId: `/${prefix}/capabilities/interview-runs-interpreter-id`,
   };
 }
-
-/** The interviews tenant's code interpreter name; the middleware scopes its grant to it. */
-export const interviewRunsInterpreterName = (prefix: string): string => `${prefix.replace(/-/g, '_')}_interview_runs`;
 
 export interface AgentCoreCapabilitiesStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -100,34 +95,6 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
 
     this.codeInterpreterId = codeInterpreter.attrCodeInterpreterId;
     this.codeInterpreterArn = codeInterpreter.attrCodeInterpreterArn;
-
-    // -------------------------------------------------------------------
-    // Interview runs (`-c interviews=true`) — a candidate's code, run by the
-    // middleware's AgentCoreExecutor (middleware/src/lib/interviews/runs).
-    // Its own interpreter so candidate code never shares a sandbox with the
-    // agents', and an execution role with no permissions: the sandbox's
-    // metadata endpoint answers, so whatever this role may do, a candidate
-    // may do. It writes no logs for the same reason.
-    // -------------------------------------------------------------------
-
-    if (contextFlag(this, 'interviews', false)) {
-      const runsRole = new iam.Role(this, 'InterviewRunsExecutionRole', {
-        roleName: `${prefix}-interview-runs-execution-role`,
-        assumedBy: trustedService(this, 'bedrock-agentcore.amazonaws.com'),
-        description: 'Execution role for the interviews code interpreter: no permissions, on purpose',
-      });
-      const runs = new bedrockagentcore.CfnCodeInterpreterCustom(this, 'InterviewRunsInterpreter', {
-        name: interviewRunsInterpreterName(prefix),
-        description: 'Interviews tenant: runs candidate code (Python, JavaScript, TypeScript) with no network',
-        executionRoleArn: runsRole.roleArn,
-        networkConfiguration: { networkMode: 'SANDBOX' },
-      });
-      new ssm.StringParameter(this, 'InterviewRunsInterpreterIdParameter', {
-        parameterName: capabilityParameterNames(prefix).interviewRunsInterpreterId,
-        stringValue: runs.attrCodeInterpreterId,
-        description: 'INTERVIEWS_CODE_INTERPRETER_ID for the deployed middleware (read by name)',
-      });
-    }
 
     // -------------------------------------------------------------------
     // Browser — headless web browser for web research

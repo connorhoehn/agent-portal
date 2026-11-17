@@ -412,9 +412,9 @@ The mock passes these by script. Only a real backend proves that untrusted code 
 
 ### I4.7 built; the interpreter half of I4.10 (2026-11-17)
 
-`middleware/src/lib/interviews/runs/agentcore-executor.ts` runs Python 3.12, JavaScript (Node.js 24) and TypeScript (tsx on Node.js 24) on AgentCore Code Interpreter, one session per run, and answers the compiled languages with `internal_error` and a plain message. `select.ts` picks it when `INTERVIEWS_CODE_INTERPRETER_ID` is set. A cluster without one answers "Running code is not set up in this deployment." and never falls back to the mock. With `-c interviews=true`, OrgIQ-AgentCoreCapabilities creates `<prefix>_interview_runs` (SANDBOX) with an execution role that has no permissions, because candidate code can reach the sandbox's metadata endpoint. The middleware reads its id by name and may start, invoke and stop sessions on that interpreter only. `interviewsSettings` cannot set the backend or the id.
+`middleware/src/lib/interviews/runs/agentcore-executor.ts` runs Python 3.12, JavaScript (Node.js 24) and TypeScript (tsx on Node.js 24) on AgentCore Code Interpreter, one session per run, and answers the compiled languages with `internal_error` and a plain message. `select.ts` picks it when `INTERVIEWS_CODE_INTERPRETER_ID` is set. A cluster without one answers "Running code is not set up in this deployment." and never falls back to the mock. With `-c interviews=true` the middleware gets `INTERVIEWS_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`, AWS's built-in interpreter, and may start, invoke and stop sessions on it only. `interviewsSettings` cannot set the backend or the id.
 
-Run against the real service in 647757222309 (us-east-1), on the built-in `aws.codeinterpreter.v1`, because the tenant's own interpreter is not deployed yet (`INTERVIEWS_CI_LIVE=1 npx jest src/lib/interviews/runs/`): the whole contract passes for all three languages, with every status, truncation, a repeated `runId`, the queue, cancel and the 61st run. These hostile cases also pass:
+Run against the real service in 647757222309 (us-east-1), on the built-in `aws.codeinterpreter.v1` (`INTERVIEWS_CI_LIVE=1 npx jest src/lib/interviews/runs/`): the whole contract passes for all three languages, with every status, truncation, a repeated `runId`, the queue, cancel and the 61st run. These hostile cases also pass:
 
 - A fork bomb ends within the wall time, and the next run is unaffected. `ulimit -u` is 256: tsx's esbuild cannot start under 64.
 - DNS, a socket to 1.1.1.1 and metadata credentials are all closed.
@@ -423,9 +423,10 @@ Run against the real service in 647757222309 (us-east-1), on the built-in `aws.c
 
 Found on the way: V8 aborts on a full heap, but the process then wrote a core file until the wall time, so the run read `timed_out`. The wrapper now sets `ulimit -c 0`, and the out-of-memory message is checked before the exit code.
 
+Why the built-in and not a tenant interpreter: a custom `orgiq_interview_runs` (SANDBOX, an execution role with no permissions) was deployed and run through the same cases. Everything passed except the metadata check. Code inside it read the execution role's temporary credentials. Candidate output comes back to the candidate, so the custom interpreter was dropped.
+
 Not yet done:
 
-- Repeat the hostile cases against `<prefix>_interview_runs` once it is deployed. Its execution role is the difference, and the metadata case is the one to watch.
 - A write outside the working directory is not refused. It lands in a session that is stopped after the run.
 - The runner half of I4.10 (I4.8, I4.9).
 
