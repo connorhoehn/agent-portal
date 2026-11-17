@@ -66,6 +66,7 @@ Each is made here so the work can start. The ones marked "owner" are the ones mo
 18. **Money.** A new spend source, `interviews`. Milo's listening, the coach's calls, speech and runs are held against the opening, with a cap per interview. How an opening carries a budget is settled in the first phase (row I0.6).
 19. **Mock first, with two known limits.** Every behaviour walks headlessly with the scripted session, the scripted coach and the mock executor before anything touches a provider. Two things do not exist in the plain mock world today: shared editing and recordings. Row I0.7 decides how the pad is carried and walked (over the middleware's own gateway, or a walk that starts a local gateway); the record page is walked on a seeded recording stand-in, and a real recording is checked by hand on the social profile.
 20. **Panels.** One lead interviewer, and up to two more panel members assigned to the same round who may join the call. Only the lead gets Milo's prompts. Each panel member submits their own scorecard.
+21. **The room is a call first, with one side pane (owner, 16 November).** The interview room fills the window: the library's call layout (the hangout grid of video tiles, the way initiative huddles look) takes the space, and one pane sits on the far right. In a behavioural round that pane is Milo's context for the panel (the plan, the kit's competencies, Milo's notes). In a technical round it is the code pad, with the run output under it. It is built from the tenant layouts that exist, not a new frame: the portal shell (`AppShell`, the section rail collapsed while the call is live), the library's call composites that initiative huddles and meeting rooms already use for the tiles and controls, and the shell's right column (`SidePane`) for the pane. The call's controls and Milo's prompts live in the shell footer on the same model as a work call (`SocialFooter`: the library's `HuddleBar` and `MeetingToolbar`, Milo's bar controls and the footer prompt deck), with the interview's own elements in it (time left, End interview, the suggestion and its three answers) rather than a separate toolbar on the page. A primitive the room needs that the library lacks is added to the library first. The candidate sees the same layout without Milo's context: video, and the pad in a technical round. Milo's prompts stay in the footer (decision 8).
 
 ### Safeguards the product has
 
@@ -149,6 +150,24 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 - No interviews role can use the voice navigator yet. The channel partition refuses everything until the call phases add channel families. The palette has no record search for the tenant.
 - The seed story has 11 interviews rather than 10: one finished round has its scorecard still due, so that state can be seen. The iOS opening has no hiring manager, so Amara Okafor does not see it.
 - The cast shows initials until portraits are made; their ids are listed as waiting for portraits.
+
+**16 November, round 1 (six lanes in parallel).**
+
+- **I0.7:** answered below.
+- **I1.2, the candidate profile:** header, the stage tracker, the rounds with results the viewer may see, and the stage history. Names in every list link to it.
+- **I1.3, openings and their kits:** the Openings table, an opening's page, the kit editor and a New opening page.
+  - The recruiter writes under the existing `ManageCandidates` action, which already covers openings.
+  - Each opening has a revision; a save made from an older revision is refused, so nobody overwrites someone else's changes unseen.
+  - A round, competency or question already in use cannot be removed.
+- **I1.8:** the Engineering Manager opening has a behavioural kit.
+- **I3.1, the policy seam in the meeting assistant:** in place, with only the default policy registered. I3.2 must also widen the meeting-assistant routes' tenant gate, grant `InviteMeetingAssistant` to the interviewer role, and add the `interviews` spend source.
+- **Library (ui-components 2.532.0):**
+  - `DateTimeField` and `RatingInput`, the library halves of I1.5 and I5.3.
+  - `CodePad` on its own subpath, which is I4.1: CodeMirror 6 on a shared Y.Text with named carets, seven languages, and paste and edit reports.
+  - `PdfViewer`, the library half of I1.6.
+  - CodeMirror and pdf.js are optional peers, so the portal installs them the first time a page uses either. That install happens in the foreground.
+
+The judge's pieces live in `scripts/validate-interviews.d/` and the walk's in `scripts/journeys/interviews/`, one file per row.
 
 ## I0.7 answer
 
@@ -250,7 +269,7 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 | I2.1 | Invite token and the guest identity (decision 3); the token leaves the address after first load | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
 | I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, a guest seat through the token bridge, the channel guard refusing a guest everywhere else (realtime, media) | gateway authority tests starting from a guest, the pad proof among them (a guest of another interview, and one not yet admitted, refused); platform-api tests: a guest token refused outside its video session | I2.1, I0.7; media is platform-api (the tenant list, guest tokens); realtime-modules needs nothing (I0.7 answer) | L |
 | I2.3 | Portal: landing, the notice and three consents, device check, waiting room, admitted by the interviewer | walk with a second browser context as the candidate | I2.2 | L |
-| I2.4 | The interview room for both sides; the candidate's layout has no shell | walk step; screenshots at 1440 and 1280 | I2.3 | M |
+| I2.4 | The interview room for both sides (decision 21: the call fills the window, one far-right pane: Milo's context, or the pad in a technical round); the candidate's layout has no shell | walk step; screenshots at 1440 and 1280 | I2.3 | M |
 | I2.5 | Declined consent: what the interview runs without, what the recruiter is told, nothing shown against the candidate | tests per combination; walk step | I2.3 | M |
 | I2.6 | Recording only with consent (a rule in the media stack for this lobby family) and panel-only playback (media) | tests in the media stack (the family's decision waits for consent; a guest token cannot list or play; no share links) and here; the record page on the seeded stand-in, panel side only; one real recording checked by hand on the social profile | I2.3 | M |
 | I2.7 | Panel seats: up to two more panel members in the call; only the lead gets Milo's prompts | admission tests; walk step with a third context | I2.4 | S |

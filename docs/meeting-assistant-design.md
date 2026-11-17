@@ -170,6 +170,21 @@ What that run does not show: the media server's own taps (the simulator stood in
 - A scenario suite for the simulator (`scripts/meeting-assistant/scenarios.mjs`): twelve scripted calls, run against a fake provider at no cost or against the real provider with `--yes` and a spending cap.
 - Package 6 ends with a measured paid run: quiet during ten minutes of real conversation, answers when addressed, right speaker on each line.
 
+## Policy seam (16 November)
+
+Each call has a lobby family (`<tenant>:<family>`, the first two segments of its lobby id), and the family picks a policy in `middleware/src/lib/meeting-assistant/policy.ts`. Families without one get the default, which is the behaviour described in this document. A policy answers:
+
+- **Inviting:** who may invite Milo, turn its voice on and add time.
+- **Reading:** who reads the record, the transcript and the minutes.
+- **Paying:** whose budget pays, for which initiative, under which spend source.
+- **Tools:** which tools the session is offered, and which it may run for a given asker.
+- **Acknowledgement:** whether a person acknowledges in the call or somewhere else, such as the interviews portal's consent.
+- **Bells and lists:** whether the bell reaches a person, and whether the meeting appears in their Meetings list.
+- **Speech:** whether the live model's speech is relayed.
+- **Fixed requests:** whether a request is answered from text the server already holds.
+
+The Cedar action on each route and the routers' tenant gate stay where they are. A policy can only narrow an invitation, never widen it.
+
 ## Risks
 
 - **Quiet behaviour is instructed, and since 15 November enforced for the voice.** The model can still make an unprompted remark: the chat drops it (it answers nobody) and the voice gate withholds its audio unless someone addressed Milo in the last 10 seconds or Milo has addressed work in flight. What remains is a remark that happens to fall inside that window. The voice is off by default and each person has a mute.
