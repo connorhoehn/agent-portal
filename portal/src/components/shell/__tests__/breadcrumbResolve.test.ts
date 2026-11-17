@@ -132,3 +132,19 @@ test('a run crumb names the record by its decoded id and never shows the raw id 
   // A malformed escape stays as written rather than throwing.
   assert.equal(resolveBreadcrumbs('/iq/decisions/50%25%zz').at(-1)?.id, '50%25%zz');
 });
+
+test('a round page reads <group> › <home> › <the round> › <page> by the viewer’s role (U6)', () => {
+  const id = 'iv-k1p5w8ra';
+  const round = { label: 'Round', path: `/interviews/rounds/${id}`, id };
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/room`, 'interviewer'),
+    [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }, round, { label: 'Room' }]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/room`, 'recruiter'),
+    [{ label: 'Hire' }, { label: 'Upcoming', path: '/interviews/upcoming' }, round, { label: 'Room' }]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/scorecard`, 'hiring-manager'),
+    [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }, round, { label: 'Scorecard' }]);
+  for (const [page, label] of [['prepare', 'Prepare'], ['record', 'Record'], ['debrief', 'Debrief']] as const) {
+    assert.equal(resolveBreadcrumbs(`/interviews/rounds/${id}/${page}`, 'admin').at(-1)!.label, label);
+  }
+  // An unknown round page keeps the old trail rather than inventing a crumb.
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/elsewhere`, 'interviewer').map((c) => c.label), ['Hire', 'Round']);
+});

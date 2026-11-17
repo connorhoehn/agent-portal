@@ -14,6 +14,7 @@ import { Breadcrumbs as UIBreadcrumbs, type BreadcrumbItem } from '@connorhoehn/
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
 import { useCrumbLabels, useCrumbTrails } from '../../lib/crumbLabels';
+import { useOptionalSession } from '../../lib/auth';
 export type { Crumb } from './breadcrumbResolve';
 
 
@@ -30,15 +31,16 @@ export function useShellBreadcrumbItems() {
   // A page that knows its record's PLACE (a Work page under an initiative)
   // registers the whole trail under the record's id; otherwise only titles.
   const trails = useCrumbTrails();
+  const role = useOptionalSession()?.role ?? null; // a round's trail follows the viewer's role (U6)
   const crumbs = useMemo(() => {
-    const resolved = resolveBreadcrumbs(pathname);
+    const resolved = resolveBreadcrumbs(pathname, role);
     const owned = resolved.map((c) => (c.id ? trails.get(c.id) : undefined)).find(Boolean);
     if (owned) return owned.map((c) => ({ ...c }));
     return resolved.map((c) => {
       const title = c.id ? titles.get(c.id) : undefined;
       return title ? { ...c, label: title } : c;
     });
-  }, [pathname, titles, trails]);
+  }, [pathname, role, titles, trails]);
 
   // Group crumbs (Build/Org/Operate/System) are context, not destinations, so
   // they carry no href and the library renders them as plain text. The last

@@ -2,21 +2,21 @@
 // same model as a work call: the room page (pages/interviews/InterviewRoomPage.tsx) registers what the footer
 // needs here; SocialFooter draws `InterviewRoomBarItems` in the call bar's extras (time left, what the candidate
 // turned off, End interview for the lead) and `InterviewRoomAsks` in the footer's prompt deck beside Milo's
-// asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep going). Nothing renders unless
+// asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep going). The quiet facts are chips
+// with the full sentence as a tooltip, so the row stays one line at 1280. Nothing renders unless
 // the shell's call is the registered interview's, so no other tenant's footer changes.
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Button, Inline, T } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, Inline, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, knockPromptId, roomStartMs, suggestionPromptId, timeLeftLabel, timeLeftTone, type Admission, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, knockPromptId, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
   lobbyName: string;
   lead: boolean;
-  scheduledAt: string | null;
   minutes: number;
-  /** "Recording is off for this interview" (C4), for the lead; null shows nothing. */
-  offLine: string | null;
+  /** What the candidate answered (C4) as a chip: not answered yet, or what is off; null shows nothing. */
+  consent: ConsentChip | null;
   /** C3's answer for the lead; null: nobody waiting (or the route is not there). */
   admission: Admission | null;
   end(): Promise<{ error?: string }>;
@@ -62,17 +62,21 @@ function useNow(stepMs: number): number {
   return now;
 }
 
-/** In the call bar's extras: time left, the one quiet consent line, and the lead's End interview. */
+/** In the call bar's extras: time left, the consent chip, and the lead's End interview. */
 export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName: string | null | undefined; callStartedAt: number | string | null | undefined }) {
   const room = useRoomFor(lobbyName);
   const now = useNow(15_000);
   const asked = useSyncExternalStore(subscribe, askedSnapshot, askedSnapshot);
   if (!room) return null;
-  const left = timeLeftLabel(roomStartMs(room.scheduledAt, callStartedAt), room.minutes, now);
+  const left = callTimeLabel(callStartedAt, room.minutes, now);
   return <Inline gap="sm" align="center" wrap={false} data-testid="interview-room-bar">
-    {left && <T size="xs" weight="medium" tone={timeLeftTone(left)} className="whitespace-nowrap" data-testid="interview-time-left">{left}</T>}
-    {room.pausedLine && <T size="xs" tone="secondary" truncate className="max-w-[20rem]" data-testid="interview-suggestions-paused">{room.pausedLine}</T>}
-    {room.offLine && <T size="xs" tone="secondary" truncate className="max-w-[16rem]" data-testid="interview-consent-off">{room.offLine}</T>}
+    {left && <Chip size="sm" tone={timeLeftTone(left) === 'warning' ? 'warning' : 'neutral'} data-testid="interview-time-left">{left}</Chip>}
+    {room.pausedLine && <Tooltip content={room.pausedLine} placement="top">
+      <Chip size="sm" tone="neutral" aria-label={room.pausedLine} data-testid="interview-suggestions-paused">Suggestions paused</Chip>
+    </Tooltip>}
+    {room.consent && <Tooltip content={room.consent.tooltip} placement="top">
+      <Chip size="sm" tone={room.consent.tone} aria-label={room.consent.tooltip} data-testid="interview-consent">{room.consent.label}</Chip>
+    </Tooltip>}
     {room.lead && <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>}
   </Inline>;
 }

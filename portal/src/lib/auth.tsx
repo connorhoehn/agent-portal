@@ -444,6 +444,11 @@ export function useSession(): SessionContextValue {
   return ctx;
 }
 
+/** The session when a provider is mounted, else null (the shell's trail renders in tests without one). */
+export function useOptionalSession(): Session | null {
+  return useContext(SessionContext)?.session ?? null;
+}
+
 /**
  * Gate a whole route tree on the session's TENANT. The rail already hides
  * another tenant's entries, but hiding a door is not locking it: an orgiq SME

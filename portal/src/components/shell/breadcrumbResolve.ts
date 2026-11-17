@@ -92,6 +92,12 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   // slot 4: a lane adds its entries just below this line
   upcoming: 'Upcoming',
   room: 'Interview room',
+  // A round's pages (U6): /interviews/rounds/:id/<page> ends in one of these.
+  'round:room': 'Room',
+  'round:prepare': 'Prepare',
+  'round:scorecard': 'Scorecard',
+  'round:record': 'Record',
+  'round:debrief': 'Debrief',
   // slot 5: a lane adds its entries just below this line
   prepare: 'Prepare',
   scorecard: 'Scorecard',
@@ -115,11 +121,23 @@ const PROMPT_PAGES: Record<string, string> = {
   diff: 'Diff', evaluations: 'Evals',
 };
 // The module header prints the three tabs; the crumb names the one open.
+/** Where a round's trail starts for the viewer's role (U6): an interviewer's desk, the recruiter's week, the hiring manager's openings. */
+export function interviewsRoundHome(role: string | null | undefined): Crumb[] {
+  if (role === 'interviewer') return [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }];
+  if (role === 'hiring-manager') return [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }];
+  return [{ label: 'Hire' }, { label: 'Upcoming', path: '/interviews/upcoming' }];
+}
+
+/** `<group> › <home> › <candidate, round> › <page>`; the third crumb's label is what the round's page registers under its id. */
+export function interviewsRoundTrail(id: string, pageLabel: string, role: string | null | undefined): Crumb[] {
+  return [...interviewsRoundHome(role), { label: 'Round', path: `/interviews/rounds/${encodeURIComponent(id)}`, id }, { label: pageLabel }];
+}
+
 function shortId(s: string): string {
   return s.length > 12 ? `${s.slice(0, 8)}…` : s;
 }
 
-export function resolveBreadcrumbs(pathname: string): Crumb[] {
+export function resolveBreadcrumbs(pathname: string, role?: string | null): Crumb[] {
   // Decoded: a record id with a reserved character arrives encoded in the
   // path (`/iq/runs/agent-run%3A79ee…`) while its page reads the decoded id
   // from the router and registers its title under that, so an encoded crumb
@@ -321,6 +339,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     const trail: Crumb[] = [{ label: INTERVIEWS_GROUPS[page] ?? 'Candidates' }];
     // A candidate's profile (Hire › Candidates › name); the page registers the name as the crumb's label.
     if (page === 'candidates' && b) return [...trail, { label: INTERVIEWS_LABELS[page] ?? page, path: '/interviews/candidates' }, { label: shortId(b), id: b }];
+    // A round's page (U6): the viewer's group and home, the round (its page registers "candidate, round"), then the page.
+    if (page === 'rounds' && b && c && INTERVIEWS_LABELS[`round:${c}`]) return interviewsRoundTrail(b, INTERVIEWS_LABELS[`round:${c}`]!, role);
     return [...trail, { label: INTERVIEWS_LABELS[page] ?? page }];
   }
 

@@ -1,42 +1,48 @@
-// The interview room, the panel's side (docs/interviews-tenant-plan.md row I2.4, decision 21; contract C5), at
-// /interviews/rounds/:id/room. The room is a call that fills the window, built from the layouts that exist:
+// The interview room, the panel's side (docs/interviews-tenant-plan.md row I2.4, decision 21; contracts C5, U1, U5,
+// U6), at /interviews/rounds/:id/room. The room is a call that fills the window, built from the layouts that exist:
 //
 //   - the call: the shell's one call host (lib/conversationCall.tsx). The page binds the interview's lobby
 //     (`interviews:interview:<id>`, C1) the way an initiative page binds its huddle (`useCallBlock(…, { bind })`),
 //     so the footer's start, the pre-join device check, the tiles and the HuddleBar run it unchanged.
 //   - the tiles: the library's `CallBlock`, claimed as the call's grid (`placement="pane"` draws the dock's
-//     `grid` layout: tiles only, the host's bar owns mic, camera and Leave), taking the page's content area.
-//   - the one right pane: the shell's right column (`SidePane` through `SidePaneProvider`), open by default.
-//     Behavioural: Milo's context (the plan, the kit's competencies and anchors, Milo's notes). Technical: the
-//     coding questions with their starter code, read-only, until the pad (row I4.2) replaces them. Under either, while
-//     the interview is live (rows I3.6, I3.7; contract E5): Milo's notes for every seat (what was asked about per
-//     competency, what is still to ask, the time check), the lead's private question to Milo with its quoted answer,
-//     and the live transcript (folded in a technical round, where the coding questions lead). Nothing of it is in the
-//     footer, and the candidate's room imports none of it.
+//     `grid` layout: tiles only, the footer's bar owns mic, camera and Leave), taking all the page's space. It wins
+//     the call's one media sink because nothing else on the page claims it: the room registers as the huddle
+//     pane's owner (as pages/social/RoomPane.tsx does), so the shell's fallback chat pane, its media grid and its
+//     composer dock never open here, the chat tab draws `HuddleChatBody showCall={false}`, and the footer's video
+//     panel is kept shut while the call is this room's.
+//   - the one right pane (U1): the shell's right column (`SidePane`) with the library's tabs. Technical: Pad,
+//     Questions, Milo, Chat. Behavioural: Plan, Milo, Chat. Milo is Milo's notes, the lead's private question and
+//     the live transcript (rows I3.6, I3.7). The footer's Message opens the Chat tab; it never opens a second pane.
+//   - the chrome (U5): while the call is drawn the page folds the shell's trail, the primary rail and the content
+//     gutter (components/shell/pageChrome.ts); the header and the footer stay. Before and after, an ordinary page.
 //   - the footer: the work-call footer (SocialFooter) with the interview's own elements registered here
-//     (components/shell/InterviewRoomFooter.tsx): time left, End interview, the waiting candidate.
-//   - the rails: the shell's dialogue fold folds them while the pane is shown (useDialogueRailFold).
+//     (components/shell/InterviewRoomFooter.tsx): time from the join, the consent chip, End interview, the
+//     waiting candidate, Milo's suggestion.
 //
 // The lead's join starts the interview (POST start); End interview ends it (POST end), leaves the call and goes
 // to My interviews. Anyone without a seat reads the not-found page.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { ChatComposer, CodeBlock, Disclosure, EmptyState, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ChatComposer, Disclosure, EmptyState, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { CallBlock, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
+import { CallBlock, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
+import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
+import { usePageChromeFold } from '../../components/shell/pageChrome';
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
-import { PAD_LANGUAGE_LABELS } from '../../lib/interviewsKit';
+import { whenWithZone } from '../../lib/interviews';
+import { PadTab } from './room/PadTab';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents,
-  suggestionReadBudgetMs, type SuggestionAnswerId, type SuggestionView, codeBlockLanguage, consentOffLine, consentsPath, endInterview, pollsWaiting, readAdmission,
+  suggestionReadBudgetMs, type SuggestionAnswerId, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
-  pollsMilo, readLiveTranscript, readMiloNotes, transcriptOpenByDefault, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
+  pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
+  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, type RoomTabId,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -52,7 +58,8 @@ function InterviewRoom({ id }: { id: string }) {
   const navigate = useNavigate();
   const { data, error, isLoading, refresh } = useFetch<{ room: RoomView }>(id ? roomPath(id) : null);
   const room = data?.room ?? null;
-  useCrumbLabel(id, room ? roomCallTitle(room) : undefined);
+  // The trail's round crumb (U6): "Mateo Álvarez, System design".
+  useCrumbLabel(id, room ? roundCrumbLabel(room) : undefined);
 
   const open = !!room && OPEN_STATES.has(room.state);
   const lobbyName = open ? room.lobbyName : null;
@@ -62,6 +69,12 @@ function InterviewRoom({ id }: { id: string }) {
   const host = useCallHost();
   const phase = host?.call.phase ?? 'idle';
   const joined = call.here && hasJoinedCall(host?.call.call, phase);
+  const drawn = !!room && call.here && callDrawn(phase, true);
+  // U5: while the call is drawn, the shell folds its trail, primary rail and gutter.
+  usePageChromeFold(drawn);
+  // The page's tiles are the call's one media sink: the footer's own video panel stays shut while the call is this room's.
+  const media = useCallMediaPanel();
+  useEffect(() => { if (call.here && media?.open) media.setOpen(false); }, [call.here, media?.open, media?.setOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The lead's join starts it, once.
   const started = useRef(false);
@@ -87,10 +100,12 @@ function InterviewRoom({ id }: { id: string }) {
     return () => { live = false; window.clearInterval(timer); };
   }, [polling, id]);
 
-  // C4: one quiet line of what the candidate turned off; not found shows nothing.
-  // Any seat reads it: the interviewer is told what is off (decision 5).
+  // C4: what the candidate answered, as one footer chip: "Not answered yet" until they have, then what is off.
+  // Any seat reads it: the interviewer is told what is off (decision 5). A knock means the answers exist: read again.
   const consents = useFetch<{ answered: boolean; off: ConsentPart[] }>(readsConsents(room?.seat ?? null, open) ? consentsPath(id) : null);
-  const offLine = consents.error ? null : consentOffLine(consents.data?.off);
+  const refreshConsents = consents.refresh;
+  useEffect(() => { if (admission && admission.state !== 'not-knocked') refreshConsents(); }, [admission?.state, refreshConsents]); // eslint-disable-line react-hooks/exhaustive-deps
+  const consent = consents.error ? null : consentChip(consents.data);
 
   // D7: Milo's suggestion, for the lead only, read on the server's wait while the interview is live and the lead is in the call.
   const [suggestion, setSuggestion] = useState<SuggestionView | null>(null);
@@ -137,12 +152,12 @@ function InterviewRoom({ id }: { id: string }) {
     return {};
   }, [id]);
   const footer = useMemo<InterviewRoomFooterState | null>(() => (room && lobbyName ? {
-    interviewId: room.id, lobbyName, lead: room.seat === 'lead', scheduledAt: room.scheduledAt, minutes: room.round.minutes,
-    offLine, admission, end, answerKnock: knock,
+    interviewId: room.id, lobbyName, lead: room.seat === 'lead', minutes: room.round.minutes,
+    consent, admission, end, answerKnock: knock,
     suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
     pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,
     answerSuggestion: answerAsk,
-  } : null), [room, lobbyName, offLine, admission, end, knock, suggestion, paused, answerAsk]);
+  } : null), [room, lobbyName, consent?.label, consent?.tooltip, admission, end, knock, suggestion, paused, answerAsk]); // eslint-disable-line react-hooks/exhaustive-deps
   useRegisterInterviewRoomFooter(footer);
 
   if (error && !room) {
@@ -156,17 +171,16 @@ function InterviewRoom({ id }: { id: string }) {
   }
   if (!room) return <LoadingState label={isLoading ? 'Loading the interview room…' : 'Loading…'} />;
 
-  const drawn = call.here && callDrawn(phase, true);
-  return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room">
+  return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {drawn
       ? <CallBlock placement="pane" className="h-full min-h-0 min-w-0 flex-1" />
-      : <RoomIdle room={room} live={call.live} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
-    <RoomPane room={room} />
+      : <RoomIdle room={room} live={call.live} admission={admission} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
+    <RoomPane room={room} here={call.here} />
   </Stack>;
 }
 
-/** Before the call (or after it): where the tiles will be, and what to do. */
-function RoomIdle({ room, live, onBack }: { room: RoomView; live: boolean; onBack(): void }) {
+/** Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. */
+function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boolean; admission: Admission | null; onBack(): void }) {
   if (!OPEN_STATES.has(room.state)) {
     const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
     return <EmptyState title={over ? 'This interview has ended' : 'This interview is not ready for a call'}
@@ -174,35 +188,70 @@ function RoomIdle({ room, live, onBack }: { room: RoomView; live: boolean; onBac
       actionLabel="Open My interviews" onAction={onBack} testId="interview-room-closed" />;
   }
   const lead = room.seat === 'lead';
+  const waiting = lead ? candidateLine(admission) : null;
+  const facts = [
+    { label: 'Candidate', value: room.candidate.name },
+    { label: 'Round', value: `${room.round.name} · ${room.round.type === 'technical' ? 'Technical' : 'Behavioural'}` },
+    { label: 'When', value: whenWithZone(room.scheduledAt) },
+    { label: 'Length', value: `${room.round.minutes} min` },
+    { label: 'Panel', value: panelLine(room.seats) },
+    ...(waiting ? [{ label: 'The candidate', value: waiting }] : []),
+  ];
   return <EmptyState title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'}
-    body={live ? 'Join it from the bar at the bottom of the window.'
-      : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-        : 'You can join the call from the bar at the bottom of the window.'}
+    description={<Stack gap="md">
+      <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
+        : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
+          : 'You can join the call from the bar at the bottom of the window.'}</T>
+      <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
+    </Stack>}
     testId="interview-room-idle" />;
 }
 
-/** The room's one right pane: Milo's context in a behavioural round, the coding questions in a technical one. */
-function RoomPane({ room }: { room: RoomView }) {
+/**
+ * The room's one right pane (U1), with the library's tabs. While the call is this room's, the room is the huddle
+ * pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own chat pane never opens beside it, and a focus
+ * request for the call's chat (the footer's Message) selects the Chat tab and shows the pane.
+ */
+function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
   const pane = useSidePaneHost();
   const { reveal } = pane;
   // Open by default in the room; the reader's × still closes it for this visit.
   useEffect(() => { reveal(); }, [reveal]);
-  const technical = room.round.type === 'technical';
-  return <SidePane title={technical ? 'Coding questions' : 'Milo’s context'} subtitle={roomCallTitle(room)} paneId="interview-room"
-    widthPx={{ min: 360, max: 460 }} data-testid="interview-room-pane">
-    <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4">
-      {technical ? <CodingQuestions questions={room.questions} /> : <>
-        <Plan questions={room.questions} />
-        <Competencies room={room} />
-      </>}
-      <MiloForYou room={room} />
-    </Stack>
+  const type = room.round.type;
+  const [tab, setTab] = useState<RoomTabId>(() => defaultRoomTab(type));
+  const chat = useHuddleChat();
+  const registerPane = chat?.registerPaneOwner;
+  const chatVisible = pane.shown && !pane.folded && tab === ROOM_MESSAGE_TAB;
+  const hideChat = useCallback(() => setTab(defaultRoomTab(type)), [type]);
+  useEffect(() => (here ? registerPane?.({ visible: chatVisible, hide: hideChat }) : undefined), [here, registerPane, chatVisible, hideChat]);
+  const lastFocus = useRef(chat?.focusRequest ?? 0);
+  useEffect(() => {
+    if (here && chat && chat.focusRequest !== lastFocus.current) { setTab(ROOM_MESSAGE_TAB); reveal(); }
+    lastFocus.current = chat?.focusRequest ?? 0;
+  }, [here, chat?.focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+  const milo = useMiloPane(room);
+  const tabs = useMemo(() => roomTabs(type), [type]);
+  return <SidePane title={roomCallTitle(room)} subtitle={`${room.round.minutes} min · ${type === 'technical' ? 'Technical' : 'Behavioural'} round`}
+    paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t))}
+    data-testid="interview-room-pane">
+    {tab === 'chat'
+      ? <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-chat">
+        {chat?.callId && here ? <HuddleChatBody showCall={false} />
+          : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
+      </Stack>
+      : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
+        {tab === 'pad' && <PadTab room={room} />}
+        {tab === 'questions' && <Questions questions={room.questions} />}
+        {tab === 'plan' && <><Questions questions={room.questions} title="The plan" /><Competencies room={room} /></>}
+        {tab === 'milo' && <MiloForYou room={room} {...milo} />}
+      </Stack>}
   </SidePane>;
 }
 
-function Plan({ questions }: { questions: RoomQuestion[] }) {
-  if (!questions.length) return <PageSection size="sm" title="The plan" empty="No questions were chosen for this round." />;
-  return <PageSection size="sm" title="The plan" count={questions.length}>
+/** The chosen questions with their follow-ups: a technical round's Questions tab, a behavioural round's plan. */
+function Questions({ questions, title = 'Questions' }: { questions: RoomQuestion[]; title?: string }) {
+  if (!questions.length) return <PageSection size="sm" title={title} empty="No questions were chosen for this round." />;
+  return <PageSection size="sm" title={title} count={questions.length}>
     <Stack as="ol" gap="md" data-testid="interview-room-plan">
       {questions.map((q, n) => <Stack as="li" key={q.id} gap="xs">
         <T size="xs" weight="medium" tone="secondary">{`${n + 1}. ${q.competency ?? 'Competency'}`}</T>
@@ -227,25 +276,6 @@ function Competencies({ room }: { room: RoomView }) {
       </Disclosure>)}
     </Stack>
   </PageSection>;
-}
-
-/** Technical round: each chosen question's prompt and starter code, read-only, to read aloud. Row I4.2's pad replaces this. */
-function CodingQuestions({ questions }: { questions: RoomQuestion[] }) {
-  if (!questions.length) return <PageSection size="sm" title="The plan" empty="No questions were chosen for this round." />;
-  return <Stack gap="lg" data-testid="interview-room-coding">
-    {questions.map((q, n) => <PageSection key={q.id} size="sm" title={`Question ${n + 1}`} description={q.competency ?? undefined}>
-      <Stack gap="sm">
-        <T size="sm" wrap>{q.prompt}</T>
-        {q.starter.map((s) => <Stack key={s.language} gap="xs">
-          <T size="xs" weight="medium" tone="secondary">{`Starter code · ${PAD_LANGUAGE_LABELS[s.language]}`}</T>
-          <CodeBlock code={s.code} language={codeBlockLanguage(s.language)} copyButton ariaLabel={`Starter code in ${PAD_LANGUAGE_LABELS[s.language]}`} />
-        </Stack>)}
-        {q.followUps.length > 0 && <Disclosure summary={<T size="xs" tone="secondary">{`Follow-ups (${q.followUps.length})`}</T>} density="compact">
-          <Stack as="ul" gap="xs">{q.followUps.map((f) => <T as="li" key={f} size="sm" wrap>{f}</T>)}</Stack>
-        </Disclosure>}
-      </Stack>
-    </PageSection>)}
-  </Stack>;
 }
 
 // ── Milo for you and the live transcript (rows I3.6, I3.7; contract E5) ─────────────────────────────────────────
@@ -305,12 +335,12 @@ function useMiloPane(room: RoomView) {
   return { live, lines, off, notes };
 }
 
-function MiloForYou({ room }: { room: RoomView }) {
-  const { live, lines, off, notes } = useMiloPane(room);
+/** The Milo tab: the notes, the lead's private question, the live transcript (open: it has the tab to itself). */
+function MiloForYou({ room, live, lines, off, notes }: { room: RoomView } & ReturnType<typeof useMiloPane>) {
   return <>
     <MiloNotesSection notes={live ? notes : null} />
     {asksMilo(room.seat, room.state) && <AskMilo interviewId={room.id} />}
-    <TranscriptSection live={live} lines={lines} off={off} openByDefault={transcriptOpenByDefault(room.round.type)} />
+    <TranscriptSection live={live} lines={lines} off={off} openByDefault />
   </>;
 }
 

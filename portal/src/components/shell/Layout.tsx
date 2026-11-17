@@ -72,6 +72,7 @@ import { EmbeddedSocialProvider } from './EmbeddedSocial';
 import { TodayPlacementProvider, TodayStripSlot } from './FooterTodayStrip';
 import { SocialFooter } from './SocialFooter';
 import { HuddleChatSplit } from './HuddleChat';
+import { usePageChromeFolded } from './pageChrome';
 import { MeetingRoomBanner } from './CallMeeting';
 import { healthFailed, healthPending, type DependencyHealth } from '../../lib/healthStatus';
 
@@ -364,7 +365,8 @@ function ShellLayout() {
   const phoneHeader = viewportWidth < 640;
   const primaryRail = useRailFold({ storageKey: 'shell.primary-rail', band, defaultFolded: band === 'deep' || viewportWidth < RAIL_FOLD_PRIMARY_BELOW });
   const [huddleDialogueOpen, setHuddleDialogueOpen] = useState(false);
-  const dialogueRail = useDialogueRailFold(sidePane.shown || huddleDialogueOpen, primaryRail, pathname);
+  const chromeFolded = usePageChromeFolded(); // a live interview call folds the trail, the rail and the gutter (pageChrome.ts, U5)
+  const dialogueRail = useDialogueRailFold(sidePane.shown || huddleDialogueOpen || chromeFolded, primaryRail, pathname);
   const rails = {
     primary: dialogueRail.folded ? 'collapsed' : 'open',
     section: viewportWidth < RAIL_FOLD_SECTION_BELOW ? 'collapsed' : 'open',
@@ -583,6 +585,7 @@ function ShellLayout() {
             title={tenantLabel}
             items={subNavItems}
             railWidth={200}
+            contentPadding={chromeFolded ? 'none' : 'default'}
             collapsed={dialogueRail.folded}
             titleAction={(
               <IconButton
@@ -657,7 +660,7 @@ function ShellLayout() {
             <Stack gap="none" className="h-full bg-bg">
               {/* Where you are, once you're 3+ levels deep — stacked rails say
                   what you can open, the trail says where you stand. */}
-              <Breadcrumbs />
+              {!chromeFolded && <Breadcrumbs />}
               {/* The huddle chat opens in the right split pane beside the page
                   (HuddleChat.tsx); with no pane open the page takes the width. */}
               <Stack gap="none" className="flex-1 min-h-0">

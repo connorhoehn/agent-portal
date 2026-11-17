@@ -327,3 +327,64 @@ export function keepExchange(kept: readonly MiloExchange[], question: string, bo
 
 /** "Asked by Milo" for what Milo put in the call chat; nothing for what the panel asked itself. */
 export const askedByLabel = (by: MiloAskedItem['by']): string | null => (by === 'milo' ? 'Milo asked it' : null);
+
+// ── The room as decision 21 draws it (UI round 1, lane ROOM; contracts U1, U6) ──────────────────────────────
+
+/** The one pane's tabs (U1), in order: a technical round leads with the pad, a behavioural one with the plan. */
+export type RoomTabId = 'pad' | 'questions' | 'plan' | 'milo' | 'chat';
+const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', questions: 'Questions', plan: 'Plan', milo: 'Milo', chat: 'Chat' };
+export function roomTabIds(type: RoundType): RoomTabId[] {
+  return type === 'technical' ? ['pad', 'questions', 'milo', 'chat'] : ['plan', 'milo', 'chat'];
+}
+export const roomTabs = (type: RoundType): Array<{ id: RoomTabId; label: string }> => roomTabIds(type).map((id) => ({ id, label: TAB_LABELS[id] }));
+export const defaultRoomTab = (type: RoundType): RoomTabId => (type === 'technical' ? 'pad' : 'plan');
+/** The footer's Message opens the pane on its chat tab (never a second pane). */
+export const ROOM_MESSAGE_TAB: RoomTabId = 'chat';
+/** A tab id from the library's tab row, kept to this round's tabs (anything else keeps the current one). */
+export function roomTabOf(type: RoundType, id: string, current: RoomTabId): RoomTabId {
+  return (roomTabIds(type) as string[]).includes(id) ? (id as RoomTabId) : current;
+}
+/** The pane's width (U1): code needs room; Milo's context stays narrow. */
+export const roomPaneWidth = (type: RoundType): { min: number; max: number } =>
+  (type === 'technical' ? { min: 560, max: 760 } : { min: 360, max: 460 });
+
+/** The round's crumb (U6): "Mateo Álvarez, System design". */
+export const roundCrumbLabel = (room: Pick<RoomView, 'round' | 'candidate'>): string => `${room.candidate.name}, ${room.round.name}`;
+
+/**
+ * The footer's time while the call is on: counted from the call's start (the join), never from the set time, so a
+ * call held early never reads "Starts in 1525 min". Before the start is known it says the round's length.
+ */
+export function callTimeLabel(callStartedAt: number | string | null | undefined, minutes: number, nowMs: number): string | null {
+  if (minutes <= 0) return null;
+  const start = roomStartMs(null, callStartedAt);
+  if (start === null || nowMs < start) return `${minutes} min round`;
+  return timeLeftLabel(start, minutes, nowMs);
+}
+
+/** The consent chip in the footer: a short label and the full sentence as its tooltip. Null shows nothing. */
+export interface ConsentChip { label: string; tooltip: string; tone: 'neutral' | 'warning' }
+export const NOT_ANSWERED_LINE = 'The candidate has not answered yet';
+export function consentChip(consents: { answered: boolean; off: readonly ConsentPart[] } | null | undefined): ConsentChip | null {
+  if (!consents) return null;
+  if (!consents.answered) return { label: 'Not answered yet', tooltip: `${NOT_ANSWERED_LINE}.`, tone: 'neutral' };
+  const line = consentOffLine(consents.off);
+  if (!line) return null;
+  const parts = [...new Set(consents.off)].filter((p) => p in PART_WORDS);
+  return { label: parts.length === 1 ? `${PART_WORDS[parts[0]!]} off` : `${parts.length} parts off`, tooltip: `${line}.`, tone: 'warning' };
+}
+
+/** Before the call: who sits on the panel, the lead first ("Hugo Marchetti (lead), Wen Zhao"). */
+export function panelLine(seats: RoomView['seats']): string {
+  const ordered = [...seats].sort((a, b) => (a.seat === b.seat ? 0 : a.seat === 'lead' ? -1 : 1));
+  return ordered.map((s) => (s.seat === 'lead' ? `${s.person.name} (lead)` : s.person.name)).join(', ') || 'Nobody is seated yet';
+}
+
+/** Before the call, for the lead: whether the candidate is here. Null when the room does not know (a panel seat). */
+export function candidateLine(admission: Admission | null): string | null {
+  if (!admission) return null;
+  if (admission.state === 'waiting') return 'Waiting to be let in';
+  if (admission.state === 'admitted') return 'Let in';
+  if (admission.state === 'turned-away') return 'Asked to wait';
+  return 'Not here yet';
+}
