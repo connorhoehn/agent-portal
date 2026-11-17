@@ -47,6 +47,8 @@ import { inSocialDeckNamespace, parseSocialDeckChannel, socialDeckPresenceChanne
 import { SOCIAL_CHANNEL_PREFIX, slugForChannel, socialChat } from '../social-chat.js';
 import { isSocialTeamMember } from '../../providers/social-platform.js';
 import { pageResourceVisible, type PageResourceKind } from '../page-resources.js';
+import { inDocumentNamespace } from '../interviews/pad/channel.js';
+import { admitPadChannel } from '../interviews/pad/authority.js';
 import {
   TENANT_CHANNEL_FAMILIES, TENANT_PARTITIONS, channelAuthorityFor, tenantChannelFamily,
   type ChannelAuthority, type TenantChannelFamily,
@@ -298,6 +300,8 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
     // A huddle's chat: only current seats of that call, never a grant or partition alone.
     { id: 'call-chat', match: base => base === 'orgiq:huddle' || base.startsWith('orgiq:huddle:'),
       channel: args => authorizeHuddleChannel(args, args.base, engineGuards) },
+    // A `doc:` name is an interview's code pad or nothing: its lead and panel, now (lib/interviews/pad/authority.ts).
+    { id: 'interview-pad', match: base => inDocumentNamespace(base), channel: args => admitPadChannel(args, args.base) },
   ],
   channelSteps: [socialChannelStep],
   callSteps: [workGraphLobbyStep, socialCallStep],

@@ -84,6 +84,7 @@ import { startStatsLine, statsIntervalMs, type RealtimeGatewayStore } from './ga
 import { authorityCacheEnabled, authorityCacheMaxAgeMs, inboundRateLimit, peerOperationLingerMs, publishProofMaxAgeMs, realtimeGatewayRouting } from './gateway/env.js';
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
 import { recordOwnerSender } from './record-owner.js';
+import { interviewPads } from './interviews/pad/feature.js';
 
 // Everything the pre-split file exported, from where it lives now.
 export { lobbyGuard, channelGuard } from './gateway/authority.js';
@@ -407,6 +408,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       // about a tenant discussion reaches only someone who reads it now.
       notifications({ store: inbox.store, authorize: async clientId => getCtx(clientId) !== null,
         replayOnConnect: true, admit: (userId, record) => admitTenantNotification(userId, record) }),
+      // Interview code pads (lib/interviews/pad/feature.ts): the only documents on this socket.
+      interviewPads(),
     ],
   });
   handleRef = handle;
