@@ -29,6 +29,7 @@ import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
 import { GuestMiloRequests, GuestMiloVoice } from './GuestMiloVoice';
 import { GuestRoomPane, type GuestPaneTab } from './GuestRoomPane';
+import { useGuestMediaBinding } from './guestMedia.ts';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
 import { ROOM_POLL_MS, guestCallStartMs, roomMaxPolls, roomStepAfterRead, roomView, type GuestPanel, type GuestRoom } from './steps.ts';
@@ -169,6 +170,8 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
     if (technical) setTab('pad'); else setPaneOpen(false);
   }, [chatOpen, technical]);
   const callId = host?.call.call?.callId ?? null;
+  // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
+  useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
   const view = roomView({ token: 'ready', joined, left });
   // Milo's sentence to the candidate's last request: asked from the bar, shown on the line above it.
   const [miloLine, setMiloLine] = useState<string | null>(null);

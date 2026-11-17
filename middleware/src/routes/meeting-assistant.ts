@@ -1301,7 +1301,7 @@ async function ackedElsewhereAt(call: PolicyCall, present: readonly string[], in
 }
 
 /** A person taking a seat whose acknowledgement comes from elsewhere and who gave it there is acknowledged now (their audio is admitted). */
-async function ackElsewhere(callId: string, userId: string): Promise<void> {
+export async function ackElsewhere(callId: string, userId: string): Promise<void> {
   if (!hasFamilyPolicies()) return;
   const store = assistantStore();
   const record = await store.get(callId);

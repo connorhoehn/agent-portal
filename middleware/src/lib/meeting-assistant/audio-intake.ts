@@ -218,6 +218,22 @@ export class AudioIntake {
     return 'bound';
   }
 
+  /**
+   * Forget every media participant id bound to this person, in every call (an interview's guest turned away, its link revoked, the
+   * interview ended): from now on their audio is unmapped and dropped. Persisted where a record holds the binding.
+   */
+  async unbindUser(userId: string): Promise<number> {
+    let removed = 0;
+    for (const [callId, map] of this.bindings) {
+      const ids = [...map.entries()].filter(([, u]) => u === userId).map(([id]) => id);
+      if (!ids.length) continue;
+      for (const id of ids) map.delete(id);
+      removed += ids.length;
+      await this.store().patchSession(callId, { participants: Object.fromEntries(map) }).catch(() => undefined);
+    }
+    return removed;
+  }
+
   userOf(callId: string, participantId: string): string | null { return this.bindings.get(callId)?.get(participantId) ?? null; }
   private readonly bindings = new Map<string, Map<string, string>>();
 

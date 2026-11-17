@@ -24,6 +24,7 @@ import { consentGuestRouter } from './interview-invite-consents.js';
 import { padGuestRouter } from './interview-invite-pad.js';
 import { runsGuestRouter } from './interview-invite-runs.js';
 import { miloGuestRouter } from './interview-invite-milo.js';
+import { mediaGuestRouter } from './interview-invite-media.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { runWithDbTenant } from '../providers/db-tenant.js';
 import { interviewsStore } from '../lib/interviews/store-select.js';
@@ -137,6 +138,7 @@ interviewInviteRouter.use(padGuestRouter);
 interviewInviteRouter.use(consentGuestRouter);
 interviewInviteRouter.use(runsGuestRouter);
 interviewInviteRouter.use(miloGuestRouter);
+interviewInviteRouter.use(mediaGuestRouter);
 interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
   const interview = (await interviewsStore().listInterviews()).find((i) => i.id === req.guest!.interviewId);

@@ -124,6 +124,13 @@ export async function miloRefusalForConsent(interviewId: string): Promise<string
   return answer ? MILO_OFF_NO_TRANSCRIPT : MILO_OFF_NOT_ANSWERED;
 }
 
+/** Did the candidate accept the transcript (the listener may hear them)? No answer and a failing read are no. */
+export async function candidateTranscribed(interviewId: string): Promise<boolean> {
+  const source = consentSource ?? storedAnswers;
+  const answer = await source(interviewId).catch(() => null);
+  return answer?.transcription === true;
+}
+
 const NONE: ReadAccess = Object.freeze({ record: false, transcript: false, minutes: false });
 
 export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<MeetingAssistantPolicy>({

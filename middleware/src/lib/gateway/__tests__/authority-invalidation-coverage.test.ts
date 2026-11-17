@@ -94,7 +94,8 @@ const SURFACES: Surface[] = [
     // The interview's guest leaves the room: turned away (admission), the link revoked or replaced, the interview ended.
     file: 'src/lib/interviews/invite/admission.ts',
     sites: /\.setAdmission\(/,
-    calls: SEAM,
+    calls: /\bguestLeft\(/, // guestLeft tells the verdict cache, then the guest-gone listeners (the call assistant's media binding)
+    helpers: { guestLeft: /\binvalidateForUser\(/ },
     known: ['applyAdmission'],
   },
   {

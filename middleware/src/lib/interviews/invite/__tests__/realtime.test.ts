@@ -90,6 +90,7 @@ describe('served only by the guest\'s own router', () => {
       'GET /api/interview-invite/room',
       'GET /api/interview-invite/runs', 'GET /api/interview-invite/runs/:runId', 'GET /api/interview-invite/runs/events', // lane RUNS (row I4.4)
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock',
+      'POST /api/interview-invite/media/participant', // the candidate's own media id, bound to its session's subject (routes/interview-invite-media.ts)
       'POST /api/interview-invite/milo/request', // lane SPEAK (rows I3.5, I3.8): the candidate's two requests (routes/interview-invite-milo.ts)
       'POST /api/interview-invite/pad/events', // row I4.3: the candidate's pad log writes (routes/interview-invite-pad.ts)
       'POST /api/interview-invite/runs', 'POST /api/interview-invite/runs/:runId/cancel', // lane RUNS (row I4.4)

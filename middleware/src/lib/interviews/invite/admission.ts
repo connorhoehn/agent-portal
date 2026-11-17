@@ -27,6 +27,16 @@ import { invalidateForUser } from '../../gateway/authority-invalidation.js';
 // The guest's call identity, realtime.ts guestSubject's (not imported: realtime.ts → guest.ts → this file is a cycle).
 const guestSubject = (inviteId: string): string => `guest:${inviteId}`;
 
+/** Told of a guest who has left the room for good (turned away, link revoked or replaced, interview ended): its subject. */
+type GuestGone = (subject: string, reason: string) => void;
+const guestGone = new Set<GuestGone>();
+/** Be told when a guest leaves the room (the call assistant drops its media binding then). Returns the unsubscribe. */
+export function onGuestGone(fn: GuestGone): () => void { guestGone.add(fn); return () => { guestGone.delete(fn); }; }
+function guestLeft(subject: string, reason: string): void {
+  invalidateForUser(subject, reason);
+  for (const fn of [...guestGone]) { try { fn(subject, reason); } catch { /* a listener never blocks the write */ } }
+}
+
 export const ADMISSION_STATES = ['not-knocked', 'waiting', 'admitted', 'turned-away'] as const;
 export type AdmissionState = typeof ADMISSION_STATES[number];
 
@@ -112,7 +122,7 @@ export async function applyAdmission(inviteId: string, event: AdmissionEvent, no
       { admissionState: next.state, knockedAt: next.knockedAt, admissionDecidedAt: next.decidedAt });
     // Out of the room (turned away, or back to waiting): the gateway's verdict cache drops every yes it holds for the
     // guest now, so a cached call-chat yes never outlives the decision (with REALTIME_AUTHORITY_CACHE on).
-    if (written && next.state !== 'admitted') invalidateForUser(guestSubject(invite.id), 'interview-admission');
+    if (written && next.state !== 'admitted') guestLeft(guestSubject(invite.id), 'interview-admission');
     return written ? { ok: true, admission: admissionOf(written) } : { ok: false, reason: 'stale' };
   });
 }
@@ -123,5 +133,5 @@ export async function applyAdmission(inviteId: string, event: AdmissionEvent, no
  */
 export async function forgetInterviewGuest(interviewId: string, reason: string, invite?: Pick<Invite, 'id'> | null): Promise<void> {
   const which = invite !== undefined ? invite : await runWithDbTenant(INTERVIEWS_TENANT, () => inviteStore().latestInvite(interviewId));
-  if (which) invalidateForUser(guestSubject(which.id), reason);
+  if (which) guestLeft(guestSubject(which.id), reason);
 }
