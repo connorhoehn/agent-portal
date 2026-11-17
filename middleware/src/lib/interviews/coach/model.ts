@@ -48,6 +48,21 @@ export function estimateCoachTokens(input: CoachInput): TokenCounts {
   return { inputTokens: Math.ceil(chars / 4), outputTokens: 120 };
 }
 
+/** Errors that mean the provider refused the request without running the model (nothing billed). */
+const REFUSED_NAMES = new Set(['AccessDeniedException', 'UnrecognizedClientException', 'ValidationException', 'ThrottlingException',
+  'ServiceQuotaExceededException', 'ResourceNotFoundException', 'ExpiredTokenException', 'InvalidSignatureException',
+  'CredentialsProviderError', 'IncompleteSignatureException', 'MissingAuthenticationTokenException']);
+
+/** Did the provider (or the SDK, before sending) refuse the call outright: a client fault, a 4xx, or a known refusal? */
+export function refusedBeforeRunning(e: unknown): boolean {
+  const err = e as { name?: unknown; $fault?: unknown; $metadata?: { httpStatusCode?: unknown } } | null;
+  if (!err || typeof err !== 'object') return false;
+  if (typeof err.name === 'string' && REFUSED_NAMES.has(err.name)) return true;
+  if (err.$fault === 'client') return true;
+  const status = Number(err.$metadata?.httpStatusCode);
+  return Number.isFinite(status) && status >= 400 && status < 500;
+}
+
 type Send = (cmd: ConverseCommand, opts: { abortSignal: AbortSignal }) => Promise<ConverseCommandOutput>;
 
 let client: BedrockRuntimeClient | null = null;
@@ -78,7 +93,9 @@ export class BedrockCoachModel implements CoachModel {
       // The error's name only: its message could quote the request.
       const timedOut = abort.signal.aborted;
       console.warn('[interviews] coach call failed', timedOut ? 'timeout' : (e as Error)?.name ?? 'error');
-      return { raw: null, code: timedOut ? 'timeout' : 'error', sent: true, usage: null };
+      // A refusal (no access, bad credentials, a throttle, a bad request) ran no model and bills nothing, so no spend is
+      // booked for it; a timeout or a server-side failure may have run, so it is booked at the estimate as before.
+      return { raw: null, code: timedOut ? 'timeout' : 'error', sent: timedOut || !refusedBeforeRunning(e), usage: null };
     } finally {
       clearTimeout(timer);
     }

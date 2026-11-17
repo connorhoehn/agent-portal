@@ -25,10 +25,23 @@ describe('the Bedrock model, over a fake client', () => {
   it('a failure is a code, and nothing of the request is logged', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const err = new BedrockCoachModel({ send: async () => { throw Object.assign(new Error('the transcript said: secret words'), { name: 'ThrottlingException' }); } });
-    expect(await err.suggest(FIXED_INPUT)).toMatchObject({ raw: null, code: 'error', sent: true });
+    expect(await err.suggest(FIXED_INPUT)).toMatchObject({ raw: null, code: 'error', sent: false }); // refused: nothing ran, nothing to book
     const slow = new BedrockCoachModel({ timeoutMs: 5, send: (_c, { abortSignal }) => new Promise((_r, reject) => abortSignal.addEventListener('abort', () => reject(new Error('aborted')))) });
     expect(await slow.suggest(FIXED_INPUT)).toMatchObject({ code: 'timeout' });
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/secret|payments queue/);
+    warn.mockRestore();
+  });
+
+  it('books spend only for a call that may have run: a refusal is not sent, a timeout or a server failure is', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const failing = (e: unknown) => new BedrockCoachModel({ send: async () => { throw e; } }).suggest(FIXED_INPUT);
+    for (const name of ['AccessDeniedException', 'UnrecognizedClientException', 'CredentialsProviderError', 'ValidationException']) {
+      expect([name, (await failing(Object.assign(new Error('x'), { name }))).sent]).toEqual([name, false]);
+    }
+    expect((await failing(Object.assign(new Error('x'), { name: 'Other', $fault: 'client' }))).sent).toBe(false);
+    expect((await failing(Object.assign(new Error('x'), { name: 'Other', $metadata: { httpStatusCode: 403 } }))).sent).toBe(false);
+    expect((await failing(Object.assign(new Error('x'), { name: 'InternalServerException', $fault: 'server', $metadata: { httpStatusCode: 500 } }))).sent).toBe(true);
+    expect((await failing(new Error('socket hang up'))).sent).toBe(true);
     warn.mockRestore();
   });
 
