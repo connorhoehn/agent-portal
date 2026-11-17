@@ -135,7 +135,7 @@ export function AssistantBarControls() {
         ...(controls.dismiss ? [{ label: DISMISS_LABEL, icon: <CloseIcon size={14} />, danger: true, onSelect: () => assistant.askDismiss() }] : []),
       ] }]} />}
     {/* Milo's voice, seen without opening the menu: on for the call, or muted by this person. */}
-    {voiceChip && !controls.left && <Chip size="xs" tone={voice.muted ? 'neutral' : 'info'} icon={<SpeakerIcon size={12} />} data-testid="assistant-voice-chip">{voiceChip}</Chip>}
+    {voiceChip && !controls.left && <Chip size="sm" tone={voice.muted ? 'neutral' : 'info'} icon={<SpeakerIcon size={12} />} data-testid="assistant-voice-chip">{voiceChip}</Chip>}
     {/* What waits on this person: change cards to confirm (they expire) and proposals to answer. The cards come first: the badge
         jumps to the soonest-expiring one; with none, it reopens the proposal deck that Esc hid. A count badge, with the words as its
         name and tooltip, keeps the footer on one line at 1280 with three people in the call. */}

@@ -26,7 +26,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
@@ -127,13 +127,16 @@ function homeFor(role: string | undefined): { to: string; label: string } {
  * candidate, a hiring manager the candidates on their openings. An interviewer has no candidates list (theirs is
  * rounds) and My interviews' read names no candidates, so they keep the page without a rail.
  */
-function ProfileFrame({ id, role, footer, children }: { id: string; role: string; footer?: ReactNode; children: ReactNode }) {
+function ProfileFrame({ id, role, footer, listVersion = 0, children }: { id: string; role: string; footer?: ReactNode; listVersion?: number; children: ReactNode }) {
   const navigate = useNavigate();
   const kind = railKindFor(role);
   const [query, setQuery] = useState('');
   const mine = useFetch<ItemsResponse<CandidateRow>>(kind === 'candidates' ? `${INTERVIEWS_API}/candidates` : null);
   const openings = useFetch<ItemsResponse<OpeningRow>>(kind === 'openings' ? `${INTERVIEWS_API}/openings` : null);
   const source = kind === 'openings' ? openings : mine;
+  // A deletion renames the candidate on the server: the rail re-reads so it shows what the breadcrumb shows.
+  const refreshRail = source.refresh;
+  useEffect(() => { if (listVersion > 0) refreshRail(); }, [listVersion, refreshRail]);
   const entries = useMemo(
     () => (kind === 'candidates' ? entriesFromCandidates(mine.data?.items ?? []) : kind === 'openings' ? entriesFromOpenings(openings.data?.items ?? []) : []),
     [kind, mine.data, openings.data],
@@ -195,7 +198,7 @@ function CandidateProfile({ id }: { id: string }) {
   const rounds = applications.flatMap((a) => a.interviews);
   const recorded = recordedRounds(applications);
   return (
-    <ProfileFrame id={id} role={role} footer={dock}>
+    <ProfileFrame id={id} role={role} footer={dock} listVersion={deletions.done}>
       {!framed && <PageHeader density="compact" title={candidate.name} description={candidate.headline} badge={first ? <StageChip stage={first.stage} /> : undefined} />}
       <Stack gap="md" className={framed ? undefined : 'px-[var(--ui-page-gutter)] pb-4'} data-testid="interviews-candidate-profile">
         <ProfileHead framed={framed} name={candidate.name} headline={candidate.headline} stage={first?.stage}>
