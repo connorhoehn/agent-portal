@@ -15,6 +15,15 @@
 //   in   nested response.completed { response: { id, usage } }                  backend tokens, each response id once
 //   out  session.thinking.append { event_id, delegation_id: null, content }     silent context
 //   out  session.close                                                          then session.closed; HTTPS hangup as the fallback
+//   out  session.commentary.append { event_id, delegation_id: null, content }  spoken context: what `say` sends (the server's words)
+//
+// `sayVerbatim` (the server's own words, said verbatim: an interview's approved question). The provider's audio and transcript carry no id
+// of the response they belong to, so the utterance a `say` produced is found by position: the first one to BEGIN FROM QUIET (no
+// voiced audio running, no output utterance open) after the request claims it. Its frames and its final transcript carry `say: id`
+// from that start until both its transcript has been flushed and its audio has ended (`last`), then the request's `ended` is called. A claim
+// can be wrong (the model spoke something else first); that is safe because the caller relays nothing until the transcript of what
+// was claimed equals the words it asked for (orchestrator.ts `sayHeldText`), and an utterance that runs on into other words fails
+// that check.
 //
 // Transcripts arrive only as DELTAS (no "done" event is documented). Input is cut into pieces: at a sentence end, at a gap of
 // more than `gapMs`, at a delegation, at close, and after `idleFlushMs` of quiet. Output is cut into UTTERANCES: one runs from its
@@ -71,7 +80,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
-interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number }
+interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number; /** The `say` request this utterance belongs to. */ say?: string }
 
 export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'openai' as const;
@@ -103,6 +112,10 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   /** Output audio: silent frames still owed after the last voiced one, and the frame counter. Audio is never kept. */
   private tailLeft = 0;
   private audioSeq = 0;
+  /** `say` requests sent and not yet claimed by an utterance, oldest first. */
+  private sayQueue: Array<{ id: string; ended: (transcript: string | null) => void }> = [];
+  /** The `say` request whose utterance is being emitted now. */
+  private saying: { id: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null } | null = null;
   private closing: Promise<void> | null = null;
   private onClosed: (() => void) | null = null;
   private fail: ((e: Error) => void) | null = null;
@@ -155,6 +168,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   appendContext(text: string): boolean {
     if (this.ended || !this.opened) return false;
     this.send({ type: 'session.thinking.append', event_id: this.eventId(), delegation_id: null, content: text.slice(0, 2000) });
+    return true;
+  }
+
+  /** Say the server's words aloud (session.ts `sayVerbatim`): sent as spoken commentary; the next utterance from quiet is claimed for it. */
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void): boolean {
+    if (this.ended || !this.opened || !text.trim()) return false;
+    this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: text.slice(0, 2000) });
+    this.sayQueue.push({ id, ended });
+    trace('say.asked', { t: this.sinceStart(), queued: this.sayQueue.length });
     return true;
   }
 
@@ -214,6 +236,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (this.idle) { clearTimeout(this.idle); this.idle = null; }
     this.clearOutputTimer();
     this.input = null; this.output = null; this.open.clear();
+    this.sayQueue = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
   }
@@ -304,13 +327,34 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const usable = whole.length - (whole.length % 2);
     for (let at = 0; at < usable; at += OUTPUT_FRAME_BYTES) {
       const pcm = whole.subarray(at, Math.min(usable, at + OUTPUT_FRAME_BYTES));
-      if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) { if (this.tailLeft === 0) trace('voice.start', { t: this.sinceStart() }); this.tailLeft = OUTPUT_TAIL_FRAMES; }
+      if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) {
+        if (this.tailLeft === 0) { trace('voice.start', { t: this.sinceStart() }); if (!this.output) this.claimSay(); }
+        this.tailLeft = OUTPUT_TAIL_FRAMES;
+      }
       else if (this.tailLeft === 0) continue;
       else this.tailLeft -= 1;
       this.audioSeq += 1;
       const last = this.tailLeft === 0;
-      this.emit('outputAudio', { pcm: Buffer.from(pcm), seq: this.audioSeq, ...(last ? { last: true as const } : {}) });
+      const say = this.saying?.id;
+      this.emit('outputAudio', { pcm: Buffer.from(pcm), seq: this.audioSeq, ...(last ? { last: true as const } : {}), ...(say ? { say } : {}) });
+      if (this.saying) { this.saying.audioDone = last; this.endSayIfDone(); }
     }
+  }
+
+  /** The session is quiet and something begins: the oldest waiting `say` request claims it. */
+  private claimSay(): void {
+    if (this.saying || this.sayQueue.length === 0) return;
+    const next = this.sayQueue.shift()!;
+    this.saying = { id: next.id, ended: next.ended, textDone: false, audioDone: true, transcript: null };
+    trace('say.claimed', { t: this.sinceStart() });
+  }
+
+  /** Both halves of the claimed utterance are out: its transcript flushed and its audio ended. */
+  private endSayIfDone(): void {
+    const s = this.saying;
+    if (!s || !s.textDone || !s.audioDone) return;
+    this.saying = null;
+    try { s.ended(s.transcript); } catch (e) { console.warn('[meeting-assistant] say listener threw', (e as Error).message); }
   }
 
   /** Report usage as the larger of the provider's last figure and the wall clock since `session.started`, rounded up. */
@@ -338,9 +382,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       const at = this.sinceStart();
       // Milo beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
       // utterance is judged (the provider's input deltas come in small pieces, and its idle flush would land after a short answer).
-      if (!this.output) this.flushInput('output');
-      this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, inputsBefore: this.inputCount };
-      this.emit('outputTranscript', { text: this.output.text.trim(), final: false });
+      if (!this.output) {
+        this.flushInput('output');
+        // From quiet (no voice running): this utterance may be the one a `say` asked for. With the voice already running under a claim,
+        // these are that utterance's words.
+        if (this.tailLeft === 0) this.claimSay();
+      }
+      const say = this.output ? this.output.say : this.saying && !this.saying.textDone ? this.saying.id : undefined;
+      this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, inputsBefore: this.inputCount, ...(say ? { say } : {}) };
+      this.emit('outputTranscript', { text: this.output.text.trim(), final: false, ...(say ? { say } : {}) });
       this.armOutput();
     }
   }
@@ -382,7 +432,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.clearOutputTimer();
     const p = this.output; this.output = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt, inputsBefore: p.inputsBefore }); }
+    if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt, inputsBefore: p.inputsBefore, ...(p.say ? { say: p.say } : {}) }); }
+    if (p?.say && this.saying?.id === p.say) { this.saying.textDone = true; this.saying.transcript = text || null; this.endSayIfDone(); }
   }
 
   private onResponseEvent(raw: unknown): void {

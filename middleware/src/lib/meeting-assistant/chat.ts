@@ -128,6 +128,15 @@ export function postApprovedQuestion(callId: string, text: string, opts: PostOpt
   return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', [APPROVED_QUESTION_KEY]: true } }, opts);
 }
 
+/**
+ * Milo's answer, from words the server holds, to an interview candidate's fixed request (interviews decision 10: the last approved
+ * question again, the time left, or the one fixed sentence). It carries the approved mark, so the candidate reads it, and the
+ * `approvedAnswer` mark, so a page that shows "the question Milo last asked" can tell it from a question.
+ */
+export function postApprovedAnswer(callId: string, text: string, opts: PostOptions = {}): Promise<ChatMessage | null> {
+  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', [APPROVED_QUESTION_KEY]: true, approvedAnswer: true } }, opts);
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Replies and action cards.
 

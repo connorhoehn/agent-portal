@@ -94,6 +94,11 @@ export interface MeetingAssistantPolicy {
    */
   answerFromHeldText?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
   /**
+   * After a held answer was posted (with the approved mark) and offered to the call's voice as approved words (orchestrator.ts
+   * `sayHeldText`): whether it was relayed. For the family's own log. Absent: nothing is noted.
+   */
+  heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; spoken: boolean }): Promise<void>;
+  /**
    * The family keeps its calls' stored words for its own period and removes them itself (the interviews retention: media 90 days,
    * or a deletion request). True: the meeting assistant's age sweep leaves the call's lines, minutes, turns, actions, record and
    * chat alone; the abandoned-call ending and the proposals' expiry still apply. Absent or false: the sweep removes them (Work).

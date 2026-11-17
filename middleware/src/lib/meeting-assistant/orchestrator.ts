@@ -20,7 +20,7 @@ import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
 import { ASSISTANT_NAME } from './chat-types.js';
 import {
-  nameOf, noticeText, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
+  nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { isPrivateRead, meetingInstructions } from './instructions.js';
 import { limitsOfCall, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
@@ -49,6 +49,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
+import { saidVerbatim, sayBoundMs, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -324,6 +325,10 @@ interface CallRun {
   /** When the server last told the session news about addressed work (`tellSession`), epoch ms. */
   newsAt: number;
   speech: AssistantSpeech;
+  /** The approved utterance being held whole while the session says it (approved-speech.ts); at most one at a time. */
+  approved?: ApprovedHold | null;
+  /** True only while the held frames of a checked approved utterance are being handed to the gate (its reason is then `approved`). */
+  releasingApproved?: boolean;
   /** When the provider says the open session ends (epoch ms), or null when it did not say. */
   expiresAt: number | null;
   sessionKind: 'openai' | 'scripted';
@@ -539,8 +544,25 @@ export function callOffsets(run: { sessionStartedAt: number; callStartedAt: numb
   return { startMs, endMs: Math.max(startMs, e.endMs + shift) };
 }
 
+/** An approved utterance in flight: what was asked, the session asked, and its frames, held in memory only until it is checked. */
+interface ApprovedHold {
+  id: string;
+  text: string;
+  session: LiveMeetingSession;
+  frames: Array<{ pcm: Buffer; last: boolean }>;
+  /** The bound: withheld whole when the utterance is not complete by then. */
+  timer: ReturnType<typeof setTimeout> | null;
+  /** Checked and going out (the bound no longer applies). */
+  releasing: boolean;
+  finish: (outcome: SayOutcome, why: SayWithheldWhy | 'relayed') => void;
+}
+
+/** How far ahead of its playout an approved utterance is queued on the relay (2 s: under the relay's 3 s cap). */
+const APPROVED_AHEAD_FRAMES = 20;
+
 export class AssistantRuntime {
   private readonly runs = new Map<string, CallRun>();
+  private saySeq = 0;
   /** Per call, the stops and leaves still finishing (a run's `stop`, a dismissal's follow-up): `settled` waits for them. */
   private readonly stopping = new Map<string, Set<Promise<void>>>();
   private readonly extending = new Map<string, Promise<void>>();
@@ -891,6 +913,8 @@ export class AssistantRuntime {
       }),
       session.on('outputAudio', (e) => this.onOutputAudio(run, session, e)),
       session.on('outputTranscript', (e) => {
+        // An approved utterance's words wait, unheard, for its frames: they join the span its release opens (the echo guard).
+        if (e.say !== undefined) { if (run.voice && run.approved?.id === e.say) run.speech.noteText(this.now(), e.text, e.final, true); return; }
         // Words for frames the gate holds wait for those frames; words for a withheld turn were never heard and are dropped.
         const g = run.gate.phase();
         if (run.voice && g !== 'dropping') run.speech.noteText(this.now(), e.text, e.final, g === 'held');
@@ -1037,6 +1061,14 @@ export class AssistantRuntime {
    * echo) up to the hold's length later than its frames were sent.
    */
   private onOutputAudio(run: CallRun, session: LiveMeetingSession, e: SessionEvents['outputAudio']): void {
+    // Approved speech (sayHeldText): the frames of the utterance asked for are held whole, unsent, until its transcript is checked;
+    // a frame tagged for any other request is dropped; and while one is outstanding nothing else the session says is relayed.
+    if (e.say !== undefined) {
+      const a = run.approved;
+      if (a && a.id === e.say && !a.releasing && a.session === session && run.session === session) a.frames.push({ pcm: e.pcm, last: e.last === true });
+      return;
+    }
+    if (run.approved) return;
     if (!run.voice || run.voiceHeld || run.finished || run.session !== session || !run.policy.relaysLiveSpeech(run.call)) return;
     run.gate.frame(e.pcm, e.last === true);
   }
@@ -1062,6 +1094,7 @@ export class AssistantRuntime {
 
   /** Forget what Milo was about to say: the gate's held frames and its words for them; with `relay`, also what is queued to go out (and its playout). */
   private dropVoice(run: CallRun, relay: boolean): void {
+    run.approved?.finish('posted', 'voice-off');
     if (relay) { run.relay.clear(); run.playhead = 0; }
     run.gate.clear();
     run.speech.forgetUnheard();
@@ -1076,6 +1109,8 @@ export class AssistantRuntime {
 
   /** Why Milo's voice is wanted right now (the gate's two conditions), or null when nobody asked. */
   private voiceWanted(run: CallRun): VoiceGateWhy | null {
+    // 0. An approved utterance, checked whole, is being let through (sayHeldText): the only reason it opens for.
+    if (run.releasingApproved) return 'approved';
     const now = this.now();
     // 1. Someone addressed Milo just now, or is addressing it now (heard, not yet flushed).
     if (now - run.addressedAt <= VOICE_PROMPT_WINDOW_MS) return 'addressed';
@@ -1090,6 +1125,86 @@ export class AssistantRuntime {
     const mutedNow = !!c && c.visibility === 'muted' && this.contextLive(c, now);
     if (!mutedNow && run.readyMessages.some((m) => m <= now && now - m < ASKER_WINDOW_MS)) return 'message';
     return null;
+  }
+
+  /**
+   * Say words the SERVER holds aloud in this call, on its own live session, through its own gate and relay (interviews decision 9):
+   * an approved question, a repeat of it, the time left, the one fixed refusal. The caller has already logged the words and posted
+   * them in the call chat. The session is asked to say `text` verbatim; the utterance it produces is held whole until the session's
+   * transcript of it is complete and equals `text` (approved-speech.ts), then released through the call's VoiceGate with the reason
+   * `approved`; on any difference, no words, no audio or no answer inside `sayBoundMs`, it is withheld whole. `spoken` only when
+   * frames were relayed; `posted` (chat only) when the voice is off, Milo is paused, the session cannot say verbatim, another approved
+   * utterance is outstanding, or it was withheld; `no-call` when Milo has no run in this call. Never throws.
+   */
+  async sayHeldText(callId: string, text: string, by: string): Promise<SayOutcome> {
+    void by; // who asked is the caller's log row; the trace carries codes only
+    const run = this.runs.get(callId);
+    if (!run || run.finished) return 'no-call';
+    const session = run.session;
+    const words = text.trim().slice(0, 1500);
+    const early: SayWithheldWhy | null = !words ? 'empty' : !session?.sayVerbatim ? 'no-say' : !run.voice ? 'voice-off' : run.voiceHeld ? 'paused' : run.approved ? 'busy' : null;
+    if (early || !session?.sayVerbatim) { trace('voice.approved', { decision: 'chat', why: early ?? 'no-say' }); return 'posted'; }
+    this.saySeq += 1;
+    const id = `say_${this.saySeq}`;
+    return new Promise<SayOutcome>((resolve) => {
+      const hold: ApprovedHold = {
+        id, text: words, session, frames: [], timer: null, releasing: false,
+        finish: (outcome, why) => {
+          if (run.approved !== hold) return;
+          run.approved = null;
+          if (hold.timer) clearTimeout(hold.timer);
+          if (outcome !== 'spoken') run.speech.forgetUnheard();
+          trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : 'withheld', why, frames: hold.frames.length, chars: words.length });
+          hold.frames = [];
+          resolve(outcome);
+        },
+      };
+      run.approved = hold;
+      hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', 'timeout'); }, sayBoundMs(words));
+      (hold.timer as { unref?: () => void }).unref?.();
+      let asked = false;
+      try { asked = session.sayVerbatim!(id, words, (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); }); } catch { asked = false; }
+      if (!asked) hold.finish('posted', 'refused');
+    });
+  }
+
+  /**
+   * The session's utterance for an approved request is complete: check it whole, then let it through the call's gate and relay, or
+   * withhold it. Released at the pace it plays (the relay drops what runs more than 3 s ahead), so a long question is heard whole;
+   * while it goes out nothing else the session says is relayed. `spoken` once the relay has sent its frames.
+   */
+  private async releaseApproved(run: CallRun, hold: ApprovedHold, transcript: string | null): Promise<void> {
+    if (run.approved !== hold) return;
+    if (transcript === null || !transcript.trim()) { hold.finish('posted', 'no-words'); return; }
+    if (!saidVerbatim(hold.text, transcript)) { hold.finish('posted', 'mismatch'); return; }
+    if (!hold.frames.length) { hold.finish('posted', 'no-audio'); return; }
+    hold.releasing = true;
+    if (hold.timer) { clearTimeout(hold.timer); hold.timer = null; }
+    const stopped = (): SayWithheldWhy | null => run.approved !== hold ? 'voice-off' : run.finished ? 'closed' : run.session !== hold.session ? 'session-changed'
+      : !run.voice ? 'voice-off' : run.voiceHeld ? 'paused' : null;
+    const before = run.relay.relayed;
+    const frames = hold.frames;
+    // A turn of its own: decided afresh at its first frame (reason `approved`), and nothing after it rides on its open turn.
+    run.gate.clear();
+    let i = 0;
+    let why: SayWithheldWhy | null = null;
+    while (i < frames.length) {
+      why = stopped();
+      if (why) break;
+      while (i < frames.length && run.relay.queuedFrames() < APPROVED_AHEAD_FRAMES) {
+        const f = frames[i]!;
+        run.releasingApproved = true;
+        try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
+        i += 1;
+      }
+      if (i < frames.length) await new Promise((r) => setTimeout(r, VOICE_FRAME_MS));
+    }
+    // Wait (bounded) for the relay to send what was queued, so `spoken` means sent.
+    for (let k = 0; k < 40 && run.relay.queuedFrames() > 0; k += 1) await new Promise((r) => setTimeout(r, VOICE_FRAME_MS));
+    await new Promise((r) => setTimeout(r, 0));
+    run.gate.clear();
+    const sent = run.relay.relayed > before;
+    hold.finish(sent ? 'spoken' : 'posted', why ?? (sent ? 'relayed' : 'not-relayed'));
   }
 
   /** Is Milo answering in this call: its voice going out now, or one of its tool calls still open? (The watcher waits while it is.) */
@@ -1291,6 +1406,8 @@ export class AssistantRuntime {
    * else a plain answer for the oldest unanswered addressing line (no label when none says who).
    */
   private async onOutput(run: CallRun, e: SessionEvents['outputTranscript']): Promise<void> {
+    // Approved speech was posted (and logged) by whoever asked for it, before it was said: its transcript is never posted again.
+    if (e.say !== undefined) return;
     // A pause closes the session on purpose: the half sentence its close flushes is not an answer to anyone.
     if (!e.final || !e.text.trim() || run.finished || run.intentionalClose) return;
     const t = e.startedAt !== undefined ? run.sessionStartedAt + e.startedAt : this.now();
@@ -1359,7 +1476,13 @@ export class AssistantRuntime {
       if (e.type === 'request') {
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
-        if (held !== null) { await postReply(callId, { text: held, askedBy: e.askedBy, askedByName: await nameOf(e.askedBy) }).catch(() => null); continue; }
+        if (held !== null) {
+          // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
+          const posted = await postApprovedAnswer(callId, held).catch(() => null);
+          const said = posted ? await this.sayHeldText(callId, held, e.askedBy) : 'posted';
+          await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, spoken: said === 'spoken' }).catch(() => undefined);
+          continue;
+        }
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
         // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
         const record = await this.store.get(callId);

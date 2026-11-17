@@ -35,8 +35,12 @@ export const VOICE_UTTERANCE_GAP_MS = 1500;
 export const VOICE_OPEN_TURN_GAP_MS = 3000;
 
 export type VoiceGateDecision = 'open' | 'held' | 'released' | 'withheld';
-/** Why the gate opened: a short code (never text). */
-export type VoiceGateWhy = 'addressed' | 'hearing' | 'call' | 'reply' | 'message';
+/**
+ * Why the gate opened: a short code (never text). `approved`: an utterance the server asked the session to say with words it already
+ * holds (an interview's approved question, a repeat of it, the time left, the one fixed refusal), checked whole against those words
+ * before any frame of it is let through (approved-speech.ts); the orchestrator answers it only while it releases such an utterance.
+ */
+export type VoiceGateWhy = 'addressed' | 'hearing' | 'call' | 'reply' | 'message' | 'approved';
 /** Where the current turn stands: `idle` between turns. */
 export type VoiceGatePhase = 'idle' | 'open' | 'held' | 'dropping';
 

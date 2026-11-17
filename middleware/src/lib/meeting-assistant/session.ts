@@ -26,7 +26,7 @@ export interface SessionEvents {
   /** One person-turn of heard speech. `parts` are the provider's own pieces in order (word groups with their times), when it sent several: the server splits the turn where the voice changes. */
   inputTranscript: { text: string; startMs: number; endMs: number; parts?: Array<{ text: string; startMs: number; endMs: number }> };
   /** What Milo said. `final: false` is the text so far; `final: true` ends the piece. */
-  outputTranscript: { text: string; final: boolean; /** For a final utterance: when it began and when its last word arrived, in ms on the session timeline (the same clock as a tool call's `atMs`). */ startedAt?: number; endedAt?: number; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string; /** How many input transcripts the session had emitted when this utterance began (lines heard before it). */ inputsBefore?: number };
+  outputTranscript: { text: string; final: boolean; /** Set when this is the utterance a `say` request produced: that request's id (never set otherwise). */ say?: string; /** For a final utterance: when it began and when its last word arrived, in ms on the session timeline (the same clock as a tool call's `atMs`). */ startedAt?: number; endedAt?: number; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string; /** How many input transcripts the session had emitted when this utterance began (lines heard before it). */ inputsBefore?: number };
   /** The delegation backend called a function. `atMs` is the session timeline when it arrived. */
   toolCall: { callId: string; name: string; args: unknown; atMs: number; askedBy?: string };
   /** The model handed a request to the backend (it speaks a short acknowledgement about now). */
@@ -38,7 +38,7 @@ export interface SessionEvents {
   /** Cumulative seconds the session has run, and the backend tokens so far when the provider reported them. */
   usage: { seconds: number; backendTokens?: BackendTokens; /** True when `seconds` is the server's own wall-clock estimate (an unexpected close). */ estimated?: boolean };
   /** What Milo said aloud: PCM16 mono 24 kHz, at most 100 ms, VOICED frames only (silence is dropped at the source). `seq` counts frames from 1 per session. Never stored or logged. */
-  outputAudio: { pcm: Buffer; seq: number; /** True on the final frame of an utterance (the end of the tail after the last voiced frame). */ last?: true };
+  outputAudio: { pcm: Buffer; seq: number; /** True on the final frame of an utterance (the end of the tail after the last voiced frame). */ last?: true; /** Set on the frames of the utterance a `say` request produced: that request's id (never set otherwise). */ say?: string };
   /** The provider told us when the session ends (epoch ms). */
   expires: { atMs: number };
   closed: { reason: string };
@@ -70,6 +70,14 @@ export interface LiveMeetingSession {
   answerToolCall(callId: string, output: string): boolean;
   /** Silent context for the model ("the card was declined"). False when the session cannot take it. */
   appendContext(text: string): boolean;
+  /**
+   * Say `text` aloud, word for word (words the SERVER holds: an interview's approved question, a repeat, the time left, a fixed refusal).
+   * The utterance this produces is told apart from every other response: its frames and its final transcript carry `say: id`, and
+   * `ended` is called once when it is complete (all its frames and its final transcript emitted; `transcript` null when the session
+   * produced no words for it). The caller checks the transcript against `text` before anything is relayed. False when the session
+   * cannot take it now (closed, not open). Absent: the session cannot say anything verbatim.
+   */
+  sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void): boolean;
   /** What the session has heard of the current person-turn but not yet emitted as an `inputTranscript` ('' when nothing). Read-only, for the voice gate. */
   pendingInputText(): string;
   /** The provider's error events so far (codes only, bounded); absent on a session with no provider. */

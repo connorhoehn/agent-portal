@@ -105,14 +105,36 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   }
 
   /** A spoken reply: its words, then the synthetic tone so a walk or a test can watch the relay with no provider. */
-  private speak(text: string, inReplyTo?: string): void {
-    this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) });
+  private speak(text: string, inReplyTo?: string, say?: string, ended?: (transcript: string | null) => void): void {
+    this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}), ...(say ? { say } : {}) });
     const frames = scriptToneFrames();
     frames.forEach((pcm, i) => {
       if (this.ended) return;
       this.audioSeq += 1;
-      this.emit('outputAudio', { pcm, seq: this.audioSeq, ...(i === frames.length - 1 ? { last: true as const } : {}) });
+      this.emit('outputAudio', { pcm, seq: this.audioSeq, ...(i === frames.length - 1 ? { last: true as const } : {}), ...(say ? { say } : {}) });
     });
+    if (say && !this.ended) ended?.(text);
+  }
+
+  /**
+   * Tests and walks: what the scripted "model" makes of words it is asked to say verbatim. Null (the default) says them exactly; a
+   * function stands in for a model that paraphrases, so the caller's check can be watched withholding it.
+   */
+  sayAs: ((text: string) => string) | null = null;
+
+  /** Say the server's words aloud (session.ts `sayVerbatim`): their transcript and the tone, tagged with the request's id. */
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void): boolean {
+    if (this.ended) return false;
+    const words = this.sayAs ? this.sayAs(text) : text;
+    queueMicrotask(() => { if (!this.ended) this.speak(words, undefined, id, ended); });
+    return true;
+  }
+
+  /** Tests and walks: the scripted model speaks of its own accord, as a live model sometimes does (nobody asked; no `say`). */
+  speakUnprompted(text: string): boolean {
+    if (this.ended) return false;
+    queueMicrotask(() => { if (!this.ended) this.speak(text); });
+    return true;
   }
 
   /** A tool call the way the backend would raise it, attributed by the caller (the orchestrator's own record of who asked). */

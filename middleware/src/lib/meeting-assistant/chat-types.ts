@@ -48,6 +48,8 @@ export interface AssistantNoticeMetadata extends AssistantBase {
   kind: 'assistant-notice';
   /** An approved question (APPROVED_QUESTION_KEY): posted as a plain line of Milo's, with no asker. */
   approvedQuestion?: true;
+  /** With the approved mark: this is Milo's answer to a candidate's fixed request (chat.ts `postApprovedAnswer`), not a question. */
+  approvedAnswer?: true;
   /** The closing notice names the meeting it is about; the portal links to that meeting's page from it. */
   meetingCallId?: string;
   /** The minutes notice only: what the minutes hold, so the chat draws them as a card. The text is the summary's first sentences. */
@@ -131,7 +133,7 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
   if (m['kind'] === 'assistant-notice') {
     const minutes = minutesCounts(m['minutes']);
     return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}),
-      ...(m[APPROVED_QUESTION_KEY] === true ? { approvedQuestion: true as const } : {}) };
+      ...(m[APPROVED_QUESTION_KEY] === true ? { approvedQuestion: true as const } : {}), ...(m[APPROVED_QUESTION_KEY] === true && m['approvedAnswer'] === true ? { approvedAnswer: true as const } : {}) };
   }
   if (m['kind'] === 'assistant-reply') {
     if (!str(m['askedBy'], 128) || !str(m['askedByName'], 128)) return null;
