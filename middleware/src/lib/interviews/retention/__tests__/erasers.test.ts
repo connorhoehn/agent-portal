@@ -1,7 +1,11 @@
 // The recording eraser's client for contract D5 and the registry's contract D6 (lib/interviews/retention/erasers.ts, registry.ts).
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import { SERVICE_AUTH_HEADER, verifyEnvelope } from '@connorhoehn/service-runtime';
-import { recordingEraser, recordingServiceUrl } from '../erasers.js';
+import { config } from '../../../../config.js';
+import { fixtureRegistry } from '../../../../mock/core/index.js';
+import { interviewRecordLinesFixture, interviewRecordingsFixture } from '../../../../mock/interviews-records.js';
+import { MemoryAssistantStore } from '../../../meeting-assistant/store.js';
+import { callWordsEraser, mockStandIns, recordingEraser, recordingServiceUrl } from '../erasers.js';
 import { EraserSkipped, eraserFor, erasersOf, registerEraser, unregisterEraser } from '../registry.js';
 import '../service.js';
 
@@ -27,6 +31,39 @@ describe('the recording eraser (D5)', () => {
   it('fails (to be retried) on a refusal, or a configured URL without the secret', async () => {
     await expect(recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's' }, fetch: answer(400, { error: 'x' }) }).erase(['iv-1'])).rejects.toThrow(/400/);
     await expect(recordingEraser({ env: { PLATFORM_API_URL: 'http://p' }, fetch: answer(200, { erased: 1 }) }).erase(['iv-1'])).rejects.toThrow(/SERVICE_AUTH_SECRET/);
+  });
+});
+
+// Hardening H5, finding 4: the seeded finished interviews have a stand-in recording and stand-in words in place of a media
+// server and a stored call. The erasers remove them in the mock world, counted as a recording and a call would be, so the
+// record reads them as removed; outside the mock world nothing is touched and the real path is unchanged.
+describe('the mock world\'s stand-ins', () => {
+  const SEEDED = 'iv-j6x2d9sb';
+  const held = (id: string) => [interviewRecordingsFixture.rows().some((r) => r.interviewId === id), interviewRecordLinesFixture.rows().some((l) => l.interviewId === id)];
+  const words = () => callWordsEraser({ store: () => new MemoryAssistantStore(), eraseCall: async () => 0, now: () => 0 });
+  beforeEach(() => fixtureRegistry.resetAll('default'));
+  afterEach(() => { (config.mock as { aurora: boolean }).aurora = true; fixtureRegistry.resetAll('default'); });
+
+  it('the recording eraser removes a seeded stand-in and counts it, where it would otherwise have no service to call', async () => {
+    expect(held(SEEDED)).toEqual([true, true]);
+    expect(await recordingEraser({ env: {} }).erase([SEEDED, 'iv-1'])).toBe(1);
+    expect(held(SEEDED)[0]).toBe(false);
+    // Asked again, there is nothing left and no service: skipped, as before.
+    await expect(recordingEraser({ env: {} }).erase([SEEDED])).rejects.toBeInstanceOf(EraserSkipped);
+  });
+  it('the words eraser removes the seeded lines and counts one call per interview that had them, once', async () => {
+    expect(await words().erase([SEEDED, 'iv-1'])).toBe(1);
+    expect(held(SEEDED)).toEqual([true, false]);
+    expect(await words().erase([SEEDED])).toBe(0);
+    expect(interviewRecordLinesFixture.rows().length).toBeGreaterThan(0); // the other seeded interviews keep theirs
+  });
+  it('outside the mock world it touches nothing, and the recording eraser has no service to call', async () => {
+    (config.mock as { aurora: boolean }).aurora = false;
+    expect(mockStandIns.recordings([SEEDED])).toEqual([]);
+    expect(mockStandIns.words([SEEDED])).toEqual([]);
+    await expect(recordingEraser({ env: {} }).erase([SEEDED])).rejects.toBeInstanceOf(EraserSkipped);
+    expect(await words().erase([SEEDED])).toBe(0);
+    expect(held(SEEDED)).toEqual([true, true]);
   });
 });
 

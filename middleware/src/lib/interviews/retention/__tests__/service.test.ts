@@ -12,7 +12,9 @@ import { MemoryResumeBytes } from '../../resume/bytes-store.js';
 import { MemoryResumeRows } from '../../resume/row-store.js';
 import { resumeBytes, resumeRows, setResumeStores } from '../../resume/service.js';
 import type { Interview, InterviewsWorld } from '../../types.js';
-import { callWordsEraser, recordingEraser } from '../erasers.js';
+import { callWordsEraser, recordingEraser, type StandIns } from '../erasers.js';
+// These tests hold the erasers' real paths (a recording service, a stored call); the mock world's stand-ins are tested in erasers.test.ts.
+const NO_STAND_INS: StandIns = { recordings: () => [], words: () => [] };
 import { DEFAULT_PERIODS } from '../periods.js';
 import { registerEraser, unregisterEraser } from '../registry.js';
 import { DAY_MS, addYears } from '../rules.js';
@@ -189,13 +191,13 @@ describe('a candidate\'s deletion request', () => {
   beforeEach(async () => {
     assistant = new MemoryAssistantStore();
     setResumeStores({ rows: new MemoryResumeRows(), bytes: new MemoryResumeBytes() });
-    registerEraser(callWordsEraser({ store: () => assistant, eraseCall: (s, id, by, at) => s.tombstoneMinutes(id, by, at), now: () => NOW }));
+    registerEraser(callWordsEraser({ store: () => assistant, eraseCall: (s, id, by, at) => s.tombstoneMinutes(id, by, at), now: () => NOW, standIns: NO_STAND_INS }));
   });
   afterEach(() => setResumeStores({ rows: null, bytes: null }));
 
   it('erases the media now, revokes the live link, removes the résumé, takes the contact details out, and logs it', async () => {
     const rec = recordingFetch((lobby) => (lobby === LOBBY ? 1 : 0));
-    registerEraser(recordingEraser({ env: ENV, fetch: rec.f }));
+    registerEraser(recordingEraser({ env: ENV, fetch: rec.f, standIns: NO_STAND_INS }));
     await heldCall(assistant);
     await inviteStore().issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'b'.repeat(64), issuedBy: 'u-greta', issuedAt: new Date(NOW - DAY_MS).toISOString(), expiresAt: new Date(NOW + 9 * DAY_MS).toISOString() });
     const resume = (await resumeRows().get('cand-mateo'))!;
@@ -242,14 +244,14 @@ describe('a candidate\'s deletion request', () => {
   });
 
   it('records that there was nothing to call where no recording service is configured, and still finishes', async () => {
-    registerEraser(recordingEraser({ env: {} }));
+    registerEraser(recordingEraser({ env: {}, standIns: NO_STAND_INS }));
     const { row } = await deleteCandidateMedia('cand-ravi', 'u-greta', deps);
     expect(row.left).toEqual([{ kind: 'recording', why: 'no-service', retry: false }]);
     expect(row.doneAt).not.toBeNull();
   });
 
   it('leaves a running call for the next sweep, which finishes the request once the call is over', async () => {
-    registerEraser(recordingEraser({ env: {} }));
+    registerEraser(recordingEraser({ env: {}, standIns: NO_STAND_INS }));
     await heldCall(assistant, false);
     const first = await deleteCandidateMedia('cand-mateo', 'u-greta', deps);
     expect(first.row.doneAt).toBeNull();

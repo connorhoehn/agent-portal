@@ -16,6 +16,12 @@
 //                                   Milo is listening to cannot be erased: EraserBusy, retried.
 //   consents, scorecards    record  records.ts's own statements.
 // The suggestion log's eraser is the coach's (`eraseSuggestions`), registered by the integrator.
+//
+// The mock world has no media server and, for the seeded finished interviews, no stored call: their recording and words are
+// stand-ins (mock/interviews-records.ts) the record reads in place of them. There, and only there, the recording and the
+// words erasers also remove the interview's stand-ins and count them as they would a recording or a call, so a seeded
+// record past its period, or after a deletion request, reads as removed (hardening H5, finding 4). Outside the mock world
+// `mockStandIns` touches nothing and both erasers behave as described above.
 
 import { eraseSuggestions } from '../coach/index.js';
 import { eraseRecaps } from '../recap/index.js';
@@ -29,6 +35,8 @@ import { EraserBusy, EraserSkipped, registerEraser, type Eraser } from './regist
 import { recordStatements, type RecordStatements } from './records.js';
 import { interviewLobby } from './rules.js';
 import { interviewsNowMs } from '../clock.js';
+import { config } from '../../../config.js';
+import { interviewRecordLinesFixture, interviewRecordingsFixture } from '../../../mock/interviews-records.js';
 
 export const RECORDING_ERASE_PATH = '/internal/recordings/erase';
 const RECORDING_TIMEOUT_MS = 8_000;
@@ -39,9 +47,35 @@ export function recordingServiceUrl(env: NodeJS.ProcessEnv = process.env): strin
   return url.trim() ? url.trim().replace(/\/+$/, '') : null;
 }
 
+/** The mock world's seeded stand-ins for a recording and a stored call's words. Each removes those of the given interviews and answers which interviews had one. */
+export interface StandIns {
+  recordings(interviewIds: readonly string[]): string[];
+  words(interviewIds: readonly string[]): string[];
+}
+
+/** Removes the rows of `rows` that `match`, in place; answers the removed rows. */
+function takeWhere<T>(rows: T[], match: (r: T) => boolean): T[] {
+  const taken: T[] = [];
+  for (let k = rows.length - 1; k >= 0; k -= 1) if (match(rows[k]!)) taken.unshift(...rows.splice(k, 1));
+  return taken;
+}
+
+/** The seeded stand-ins, in the mock world only: outside it there are none to remove and nothing is touched. */
+export const mockStandIns: StandIns = {
+  recordings(ids) {
+    if (!config.mock?.aurora) return [];
+    return [...new Set(takeWhere(interviewRecordingsFixture.rows(), (r) => ids.includes(r.interviewId)).map((r) => r.interviewId))];
+  },
+  words(ids) {
+    if (!config.mock?.aurora) return [];
+    return [...new Set(takeWhere(interviewRecordLinesFixture.rows(), (l) => ids.includes(l.interviewId)).map((l) => l.interviewId))];
+  },
+};
+
 export interface RecordingDeps {
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
+  standIns: StandIns;
 }
 
 export function recordingEraser(deps: Partial<RecordingDeps> = {}): Eraser {
@@ -50,12 +84,17 @@ export function recordingEraser(deps: Partial<RecordingDeps> = {}): Eraser {
     async erase(interviewIds) {
       const env = deps.env ?? process.env;
       const base = recordingServiceUrl(env);
-      if (!base) throw new EraserSkipped('no-service');
+      // The mock world's stand-in recordings go with the interview, as a recording on the media server would.
+      const standIns = (deps.standIns ?? mockStandIns).recordings(interviewIds).length;
+      if (!base) {
+        if (standIns > 0) return standIns;
+        throw new EraserSkipped('no-service');
+      }
       const secret = env['SERVICE_AUTH_SECRET']?.trim();
       if (!secret) throw new Error('SERVICE_AUTH_SECRET is not set, so recordings cannot be erased.');
       const serviceId = env['WORK_GRAPH_GATEWAY_SERVICE_ID']?.trim() || 'realtime-examples';
       const doFetch = deps.fetch ?? fetch;
-      let erased = 0;
+      let erased = standIns;
       for (const id of interviewIds) {
         const body = { lobbyName: interviewLobby(id) };
         const res = await doFetch(`${base}${RECORDING_ERASE_PATH}`, {
@@ -77,6 +116,7 @@ export interface CallWordsDeps {
   store: () => AssistantStore;
   eraseCall: (store: AssistantStore, callId: string, by: string, at: number) => Promise<number | null>;
   now: () => number;
+  standIns: StandIns;
 }
 
 /** Loaded on demand, so the retention tests never pull in the call chat stack. */
@@ -84,6 +124,7 @@ const defaultCallWords: CallWordsDeps = {
   store: () => { throw new Error('not loaded'); },
   eraseCall: async (store, callId, by, at) => (await import('../../meeting-assistant/erase.js')).eraseCall(store, callId, by, at),
   now: interviewsNowMs,
+  standIns: mockStandIns,
 };
 
 /** How many calls of one lobby are looked at per interview; an interview has one call, so this is generous. */
@@ -97,8 +138,10 @@ export function callWordsEraser(deps: Partial<CallWordsDeps> = {}): Eraser {
       const store = deps.store ? deps.store() : (await import('../../meeting-assistant/store-select.js')).assistantStore();
       let erased = 0;
       let busy = false;
+      const withCall = new Set<string>();
       for (const id of interviewIds) {
         for (const call of await store.callsOfLobby(interviewLobby(id), CALLS_PER_INTERVIEW)) {
+          withCall.add(id);
           if (call.state === 'listening' || call.state === 'paused') { busy = true; continue; }
           const minutes = await store.getMinutes(call.callId);
           const lines = await d.eraseCall(store, call.callId, 'retention', d.now());
@@ -108,6 +151,9 @@ export function callWordsEraser(deps: Partial<CallWordsDeps> = {}): Eraser {
           if (lines > 0 || (minutes !== null && !minutes.deleted)) erased += 1;
         }
       }
+      // The record reads a stand-in only where no stored call is found; those count as a call each. A stand-in under an
+      // interview that had a stored call was never shown, and goes without a count.
+      erased += d.standIns.words(interviewIds).filter((id) => !withCall.has(id)).length;
       if (busy) throw new EraserBusy('call-running', erased);
       return erased;
     },
