@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { Button, ChatComposer, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, ChatComposer, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
@@ -200,14 +200,18 @@ function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boo
     { label: 'Panel', value: panelLine(room.seats) },
     ...(waiting ? [{ label: 'The candidate', value: waiting }] : []),
   ];
-  return <EmptyState title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'}
-    description={<Stack gap="md">
-      <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
-        : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-          : 'You can join the call from the bar at the bottom of the window.'}</T>
-      <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
-    </Stack>}
-    testId="interview-room-idle" />;
+  // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
+  return (
+    <Stack gap="md" className="min-h-0 flex-1 overflow-auto" data-testid="interview-room-idle">
+      <PageHeader density="compact" title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'}
+        description={live ? 'Join it from the bar at the bottom of the window.'
+          : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
+            : 'You can join the call from the bar at the bottom of the window.'} />
+      <Stack gap="md" className="px-[var(--ui-page-gutter)]">
+        <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
+      </Stack>
+    </Stack>
+  );
 }
 
 /**

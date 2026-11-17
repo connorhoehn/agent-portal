@@ -81,7 +81,7 @@ function MyOpeningsWorkspace() {
             notices: openings.map((o) => `${o.title}, ${o.team}: ${byStageLine(o.byStage) || 'no candidates yet'}${o.upcoming ? ` · ${plural(o.upcoming, 'interview')} coming up` : ''}`),
             onRefresh: refresh, refreshing: isLoading,
           }}>
-            <Tabs aria-label="Candidates by stage" size="md" value={stage || 'all'} onValueChange={(v) => setStage(stageFilterOf(v))} getItemTestId={(i) => `interviews-openings-stage-${i.id}`}
+            <Tabs aria-label="Candidates by stage" size="sm" value={stage || 'all'} onValueChange={(v) => setStage(stageFilterOf(v))} getItemTestId={(i) => `interviews-openings-stage-${i.id}`}
               items={[{ id: 'all', label: 'All', badge: data ? tabs.all : undefined }, ...tabs.stages.map((t) => ({ id: t.stage, label: STAGE_LABELS[t.stage], badge: t.count }))]} />
           </CollectionToolbar>
           {error ? (

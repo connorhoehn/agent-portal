@@ -257,7 +257,7 @@ function MyInterviewsWorkspace() {
             summary: data ? ofTotal(rows.length, inTab.length, 'interview') : undefined,
             onRefresh: refresh, refreshing: isLoading,
           }}>
-            <Tabs aria-label="Your interviews" size="md" value={tab} onValueChange={(v) => setPicked(v as DeskTab)} getItemTestId={(i) => `interviews-desk-tab-${i.id}`}
+            <Tabs aria-label="Your interviews" size="sm" value={tab} onValueChange={(v) => setPicked(v as DeskTab)} getItemTestId={(i) => `interviews-desk-tab-${i.id}`}
               items={DESK_TABS.map((d) => ({ id: d.value, label: d.label, badge: data ? counts[d.value] : undefined }))} />
           </CollectionToolbar>
           {error ? (
