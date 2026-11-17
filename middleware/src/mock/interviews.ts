@@ -20,6 +20,7 @@
 // providers/identity.ts FALLBACK_USERS with a grant only in `interviews`.
 
 import { clock, defineFixture } from './core/index.js';
+import { EM_KIT } from './interviews-behavioural.js';
 import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, Scorecard, StageChange,
 } from '../lib/interviews/types.js';
@@ -42,11 +43,13 @@ export const WEN = 'u-wen';
 export const AMARA = 'u-amara';
 
 // ── openings and their kits ──────────────────────────────────────────────────
+// The Engineering Manager's kit, a behavioural one (row I1.8), is in interviews-behavioural.ts.
 
 const anchors = (one: string, two: string, three: string, four: string) => ({ 1: one, 2: two, 3: three, 4: four });
 
 const COMMUNICATION = {
   id: 'communication', name: 'Communication',
+  lookFor: 'Explains their thinking as they go, checks the listener is with them, and says plainly what they do not know.',
   anchors: anchors('Hard to follow even when prompted.', 'Gets the point across with help.', 'Clear and structured; checks they were understood.', 'Explains trade-offs so others can decide with them.'),
 };
 
@@ -57,16 +60,21 @@ const BACKEND_KIT: OpeningKit = {
     { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
   ],
   competencies: [
-    { id: 'problem-solving', name: 'Problem solving', anchors: anchors('Did not reach a working approach.', 'Reached an approach with heavy hints.', 'Found a working approach and tested its edges.', 'Found it quickly and improved on it unprompted.') },
-    { id: 'code-quality', name: 'Code quality', anchors: anchors('Code would not pass review.', 'Works, but hard to change.', 'Readable, tested where it matters.', 'Code a teammate would happily extend.') },
-    { id: 'system-design', name: 'System design', anchors: anchors('No coherent design.', 'A design with gaps in failure handling.', 'A sound design with failure modes covered.', 'Covers failure, cost and how it would be rolled out.') },
+    { id: 'problem-solving', name: 'Problem solving', lookFor: 'Breaks the problem down out loud, picks an approach for a reason and tests it against the edges before calling it done.',
+      anchors: anchors('Did not reach a working approach.', 'Reached an approach with heavy hints.', 'Found a working approach and tested its edges.', 'Found it quickly and improved on it unprompted.') },
+    { id: 'code-quality', name: 'Code quality', lookFor: 'Names things clearly, handles the failure paths and writes the test that would have caught the bug.',
+      anchors: anchors('Code would not pass review.', 'Works, but hard to change.', 'Readable, tested where it matters.', 'Code a teammate would happily extend.') },
+    { id: 'system-design', name: 'System design', lookFor: 'Starts from the requirements, names the failure modes and says what the design costs to run.',
+      anchors: anchors('No coherent design.', 'A design with gaps in failure handling.', 'A sound design with failure modes covered.', 'Covers failure, cost and how it would be rolled out.') },
     COMMUNICATION,
-    { id: 'collaboration', name: 'Collaboration', anchors: anchors('Works around people rather than with them.', 'Cooperates when asked.', 'Seeks input and shares credit.', 'Makes the people around them better.') },
+    { id: 'collaboration', name: 'Collaboration', lookFor: 'Talks about other people\'s work specifically and changes course when someone has a better idea.',
+      anchors: anchors('Works around people rather than with them.', 'Cooperates when asked.', 'Seeks input and shares credit.', 'Makes the people around them better.') },
   ],
   questions: [
     {
       id: 'q-be-ratelimit', competencyId: 'problem-solving', roundType: 'technical',
       prompt: 'Implement a token-bucket rate limiter that allows bursts of up to N requests and refills at R tokens per second.',
+      followUps: ['What happens when two requests arrive in the same instant?', 'How would this work across several servers?'],
       starter: {
         python: 'class RateLimiter:\n    def __init__(self, capacity: int, refill_per_second: float):\n        pass\n\n    def allow(self, now: float) -> bool:\n        pass\n',
         go: 'type RateLimiter struct{}\n\nfunc NewRateLimiter(capacity int, refillPerSecond float64) *RateLimiter {\n\treturn &RateLimiter{}\n}\n\nfunc (r *RateLimiter) Allow(now float64) bool {\n\treturn false\n}\n',
@@ -76,6 +84,7 @@ const BACKEND_KIT: OpeningKit = {
     {
       id: 'q-be-retry', competencyId: 'code-quality', roundType: 'technical',
       prompt: 'Wrap a flaky payment-provider call with retries, exponential backoff and an idempotency key, so that a retried charge is never taken twice.',
+      followUps: ['How long do you keep an idempotency key, and why that long?', 'What do you log so support can trace one charge?'],
       starter: {
         python: 'def charge_with_retry(provider, amount_cents: int, card_token: str) -> str:\n    pass\n',
         typescript: 'export async function chargeWithRetry(provider: Provider, amountCents: number, cardToken: string): Promise<string> {\n  throw new Error("not implemented");\n}\n',
@@ -84,18 +93,22 @@ const BACKEND_KIT: OpeningKit = {
     {
       id: 'q-be-ledger', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Design the write path for a double-entry ledger that records card captures and refunds, survives a region failover and never loses or duplicates an entry.',
+      followUps: ['What happens when the failover lands in the middle of a write?', 'How would you prove no entry was written twice?'],
     },
     {
       id: 'q-be-reconcile', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Every night our ledger and the card network\'s settlement file disagree on a few hundred rows. Design the reconciliation job.',
+      followUps: ['Which differences do you fix automatically, and which go to a person?', 'How do you know the job itself did not miss rows?'],
     },
     {
       id: 'q-be-incident', competencyId: 'communication', roundType: 'behavioural',
       prompt: 'Tell me about an incident you led from detection to the write-up. What changed afterwards?',
+      followUps: ['How did you decide who to bring in?', 'What did the write-up change that is still in place?'],
     },
     {
       id: 'q-be-disagree', competencyId: 'collaboration', roundType: 'behavioural',
       prompt: 'Describe a time you disagreed with a technical decision your team had already made. What did you do?',
+      followUps: ['How did you raise it, and with whom?', 'What happened afterwards?'],
     },
   ],
 };
@@ -106,49 +119,37 @@ const IOS_KIT: OpeningKit = {
     { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
   ],
   competencies: [
-    { id: 'problem-solving', name: 'Problem solving', anchors: anchors('Did not reach a working approach.', 'Reached an approach with heavy hints.', 'Found a working approach and tested its edges.', 'Found it quickly and improved on it unprompted.') },
-    { id: 'swift', name: 'Swift and SwiftUI', anchors: anchors('Unfamiliar with the language.', 'Writes Swift, fights the frameworks.', 'Idiomatic Swift, comfortable with concurrency.', 'Knows where the frameworks bite and why.') },
-    { id: 'app-architecture', name: 'App architecture', anchors: anchors('State scattered through views.', 'Some separation, leaks under change.', 'Clear layers; state is testable.', 'Designs for offline, paging and failure from the start.') },
+    { id: 'problem-solving', name: 'Problem solving', lookFor: 'Breaks the problem down out loud, picks an approach for a reason and tests it against the edges before calling it done.',
+      anchors: anchors('Did not reach a working approach.', 'Reached an approach with heavy hints.', 'Found a working approach and tested its edges.', 'Found it quickly and improved on it unprompted.') },
+    { id: 'swift', name: 'Swift and SwiftUI', lookFor: 'Uses the type system and concurrency on purpose, and knows what the frameworks do behind the scenes.',
+      anchors: anchors('Unfamiliar with the language.', 'Writes Swift, fights the frameworks.', 'Idiomatic Swift, comfortable with concurrency.', 'Knows where the frameworks bite and why.') },
+    { id: 'app-architecture', name: 'App architecture', lookFor: 'Keeps state in one place, separates the view from the data, and plans for offline and failure.',
+      anchors: anchors('State scattered through views.', 'Some separation, leaks under change.', 'Clear layers; state is testable.', 'Designs for offline, paging and failure from the start.') },
     COMMUNICATION,
   ],
   questions: [
     {
       id: 'q-ios-feed', competencyId: 'app-architecture', roundType: 'technical',
       prompt: 'Build a paginated list that loads the next page as the user nears the end, and keeps the loaded pages when the app goes offline.',
+      followUps: ['How do you avoid loading the same page twice?', 'What does the user see while offline?'],
       starter: { swift: 'struct FeedView: View {\n    var body: some View {\n        List {\n        }\n    }\n}\n' },
     },
     {
       id: 'q-ios-debounce', competencyId: 'swift', roundType: 'technical',
       prompt: 'Debounce a search field so a request goes out only after the user stops typing for 300 ms, and cancel the request already in flight.',
+      followUps: ['How would you test the timing without waiting in the test?'],
       starter: { swift: 'final class SearchModel: ObservableObject {\n    @Published var query = ""\n    @Published var results: [String] = []\n}\n' },
     },
     {
       id: 'q-ios-crash', competencyId: 'problem-solving', roundType: 'behavioural',
       prompt: 'Walk me through the hardest crash you have tracked down in production.',
+      followUps: ['How did you reproduce it?', 'What did you add so the next one is found faster?'],
     },
     {
       id: 'q-ios-design', competencyId: 'communication', roundType: 'behavioural',
       prompt: 'Tell me about a time a designer and you disagreed on an interaction. How was it settled?',
+      followUps: ['Who made the final call?', 'Would you settle it the same way again?'],
     },
-  ],
-};
-
-const EM_KIT: OpeningKit = {
-  rounds: [
-    { id: 'rd-leadership', name: 'Leadership', type: 'behavioural', minutes: 60 },
-    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60 },
-  ],
-  competencies: [
-    { id: 'people-leadership', name: 'People leadership', anchors: anchors('Manages tasks, not people.', 'Supports people when asked.', 'Grows people and handles hard conversations.', 'Builds a team that grows its own people.') },
-    { id: 'delivery', name: 'Delivery', anchors: anchors('Surprised by their own slips.', 'Reports slips once they happen.', 'Sees slips early and resets plans openly.', 'Shapes the plan so slips are rare and cheap.') },
-    { id: 'system-design', name: 'System design', anchors: anchors('No coherent design.', 'A design with gaps in failure handling.', 'A sound design with failure modes covered.', 'Covers failure, cost and how it would be rolled out.') },
-    COMMUNICATION,
-  ],
-  questions: [
-    { id: 'q-em-struggling', competencyId: 'people-leadership', roundType: 'behavioural', prompt: 'Tell me about someone on your team who was struggling. What did you do, and what happened?' },
-    { id: 'q-em-slip', competencyId: 'delivery', roundType: 'behavioural', prompt: 'Your team\'s roadmap slips by a quarter. Walk me through how you tell your stakeholders and what you change.' },
-    { id: 'q-em-hiring', competencyId: 'people-leadership', roundType: 'behavioural', prompt: 'How have you built a team? Who did you hire first, and why?' },
-    { id: 'q-em-platform', competencyId: 'system-design', roundType: 'technical', prompt: 'Design a self-service deploy platform for forty product teams. What do you build first?' },
   ],
 };
 
@@ -157,11 +158,11 @@ export const interviewOpeningsFixture = defineFixture<Opening>({
   scenarios: {
     default: () => [
       { id: 'op-backend', title: 'Senior Backend Engineer', level: 'Senior', team: 'Payments', location: 'Lisbon or remote in Europe',
-        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(41), kit: BACKEND_KIT, budgetCapUsd: null },
+        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(41), kit: BACKEND_KIT, budgetCapUsd: null, revision: 1 },
       { id: 'op-ios', title: 'iOS Engineer', level: 'Mid-level', team: 'Mobile Checkout', location: 'Berlin or remote in Europe',
-        hiringManagerId: null, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(26), kit: IOS_KIT, budgetCapUsd: null },
+        hiringManagerId: null, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(26), kit: IOS_KIT, budgetCapUsd: null, revision: 1 },
       { id: 'op-em', title: 'Engineering Manager', level: 'Manager', team: 'Platform', location: 'Lisbon',
-        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(19), kit: EM_KIT, budgetCapUsd: null },
+        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(19), kit: EM_KIT, budgetCapUsd: null, revision: 1 },
     ],
     empty: () => [],
   },

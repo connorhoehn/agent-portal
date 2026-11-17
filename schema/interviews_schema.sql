@@ -22,9 +22,14 @@
 
 -- ── openings ────────────────────────────────────────────────────────────────
 -- The kit is one JSONB document: { rounds: [{ id, name, type, minutes }],
--- competencies: [{ id, name, anchors: { "1".."4" } }], questions: [{ id,
--- prompt, competencyId, roundType, starter? }] }. It is edited as a whole
--- (row I1.3) and read as a whole by every interview of the opening.
+-- competencies: [{ id, name, lookFor, anchors: { "1".."4" } }], questions:
+-- [{ id, prompt, followUps: [text], competencyId, roundType, starter?:
+-- { <language>: code } }] }, each list in the order shown. It is replaced as
+-- a whole by the kit editor (row I1.3), checked first by
+-- middleware/src/lib/interviews/kit.ts, and read as a whole by every
+-- interview of the opening. `revision` is bumped by every write; a write
+-- names the revision it was made against (compare-and-set), so two editors
+-- never overwrite each other unseen.
 CREATE TABLE IF NOT EXISTS interview_openings (
   id                 TEXT PRIMARY KEY,
   title              TEXT NOT NULL,
@@ -37,7 +42,8 @@ CREATE TABLE IF NOT EXISTS interview_openings (
   opened_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   kit                JSONB NOT NULL DEFAULT '{"rounds": [], "competencies": [], "questions": []}'::jsonb,
   -- The spend cap per interview, in US dollars; how it is held is row I0.6.
-  budget_cap_usd     NUMERIC(10, 2)
+  budget_cap_usd     NUMERIC(10, 2),
+  revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
 CREATE INDEX IF NOT EXISTS interview_openings_hiring_manager_idx ON interview_openings (hiring_manager_id);
 

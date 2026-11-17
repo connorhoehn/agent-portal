@@ -54,6 +54,8 @@ export interface OpeningRow {
   hiringManager: PersonRef | null;
   recruiter: PersonRef;
   rounds: KitRound[];
+  /** The kit at a glance (the Openings table, row I1.3): how many competencies, and questions per round type. */
+  kitSize: { competencies: number; questions: Record<RoundType, number> };
   candidates: number;
   byStage: Partial<Record<ApplicationStage, number>>;
   upcoming: number;
@@ -64,6 +66,8 @@ export interface OpeningRow {
 export interface OpeningRecord extends OpeningRow {
   competencies: KitCompetency[];
   questions: KitQuestion[];
+  /** The revision a write must name (row I1.3: compare-and-set). */
+  revision: number;
 }
 
 export interface InterviewRow {
@@ -211,6 +215,10 @@ export class WorldIndex {
       hiringManager: o.hiringManagerId ? this.people(o.hiringManagerId) : null,
       recruiter: this.people(o.recruiterId),
       rounds: o.kit.rounds,
+      kitSize: {
+        competencies: o.kit.competencies.length,
+        questions: { technical: o.kit.questions.filter((q) => q.roundType === 'technical').length, behavioural: o.kit.questions.filter((q) => q.roundType === 'behavioural').length },
+      },
       candidates: apps.length,
       byStage,
       upcoming: interviews.filter((i) => OPEN_STATES.has(i.state)).length,
@@ -229,7 +237,7 @@ export class WorldIndex {
   }
 
   openingRecord(o: Opening): OpeningRecord {
-    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions };
+    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions, revision: o.revision };
   }
 
   interviewRow(i: Interview): InterviewRow | null {

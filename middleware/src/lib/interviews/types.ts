@@ -34,6 +34,7 @@ export const RECOMMENDATIONS: readonly Recommendation[] = ['strong-no', 'no', 'y
 
 /** Languages a question may carry starter code in (decision 11). */
 export type PadLanguage = 'python' | 'swift' | 'javascript' | 'typescript' | 'java' | 'go' | 'cpp';
+export const PAD_LANGUAGES: readonly PadLanguage[] = ['python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp'];
 
 export interface KitRound {
   id: string;
@@ -42,22 +43,36 @@ export interface KitRound {
   minutes: number;
 }
 
-/** One competency and what each rating means for it (1 to 4). */
+/**
+ * One competency: what good looks like (the coach reads it, I3.3) and what each rating means (the
+ * scorecard rates against the anchors, I5.3). Its id is stable across edits, so a rating, a
+ * suggestion or a recap keeps pointing at it when the name is reworded.
+ */
 export interface KitCompetency {
   id: string;
   name: string;
+  /** One or two sentences on what a strong answer shows. */
+  lookFor: string;
   anchors: { 1: string; 2: string; 3: string; 4: string };
 }
 
+/**
+ * One question in the bank, asked in rounds of `roundType`. A technical question may carry starter
+ * code per pad language (the pad inserts it, I4.2); a behavioural one never does (its round has no
+ * pad, row I1.8). Its id is stable, so an interview's chosen questions keep pointing at it.
+ */
 export interface KitQuestion {
   id: string;
   prompt: string;
+  /** What to ask next if the answer stays general, in the order to ask them. */
+  followUps: string[];
+  /** The competency this question gathers evidence for. */
   competencyId: string;
   roundType: RoundType;
   starter?: Partial<Record<PadLanguage, string>>;
 }
 
-/** An opening's kit: its rounds, the competencies they judge and the question bank. */
+/** An opening's kit: its rounds, the competencies they judge and the question bank, each list in the order shown. */
 export interface OpeningKit {
   rounds: KitRound[];
   competencies: KitCompetency[];
@@ -78,7 +93,12 @@ export interface Opening {
   kit: OpeningKit;
   /** Spend cap per interview in US dollars; how it is held is row I0.6. */
   budgetCapUsd: number | null;
+  /** Bumped by every write; a write names the revision it was made against, so two editors never overwrite each other unseen. */
+  revision: number;
 }
+
+/** What "edit its details" changes on an opening (row I1.3); the kit is replaced on its own. */
+export type OpeningDetails = Pick<Opening, 'title' | 'level' | 'team' | 'location' | 'hiringManagerId' | 'state' | 'budgetCapUsd'>;
 
 /** A candidate is a record, never a user (decision 3). */
 export interface Candidate {
