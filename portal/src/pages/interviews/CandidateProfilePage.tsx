@@ -15,6 +15,11 @@
 // round", its own form) and reassigns one that has not started. Who declined a
 // seat and why shows on its round for the recruiter and the hiring manager (the
 // server sends declines to nobody else); the hiring manager's view is read-only.
+//
+// Row I6.3: a "Deletions" section at the end of the profile for the recruiter and the opening's hiring manager (when, what
+// was removed and what is left, by whom). The recruiter's "Delete recordings and transcripts" is asked through a prompt
+// in the composer's deck (what goes and what stays, in two sentences), never a dialog. Afterwards the résumé section
+// shows its no-file line and the contact fields show what the redaction left.
 
 import {
   Avatar, Button, Chip, DataTable, DetailSection, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, WorkflowStepper,
@@ -37,6 +42,10 @@ import {
 } from '../../lib/interviews';
 import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
 import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
+import {
+  REDACTED_NAME, askedByLine, deletionQuestion, deletionState, deletionsPath, leftLines, removedLine, requestDeletion,
+  type DeletionView, type RetentionPeriods,
+} from '../../lib/interviewsRetention';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
 import ResumeViewer from './ResumeViewer';
 
@@ -106,6 +115,8 @@ function CandidateProfile({ id }: { id: string }) {
   const { data, error, isLoading, refresh } = useFetch<{ candidate: CandidateProfile }>(id ? `${INTERVIEWS_API}/candidates/${encodeURIComponent(id)}` : null);
   const profile = data?.candidate;
   useCrumbLabel(id, profile?.candidate.name);
+  const role = String(session?.role);
+  const deletions = useDeletionPrompt(id, role, refresh);
 
   if (error && !profile) {
     const home = homeFor(session?.role);
@@ -121,6 +132,7 @@ function CandidateProfile({ id }: { id: string }) {
 
   const { candidate, applications } = profile;
   const first = applications[0];
+  const redacted = candidate.name === REDACTED_NAME;
   return (
     <Stack gap="none" className="h-full min-h-0 min-w-0" data-testid="interviews-candidate-profile">
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto">
@@ -132,13 +144,20 @@ function CandidateProfile({ id }: { id: string }) {
             { label: 'Applied for', value: <T size="sm" data-testid="interviews-profile-opening">{applications.length ? applications.map((a) => `${a.opening.title}, ${a.opening.team}`).join(' · ') : '—'}</T> },
             { label: 'Applied', value: <T size="sm" data-testid="interviews-profile-applied" title={first?.history[0] ? new Date(first.history[0].at).toLocaleString() : undefined}>{first?.history[0] ? relativeTime(first.history[0].at) : '—'}</T> },
             { label: 'Came from', value: <T size="sm" data-testid="interviews-profile-source">{candidate.source || '—'}</T> },
-            { label: 'Based in', value: <T size="sm">{candidate.location || '—'}</T> },
+            { label: 'Based in', value: <T size="sm" data-testid="interviews-profile-location">{redacted ? 'Removed' : candidate.location || '—'}</T> },
           ]} />
         </Inline>
+        {redacted && (
+          <T size="sm" tone="secondary" className="px-[var(--ui-page-gutter)]" data-testid="interviews-profile-redacted">
+            This candidate's contact details were removed. Their interview records stay for their period without them.
+          </T>
+        )}
         {applications.length === 0 && <T size="sm" tone="secondary" className="px-[var(--ui-page-gutter)]">This candidate has no application you can read.</T>}
         {applications.map((a) => <ApplicationSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id}
           assigns={['recruiter', 'admin'].includes(String(session?.role))} />)}
-        <ResumeSection candidateId={candidate.id} name={candidate.name} manages={['recruiter', 'admin'].includes(String(session?.role))} />
+        <ResumeSection key={`resume-${deletions.done}`} candidateId={candidate.id} name={candidate.name} manages={['recruiter', 'admin'].includes(String(session?.role))}
+          extraPrompts={deletions.prompts} />
+        {deletions.reads && <DeletionsSection rows={deletions.rows} asks={deletions.asks} onAsk={deletions.ask} />}
       </Stack>
     </Stack>
   );
@@ -181,7 +200,7 @@ function ApplicationSection({ app, several, candidateId, assigns }: { app: Profi
 }
 
 /** The résumé: the file for everyone who can open the profile; its facts and the three actions for the recruiter. */
-function ResumeSection({ candidateId, name, manages }: { candidateId: string; name: string; manages: boolean }) {
+function ResumeSection({ candidateId, name, manages, extraPrompts }: { candidateId: string; name: string; manages: boolean; extraPrompts: ComposerPrompt[] }) {
   const { data, refresh } = useFetch<{ resume: ResumeRecord }>(manages ? resumePath(candidateId) : null);
   const [version, setVersion] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
@@ -251,7 +270,70 @@ function ResumeSection({ candidateId, name, manages }: { candidateId: string; na
           </Stack>
         </Stack>
       </DetailSection>
-      {manages && <CollectionCommandHost adapter={adapter} prompts={prompts} />}
+      {manages && <CollectionCommandHost adapter={adapter} prompts={[...prompts, ...extraPrompts]} />}
+    </Stack>
+  );
+}
+
+const DELETION_COLUMNS: DataTableColumn<DeletionView>[] = [
+  { key: 'at', header: 'When', numeric: true, width: '144px', render: (r) => <T size="sm" title={new Date(r.requestedAt).toLocaleString()}>{relativeTime(r.requestedAt)}</T> },
+  {
+    key: 'what', header: 'Removed',
+    render: (r) => <T size="sm" title={removedLine(r)} className="block max-w-[28rem] truncate" data-testid="interviews-deletion-removed">{removedLine(r)}</T>,
+  },
+  {
+    key: 'left', header: 'Not removed',
+    render: (r) => {
+      const lines = leftLines(r);
+      return lines.length
+        ? <T size="sm" tone="secondary" title={lines.join('\n')} className="block max-w-[22rem] truncate" data-testid="interviews-deletion-left">{lines[0]}</T>
+        : <Dash />;
+    },
+  },
+  { key: 'by', header: 'By', render: (r) => <T size="sm">{askedByLine(r)}</T> },
+  { key: 'state', header: 'Status', width: '120px', render: (r) => { const s = deletionState(r); return <Chip tone={s.tone} size="xs">{s.label}</Chip>; } },
+];
+
+/** The deletion log and, for the recruiter, the prompt that asks for one. Hooks only; the section draws it. */
+function useDeletionPrompt(candidateId: string, role: string, refreshProfile: () => void) {
+  const reads = role === 'recruiter' || role === 'hiring-manager';
+  const asks = role === 'recruiter';
+  const { data, refresh } = useFetch<{ items: DeletionView[]; periods: RetentionPeriods }>(reads && candidateId ? deletionsPath(candidateId) : null);
+  const [asking, setAsking] = useState(0);
+  const [done, setDone] = useState(0);
+  const periods = data?.periods ?? null;
+  const prompts = useMemo<ComposerPrompt[]>(() => {
+    if (!asks || !asking || !periods) return [];
+    const scope = `interviews-deletion:${candidateId}`;
+    return [{
+      id: `${scope}:ask-${asking}`, scope, kind: 'choice', eyebrow: 'Delete recordings and transcripts', title: 'This candidate',
+      question: deletionQuestion(periods),
+      options: [{ id: 'delete', label: 'Delete', emphasis: 'danger' }, { id: 'keep', label: 'Keep everything', emphasis: 'primary' }],
+      onAnswer: async (a) => {
+        if (!('optionId' in a) || a.optionId !== 'delete') { setAsking(0); return { receipt: 'Kept. Nothing was removed.' }; }
+        const out = await requestDeletion(candidateId);
+        setAsking(0); refresh();
+        if (!out.ok) return { error: out.error };
+        setDone((n) => n + 1); refreshProfile();
+        return { receipt: out.created ? `${removedLine(out.deletion)}` : 'This was already deleted. Nothing changed.' };
+      },
+    }];
+  }, [asks, asking, periods, candidateId, refresh, refreshProfile]);
+  return { reads, asks, rows: data?.items ?? null, prompts, done, ask: () => setAsking((n) => n + 1) };
+}
+
+function DeletionsSection({ rows, asks, onAsk }: { rows: DeletionView[] | null; asks: boolean; onAsk: () => void }) {
+  return (
+    <Stack gap="md" className="px-[var(--ui-page-gutter)] pb-4" data-testid="interviews-profile-deletions-section">
+      <DetailSection variant="heading" title="Deletions" hint={rows ? plural(rows.length, 'deletion') : undefined}
+        actions={asks ? <Button size="sm" variant="ghost" data-testid="interviews-deletion-ask" onClick={onAsk}>Delete recordings and transcripts</Button> : undefined}>
+        {rows === null
+          ? <LoadingState label="Loading deletions…" />
+          : (
+            <DataTable narrow data-testid="interviews-profile-deletions" aria-label="Deletions" data={rows} columns={DELETION_COLUMNS}
+              keyField={(r) => r.id} staticRows="Each deletion, read in place" emptyMessage="Nothing has been deleted for this candidate." />
+          )}
+      </DetailSection>
     </Stack>
   );
 }

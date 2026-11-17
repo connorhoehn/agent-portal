@@ -6,8 +6,8 @@
 //                                    candidate in scope (404), body `{ confirm: true }` (400 otherwise). Runs the
 //                                    deletion (lib/interviews/retention/service.ts) and answers `{ deletion, created }`:
 //                                    a repeat answers the earlier row with `created: false`.
-//   GET  /candidates/:id/deletions   the recruiter and the hiring manager of the candidate's opening: `{ items }`,
-//                                    newest first. Everyone else, and a candidate outside scope: not-found.
+//   GET  /candidates/:id/deletions   the recruiter and the hiring manager of the candidate's opening: `{ items, periods }`,
+//                                    newest first, with this deployment's periods (the profile's prompt states them). Everyone else, and a candidate outside scope: not-found.
 // The admin is answered not-found on both: the log is the hiring side's record, as the consents are.
 //
 // The candidate cannot ask here: the notice tells them to ask the person who sent their link.
@@ -17,6 +17,7 @@ import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { deleteCandidateMedia, deletionsOf } from '../../lib/interviews/retention/service.js';
+import { retentionPeriods } from '../../lib/interviews/retention/periods.js';
 import type { DeletionRow } from '../../lib/interviews/retention/store.js';
 
 export const retentionRouter = Router();
@@ -68,5 +69,5 @@ retentionRouter.post('/candidates/:id/deletion', manage, asyncHandler(async (req
 retentionRouter.get('/candidates/:id/deletions', asyncHandler(async (req, res) => {
   const candidateId = await candidateFor(req, ['recruiter', 'hiring-manager']);
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ items: await viewOf(await deletionsOf(candidateId)) });
+  res.json({ items: await viewOf(await deletionsOf(candidateId)), periods: retentionPeriods() });
 }));

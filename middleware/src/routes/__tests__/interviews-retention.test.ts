@@ -135,7 +135,7 @@ describe('asking for a deletion', () => {
 
 describe('reading the deletion log', () => {
   it('the recruiter and the opening\'s hiring manager read it, newest first; nobody else finds it', async () => {
-    expect((await GRETA.log('cand-mateo')).body).toEqual({ items: [] });
+    expect((await GRETA.log('cand-mateo')).body).toEqual({ items: [], periods: { mediaDays: 90, recordYears: 4, deletionDays: 30 } });
     await GRETA.ask('cand-mateo');
     const greta = await GRETA.log('cand-mateo');
     expect(greta.status).toBe(200);
