@@ -1,3 +1,5 @@
+jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
+
 import { clearExportSections, exportSections, registerExportSection } from '../registry.js';
 import { buildMiloExport } from '../service.js';
 import type { Interview } from '../../types.js';
