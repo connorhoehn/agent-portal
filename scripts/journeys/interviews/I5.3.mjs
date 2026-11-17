@@ -72,6 +72,10 @@ export default async function run(ctx) {
     const own = (first.text.match(/Your rating[^A-Z]*3 of 4/g) ?? []).length;
     const stored = (await api(wen, 'GET', `/api/interviews/interviews/${JONAH}/recap`)).body?.recap;
     const shots = await shootPage(page, 'scorecard-recap');
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(300);
+    const clipped = await page.evaluate(() => [...document.querySelectorAll('[data-testid="interviews-recap"] *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1 && e.textContent.trim() !== '').length);
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await seen(page, 'interviews-scorecard-recap-step');
     await seen(page, 'interviews-recap-competency');
@@ -80,7 +84,7 @@ export default async function run(ctx) {
     const checks = {
       prompt: /recorded as they stand/.test(asked), blocks: first.blocks === competencies, statements: first.n >= 1, sourced, noTone: first.tones === 0, own: own === competencies,
       stored: stored?.state === 'ready', reloadBlocks: again.blocks === competencies, reloadStatements: again.n === first.n, reloadOwn: /Your rating[^A-Z]*3 of 4/.test(again.text),
-      milo: !miloScoresIn(pageText), consent: !consentIn(pageText), shots: shots.every((s) => s.ok),
+      milo: !miloScoresIn(pageText), consent: !consentIn(pageText), shots: shots.every((s) => s.ok), noClipAt1280: clipped === 0,
     };
     const ok = Object.values(checks).every(Boolean);
     record('I5.3b', ok, `[failing: ${failing(checks)}] prompt "${asked.slice(0, 60)}…", ${first.blocks} competencies, ${first.n} statements each with its line and quote (${sourced}), tones ${first.tones}, own ratings shown ${own}; a reload at the recap step: ${again.blocks} competencies, ${again.n} statements; ${widths(shots)}`);

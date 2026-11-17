@@ -344,8 +344,8 @@ function RecapView({ interviewId, competencies, initial, ratings }: {
                   value: evidence.length === 0 ? 'Nothing was said about this' : (
                     <Stack gap="xs">
                       {evidence.map((e) => (
-                        <Disclosure key={`${e.source.seq}:${e.text}`} variant="plain" summary={<T size="sm">{e.text}</T>} data-testid="interviews-recap-claim">
-                          <T size="sm" tone="secondary">{`Line ${e.source.seq} of the transcript: “${e.source.quote}”`}</T>
+                        <Disclosure key={`${e.source.seq}:${e.text}`} variant="plain" summary={<T size="sm" wrap>{e.text}</T>} data-testid="interviews-recap-claim">
+                          <T size="sm" tone="secondary" wrap>{`Line ${e.source.seq} of the transcript: “${e.source.quote}”`}</T>
                         </Disclosure>
                       ))}
                     </Stack>
