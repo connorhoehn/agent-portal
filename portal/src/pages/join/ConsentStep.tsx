@@ -4,10 +4,13 @@
 // A part the deployment requires (row I6.4) carries one line saying so; saying no to it is still allowed and saved.
 // UI round 2: the notice sits BESIDE the questions and scrolls in its own column, so the three questions and
 // Continue stay in view at 1280×800 (the frame gives this step a fixed-height body).
-import { useState } from 'react';
+// Hardening H2 (I2.3f): a refused save whose stored answers still stand (the call started, or another window saved
+// first) offers "Back to waiting" on those answers, and the page keeps asking for the admission meanwhile, so the
+// lead's Admit reaches it without a reload.
+import { useEffect, useRef, useState } from 'react';
 import { Button, Card, Divider, InlineAlert, Inline, RadioGroup, Stack, T } from '@connorhoehn/ui-components/shared';
-import { allAnswered, choose, miloLocked, REQUIRED_LINE, type ConsentChoices, type ConsentPart, type GuestConsents } from './steps.ts';
-import { LinkDead, saveConsents } from './guestApi.ts';
+import { ADMISSION_MAX_POLLS, ADMISSION_POLL_MS, allAnswered, answersStand, choose, miloLocked, REQUIRED_LINE, type ConsentChoices, type ConsentPart, type GuestConsents } from './steps.ts';
+import { LinkDead, readAdmission, saveConsents } from './guestApi.ts';
 
 type YesNo = 'yes' | 'no' | '';
 
@@ -19,16 +22,40 @@ const QUESTIONS: { part: ConsentPart; question: string; ifNo: string }[] = [
 
 const asYesNo = (v: boolean | null): YesNo => (v === null ? '' : v ? 'yes' : 'no');
 
-export function ConsentStep({ consents, onSaved, onLinkDead }: {
+export function ConsentStep({ consents, onSaved, onLinkDead, onBack, onAdmitted }: {
   consents: GuestConsents;
   onSaved: (saved: GuestConsents) => void;
   onLinkDead: () => void;
+  /** A refused change: go back to waiting on the answers the server holds. */
+  onBack: (held: GuestConsents) => void;
+  /** The lead let the candidate in while the page sat on a refused change. */
+  onAdmitted: () => void;
 }) {
   const [notice, setNotice] = useState(consents.notice);
   const [required, setRequired] = useState<readonly ConsentPart[]>(consents.required ?? []);
   const [answers, setAnswers] = useState<ConsentChoices>(consents.answers);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The answers the server holds after a refused save, when they still stand.
+  const [held, setHeld] = useState<GuestConsents | null>(null);
+  const admitted = useRef(onAdmitted);
+  admitted.current = onAdmitted;
+
+  useEffect(() => {
+    if (!held) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let polls = 0;
+    const poll = async () => {
+      polls += 1;
+      const admission = await readAdmission().catch(() => null);
+      if (stopped) return;
+      if (admission?.state === 'admitted') { admitted.current(); return; }
+      if (polls < ADMISSION_MAX_POLLS) timer = setTimeout(() => { void poll(); }, ADMISSION_POLL_MS);
+    };
+    void poll();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [held]);
 
   const save = async () => {
     setBusy(true);
@@ -41,6 +68,7 @@ export function ConsentStep({ consents, onSaved, onLinkDead }: {
         setNotice(result.consents.notice);
         setAnswers(result.consents.answers);
         setRequired(result.consents.required ?? []);
+        setHeld(answersStand(result.consents) ? result.consents : null);
       }
       setMessage(result.message);
     } catch (error) {
@@ -91,6 +119,7 @@ export function ConsentStep({ consents, onSaved, onLinkDead }: {
           <Button variant="primary" disabled={!allAnswered(answers) || busy} onClick={() => { void save(); }} data-testid="join-consents-continue">
             Continue
           </Button>
+          {held && <Button variant="secondary" disabled={busy} onClick={() => onBack(held)} data-testid="join-consents-back">Back to waiting</Button>}
           {!allAnswered(answers) && <T size="xs" tone="secondary">Answer all three questions to continue.</T>}
         </Inline>
       </Stack>

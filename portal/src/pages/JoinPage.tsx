@@ -179,6 +179,8 @@ export default function JoinPage() {
           consents={consents}
           onLinkDead={() => setView({ kind: 'dead' })}
           onSaved={(saved) => setView((v) => (v.kind === 'ready' ? { ...v, consents: saved, step: stepAfterConsents(devicesChecked, saved) } : v))}
+          onBack={(held) => setView((v) => (v.kind === 'ready' ? { ...v, consents: held, step: stepAfterConsents(devicesChecked, held) } : v))}
+          onAdmitted={onAdmitted}
         />
       )}
       {step === 'devices' && (

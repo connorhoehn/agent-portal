@@ -101,6 +101,12 @@ export function stepAfterConsents(devicesChecked: boolean, saved?: Pick<GuestCon
   return devicesChecked ? 'waiting' : 'devices';
 }
 
+/** After a refused save (the call started, or another window saved first): the answers the server holds still stand
+ *  when all three are answered, so the candidate may go back to waiting on them instead of being stuck on the answers. */
+export function answersStand(held: Pick<GuestConsents, 'answers'> | null | undefined): boolean {
+  return !!held && allAnswered(held.answers);
+}
+
 /** How often the waiting page asks, and for how long before it stops and offers to check again. */
 export const ADMISSION_POLL_MS = 4000;
 export const ADMISSION_MAX_POLLS = 450; // 30 minutes

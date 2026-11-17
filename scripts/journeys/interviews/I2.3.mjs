@@ -10,8 +10,8 @@
 //          when the transcript is declined, and the recruiter's consent effects name exactly what is off
 //   I2.3e  the late candidate (O-206): the lead has started; the candidate lands, gives first answers, knocks and is
 //          let in to the room
-//   I2.3f  the late candidate changes an answer: refused in words, the stored answer stands, and the page can go back
-//          to waiting so the lead's Admit reaches it (FAILS today: the page stays on the answers until a reload)
+//   I2.3f  the late candidate changes an answer: refused in words, the stored answer stands, "Back to waiting" goes
+//          back on the stored answers, and the lead's Admit reaches the page without a reload
 export default async function run(ctx) {
   const { SEED, record, signIn, resetMock, mintInvite, openGuest, answerConsents, toWaiting, waiting, admit, startInterview,
     api, guestApi, shootPage } = ctx;
@@ -147,9 +147,8 @@ export default async function run(ctx) {
       detail: `the lead started first (${started.status}); the candidate's first answers are taken (${JSON.stringify(stored)}) → ${at}; the lead reads ${lead ? 'waiting' : 'NOT waiting'}; admitted ${yes.status}, the page ${inRoom ? 'opens the room' : 'did NOT open the room'}` };
   });
 
-  // After the start a change is refused in words and the stored answer stands. Then the candidate must be able to go
-  // back to waiting: today the consent page offers only Continue, which re-saves and is refused again, so the lead's
-  // Admit never reaches the page until a reload (a finding for the lead: recorded FAIL until the page goes back).
+  // After the start a change is refused in words and the stored answer stands. The refusal offers "Back to waiting" on
+  // the stored answers, and the lead's Admit then reaches the page without a reload.
   await step('I2.3f', async () => {
     await resetMock();
     await startInterview(hugo, iv);
@@ -163,7 +162,8 @@ export default async function run(ctx) {
     const refused = await seen(g.page, 'join-consents-message', 15_000);
     const message = refused ? (await g.page.getByTestId('join-consents-message').innerText()).trim() : '';
     const stored = (await guestApi(g.context, 'GET', '/consents')).body?.answers ?? {};
-    await g.page.getByTestId('join-consents-continue').click().catch(() => undefined);
+    await shootPage(g.page, 'I2.3f-late-refused').catch(() => undefined);
+    await g.page.getByTestId('join-consents-back').click({ timeout: 5_000 }).catch(() => undefined);
     const backToWaiting = await seen(g.page, 'join-waiting', 10_000);
     await until(async () => (await waiting(hugo, iv))?.state === 'waiting');
     await admit(hugo, iv, true);
@@ -172,7 +172,7 @@ export default async function run(ctx) {
     if (!roomWithoutReload) { await g.page.reload({ waitUntil: 'domcontentloaded' }); afterReload = await seen(g.page, 'join-room'); }
     const wordsOk = message === 'Your interview has started, so these answers can no longer be changed.' && stored.recording === true;
     return { ok: wordsOk && backToWaiting && roomWithoutReload,
-      detail: `a change reads "${message}", the stored recording answer is ${stored.recording}; Continue again ${backToWaiting ? 'returns to waiting' : 'is refused again and the page stays on the answers'}; Admit ${roomWithoutReload ? 'reaches the page' : `does NOT reach the page (a reload ${afterReload ? 'opens the room' : 'does not help'})`}` };
+      detail: `a change reads "${message}", the stored recording answer is ${stored.recording}; Back to waiting ${backToWaiting ? 'returns to waiting' : 'is missing and the page stays on the answers'}; Admit ${roomWithoutReload ? 'reaches the page' : `does NOT reach the page (a reload ${afterReload ? 'opens the room' : 'does not help'})`}` };
   });
 
   for (const c of opened) await c.close().catch(() => undefined);
