@@ -1,5 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
-import { NAG_SUPPRESSIONS } from '../nag-suppressions';
+import { NAG_SUPPRESSIONS, type NagSuppressionEntry } from '../nag-suppressions';
 
 /**
  * cdk-nag AwsSolutions checks over the whole app (work item 19).
@@ -31,10 +31,18 @@ export function applyNag(app: cdk.App, stacks: cdk.Stack[]): 'applied' | 'skippe
     return 'missing';
   }
   cdk.Aspects.of(app).add(new nag.AwsSolutionsChecks({ verbose: true }));
+  // `-c allowHttpOrigin=true` (throwaway stacks, lib/portal-stack.ts) is a refused-by-default choice the
+  // operator made by name, and it is exactly what CFR5 reports: without a certificate every CloudFront
+  // origin in OrgIQ-Portal is HTTP_ONLY. Without the flag CFR5 stays fixed in the stack, not suppressed.
+  const httpOrigin = app.node.tryGetContext('allowHttpOrigin');
+  const httpOriginEntries: NagSuppressionEntry[] = httpOrigin === true || httpOrigin === 'true'
+    ? [{ id: 'AwsSolutions-CFR5', reason: 'allowHttpOrigin=true: a throwaway stack with no certificate on the ALB, so CloudFront reaches it over HTTP (infra/SECURITY-NOTES.md).', stacks: ['Portal'] }]
+    : [];
   for (const stack of stacks) {
     // NAG_NO_SUPPRESS=1 prints every raw finding (audit aid; never set it in CI).
     if (process.env.NAG_NO_SUPPRESS) continue;
-    const entries = NAG_SUPPRESSIONS.filter(e => !e.stacks || e.stacks.some(suffix => stack.stackName.endsWith(`-${suffix}`)));
+    const entries = [...NAG_SUPPRESSIONS, ...httpOriginEntries]
+      .filter(e => !e.stacks || e.stacks.some(suffix => stack.stackName.endsWith(`-${suffix}`)));
     const stackWide = entries.filter(e => !e.paths);
     if (stackWide.length) {
       nag.NagSuppressions.addStackSuppressions(stack, stackWide.map(e => ({ id: e.id, reason: e.reason })), true);

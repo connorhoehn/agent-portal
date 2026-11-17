@@ -6,7 +6,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
-import { protectData as protectDataFlag } from './context-flags';
+import { contextFlag, protectData as protectDataFlag } from './context-flags';
 import { REPLAY_PARTITION_KEY, REPLAY_TTL_ATTRIBUTE, replayTableName } from './replay-table';
 
 export interface FoundationStackProps extends cdk.StackProps {
@@ -22,6 +22,8 @@ export class FoundationStack extends cdk.Stack {
   public readonly documentsBucket: s3.Bucket;
   /** S3 bucket for processed artifacts (embeddings, graph snapshots, reports) */
   public readonly artifactsBucket: s3.Bucket;
+  /** The interviews tenant's candidate résumés (`-c interviews=true`), read and written by the BFF only */
+  public readonly interviewResumesBucket?: s3.Bucket;
   /** DynamoDB table for expertise scores */
   public readonly scoresTable: dynamodb.Table;
   /** DynamoDB table for session state */
@@ -113,6 +115,32 @@ export class FoundationStack extends cdk.Stack {
     // `Retain` property turns that Delete into a no-op.
     this.emptyBucketOnDestroy(this.documentsBucket, protectData);
     this.emptyBucketOnDestroy(this.artifactsBucket, false);
+
+    // The interviews tenant's résumés (docs/interviews-tenant-plan.md row I1.6), `-c interviews=true`.
+    // Objects are private and reached only through the BFF (middleware lib/interviews/resume/bytes-store.ts):
+    // no ACL, no public or presigned URL. Unversioned on purpose: a candidate's deletion request removes the
+    // file, and a version history would keep it. Retained with the other data under protectData.
+    if (contextFlag(this, 'interviews', false)) {
+      this.interviewResumesBucket = new s3.Bucket(this, 'InterviewResumesBucket', {
+        bucketName: `${prefix}-interview-resumes-${this.account}-${this.region}`,
+        enforceSSL: true,
+        versioned: false,
+        encryption: s3.BucketEncryption.S3_MANAGED,
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+        lifecycleRules: [{ id: 'AbortIncompleteUploads', abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) }],
+        removalPolicy: protectData ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      });
+      this.emptyBucketOnDestroy(this.interviewResumesBucket, protectData);
+      new cdk.CfnOutput(this, 'InterviewResumesBucketName', {
+        value: this.interviewResumesBucket.bucketName,
+        exportName: `${prefix}-interview-resumes-bucket-name`,
+      });
+      new cdk.CfnOutput(this, 'InterviewResumesBucketArn', {
+        value: this.interviewResumesBucket.bucketArn,
+        exportName: `${prefix}-interview-resumes-bucket-arn`,
+      });
+    }
 
     // -------------------------------------------------------------------
     // DynamoDB Tables

@@ -15,6 +15,13 @@ Work item 19 in `docs/next-steps.md` §8 (least privilege for the infrastructure
 | `allowHttpOrigin` | `false` | Lets `deployPortal` run without `certificateArn`, so CloudFront reaches the ALB over plain HTTP. Throwaway stacks only; it leaves a synth warning. |
 | `nag` | unset | `true` requires cdk-nag and fails the synth without it, `false` skips it. Unset runs it when installed and warns when not. |
 | `microvm` | `false` | Adds OrgIQ-MicrovmNetwork and OrgIQ-MicrovmRuntime and the middleware's microVM grants. See "microVM runner" below. |
+| `interviews` | `false` | The interviews tenant: OrgIQ-Foundation's private résumé bucket and the middleware's `INTERVIEWS_*` settings and object grant. See "Interviews tenant and Milo" below. |
+| `interviewsGuestRealtime` | `realtimeGateway` | A candidate may hold a realtime token for the interview call. Refused without `realtimeGateway=true`. |
+| `interviewsSettings` | unset | JSON object of optional `INTERVIEWS_*` settings (`middleware/src/lib/interviews/settings.ts`). |
+| `meetingAssistant` | `false` | Milo in calls: the sink secret, the middleware's `MEETING_ASSISTANT_*` settings, and on OrgIQ-SocialMedia the middleware on the SFU API port plus the SFU's `LIVE_CAPTIONS_*`. |
+| `meetingAssistantProvider` | `aws` | `aws` (Transcribe, Bedrock, Polly) or `openai` (needs the `<prefix>/openai/api-key` secret, as `voice` does). |
+| `meetingAssistantSinkBaseUrl` | the portal URL | Where the SFU posts Milo's audio. Needed only without `portalPublicUrls`. |
+| `sfuLive` | inferred | OrgIQ-SocialMedia has written its parameters, so the middleware can resolve the SFU address and admin token. `deploy.sh` infers it. |
 | `xrayIndexingPercent` | unset | A number from 1 to 100. OrgIQ-AgentCoreTelemetry then manages X-Ray Transaction Search for the account and Region (`AWS::XRay::TransactionSearchConfig`, plus the CloudWatch Logs policy that lets X-Ray write `aws/spans`) at that indexing share. The traces list only sees indexed spans, and the default is 1%. Unset leaves the setting alone. In an account that already turned Transaction Search on outside CloudFormation, set the share with one call instead: `aws xray update-indexing-rule --name Default --rule '{"Probabilistic":{"DesiredSamplingPercentage":100}}'`. Indexing above 1% is billed per span. |
 
 Middleware sizing: with the realtime gateway on (`realtimeGateway=true`), the middleware task now defaults to 2 vCPU / 4 GB. That is the measured profile: 1,000 sockets and 100 calls with no errors and chat p95 about 0.7 s (`docs/spend-map.md`). At 1 vCPU the BFF pinned one core and chat p95 was 1.2 to 1.8 s. Without the gateway the size is unchanged. `middlewareCpu` and `middlewareMemoryMiB` still override it.
@@ -134,6 +141,15 @@ The infrastructure half of `docs/microvm-runner-design.md` (§2, §5, §7, §11,
 - **Never the browser.** Only the middleware reads the key. The browser gets an SDP answer and an opaque session id, never the key or an OpenAI token of its own (spec §6).
 - **Settings.** Plain environment from context: `voiceUsdPerMinute` (0.05), `voiceSessionMinutesP75` (10), `voiceSessionMaxMinutes` (30), `voiceModel` (`gpt-live-1`), `voiceVoice` (unset). They become `VOICE_USD_PER_MINUTE`, `VOICE_SESSION_MINUTES_P75`, `VOICE_SESSION_MAX_MINUTES`, `VOICE_LIVE_MODEL`, `VOICE_VOICE`.
 - **CSP.** No addition. The mint is proxied by the middleware, so `connect-src` does not need `https://api.openai.com`, and WebRTC media travels over ICE/DTLS, which CSP does not govern. A test asserts the portal's policy never names OpenAI. If the data channel proves to need an HTTPS fallback (spec §6, unverified), pass `-c cspConnectOrigins=https://api.openai.com`.
+
+## Interviews tenant and Milo
+
+- **Order.** Foundation and the middleware take `-c interviews=true` together (the middleware imports the résumé bucket's exports). With `-c meetingAssistant=true` the first middleware deploy creates the sink secret; OrgIQ-Portal, then OrgIQ-SocialMedia (which reads the portal URL and the secret's ARN by name), then a second middleware deploy with `sfuLive` and `portalPublicUrls` (both inferred by `deploy.sh`) give Milo the SFU's address, its admin token and the sink address. Until that second deploy an invite answers "Milo isn't set up here".
+- **Schema.** `interviews_schema.sql` and `meeting_assistant_schema.sql` are repeatable manifest entries, so the deploy's migration applies them. Run `python3 schema/apply_all_seed.py --roles-only` afterwards, or the middleware's login cannot reach the new tables.
+- **Résumés.** Private bucket, no versioning (a deletion request must remove the file), objects reached only through the BFF. The task role has object get, put and delete there and nothing else.
+- **Milo's audio.** The middleware arms one tap per participant on the SFU's API (port 3901, its security group admitted by OrgIQ-SocialMedia) with the SFU admin token. The SFU posts PCM to `<portal URL>/api/internal/meeting-assistant/pcm/<token>` through CloudFront and signs it with `X-Live-Captions-Secret`, the sink secret the middleware also checks. The SFU image must include live-video-streaming `5d050af` (signed taps); the pinned source is `67c976b8`.
+- **The candidate.** `INTERVIEWS_GUEST_REALTIME` serves a guest token only for its own interview. platform-api (`a26685c5`) and the social gateway (`cef92bfe`) refuse it everywhere else; the image pins in `scripts/docker/document-workspace-sources.json` are at those commits.
+- **Provider.** `meetingAssistantProvider=aws` keeps candidates' and colleagues' voices in this account (Transcribe and Polly, no resource-level permission, in `MeetingAssistantTaskPolicy`). `openai` sends them to OpenAI; the local mock world uses it by default.
 
 ## Knowledge base: one data source per tenant prefix
 

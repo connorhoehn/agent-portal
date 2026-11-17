@@ -116,8 +116,8 @@ test('the BFF gets MEMORY_ID_<TENANT> and a grant on exactly the memories it is 
   assert.ok(!JSON.stringify(grant.Resource).includes('memory/*'));
 });
 
-test('DE-29: the memory tenants are the manifest tenants, unchanged for the five existing ones', () => {
-  assert.deepEqual([...MEMORY_TENANTS], ['orgiq', 'assessment', 'social', 'pipelines', 'access']);
+test('DE-29: the memory tenants are the manifest tenants, unchanged for the existing ones', () => {
+  assert.deepEqual([...MEMORY_TENANTS], ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']);
   const manifest = JSON.parse(readFileSync(join(__dirname, '..', '..', 'tenants', 'manifest.json'), 'utf8')) as { tenants: Array<{ id: string }> };
   assert.deepEqual([...MEMORY_TENANTS], manifest.tenants.map((t) => t.id));
 });

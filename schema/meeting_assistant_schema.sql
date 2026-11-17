@@ -12,7 +12,7 @@
 -- pattern names them.
 
 CREATE TABLE IF NOT EXISTS meeting_assistants (
-  call_id            TEXT        PRIMARY KEY CHECK (call_id ~ '^[a-zA-Z0-9:_-]{1,256}$'),
+  call_id            TEXT        PRIMARY KEY CHECK (char_length(call_id) BETWEEN 1 AND 256 AND call_id ~ '^[a-zA-Z0-9:_-]+$'),
   tenant             TEXT        NOT NULL,
   lobby              TEXT        NOT NULL,
   initiative_id      TEXT,
@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS meeting_assistants (
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meeting_assistants_tenant_idx ON meeting_assistants (tenant, invited_at DESC);
+-- Postgres caps a regex bound at 255, so the first spelling of this check, `{1,256}`, was accepted by CREATE TABLE and then
+-- refused every INSERT ("invalid repetition count(s)"). A table created with it gets the working check here; the length moves
+-- out of the pattern so the rule is still the route's (routes/meeting-assistant.ts: 1 to 256 of [a-zA-Z0-9:_-]).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'meeting_assistants_call_id_check'
+             AND conrelid = 'meeting_assistants'::regclass AND pg_get_constraintdef(oid) LIKE '%{1,256}%') THEN
+    ALTER TABLE meeting_assistants DROP CONSTRAINT meeting_assistants_call_id_check;
+    ALTER TABLE meeting_assistants ADD CONSTRAINT meeting_assistants_call_id_check
+      CHECK (char_length(call_id) BETWEEN 1 AND 256 AND call_id ~ '^[a-zA-Z0-9:_-]+$');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS meeting_transcript_lines (
   call_id         TEXT        NOT NULL REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
