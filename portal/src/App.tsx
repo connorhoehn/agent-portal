@@ -103,6 +103,7 @@ const InterviewsRoundRedirectPage = lazy(() => import('./pages/interviews/RoundR
 // slot 4: a lane adds its entries just below this line
 const InterviewsUpcomingPage = lazy(() => import('./pages/interviews/UpcomingPage'));
 // slot 5: a lane adds its entries just below this line
+const InterviewsPreparePage = lazy(() => import('./pages/interviews/PreparePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const NoAccessPage = lazy(() => import('./pages/NoAccessPage'));
 const OtherWorkspacePage = lazy(() => import('./pages/NoAccessPage').then((m) => ({ default: m.OtherWorkspacePage })));
@@ -590,6 +591,7 @@ export function App() {
             {/* slot 4: a lane adds its routes just below this line */}
             <Route path="upcoming" element={<Gate roles={['recruiter', 'admin']}><Page element={<InterviewsUpcomingPage />} /></Gate>} />
             {/* slot 5: a lane adds its routes just below this line */}
+            <Route path="rounds/:id/prepare" element={<Gate roles={['recruiter', 'interviewer', 'admin']}><Page element={<InterviewsPreparePage />} /></Gate>} />
           </Route>
         ) : (
           <Route path="interviews/*" element={<Navigate to="/" replace />} />

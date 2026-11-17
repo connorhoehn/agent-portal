@@ -83,7 +83,12 @@ export const SET_TIME_SQL = `UPDATE interviews
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
 
-export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, ANSWER_SEAT_SQL, REASSIGN_SQL, SET_TIME_SQL] as const;
+export const SET_QUESTIONS_SQL = `UPDATE interviews
+  SET question_ids = ARRAY(SELECT jsonb_array_elements_text(CAST(:question_ids AS JSONB))), state = :state, revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+
+export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, ANSWER_SEAT_SQL, REASSIGN_SQL, SET_TIME_SQL, SET_QUESTIONS_SQL] as const;
 
 const textParam = (name: string, value: string | null): SqlParameter =>
   (value === null ? { name, value: { isNull: true } } : { name, value: { stringValue: value } });
@@ -233,6 +238,12 @@ export class SqlInterviewsStore implements InterviewsStore {
 
   async setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>> {
     return this.casInterview(id, await this.exec(SET_TIME_SQL, [textParam('id', id), intParam('revision', revision), textParam('scheduled_at', scheduledAt)]));
+  }
+
+  async setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SET_QUESTIONS_SQL, [
+      textParam('id', id), intParam('revision', revision), textParam('question_ids', JSON.stringify(questionIds)), textParam('state', state),
+    ]));
   }
 
   /** cas() for an interview. */

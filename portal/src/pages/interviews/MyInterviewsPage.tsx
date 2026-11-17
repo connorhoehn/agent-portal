@@ -6,12 +6,15 @@
 //
 // Row I1.4: a seat still to answer carries Accept and Decline. Accept is one
 // click, confirmed in place on the row; Decline asks for the reason in the
-// composer's prompt deck (never a dialog), and the recruiter is told. Preparing
-// (I1.7) and scoring (I5.3) are later rows.
+// composer's prompt deck (never a dialog), and the recruiter is told.
+//
+// Row I1.7: rows in "To prepare" and "Upcoming" open the Prepare page; a ready or live round the viewer sits on also
+// has "Open the room". Scoring (I5.3) is a later row.
 
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { Button, Chip, CollectionToolbar, DataTable, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -22,6 +25,7 @@ import {
   DESK_VIEWS, INTERVIEWS_API, candidateHref, ROUND_TYPE_LABELS, deskLabel, deskOrder, deskTone, inDeskView, matches, whenLabel,
   type DeskView, type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
+import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
 import { REASON_MAX, acceptSeat, declineSeat, reasonProblem } from '../../lib/interviewsAssign';
 import { PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
@@ -56,6 +60,7 @@ export default function MyInterviewsPage() {
 }
 
 function MyInterviewsWorkspace() {
+  const navigate = useNavigate();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
   const [query, setQuery] = useState('');
   /** Rows answered on this page: the confirmation shown in place until the desk reloads. */
@@ -100,7 +105,17 @@ function MyInterviewsWorkspace() {
   const answerCell = (r: InterviewRow) => {
     const done = answered.get(r.id);
     if (done) return <T size="xs" tone="secondary" data-testid="interviews-desk-answered">{done}</T>;
-    if (r.myAnswer !== 'to-answer') return null;
+    if (r.myAnswer !== 'to-answer') {
+      const prepare = r.bucket === 'to-prepare' || r.bucket === 'upcoming';
+      if (!prepare && !canOpenRoom(r)) return null;
+      return (
+        <Inline gap="xs" wrap={false}>
+          {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'ghost'} data-testid="interviews-desk-prepare"
+            onClick={() => void navigate(preparePath(r.id))}>{r.seat === 'lead' ? 'Prepare' : 'Read the plan'}</Button>}
+          {canOpenRoom(r) && <Button size="sm" variant="secondary" data-testid="interviews-desk-room" onClick={() => void navigate(roomPath(r.id))}>Open the room</Button>}
+        </Inline>
+      );
+    }
     return (
       <Stack gap="none">
         <Inline gap="xs" wrap={false}>

@@ -1,0 +1,156 @@
+// /interviews/rounds/:id/prepare — the lead's page for one round (docs/interviews-tenant-plan.md row I1.7, contract
+// C6): who the candidate is, the résumé, what the kit judges, the question bank and "Your plan". The lead adds,
+// removes and reorders questions and saves them; a panel member or the recruiter reads the same page and chooses
+// nothing. One line says what the round still waits for; once it is ready the lead can open the room (row I2.4).
+// The server decides everything (middleware lib/interviews/prepare.ts); a stale save shows what was saved.
+
+import { Button, ChevronIcon, Chip, DataTable, DetailPage, DetailSection, EmptyState, IconButton, Inline, MetaLine, Stack, T, TrashIcon, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
+import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { INTERVIEWS_API, ROUND_TYPE_LABELS, roundStatus, whenWithZone } from '../../lib/interviews';
+import { moved } from '../../lib/interviewsKit';
+import { bankGroups, canOpenRoom, roomPath, samePlan, savePlan, type BankQuestion, type InterviewRecord } from '../../lib/interviewsPrepare';
+import ResumeViewer from './ResumeViewer';
+
+export default function PreparePage() {
+  const { id = '' } = useParams();
+  const navigate = useNavigate();
+  const base = useFlushTrailItems();
+  const { data, error, failure, refresh } = useFetch<{ interview: InterviewRecord }>(id ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}` : null);
+  const record = data?.interview ?? null;
+  useCrumbLabel(id, record ? `${record.candidate.name}, ${record.round.name}` : null);
+  if (failure?.status === 404) {
+    return <RecordNotFound heading="Round" title="Round not found" body="There is no round here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
+  }
+  if (error && !record) return <UnavailableNotice error={error} what="this round" source="Rounds are read from the interviews tenant" onRetry={refresh} />;
+  if (!record) return <DetailPage title="Prepare" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the round…</T></DetailPage>;
+  return <PrepareWorkspace key={`${record.id}:${record.revision}`} record={record} trail={base} onChanged={refresh} />;
+}
+
+function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecord; trail: ReturnType<typeof useFlushTrailItems>; onChanged: () => void }) {
+  const navigate = useNavigate();
+  const saved = useMemo(() => record.questionsChosen.map((q) => q.id), [record]);
+  const [plan, setPlan] = useState<string[]>(saved);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => { setPlan(saved); }, [saved]);
+
+  const byId = new Map(record.bank.map((q) => [q.id, q]));
+  const planned = plan.map((q) => byId.get(q)).filter((q): q is BankQuestion => !!q);
+  const groups = bankGroups(record.bank, record.competencies, plan);
+  const dirty = !samePlan(plan, saved);
+  const editable = record.canPrepare;
+  const full = plan.length >= record.maxQuestions;
+  const status = roundStatus(record.state);
+
+  const save = async () => {
+    setBusy(true); setProblem(null); setNote(null);
+    const out = await savePlan(record.id, record.revision, plan);
+    setBusy(false);
+    if (!out.ok) { setProblem(out.error); if (out.stale) onChanged(); return; }
+    setNote('Your plan is saved.');
+    onChanged();
+  };
+
+  const planColumns: DataTableColumn<BankQuestion>[] = [
+    { key: 'n', header: '#', numeric: true, width: '48px', render: (q) => <T size="sm" tone="secondary">{plan.indexOf(q.id) + 1}</T> },
+    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} className="block max-w-[34rem] truncate" data-testid="interviews-plan-prompt">{q.prompt}</T> },
+    { key: 'competency', header: 'Competency', render: (q) => <T size="sm" tone="secondary" className="block max-w-[12rem] truncate">{q.competency}</T> },
+  ];
+  const bankColumns: DataTableColumn<BankQuestion>[] = [
+    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} className="block max-w-[38rem] truncate" data-testid="interviews-bank-prompt">{q.prompt}</T> },
+    { key: 'starter', header: 'Starter code', width: '120px', render: (q) => (q.hasStarter ? <T size="sm">Has starter code</T> : <T size="xs" tone="tertiary">—</T>) },
+  ];
+
+  const planControls = (q: BankQuestion) => {
+    const i = plan.indexOf(q.id);
+    return (
+      <Inline gap="xs" wrap={false} justify="end">
+        <IconButton size="sm" variant="ghost" aria-label={`Move question ${i + 1} up`} icon={<ChevronIcon dir="up" size={14} />} disabled={!editable || i === 0}
+          onClick={() => setPlan((p) => moved(p, i, -1))} />
+        <IconButton size="sm" variant="ghost" aria-label={`Move question ${i + 1} down`} icon={<ChevronIcon dir="down" size={14} />} disabled={!editable || i === plan.length - 1}
+          onClick={() => setPlan((p) => moved(p, i, 1))} />
+        <IconButton size="sm" variant="ghost" aria-label={`Take question ${i + 1} out of your plan`} icon={<TrashIcon size={14} />} disabled={!editable}
+          onClick={() => setPlan((p) => p.filter((x) => x !== q.id))} />
+      </Inline>
+    );
+  };
+
+  const planSection = (
+    <Stack gap="md">
+      <DetailSection variant="heading" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}
+        actions={editable ? (
+          <Button size="sm" variant="primary" disabled={!dirty || busy} data-testid="interviews-plan-save" onClick={() => { void save(); }}>{busy ? 'Saving…' : 'Save plan'}</Button>
+        ) : undefined}>
+        <Stack gap="sm">
+          {record.missing && <T size="sm" tone="secondary" data-testid="interviews-prepare-missing">{record.missing}</T>}
+          {!editable && <T size="sm" tone="secondary" data-testid="interviews-prepare-readonly">{readOnlyLine(record)}</T>}
+          {problem && <T size="sm" tone="danger" role="alert" data-testid="interviews-plan-problem">{problem}</T>}
+          {note && !problem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
+          {planned.length === 0
+            ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">Nothing in the plan yet. Add questions from the list below.</T>
+            : <DataTable narrow data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id}
+              rowActions={editable ? planControls : undefined} rowActionsHeader="Order" rowActionsHeaderHidden />}
+        </Stack>
+      </DetailSection>
+      {groups.length === 0
+        ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the bank is in your plan.'}</T>
+        : groups.map((g) => (
+          <DetailSection key={g.competencyId} variant="heading" title={g.name} hint={`${g.questions.length} to choose from`}>
+            <DataTable narrow data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id}
+              rowActions={editable ? (q) => (
+                <Button size="sm" variant="secondary" disabled={full} title={full ? `A round takes at most ${record.maxQuestions} questions.` : undefined}
+                  data-testid="interviews-bank-add" onClick={() => setPlan((p) => [...p, q.id])}>Add</Button>
+              ) : undefined} rowActionsHeader="Add" rowActionsHeaderHidden />
+          </DetailSection>
+        ))}
+    </Stack>
+  );
+
+  return (
+    <DetailPage data-testid="interviews-prepare" title={`${record.candidate.name}, ${record.round.name}`} breadcrumbs={trail}
+      badge={<Chip tone={status.tone} size="xs" data-testid="interviews-prepare-state">{status.label}</Chip>}
+      meta={<MetaLine size="sm" data-testid="interviews-prepare-meta" items={[
+        record.opening.title, `${ROUND_TYPE_LABELS[record.round.type]}, ${record.round.minutes} minutes`, whenWithZone(record.scheduledAt),
+        record.seat === 'lead' ? 'You lead' : record.seat === 'panel' ? `${record.lead.name} leads` : `${record.lead.name} leads`,
+      ]} />}
+      actions={canOpenRoom(record) && record.seat === 'lead'
+        ? <Button size="sm" variant="primary" data-testid="interviews-prepare-room" onClick={() => void navigate(roomPath(record.id))}>Open the room</Button>
+        : undefined}
+      tabs={[
+        { id: 'plan', label: 'Questions', badge: plan.length || undefined, testId: 'interviews-prepare-tab-plan', content: planSection },
+        {
+          id: 'resume', label: 'Résumé', testId: 'interviews-prepare-tab-resume',
+          content: <Stack gap="none" className="h-[70vh] min-h-[28rem]" data-testid="interviews-prepare-resume"><ResumeViewer candidateId={record.candidate.id} /></Stack>,
+        },
+        { id: 'competencies', label: 'Competencies', badge: record.competencies.length || undefined, testId: 'interviews-prepare-tab-competencies', content: <Competencies record={record} /> },
+      ]} />
+  );
+}
+
+function readOnlyLine(r: InterviewRecord): string {
+  if (r.state === 'assigned') return r.seat === 'lead' ? 'Accept this round first: you choose its questions once you have.' : `${r.lead.name} chooses the questions once they accept.`;
+  if (r.state === 'live' || r.state === 'ended' || r.state === 'scored' || r.state === 'reviewed') return 'This round has started, so its plan is fixed.';
+  if (r.state === 'declined' || r.state === 'cancelled') return 'This round is no longer going ahead.';
+  return `${r.lead.name} chooses the questions for this round.`;
+}
+
+function Competencies({ record }: { record: InterviewRecord }) {
+  if (!record.competencies.length) return <EmptyState title="No competencies yet" description="The recruiter adds what each round judges in the opening's kit." />;
+  return (
+    <Stack gap="md" data-testid="interviews-prepare-competencies">
+      {record.competencies.map((c) => (
+        <DetailSection key={c.id} variant="heading" title={c.name} hint={c.lookFor}>
+          <Stack gap="xs">
+            {([1, 2, 3, 4] as const).map((n) => <T key={n} size="sm" tone="secondary">{`${n}. ${c.anchors[n]}`}</T>)}
+          </Stack>
+        </DetailSection>
+      ))}
+    </Stack>
+  );
+}

@@ -16,6 +16,7 @@ import { resumeRouter } from './interviews/resume.js';
 import { resumeRows } from '../lib/interviews/resume/service.js';
 import { requireAction } from '../lib/authz.js';
 import { indexFor, param } from '../lib/interviews/request.js';
+import { prepareRouter } from './interviews/prepare.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { openingsRouter } from './interviews/openings.js';
 import { assignmentsRouter } from './interviews/assignments.js';
@@ -73,6 +74,8 @@ interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ items: ix.interviewRows() });
 }));
+
+interviewsRouter.use(prepareRouter); // lane PREPARE (row I1.7): the lead chooses a round's questions
 
 interviewsRouter.get('/interviews/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

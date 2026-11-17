@@ -8,6 +8,7 @@ import type {
 } from './types.js';
 import { reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
+import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { Seat } from './types.js';
 
 export interface PersonRef { id: string; name: string }
@@ -114,6 +115,13 @@ export interface InterviewRecord extends InterviewRow {
   questionsChosen: KitQuestion[];
   competencies: KitCompetency[];
   scorecards: ScorecardView[];
+  /** The opening's questions for this round's type, to choose from (row I1.7). No money, nothing about anyone. */
+  bank: Array<{ id: string; prompt: string; competencyId: string; competency: string; hasStarter: boolean }>;
+  /** Whether the viewer may choose the questions now (the lead of the round, accepted, not yet live). */
+  canPrepare: boolean;
+  /** What is still missing before the round is ready, in one plain line; null when nothing is. */
+  missing: string | null;
+  maxQuestions: number;
 }
 
 /** What a candidate's record shows of their résumé (row I1.6): the file itself is read from its own route. */
@@ -307,6 +315,14 @@ export class WorldIndex {
     const names = new Map(o.kit.competencies.map((k) => [k.id, k.name]));
     return {
       ...row,
+      state: readyState(i),
+      bank: o.kit.questions.filter((q) => q.roundType === i.type).map((q) => ({
+        id: q.id, prompt: q.prompt, competencyId: q.competencyId, competency: names.get(q.competencyId) ?? q.competencyId,
+        hasStarter: Object.values(q.starter ?? {}).some((c) => !!c),
+      })),
+      canPrepare: mayChoose(i, this.viewer.id) && isPreparable(i.state) && hasAccepted(i, i.leadId, 'lead'),
+      missing: missingLine(i),
+      maxQuestions: MAX_QUESTIONS,
       questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q),
       competencies: o.kit.competencies,
       scorecards: this.scorecardsOf(i.id).map((s) => ({

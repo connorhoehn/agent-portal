@@ -21,7 +21,7 @@
 // saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Candidate, Interview, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard } from './types.js';
+import type { Application, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
@@ -54,6 +54,8 @@ export interface InterviewWrites {
   reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>>;
   /** Set (an ISO instant, UTC) or clear (`null`) the time, against `revision`. The state is not touched. */
   setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>>;
+  /** The lead's chosen questions in order and the state they leave (prepare.ts readyState), against `revision`. */
+  setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>>;
 }
 
 export interface InterviewsStore extends OpeningWrites, InterviewWrites {
@@ -119,6 +121,10 @@ export class MemoryInterviewsStore implements InterviewsStore {
 
   async setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>> {
     return casInterview(id, revision, (i) => { i.scheduledAt = scheduledAt; });
+  }
+
+  async setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { i.questionIds = [...questionIds]; i.state = state; });
   }
 }
 
