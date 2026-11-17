@@ -15,8 +15,10 @@ export default async function run({ portal, out, path, record, signIn }) {
     const url = new URL(page.url()).pathname;
     const header = await page.getByTestId('interviews-profile-header').innerText();
     const tracker = await page.getByTestId('interviews-profile-tracker').innerText();
-    const history = await page.getByTestId('interviews-profile-history').innerText();
     const rounds = await page.getByTestId('interviews-profile-rounds').innerText();
+    // Stage history sits on the profile's Activity tab (UI round 3).
+    await page.getByTestId('interviews-profile-tab-activity').click();
+    const history = await page.getByTestId('interviews-profile-history').innerText({ timeout: 30_000 });
     const crumbs = await page.locator('nav[aria-label*="readcrumb" i]').first().innerText().catch(() => '');
     const body = await page.getByTestId('interviews-candidate-profile').innerText();
     const roundCount = await page.getByTestId('interviews-profile-rounds').getByTestId('interviews-profile-round').count();

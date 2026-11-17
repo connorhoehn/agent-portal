@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T15:10:12.455Z",
-  "serverHandlerSha": "385a2b65aae1e912ec19858088eab65fed7c72ce56a2d0adc618f21f20327eb7",
+  "capturedAt": "2026-11-17T16:12:48.916Z",
+  "serverHandlerSha": "0fd190805d97cbec3f7a1a692038822e6bb23b5c1377718edf56740f2749b954",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5086,6 +5086,7 @@
         "items[].nextInterview.state": [
           "accepted",
           "assigned",
+          "live",
           "ready"
         ],
         "items[].nextInterview.type": [
@@ -5438,6 +5439,7 @@
           "accepted",
           "assigned",
           "ended",
+          "live",
           "ready",
           "scored"
         ]
@@ -5785,6 +5787,7 @@
         "items[].pipeline[].nextInterview.state": [
           "accepted",
           "assigned",
+          "live",
           "ready"
         ],
         "items[].pipeline[].nextInterview.type": [
@@ -12113,6 +12116,7 @@
         "available",
         "ended",
         "imported",
+        "live",
         "missing",
         "none",
         "ok",
