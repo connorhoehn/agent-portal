@@ -11,6 +11,8 @@
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
+import { resumeRouter } from './interviews/resume.js';
+import { resumeRows } from '../lib/interviews/resume/service.js';
 import { requireAction } from '../lib/authz.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
@@ -45,6 +47,8 @@ interviewsRouter.get('/openings/:id', asyncHandler(async (req, res) => {
   res.json({ opening: ix.openingRecord(o) });
 }));
 
+interviewsRouter.use(resumeRouter); // lane RESUME (row I1.6): a candidate's résumé file
+
 interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   res.setHeader('Cache-Control', 'no-store');
@@ -56,7 +60,7 @@ interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
   const c = ix.candidates.get(param(req, 'id'));
   if (!c) throw new NotFoundError('There is no candidate here that you can open.');
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ candidate: ix.candidateRecord(c) });
+  res.json({ candidate: ix.candidateRecord(c, await resumeRows().get(c.id)) });
 }));
 
 interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {

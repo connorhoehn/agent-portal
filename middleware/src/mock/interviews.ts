@@ -21,6 +21,7 @@
 
 import { clock, defineFixture } from './core/index.js';
 import { EM_KIT } from './interviews-behavioural.js';
+import { seededResumeFileId } from './interviews-resumes.js';
 import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, Scorecard, StageChange,
 } from '../lib/interviews/types.js';
@@ -171,7 +172,7 @@ export const interviewOpeningsFixture = defineFixture<Opening>({
 // ── candidates ───────────────────────────────────────────────────────────────
 
 const candidate = (id: string, name: string, email: string, headline: string, location: string, source: string, notes: string, createdDaysAgo: number): Candidate =>
-  ({ id, name, email, headline, location, source, resumeFileId: null, notes, createdAt: clock.daysAgo(createdDaysAgo) });
+  ({ id, name, email, headline, location, source, resumeFileId: seededResumeFileId(id), notes, createdAt: clock.daysAgo(createdDaysAgo) });
 
 export const interviewCandidatesFixture = defineFixture<Candidate>({
   key: 'interviews.candidates',

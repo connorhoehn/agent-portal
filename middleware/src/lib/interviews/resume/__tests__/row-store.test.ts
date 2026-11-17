@@ -1,0 +1,141 @@
+// The two résumé row stores behave the same (row I1.6): one contract, run over the memory store (the registered
+// fixture, the candidates fixture's pointer) and the SQL store (its real statements against a stateful stand-in for
+// the table), then every statement is held to schema/interviews_schema.sql.
+jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import {
+  DELETE_RESUME_SQL, GET_RESUME_SQL, INSERT_RESUME_SQL, MemoryResumeRows, POINT_CANDIDATE_SQL, RESUME_STATEMENTS, SqlResumeRows, type ResumeRowStore,
+} from '../row-store.js';
+import { interviewCandidatesFixture } from '../../../../mock/interviews.js';
+import { interviewResumesFixture } from '../../../../mock/interviews-resumes.js';
+import { fixtureRegistry } from '../../../../mock/core/index.js';
+import { MemoryInterviewsStore } from '../../store.js';
+import type { ResumeRecord } from '../types.js';
+
+const ts = (iso: string) => iso.replace('T', ' ').replace('Z', '');
+
+/** A Data API over a stateful interview_resumes table (seeded from the fixture) and the candidates' pointer column. */
+function tableExec(pointers: Map<string, string | null>) {
+  const table: Record<string, unknown>[] = interviewResumesFixture.rows().map((r) => ({
+    id: r.id, candidate_id: r.candidateId, file_name: r.fileName, size_bytes: String(r.sizeBytes), content_type: r.contentType, sha256: r.sha256,
+    uploaded_by: r.uploadedBy, uploaded_at: ts(r.uploadedAt), storage_key: r.storageKey,
+  }));
+  const seen: string[] = [];
+  const exec = async (sql: string, params: SqlParameter[] = []) => {
+    seen.push(sql);
+    const b = new Map(params.map((p) => [p.name!, p.value!.isNull ? null : p.value!.stringValue ?? p.value!.longValue ?? null]));
+    if (sql === GET_RESUME_SQL) return table.filter((r) => r['candidate_id'] === b.get('candidate_id'));
+    if (sql === DELETE_RESUME_SQL) {
+      const gone = table.filter((r) => r['candidate_id'] === b.get('candidate_id'));
+      for (const g of gone) table.splice(table.indexOf(g), 1);
+      return gone;
+    }
+    if (sql === INSERT_RESUME_SQL) {
+      if (table.some((r) => r['candidate_id'] === b.get('candidate_id'))) throw new Error('duplicate key value violates unique constraint');
+      const row = {
+        id: b.get('id'), candidate_id: b.get('candidate_id'), file_name: b.get('file_name'), size_bytes: String(b.get('size_bytes')), content_type: b.get('content_type'),
+        sha256: b.get('sha256'), uploaded_by: b.get('uploaded_by'), uploaded_at: ts(String(b.get('uploaded_at'))), storage_key: b.get('storage_key'),
+      };
+      table.push(row);
+      return [row];
+    }
+    if (sql === POINT_CANDIDATE_SQL) { pointers.set(String(b.get('id')), b.get('resume_file_id') as string | null); return []; }
+    throw new Error(`unexpected statement: ${sql}`);
+  };
+  return { exec, seen };
+}
+
+const NEW: ResumeRecord = {
+  id: 'rf-new', candidateId: 'cand-mateo', fileName: 'Mateo-new.pdf', sizeBytes: 1234, contentType: 'application/pdf', sha256: 'a'.repeat(64),
+  uploadedBy: 'u-greta', uploadedAt: '2026-11-16T09:30:00.000Z', storageKey: 'interviews/resumes/cand-mateo/rf-new.pdf',
+};
+const FIRST_TIME: ResumeRecord = { ...NEW, id: 'rf-chloe', candidateId: 'cand-chloe', fileName: 'Chloe.pdf', storageKey: 'interviews/resumes/cand-chloe/rf-chloe.pdf' };
+
+/** What the candidate row points at, as each implementation keeps it. */
+type Harness = { name: string; store: ResumeRowStore; pointer: (candidateId: string) => Promise<string | null> };
+const harnesses: Array<[string, () => Harness]> = [
+  ['memory', () => ({ name: 'memory', store: new MemoryResumeRows(), pointer: async (id) => (await new MemoryInterviewsStore().listCandidates()).find((c) => c.id === id)!.resumeFileId })],
+  ['sql', () => {
+    const pointers = new Map<string, string | null>(interviewCandidatesFixture.rows().map((c) => [c.id, c.resumeFileId]));
+    return { name: 'sql', store: new SqlResumeRows(tableExec(pointers).exec), pointer: async (id) => pointers.get(id) ?? null };
+  }],
+];
+
+beforeEach(() => fixtureRegistry.resetAll('default'));
+
+describe.each(harnesses)('the %s résumé rows', (_name, make) => {
+  let h: Harness;
+  beforeEach(() => { h = make(); });
+
+  it('reads the seeded résumé and nothing for a candidate with none', async () => {
+    expect(await h.store.get('cand-mateo')).toMatchObject({ id: 'rf-mateo', candidateId: 'cand-mateo', contentType: 'application/pdf', uploadedBy: 'u-greta' });
+    expect(await h.store.get('cand-chloe')).toBeNull();
+    expect(await h.pointer('cand-mateo')).toBe('rf-mateo');
+    expect(await h.pointer('cand-chloe')).toBeNull();
+  });
+
+  it('a first résumé is written and the candidate points at it', async () => {
+    expect(await h.store.replace(FIRST_TIME)).toBeNull();
+    expect(await h.store.get('cand-chloe')).toEqual(FIRST_TIME);
+    expect(await h.pointer('cand-chloe')).toBe('rf-chloe');
+  });
+
+  it('a new one replaces the old: one row, the old row handed back, the pointer moved', async () => {
+    const before = (await h.store.get('cand-mateo'))!;
+    expect(await h.store.replace(NEW)).toEqual(before);
+    expect(await h.store.get('cand-mateo')).toEqual(NEW);
+    expect(await h.pointer('cand-mateo')).toBe('rf-new');
+  });
+
+  it('removal hands the row back, clears the pointer, and a second removal finds nothing', async () => {
+    const before = (await h.store.get('cand-ingrid'))!;
+    expect(await h.store.remove('cand-ingrid')).toEqual(before);
+    expect(await h.store.get('cand-ingrid')).toBeNull();
+    expect(await h.pointer('cand-ingrid')).toBeNull();
+    expect(await h.store.remove('cand-ingrid')).toBeNull();
+    expect(await h.store.get('cand-mateo')).not.toBeNull();
+  });
+});
+
+describe('the SQL store runs its statements in order', () => {
+  it('replace deletes, inserts, then points; remove deletes then clears', async () => {
+    const pointers = new Map<string, string | null>();
+    const { exec, seen } = tableExec(pointers);
+    const sql = new SqlResumeRows(exec);
+    await sql.replace(NEW);
+    expect(seen).toEqual([DELETE_RESUME_SQL, INSERT_RESUME_SQL, POINT_CANDIDATE_SQL]);
+    seen.length = 0;
+    await sql.remove('cand-mateo');
+    expect(seen).toEqual([DELETE_RESUME_SQL, POINT_CANDIDATE_SQL]);
+  });
+});
+
+describe('every statement matches schema/interviews_schema.sql', () => {
+  const ddl = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
+  const block = /CREATE TABLE IF NOT EXISTS interview_resumes \(([\s\S]*?)\n\);/.exec(ddl)![1]!;
+  const cols = new Set([...block.matchAll(/^\s{2}([a-z_0-9]+)\s+[A-Z]/gm)].map((m) => m[1]!));
+
+  it('declares the table, one row per candidate', () => {
+    expect(cols.size).toBe(9);
+    expect(block).toMatch(/candidate_id\s+TEXT NOT NULL UNIQUE REFERENCES interview_candidates\(id\)/);
+  });
+
+  it.each(RESUME_STATEMENTS.map((s) => [s.split('\n')[0]!.slice(0, 50), s]))('%s… names only declared columns, and an insert names all', (_l, statement) => {
+    const named = [
+      ...(/INSERT INTO interview_resumes \(([^)]+)\)/.exec(statement)?.[1]?.split(',') ?? []),
+      ...(/RETURNING ([\s\S]+)$/.exec(statement)?.[1]?.split(',') ?? []),
+      ...(/SELECT ([\s\S]+?)\s+FROM/.exec(statement)?.[1]?.split(',') ?? []),
+    ].map((c) => c.trim());
+    expect(named.length).toBeGreaterThan(1);
+    for (const c of named) expect([c, cols.has(c)]).toEqual([c, true]);
+    if (statement.startsWith('INSERT')) expect(/INSERT INTO interview_resumes \(([^)]+)\)/.exec(statement)![1]!.split(',').map((c) => c.trim()).sort()).toEqual([...cols].sort());
+  });
+
+  it('the pointer statement writes the candidates\' declared column', () => {
+    expect(POINT_CANDIDATE_SQL).toContain('interview_candidates SET resume_file_id');
+    expect(/CREATE TABLE IF NOT EXISTS interview_candidates \(([\s\S]*?)\n\);/.exec(ddl)![1]).toMatch(/resume_file_id\s+TEXT/);
+  });
+});

@@ -106,8 +106,13 @@ export interface InterviewRecord extends InterviewRow {
   scorecards: ScorecardView[];
 }
 
+/** What a candidate's record shows of their résumé (row I1.6): the file itself is read from its own route. */
+export interface ResumeSummary { fileName: string; sizeBytes: number; uploadedAt: string; uploadedBy: PersonRef }
+
 export interface CandidateRecord {
   candidate: Candidate;
+  /** The current résumé, or null. */
+  resume: ResumeSummary | null;
   applications: Array<{
     applicationId: string;
     opening: { id: string; title: string; team: string };
@@ -289,9 +294,10 @@ export class WorldIndex {
     };
   }
 
-  candidateRecord(c: Candidate): CandidateRecord {
+  candidateRecord(c: Candidate, resume: { fileName: string; sizeBytes: number; uploadedAt: string; uploadedBy: string } | null = null): CandidateRecord {
     return {
       candidate: c,
+      resume: resume ? { fileName: resume.fileName, sizeBytes: resume.sizeBytes, uploadedAt: resume.uploadedAt, uploadedBy: this.people(resume.uploadedBy) } : null,
       applications: this.world.applications.filter((a) => a.candidateId === c.id).flatMap((a) => {
         const o = this.openings.get(a.openingId);
         if (!o) return [];

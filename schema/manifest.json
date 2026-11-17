@@ -362,7 +362,7 @@
       "id": "interviews_schema",
       "file": "interviews_schema.sql",
       "kind": "repeatable",
-      "why": "The interviews tenant's model (docs/interviews-tenant-plan.md, \"The model\"): openings with their kit, candidates, applications, interviews, scorecards. DDL only; the seed story is the mock world's registered fixtures. FKs app_users (identity_schema.sql), so it loads after it. Tables of one tenant, so row_level_security.sql lists them. NOT yet applied to Aurora."
+      "why": "The interviews tenant's model (docs/interviews-tenant-plan.md, \"The model\"): openings with their kit, candidates, applications, interviews, scorecards, and each candidate's current résumé record (the file itself is in a private bucket). DDL only; the seed story is the mock world's registered fixtures. FKs app_users (identity_schema.sql), so it loads after it. Tables of one tenant, so row_level_security.sql lists them. NOT yet applied to Aurora."
     },
     {
       "id": "seed",

@@ -479,6 +479,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (c: { id: string }) => c.id,
   },
   {
+    name: 'interview_resumes',
+    fixture: 'interviews.resumes',
+    describes: 'A candidate\'s current résumé: its record only. The bytes are in the private bucket (or the mock\'s memory), by storage key.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_resumes',
+    mockRows: async () => (await import('../../interviews-resumes.js')).interviewResumesFixture.rows('default'),
+    mockId: (r: { id: string }) => r.id,
+  },
+  {
     name: 'interview_applications',
     fixture: 'interviews.applications',
     describes: 'One candidate on one opening, its stage and the history of stage decisions.',

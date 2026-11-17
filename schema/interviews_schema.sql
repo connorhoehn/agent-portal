@@ -61,6 +61,22 @@ CREATE TABLE IF NOT EXISTS interview_candidates (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ── résumés ─────────────────────────────────────────────────────────────────
+-- A candidate's current résumé (row I1.6): one row per candidate, a new upload replaces it. The bytes are
+-- not here: they are in the private bucket named by INTERVIEWS_RESUME_BUCKET under `storage_key`, which is
+-- made from two ids and never from `file_name`. `interview_candidates.resume_file_id` points at `id`.
+CREATE TABLE IF NOT EXISTS interview_resumes (
+  id                 TEXT PRIMARY KEY,
+  candidate_id       TEXT NOT NULL UNIQUE REFERENCES interview_candidates(id),
+  file_name          TEXT NOT NULL,
+  size_bytes         INTEGER NOT NULL CHECK (size_bytes > 0),
+  content_type       TEXT NOT NULL DEFAULT 'application/pdf' CHECK (content_type = 'application/pdf'),
+  sha256             TEXT NOT NULL,
+  uploaded_by        TEXT NOT NULL,
+  uploaded_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  storage_key        TEXT NOT NULL
+);
+
 -- ── applications ────────────────────────────────────────────────────────────
 -- One candidate on one opening. `history` is the stage decisions in order:
 -- [{ stage, at, by, reason }], the last one being `stage`.
