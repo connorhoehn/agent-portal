@@ -281,6 +281,8 @@ Fixed:
 
 Note: the named endpoint `<prefix>_microvm_endpoint` stays on runtime version 1 because nothing moves it. Everything invokes `DEFAULT`, which follows the latest version, so do not probe through the named endpoint. The devbox and agent stacks' named endpoints behave the same way.
 
+Teardown: deleting OrgIQ-MicrovmRuntime does not free the runtime subnets right away. AgentCore keeps its two `agentic_ai` interfaces attached for at least 90 minutes after the runtime is gone. They are owned by the service, so they cannot be detached or deleted, and OrgIQ-MicrovmNetwork stops in `DELETE_FAILED` on the runtime security group and subnets. Once the Network Firewall, NAT gateway and endpoints are deleted, nothing left bills. Retry `delete-stack` after the interfaces are gone. `destroy.sh` does not wait for this.
+
 Not yet run: `task`, `push` and `debrief`, which need the BFF reachable as `lab.<prefix>.internal`; the ACM certificate; and the ALB route from the runner VPC.
 
 ### Gaps against what the other lanes ship
