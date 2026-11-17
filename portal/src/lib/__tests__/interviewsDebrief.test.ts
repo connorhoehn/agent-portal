@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  confirmQuestion, debriefHref, dueLine, missingLine, readsDebrief, reasonProblem, recapLine, roundEmptyLine, scorecardNotes, sideBySide,
+  confirmQuestion, debriefHref, dueLine, missingLine, readsDebrief, reasonProblem, recapLine, roundEmptyLine, scorecardNotes, sideBySide, applicationSideBySide,
   type DebriefApplication, type DebriefScorecard,
 } from '../interviewsDebrief.ts';
 
@@ -77,4 +77,21 @@ test('who opens a debrief, where it is, and what the recap says when it has noth
   assert.match(recapLine({ ...empty, state: 'no-transcript' })!, /without a transcript/);
   assert.match(recapLine({ ...empty, state: 'paused', paused: 'budget' })!, /budget/);
   assert.equal(recapLine({ ...empty, state: 'ready', competencies: [{ id: 'd', name: 'D', evidence: [{ text: 't', source: { kind: 'transcript', seq: 1, quote: 'q' } }] }] }), null);
+});
+
+test('one table for an application: each round a group of one column per interviewer, the recommendation and the summary as rows', () => {
+  const r1 = { interviewId: 'iv-1', name: 'Coding', scorecards: [card('a', 'Hugo Marchetti'), card('b', 'Wen Zhao')] };
+  const r2 = { interviewId: 'iv-2', name: 'Together', scorecards: [card('c', 'Amara Okafor', { recommendation: 'strong-yes' })] };
+  const { columns, rows } = applicationSideBySide([r1, r2], COMPETENCIES);
+  assert.deepEqual(columns.map((c) => [c.roundName, c.interviewer.name, c.firstInRound]), [['Coding', 'Hugo Marchetti', true], ['Coding', 'Wen Zhao', false], ['Together', 'Amara Okafor', true]]);
+  assert.deepEqual(rows.map((r) => r.label), ['System design', 'Communication', 'Recommendation', 'Summary']);
+  assert.deepEqual(Object.keys(rows[2]!.cells).sort(), ['a', 'b', 'c']);
+  assert.deepEqual(rows[2]!.cells['c'], { kind: 'recommendation', recommendation: 'strong-yes' });
+});
+
+test('a round with no scorecard adds no column, and no rounds at all still gives the competency rows', () => {
+  const none = { interviewId: 'iv-3', name: 'Design', scorecards: [] };
+  assert.equal(applicationSideBySide([none], COMPETENCIES).columns.length, 0);
+  assert.equal(applicationSideBySide([none], COMPETENCIES).rows.length, COMPETENCIES.length + 2);
+  assert.equal(applicationSideBySide([], COMPETENCIES).rows.length, COMPETENCIES.length + 2);
 });

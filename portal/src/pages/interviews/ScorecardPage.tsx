@@ -16,12 +16,12 @@
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea,
+  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -30,7 +30,7 @@ import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/in
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
-  othersLine, previousStep, recapStateLine, recapUrl, saveDraft, scaleOf, submitScorecard,
+  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, previousStep, recommendationVerdict, recapStateLine, recapUrl, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
@@ -47,8 +47,8 @@ export default function ScorecardPage() {
     return <RecordNotFound heading="Scorecard" title="Scorecard not found" body="There is no interview here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
   }
   if (error && !view) return <UnavailableNotice error={error} what="this scorecard" source="Scorecards are read from the interviews tenant" onRetry={refresh} />;
-  if (!view) return <DetailPage title="Scorecard" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the scorecard…</T></DetailPage>;
-  return <ScorecardWorkspace key={`${view.interview.id}:${view.mine?.version ?? 0}`} view={view} trail={base} onChanged={refresh} />;
+  if (!view) return <FlushDetailFrame><DetailPage title="Scorecard" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the scorecard…</T></DetailPage></FlushDetailFrame>;
+  return <FlushDetailFrame><ScorecardWorkspace key={`${view.interview.id}:${view.mine?.version ?? 0}`} view={view} trail={base} onChanged={refresh} /></FlushDetailFrame>;
 }
 
 function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageView; trail: Trail; onChanged: () => void }) {
@@ -270,26 +270,31 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   );
 }
 
-/** One submitted scorecard, read-only: each competency's rating against its anchors and the note, then the decision. */
+/** One submitted scorecard, read-only: the three steps it went through, then each competency's rating (1 to 4) beside its anchor sentence and note, the summary and the decision in words. */
 function ScorecardReadout({ card, competencies, round, testId }: { card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; testId: string }) {
   const kit = new Map(competencies.map((c) => [c.id, c]));
   const when = new Date(card.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   return (
     <DetailSection variant="heading" title={round ? `${card.interviewer.name}, ${round}` : card.interviewer.name} data-testid={testId}
       hint={<MetaLine size="sm" items={[`Version ${card.version}`, `Submitted ${when}`, ...(card.correctionReason ? [`Corrected: ${card.correctionReason}`] : [])]} />}
-      actions={<Chip tone={recommendationTone(card.recommendation)} size="xs">{RECOMMENDATION_LABELS[card.recommendation]}</Chip>}>
-      <Stack gap="sm">
+      actions={<Chip tone={recommendationTone(card.recommendation)} size="xs" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>}>
+      <Stack gap="md">
+        <WorkflowStepper aria-label="The steps of a scorecard" data-testid="interviews-scorecard-steps"
+          steps={SCORECARD_STEPS.map((id, i) => ({ step: i + 1, label: SCORECARD_STEP_LABELS[id], done: true, active: false }))} />
         {card.ratings.map((r) => {
           const c = kit.get(r.competencyId);
           return (
             <Stack key={r.competencyId} gap="xs">
-              <RatingInput label={r.competency} readOnly value={r.rating} onChange={() => undefined}
-                options={c ? scaleOf(c) : ([1, 2, 3, 4] as const).map((n) => ({ value: n, label: `${n} of 4` }))} />
-              {r.note && <T size="sm" tone="secondary">{r.note}</T>}
+              <Inline gap="md" align="start" wrap={false}>
+                <RatingInput label={r.competency} readOnly value={r.rating} onChange={() => undefined}
+                  options={([1, 2, 3, 4] as const).map((n) => ({ value: n, label: `${n} of 4` }))} />
+                {c && <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{c.anchors[r.rating]}</T>}
+              </Inline>
+              {r.note && <T size="sm">{r.note}</T>}
             </Stack>
           );
         })}
-        <T size="sm">{card.summary}</T>
+        <T size="sm" data-testid="interviews-scorecard-summary">{card.summary}</T>
       </Stack>
     </DetailSection>
   );

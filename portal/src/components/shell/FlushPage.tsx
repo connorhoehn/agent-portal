@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Breadcrumbs, Stack } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from './Breadcrumbs';
 import { useSectionTrailDrawn } from './sectionTrail';
@@ -23,4 +24,12 @@ export function useFlushTrailItems() {
   const breadcrumbs = useShellBreadcrumbItems();
   const trailDrawn = useSectionTrailDrawn();
   return trailDrawn ? undefined : breadcrumbs;
+}
+
+/** A page built on the library `DetailPage`, which is not flush by itself: it marks its root
+ * `data-shell-flush`, so the shell hides its own trail row and the page's header draws the one
+ * trail (the shell's items, from `useFlushTrailItems`) at the page gutter. Without it the shell's
+ * row and the header's stand one above the other. */
+export function FlushDetailFrame({ children }: { children: ReactNode }) {
+  return <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>{children}</Stack>;
 }

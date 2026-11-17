@@ -19,6 +19,7 @@ import {
   meetingRosterProps, meetingToolbarItems, WrappedBreakoutRoomBanner, WrappedBreakoutRoomsPanel, type RMMeetingPerson,
 } from '@connorhoehn/ui-components/integrations/realtime';
 import { useAssistantRosterEntries } from './MeetingAssistantBar';
+import { callNoun } from './callCopy';
 import { callCounts, useCallBlockPlacement, useCallHost, type CallHostMeeting } from '../../lib/conversationCall';
 import { meetingBarItems, meetingPeople, meetingStageItems, roomsAllowed, stageHoldsMeeting } from '../../lib/meetingRooms';
 
@@ -104,6 +105,7 @@ export function useMeetingBarItems(react: { send(emoji: string): void; emojis: s
 /** The open meeting pane, stacked above the conversation in the shell's right column. */
 export function MeetingPane() {
   const call = useCallMeeting();
+  const noun = callNoun(useCallHost()?.lobby?.lobbyName);
   const assistantEntries = useAssistantRosterEntries();
   if (!call?.pane) return null;
   if (call.pane === 'rooms') {
@@ -114,9 +116,9 @@ export function MeetingPane() {
     </Stack>;
   }
   return <Stack gap="none" className="max-h-[60%] min-h-0 shrink-0" data-testid="huddle-meeting-pane" data-pane="people">
-    <ChatSidePanelFrame title="People" subtitle={`${call.people.length} in the huddle`} onClose={call.close}
+    <ChatSidePanelFrame title="People" subtitle={`${call.people.length} in the ${noun}`} onClose={call.close}
       className="border-b border-l border-border bg-surface" data-testid="huddle-meeting-people">
-      <RosterPanel {...meetingRosterProps(call.meeting, call.roster)} extraEntries={assistantEntries} title="In this huddle" />
+      <RosterPanel {...meetingRosterProps(call.meeting, call.roster)} extraEntries={assistantEntries} title={`In this ${noun}`} />
     </ChatSidePanelFrame>
   </Stack>;
 }

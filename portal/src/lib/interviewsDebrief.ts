@@ -171,6 +171,25 @@ export function sideBySide(round: Pick<DebriefRound, 'scorecards'>, competencies
   return { columns, rows };
 }
 
+export interface AppColumn extends SideColumn { roundId: string; roundName: string; firstInRound: boolean }
+
+/**
+ * One table for an application (decision 15): the competencies down the side, then across each round as a group with one
+ * column per scorecard in seat order, then the recommendation and the summary. A round with no scorecard has no column
+ * (the page says why under the table). Same cells as `sideBySide`; nothing is summed or ordered by how high anyone scored.
+ */
+export function applicationSideBySide(rounds: Array<Pick<DebriefRound, 'interviewId' | 'name' | 'scorecards'>>, competencies: DebriefApplication['competencies']): { columns: AppColumn[]; rows: SideRow[] } {
+  const columns: AppColumn[] = [];
+  let rows: SideRow[] = [];
+  for (const r of rounds) {
+    const part = sideBySide(r, competencies);
+    part.columns.forEach((c, i) => columns.push({ ...c, roundId: r.interviewId, roundName: r.name, firstInRound: i === 0 }));
+    rows = part.rows.map((row, i) => ({ ...row, cells: { ...(rows[i]?.cells ?? {}), ...row.cells } }));
+  }
+  if (!rows.length) rows = sideBySide({ scorecards: [] }, competencies).rows;
+  return { columns, rows };
+}
+
 // ── the decision ────────────────────────────────────────────────────────────
 
 /** The confirmation: what is recorded, under whose name, and once more if a scorecard is still due. */

@@ -7,7 +7,7 @@
 import { Button, ChevronIcon, Chip, DataTable, DetailPage, DetailSection, EmptyState, IconButton, Inline, MetaLine, Stack, T, TrashIcon, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -27,8 +27,8 @@ export default function PreparePage() {
     return <RecordNotFound heading="Round" title="Round not found" body="There is no round here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
   }
   if (error && !record) return <UnavailableNotice error={error} what="this round" source="Rounds are read from the interviews tenant" onRetry={refresh} />;
-  if (!record) return <DetailPage title="Prepare" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the round…</T></DetailPage>;
-  return <PrepareWorkspace key={`${record.id}:${record.revision}`} record={record} trail={base} onChanged={refresh} />;
+  if (!record) return <FlushDetailFrame><DetailPage title="Prepare" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the round…</T></DetailPage></FlushDetailFrame>;
+  return <FlushDetailFrame><PrepareWorkspace key={`${record.id}:${record.revision}`} record={record} trail={base} onChanged={refresh} /></FlushDetailFrame>;
 }
 
 function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecord; trail: ReturnType<typeof useFlushTrailItems>; onChanged: () => void }) {

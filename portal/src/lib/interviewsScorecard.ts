@@ -6,7 +6,7 @@
 // The draft (what is typed before Submit) is kept in this browser only, per interview, and cleared on submit. It is
 // never sent anywhere until Submit.
 
-import { INTERVIEWS_API, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
+import { INTERVIEWS_API, RECOMMENDATION_LABELS, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
 import type { KitCompetency } from './interviewsKit.ts';
 import type { MiloAskBody } from './interviewsRoom.ts';
 import { writeJson } from './writeJson.ts';
@@ -97,6 +97,12 @@ export const allRated = (d: Pick<Draft, 'ratings'>, competencies: readonly KitCo
 
 /** The scale's labels for one competency: its anchors, lowest first. */
 export const scaleOf = (c: KitCompetency): Array<{ value: number; label: string }> => ([1, 2, 3, 4] as const).map((n) => ({ value: n, label: c.anchors[n] }));
+
+/** The recommendation as a go or no-go in words: "Go, strong yes", "No-go, no". */
+export const recommendationVerdict = (r: Recommendation): string => `${r === 'yes' || r === 'strong-yes' ? 'Go' : 'No-go'}, ${RECOMMENDATION_LABELS[r].toLowerCase()}`;
+
+/** Decision 14's three steps in the order a scorecard is filled; a submitted scorecard has been through all of them. */
+export const SCORECARD_STEP_LABELS: Readonly<Record<ScorecardStep, string>> = { rate: 'Rate each competency', recap: "Read Milo's recap", decide: 'Recommend' };
 
 /** What still stands between the draft and Submit, one plain sentence each, in the form's order. Empty when complete. */
 export function missingFrom(d: Draft, competencies: readonly KitCompetency[], limits: ScorecardPageView['limits'], correcting: boolean): string[] {

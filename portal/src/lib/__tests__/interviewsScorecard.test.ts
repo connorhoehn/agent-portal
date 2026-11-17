@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SCORECARD_STEPS, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
+  SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
   previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
@@ -132,4 +132,15 @@ test('the recap ask: its path, and what each answer of the server reads as', () 
   assert.deepEqual(recapAskOutcome({ ok: false, status: 409, data: body }), { ok: true, body });
   assert.deepEqual(recapAskOutcome({ ok: false, status: 404, data: null, error: 'There is no recap here that you can open.' }), { ok: false, error: 'There is no recap here that you can open.' });
   assert.deepEqual(recapAskOutcome({ ok: false, status: 500, data: null }), { ok: false, error: 'That did not go through. Try again.' });
+});
+
+test('a submitted scorecard states its recommendation as a go or no-go in words', () => {
+  assert.equal(recommendationVerdict('strong-yes'), 'Go, strong yes');
+  assert.equal(recommendationVerdict('yes'), 'Go, yes');
+  assert.equal(recommendationVerdict('no'), 'No-go, no');
+  assert.equal(recommendationVerdict('strong-no'), 'No-go, strong no');
+});
+
+test('the three steps of a scorecard each have a plain label, in the order of the flow', () => {
+  assert.deepEqual(SCORECARD_STEPS.map((s) => SCORECARD_STEP_LABELS[s]), ['Rate each competency', "Read Milo's recap", 'Recommend']);
 });

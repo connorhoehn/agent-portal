@@ -22,7 +22,7 @@ import { useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
-import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -30,7 +30,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, type InterviewRow } from '../../lib/interviews';
 import {
   DECISION_CHOICES, DECISION_DONE, confirmQuestion, debriefApi, debriefHref, decideStage, decisionTone, dueLine, missingLine, reasonProblem, recapLine,
-  roundEmptyLine, scorecardNotes, sideBySide,
+  roundEmptyLine, scorecardNotes, applicationSideBySide,
   type DebriefApplication, type DebriefMove, type DebriefRound, type DebriefView, type Decision, type RecapBody, type SideCell, type SideRow,
 } from '../../lib/interviewsDebrief';
 import { plural } from '../../lib/plural';
@@ -48,8 +48,8 @@ export default function DebriefPage() {
     return <RecordNotFound heading="Debrief" title="Debrief not found" body="There is no candidate here whose debrief you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
   }
   if (error && !view) return <UnavailableNotice error={error} what="this debrief" source="Debriefs are read from the interviews tenant" onRetry={refresh} />;
-  if (!view) return <DetailPage title="Debrief" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the debrief…</T></DetailPage>;
-  return <DebriefWorkspace view={view} trail={trail} onChanged={refresh} />;
+  if (!view) return <FlushDetailFrame><DetailPage title="Debrief" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the debrief…</T></DetailPage></FlushDetailFrame>;
+  return <FlushDetailFrame><DebriefWorkspace view={view} trail={trail} onChanged={refresh} /></FlushDetailFrame>;
 }
 
 /** Where a bell leads: the round's candidate's debrief, for whoever may read it. */
@@ -150,6 +150,16 @@ function DebriefWorkspace({ view, trail, onChanged }: { view: DebriefView; trail
 function ApplicationRounds({ app, several }: { app: DebriefApplication; several: boolean }) {
   const blocked = app.decide && !app.decide.options.some((o) => o.allowed)
     ? app.decide.options.find((o) => o.decision === 'reject')?.refusal ?? null : null;
+  const { columns, rows } = applicationSideBySide(app.rounds, app.competencies);
+  // Every column is one interviewer's scorecard; the round's name leads each header and a rule starts each round's group.
+  const tableColumns: DataTableColumn<SideRow>[] = [
+    { key: 'label', header: 'Competency', width: '176px', render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
+    ...columns.map((c): DataTableColumn<SideRow> => ({
+      key: c.id, width: '300px', className: c.firstInRound ? 'border-l border-border' : undefined,
+      header: <Stack gap="none"><T size="xs" tone="tertiary">{c.roundName}</T><T size="sm" weight="medium">{c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name}</T></Stack>,
+      render: (r) => <SideCellView cell={r.cells[c.id] ?? { kind: 'none' }} />,
+    })),
+  ];
   const body = (
     <Stack gap="md" data-testid="interviews-debrief-application">
       {app.decide && (
@@ -158,7 +168,11 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
         </T>
       )}
       {app.rounds.length === 0 && <T size="sm" tone="secondary">No round has been assigned yet.</T>}
-      {app.rounds.map((r) => <RoundBlock key={r.interviewId} round={r} competencies={app.competencies} />)}
+      {columns.length > 0 && (
+        <DataTable rowHeight="content" data-testid="interviews-debrief-side-by-side" aria-label={`${app.opening.title}: scorecards side by side`} data={rows} columns={tableColumns}
+          keyField={(r) => r.id} staticRows="Each competency as each interviewer rated it, read in place" />
+      )}
+      {app.rounds.map((r) => <RoundBlock key={r.interviewId} round={r} />)}
     </Stack>
   );
   return several
@@ -166,20 +180,13 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
     : body;
 }
 
-function RoundBlock({ round, competencies }: { round: DebriefRound; competencies: DebriefApplication['competencies'] }) {
+/** What the table does not say about one round: when it was, who sat on it, who is still due, and Milo's recap under it. */
+function RoundBlock({ round }: { round: DebriefRound }) {
   const navigate = useNavigate();
   const status = roundStatus(round.state);
-  const { columns, rows } = sideBySide(round, competencies);
   const empty = roundEmptyLine(round);
   const due = dueLine(round);
   const notes = round.scorecards.flatMap(scorecardNotes);
-  const tableColumns: DataTableColumn<SideRow>[] = [
-    { key: 'label', header: 'Competency', width: '176px', render: (r) => <T size="sm" data-testid="interviews-debrief-row">{r.label}</T> },
-    ...columns.map((c): DataTableColumn<SideRow> => ({
-      key: c.id, header: c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name,
-      render: (r) => <SideCellView cell={r.cells[c.id] ?? { kind: 'none' }} />,
-    })),
-  ];
   return (
     <DetailSection variant="heading" title={round.name} data-testid="interviews-debrief-round"
       hint={<MetaLine size="sm" items={[
@@ -196,10 +203,7 @@ function RoundBlock({ round, competencies }: { round: DebriefRound; competencies
         </Inline>
       )}>
       <Stack gap="sm">
-        {empty ? <T size="sm" tone="secondary" data-testid="interviews-debrief-round-empty">{empty}</T> : (
-          <DataTable narrow data-testid="interviews-debrief-side-by-side" aria-label={`${round.name}: scorecards side by side`} data={rows} columns={tableColumns}
-            keyField={(r) => r.id} staticRows="Each competency as each interviewer rated it, read in place" />
-        )}
+        {empty && <T size="sm" tone="secondary" data-testid="interviews-debrief-round-empty">{empty}</T>}
         {due && <T size="sm" tone="secondary" data-testid="interviews-debrief-due">{due}</T>}
         {notes.map((n) => <T key={n} size="xs" tone="secondary" data-testid="interviews-debrief-note">{n}</T>)}
         {round.recapPath && <RecapInPlace path={round.recapPath} />}
@@ -213,9 +217,9 @@ function SideCellView({ cell }: { cell: SideCell }) {
     case 'rating':
       return (
         <Stack gap="xs">
-          <Inline gap="xs" align="center" wrap={false}>
+          <Inline gap="xs" align="start" wrap={false}>
             <Chip size="xs" tone="neutral">{`${cell.rating} of 4`}</Chip>
-            <T size="sm" title={cell.anchor} className="block max-w-[14rem] truncate">{cell.anchor}</T>
+            <T size="sm">{cell.anchor}</T>
           </Inline>
           {cell.note && <T size="sm" tone="secondary">{cell.note}</T>}
         </Stack>
@@ -274,12 +278,7 @@ const MOVE_COLUMNS: DataTableColumn<DebriefMove>[] = [
     render: (m) => {
       const missing = missingLine(m.scorecardsMissing);
       if (!m.reason && !missing) return <Dash />;
-      return (
-        <Stack gap="none">
-          {m.reason && <T size="sm" tone="secondary">{m.reason}</T>}
-          {missing && <T size="xs" tone="tertiary">{`Decided while ${missing}.`}</T>}
-        </Stack>
-      );
+      return <T size="sm" tone="secondary">{[m.reason, missing && `Decided while ${missing}.`].filter(Boolean).join(' ')}</T>;
     },
   },
 ];

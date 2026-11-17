@@ -32,6 +32,7 @@ import { HuddleRoster, createHuddleRosterReader, huddleScopeKey, type HuddlePart
 import { INERT_MEETING, announceInstead, huddleChatChannelFor, isBreakoutChat } from '../../lib/meetingRooms';
 import { MeetingPane, useCallMeeting } from './CallMeeting';
 import { currentCallPage, isCallContextReference, readCallChatPageReference, type CallPageDescriptor } from '../../lib/callPages';
+import { callNoun } from './callCopy';
 import { useCallBlockPageClaimed, useCallHost, useCallMediaPanel, useClaimCallBlock } from '../../lib/conversationCall';
 import { useMeetingChat, type MeetingChatBinding } from '@connorhoehn/ui-components/integrations/realtime';
 import { callScopeKey, hasJoinedCall, huddleChatScopeTenant } from './callShellModel';
@@ -203,6 +204,7 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   // huddleLobbyTenant) answers 403, which the roster reads as `denied`.
   const tenant = huddleChatScopeTenant(host?.tenant ?? null, joined);
   const callId = tenant ? host?.call.call?.callId ?? null : null;
+  const noun = callNoun(host?.lobby?.lobbyName); // an interview's room is a call, every other lobby's a huddle
   const actorId = host?.self?.userId ?? null;
   const identityKey = callScopeKey(session);
   const draftIdentity = session ? identityKey : null;
@@ -281,12 +283,12 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   // Once the call is over the chat is closed to everyone: when Milo was in it and listened, say where its minutes are.
   const assistant = useMeetingAssistant(callId);
   const minutesFollow = assistant.enabled && assistant.view.phase !== 'none' && (assistant.view.listeningSeconds ?? 0) > 0;
-  const unavailableReason = !current ? 'Join a huddle to message its participants.'
+  const unavailableReason = !current ? `Join a ${noun} to message its participants.`
     : rosterState.ended ? (minutesFollow ? 'This call has ended. Its minutes are in Meetings.' : 'This call has ended.')
-    : !connected ? 'Reconnect to send huddle messages.'
-    : !rosterState.loaded ? 'Loading the huddle conversation…'
-    : rosterState.denied || !rosterState.canSend ? 'You cannot send messages to this huddle.'
-    : !ready ? 'Loading the huddle conversation…' : null;
+    : !connected ? `Reconnect to send ${noun} messages.`
+    : !rosterState.loaded ? `Loading the ${noun} conversation…`
+    : rosterState.denied || !rosterState.canSend ? `You cannot send messages to this ${noun}.`
+    : !ready ? `Loading the ${noun} conversation…` : null;
   // The work item's composer hands a huddle-bound draft to this pane: open
   // and focus it, seed the draft and attach the page reference.
   const openPane = useCallback((request: HuddlePaneRequest = {}): boolean => {
@@ -335,7 +337,7 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (error) {
       if (mine === generation.current && sameDraftScope()) {
-        setSendError(error instanceof Error ? error.message : 'The huddle message was not confirmed. Retry to confirm it.');
+        setSendError(error instanceof Error ? error.message : `The ${noun} message was not confirmed. Retry to confirm it.`);
         if (submittedDraft) setDraft(settleHuddleDraft(draftRef.current, submittedDraft, false, EMPTY_DRAFT));
       }
       return false;
@@ -369,7 +371,7 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
       {children}
       {mounted && channel && actorId ? <HuddleChannel key={`${scopeKey}:${readyEpoch}:${channel}`} channel={channel} userId={actorId}
         displayName={session?.name ?? actorId} maySend={!rosterState.denied && rosterState.canSend && !rosterState.ended}
-        post={async (text, metadata) => { if (!await sendRef.current(text, null, metadata)) throw new Error('The summary could not be sent to this huddle.'); }}
+        post={async (text, metadata) => { if (!await sendRef.current(text, null, metadata)) throw new Error(`The summary could not be sent to this ${noun}.`); }}
         publish={publish} /> : null}
     </ChannelContext.Provider>
     </ReactionPlaybackContext.Provider>
@@ -541,7 +543,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
   if (!runtime) {
     return <Stack gap="none" className="min-h-0 flex-1">
       {error}
-      {!state.error && <T size="sm" tone="tertiary" className="m-3" wrap data-testid="huddle-chat-loading">{chat.unavailableReason ?? 'Loading the huddle conversation…'}</T>}
+      {!state.error && <T size="sm" tone="tertiary" className="m-3" wrap data-testid="huddle-chat-loading">{chat.unavailableReason ?? `Loading the ${callNoun(callLobby)} conversation…`}</T>}
     </Stack>;
   }
   // The shell's meeting chat binding: announcements merged and marked, the which-chat line and the
@@ -556,7 +558,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       // Writers react, pin and attach; a reader sees the thread, its pins and files.
       // A room's chat is gateway-only: pins and files (REST on the call's channel) stay with the main huddle.
       reactions={!chat.unavailableReason} {...(inRoom ? {} : { pins: { canPin: !chat.unavailableReason } })} attachments={!chat.unavailableReason && !inRoom}
-      readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
+      readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : `Message this ${callNoun(callLobby)}…`} typingUsers={runtime.conversation.chat.typingUsers}
       renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard} isAssistantMessage={isAssistantChatMessage}
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
       // A deleted meeting's line once, however many of Milo's messages the open chat still holds (erasedLines.ts).

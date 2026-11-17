@@ -4,15 +4,18 @@ import { useMemo, useState, type ReactNode } from 'react';
 import type { CallPageDescriptor } from '../../lib/callPages';
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { huddleChannel } from '../../lib/huddleRoster';
+import { useCallHost } from '../../lib/conversationCall';
+import { callNoun } from './callCopy';
 import { useHuddleChat } from './HuddleChat';
 
 /** The same call recipient and shell-owned draft on every workspace surface. */
 export function useHuddleComposerRecipient(page?: CallPageDescriptor | null) {
   const chat = useHuddleChat();
+  const noun = callNoun(useCallHost()?.lobby?.lobbyName);
   const selectedPage = page === undefined ? chat?.page ?? null : page;
   const recipient = useMemo<ConversationRecipient | null>(() => chat?.callId ? {
     id: `huddle:${chat.callId}`, label: `${chat.title} · Huddle`, channel: chat.channel ?? huddleChannel(chat.callId),
-    placeholder: 'Message this huddle…', carriesReference: !!selectedPage, claim: true,
+    placeholder: `Message this ${noun}…`, carriesReference: !!selectedPage, claim: true,
     unavailableReason: chat.unavailableReason, error: chat.state.error,
     onSelect: () => { chat.openPane({ page: selectedPage, focus: false }); },
     send: async out => {
@@ -20,7 +23,7 @@ export function useHuddleComposerRecipient(page?: CallPageDescriptor | null) {
       if (sent) chat.openPane({ focus: false });
       return sent;
     },
-  } : null, [chat, selectedPage]);
+  } : null, [chat, selectedPage, noun]);
   return { chat, recipient };
 }
 
