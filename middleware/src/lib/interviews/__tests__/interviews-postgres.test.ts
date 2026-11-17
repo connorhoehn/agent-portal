@@ -136,6 +136,7 @@ const one = async (sql: string) => (await q(sql))[0] ?? {};
 
 // ── the stores under test, each over pgExec ─────────────────────────────────
 import { SqlInterviewsStore } from '../store-sql.js';
+import { DuplicateCandidateError } from '../store.js';
 import { setInterviewsStore } from '../store-select.js';
 import { SqlInviteStore } from '../invite/store-sql.js';
 import { SqlConsentStore } from '../consent/store-sql.js';
@@ -287,15 +288,19 @@ async function seedWorld(): Promise<void> {
       expect(await one(`SELECT count(*) AS n FROM interview_applications WHERE id = 'app-pg-2'`)).toEqual({ n: '0' });
     });
     // The route checks the address against the opening's candidates, lower-cased, and then inserts (routes/interviews/
-    // candidates.ts). The schema holds no unique rule on the address, so two adds at once both pass the check: expected to
-    // fail here until the schema or the statement holds the rule. A finding for the lead (hardening H5).
-    it.failing('two adds of one address on one opening at once (case aside): only one lands', async () => {
+    // candidates.ts); two adds at once both pass that check. The schema's unique index on the opening and the lower-cased
+    // address (found by hardening H5) lets one land; the other is thrown as DuplicateCandidateError and writes nothing.
+    it('two adds of one address on one opening at once (case aside): only one lands', async () => {
       const results = await Promise.allSettled([
         interviews.createCandidate(cand('cand-pg-a', 'same.person@example.test'), app('app-pg-a', 'cand-pg-a')),
         interviews.createCandidate(cand('cand-pg-b', 'Same.Person@Example.test'), app('app-pg-b', 'cand-pg-b')),
       ]);
       const landed = results.filter((r) => r.status === 'fulfilled' && r.value !== null);
       expect(landed).toHaveLength(1);
+      const refused = results.filter((r) => r.status === 'rejected');
+      expect(refused).toHaveLength(1);
+      expect((refused[0] as PromiseRejectedResult).reason).toBeInstanceOf(DuplicateCandidateError);
+      expect(await one(`SELECT count(*) AS n FROM interview_candidates WHERE id IN ('cand-pg-a', 'cand-pg-b')`)).toEqual({ n: '1' });
     });
   });
 
@@ -524,9 +529,8 @@ async function seedWorld(): Promise<void> {
   });
 });
 
-// Static, runs by default: every table of the tenant's schema file has its row-level rule. Found by the hardening pass (H5):
-// `interview_runs` (row I4.4) is not in schema/row_level_security.sql, so on a cluster the middleware's role reads and writes
-// every run whatever the request's tenant. Left failing for the lead: the schema is not this lane's to change.
+// Static, runs by default: every table of the tenant's schema file has its row-level rule. The hardening pass (H5) found
+// `interview_runs` (row I4.4) missing from schema/row_level_security.sql; it now carries the interviews predicate.
 describe('the row-level rules cover the interviews tables (static)', () => {
   const tables = [...read('interviews_schema.sql').matchAll(/CREATE TABLE IF NOT EXISTS (\w+)/g)].map((m) => m[1]!);
   const rls = read('row_level_security.sql');
@@ -534,7 +538,7 @@ describe('the row-level rules cover the interviews tables (static)', () => {
     expect(tables.length).toBeGreaterThanOrEqual(17);
     expect(new Set(tables)).toEqual(new Set(INTERVIEW_TABLES));
   });
-  it.failing('gives each of them the interviews predicate', () => {
+  it('gives each of them the interviews predicate', () => {
     const missing = tables.filter((t) => !rls.includes(`('${t}',`));
     expect(missing).toEqual([]);
   });
