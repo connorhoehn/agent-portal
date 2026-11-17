@@ -14,6 +14,7 @@ import { inviteRouter } from './interviews/invite.js';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { resumeRouter } from './interviews/resume.js';
 import { resumeRows } from '../lib/interviews/resume/service.js';
+import { retentionRouter } from './interviews/retention.js';
 import { requireAction } from '../lib/authz.js';
 import { admissionRouter } from './interviews/admission.js';
 import { indexFor, param } from '../lib/interviews/request.js';
@@ -66,6 +67,7 @@ interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
 }));
 
 interviewsRouter.use(consentsRouter); // lane CONSENT (row I2.3): what the panel is told about the candidate's consents
+interviewsRouter.use(retentionRouter); // lane RETENTION (row I6.3): a candidate's deletion request and deletion log
 interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const c = ix.candidates.get(param(req, 'id'));

@@ -24,12 +24,15 @@ export class ResumeStorageUnavailableError extends Error {
 
 export class MemoryResumeBytes implements ResumeBytesStore {
   private readonly held = new Map<string, Buffer>();
-  async put(key: string, bytes: Buffer): Promise<void> { this.held.set(key, Buffer.from(bytes)); }
+  /** Seeded files that were removed (row I6.3): the seed builds them from the key, so a removal has to be remembered. */
+  private readonly removed = new Set<string>();
+  async put(key: string, bytes: Buffer): Promise<void> { this.removed.delete(key); this.held.set(key, Buffer.from(bytes)); }
   async get(key: string): Promise<Buffer | null> {
+    if (this.removed.has(key)) return null;
     const held = this.held.get(key) ?? seededResumeBytes(key);
     return held ? Buffer.from(held) : null;
   }
-  async remove(key: string): Promise<void> { this.held.delete(key); }
+  async remove(key: string): Promise<void> { this.held.delete(key); this.removed.add(key); }
 }
 
 export class UnavailableResumeBytes implements ResumeBytesStore {

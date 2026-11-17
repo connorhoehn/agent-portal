@@ -55,6 +55,7 @@ import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
 import { startInterviewsSoonSweep } from './lib/interviews/soon-sweep.js';
+import { startInterviewsRetentionSweep } from './lib/interviews/retention/service.js';
 import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer } from './lib/meeting-assistant/reconcile.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
@@ -399,6 +400,7 @@ app.use('/api/meetings', meetingsRouter);
 startMeetingAssistantSweeps();
 // "Starting soon" bells for interviews (row I5.6); does nothing while the interviews flag is off.
 startInterviewsSoonSweep();
+startInterviewsRetentionSweep(); // row I6.3: media and records past their periods, and deletions left to finish (nothing while the flag is off)
 if (meetingAssistantEnabled()) announceSinkSecret();
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));
