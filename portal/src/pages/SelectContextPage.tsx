@@ -50,7 +50,7 @@ const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string
   social: { label: 'Social', blurb: 'Channels, direct messages, calls and rooms — the people you work with', accent: 'var(--color-tenant-social)' },
   pipelines: { label: 'Pipelines', blurb: 'Definitions, runs and approvals — what the fleet ran, and for whom', accent: 'var(--color-tenant-pipelines)' },
   access: { label: 'Access', blurb: 'Request, approve and audit access — roles and memberships across every workspace', accent: 'var(--color-tenant-access)' },
-  interviews: { label: 'Interviews', blurb: 'Openings, candidates and interview rounds — from assignment to the hiring decision', accent: 'var(--color-tenant-interviews)' },
+  interviews: { label: 'Candidates', blurb: 'Openings, candidates and interview rounds — from assignment to the hiring decision', accent: 'var(--color-tenant-interviews)' },
 };
 
 const ROLE_META: Record<string, { label: string; hint: string }> = {

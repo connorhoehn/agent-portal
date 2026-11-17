@@ -32,7 +32,7 @@ export const TENANT_DISPLAY_NAMES = {
   social: 'Social',
   pipelines: 'Pipelines',
   access: 'Access',
-  interviews: 'Interviews',
+  interviews: 'Candidates',
 } as const;
 
 export const TENANT_MANIFEST = {
@@ -41,7 +41,7 @@ export const TENANT_MANIFEST = {
   social: { id: 'social', displayName: 'Social', portalRoot: '/social', home: '/social/channels', featureFlag: 'VITE_ENABLE_SOCIAL', discussions: false },
   pipelines: { id: 'pipelines', displayName: 'Pipelines', portalRoot: '/pipelines', home: '/pipelines/runs', featureFlag: 'VITE_ENABLE_PIPELINES', discussions: true },
   access: { id: 'access', displayName: 'Access', portalRoot: '/access', home: '/access/requests', featureFlag: 'VITE_ENABLE_ACCESS', discussions: false },
-  interviews: { id: 'interviews', displayName: 'Interviews', portalRoot: '/interviews', home: '/interviews/candidates', featureFlag: 'VITE_ENABLE_INTERVIEWS', discussions: false },
+  interviews: { id: 'interviews', displayName: 'Candidates', portalRoot: '/interviews', home: '/interviews/candidates', featureFlag: 'VITE_ENABLE_INTERVIEWS', discussions: false },
 } as const;
 
 /** Pages carry reader-cursor discussions (`discussions`). */

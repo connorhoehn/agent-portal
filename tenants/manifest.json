@@ -84,7 +84,7 @@
     },
     {
       "id": "interviews",
-      "displayName": "Interviews",
+      "displayName": "Candidates",
       "roles": ["recruiter", "interviewer", "hiring-manager"],
       "apiPrefix": "/api/interviews",
       "portalRoot": "/interviews",

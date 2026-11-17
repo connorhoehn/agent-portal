@@ -294,7 +294,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
   social: 'Social',
   pipelines: 'Pipelines',
   access: 'Access',
-  interviews: 'Interviews',
+  interviews: 'Candidates',
   admin: 'Admin',
 };
 

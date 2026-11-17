@@ -9,7 +9,7 @@ row_I0.1() {
 
 row_I0.2() {
   local f
-  if node -e "const m=require('./tenants/manifest.json');const t=m.tenants.find(x=>x.id==='$T');process.exit(t&&t.displayName==='Interviews'&&t.apiPrefix==='/api/interviews'&&t.portalRoot==='/interviews'&&JSON.stringify(t.roles)==='[\"recruiter\",\"interviewer\",\"hiring-manager\"]'&&t.channelPartition===true&&t.demoGrant===false?0:1)"; then
+  if node -e "const m=require('./tenants/manifest.json');const t=m.tenants.find(x=>x.id==='$T');process.exit(t&&t.displayName==='Candidates'&&t.apiPrefix==='/api/interviews'&&t.portalRoot==='/interviews'&&JSON.stringify(t.roles)==='[\"recruiter\",\"interviewer\",\"hiring-manager\"]'&&t.channelPartition===true&&t.demoGrant===false?0:1)"; then
     ok "manifest: Interviews, /api/interviews, /interviews, the three roles, a default-deny channel partition, no demo grant"
   else fail "manifest: the interviews entry is missing or differs (tenants/manifest.json)"; fi
   if node scripts/gen-tenants.mjs --check >"$LOGS/gen-tenants.log" 2>&1; then ok "generated files match the manifest"; else fail "generated files are stale (node scripts/gen-tenants.mjs)"; fi
@@ -46,7 +46,7 @@ row_I0.2() {
   needF "INTERVIEWS_ENABLED" $MW/lib/interviews/flag.ts "the server flag INTERVIEWS_ENABLED"
   needF "config.mock?.aurora === true" $MW/lib/interviews/flag.ts "the flag is on in the mock world when unset"
   if has "tenant: 'interviews'" $MW/lib/tenant-channels.ts; then fail "a channel family for interviews exists before its row (I2.2)"; else ok "no interviews channel family yet: the partition denies every interviews: channel"; fi
-  needF "interviews: 'Interviews'" $MW/lib/social-notify.ts "notification label"
+  needF "interviews: 'Candidates'" $MW/lib/social-notify.ts "notification label"
   needF "interviews: ['/interviews/']" $MW/lib/social-notify.ts "notification paths stay inside /interviews/"
   if grep -E "^export const VOICE_TENANTS" $MW/lib/voice/catalogue.ts | grep -q interviews; then fail "VOICE_TENANTS lists interviews, but its roles hold no VoiceNavigate"; else ok "voice: interviews is not a voice tenant (VOICE_TENANTS), and says why"; fi
   for p in candidates my-openings my-interviews; do needF "id: '$p', path: '/interviews/$p'" $MW/lib/voice/catalogue.ts "voice page list mirrors the palette: $p"; done
@@ -56,10 +56,10 @@ row_I0.2() {
   needF "INTERVIEWS_ENABLED" portal/src/lib/features.ts "portal flag INTERVIEWS_ENABLED (VITE_ENABLE_INTERVIEWS)"
   needF "INTERVIEWS_ENABLED ?" portal/src/App.tsx "App.tsx honours the portal flag"
   n=$(count "tenant: 'interviews', group:" portal/src/components/shell/Layout.tsx); if [ "${n:-0}" -ge 3 ]; then ok "rail rows for interviews ($n: the three homes and the rows later lanes add)"; else fail "rail rows for interviews: $n, want at least the three homes"; fi
-  needF "interviews: 'Interviews'" portal/src/components/shell/Layout.tsx "TENANT_LABELS.interviews"
+  needF "interviews: 'Candidates'" portal/src/components/shell/Layout.tsx "TENANT_LABELS.interviews"
   needF "interviews: ['Hire', 'Interview', 'System']" portal/src/components/shell/portalCommands.ts "palette group order"
   want_count "tenant: 'interviews', group:" portal/src/components/shell/portalCommands.ts 3 "palette rows for interviews"
-  needF "interviews: { label: 'Interviews'" portal/src/pages/SelectContextPage.tsx "the picker's tile"
+  needF "interviews: { label: 'Candidates'" portal/src/pages/SelectContextPage.tsx "the picker's tile"
   for u in "${CAST[@]}"; do needF "{ id: '$u', persona:" portal/src/pages/SelectContextPage.tsx "the picker's cast has $u (demo logins)"; done
   needF '[data-tenant="interviews"] {' portal/src/app.css "light tenant colours"
   needF 'html[data-theme="dark"][data-tenant="interviews"]' portal/src/app.css "dark tenant colours"

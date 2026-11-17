@@ -75,7 +75,7 @@ const TENANT_LABELS: Record<string, string> = {
   social: 'Social',
   pipelines: 'Pipelines',
   access: 'Access',
-  interviews: 'Interviews',
+  interviews: 'Candidates',
 };
 
 export function tenantLabel(tenant: string): string {

@@ -20,7 +20,7 @@ const manifest = JSON.parse(readFileSync(new URL('../../../../tenants/manifest.j
 
 test('tenant order and the switcher/masquerade labels are unchanged', () => {
   assert.deepEqual([...TENANTS], ['orgiq', 'assessment', 'social', 'pipelines', 'access', 'interviews']);
-  assert.deepEqual({ ...TENANT_DISPLAY_NAMES }, { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access', interviews: 'Interviews' });
+  assert.deepEqual({ ...TENANT_DISPLAY_NAMES }, { orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access', interviews: 'Candidates' });
   // TenantSwitcher walks Object.keys(LABELS): that order is the switcher's tile order.
   assert.deepEqual(Object.keys(TENANT_DISPLAY_NAMES), [...TENANTS]);
 });

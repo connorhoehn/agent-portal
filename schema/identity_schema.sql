@@ -56,7 +56,7 @@ INSERT INTO tenants (id, display_name) VALUES
   ('social', 'Social'),
   ('pipelines', 'Pipelines'),
   ('access', 'Access'),
-  ('interviews', 'Interviews')
+  ('interviews', 'Candidates')
 ON CONFLICT (id) DO NOTHING;
 -- END GENERATED tenants
 
