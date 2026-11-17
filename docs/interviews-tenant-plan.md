@@ -241,6 +241,165 @@ So I2.6 is mostly media work:
 
 Rows changed: I2.2 and I2.6 now name platform-api and say how they are judged; I4.2 is judged on this carrier.
 
+## I3.9 answer
+
+Written 17 November 2026 from this repository's code. No price here was looked up on the day: the repository's own figures are cited where they are, and every other price is in "Prices assumed, to verify" with the unit it is charged in. Each model figure shows its arithmetic, so a corrected price can be dropped in.
+
+### What one interview costs
+
+**Prices from this repository.** The live session: $0.05 a minute (`OPENAI_LIVE_USD_PER_MINUTE`, `lib/model-prices-defaults.ts`; the meeting assistant's "about $3 per hour"). Amazon Nova Pro: $0.0008 per 1,000 input tokens and $0.0032 per 1,000 output tokens (`lib/pricing.ts`). Every Nova caller sizes its hold the same way: (system prompt + 800 + the request's own text) characters at four characters a token in, and a fixed number of tokens out.
+
+**The arithmetic, one call each.** A transcript line is taken as 170 characters typical (speech plus its number and speaker) and 620 at the cap (`MAX_LINE_CHARS` 600 plus the label).
+
+- Suggestion (`estimateCoachTokens`): prompt 1,593 + 800, the kit about 1,500, 80 lines, 8 earlier suggestions: about 19,900 characters, 5,000 tokens in, 120 out, **$0.0044**. At the cap (120 lines, 20 earlier, a 3,000-character kit): 23,000 in, 300 out (`COACH_MAX_TOKENS`), **$0.019**.
+- Private answer, live or after the call (`estimateAskTokens`; both read the last 120 lines): prompt 1,468 + 800, a 300-character question, 80 lines: 4,000 in, 400 out (`ASK_MAX_TOKENS`), **$0.0045**. At the cap: 19,200 in, **$0.017**.
+- Plan draft (`estimatePlanTokens`): prompt 1,137 + 800, a 20-question bank at 300 characters: 2,200 in, 700 out (`PLAN_MAX_TOKENS`), **$0.0040**. A 50-question bank at the 400-character cut: 6,900 in, **$0.0077**.
+- Recap attempt (`estimateRecapTokens`): prompt 1,817 + 800, 250 lines for 60 minutes (190 for 45): 11,500 in (9,000), 1,000 out, **$0.012** ($0.010). At the cap (400 lines of 620, 2,000 out): 63,400 in, **$0.057**.
+
+These replace round 5's figures where they differ; round 5's "at most $0.10" for suggestions assumed typical lines, and the cap's worst case is about four times that.
+
+**The table.** Typical is a round that runs to time with an ordinary amount of help; worst is every limit used at its cap. Dollars per interview.
+
+| Part | Unit | Units (product limit) | 60-min technical, typical | worst | 45-min behavioural, typical | worst | Held under |
+|---|---|---|---|---|---|---|---|
+| Listener (live session, listening only) | minute | the call's ceiling: 60 min, extendable to 180 (`MEETING_ASSISTANT_HARD_MAX_MINUTES`) | 60 min, $3.00 | 180 min, $9.00 | 45 min, $2.25 | 180 min, $9.00 | `listening` (the meeting assistant's hold, tied to the interview by its call) |
+| Suggestions | call | 20 an interview | 10, $0.044 | 20, $0.39 | 12, $0.053 | 20, $0.39 | `coach` |
+| Private answers, live | call | 15 an interview, the lead | 5, $0.023 | 15, $0.25 | 5, $0.023 | 15, $0.25 | `coach` |
+| Private answers, after the call | call | 10 a seat, 3 seats | 3, $0.014 | 30, $0.50 | 6, $0.027 | 30, $0.50 | `coach` |
+| Plan draft | call | 3 an interview | 1, $0.004 | 3, $0.023 | 1, $0.004 | 3, $0.023 | `coach` |
+| Recap | attempt | 3 an interview | 1, $0.012 | 3, $0.17 | 1, $0.010 | 3, $0.17 | `coach` |
+| Speech, Milo asking aloud (I3.5, not built) | character (assumed) | approved questions, repeats, the time | 1,300 chars, $0.021 | 12,800 chars, $0.20 | 1,300 chars, $0.021 | 12,800 chars, $0.20 | `speech` |
+| Runs (I4.4, not built) | vCPU-second and GB-second (assumed) | 60 an interview | 25 runs, $0.003 | 60 compiled runs, $0.10 | none | none | `run` |
+| **Held against the cap** | | | **$3.12** | **$10.63** | **$2.39** | **$10.53** | |
+| Recording and its storage for 90 days | GB-month (assumed) | one recording | about 1 GB, $0.07 | the same, $0.07 | about 0.75 GB, $0.05 | $0.05 | nothing: platform-api's media cost |
+
+Speech: typical is four approved questions of 200 characters, two repeats and two time answers; worst is all 20 suggestions spoken and repeated once, plus 20 fixed answers. Runs: typical is an interpreted run of 3 CPU-seconds in a 15-second, 1 GB session (about $0.0001); worst is a compiled run of 30 seconds on 2 vCPU and 2 GB (about $0.0017). A recording is about 1 GB an hour (assumed: 2.2 Mbit/s), kept three months. Playback adds data transfer per viewing (assumed below).
+
+**What it shows.** The listener is 96% of a typical interview; all of Milo's text work together is under $0.15. The worst case passes the default cap of $10 only because the listener's ceiling is the meeting assistant's (60 minutes, extendable to 180), not the round's. With the cap in force the coach and runs are what get refused first, which is the wrong way round.
+
+**What the cap should be.** Two changes, one decision:
+
+- The interview's listening ceiling becomes the round's minutes plus 15, and extensions stop there (a policy value in `milo-policy.ts`, not a new setting). The worst cases then fall to $5.38 (technical: $3.75 of listening) and $4.53 (behavioural: $3.00).
+- The default per-interview cap (`INTERVIEWS_INTERVIEW_CAP_USD`) goes from $10 to **$6** (owner: the default stands at $10 until changed). $6 covers every worst case above with a margin for a model price change, and halves what one interview can spend. With the Transcribe listener below, a typical technical round falls to about $1.61 and the cap could fall again.
+
+### Prices assumed, to verify
+
+Each is a public list price recalled, not read on the day, for us-east-1 on demand.
+
+- Amazon Transcribe streaming: $0.024 per minute of audio streamed, billed per second with a 15-second minimum per stream.
+- Amazon Polly neural voices: $16 per million characters (generative voices about $30 per million).
+- AgentCore Code Interpreter and AgentCore Runtime: $0.0895 per vCPU-hour of active CPU and $0.00945 per GB-hour of memory, billed per second.
+- Amazon S3 Standard: $0.023 per GB-month. Data transfer out for playback: about $0.09 per GB.
+- The recording's size: 2.2 Mbit/s, about 1 GB an hour (this is platform-api's choice, not a price).
+
+### A listener on Amazon Transcribe
+
+**What it implements.** `LiveMeetingSession` (`lib/meeting-assistant/session.ts`), as a third kind: `TranscribeListener`, `kind: 'transcribe'`, `acceptsText: false`. It emits `inputTranscript`, `usage`, `expires`, `closed` and `error`, and never `outputTranscript`, `outputAudio`, `toolCall` or the delegation events: it has no voice and no tools. `start` ignores the instructions and the catalogue. `answerToolCall` and `appendContext` answer false. `pendingInputText` returns the newest partial result. `close` ends every stream and resolves once `closed` is emitted.
+
+**One stream per participant.** Today the media server's taps already post each participant's own 16 kHz mono audio, 200 ms at a time, and the audio intake (`audio-intake.ts`) checks the token, the participant's binding and the acknowledgement before the mixer sums everyone into one 24 kHz stream. Transcribe takes 16 kHz PCM as it arrives, so the listener skips the mixer:
+
+- The interface gains one optional method, `appendParticipantAudio(userId, pcm16kMono)`, and a flag, `perSpeaker: true`. The intake routes a chunk there instead of to the mixer when the session has the flag; the mixer path is unchanged for the other two kinds.
+- `inputTranscript` gains `speakerId`. When it is set, the line is attributed to that person and the voiced timeline (`attribution.ts`) is not consulted. Overlap stops being a guess: two people talking at once are two lines.
+- The listener opens one streaming transcription per bound participant (`StartStreamTranscription`, PCM 16 kHz), keyed by the user id the intake resolved, never by anything the stream says.
+
+What the media stack must hand over is what it hands over today. What is missing: the candidate's tap is bound only through a person binding their own seat (`bindParticipant`), so the guest's seat (I2.2) must bind its participant id the same way; and one stream per seat costs per seat, so a seat's stream is opened when that person has been voiced and closed after 20 seconds of silence, with a one-second ring kept so the first words are not lost (the intake already measures each participant's level against their noise floor).
+
+**Partial and final results.** Transcribe sends partial results while a person speaks and a final one when a segment ends. Only finals become `inputTranscript`, so the stored transcript, the coach, the private answers, the recap and the record page read finals only, exactly as they read lines today. The newest partial is `pendingInputText`, which the voice gate reads; the panel's live transcript (I3.6) shows it greyed under the last line and replaces it when the final arrives. Nothing partial is stored.
+
+**Consent.** Nothing is sent before transcription is accepted, and the check stays where it is: the intake drops an unacknowledged person's chunk before it reaches any session, and the interviews policy's `acknowledgedElsewhere` answers for the candidate from the portal consent (I2.3). A stream is opened only for a person the intake has passed, so a declined candidate never has a stream at all. `inviteRefusal` still refuses the lead when the candidate declined the transcript.
+
+**Language.** One language per interview, set on the opening and defaulting to English (US); the stream is opened with it. Automatic language identification is not used: it costs a second pass, and a wrong guess is worse than a fixed choice. A custom vocabulary per opening (the kit's terms) is a later row.
+
+**Failure and reconnection.** A stream that fails or closes is reopened for that participant with backoff (1, 2, 4, 8 seconds, then every 15). Audio that arrives meanwhile is kept in the one-second ring and the rest is dropped, and the gap is recorded as a marker on the record ("transcription paused for 40 seconds"), never filled in. Throttling and service errors keep codes only (`ProviderErrorInfo`). When every stream has failed for 90 seconds the listener emits `closed`, and the meeting assistant's existing pause, settle and resume path runs unchanged.
+
+**What Milo loses.** The live model can hear a spoken request and answer it. In an interview nothing it says is relayed (decision 9, `relaysLiveSpeech: never`), and the candidate's two requests are answered with held text, never by a model (decision 10). So the requests are found where the meeting assistant's detector already finds spoken commands: in the final transcript lines, by fixed patterns, which is what I3.8 builds. The answer is spoken by I3.5's synthesis. With the Transcribe listener the free-form spoken question to Milo disappears from interviews; nothing in this plan uses it. Work's calls keep the live model.
+
+**How it is chosen.** `session-select.ts` takes the call's policy: a policy may name a listener, and the interviews policy names `transcribe` when the deployment setting `INTERVIEWS_LISTENER` says `transcribe` (default `live`, the session today). The mock world still returns the scripted session first, untouched. A Transcribe listener is made only when its client can be built.
+
+**Money.** Held under `listening`, like the live session, in stream-minutes. The invite holds 10 stream-minutes per seat, and the run meter (`meterInterviewSpend`) tops up in 10-minute steps against the same caps; a refused top-up closes the streams and pauses Milo as a refused hold does today. Settled on the seconds each stream actually ran (the service reports none per stream), floored at the 15-second minimum. Typical, at the assumed price: a technical round's candidate speaks about 30 minutes and the lead 18; with silence tails about 62 stream-minutes, **$1.49** (a behavioural round with a panel member, about **$1.31**). Worst, every stream of four seats open for 75 minutes: **$7.20**, which the cap stops.
+
+**Tests and what only a real call proves.** A scripted Transcribe stand-in (an injected client that replays partials and finals per stream, fails one stream mid-call, and throttles) proves: lines carry the stream's speaker; partials never stored; an unacknowledged person has no stream; reconnection and the gap marker; the 90-second close; holds, top-ups and the settle; the detector finds both fixed requests in finals. Only a real call proves accuracy on accents and technical words, latency from speech to a final line, the cost per real interview, and that a guest's tap binds.
+
+**Size and rows.** About 6 builder days (the session and stand-in 2, the intake's per-speaker route and gating 2, selection, money and the gap marker 1, tests 1). Rows it would add: **I3.11** the Transcribe listener behind the session interface (M), **I3.12** the per-speaker route and the voiced gate in the intake (M), **I3.13** a measured cost per interview from one real call on each listener, written here (S).
+
+**Decision (owner).** Decision 7 accepts the speech-to-speech listener for the first version, and that default stands. Recommended: switch interviews to the Transcribe listener before the first real candidate. It is AWS-native, so a candidate's voice stays in this deployment's provider; attribution comes from the stream rather than timing; it costs about half; and it loses nothing an interview uses.
+
+## I4.6 answer
+
+Written 17 November 2026 as a design only: I4.4 (the queue and the mock executor) is not built, so this is written against "The run interface" as the plan states it. What I4.4 must expose is at the end of the first part.
+
+### AgentCore Code Interpreter: Python, JavaScript and TypeScript
+
+What exists: the capabilities stack deploys a custom Code Interpreter in `SANDBOX` network mode (`infra/lib/agentcore-capabilities-stack.ts`), and the provider (`providers/agentcore.ts`, `executeCode`) starts a session, runs one snippet, collects the result and stops the session. That is the Python-only, synchronous route the audit found. The interviews backend is a second interpreter, `<prefix>_interview_runs`, of its own, so its role and limits are not shared with the agents'.
+
+**A session per run.** Chosen over a session per interview. A fresh session per run leaves nothing of one run's files, processes or memory for the next, so a candidate's earlier program cannot change a later result and a hostile run harms only itself. Billing is for active CPU and memory, so a session left open for an interview costs memory for the hour and buys only start-up time. The cost is start-up per run, which is measured before this ships (below).
+
+**How the request maps.**
+
+- `files`: written with the interpreter's file-writing tool into a fresh working directory; a path with `..`, an absolute path or more than 50 files is refused before the session starts.
+- `entrypoint` and `stdin`: run as one command, `<runtime> <entrypoint> < stdin.txt`, with stdin written as a file. Python runs directly. TypeScript is compiled first, and that step is `compiling` with its own 10-second limit.
+- Limits: the session timeout is set to `wallMs` plus 5 seconds as a backstop, and the middleware's own timer stops the task at `wallMs` and reports `timed_out`. Memory is limited inside the session by the run wrapper (`prlimit` on address space and process count), so the runtime enforces it rather than the program. Exit by that limit reports `memory_exceeded`.
+- `maxOutputBytes`: the middleware counts as it reads, keeps the first `maxOutputBytes` of each stream, and sets `truncated`. Past four times the limit it stops the task as an output flood and reports `failed`.
+
+**Status and output.** `queued` is I4.4's queue. `compiling` is only for TypeScript. `running` starts when the command starts. The end maps: exit 0 to `succeeded`, any other exit to `failed`, the timer to `timed_out`, the memory limit to `memory_exceeded`, a cancel to `cancelled`, and any service error, throttle or refused session to `internal_error`. Output events (`stdout`, `stderr`) are sent as the service makes output available. If it gives output only at the end (to verify), the events arrive in one burst at the end and the contract still holds.
+
+**Cancel.** Stops the task and then the session; the result is `cancelled` unless the run had already ended.
+
+**The runtime version.** The service chooses its language versions; this project cannot pin them. Each run asks the runtime for its version in the same command and writes it on the result. A version that differs from the one this plan names raises an alarm and the run still answers. (owner: accept the service's versions; the alternative is to send all languages to the container runner below, which pins them.)
+
+**No network.** `SANDBOX` mode is documented as having no outside network. What must be verified on a real interpreter: that DNS lookups do not resolve, that AWS endpoints (S3 included) are not reachable from the program, and that the session's role credentials cannot be read. The interviews interpreter's execution role holds nothing at all, not even logs, so a credential that leaked would open nothing.
+
+**Cost.** At the assumed price, an interpreted run of 3 CPU-seconds in a 15-second, 1 GB session is about $0.0001. 60 runs are under $0.01, held under the `run` part, one hold per run (key: the `runId`), settled from the session's seconds.
+
+**What I4.4 must expose.** An `Executor` interface with `start(request, onEvent)` returning the result, and `cancel(runId)`. A backend name and its pinned versions per language. The queue's one-at-a-time per interview and its 60-run count, held outside the executor so every backend gets them. The run row keyed by `runId`, so a repeat returns the stored result and never runs twice. The hold and settle around `start`.
+
+### A container runner with no network: Swift, Java, Go and C++
+
+**Where it runs.** The options that fit a CDK-only, AWS-native deployment:
+
+- **AgentCore Runtime with one image per language, a session per run (chosen).** Each session is its own microVM, which is the isolation a hostile program needs. It is what the microVM runner already chose over self-hosting Firecracker (`docs/microvm-runner-design.md`, section 2), so the stack, the image pipeline and the role pattern exist. It runs in VPC mode in subnets with no route out and a security group with no outbound rule.
+- ECS on Fargate, a task per run. Isolation is as good, but a task takes tens of seconds to start (assumed), well past what a person waits for in an interview. Rejected.
+- Lambda with container images. Fast, but a warm environment is reused between invocations, so one candidate's leftover files and processes could meet the next run. Forcing a fresh environment per run gives up the speed. Rejected.
+- ECS on EC2 with gVisor or Firecracker hosts. This means self-hosting, and the microVM runner already decided against it. Rejected.
+
+**One sandbox per run.** A new session id per run, closed when the run ends. The image runs a small run server (the runtime's invocation contract) that writes the files, compiles, runs and streams back. The program runs as an unprivileged user in a fresh directory with an empty environment, so no credentials are passed to it.
+
+**Compile, then run.** `compiling` has its own limit, 20 seconds (Swift and C++ compile slowly), and its output goes to `compileOutput`. A failed compile ends at `compile_error` and does not count against the run's `wallMs`.
+
+**Limits enforced by the runtime.** Wall time by the run server's timer and the session's own lifetime as a backstop. Memory and the number of processes by cgroup or `prlimit` set before the program starts. No program can raise its own limits. Output is truncated as in the interpreter, by the run server and again by the middleware.
+
+**Images pinned by digest.** One ECR repository, one image per language built in CDK with its version in the tag. The runtime is deployed by digest, and the digest and version are written on every result as `backend` and `runtimeVersion`. A new version is a new digest and a deploy, never a moving tag.
+
+**No credentials or metadata.** The runtime's execution role holds only what pulling the image and writing logs needs. The program's user gets no environment. Before this ships, a run must show it cannot reach the metadata or credential endpoint or any address.
+
+**The queue.** I4.4's queue in the middleware's store stays the queue; the middleware calls the runtime with a streaming response and turns it into the contract's events. No separate queue service while one middleware task runs. A deployment with several tasks claims runs from the same table under the per-interview lock, so one-at-a-time still holds.
+
+**Cold start.** The contract's 10 seconds is the program's wall time, from `running`, not the wait. Start-up shows as `queued`. The microVM runner's boot time has never been measured in AWS (`microvm-boot-seconds`, "Unverified without AWS"), so the target is set here: a run reaches `running` within 5 seconds at the 75th percentile. If it does not, a warm session for each language is kept for at most one run and then discarded. That pays a session's idle memory to save the wait, and never reuses a sandbox.
+
+**Cost.** At the assumed price, a compiled run of 30 seconds on 2 vCPU and 2 GB is about $0.0017; 60 runs are about $0.10, under `run`.
+
+### What both must pass
+
+The executor contract tests I4.4 writes, run unchanged against each backend:
+
+- Each terminal status: `succeeded`, `failed`, `compile_error` (compiled languages), `timed_out`, `memory_exceeded`, `cancelled`, `internal_error` (an injected service failure).
+- Truncation: an output past `maxOutputBytes` is cut, flagged, and the run goes on to its own end.
+- A repeat of a `runId` returns the first result and starts nothing.
+- Cancel while queued, while compiling and while running.
+- One run at a time per interview; a second waits as `queued`. The 61st run is refused.
+- Hostile programs: a fork bomb ends in `failed` or `memory_exceeded` within the wall time and leaves the next run unaffected; a network attempt (a socket to an outside address, a DNS lookup, the metadata address) fails; a write outside the working directory fails, and a file written inside it is gone in the next run; an output flood is cut and stopped.
+- `runtimeVersion` and `backend` on every result.
+
+The mock passes these by script. Only a real backend proves that untrusted code is isolated, which "What the judge cannot see" already says. A real backend is accepted when a person has run the hostile cases against it in a deployed account and written the results here.
+
+### Order and size
+
+**Which backend first (owner).** The default and the recommendation: AgentCore Code Interpreter first, because the stack, the role pattern and the provider call exist, and Python is the most common interview language. The runner follows, for the four compiled languages. About 3 builder days for the interpreter (its own interpreter in the stack 0.5, the executor 1.5, contract tests and a hostile run by hand 1) and about 8 for the runner (four images and their pipeline 3, the run server 2, the stack in VPC mode 1, the executor 1, measured cold start and hostile runs 1).
+
+**What the owner provides.** AgentCore Code Interpreter and Runtime available in the account and region, with a session quota for at least the expected concurrent interviews. An ECR repository. Two subnets with no route out for the runner. Consent to run the hostile tests in that account.
+
+**Rows a build would add.** **I4.7** the AgentCore Code Interpreter executor for Python, JavaScript and TypeScript (M). **I4.8** the language images and the run server, pinned by digest (L). **I4.9** the container runner executor on AgentCore Runtime in VPC mode (M). **I4.10** the hostile-program runs against both real backends, by hand, written here (S).
+
 ## Ledger
 
 Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited. The journey `journey:interviews` starts with I1.1 and gains a step with each row that names a walk step; it is not written at the end. Rows that change another repository say so: "library" is `ui-components`, "realtime" is `realtime-modules`, "media" is `platform-api`. Rows marked "install" need a package the owner installs first.
