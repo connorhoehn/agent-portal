@@ -56,6 +56,8 @@ import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
 import { startInterviewsSoonSweep } from './lib/interviews/soon-sweep.js';
 import { startInterviewsRetentionSweep } from './lib/interviews/retention/service.js';
+// Consent wires itself to the knock and to Milo's hearing of a guest on load (round 3, C8).
+import './lib/interviews/consent/index.js';
 import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer } from './lib/meeting-assistant/reconcile.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';

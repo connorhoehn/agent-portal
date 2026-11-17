@@ -21,6 +21,7 @@ import { checkAnswers, stampAnswers } from '../lib/interviews/consent/rules.js';
 import { consentStore, type ConsentRecord } from '../lib/interviews/consent/store.js';
 import type { Interview } from '../lib/interviews/types.js';
 import { interviewsFlagGate } from './interviews.js';
+import { consentsSaved } from '../lib/interviews/consent-bell.js';
 
 export const consentGuestRouter: Router = Router();
 
@@ -91,5 +92,6 @@ consentGuestRouter.put('/consents', interviewsFlagGate, requireGuest(), asyncHan
     res.status(409).json({ error: RACED, ...guestConsentsView(result.reason === 'stale' ? result.row : null) });
     return;
   }
+  void consentsSaved(interview.id, before, result.row);
   res.json(guestConsentsView(result.row));
 }));
