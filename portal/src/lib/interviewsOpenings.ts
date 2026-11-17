@@ -21,3 +21,20 @@ export function stageTabs(rows: ReadonlyArray<{ stage: ApplicationStage }>): Sta
 
 /** The stage a typed filter names, or '' for all. */
 export const stageFilterOf = (value: string): ApplicationStage | '' => (DECISION_ORDER as readonly string[]).includes(value) ? (value as ApplicationStage) : '';
+
+// ── the openings list rail beside an open opening ────────────────────────────
+
+const RAIL_STATES = ['open', 'paused', 'closed'] as const;
+const RAIL_STATE_LABELS: Record<(typeof RAIL_STATES)[number], string> = { open: 'Open', paused: 'Paused', closed: 'Closed' };
+
+interface RailOpening { id: string; title: string; team: string; level?: string; state: (typeof RAIL_STATES)[number] }
+
+/** The rail's groups (by state, empty ones hidden by the list) and rows (title, with the team as the subline). */
+export function openingRail(rows: readonly RailOpening[], query: string) {
+  const q = query.trim().toLowerCase();
+  const found = q ? rows.filter((r) => [r.title, r.team, r.level ?? ''].some((v) => v.toLowerCase().includes(q))) : rows;
+  return {
+    groups: RAIL_STATES.map((s) => ({ id: s, title: RAIL_STATE_LABELS[s], count: found.filter((r) => r.state === s).length })),
+    rows: found.map((r) => ({ id: r.id, groupId: r.state, title: r.title, subline: r.team })),
+  };
+}

@@ -10,19 +10,22 @@ import {
   Button, Chip, CodeEditor, DataTable, DetailPage, DetailSection, EmptyState, Inline, MetaLine, Stack, T, type BreadcrumbItem, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { useCrumbLabel } from '../../lib/crumbLabels';
+import { openingRail } from '../../lib/interviewsOpenings';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
-import { INTERVIEWS_API, ROUND_TYPE_LABELS, byStageLine, nextInterviewLine, type PipelineEntry, type RoundType } from '../../lib/interviews';
+import { INTERVIEWS_API, ROUND_TYPE_LABELS, byStageLine, candidateHref, type ItemsResponse, nextInterviewLine, type PipelineEntry, type RoundType } from '../../lib/interviews';
 import {
   OPENING_STATE_LABELS, PAD_LANGUAGES, PAD_LANGUAGE_LABELS, changesLine, detailsChanged, detailsOf, kitChanges, kitOf, padLine, problemsByPath,
-  moneyLine, openingMoneyPath, readsOpeningMoney, saveDetails, saveKit, starterLine, type OpeningMoney, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningRecord,
+  moneyLine, openingMoneyPath, readsOpeningMoney, saveDetails, saveKit, starterLine, type OpeningMoney, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningRecord, type OpeningListRow,
 } from '../../lib/interviewsKit';
 import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
 import { KitEditor, type OpenRow } from './KitEditor';
@@ -30,20 +33,54 @@ import { OpeningDetailsForm } from './OpeningDetailsForm';
 
 const stateTone = (s: OpeningRecord['state']) => (s === 'open' ? 'success' : s === 'paused' ? 'caution' : 'neutral');
 
+interface RailModel { rows: OpeningListRow[]; query: string; setQuery: (q: string) => void; loading: boolean; error: string | null; retry: () => void }
+/** The openings the viewer may see, as the list rail beside an open opening; null for an interviewer, who has no Openings list. */
+const RailContext = createContext<RailModel | null>(null);
+
 export default function OpeningPage({ editing = false }: { editing?: boolean }) {
   const { id = '' } = useParams();
   const { session } = useSession();
-  // Flush: the page's own header draws the one trail, with the opening's title on it (Breadcrumbs.tsx).
+  const lists = (session?.role as string | undefined) !== 'interviewer';
+  const list = useFetch<ItemsResponse<OpeningListRow>>(lists ? `${INTERVIEWS_API}/openings` : null, 30_000);
+  const [query, setQuery] = useState('');
+  const rail = useMemo<RailModel | null>(() => (lists
+    ? { rows: list.data?.items ?? [], query, setQuery, loading: list.isLoading && !list.data, error: list.error ? String(list.error) : null, retry: list.refresh }
+    : null), [lists, list.data, list.isLoading, list.error, list.refresh, query]);
   return (
-    <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
-      <OpeningWorkspace key={`${id}:${session?.sub}:${session?.role}:${editing}`} id={id} editing={editing} />
-    </Stack>
+    <RailContext.Provider value={rail}>
+      {rail ? <OpeningWorkspace key={`${id}:${session?.sub}:${session?.role}:${editing}`} id={id} editing={editing} />
+        // An interviewer keeps the page alone: Flush, the page's own header draws the one trail (Breadcrumbs.tsx).
+        : <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
+          <OpeningWorkspace key={`${id}:${session?.sub}:${session?.role}:${editing}`} id={id} editing={editing} />
+        </Stack>}
+    </RailContext.Provider>
+  );
+}
+
+/** The opening inside the Openings list rail (the frame draws the one trail); without a rail, the page and its footer as they were. */
+function OpeningFrame({ id, title, guard, footer, children }: { id: string; title: string | null; guard?: (to: string) => boolean; footer?: ReactNode; children: ReactNode }) {
+  const rail = useContext(RailContext);
+  const navigate = useNavigate();
+  useCrumbLabel(rail ? id : undefined, title);
+  if (!rail) return <>{children}{footer}</>;
+  const model = openingRail(rail.rows, rail.query);
+  return (
+    <CollectionRecordFrame title="Openings" listTitle="Openings" listLabel="openings" data-testid="interviews-opening-frame"
+      {...(rail.loading ? {} : { count: rail.rows.length })}
+      search={{ value: rail.query, onChange: rail.setQuery, placeholder: 'Find an opening' }}
+      groups={model.groups} rows={model.rows} currentId={id}
+      onOpen={(to) => { const href = `/interviews/openings/${encodeURIComponent(to)}`; if (!guard?.(href)) void navigate(href); }}
+      loading={rail.loading} error={rail.error} onRetry={rail.retry} footer={footer} railType="app">
+      {children}
+    </CollectionRecordFrame>
   );
 }
 
 /** The shell's trail (Hire › Openings) with the opening, and "Edit kit" on the editor, after it. */
 function useOpeningTrail(o: OpeningRecord | null, editing: boolean): BreadcrumbItem[] | undefined {
-  const base = useFlushTrailItems();
+  const flush = useFlushTrailItems();
+  // Beside the Openings rail the frame draws the one trail, with the opening's title registered under its id.
+  const base = useContext(RailContext) ? undefined : flush;
   const navigate = useNavigate();
   return useMemo(() => {
     if (!base || !o) return base;
@@ -68,12 +105,12 @@ function OpeningWorkspace({ id, editing }: { id: string; editing: boolean }) {
   const o = data?.opening ?? null;
   const trail = useOpeningTrail(o, editing);
   if (failure?.status === 404) {
-    return <EmptyState testId="interviews-opening-missing" title="There is no opening here that you can open"
-      description="It may have been removed, or it belongs to someone else's hiring." />;
+    return <OpeningFrame id={id} title={null}><EmptyState testId="interviews-opening-missing" title="There is no opening here that you can open"
+      description="It may have been removed, or it belongs to someone else's hiring." /></OpeningFrame>;
   }
-  if (error && !o) return <UnavailableNotice error={error} what="this opening" source="Openings are read from the interviews tenant" onRetry={refresh} />;
+  if (error && !o) return <OpeningFrame id={id} title={null}><UnavailableNotice error={error} what="this opening" source="Openings are read from the interviews tenant" onRetry={refresh} /></OpeningFrame>;
   // The editor starts its draft from the money too (the cap per interview), so it waits for it.
-  if (!o || (editing && seesMoney && !spend && !money.error)) return <DetailPage title="Opening" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the opening…</T></DetailPage>;
+  if (!o || (editing && seesMoney && !spend && !money.error)) return <OpeningFrame id={id} title={null}><DetailPage title="Opening" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the opening…</T></DetailPage></OpeningFrame>;
   const refreshAll = () => { refresh(); money.refresh(); };
   return editing
     ? <OpeningEditor opening={o} money={spend} trail={trail} onSaved={refreshAll} />
@@ -100,6 +137,7 @@ function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; mon
   const { can } = useCapabilities();
   const editable = can('ManageCandidates');
   return (
+    <OpeningFrame id={o.id} title={o.title}>
     <DetailPage data-testid="interviews-opening" title={o.title} breadcrumbs={trail}
       badge={<Chip tone={stateTone(o.state)} size="xs">{OPENING_STATE_LABELS[o.state]}</Chip>}
       meta={<OpeningMeta o={o} money={money} />}
@@ -110,6 +148,7 @@ function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; mon
         { id: 'kit', label: 'Kit', testId: 'interviews-opening-tab-kit', content: <KitView o={o} /> },
         { id: 'candidates', label: 'Candidates', badge: o.candidates || undefined, testId: 'interviews-opening-tab-candidates', content: <Pipeline o={o} /> },
       ]} />
+    </OpeningFrame>
   );
 }
 
@@ -191,7 +230,7 @@ function QuestionDetail({ q, competency }: { q: KitQuestion; competency: string 
 
 function Pipeline({ o }: { o: OpeningRecord }) {
   const columns: DataTableColumn<PipelineEntry>[] = [
-    { key: 'candidate', header: 'Candidate', render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} /> },
+    { key: 'candidate', header: 'Candidate', render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} to={candidateHref(r.candidate.id)} /> },
     { key: 'stage', header: 'Stage', width: '152px', render: (r) => <StageChip stage={r.stage} /> },
     { key: 'next', header: 'Next interview', render: (r) => (r.nextInterview ? <T size="sm" className="block max-w-[16rem] truncate">{nextInterviewLine(r.nextInterview)}</T> : <Dash />) },
     { key: 'result', header: 'Last result', width: '176px', render: (r) => <ResultChip result={r.lastResult} due={r.scorecardDue} /> },
@@ -264,13 +303,17 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
     return { receipt: 'Saved. Everyone who reads this opening sees the new kit now.' };
   };
 
+  // A click on another opening in the rail asks the same question as Close, then goes where it was pointed.
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  const guard = (to: string): boolean => { if (!changes) return false; setLeaveTo(to); raise('close'); return true; };
+
   const discard = (thenClose: boolean) => {
     setKit(kitOf(base));
     setDetails(detailsOf(base, baseCap));
     setProblems(new Map());
     setOpen(null);
     setAsk(null);
-    if (thenClose) void navigate(view);
+    if (thenClose) void navigate(leaveTo ?? view);
   };
 
   const prompts = useMemo<ComposerPrompt[]>(() => {
@@ -297,7 +340,7 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
         { id: 'keep', label: 'Keep editing', emphasis: 'primary' },
       ],
       onAnswer: async (a) => {
-        if (!('optionId' in a) || a.optionId !== 'discard') { setAsk(null); return { receipt: 'Still editing.' }; }
+        if (!('optionId' in a) || a.optionId !== 'discard') { setAsk(null); setLeaveTo(null); return { receipt: 'Still editing.' }; }
         discard(closing);
         return { receipt: 'Changes discarded.' };
       },
@@ -312,7 +355,7 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
   }), [onSaved]);
 
   return (
-    <>
+    <OpeningFrame id={base.id} title={base.title} guard={guard} footer={<CollectionCommandHost adapter={adapter} prompts={prompts} />}>
       <DetailPage data-testid="interviews-opening-editor" title={base.title} breadcrumbs={trail}
         badge={<Chip tone={changes ? 'caution' : 'neutral'} size="xs">{changes ? 'Unsaved changes' : 'Saved'}</Chip>}
         meta={<OpeningMeta o={base} money={money} />}
@@ -330,7 +373,6 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
           { id: 'details', label: 'Details', testId: 'interviews-opening-tab-details', badge: detailsDiff ? '•' : undefined,
             content: <OpeningDetailsForm details={details} onChange={setDetails} problems={problems} defaultInterviewCapUsd={money?.defaultInterviewCapUsd} /> },
         ]} />
-      <CollectionCommandHost adapter={adapter} prompts={prompts} />
-    </>
+    </OpeningFrame>
   );
 }
