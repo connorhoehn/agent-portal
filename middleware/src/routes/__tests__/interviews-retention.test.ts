@@ -2,8 +2,8 @@
 // mounted as index.ts mounts the tenant.
 //
 //   recruiter       asks for a deletion (confirmed), reads the log
-//   hiring-manager  reads the log of their own opening's candidates; asking is refused (403)
-//   interviewer     asking refused (403); the log is not found
+//   hiring-manager  reads the log of their own opening's candidates; asking is not found
+//   interviewer     asking and the log are not found
 //   admin           not found on both
 //   another tenant  the tenant's refusal at the mount
 // The recording service is not configured here (the mock world), so the log says there was nothing to call.
