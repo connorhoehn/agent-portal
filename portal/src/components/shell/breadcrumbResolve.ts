@@ -70,6 +70,7 @@ const INTERVIEWS_GROUPS: Record<string, string> = {
   // slot 2: a lane adds its entries just below this line
   openings: 'Hire',
   // slot 3: a lane adds its entries just below this line
+  rounds: 'Hire',
   // slot 4: a lane adds its entries just below this line
   // slot 5: a lane adds its entries just below this line
 };
@@ -81,6 +82,7 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   // slot 2: a lane adds its entries just below this line
   openings: 'Openings',
   // slot 3: a lane adds its entries just below this line
+  rounds: 'Round',
   // slot 4: a lane adds its entries just below this line
   // slot 5: a lane adds its entries just below this line
 };

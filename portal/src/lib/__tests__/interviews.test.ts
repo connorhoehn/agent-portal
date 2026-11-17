@@ -40,7 +40,8 @@ test('tones: a go is success, a no caution, a strong no danger; stages read calm
 const row = (over: Partial<InterviewRow>): InterviewRow => ({
   id: 'iv', candidate: { id: 'c', name: 'C', headline: '' }, opening: { id: 'o', title: 'O', team: 'T' }, applicationId: 'a',
   round: { id: 'r', name: 'Coding', type: 'technical', minutes: 60 }, lead: { id: 'u', name: 'U' }, panel: [], scheduledAt: null,
-  state: 'accepted', bucket: 'upcoming', seat: 'lead', questions: 0, myScorecard: null, scorecardsIn: 0, ...over,
+  state: 'accepted', bucket: 'upcoming', seat: 'lead', questions: 0, myScorecard: null, scorecardsIn: 0,
+  seats: [], myAnswer: 'accepted', declines: [], revision: 1, ...over,
 });
 
 test('the desk: what needs you first, then upcoming by time, then done newest first', () => {
@@ -51,15 +52,17 @@ test('the desk: what needs you first, then upcoming by time, then done newest fi
     row({ id: 'accept', bucket: 'to-accept', state: 'assigned', scheduledAt: '2026-11-19T14:00:00Z' }),
     row({ id: 'up-soon', state: 'ready', scheduledAt: '2026-11-17T10:00:00Z' }),
     row({ id: 'done-new', bucket: 'done', state: 'scored', scheduledAt: '2026-11-13T10:00:00Z' }),
+    row({ id: 'prep', bucket: 'to-prepare', state: 'accepted', scheduledAt: '2026-11-25T10:00:00Z' }),
   ];
-  assert.deepEqual([...rows].sort(deskOrder).map((r) => r.id), ['accept', 'due', 'up-soon', 'up-late', 'done-new', 'done-old']);
-  assert.deepEqual(rows.filter((r) => inDeskView(r, 'open')).map((r) => r.id).sort(), ['accept', 'due', 'up-late', 'up-soon']);
+  assert.deepEqual([...rows].sort(deskOrder).map((r) => r.id), ['accept', 'due', 'prep', 'up-soon', 'up-late', 'done-new', 'done-old']);
+  assert.deepEqual(rows.filter((r) => inDeskView(r, 'open')).map((r) => r.id).sort(), ['accept', 'due', 'prep', 'up-late', 'up-soon']);
   assert.deepEqual(rows.filter((r) => inDeskView(r, 'done')).map((r) => r.id).sort(), ['done-new', 'done-old']);
 });
 
 test('the desk says what each interview waits for', () => {
   assert.equal(deskLabel(row({ bucket: 'to-accept', state: 'assigned' })), 'Accept or decline');
   assert.equal(deskLabel(row({ bucket: 'to-accept', state: 'assigned', seat: 'panel' })), 'Panel: accept or decline');
+  assert.equal(deskLabel(row({ bucket: 'to-prepare', state: 'accepted' })), 'Choose questions');
   assert.equal(deskLabel(row({ state: 'ready' })), 'Prepared');
   assert.equal(deskLabel(row({ state: 'accepted' })), 'Choose questions');
   assert.equal(deskLabel(row({ state: 'accepted', seat: 'panel' })), 'On the panel');
@@ -94,6 +97,7 @@ test('stageSteps ends the track at the stage of a candidate on hold or not movin
 test('roundStatus words each interview state and candidateHref addresses the profile', () => {
   assert.equal(roundStatus('assigned').label, 'To accept');
   assert.equal(roundStatus('ready').label, 'Scheduled');
+  assert.equal(roundStatus('accepted').label, 'Accepted');
   assert.equal(roundStatus('ended').label, 'Scorecard due');
   assert.equal(roundStatus('reviewed').label, 'Done');
   assert.equal(candidateHref('cand-ingrid'), '/interviews/candidates/cand-ingrid');

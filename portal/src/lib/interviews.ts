@@ -9,7 +9,7 @@ export type ApplicationStage = 'applied' | 'screening' | 'interviewing' | 'debri
 export type InterviewState = 'assigned' | 'accepted' | 'ready' | 'live' | 'ended' | 'scored' | 'reviewed' | 'declined' | 'cancelled';
 export type Recommendation = 'strong-no' | 'no' | 'yes' | 'strong-yes';
 export type RoundType = 'technical' | 'behavioural';
-export type Bucket = 'to-accept' | 'upcoming' | 'scorecard-due' | 'done' | 'closed';
+export type Bucket = 'to-accept' | 'to-prepare' | 'upcoming' | 'scorecard-due' | 'done' | 'closed';
 export type ChipTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'caution' | 'accent';
 
 export interface PersonRef { id: string; name: string }
@@ -73,6 +73,14 @@ export interface InterviewRow {
   questions: number;
   myScorecard: { recommendation: Recommendation; submittedAt: string } | null;
   scorecardsIn: number;
+  /** Each seat held now, the lead first, and whether its holder accepted (row I1.4). */
+  seats: Array<{ person: PersonRef; seat: 'lead' | 'panel'; accepted: boolean }>;
+  /** The viewer's own seat: still to answer, or accepted; null without a seat. */
+  myAnswer: 'to-answer' | 'accepted' | null;
+  /** Who declined and why; the recruiter and the hiring manager read them, an interviewer gets none. */
+  declines: Array<{ person: PersonRef; seat: 'lead' | 'panel'; reason: string; at: string }>;
+  /** The revision a write names. */
+  revision: number;
 }
 
 export interface ItemsResponse<T> { items: T[] }
@@ -153,7 +161,8 @@ export function stageSteps(stage: ApplicationStage, history: ReadonlyArray<Pick<
 export function roundStatus(state: InterviewState): { label: string; tone: ChipTone } {
   switch (state) {
     case 'assigned': return { label: 'To accept', tone: 'warning' };
-    case 'accepted': case 'ready': return { label: 'Scheduled', tone: 'info' };
+    case 'accepted': return { label: 'Accepted', tone: 'info' };
+    case 'ready': return { label: 'Scheduled', tone: 'info' };
     case 'live': return { label: 'In progress', tone: 'info' };
     case 'ended': return { label: 'Scorecard due', tone: 'caution' };
     case 'scored': case 'reviewed': return { label: 'Done', tone: 'success' };
@@ -165,6 +174,7 @@ export function roundStatus(state: InterviewState): { label: string; tone: ChipT
 /** What an interview on the viewer's desk is waiting for, in their words. */
 export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>): string {
   if (row.bucket === 'to-accept') return row.seat === 'panel' ? 'Panel: accept or decline' : 'Accept or decline';
+  if (row.bucket === 'to-prepare') return 'Choose questions';
   if (row.bucket === 'scorecard-due') return 'Scorecard due';
   if (row.bucket === 'done') return 'Scorecard in';
   if (row.bucket === 'closed') return row.state === 'declined' ? 'Declined' : 'Cancelled';
@@ -175,6 +185,7 @@ export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>):
 
 export function deskTone(row: Pick<InterviewRow, 'bucket' | 'state'>): ChipTone {
   if (row.bucket === 'to-accept') return 'warning';
+  if (row.bucket === 'to-prepare') return 'accent';
   if (row.bucket === 'scorecard-due') return 'caution';
   if (row.bucket === 'done') return 'success';
   if (row.bucket === 'closed') return 'neutral';
@@ -182,7 +193,7 @@ export function deskTone(row: Pick<InterviewRow, 'bucket' | 'state'>): ChipTone 
 }
 
 /** The desk's order: what needs the viewer first, then what is coming up by time, then what is done. */
-const BUCKET_RANK: Readonly<Record<Bucket, number>> = { 'to-accept': 0, 'scorecard-due': 1, upcoming: 2, done: 3, closed: 4 };
+const BUCKET_RANK: Readonly<Record<Bucket, number>> = { 'to-accept': 0, 'scorecard-due': 1, 'to-prepare': 2, upcoming: 3, done: 4, closed: 5 };
 export function deskOrder(a: InterviewRow, b: InterviewRow): number {
   return BUCKET_RANK[a.bucket] - BUCKET_RANK[b.bucket]
     || (a.bucket === 'done' ? (b.scheduledAt ?? '').localeCompare(a.scheduledAt ?? '') : (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''));
@@ -192,12 +203,13 @@ export type DeskView = 'open' | Bucket;
 export const DESK_VIEWS: ReadonlyArray<{ value: DeskView; label: string }> = [
   { value: 'open', label: 'Needs me or coming up' },
   { value: 'to-accept', label: 'To accept' },
+  { value: 'to-prepare', label: 'To prepare' },
   { value: 'upcoming', label: 'Upcoming' },
   { value: 'scorecard-due', label: 'Scorecards due' },
   { value: 'done', label: 'Done' },
 ];
 export function inDeskView(row: InterviewRow, view: DeskView): boolean {
-  return view === 'open' ? row.bucket === 'to-accept' || row.bucket === 'upcoming' || row.bucket === 'scorecard-due' : row.bucket === view;
+  return view === 'open' ? row.bucket === 'to-accept' || row.bucket === 'to-prepare' || row.bucket === 'upcoming' || row.bucket === 'scorecard-due' : row.bucket === view;
 }
 
 // ── time ─────────────────────────────────────────────────────────────────────

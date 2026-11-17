@@ -6,9 +6,14 @@
 // hiring manager their own openings, an interviewer the people they interview),
 // and that shows the usual not-found page, never an error. Résumé, recordings
 // and the activity log arrive with their own rows.
+//
+// Row I1.4: the recruiter assigns a round from the rounds list ("Assign a
+// round", its own form) and reassigns one that has not started. Who declined a
+// seat and why shows on its round for the recruiter and the hiring manager (the
+// server sends declines to nobody else); the hiring manager's view is read-only.
 
 import {
-  Avatar, Chip, DataTable, DetailSection, Inline, KeyValue, LoadingState, PageHeader, Stack, T, WorkflowStepper,
+  Avatar, Button, Chip, DataTable, DetailSection, Inline, KeyValue, LoadingState, PageHeader, Stack, T, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { useNavigate, useParams } from 'react-router';
@@ -22,6 +27,7 @@ import {
   INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, stageSteps, whenLabel,
   type CandidateProfile, type ProfileApplication, type ProfileRound, type StageMove,
 } from '../../lib/interviews';
+import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
 
 const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
@@ -52,6 +58,15 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
         </Inline>
       )
       : <Dash />),
+  },
+  {
+    key: 'declined', header: 'Declined',
+    render: (r) => {
+      const lines = declineLines(r);
+      return lines.length
+        ? <T size="sm" tone="secondary" title={lines.join('\n')} className="block max-w-[22rem] truncate" data-testid="interviews-profile-round-declined">{lines[0]}</T>
+        : <Dash />;
+    },
   },
 ];
 
@@ -111,13 +126,18 @@ function CandidateProfile({ id }: { id: string }) {
           ]} />
         </Inline>
         {applications.length === 0 && <T size="sm" tone="secondary" className="px-[var(--ui-page-gutter)]">This candidate has no application you can read.</T>}
-        {applications.map((a) => <ApplicationSection key={a.applicationId} app={a} several={applications.length > 1} />)}
+        {applications.map((a) => <ApplicationSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id}
+          assigns={['recruiter', 'admin'].includes(String(session?.role))} />)}
       </Stack>
     </Stack>
   );
 }
 
-function ApplicationSection({ app, several }: { app: ProfileApplication; several: boolean }) {
+/** Stages that take no more rounds (the server refuses them too). */
+const CLOSED_STAGES = new Set(['rejected', 'withdrawn', 'hired']);
+
+function ApplicationSection({ app, several, candidateId, assigns }: { app: ProfileApplication; several: boolean; candidateId: string; assigns: boolean }) {
+  const navigate = useNavigate();
   const steps = stageSteps(app.stage, app.history, relativeTime);
   const moves = [...app.history].sort((a, b) => b.at.localeCompare(a.at));
   const rounds = [...app.interviews].sort((a, b) => (a.scheduledAt ?? '9999').localeCompare(b.scheduledAt ?? '9999'));
@@ -126,9 +146,20 @@ function ApplicationSection({ app, several }: { app: ProfileApplication; several
       <DetailSection variant="heading" first title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage">
         <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
       </DetailSection>
-      <DetailSection variant="heading" title={several ? `Rounds, ${app.opening.title}` : 'Rounds'} hint={plural(rounds.length, 'round')} data-testid="interviews-profile-rounds-section">
+      <DetailSection variant="heading" title={several ? `Rounds, ${app.opening.title}` : 'Rounds'} hint={plural(rounds.length, 'round')} data-testid="interviews-profile-rounds-section"
+        actions={assigns && !CLOSED_STAGES.has(app.stage) ? (
+          <Button size="sm" variant="secondary" data-testid="interviews-profile-assign"
+            onClick={() => navigate(assignHref(candidateId, { application: app.applicationId }))}>Assign a round</Button>
+        ) : undefined}>
         <DataTable narrow data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds} columns={ROUND_COLUMNS}
-          keyField={(r) => r.id} emptyMessage="No round has been assigned yet." />
+          keyField={(r) => r.id} emptyMessage="No round has been assigned yet."
+          {...(assigns ? {
+            rowActionsHeader: 'Change', rowActionsHeaderHidden: true,
+            rowActions: (r: ProfileRound) => (canReassign(r.state) ? (
+              <Button size="sm" variant={r.state === 'declined' ? 'primary' : 'ghost'} data-testid="interviews-profile-reassign"
+                onClick={() => navigate(assignHref(candidateId, { round: r.id }))}>Reassign</Button>
+            ) : null),
+          } : {})} />
       </DetailSection>
       <DetailSection variant="heading" title="Stage history" hint={plural(moves.length, 'move')} data-testid="interviews-profile-history-section">
         <DataTable narrow data-testid="interviews-profile-history" aria-label="Stage history" data={moves} columns={MOVE_COLUMNS}
