@@ -13,6 +13,7 @@
 // Row I2.3 adds the steps after the landing, one at a time in the same quiet layout (pages/join/steps.ts):
 // the notice and the three consents, the device check, the waiting room, and "let in" (pages/join/JoinRoom.tsx,
 // which round 4 fills with the call). Where the page opens comes from the stored answers and the admission.
+// Row I6.4: answers that say no to a part the deployment requires land on the held page instead of the waiting room.
 //
 // Row I2.4 (the candidate's side): once let in, the room fills the window (JoinRoom, no page frame); when the
 // interview ends, or the candidate is turned away mid-call, the ended page says thank you and how to ask for
@@ -24,8 +25,9 @@ import { ConsentStep } from './join/ConsentStep';
 import { DeviceCheckStep } from './join/DeviceCheckStep';
 import JoinRoom, { type GuestInterview } from './join/JoinRoom';
 import { WaitingStep } from './join/WaitingStep';
+import { HeldStep } from './join/HeldStep';
 import { LinkDead, readAdmission, readConsents, readRoom } from './join/guestApi.ts';
-import { landingStep, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
+import { declinedRequired, landingStep, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
 
 type View =
   | { kind: 'loading' }
@@ -69,7 +71,7 @@ async function load(token: string | null): Promise<View> {
     const interview = ((await res.json()) as { interview: GuestInterview }).interview;
     try {
       const [consents, admission] = await Promise.all([readConsents(), readAdmission().catch(() => null)]);
-      return { kind: 'ready', interview, consents, step: landingStep(consents.answers, admission) };
+      return { kind: 'ready', interview, consents, step: landingStep(consents.answers, admission, consents.required) };
     } catch (error) {
       return error instanceof LinkDead ? { kind: 'dead' } : { kind: 'failed' };
     }
@@ -89,6 +91,7 @@ const STEP_TITLES: Record<JoinStep, string> = {
   consents: 'Before you join',
   devices: 'Check your camera and microphone',
   waiting: 'Waiting to be let in',
+  held: 'Your interview',
   admitted: 'Your interview',
   ended: 'Your interview has ended',
 };
@@ -100,6 +103,7 @@ export default function JoinPage() {
   const go = useCallback((step: JoinStep) => setView((v) => (v.kind === 'ready' ? { ...v, step } : v)), []);
   const onAdmitted = useCallback(() => go('admitted'), [go]);
   const onAnswersNeeded = useCallback(() => go('consents'), [go]);
+  const onHeld = useCallback(() => go('held'), [go]);
   const onEnded = useCallback(() => go('ended'), [go]);
 
   useEffect(() => {
@@ -163,15 +167,16 @@ export default function JoinPage() {
         <ConsentStep
           consents={consents}
           onLinkDead={() => setView({ kind: 'dead' })}
-          onSaved={(saved) => setView((v) => (v.kind === 'ready' ? { ...v, consents: saved, step: stepAfterConsents(devicesChecked) } : v))}
+          onSaved={(saved) => setView((v) => (v.kind === 'ready' ? { ...v, consents: saved, step: stepAfterConsents(devicesChecked, saved) } : v))}
         />
       )}
       {step === 'devices' && (
         <DeviceCheckStep onBack={() => go('consents')} onContinue={() => { setDevicesChecked(true); go('waiting'); }} />
       )}
       {step === 'waiting' && (
-        <WaitingStep onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onChangeAnswers={() => go('consents')} />
+        <WaitingStep onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onHeld={onHeld} onChangeAnswers={() => go('consents')} />
       )}
+      {step === 'held' && <HeldStep declined={declinedRequired(consents.answers, consents.required)} onChangeAnswers={() => go('consents')} />}
       {step === 'ended' && <InterviewEnded />}
     </PageFrame>
   );

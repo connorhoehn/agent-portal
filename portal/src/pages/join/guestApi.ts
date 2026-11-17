@@ -40,12 +40,24 @@ export async function readAdmission(): Promise<Admission | null> {
   return ((await res.json()) as { admission: Admission }).admission;
 }
 
-/** C2. `refused` when the server will not take the knock (the answers no longer stand). */
-export async function knock(): Promise<{ admission: Admission | null; refused: boolean }> {
+/** What a knock answered: the admission, or why the server would not take it. */
+export interface KnockAnswer {
+  admission: Admission | null;
+  /** The answers no longer stand (the notice changed). */
+  refused: boolean;
+  /** Row I6.4: the answers say no to a part this interview needs; the page shows the held page. */
+  held: boolean;
+}
+
+/** C2. A 409 is `held` when the server says a required part was declined, else `refused`. */
+export async function knock(): Promise<KnockAnswer> {
   const res = await fetch(`${GUEST_API}/knock`, { ...INIT, method: 'POST' });
-  if (res.status === 409) return { admission: null, refused: true };
-  if (!res.ok) return { admission: null, refused: false };
-  return { admission: ((await res.json()) as { admission: Admission }).admission, refused: false };
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => ({}))) as { reason?: string };
+    return body.reason === 'declined-required' ? { admission: null, refused: false, held: true } : { admission: null, refused: true, held: false };
+  }
+  if (!res.ok) return { admission: null, refused: false, held: false };
+  return { admission: ((await res.json()) as { admission: Admission }).admission, refused: false, held: false };
 }
 
 /** D1. The room while the lead has let the guest in (or `ended` after); not-found otherwise. */

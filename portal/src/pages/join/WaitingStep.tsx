@@ -7,18 +7,20 @@ import { Button, Card, Inline, InlineAlert, Stack, T } from '@connorhoehn/ui-com
 import { knock, readAdmission } from './guestApi.ts';
 import { ADMISSION_MAX_POLLS, ADMISSION_POLL_MS, waitingView } from './steps.ts';
 
-export function WaitingStep({ onAdmitted, onChangeAnswers, onAnswersNeeded }: {
+export function WaitingStep({ onAdmitted, onChangeAnswers, onAnswersNeeded, onHeld }: {
   onAdmitted: () => void;
   onChangeAnswers: () => void;
   /** The server would not take the knock: the answers no longer stand (the notice changed). */
   onAnswersNeeded: () => void;
+  /** The server would not take the knock: the answers say no to a part this interview needs (row I6.4). */
+  onHeld: () => void;
 }) {
   const [view, setView] = useState<'waiting' | 'turned-away'>('waiting');
   const [stalled, setStalled] = useState(false);
   const [round, setRound] = useState(0);
   // The callbacks are read through a ref, so a parent's re-render never re-runs the knock.
-  const on = useRef({ onAdmitted, onAnswersNeeded });
-  on.current = { onAdmitted, onAnswersNeeded };
+  const on = useRef({ onAdmitted, onAnswersNeeded, onHeld });
+  on.current = { onAdmitted, onAnswersNeeded, onHeld };
 
   useEffect(() => {
     let stopped = false;
@@ -41,8 +43,9 @@ export function WaitingStep({ onAdmitted, onChangeAnswers, onAnswersNeeded }: {
     void (async () => {
       setStalled(false);
       setView('waiting');
-      const knocked = await knock().catch(() => ({ admission: null, refused: false }));
+      const knocked = await knock().catch(() => ({ admission: null, refused: false, held: false }));
       if (stopped) return;
+      if (knocked.held) { on.current.onHeld(); return; }
       if (knocked.refused) { on.current.onAnswersNeeded(); return; }
       if (knocked.admission && settle(waitingView(knocked.admission))) return;
       timer = setTimeout(() => { void poll(); }, ADMISSION_POLL_MS);

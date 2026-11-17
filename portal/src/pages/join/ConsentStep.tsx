@@ -1,9 +1,10 @@
 // The notice and the three consents (docs/interviews-tenant-plan.md decision 5, row I2.3). The notice text, then
 // three separate yes-or-no questions with one line each on what saying no means. Nothing is chosen for the
 // candidate; the transcript/Milo dependency is shown as it happens; Continue only when all three are answered.
+// A part the deployment requires (row I6.4) carries one line saying so; saying no to it is still allowed and saved.
 import { useState } from 'react';
 import { Button, Card, Divider, InlineAlert, Inline, RadioGroup, Stack, T } from '@connorhoehn/ui-components/shared';
-import { allAnswered, choose, miloLocked, type ConsentChoices, type ConsentPart, type GuestConsents } from './steps.ts';
+import { allAnswered, choose, miloLocked, REQUIRED_LINE, type ConsentChoices, type ConsentPart, type GuestConsents } from './steps.ts';
 import { LinkDead, saveConsents } from './guestApi.ts';
 
 type YesNo = 'yes' | 'no' | '';
@@ -22,6 +23,7 @@ export function ConsentStep({ consents, onSaved, onLinkDead }: {
   onLinkDead: () => void;
 }) {
   const [notice, setNotice] = useState(consents.notice);
+  const [required, setRequired] = useState<readonly ConsentPart[]>(consents.required ?? []);
   const [answers, setAnswers] = useState<ConsentChoices>(consents.answers);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function ConsentStep({ consents, onSaved, onLinkDead }: {
         // Show what the server holds now: the current notice and the answers that stand under it.
         setNotice(result.consents.notice);
         setAnswers(result.consents.answers);
+        setRequired(result.consents.required ?? []);
       }
       setMessage(result.message);
     } catch (error) {
@@ -62,6 +65,7 @@ export function ConsentStep({ consents, onSaved, onLinkDead }: {
               <Stack gap="sm" key={part} data-testid={`join-consent-${part}`}>
                 {i > 0 && <Divider />}
                 <T size="sm" weight="medium" as="p">{question}</T>
+                {required.includes(part) && <T size="xs" tone="secondary" as="p" data-testid={`join-consent-${part}-required`}>{REQUIRED_LINE}</T>}
                 <RadioGroup<YesNo>
                   name={`consent-${part}`}
                   orientation="horizontal"

@@ -73,11 +73,15 @@ export const showsConsentColumn = (role: string | null | undefined): boolean => 
 const OFF_WORDS: Record<ConsentEffectPart, string> = { recording: 'no recording', transcription: 'no transcript', milo: 'no Milo' };
 const ORDER: readonly ConsentEffectPart[] = ['recording', 'transcription', 'milo'];
 
-/** "Not answered", "All on", or what is off ("No recording", "No transcript, no Milo"). */
-export function consentColumnLabel(effect: Pick<ConsentEffect, 'answered' | 'off'> | null | undefined): string {
+/**
+ * "Not answered", "All on", or what is off ("No recording", "No transcript, no Milo"). When a part off is one the
+ * deployment requires (row I6.4, the read's `blocked`): "Cannot go ahead as set: no recording".
+ */
+export function consentColumnLabel(effect: (Pick<ConsentEffect, 'answered' | 'off'> & { blocked?: boolean }) | null | undefined): string {
   if (!effect || !effect.answered) return 'Not answered';
   const off = ORDER.filter((p) => effect.off.includes(p));
   if (!off.length) return 'All on';
   const text = off.map((p) => OFF_WORDS[p]).join(', ');
+  if (effect.blocked) return `Cannot go ahead as set: ${text}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }

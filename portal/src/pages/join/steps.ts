@@ -1,19 +1,56 @@
 // The candidate's steps (docs/interviews-tenant-plan.md row I2.3; decision 5): the pure model behind /join.
 //
 //   landing → consents → devices → waiting → admitted (the room, row I2.4) → ended
+//                      ↘ held (row I6.4: the answers leave off a part this deployment requires; the call cannot start
+//                        as set up until an answer changes)
 //
 // One step at a time. Which step a guest lands on comes from what the server holds: the answers stored under
 // the current notice (C4) and the admission (C2). Nothing here is defaulted to yes: an unanswered question is
 // null, and Milo goes back to unanswered (never to yes) when the transcript is turned back on.
 
-export type JoinStep = 'landing' | 'consents' | 'devices' | 'waiting' | 'admitted' | 'ended';
+export type JoinStep = 'landing' | 'consents' | 'devices' | 'waiting' | 'held' | 'admitted' | 'ended';
 
 export type ConsentPart = 'recording' | 'transcription' | 'milo';
 export type ConsentChoices = Record<ConsentPart, boolean | null>;
 
 export interface ConsentNotice { version: string; title: string; paragraphs: string[] }
 /** C4's answer to GET and PUT /api/interview-invite/consents. */
-export interface GuestConsents { notice: ConsentNotice; answers: ConsentChoices; answeredAt: string | null }
+export interface GuestConsents {
+  notice: ConsentNotice; answers: ConsentChoices; answeredAt: string | null;
+  /** The parts this deployment needs for the call to start (row I6.4). Missing from an older server: none. */
+  required?: ConsentPart[];
+}
+
+/** The required parts the answers say no to (row I6.4). An unanswered question declines nothing yet. */
+export function declinedRequired(answers: ConsentChoices, required: readonly ConsentPart[] | undefined): ConsentPart[] {
+  return (required ?? []).filter((p) => answers[p] === false);
+}
+
+/** The line beside a required question, before the candidate answers and after. */
+export const REQUIRED_LINE = 'This interview needs this to go ahead.';
+
+const PART_WORDS: Record<ConsentPart, string> = { recording: 'the recording', transcription: 'the transcript', milo: 'Milo' };
+
+/** "the recording", "the transcript and Milo", "the recording, the transcript and Milo". */
+export function partsInWords(parts: readonly ConsentPart[]): string {
+  const words = parts.map((p) => PART_WORDS[p]);
+  return words.length <= 1 ? (words[0] ?? '') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
+/**
+ * What the held page says, in order (row I6.4): the answer is saved, the interview cannot start as it is set up, the
+ * recruiter has been told and will be in touch, and the answer can change here until the interview starts. No blame,
+ * no pressure, no countdown.
+ */
+export function heldLines(declined: readonly ConsentPart[]): string[] {
+  const parts = partsInWords(declined);
+  return [
+    'Your answers are saved.',
+    parts ? `This interview is set up to need ${parts}, so it cannot start as it is set up now.` : 'This interview cannot start as it is set up now.',
+    'The recruiter has been told and will be in touch with you.',
+    'You can change your answers on this page until the interview starts.',
+  ];
+}
 
 export type AdmissionState = 'not-knocked' | 'waiting' | 'admitted' | 'turned-away';
 /** C2's admission. */
@@ -46,19 +83,21 @@ export function choose(answers: ConsentChoices, part: ConsentPart, value: boolea
  * Where a guest lands when the page opens. The server's answers decide: an admitted guest goes to the call; a
  * guest who knocked goes back to waiting unless their answers no longer stand (the notice changed); a guest who
  * answered but never knocked goes to the device check (it is never skipped, and holds nothing); anyone else
- * starts at the landing. A missing admission (the route is not there) counts as not knocked.
+ * starts at the landing. Answers that say no to a required part (row I6.4) land on the held page instead. A missing admission (the route is not there) counts as not knocked.
  */
-export function landingStep(answers: ConsentChoices, admission: Admission | null): JoinStep {
+export function landingStep(answers: ConsentChoices, admission: Admission | null, required?: readonly ConsentPart[]): JoinStep {
   const answered = allAnswered(answers);
   const state = admission?.state ?? 'not-knocked';
   if (state === 'admitted') return 'admitted';
   if (!answered) return 'landing';
+  if (declinedRequired(answers, required).length) return 'held';
   if (state === 'waiting' || state === 'turned-away') return 'waiting';
   return 'devices';
 }
 
-/** After the consents: the device check once per visit, then straight back to waiting. */
-export function stepAfterConsents(devicesChecked: boolean): JoinStep {
+/** After the consents: the held page when a required part is declined; else the device check once per visit, then waiting. */
+export function stepAfterConsents(devicesChecked: boolean, saved?: Pick<GuestConsents, 'answers' | 'required'>): JoinStep {
+  if (saved && declinedRequired(saved.answers, saved.required).length) return 'held';
   return devicesChecked ? 'waiting' : 'devices';
 }
 

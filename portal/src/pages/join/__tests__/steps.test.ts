@@ -83,3 +83,40 @@ test('what the room shows: a plain line when the call cannot open here; join, th
   assert.equal(roomView({ token: 'ready', joined: true, left: false }), 'call');
   assert.equal(roomView({ token: 'ready', joined: false, left: true }), 'rejoin');
 });
+
+// ── Row I6.4: a part the deployment requires ─────────────────────────────────────────────────────────────────
+import { REQUIRED_LINE, declinedRequired, heldLines, partsInWords } from '../steps.ts';
+
+test('declinedRequired: only a real no to a required part; unanswered declines nothing; an older server sends none', () => {
+  assert.deepEqual(declinedRequired({ ...ALL, recording: false }, ['recording']), ['recording']);
+  assert.deepEqual(declinedRequired({ ...ALL, recording: false }, ['transcription']), []);
+  assert.deepEqual(declinedRequired({ ...NOTHING_ANSWERED }, ['recording']), []);
+  assert.deepEqual(declinedRequired({ ...ALL, recording: false }, undefined), []);
+  assert.deepEqual(declinedRequired({ recording: true, transcription: false, milo: false }, ['transcription', 'milo']), ['transcription', 'milo']);
+});
+
+test('a declined required part lands on the held page, not the device check or the waiting room; admitted still wins', () => {
+  const no = { ...ALL, recording: false };
+  assert.equal(landingStep(no, null, ['recording']), 'held');
+  assert.equal(landingStep(no, adm('waiting'), ['recording']), 'held');
+  assert.equal(landingStep(no, adm('admitted'), ['recording']), 'admitted');
+  assert.equal(landingStep(no, null, []), 'devices');
+  assert.equal(landingStep(no, null), 'devices');
+  assert.equal(stepAfterConsents(false, { answers: no, required: ['recording'] }), 'held');
+  assert.equal(stepAfterConsents(true, { answers: no, required: ['recording'] }), 'held');
+  assert.equal(stepAfterConsents(true, { answers: ALL, required: ['recording'] }), 'waiting');
+  assert.equal(stepAfterConsents(false), 'devices');
+});
+
+test('the held page says the answer is saved, why the call cannot start, that the recruiter will be in touch, and that it can change', () => {
+  assert.deepEqual(heldLines(['recording']), [
+    'Your answers are saved.',
+    'This interview is set up to need the recording, so it cannot start as it is set up now.',
+    'The recruiter has been told and will be in touch with you.',
+    'You can change your answers on this page until the interview starts.',
+  ]);
+  assert.equal(partsInWords(['transcription', 'milo']), 'the transcript and Milo');
+  assert.equal(partsInWords(['recording', 'transcription', 'milo']), 'the recording, the transcript and Milo');
+  assert.equal(heldLines([])[1], 'This interview cannot start as it is set up now.');
+  for (const line of [...heldLines(['recording', 'milo']), REQUIRED_LINE]) assert.doesNotMatch(line, /must|minutes|seconds|deadline|refus|fail|you declined|INTERVIEWS_/i);
+});
