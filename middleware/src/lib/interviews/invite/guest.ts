@@ -25,6 +25,8 @@ import { interviewsStore } from '../store-select.js';
 import type { Interview } from '../types.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { inviteDeadReason } from './rules.js';
+import { admissionOf } from './admission.js';
+import { guestRoomState } from './room.js';
 import { inviteStore, type Invite } from './store.js';
 import { sameHash } from './token.js';
 
@@ -89,7 +91,14 @@ export function guestCookieOf(req: Request): string | undefined {
 }
 
 /** The guest the cookie stands for now, with its invite and interview; null for anything dead or forged. */
-export async function loadGuest(raw: string | undefined, now = new Date()):
+/**
+ * `endedAfterAdmission`: also accept an invite whose interview is over, when its guest had been let in (room.ts
+ * guestRoomState 'ended'). Only the room's own read (D1 `GET /room`) asks this, so the candidate who was in the call
+ * sees the ended page; every other guest route, the realtime token and every seat still refuse a closed interview.
+ */
+export interface GuestLoadOptions { endedAfterAdmission?: boolean }
+
+export async function loadGuest(raw: string | undefined, now = new Date(), opts: GuestLoadOptions = {}):
   Promise<{ principal: GuestPrincipal; invite: Invite; interview: Interview } | null> {
   if (!raw) return null;
   const c = await verifyValue<Partial<GuestCookie>>(raw);
@@ -97,20 +106,22 @@ export async function loadGuest(raw: string | undefined, now = new Date()):
   const age = now.getTime() / 1000 - c.iat;
   if (age < -60 || age > GUEST_SESSION_MAX_AGE_S) return null;
   return loadGuestSession(c.inv, (invite) => !!invite.sessionHash && sameHash(invite.sessionHash, hashGuestSession(c.sid!)),
-    new Date(c.iat * 1000).toISOString(), now);
+    new Date(c.iat * 1000).toISOString(), now, opts);
 }
 
 /**
  * The guest an invite's CURRENT session stands for, read now: the invite live (rules.ts), its interview open, and
  * `sameSession` true of the stored row. Shared by the cookie (above) and the realtime token (lib/interviews/lobby.ts).
  */
-export async function loadGuestSession(inviteId: string, sameSession: (invite: Invite) => boolean, since: string, now = new Date()):
+export async function loadGuestSession(inviteId: string, sameSession: (invite: Invite) => boolean, since: string, now = new Date(), opts: GuestLoadOptions = {}):
   Promise<{ principal: GuestPrincipal; invite: Invite; interview: Interview } | null> {
   return runWithDbTenant(INTERVIEWS_TENANT, async () => {
     const invite = await inviteStore().getInvite(inviteId);
     if (!invite || !invite.sessionHash || !sameSession(invite)) return null;
     const interview = (await interviewsStore().listInterviews()).find((i) => i.id === invite.interviewId) ?? null;
-    if (inviteDeadReason(invite, interview, now) !== null || !interview) return null;
+    if (!interview) return null;
+    if (inviteDeadReason(invite, interview, now) !== null
+      && !(opts.endedAfterAdmission && guestRoomState(invite, interview, admissionOf(invite), now) === 'ended')) return null;
     const principal: GuestPrincipal = {
       kind: 'interview-guest', inviteId: invite.id, interviewId: interview.id, role: GUEST_ROLE, tenant: null, grants: {},
       since, sessionTag: guestSessionTag(invite.sessionHash),
@@ -126,11 +137,11 @@ export const GUEST_REFUSAL = { error: 'This link no longer works.' } as const;
  * The guard for the guest routes, and only those. Reads only the guest cookie (a staff session is not a
  * guest), loads the guest again, and refuses with the one not-found answer when there is none.
  */
-export function requireGuest() {
+export function requireGuest(opts: GuestLoadOptions = {}) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const raw = guestCookieOf(req);
-      const loaded = await loadGuest(raw);
+      const loaded = await loadGuest(raw, new Date(), opts);
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Referrer-Policy', 'no-referrer');
       if (!loaded) {

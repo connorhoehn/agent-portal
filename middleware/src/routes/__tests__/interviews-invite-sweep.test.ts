@@ -7,7 +7,7 @@
 // the most tempting value there is, and the interviews routes are walked a second time with ANOTHER interview's.
 //
 // Every route must refuse the guest (a 4xx or 5xx) except the guest's own (GUEST_ROUTES: the exchange, its
-// interview, its realtime token, the knock and its admission, and CONSENT's two consents routes) and a public route, which is allowed only when it answers the guest exactly what it answers a
+// interview, its realtime token, the knock and its admission, CONSENT's two consents routes, and its room) and a public route, which is allowed only when it answers the guest exactly what it answers a
 // caller whose credential was rejected (same status, same body): the guest gains nothing by being a guest.
 // Writes to the mock control routes (/api/__mock/*: reset, scenarios, the clock) are not sent: they would
 // reset the very world the guest stands in. Then: a staff session against the guest routes, and the guest
@@ -31,6 +31,7 @@ const GUEST_ROUTES = new Set([
   'GET /api/interview-invite/admission',
   'GET /api/interview-invite/consents',
   'PUT /api/interview-invite/consents',
+  'GET /api/interview-invite/room',
 ]);
 
 /** dev:mock's environment, read from package.json as the journeys read it. */

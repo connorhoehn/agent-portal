@@ -52,6 +52,7 @@ import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewInvitesFixture } from '../../mock/interviews-invites.js';
 import { interviewsFixture } from '../../mock/interviews.js';
 import { newInviteToken } from '../../lib/interviews/invite/token.js';
+import { config } from '../../config.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -351,6 +352,68 @@ describe('the waiting room', () => {
       expect((await request(app).get('/api/interview-invite/realtime-token')).status).toBe(404);
     } finally {
       if (prev === undefined) delete process.env['INTERVIEWS_GUEST_REALTIME']; else process.env['INTERVIEWS_GUEST_REALTIME'] = prev;
+    }
+  });
+
+  // D1 (row I2.4, the candidate's side): the room, only once let in, and the ended page after.
+  it('the room: not-found until the lead lets the guest in; then the call to join; ended after the lead ends it; not-found once turned away', async () => {
+    const room = (cookie: string) => request(app).get('/api/interview-invite/room').set('Cookie', cookie);
+    const roomWrite = async (what: 'start' | 'end') => {
+      const revision = (await HUGO.get(`/interviews/${IV}/room`)).body.room.revision;
+      return request(app).post(`/api/interviews/interviews/${IV}/${what}`).set('x-user', 'u-hugo').send({ revision });
+    };
+    expect((await request(app).get('/api/interview-invite/room')).status).toBe(404);
+    const cookie = await guest();
+    expect((await room(cookie)).status).toBe(404);
+    await knock(cookie);
+    const waiting = await room(cookie);
+    expect([waiting.status, waiting.body]).toEqual([404, { error: 'This link no longer works.' }]);
+    await decide(HUGO, true);
+    const open = await room(cookie);
+    expect(open.status).toBe(200);
+    expect(open.headers['cache-control']).toBe('no-store');
+    expect(open.headers['referrer-policy']).toBe('no-referrer');
+    expect(open.body.room).toMatchObject({
+      interviewId: IV, lobbyName: `interviews:interview:${IV}`, self: { displayName: 'Candidate' },
+      round: { type: 'technical', minutes: 60 }, startedAt: null, state: 'open',
+    });
+    expect(String(open.body.room.self.userId)).toMatch(/^guest:/);
+    expect(JSON.stringify(open.body)).not.toMatch(/u-hugo|Hugo|u-greta|Greta|Mateo/);
+    expect((await roomWrite('start')).status).toBe(200);
+    expect((await room(cookie)).body.room.state).toBe('open');
+    expect((await roomWrite('end')).status).toBe(200);
+    const ended = await room(cookie);
+    expect([ended.status, ended.body.room?.state]).toEqual([200, 'ended']);
+    // Every other guest route treats the closed interview as a dead link.
+    expect((await mine(cookie)).status).toBe(404);
+  });
+
+  it('the room is not-found for a guest the lead turned away, and after a revoke', async () => {
+    const room = (cookie: string) => request(app).get('/api/interview-invite/room').set('Cookie', cookie);
+    const cookie = await guest();
+    await knock(cookie);
+    await decide(HUGO, true);
+    expect((await room(cookie)).status).toBe(200);
+    await GRETA.del(`/interviews/${IV}/invite`);
+    expect((await room(cookie)).status).toBe(404);
+    const again = await guest();
+    await knock(again);
+    await decide(HUGO, false);
+    expect((await room(again)).status).toBe(404);
+  });
+
+  it('the guest\'s realtime token carries the browser-facing endpoints the staff bridge sends, and nothing else new', async () => {
+    const cookie = await guest();
+    const saved = (config as { realtime?: unknown }).realtime;
+    try {
+      (config as { realtime?: unknown }).realtime = { gatewayUrl: 'http://gateway.test', platformApiUrl: 'http://platform.test', videoUrl: 'http://video.test' };
+      const res = await request(app).get('/api/interview-invite/realtime-token').set('Cookie', cookie);
+      expect(Object.keys(res.body).sort()).toEqual(['expiresAt', 'gatewayUrl', 'platformApiUrl', 'token', 'videoUrl']);
+      expect(res.body).toMatchObject({ gatewayUrl: 'http://gateway.test', platformApiUrl: 'http://platform.test', videoUrl: 'http://video.test' });
+      (config as { realtime?: unknown }).realtime = undefined;
+      expect(Object.keys((await request(app).get('/api/interview-invite/realtime-token').set('Cookie', cookie)).body).sort()).toEqual(['expiresAt', 'token']);
+    } finally {
+      (config as { realtime?: unknown }).realtime = saved;
     }
   });
 });

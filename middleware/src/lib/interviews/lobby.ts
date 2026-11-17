@@ -34,8 +34,6 @@ import { INTERVIEWS_TENANT, type Interview, type InterviewState } from './types.
 import { admissionOf, type AdmissionState } from './invite/admission.js';
 import { GUEST_ROLE, guestSessionTag, loadGuestSession } from './invite/guest.js';
 import { guestRealtimeEnabled, guestSubject } from './invite/realtime.js';
-import { inviteDeadReason } from './invite/rules.js';
-import { inviteStore } from './invite/store.js';
 
 export const INTERVIEW_LOBBY_PREFIX = 'interviews:interview:';
 /** The pad's id rule (lib/interviews/pad/channel.ts): one id names the lobby and the pad alike. */
@@ -159,32 +157,52 @@ export async function guestHoldsInterviewSeat(ctx: Context, interviewId: string,
 }
 
 /**
- * The same seat for a guest known only by its subject (`guest:<inviteId>`): the call runtimes (huddle chat, the
- * media seat proof) carry a Session built from the socket, without the token's session tag. The invite must be
- * live and admitted, which a newer exchange resets, so a replaced session's socket is refused here too.
+ * A guest's Session as the call runtimes hold it (the huddle chat, the call's participants, the recipient check):
+ * the guest's claims ride on it, its session tag among them, so every recheck asks the invite's CURRENT session.
+ * Built only from a verified context (guestCallSession, lib/call-access.ts callContextSession); a spread of the
+ * Session keeps it.
  */
-export async function guestSubjectHoldsSeat(sub: string, interviewId: string, opts: { pad?: boolean } = {}, now = new Date()): Promise<boolean> {
-  if (!interviewsEnabled() || !guestRealtimeEnabled() || !sub.startsWith('guest:')) return false;
+export type GuestCallSession = Session & { guest: ContextGuest };
+
+/** The guest a call runtime's Session stands for, or null: not a guest, or a guest Session without its claims. */
+export function guestOfSession(session: Session): ContextGuest | null {
+  if ((session.role as string) !== GUEST_ROLE || session.tenant !== INTERVIEWS_TENANT) return null;
+  const g = (session as Partial<GuestCallSession>).guest;
+  if (!g || typeof g !== 'object' || typeof g.inviteId !== 'string' || typeof g.interviewId !== 'string' || typeof g.session !== 'string') return null;
+  if (!g.inviteId || !g.session || session.sub !== guestSubject(g.inviteId) || !INTERVIEW_ID.test(g.interviewId)) return null;
+  return { inviteId: g.inviteId, interviewId: g.interviewId, session: g.session };
+}
+
+/**
+ * The seat for a guest Session the call runtimes hold: the same facts as a socket's (guestFacts: the invite live,
+ * its CURRENT session the one this Session's tag names, its interview this one, admitted). A Session without the
+ * guest's claims (subject alone) holds nothing: a link opened again elsewhere, and admitted again there, must not
+ * hand the older session's socket back its seat (round 3's session-tag gap).
+ */
+export async function guestSessionHoldsSeat(session: Session, interviewId: string, opts: { pad?: boolean } = {}, now = new Date()): Promise<boolean> {
+  const guest = guestOfSession(session);
+  if (!guest || guest.interviewId !== interviewId) return false;
   try {
-    return await runWithDbTenant(INTERVIEWS_TENANT, async () => {
-      const invite = await inviteStore().getInvite(sub.slice('guest:'.length));
-      if (!invite || invite.interviewId !== interviewId) return false;
-      const interview = await findInterview(interviewId);
-      if (inviteDeadReason(invite, interview, now) !== null) return false;
-      return guestSeatRule({ flagOn: true, guestInterviewId: invite.interviewId, interview, admission: admissionOf(invite).state, pad: opts.pad });
-    });
+    // Read twice, as guestHoldsInterviewSeat does: a revoke or a turn-away between the reads refuses.
+    for (let read = 0; read < 2; read++) {
+      const facts = await guestFacts(guest, now);
+      if (!guestSeatRule({ flagOn: interviewsEnabled(), guestInterviewId: facts ? guest.interviewId : null, interview: facts?.interview ?? null,
+        admission: facts?.admission ?? 'not-knocked', pad: opts.pad })) return false;
+    }
+    return true;
   } catch { return false; }
 }
 
 /** The Session the call runtimes hold for a guest socket: the interviews tenant, the guest role, no grant but that role. */
-export function guestCallSession(guest: ContextGuest): Session {
+export function guestCallSession(guest: ContextGuest): GuestCallSession {
   return {
+    guest: { inviteId: guest.inviteId, interviewId: guest.interviewId, session: guest.session },
     sub: guestSubject(guest.inviteId), name: 'Candidate', tenant: INTERVIEWS_TENANT as Session['tenant'], role: GUEST_ROLE as Session['role'],
     epoch: 0, grants: { [INTERVIEWS_TENANT]: [GUEST_ROLE] }, iat: 0,
   };
 }
 
-/** Either seat, for a Session the caller already holds current: the guest by its subject, staff by the rule. */
+/** Either seat, for a Session the caller already holds current: the guest by its live session's tag, staff by the rule. */
 export async function sessionHoldsInterviewSeat(session: Session, interviewId: string, opts: { pad?: boolean } = {}): Promise<boolean> {
-  return (session.role as string) === GUEST_ROLE ? guestSubjectHoldsSeat(session.sub, interviewId, opts) : staffHoldsInterviewSeat(session, interviewId, opts);
+  return (session.role as string) === GUEST_ROLE ? guestSessionHoldsSeat(session, interviewId, opts) : staffHoldsInterviewSeat(session, interviewId, opts);
 }

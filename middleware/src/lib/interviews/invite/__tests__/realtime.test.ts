@@ -30,6 +30,9 @@ import { applyAdmission } from '../admission.js';
 import { GUEST_ROLE, loadGuestSession, type GuestPrincipal } from '../guest.js';
 import { GUEST_DISPLAY_NAME, guestRealtimeClaims, guestRealtimeEnabled, mintGuestRealtimeToken } from '../realtime.js';
 import { MemoryInviteStore, setInviteStore } from '../store.js';
+import { HUDDLE_CHAT_TENANTS, callContextSession, callProvenance, currentCallAuthority, currentCallChatGrant } from '../../../call-access.js';
+import { guestCallSession, guestOfContext, sessionHoldsInterviewSeat } from '../../lobby.js';
+import { interviewsStore } from '../../store-select.js';
 
 const SECRET = 'guest-realtime-test-secret';
 const OWN = 'iv-mateo-design';          // the seed's technical round, Hugo's, ready
@@ -44,6 +47,10 @@ beforeEach(() => {
   const users = new Map<string, UserInfo>([
     ['u-greta', { id: 'u-greta', displayName: 'Greta', epoch: 0, email: null, personId: null, grants: { interviews: ['recruiter'] } }],
     ['u-hugo', { id: 'u-hugo', displayName: 'Hugo', epoch: 0, email: null, personId: null, grants: { interviews: ['interviewer'] } }],
+    ['u-wen', { id: 'u-wen', displayName: 'Wen', epoch: 0, email: null, personId: null, grants: { interviews: ['interviewer'] } }],
+    ['u-ines', { id: 'u-ines', displayName: 'Ines', epoch: 0, email: null, personId: null, grants: { interviews: ['interviewer'] } }],
+    ['u-kai', { id: 'u-kai', displayName: 'Kai', epoch: 0, email: null, personId: null, grants: { interviews: ['interviewer'] } }],
+    ['u-amara', { id: 'u-amara', displayName: 'Amara', epoch: 0, email: null, personId: null, grants: { interviews: ['hiring-manager'] } }],
   ]);
   jest.mocked(getUser).mockImplementation(async (id) => structuredClone(users.get(id) ?? null));
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -76,10 +83,11 @@ describe('the claims', () => {
 });
 
 describe('served only by the guest\'s own router', () => {
-  it('the guest routes are the seven of rows I2.1 to I2.3, and only routes/interview-invite.ts mints a token', () => {
+  it('the guest routes are the seven of rows I2.1 to I2.3 and the room of row I2.4, and only routes/interview-invite.ts mints a token', () => {
     const routes = enumerateRoutes().routes.filter((r) => r.path.startsWith('/api/interview-invite')).map((r) => `${r.method} ${r.path}`);
     expect(routes.sort()).toEqual([
       'GET /api/interview-invite/admission', 'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview', 'GET /api/interview-invite/realtime-token',
+      'GET /api/interview-invite/room',
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock', 'PUT /api/interview-invite/consents',
     ]);
     for (const file of ['routes/interviews/invite.ts', 'routes/interviews/admission.ts', 'routes/session.ts', 'index.ts']) {
@@ -241,5 +249,85 @@ describe('with guest realtime on', () => {
     expect(await admitSubscribe(greta, `presence:${own}`)).toBe(false);
     expect(await admitLobbyRead(greta, own)).toBe('denied');
     expect(await admitSubscribe(hugo, own)).toBe(false); // the lobby name itself carries no chat: the call's chat is its huddle
+  });
+
+  // Round 3's session-tag gap: the call runtimes held a guest Session by its subject alone, so a link opened again
+  // elsewhere (a new session, admitted again there) handed the older session's socket its seat back.
+  it('every recheck of a guest asks the live session\'s tag: an older session of the same invite is refused the call, the chat and the recipient check', async () => {
+    const old = ctx;
+    await invites.recordOpening(inviteId, new Date().toISOString(), 'b'.repeat(64));
+    const fresh = await loadGuestSession(inviteId, () => true, '');
+    const current = gatewayAuthFromClaims(await verifyRealtimeToken((await mintGuestRealtimeToken(fresh!.principal, SECRET)).token, SECRET)) as unknown as Record<string, unknown>;
+    await admit();
+    const recipient = (c: Record<string, unknown>) => admitCallRecipient(c, { lobbyName: own, callId: 'c1' }, callGuards(async () => own));
+    const chat = async (c: Record<string, unknown>) => {
+      const session = callContextSession(c, HUDDLE_CHAT_TENANTS)!;
+      const authority = await currentCallAuthority(session, HUDDLE_CHAT_TENANTS);
+      return [await sessionHoldsInterviewSeat(session, OWN), await currentCallChatGrant(session, authority, 'PostMessage', own), await currentCallChatGrant(session, authority, 'ViewSocial', own)];
+    };
+    expect(await chat(current)).toEqual([true, true, true]);
+    expect(await recipient(current)).toBe(true);
+    expect(await chat(old)).toEqual([false, false, false]);
+    expect(await recipient(old)).toBe(false);
+    expect(await join(own)).toBe(false); // `ctx` is the older session's
+    // Two sessions of one invite are two seats, never one.
+    expect(callProvenance(callContextSession(old, HUDDLE_CHAT_TENANTS)!)).not.toBe(callProvenance(callContextSession(current, HUDDLE_CHAT_TENANTS)!));
+    // The huddle runtime's own Session for a guest socket carries the claims too.
+    expect(await sessionHoldsInterviewSeat(guestCallSession(guestOfContext(current)!), OWN)).toBe(true);
+    expect(await sessionHoldsInterviewSeat(guestCallSession(guestOfContext(old)!), OWN)).toBe(false);
+    // A guest Session known by its subject alone holds nothing, and is no call authority.
+    const bare = { sub: `guest:${inviteId}`, name: 'Candidate', tenant: 'interviews', role: GUEST_ROLE, grants: { interviews: [GUEST_ROLE] }, epoch: 0, iat: 0 } as unknown as Session;
+    expect(await sessionHoldsInterviewSeat(bare, OWN)).toBe(false);
+    await expect(currentCallAuthority(bare, HUDDLE_CHAT_TENANTS)).rejects.toMatchObject({ status: 401 });
+  });
+
+  // Row I2.7, the server's half: the panel's seats in the call, its chat and its presence.
+  it('the lead and each of two panel members hold a seat; a reassignment takes it from the one removed; no one else holds one; the guest is unaffected', async () => {
+    const staffCtx = async (sub: string, role: string) => {
+      const session = { sub, name: sub, role, tenant: 'interviews', grants: { interviews: [role] }, epoch: 0, iat: Math.floor(Date.now() / 1000) } as Session;
+      return gatewayAuthFromClaims(await verifyRealtimeToken((await signRealtimeToken(realtimeClaims(session), SECRET)).token, SECRET)) as unknown as Record<string, unknown>;
+    };
+    const reseat = async (id: string, leadId: string, panelIds: string[]) => {
+      const row = (await interviewsStore().listInterviews()).find((i) => i.id === id)!;
+      const at = new Date().toISOString();
+      const acceptances = [{ userId: leadId, seat: 'lead' as const, at }, ...panelIds.map((userId) => ({ userId, seat: 'panel' as const, at }))];
+      expect(await interviewsStore().reassign(id, { leadId, panelIds, state: row.state, acceptances }, row.revision)).toMatchObject({ ok: true });
+    };
+    const holds = async (c: Record<string, unknown>, interviewId = OWN) => {
+      const lobby = `interviews:interview:${interviewId}`;
+      const session = callContextSession(c, HUDDLE_CHAT_TENANTS)!;
+      const authority = await currentCallAuthority(session, HUDDLE_CHAT_TENANTS);
+      return [
+        await admitCall(c, 'join', { lobbyName: lobby }, callGuards(noStoredCall)),
+        await admitSubscribe(c, `presence:${lobby}`),
+        await currentCallChatGrant(session, authority, 'PostMessage', lobby),
+        await currentCallChatGrant(session, authority, 'ViewSocial', lobby),
+      ];
+    };
+    const SEAT = [true, true, true, true];
+    const NONE = [false, false, false, false];
+    await reseat(OWN, 'u-hugo', ['u-wen', 'u-ines']);
+    await reseat(OTHER, 'u-kai', []);
+    await admit();
+    const [hugo, wen, ines, kai, greta, amara] = await Promise.all([
+      staffCtx('u-hugo', 'interviewer'), staffCtx('u-wen', 'interviewer'), staffCtx('u-ines', 'interviewer'),
+      staffCtx('u-kai', 'interviewer'), staffCtx('u-greta', 'recruiter'), staffCtx('u-amara', 'hiring-manager'),
+    ]);
+    expect(await holds(hugo)).toEqual(SEAT);
+    expect(await holds(wen)).toEqual(SEAT);
+    expect(await holds(ines)).toEqual(SEAT);
+    // An interviewer of another round holds that round's seat, not this one's; the recruiter and the hiring manager hold none.
+    expect(await holds(kai, OTHER)).toEqual(SEAT);
+    expect(await holds(kai)).toEqual(NONE);
+    expect(await holds(greta)).toEqual(NONE);
+    expect(await holds(amara)).toEqual(NONE);
+    expect(await join(own)).toBe(true);
+    // A reassignment drops Ines from the panel: her next check refuses; the others and the guest keep theirs.
+    await reseat(OWN, 'u-hugo', ['u-wen']);
+    expect(await holds(ines)).toEqual(NONE);
+    expect(await holds(hugo)).toEqual(SEAT);
+    expect(await holds(wen)).toEqual(SEAT);
+    expect(await join(own)).toBe(true);
+    expect(await admitSubscribe(ctx, `presence:${own}`)).toBe(true);
   });
 });

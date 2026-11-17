@@ -9,7 +9,7 @@ import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './sess
 import { insecureDevMode } from './insecure-dev-mode.js';
 import { SOCIAL_CONVERSATION_ID, tenantChannelFamily } from './tenant-channels.js';
 import { TENANTS_WITH_HUDDLE_CHAT } from './tenants.generated.js';
-import { INTERVIEW_LOBBY_PREFIX, interviewOfLobby, sessionHoldsInterviewSeat } from './interviews/lobby.js';
+import { INTERVIEW_LOBBY_PREFIX, guestOfContext, guestOfSession, interviewOfLobby, sessionHoldsInterviewSeat } from './interviews/lobby.js';
 import { GUEST_ROLE } from './interviews/invite/guest.js';
 import { GUEST_DISPLAY_NAME } from './interviews/invite/realtime.js';
 
@@ -35,7 +35,8 @@ export async function currentCallAuthority(session: Session, tenants: readonly C
   }
   // The interview's candidate is not in the directory: its invite and admission are its authority (lib/interviews/lobby.ts).
   if ((session.role as string) === GUEST_ROLE) {
-    if (session.tenant !== 'interviews' || !session.sub.startsWith('guest:')) throw new AppError(401, 'The session is no longer current. Sign in again.');
+    // Its claims (with the session's tag) must ride on the Session: the seat is asked of the invite's current session.
+    if (session.tenant !== 'interviews' || !guestOfSession(session)) throw new AppError(401, 'The session is no longer current. Sign in again.');
     return { displayName: GUEST_DISPLAY_NAME, grants: { interviews: [GUEST_ROLE] } };
   }
   try {
@@ -65,6 +66,14 @@ export async function currentCallAuthority(session: Session, tenants: readonly C
 export function callContextSession(ctx: Record<string, unknown> | undefined, tenants: readonly CallTenant[] = ORGIQ_ONLY): Session | null {
   if (!ctx || typeof ctx.userId !== 'string' || !tenants.includes(ctx.org as CallTenant) || typeof ctx.role !== 'string') return null;
   const tenant = ctx.org as CallTenant;
+  // The interview's guest: its verified claims, the session tag among them, ride on the Session so every recheck
+  // asks the invite's current session (lib/interviews/lobby.ts guestSessionHoldsSeat). A malformed guest is none.
+  if (ctx.role === GUEST_ROLE) {
+    const guest = guestOfContext(ctx);
+    if (!guest || tenant !== 'interviews') return null;
+    return { sub: ctx.userId, name: typeof ctx.displayName === 'string' ? ctx.displayName : undefined, tenant, role: GUEST_ROLE as Session['role'],
+      epoch: 0, grants: { [tenant]: [GUEST_ROLE] }, iat: Number(ctx.sessionIat) || 0, guest } as Session;
+  }
   if (!Number.isSafeInteger(ctx.epoch) || Number(ctx.epoch) < 0) return null;
   const act = ctx.act as { sub?: unknown; epoch?: unknown } | undefined;
   if (act && (typeof act.sub !== 'string' || !Number.isSafeInteger(act.epoch) || Number(act.epoch) < 0)) return null;
@@ -77,6 +86,9 @@ export function callContextSession(ctx: Record<string, unknown> | undefined, ten
   };
 }
 export function callProvenance(session: Session): string {
+  // A guest's provenance names its session's tag: a socket of an older session of the same invite is another seat.
+  const guest = guestOfSession(session);
+  if (guest) return JSON.stringify([session.sub, session.tenant, session.role, 0, null, 0, guest.session]);
   return JSON.stringify([session.sub, session.tenant, session.role, session.epoch ?? 0, session.act?.sub ?? null, session.act?.epoch ?? 0]);
 }
 export function connectedCallSession(router: RealtimeRouter, clientId: string, tenants: readonly CallTenant[] = ORGIQ_ONLY): Session | null {

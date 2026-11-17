@@ -1,6 +1,6 @@
 // The interview's lobby names and its seat rule (lib/interviews/lobby.ts; docs/interviews-tenant-plan.md row I2.2).
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
-import { CALL_STATES, guestOfContext, guestSeatRule, interviewLobbyName, interviewOfLobby, staffSeatRule, type StaffSeatFacts } from '../lobby.js';
+import { CALL_STATES, guestCallSession, guestOfContext, guestOfSession, guestSeatRule, interviewLobbyName, interviewOfLobby, staffSeatRule, type StaffSeatFacts } from '../lobby.js';
 import { INTERVIEW_STATES, type Interview } from '../types.js';
 
 const interview = (over: Partial<Interview> = {}) => ({ id: 'iv-1', state: 'ready' as Interview['state'], leadId: 'u-lead', panelIds: ['u-panel'], type: 'technical' as Interview['type'], ...over });
@@ -21,6 +21,14 @@ describe('the staff seat', () => {
   it('is the lead and the panel of that interview', () => {
     expect(staffSeatRule(staff())).toBe(true);
     expect(staffSeatRule(staff({ sub: 'u-panel' }))).toBe(true);
+  });
+
+  it('row I2.7: the lead and each of two panel members; a member a reassignment removed holds nothing', () => {
+    const two = interview({ panelIds: ['u-panel', 'u-panel-2'] });
+    for (const sub of ['u-lead', 'u-panel', 'u-panel-2']) expect([sub, staffSeatRule(staff({ sub, interview: two }))]).toEqual([sub, true]);
+    const after = interview({ panelIds: ['u-panel'] });
+    expect(staffSeatRule(staff({ sub: 'u-panel-2', interview: after }))).toBe(false);
+    expect(staffSeatRule(staff({ sub: 'u-panel', interview: after }))).toBe(true);
   });
 
   it.each([
@@ -88,5 +96,21 @@ describe('a guest context, by its claims', () => {
     ['a malformed interview id', { guest: { interviewId: 'a:b', inviteId: 'inv-1', session: 'tag' } }],
   ])('is not a guest with %s', (_what, over) => {
     expect(guestOfContext(ctx(over))).toBeNull();
+  });
+});
+
+describe('a guest Session, as the call runtimes hold it', () => {
+  const guest = { interviewId: 'iv-1', inviteId: 'inv-1', session: 'tag' };
+  it('carries the guest\'s claims, its session tag among them, through a spread', () => {
+    const session = guestCallSession(guest);
+    expect(guestOfSession(session)).toEqual(guest);
+    expect(guestOfSession({ ...session, grants: { interviews: ['interview-guest'] } })).toEqual(guest);
+  });
+  it('is no guest without its claims, with a subject that is not its invite\'s, or as a staff role', () => {
+    const { guest: _drop, ...bare } = guestCallSession(guest);
+    expect(guestOfSession(bare)).toBeNull();
+    expect(guestOfSession({ ...guestCallSession(guest), sub: 'guest:inv-2' })).toBeNull();
+    expect(guestOfSession({ ...guestCallSession(guest), role: 'interviewer' as never })).toBeNull();
+    expect(guestOfSession({ ...guestCallSession(guest), guest: { ...guest, session: '' } } as never)).toBeNull();
   });
 });

@@ -31,8 +31,10 @@ import { inviteStore } from '../lib/interviews/invite/store.js';
 import { hashInviteToken, wellFormedToken } from '../lib/interviews/invite/token.js';
 import { interviewsFlagGate } from './interviews.js';
 import { realtimeSigningSecret } from '../lib/realtime-token.js';
-import { guestRealtimeEnabled, mintGuestRealtimeToken } from '../lib/interviews/invite/realtime.js';
+import { GUEST_DISPLAY_NAME, guestRealtimeEnabled, guestSubject, mintGuestRealtimeToken } from '../lib/interviews/invite/realtime.js';
 import { admissionOf, applyAdmission } from '../lib/interviews/invite/admission.js';
+import { guestRoomState, guestRoomView } from '../lib/interviews/invite/room.js';
+import { config } from '../config.js';
 
 export const interviewInviteRouter: Router = Router();
 
@@ -145,7 +147,17 @@ interviewInviteRouter.get('/realtime-token', interviewsFlagGate, requireGuest(),
   guestHeaders(res);
   const secret = realtimeSigningSecret();
   if (!guestRealtimeEnabled() || !secret) { res.status(404).json(GUEST_REFUSAL); return; }
-  res.json(await mintGuestRealtimeToken(req.guest!, secret));
+  // D1: the browser-facing realtime endpoints, as the staff bridge sends them (routes/session.ts), so the candidate's
+  // page opens the gateway socket and the call on the same services. Nothing else is new in this answer.
+  const gatewayUrl = config.realtime?.gatewayUrl;
+  const platformApiUrl = config.realtime?.platformApiUrl;
+  const videoUrl = config.realtime?.videoUrl;
+  res.json({
+    ...await mintGuestRealtimeToken(req.guest!, secret),
+    ...(gatewayUrl ? { gatewayUrl } : {}),
+    ...(platformApiUrl ? { platformApiUrl } : {}),
+    ...(videoUrl ? { videoUrl } : {}),
+  });
 }));
 
 /** Knock: ask the lead to be let in. Allowed when the steps before it are done (admission.ts knockPrecondition). */
@@ -161,4 +173,24 @@ interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHa
 interviewInviteRouter.get('/admission', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
   res.json({ admission: admissionOf(await inviteStore().getInvite(req.guest!.inviteId)) });
+}));
+
+/**
+ * D1, the candidate's room (row I2.4, the candidate's side): the call to join, while the lead has let the guest in,
+ * and `ended` once the interview is over after that (lib/interviews/invite/room.ts). Anything else is the router's
+ * one not-found. The only guest read that still answers after the interview closes; it names no panel member,
+ * no question and nothing from the candidate's record.
+ */
+interviewInviteRouter.get('/room', interviewsFlagGate, requireGuest({ endedAfterAdmission: true }), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  const guest = req.guest!;
+  const [invite, interviews, applications, openings] = await Promise.all([
+    inviteStore().getInvite(guest.inviteId), interviewsStore().listInterviews(), interviewsStore().listApplications(), interviewsStore().listOpenings(),
+  ]);
+  const interview = interviews.find((i) => i.id === guest.interviewId) ?? null;
+  const state = invite && interview ? guestRoomState(invite, interview, admissionOf(invite), new Date()) : null;
+  if (!state || !interview) { res.status(404).json(GUEST_REFUSAL); return; }
+  const application = applications.find((a) => a.id === interview.applicationId);
+  const opening = application ? openings.find((o) => o.id === application.openingId) ?? null : null;
+  res.json({ room: guestRoomView({ userId: guestSubject(guest.inviteId), displayName: GUEST_DISPLAY_NAME }, interview, opening, state) });
 }));
