@@ -246,3 +246,61 @@ describe('Have Milo ask, said aloud (I3.5)', () => {
     }
   });
 });
+
+describe('the edges (hardening H3, O-108)', () => {
+  const kit = () => refOf().opening.kit;
+  // The seeded kit is shared by reference across resets: the edits below are made on a copy, put back after each test.
+  let saved: ReturnType<typeof kit>;
+  beforeEach(() => { const opening = refOf().opening; saved = opening.kit; opening.kit = structuredClone(saved); });
+  afterEach(() => { refOf().opening.kit = saved; });
+
+  it('the kit edited mid-interview: a waiting suggestion is shown under the competency\'s new name, or a plain one once the competency is gone', async () => {
+    const first = await read();
+    expect(first.suggestion!.competency).toEqual({ id: 'delivery', name: 'Delivery' });
+    kit().competencies.find((c) => c.id === 'delivery')!.name = 'Shipping';
+    expect((await read()).suggestion).toEqual({ ...first.suggestion, competency: { id: 'delivery', name: 'Shipping' } });
+    kit().competencies.splice(kit().competencies.findIndex((c) => c.id === 'delivery'), 1);
+    expect((await read()).suggestion).toEqual({ ...first.suggestion, competency: { id: 'delivery', name: 'Competency' } });
+    expect(deps.reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('the kit edited mid-interview: the next call reads the kit as it is now, and an answer tied to a removed competency is dropped off-kit', async () => {
+    const first = await read();
+    await answerSuggestion(refOf(), WEN, first.suggestion!.id, 'ask');
+    const seen: string[][] = [];
+    let answer = JSON.stringify({ text: 'Who did you tell first when it slipped?', competencyId: 'delivery', basedOn: null });
+    deps.model.mockReturnValue({ kind: 'bedrock', modelId: 'amazon.nova-pro-v1:0', suggest: async (input: { competencies: { id: string }[] }) => {
+      seen.push(input.competencies.map((c) => c.id));
+      return { raw: answer, code: 'ok', sent: true, usage: { inputTokens: 900, outputTokens: 30 } };
+    } });
+    kit().competencies.splice(kit().competencies.findIndex((c) => c.id === 'delivery'), 1);
+    now += SUGGESTION_GAP_MS + 1;
+    say('candidate', 'I told my manager the same day.');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: SUGGESTION_GAP_MS });
+    warn.mockRestore();
+    expect(seen[0]).not.toContain('delivery');
+    expect((await store.listSuggestions(IV)).at(-1)).toMatchObject({ dropped: 'off-kit', text: '' });
+    answer = JSON.stringify({ text: 'Who did you tell first?', competencyId: kit().competencies[0]!.id, basedOn: null });
+    now += SUGGESTION_GAP_MS + 1;
+    say('candidate', 'And the team the next morning.');
+    expect((await read()).suggestion).toMatchObject({ text: 'Who did you tell first?', competency: { id: kit().competencies[0]!.id } });
+  });
+
+  it('Bedrock answers with no usage: the suggestion is shown and the hold is settled on the estimate, marked estimated', async () => {
+    const { BedrockCoachModel, estimateCoachTokens } = await import('../model.js');
+    const { coachInput } = await import('../service.js');
+    const { estimateUsageCost } = await import('../../../pricing.js');
+    const send = jest.fn(async () => ({ output: { message: { role: 'assistant', content: [{ text: JSON.stringify({ text: 'Who did you bring in first?', competencyId: 'delivery', basedOn: null }) }] } } }));
+    deps.model.mockReturnValue(new BedrockCoachModel({ send: send as never, modelId: 'amazon.nova-pro-v1:0' }));
+    const body = await read();
+    expect(body.suggestion).toMatchObject({ text: 'Who did you bring in first?', competency: { id: 'delivery' } });
+    expect(send).toHaveBeenCalledTimes(1);
+    const estimate = estimateCoachTokens(coachInput(refOf(), transcript!.lines, []));
+    expect(deps.settle).toHaveBeenCalledWith({
+      sourceId: `iv:op-em:${IV}:coach:sg-1`, costUsd: estimateUsageCost('amazon.nova-pro-v1:0', estimate), basis: 'estimated', model: 'amazon.nova-pro-v1:0', actorId: 'u-wen',
+      provider: 'bedrock', inputTokens: estimate.inputTokens, outputTokens: estimate.outputTokens,
+    });
+    expect(estimate.inputTokens).toBeGreaterThan(0);
+  });
+});
