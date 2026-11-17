@@ -155,7 +155,7 @@ export default function JoinPage() {
   return (
     <GuestStepFrame title={STEP_TITLES[step]} description={`${interview.opening.title} · ${interview.round.name}`} step={step} fill={step === 'consents'}>
       {step === 'landing' && (
-        <Stack gap="md" className="max-w-xl">
+        <Stack gap="md">
           <Card padding="lg" data-testid="join-interview">
             <KeyValue
               items={[
@@ -197,7 +197,7 @@ export default function JoinPage() {
 /** The ended page: thanks, that it is over, and how to ask for deletion in the notice's own words. Nothing about a result. */
 function InterviewEnded() {
   return (
-    <Stack gap="md" className="max-w-xl" data-testid="join-ended">
+    <Stack gap="md" data-testid="join-ended">
       <Card padding="lg">
         <Stack gap="sm">
           <T size="base" weight="semibold" as="p">Thank you for your time.</T>

@@ -62,7 +62,7 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
   const again = useCallback(() => setRound((r) => r + 1), []);
 
   return (
-    <Stack gap="md" className="max-w-xl" data-testid="join-waiting">
+    <Stack gap="md" data-testid="join-waiting">
       <Card padding="lg">
         {view === 'turned-away' ? (
           <T size="sm" as="p" data-testid="join-turned-away">Your interviewer could not let you in just now.</T>
@@ -70,10 +70,10 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
           <Stack gap="md">
             <Stack gap="sm">
               <T size="base" weight="semibold" as="p">The interviewer has been told you are here.</T>
+              {meeting && <T size="sm" as="p" data-testid="join-waiting-meeting">{meeting}</T>}
               <T size="sm" tone="secondary" as="p">Keep this page open. It moves on by itself when you are let in.</T>
             </Stack>
-            <KeyValue aria-label="Your interview" data-testid="join-waiting-meeting" items={[
-              ...(meeting ? [{ label: 'Meeting', value: meeting }] : []),
+            <KeyValue aria-label="Your interview" data-testid="join-waiting-when" items={[
               { label: 'When', value: when },
               { label: 'Length', value: `${minutes} minutes` },
             ]} />

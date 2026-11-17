@@ -32,7 +32,7 @@ export function GuestStepFrame({ title, description, step, fill = false, childre
 }) {
   return <GuestShell>
     <PageFrame title={title} {...(description ? { description } : {})} body={fill ? 'fill' : 'scroll'}
-      className="mx-auto w-full max-w-5xl" data-testid="join-page">
+      className="mx-auto w-full max-w-4xl" data-testid="join-page">
       <Stack gap="lg" className={fill ? 'min-h-0 flex-1' : undefined}>
         {step && <WorkflowStepper steps={walkedSteps(step)} aria-label="Your steps to the interview" data-testid="join-steps" />}
         {children}

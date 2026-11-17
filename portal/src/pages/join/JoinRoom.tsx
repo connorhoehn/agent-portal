@@ -104,7 +104,7 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
 /** The steps' frame, while the call cannot draw yet. */
 function RoomFrame({ interview, children }: { interview: GuestInterview; children: ReactNode }) {
   return <GuestStepFrame title="Your interview" description={`${interview.opening.title} · ${interview.round.name}`} step="admitted">
-    <Stack gap="md" className="max-w-xl" data-testid="join-room">{children}</Stack>
+    <Stack gap="md" data-testid="join-room">{children}</Stack>
   </GuestStepFrame>;
 }
 

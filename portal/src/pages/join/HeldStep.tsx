@@ -8,7 +8,7 @@ import { heldLines, type ConsentPart } from './steps.ts';
 export function HeldStep({ declined, onChangeAnswers }: { declined: readonly ConsentPart[]; onChangeAnswers: () => void }) {
   const [saved, ...rest] = heldLines(declined);
   return (
-    <Stack gap="md" className="max-w-xl" data-testid="join-held">
+    <Stack gap="md" data-testid="join-held">
       <Card padding="lg">
         <Stack gap="sm">
           <T size="base" weight="semibold" as="p">{saved}</T>

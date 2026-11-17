@@ -21,7 +21,7 @@ export function DeviceCheckStep({ onContinue, onBack }: { onContinue: () => void
   };
 
   return (
-    <Stack gap="md" className="max-w-3xl" data-testid="join-devices">
+    <Stack gap="md" data-testid="join-devices">
       <T size="sm" as="p">
         Check that your camera and microphone work. What you see and hear here stays on this device: nothing is sent or kept.
       </T>
