@@ -73,7 +73,7 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { ackedBefore, newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
-import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js';
+import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { hasFamilyPolicies, payerFields, policyCallOf, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import {
@@ -132,7 +132,7 @@ const seatOf = async (req: Request): Promise<{ session: Session; callId: string 
   const session = sessionOf(req); const callId = callIdOf(req);
   await callChatRuntime().assertMember(callId, session, false);
   // A connected seat while the assistant is in the call is attendance (the store ignores it once the assistant has left, audit M1).
-  await attendOnce(callId, session.sub).catch(() => undefined);
+  await attendOnce(callId, session.sub).then(() => ackElsewhere(callId, session.sub)).catch(() => undefined); // and an acknowledgement given elsewhere (policy.ts)
   return { session, callId };
 };
 
@@ -142,7 +142,7 @@ async function mustAck(record: AssistantRecord, callId: string): Promise<string[
   // After Milo was invited back, the people of earlier periods who are not here now owe nothing yet: they are asked when they return.
   const earlier = recordSession(record).periods?.length ? [] : record.attendees;
   const everyone = new Set([...record.presentAtInvite, ...earlier, ...live]);
-  return [...everyone].filter((u) => u !== record.invitedBy && !record.acked.includes(u)).sort();
+  return [...everyone].filter((u) => u !== record.invitedBy && !record.acked.includes(u) && ackedInCall(record, u)).sort(); // the in-call notice's people only
 }
 
 /** Whether the call's audio reaches Milo: `connecting` while it joins or between live sessions, `no-audio` once the tap gave up. */
@@ -227,7 +227,7 @@ async function recordNameOf(initiativeId: string | null): Promise<string | null>
 /** Start (or restart) the live session for a record that already exists. */
 async function startSession(callId: string, record: AssistantRecord, session: Session): Promise<void> {
   const names = await Promise.all([...new Set([...record.presentAtInvite, session.sub])].map((u) => nameOf(u)));
-  await assistantRuntime().start({ callId, tenant: record.tenant, inviterId: record.invitedBy, roster: names, recordName: await recordNameOf(record.initiativeId) });
+  await assistantRuntime().start({ callId, tenant: record.tenant, inviterId: record.invitedBy, roster: names, recordName: await recordNameOf(record.initiativeId), lobby: record.lobby });
 }
 
 /** Arm the media server's tap for a call that is listening now. A failure here never undoes the listening: the call chat says so when the tap cannot be made. */
@@ -273,7 +273,7 @@ function sendRefusal(res: Response, refusal: SpendRefusal, action: 'invite' | 'r
 }
 
 meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
+  const { session, callId } = await inviterSeatOf(req);
   const store = assistantStore();
   const startListening = () => {
     try { assistantIntake().start(callId); } catch (e) {
@@ -314,10 +314,10 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   // the voice mint gives, and Milo never joins.
   const initiativeId = initiativeOfLobby(lobby);
   const ceilingSeconds = assistantLimits().maxSeconds;
-  const spend = assistantSpend();
+  const spend = assistantSpend(); const payer = payerFields({ callId, lobby, tenant: session.tenant, initiativeId, invitedBy: session.sub }); // the call's policy says whose
   const held = await spend.reserve({
-    callId, tenant: session.tenant, inviterId: session.sub, initiativeId, seconds: ceilingSeconds, part: 0,
-    ...((req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true ? { confirmOverUserBudget: true } : {}),
+    callId, tenant: session.tenant, ...payer, seconds: ceilingSeconds, part: 0,
+    ...(confirmOverBudget(req) && payer.inviterId === session.sub ? { confirmOverUserBudget: true } : {}),
   });
   if (!held.ok) {
     assistantIntake().stop(callId);
@@ -325,7 +325,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
     return;
   }
   const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
-  const startCtx: StartContext = { callId, tenant: session.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(initiativeId) };
+  const startCtx: StartContext = { callId, tenant: session.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(initiativeId), lobby };
   const giveBack = async () => { assistantIntake().stop(callId); await spend.release(held.holdId ? [held.holdId] : []); };
   try { await assistantRuntime().start(startCtx); } catch (e) {
     await giveBack();
@@ -339,7 +339,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
     created = await store.create({
       callId, tenant: session.tenant, lobby, initiativeId, state: 'invited',
       invitedBy: session.sub, invitedAt, pausedBy: null, leftAt: null, leftBy: null,
-      acked: [session.sub], attendees: [...new Set(present)], presentAtInvite: [...new Set(present)],
+      acked: [session.sub, ...(await ackedElsewhereAt({ callId, lobby, tenant: session.tenant }, present, session.sub))], attendees: [...new Set(present)], presentAtInvite: [...new Set(present)],
       requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
       session: { ...newAssistantSession(ceilingSeconds), listeningSince: invitedAt },
     });
@@ -431,17 +431,17 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   const pre = await preflightAudio(session, callId, prior.lobby);
   startListening();
   const part = Math.max(s.extensions, s.ledgerPart ?? 0) + 1;
-  const spend = assistantSpend();
-  // The person inviting Milo back owns this hold, so their own confirmation past their budget counts (as on a first invite).
+  const spend = assistantSpend(); const payer = payerFields(prior, session.sub);
+  // The person inviting Milo back owns this hold (the call's policy may say otherwise), so their own confirmation past their budget counts (as on a first invite).
   const held = await spend.reserve({
-    callId, tenant: prior.tenant, inviterId: session.sub, initiativeId: prior.initiativeId, seconds: grant, part,
-    ...(confirmOverBudget(req) ? { confirmOverUserBudget: true } : {}),
+    callId, tenant: prior.tenant, ...payer, seconds: grant, part,
+    ...(confirmOverBudget(req) && payer.inviterId === session.sub ? { confirmOverUserBudget: true } : {}),
   });
   const stopIntakeIfLeft = async () => { if ((await store.get(callId).catch(() => null))?.state === 'left') assistantIntake().stop(callId); };
   if (!held.ok) { await stopIntakeIfLeft(); sendRefusal(res, held.refusal, 'invite'); return; }
   const giveBack = async () => { await spend.release(held.holdId ? [held.holdId] : []); };
   const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
-  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId), fromSeq: prior.nextSeq, period: periodOf(prior) + 1 }); } catch (e) {
+  try { await runtime.start({ callId, tenant: prior.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(prior.initiativeId), fromSeq: prior.nextSeq, period: periodOf(prior) + 1, lobby: prior.lobby }); } catch (e) {
     await giveBack(); await stopIntakeIfLeft();
     if (e instanceof RunStillStopping) throw new AppError(409, REJOIN_STILL_LEAVING); // a leave that began after the wait above
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
@@ -531,14 +531,14 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     let fresh: { holdId: string | null; patch: Partial<AssistantSession> } | null = null;
     if (to === 'listening' && before?.state === 'paused' && recordSession(before).settled) {
       const prior = recordSession(before); const limits = assistantLimits();
-      const part = Math.max(prior.extensions, prior.ledgerPart ?? 0) + 1;
+      const part = Math.max(prior.extensions, prior.ledgerPart ?? 0) + 1; const payer = payerFields(before);
       const held = await assistantSpend().reserve({
-        callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part,
-        // As on invite and extend: going past a budget is the budget owner's choice, so only the inviter's confirmation counts.
-        ...(confirmOverBudget(req) && session.sub === before.invitedBy ? { confirmOverUserBudget: true } : {}),
+        callId, tenant: before.tenant, ...payer, seconds: limits.maxSeconds, part,
+        // As on invite and extend: going past a budget is the budget owner's choice, so only the confirmation of the person it counts against (the inviter) counts.
+        ...(confirmOverBudget(req) && session.sub === payer.inviterId ? { confirmOverUserBudget: true } : {}),
       });
       if (!held.ok) {
-        await askInviterQuietly(callId, before.invitedBy, session, 'resume');
+        await askInviterQuietly(callId, payer.inviterId, session, 'resume');
         sendRefusal(res, held.refusal, 'resume'); return;
       }
       fresh = { holdId: held.holdId, patch: {
@@ -592,7 +592,7 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   const store = assistantStore();
   const current = await store.get(callId);
   if (!current) throw new NotFoundError(NOT_HERE);
-  if (current.state === 'left') throw new AppError(409, ALREADY_LEFT);
+  if (current.state === 'left') throw new AppError(409, ALREADY_LEFT); if (!ackedInCall(current, session.sub)) throw new AppError(409, ACKED_ELSEWHERE);
   const acked = await store.ack(callId, session.sub);
   await assistantAudio().refresh(callId); // this person's audio is admitted from now on, not at the next gate refresh
   res.json(await view(acked, callId, session));
@@ -600,7 +600,7 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
 
 /** Milo speaking aloud is a per-call switch (decision 4), off until someone with the invite right turns it on; the call is told either way. */
 meetingAssistantRouter.post('/voice', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
+  const { session, callId } = await inviterSeatOf(req);
   const on = (req.body as { on?: unknown } | undefined)?.on;
   if (typeof on !== 'boolean') throw new ValidationError('on must be true or false');
   const store = assistantStore();
@@ -640,13 +640,13 @@ meetingAssistantRouter.post('/participant', asyncHandler(async (req, res) => {
 
 /** Anyone who may invite Milo may extend its time (decision 10): the default minutes, once per request, up to the hard maximum. */
 meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
+  const { session, callId } = await inviterSeatOf(req);
   await noteSeat(callId, session);
   const out = await assistantRuntime().extend(callId, session, confirmOverBudget(req));
   if (out.ok) { res.json(await view(await assistantStore().get(callId), callId, session)); return; }
   if (out.why === 'refused') {
     const record = await assistantStore().get(callId);
-    if (record) await askInviterQuietly(callId, record.invitedBy, session, 'extend');
+    if (record) await askInviterQuietly(callId, payerFields(record).inviterId, session, 'extend');
     sendRefusal(res, out.refusal, 'extend'); return;
   }
   if (out.why === 'no-assistant') throw new NotFoundError(NOT_HERE);
@@ -765,7 +765,7 @@ async function proposalViewer(req: Request): Promise<ProposalViewer> {
 }
 
 const involves = (p: Proposal, userId: string): boolean => p.executor === userId || p.named.includes(userId);
-const visibleTo = (v: ProposalViewer, p: Proposal): boolean => v.seated || v.attendee || involves(p, v.session.sub);
+const visibleTo = (v: ProposalViewer, p: Proposal): boolean => readsOf(v.session.sub, v.session.tenant, v.seated, v.record).record || involves(p, v.session.sub);
 /** The end of the call for expiry: when the assistant left (the call ending makes it leave). Null while it is in the call. */
 const endedAt = (record: AssistantRecord): number | null => (record.state === 'left' ? (record.leftAt ?? record.invitedAt) : null);
 
@@ -836,7 +836,7 @@ async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer,
   const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : []), ...(p.askedBy ? [p.askedBy] : [])])];
   const faces = await facesOf(people); const names: Record<string, string> = Object.fromEntries(faces.map((f) => [f.userId, f.name])); // portraits read as the attendees' are
   const mine = p.responses.find((r) => r.userId === viewer);
-  const wasThere = v.seated || v.attendee;
+  const wasThere = readsOf(viewer, v.record.tenant, v.seated, v.record).record; // by the call's policy: by default, seated now or an attendee
   const answerable = ANSWERABLE.includes(p.state);
   const recordsAs = p.state === 'done' ? p.run?.recordedAs ?? null : answerable ? await decisionRecordedAs(assistantRuntime().proposalDeps, p, v.record.initiativeId) : null;
   return {
@@ -869,7 +869,7 @@ meetingAssistantRouter.get('/proposals', asyncHandler(async (req, res) => {
   const v = await proposalViewer(req);
   const all = await listProposalsFor(assistantStore(), v.callId, Date.now(), endedAt(v.record));
   const shown = all.filter((p) => visibleTo(v, p));
-  if (!v.seated && !v.attendee && !shown.length) throw new NotFoundError('Not found');
+  if (!readsOf(v.session.sub, v.session.tenant, v.seated, v.record).record && !shown.length) throw new NotFoundError('Not found');
   res.json({ callId: v.callId, proposals: await Promise.all(shown.map((p) => proposalView(p, v.session.sub, v))) });
 }));
 
@@ -946,15 +946,15 @@ function intParam(raw: unknown, name: string, min: number, max: number, fallback
  * moment between the invite and the assistant leaving (recorded as it happens; nothing is inferred from a seat read afterwards). Same answer for "no assistant", "another tenant's call" and "you were not there": 404.
  * Admins get no exception.
  */
-export async function attendeeOf(session: Session, callId: string): Promise<AssistantRecord> {
+export async function attendeeOf(session: Session, callId: string, part: keyof ReadAccess = 'record'): Promise<AssistantRecord> {
   const record = await assistantStore().get(callId);
-  if (!record || record.tenant !== session.tenant || !record.attendees.includes(session.sub)) throw new NotFoundError('Not found');
+  if (!record || !readsOf(session.sub, session.tenant, false, record)[part]) throw new NotFoundError('Not found'); // the call's policy (by default this rule)
   return record;
 }
 
 /** A deleted record is gone for everyone, its transcript included. */
-async function liveRecordOf(session: Session, callId: string): Promise<AssistantRecord> {
-  const record = await attendeeOf(session, callId);
+async function liveRecordOf(session: Session, callId: string, part: keyof ReadAccess): Promise<AssistantRecord> {
+  const record = await attendeeOf(session, callId, part);
   if ((await assistantStore().getMinutes(callId))?.deleted) throw new NotFoundError('Not found');
   return record;
 }
@@ -971,7 +971,7 @@ meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
   const tail = req.query['tail'] === undefined ? null : intParam(req.query['tail'], 'tail', 1, 500, 100);
   if (tail === null && req.query['before'] !== undefined) throw new ValidationError('before needs tail');
   if (tail !== null && (req.query['after'] !== undefined || req.query['limit'] !== undefined)) throw new ValidationError('tail cannot be combined with after or limit');
-  const record = await liveRecordOf(session, callId);
+  const record = await liveRecordOf(session, callId, 'transcript');
   const store = assistantStore();
   let after: number; let lines: TranscriptLine[]; let earlier: boolean | undefined;
   if (tail !== null) {
@@ -1048,7 +1048,7 @@ export function coverageOf(record: AssistantRecord, attendees: readonly string[]
  */
 meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  const record = await attendeeOf(session, callId);
+  const record = await attendeeOf(session, callId, 'minutes');
   const m = await assistantStore().getMinutes(callId);
   if (m?.deleted) {
     const expired = m.deleted.by === 'system';
@@ -1111,7 +1111,7 @@ meetingAssistantRouter.post('/minutes/action-items/:index/work-item', refuseMasq
   const raw = req.params['index'];
   if (typeof raw !== 'string' || !/^\d{1,3}$/.test(raw)) throw new NotFoundError('No such action item');
   const index = Number(raw);
-  await liveRecordOf(session, callId);
+  await liveRecordOf(session, callId, 'minutes');
   const store = assistantStore();
   const m = await store.getMinutes(callId);
   const item = m && !m.deleted ? m.actionItems[index] : undefined;
@@ -1136,7 +1136,7 @@ meetingAssistantRouter.post('/minutes/action-items/:index/work-item', refuseMasq
 /** An attendee asks Milo to write minutes that failed again. Refused while a write runs and once MAX_ATTEMPTS runs were made. */
 meetingAssistantRouter.post('/minutes/rewrite', refuseMasqueradeRead, asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  await liveRecordOf(session, callId);
+  await liveRecordOf(session, callId, 'minutes');
   const { outcome } = await rewriteMinutes(callId, MAX_ATTEMPTS);
   if (outcome === 'started') { res.status(202).json({ callId, writing: true }); return; }
   if (outcome === 'busy') { res.status(409).json({ code: 'MINUTES_WRITING', error: `${ASSISTANT_NAME} is already writing these minutes.` }); return; }
@@ -1212,7 +1212,7 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   if (initiative !== undefined && (typeof initiative !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(initiative))) throw new ValidationError('Invalid initiative');
   const rows = await assistantStore().listMinutes({ tenant: session.tenant, userId: session.sub, limit, ...(initiative ? { initiativeId: initiative } : {}), ...(before ? { before } : {}) });
   const store = assistantStore(); const now = Date.now();
-  const meetings = await Promise.all(rows.map(async (m) => {
+  const meetings = await Promise.all(rows.filter((m) => policyForLobby(m.lobby).listsMeeting(m, session.sub)).map(async (m) => {
     const faces = await facesOf(m.attendees);
     const attendees = faces.map((a) => a.name);
     // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
@@ -1255,4 +1255,57 @@ function additionDueFor(record: AssistantRecord, m: MinutesRecord): boolean {
 /** Is this person seated in the running call (so they could dismiss Milo themselves)? */
 async function seatedHere(callId: string, userId: string): Promise<boolean> {
   return (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.active && u.userId === userId);
+}
+
+// ---- the call's policy (lib/meeting-assistant/policy.ts), declared last as well ----
+
+/** Refused on POST ack to a person whose acknowledgement the call's policy takes from somewhere else (decision 5 of the interviews plan). */
+export const ACKED_ELSEWHERE = 'Your consent for this call was asked before you joined, so there is nothing to acknowledge here.';
+
+/** The policy of a call whose record may not exist yet (an invite): the record's lobby, else the call's own; neither: the default. */
+async function policyHere(callId: string, tenant: string): Promise<{ policy: ReturnType<typeof policyForLobby>; call: PolicyCall }> {
+  const record = await assistantStore().get(callId).catch(() => null);
+  if (record) return { policy: policyForLobby(record.lobby), call: policyCallOf(record) };
+  const lobby = hasFamilyPolicies() ? await callChatRuntime().lobbyOf(callId).catch(() => null) : null;
+  return { policy: policyForLobby(lobby), call: { callId, lobby, tenant } };
+}
+
+/** A seat, and the call's policy letting this person invite Milo, turn its voice on and add time (after Cedar's InviteMeetingAssistant). */
+async function inviterSeatOf(req: Request): Promise<{ session: Session; callId: string }> {
+  const seat = await seatOf(req);
+  const { policy, call } = await policyHere(seat.callId, seat.session.tenant);
+  const why = await policy.inviteRefusal({ userId: seat.session.sub, tenant: seat.session.tenant, role: seat.session.role }, call);
+  if (why !== null) throw new AppError(403, why);
+  return seat;
+}
+
+/** What this person may read of the call's record, by its policy. `seated`: they hold a seat in the running call now. */
+function readsOf(userId: string, tenant: string, seated: boolean, record: AssistantRecord): ReadAccess {
+  return policyForLobby(record.lobby).reads({ userId, tenant, seated }, record);
+}
+
+/** Does this person acknowledge Milo with the notice in the call (the default for everyone), not somewhere else? */
+function ackedInCall(record: AssistantRecord, userId: string): boolean {
+  return policyForLobby(record.lobby).acknowledgement(policyCallOf(record), userId) === 'in-call-notice';
+}
+
+/** Of the people present at an invite, those whose acknowledgement comes from elsewhere and who gave it (never the inviter, who acknowledges by inviting). */
+async function ackedElsewhereAt(call: PolicyCall, present: readonly string[], inviter: string): Promise<string[]> {
+  if (!hasFamilyPolicies()) return [];
+  const policy = policyForLobby(call.lobby);
+  const elsewhere = [...new Set(present)].filter((u) => u !== inviter && policy.acknowledgement(call, u) === 'elsewhere');
+  if (!elsewhere.length || !policy.acknowledgedElsewhere) return [];
+  return (await policy.acknowledgedElsewhere(call, elsewhere)).filter((u) => elsewhere.includes(u));
+}
+
+/** A person taking a seat whose acknowledgement comes from elsewhere and who gave it there is acknowledged now (their audio is admitted). */
+async function ackElsewhere(callId: string, userId: string): Promise<void> {
+  if (!hasFamilyPolicies()) return;
+  const store = assistantStore();
+  const record = await store.get(callId);
+  if (!record || record.state === 'left' || record.acked.includes(userId) || ackedInCall(record, userId)) return;
+  const given = await policyForLobby(record.lobby).acknowledgedElsewhere?.(policyCallOf(record), [userId]) ?? [];
+  if (!given.includes(userId)) return;
+  await store.ack(callId, userId);
+  await assistantAudio().refresh(callId).catch(() => undefined);
 }

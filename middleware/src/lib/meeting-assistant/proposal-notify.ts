@@ -17,6 +17,7 @@ import { assistantStore } from './store-select.js';
 import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
 import type { Proposal } from './types.js';
+import { hasFamilyPolicies, policyOfCall } from './policy.js';
 
 /** "the Auth Migration call" for a call on an initiative, else "a call". */
 export type CallLabel = string;
@@ -59,7 +60,11 @@ async function tellOnce(p: Proposal, who: readonly string[], event: string, type
   const fresh = [...new Set(who)].filter((u) => !told.has(`${p.callId}\0${p.id}\0${event}\0${u}`));
   if (!fresh.length) return [];
   for (const u of fresh) told.add(`${p.callId}\0${p.id}\0${event}\0${u}`);
-  return notify(fresh, {
+  // Only people the call's policy lets the bell reach (policy.ts `rings`), asked after the marks so that two tellings at once still tell
+  // each person once; with no family's policy registered nothing is read and nobody is left out.
+  const ringing = hasFamilyPolicies() ? await policyOfCall(p.callId, p.tenant).then(({ policy, call }) => fresh.filter((u) => policy.rings(call, u))) : fresh;
+  if (!ringing.length) return [];
+  return notify(ringing, {
     type, title, action: { label: 'Open the meeting', href: meetingPage(p.callId) },
     payload: { tenant: p.tenant, kind: type, callId: p.callId },
   });

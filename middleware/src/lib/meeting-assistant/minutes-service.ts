@@ -29,6 +29,7 @@ import {
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSourceId, minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
+import { payerFields, policyCallOf, policyForLobby } from './policy.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { sessionOf, type AssistantRecord, type AssistantTurn, type MinutesRecord, type MinutesWriterKind, type TranscriptLine } from './types.js';
 
@@ -115,7 +116,8 @@ export async function notifyMinutesReady(minutes: MinutesRecord, now: number = D
     if (!(await assistantStore().claimMinutesNotice(minutes.callId, now))) return [];
     const names = await Promise.all(minutes.attendees.map((u) => nameOf(u)));
     const name = meetingNameOf(minutes, names);
-    return await notify(minutes.attendees, {
+    const policy = policyForLobby(minutes.lobby); const call = policyCallOf(minutes); // the bell reaches whom the call's policy lets it
+    return await notify(minutes.attendees.filter((u) => policy.rings(call, u)), {
       // Once per writing: an addition (Milo was invited back and heard more) clears the claim, and its bell says the minutes changed.
       // The meeting's name after a colon, as the page titles it: "Minutes are ready: Observability Platform call".
       type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes were updated: ${name}` : `Minutes are ready: ${name}`,
@@ -153,7 +155,7 @@ const MAX_CARDS = 8;
  */
 async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input: Parameters<MinutesWriter['write']>[0], run: { addition: number; attempt: number }): Promise<{ draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind }> {
   const spend = minutesSpend();
-  const common = { callId: record.callId, sourceId: minutesSourceId(record.callId, run.addition, run.attempt), tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId };
+  const common = { callId: record.callId, sourceId: minutesSourceId(record.callId, run.addition, run.attempt), tenant: record.tenant, ...payerFields(record) };
   if (writer.kind === 'scripted') {
     const draft = await writer.write(input);
     await spend.record({ ...common, model: 'scripted-minutes', costUsd: SCRIPTED_MINUTES_USD, basis: 'estimated' }).catch((e: unknown) => console.warn('[meeting-assistant] minutes spend not booked', (e as Error).message));

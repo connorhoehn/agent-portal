@@ -30,6 +30,7 @@ import { DECISION_MODEL_ID, type CheckLine, type DecisionAnswer } from './decisi
 import { makeDecisionModel, type DecisionModel, type ModelCheckResult } from './decision-model.js';
 import { watcherSpend, type WatcherSpend } from './spend.js';
 import { ASSISTANT_NAME } from './chat-types.js';
+import { payerFields } from './policy.js';
 import type { AssistantStore } from './store.js';
 import { periodOf, type AssistantRecord, type Proposal, type ProposalOutcome, type TranscriptLine } from './types.js';
 
@@ -319,7 +320,7 @@ export class DecisionWatcher {
     const costUsd = estimateUsageCost(DECISION_MODEL_ID, usage);
     try {
       await (this.deps.spend ?? watcherSpend)().record({
-        callId: record.callId, inviterId: record.invitedBy, initiativeId: record.initiativeId, n: now, model: model.modelId, costUsd,
+        callId: record.callId, ...payerFields(record), n: now, model: model.modelId, costUsd,
         basis: costUsd === null ? 'unknown' : reported ? 'reported' : 'estimated', tokensIn: usage.inputTokens, tokensOut: usage.outputTokens,
       });
     } catch (e) {

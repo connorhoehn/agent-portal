@@ -4,7 +4,8 @@
 //   * ASKER. Decided by the server. Scripted session: the `askedBy` the server itself passed to `sendText` for the request.
 //     Real session: the latest attributed transcript line in the 20 seconds before the call. Nothing the model says names a person.
 //   * NAME LOCK. The asker must have said the name (`nameLock`) in those 20 seconds, or the call is refused, counted and not posted.
-//   * ROLE. The tool must be in the voice catalogue for the asker's own tenant and role, and not in MEETING_EXCLUDED_TOOLS.
+//   * ROLE. The call's policy (policy.ts) says whether the asker may have the tool run; by default it must be in the voice catalogue
+//     for the asker's own tenant and role, and not in MEETING_EXCLUDED_TOOLS.
 //   * NEVER EXECUTE. The server runs no tool. A call becomes a `turn` for the asker's browser: a read runs at once there, a write
 //     waits behind a card only the asker can confirm. The result comes back through submitResult, and is handed to the session as
 //     data, never posted raw and never read as an instruction.
@@ -21,7 +22,8 @@ import { ASSISTANT_NAME } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
-import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
+import { isPrivateRead, meetingInstructions } from './instructions.js';
+import { payerOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
@@ -90,6 +92,8 @@ export interface StartContext {
   roster: readonly string[];
   /** The call's record name (an initiative's name), or null. */
   recordName: string | null;
+  /** The call's lobby, which picks its policy (policy.ts). Absent: the record's lobby, read when the run starts. */
+  lobby?: string | null;
   /** Milo was invited back: lines before this one belong to an earlier period and are never taken as a request of this one. */
   fromSeq?: number;
   /**
@@ -242,6 +246,9 @@ export const UNASKED_REPLY = `${ASSISTANT_NAME} could not tell who asked. Ask ag
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
 interface CallRun {
   ctx: StartContext;
+  /** The call as its policy sees it, and that policy (policy.ts): chosen once when the run starts, from the call's lobby. */
+  call: PolicyCall;
+  policy: MeetingAssistantPolicy;
   /** The period of Milo in the call this run serves (`StartContext.period`). */
   period: number;
   session: LiveMeetingSession | null;
@@ -618,8 +625,9 @@ export class AssistantRuntime {
     if (existing && !existing.finished && !this.stopping.get(ctx.callId)?.size && (ctx.period === undefined || ctx.period === existing.period)) return;
     if (existing || this.stopping.get(ctx.callId)?.size) throw new RunStillStopping(ctx.callId);
     this.watchIntake();
+    const call: PolicyCall = { callId: ctx.callId, lobby: ctx.lobby ?? null, tenant: ctx.tenant };
     const run: CallRun = {
-      ctx, period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
+      ctx, call, policy: policyForLobby(call.lobby), period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
@@ -632,6 +640,7 @@ export class AssistantRuntime {
       const record = await this.store.get(ctx.callId);
       run.voice = record?.voice === true;
       if (record) run.callStartedAt = record.invitedAt;
+      if (record && ctx.lobby === undefined) { run.call = { ...call, lobby: record.lobby }; run.policy = policyForLobby(record.lobby); }
       if (ctx.period === undefined && record) run.period = periodOf(record);
     } catch { /* off, period 1 */ }
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
@@ -800,8 +809,7 @@ export class AssistantRuntime {
     run.sessionKind = session.kind;
     await session.start({
       instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent }),
-      tools: meetingFunctionTools(run.ctx.tenant),
-      backendInstructions: meetingBackendInstructions(run.ctx.tenant),
+      ...run.policy.sessionTools(run.call),
     });
     run.session = session;
     run.sessionStartedAt = this.now();
@@ -1029,7 +1037,7 @@ export class AssistantRuntime {
    * echo) up to the hold's length later than its frames were sent.
    */
   private onOutputAudio(run: CallRun, session: LiveMeetingSession, e: SessionEvents['outputAudio']): void {
-    if (!run.voice || run.voiceHeld || run.finished || run.session !== session) return;
+    if (!run.voice || run.voiceHeld || run.finished || run.session !== session || !run.policy.relaysLiveSpeech(run.call)) return;
     run.gate.frame(e.pcm, e.last === true);
   }
 
@@ -1335,6 +1343,8 @@ export class AssistantRuntime {
     }
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state === 'left') { decide('drop.left'); return; }
+    // The call's policy may keep everything the live model says out of the call (an interview: only approved words are said).
+    if (!run.policy.relaysLiveSpeech(run.call)) { decide('drop.policy'); return; }
     if (asker === null) { await postNoticeQuietly(run.ctx.callId, e.text.slice(0, 1500)); return; }
     await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await nameOf(asker) });
   }
@@ -1347,6 +1357,9 @@ export class AssistantRuntime {
     if (!run) return;
     for (const e of events) {
       if (e.type === 'request') {
+        // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
+        const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
+        if (held !== null) { await postReply(callId, { text: held, askedBy: e.askedBy, askedByName: await nameOf(e.askedBy) }).catch(() => null); continue; }
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
         // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
         const record = await this.store.get(callId);
@@ -1514,7 +1527,7 @@ export class AssistantRuntime {
     const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && Buffer.byteLength(JSON.stringify(e.args)) <= MAX_ARGS_BYTES;
     // (c) The asker's own role.
     const roles = await this.deps.rolesOf(asker, tenant);
-    const allowed = !MEETING_EXCLUDED_TOOLS.has(name) && roles.some((role) => meetingTools(tenant, role).some((t) => t.name === name));
+    const allowed = run.policy.mayUseTool(run.call, { userId: asker, roles }, name);
     if (!allowed) {
       trace('call.refused', { call: e.callId, why: 'role' });
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
@@ -1798,10 +1811,11 @@ export class AssistantRuntime {
     const next = Math.min(limits.hardMaxSeconds, s.ceilingSeconds + limits.maxSeconds);
     const added = next - s.ceilingSeconds;
     if (added <= 0) return { ok: false, why: 'at-maximum' };
+    const payer = payerOf(record);
     const held = await assistantSpend().reserve({
-      callId, tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId, seconds: added, part: s.extensions + 1,
-      // Going past a budget is the budget owner's choice: only the inviter (the person the hold is against) can confirm it (audit M6).
-      ...(confirmOverUserBudget && by.sub === record.invitedBy ? { confirmOverUserBudget: true } : {}),
+      callId, tenant: record.tenant, inviterId: payer.actorId, initiativeId: payer.initiativeId, source: payer.source, seconds: added, part: s.extensions + 1,
+      // Going past a budget is the budget owner's choice: only the person the hold is against (the inviter) can confirm it (audit M6).
+      ...(confirmOverUserBudget && by.sub === payer.actorId ? { confirmOverUserBudget: true } : {}),
     });
     if (!held.ok) return { ok: false, why: 'refused', refusal: held.refusal };
     await this.store.patchSession(callId, { ceilingSeconds: next, warned: false, extensions: s.extensions + 1, holds: held.holdId ? [...s.holds, held.holdId] : s.holds });

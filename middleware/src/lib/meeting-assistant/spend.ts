@@ -11,7 +11,12 @@
 // The provider's own seconds win (the session reports them cumulatively); with none, the seconds Milo was listening are the
 // estimate, floored at the provider's 15-second minimum. The mock world's scripted session reports elapsed seconds, so the
 // ledger shows a realistic entry without a paid call.
+//
+// Whose money it is comes from the call's policy (policy.ts `payer`): by default the inviter's, on the call's initiative, under
+// `meeting_assistant`. The callers pass the payer's person as `inviterId` and its source as `source`; settling reads it from the record.
+import type { SpendSource } from '../../providers/spend-ledger.js';
 import { MIN_BILLED_SECONDS, voiceConfig, voiceCostUsd } from '../voice/config.js';
+import { payerOf } from './policy.js';
 import { assistantStore } from './store-select.js';
 import { periodOf, sessionOf, type AssistantRecord } from './types.js';
 
@@ -28,6 +33,8 @@ export interface ReserveInput {
   /** 0 for the invite's own hold, then 1, 2 ... for extensions. */
   part: number;
   confirmOverUserBudget?: boolean;
+  /** The spend source the call's policy charges (policy.ts `payer`); `meeting_assistant` when absent. */
+  source?: SpendSource;
 }
 
 export interface SettleInput {
@@ -61,7 +68,7 @@ export const realSpend: AssistantSpend = {
     const p75 = voiceCostUsd(i.seconds, cfg.usdPerMinute);
     const forecast = { costUsdP75: p75, costUsdP25: Math.round((p75 / 4) * 10_000) / 10_000, confidence: 'prior' as const };
     const held = await reserveSpend({
-      initiativeId: i.initiativeId, actorId: i.inviterId, source: 'meeting_assistant', sourceId: sourceIdFor(i.callId, i.part), forecast,
+      initiativeId: i.initiativeId, actorId: i.inviterId, source: i.source ?? 'meeting_assistant', sourceId: sourceIdFor(i.callId, i.part), forecast,
       expiresInMs: i.seconds * 1000 + HOLD_EXTRA_MS + HOLD_GRACE_MS, tenant: i.tenant,
       ...(i.confirmOverUserBudget ? { confirmed: { userBudget: true } } : {}),
     });
@@ -85,9 +92,9 @@ export const realSpend: AssistantSpend = {
     const raw = known ? i.usageSeconds : Math.round(i.listeningSeconds);
     const seconds = raw > 0 ? Math.max(MIN_BILLED_SECONDS, Math.ceil(raw)) : 0;
     const reported = known && i.sessionKind === 'openai';
-    const r = i.record;
+    const r = i.record; const payer = payerOf(r);
     await recordSpend({
-      source: 'meeting_assistant', sourceId: sourceIdFor(r.callId, i.part ?? 0), initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
+      source: payer.source, sourceId: sourceIdFor(r.callId, i.part ?? 0), initiativeId: payer.initiativeId, boxId: null, actorId: payer.actorId,
       trigger: `meeting-assistant:${r.tenant}`, model: cfg.model, costUsd: voiceCostUsd(seconds, cfg.usdPerMinute),
       costBasis: reported ? 'reported' : 'estimated', provider: 'openai',
     });
@@ -95,7 +102,7 @@ export const realSpend: AssistantSpend = {
       const model = delegationModel();
       const costUsd = await delegationCostUsd(model, { inputTokens: i.tokens.input, outputTokens: i.tokens.output, cachedTokens: Math.min(i.tokens.cached, i.tokens.input), responses: 0 });
       await recordSpend({
-        source: 'meeting_assistant', sourceId: `${sourceIdFor(r.callId, i.part ?? 0)}:tokens`, initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
+        source: payer.source, sourceId: `${sourceIdFor(r.callId, i.part ?? 0)}:tokens`, initiativeId: payer.initiativeId, boxId: null, actorId: payer.actorId,
         trigger: 'meeting-assistant-delegation', model, costUsd, costBasis: costUsd == null ? 'unknown' : reported ? 'reported' : 'estimated', provider: 'openai',
         inputTokens: i.tokens.input, outputTokens: i.tokens.output, estimatedCostUsd: costUsd,
       });
@@ -156,10 +163,10 @@ export const minutesSourceId = (callId: string, addition = 0, attempt = 1): stri
 
 export interface MinutesSpend {
   /** Hold the estimated cost; a refusal means no model minutes (the record then carries a plain note). `sourceId` is the run's (`minutesSourceId`). */
-  reserve(input: { callId: string; sourceId: string; tenant: string; inviterId: string; initiativeId: string | null; estimateUsd: number }): Promise<ReserveOutcome>;
+  reserve(input: { callId: string; sourceId: string; tenant: string; inviterId: string; initiativeId: string | null; estimateUsd: number; source?: SpendSource }): Promise<ReserveOutcome>;
   release(holdIds: readonly string[]): Promise<void>;
   /** Book what the minutes cost, under the run's `sourceId` (the same as its hold's, so the row settles it). `reported` only when the provider's own token counts priced it. */
-  record(input: { callId: string; sourceId: string; inviterId: string; initiativeId: string | null; tenant: string; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn?: number; tokensOut?: number }): Promise<void>;
+  record(input: { callId: string; sourceId: string; inviterId: string; initiativeId: string | null; tenant: string; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn?: number; tokensOut?: number; source?: SpendSource }): Promise<void>;
 }
 
 /** What a scripted (mock-world) minutes entry books: a small estimate, so the mock ledger shows the line. */
@@ -170,7 +177,7 @@ export const realMinutesSpend: MinutesSpend = {
     const { reserveSpend, HOLD_GRACE_MS, spendRefusalResponse } = await import('../spend-holds.js');
     const forecast = { costUsdP75: i.estimateUsd, costUsdP25: Math.round((i.estimateUsd / 4) * 10_000) / 10_000, confidence: 'prior' as const };
     const held = await reserveSpend({
-      initiativeId: i.initiativeId, actorId: i.inviterId, source: 'meeting_assistant', sourceId: i.sourceId, forecast,
+      initiativeId: i.initiativeId, actorId: i.inviterId, source: i.source ?? 'meeting_assistant', sourceId: i.sourceId, forecast,
       expiresInMs: 10 * 60_000 + HOLD_GRACE_MS, tenant: i.tenant,
     });
     if (held.kind === 'held') return { ok: true, holdId: held.holdId };
@@ -181,7 +188,7 @@ export const realMinutesSpend: MinutesSpend = {
   async record(i) {
     const { recordSpend } = await import('../../providers/spend-ledger.js');
     await recordSpend({
-      source: 'meeting_assistant', sourceId: i.sourceId, initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
+      source: i.source ?? 'meeting_assistant', sourceId: i.sourceId, initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
       trigger: 'meeting-assistant-minutes', model: i.model, costUsd: i.costUsd, costBasis: i.basis, provider: 'openai',
       ...(i.tokensIn !== undefined ? { inputTokens: i.tokensIn } : {}), ...(i.tokensOut !== undefined ? { outputTokens: i.tokensOut } : {}),
       ...(i.costUsd !== null ? { estimatedCostUsd: i.costUsd } : {}),
@@ -204,7 +211,7 @@ export interface WatcherSpend {
   /** May a check be made now? False once the listening hold is exhausted or the call is settled. */
   allowed(record: AssistantRecord, now: number): boolean;
   /** Book one check. `reported` only when the provider's own token counts priced it. */
-  record(input: { callId: string; inviterId: string; initiativeId: string | null; n: number; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn: number; tokensOut: number }): Promise<void>;
+  record(input: { callId: string; inviterId: string; initiativeId: string | null; n: number; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn: number; tokensOut: number; source?: SpendSource }): Promise<void>;
 }
 
 export function watcherBudgetLeft(record: AssistantRecord, now: number): boolean {
@@ -218,7 +225,7 @@ export const realWatcherSpend: WatcherSpend = {
   async record(i) {
     const { recordSpend } = await import('../../providers/spend-ledger.js');
     await recordSpend({
-      source: 'meeting_assistant', sourceId: watcherSourceId(i.callId, i.n), initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
+      source: i.source ?? 'meeting_assistant', sourceId: watcherSourceId(i.callId, i.n), initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
       trigger: 'meeting-assistant-decision-check', model: i.model, costUsd: i.costUsd, costBasis: i.basis, provider: 'bedrock',
       inputTokens: i.tokensIn, outputTokens: i.tokensOut, ...(i.costUsd !== null ? { estimatedCostUsd: i.costUsd } : {}),
     });

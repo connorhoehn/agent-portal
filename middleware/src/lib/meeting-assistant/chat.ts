@@ -26,6 +26,7 @@ import { assistantLimits } from './limits.js';
 import { nameTwins } from './detector.js';
 import { onProposalChanged } from './proposals.js';
 import type { Proposal } from './types.js';
+import { policyCallOf, policyForLobby } from './policy.js';
 import {
   ASSISTANT_NAME, ASSISTANT_USER_ID, DELETED_RECORD_LINE, LEGACY_DELETED_RECORD_LINES, isAssistantUserId,
   type ActionInput, type AssistantActionStatus, type AssistantMetadata, type ReplyInput,
@@ -213,6 +214,7 @@ onProposalChanged(async (p, how) => {
 export async function postPrivately(callId: string, userId: string, input: { text: string; title?: string }): Promise<boolean> {
   const record = await assistantStore().get(callId);
   if (!record || record.state === 'left') return false;
+  if (!policyForLobby(record.lobby).rings(policyCallOf(record), userId)) return false; // the call's policy keeps this person's bell quiet
   const sent = await notify([userId], {
     type: 'assistant-private-reply', title: input.title ?? `${ASSISTANT_NAME} (only you can see this)`, body: input.text,
     payload: { tenant: record.tenant, kind: 'assistant-private-reply', callId, assistant: true },
