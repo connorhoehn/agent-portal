@@ -88,8 +88,10 @@ describe('served only by the guest\'s own router', () => {
     expect(routes.sort()).toEqual([
       'GET /api/interview-invite/admission', 'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview', 'GET /api/interview-invite/realtime-token',
       'GET /api/interview-invite/room',
+      'GET /api/interview-invite/runs', 'GET /api/interview-invite/runs/:runId', 'GET /api/interview-invite/runs/events', // lane RUNS (row I4.4)
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock',
       'POST /api/interview-invite/pad/events', // row I4.3: the candidate's pad log writes (routes/interview-invite-pad.ts)
+      'POST /api/interview-invite/runs', 'POST /api/interview-invite/runs/:runId/cancel', // lane RUNS (row I4.4)
       'PUT /api/interview-invite/consents',
     ]);
     for (const file of ['routes/interviews/invite.ts', 'routes/interviews/admission.ts', 'routes/session.ts', 'index.ts']) {
