@@ -16,7 +16,7 @@ row_I1.7() {
   if [ "$QUICK" -eq 0 ]; then
     jest_ok "the plan's checks and the prepare route" src/lib/interviews/__tests__/prepare.test.ts src/routes/__tests__/interviews-prepare.test.ts
     run_journey
-    for s in I1.7a I1.7b I1.7c I1.7d I1.7e; do journey_step "$s"; done
+    for s in I1.7a I1.7b I1.7c I1.7d I1.7e I1.7f; do journey_step "$s"; done
   fi
 }
 
