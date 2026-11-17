@@ -68,22 +68,23 @@ export default async function run({ portal, SEED, record, signIn, resetMock, set
   for (const p of [first?.w, first?.h]) await p?.close().catch(() => undefined);
 
   // ── I5.6c ──
+  // The server's own counts are the proof of "once": the sweep says how many bells it rang. (Which old bells a page still lists
+  // depends on what was read, so the pages are only asked for what must be there.)
   try {
-    await clock.sweep('soon');
-    // Opening the bell panel in I5.6a marked the first bell read, and the panel lists only unread ones: a second sweep at the same time must leave nothing new.
-    const w = await soonLines(wen, 0); const h = await soonLines(hugo, 0);
-    record('I5.6c', w.length === 0 && h.length === 0, `swept again at the same time: ${w.length} new bell(s) for the lead, ${h.length} for the panel member (the first ones were read in I5.6a)`);
+    const s2 = await clock.sweep('soon');
+    record('I5.6c', (s2?.sweep?.rang ?? -1) === 0, `swept again at the same time: ${JSON.stringify(s2?.sweep)} (no second ring for the lead or the panel member)`);
   } catch (e) { record('I5.6c', false, `second sweep: ${e.message.split('\n')[0]}`); }
 
   // ── I5.6d ──
+  // A moved time is a new instant: it rings both again once; a repeat sweep rings nothing. The new time is ten minutes out so it
+  // can never land on the minute the first one had (the clock keeps running while the walk reads bells).
   try {
-    const set = await setTime(greta, id, await clock.minutesFromNow(13));
-    await clock.sweep('soon');
+    const set = await setTime(greta, id, await clock.minutesFromNow(10));
+    const s3 = await clock.sweep('soon');
     const w = await soonLines(wen, 1); const h = await soonLines(hugo, 1);
-    await clock.sweep('soon');
-    const w2 = await soonLines(wen, 0); const h2 = await soonLines(hugo, 0);
-    record('I5.6d', set.status === 200 && w.length === 1 && h.length === 1 && w2.length === 0 && h2.length === 0,
-      `time moved (${set.status}): ${w.length} new bell for the lead and ${h.length} for the panel member; after one more sweep ${w2.length} and ${h2.length}`);
+    const s4 = await clock.sweep('soon');
+    record('I5.6d', set.status === 200 && s3?.sweep?.rang === 2 && s4?.sweep?.rang === 0 && w.length >= 1 && h.length >= 1,
+      `time moved (${set.status}): the sweep rang ${JSON.stringify(s3?.sweep)}; the lead's bells ${w.length}, the panel member's ${h.length}; swept again ${JSON.stringify(s4?.sweep)}`);
   } catch (e) { record('I5.6d', false, `moved time: ${e.message.split('\n')[0]}`); }
 
   // ── I5.6e ──
