@@ -87,6 +87,7 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   rounds: 'Round',
   // slot 4: a lane adds its entries just below this line
   upcoming: 'Upcoming',
+  room: 'Interview room',
   // slot 5: a lane adds its entries just below this line
   prepare: 'Prepare',
 };

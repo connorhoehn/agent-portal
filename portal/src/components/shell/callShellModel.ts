@@ -5,6 +5,7 @@
 // (ui-components 2.439, lib/conversationCall.tsx).
 import { callChannelHref, initiativeFromChannel } from '../../lib/conversationCallModel.ts';
 import { hrefFromCallChannel } from '../../pages/assessment/knowledge/documentCommentsModel.ts';
+import { isInterviewLobby } from '../../lib/interviewsRoom.ts';
 
 interface CallSessionScope {
   sub: string;
@@ -108,4 +109,33 @@ export function idleHuddleControls(input: { tenant: string | null | undefined; h
   const places = input.tenant ? HUDDLE_PLACES[input.tenant] : undefined;
   if (!places && !input.hasSocialGrant) return { show: false };
   return { show: true, startReason: `This page has no huddle — ${places ?? 'open a conversation in Communication'}`, messageReason: 'No huddle here to message' };
+}
+
+/**
+ * What the footer's call bar carries for a lobby (docs/interviews-tenant-plan.md decision 21). A work huddle
+ * gets everything; an interview's call (`interviews:interview:<id>`) leaves out what belongs to a work huddle
+ * only: sharing the page, the meeting's rooms and breakouts, reactions, the bar's second video panel (the room
+ * page holds the tiles) and the Social entry. The call is named as it is, never "… huddle".
+ */
+export interface FooterCallItems {
+  share: boolean;
+  meeting: boolean;
+  reactions: boolean;
+  mediaToggle: boolean;
+  socialEntry: boolean;
+  /** The bar's name for the call. */
+  name: (title: string) => string;
+  /** The idle bar's start control. */
+  startLabel: string;
+  /** Message before the call has started. */
+  idleMessage: boolean;
+}
+
+const huddleName = (title: string): string => (/huddle$/i.test(title) ? title : `${title} huddle`);
+
+export function footerCallItems(lobbyName: string | null | undefined): FooterCallItems {
+  if (isInterviewLobby(lobbyName)) {
+    return { share: false, meeting: false, reactions: false, mediaToggle: false, socialEntry: false, name: (title) => title, startLabel: 'Join the call', idleMessage: false };
+  }
+  return { share: true, meeting: true, reactions: true, mediaToggle: true, socialEntry: true, name: huddleName, startLabel: 'Huddle', idleMessage: true };
 }

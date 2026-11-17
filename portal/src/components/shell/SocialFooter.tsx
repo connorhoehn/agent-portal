@@ -37,7 +37,8 @@ import { AssistantProposalAsk } from './AssistantProposalAsk';
 import { MeetingTurnRunner } from './MeetingTurnRunner';
 import { AssistantPrivateAnswers } from './AssistantPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
-import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
+import { callScopeKey, footerCallItems, hasJoinedCall, idleHuddleControls } from './callShellModel';
+import { InterviewRoomAsks, InterviewRoomBarItems } from './InterviewRoomFooter';
 import { VoiceFooterSlot } from './VoiceFooterPane';
 import { lineStarts } from './footerLines';
 import { usePhoneFooter } from './phoneFooter';
@@ -87,7 +88,9 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   const barShown = inComposer || placement === 'stage' || placement === 'page' || placement === 'block';
   if (!host?.lobby || !callDrawn(host.call.phase, true)) return null;
   const call = host.call;
-  const title = /huddle$/i.test(host.lobby.title) ? host.lobby.title : `${host.lobby.title} huddle`;
+  // What this lobby's bar carries: an interview's call leaves out the work-huddle-only items (callShellModel.footerCallItems).
+  const items = footerCallItems(host.lobby.lobbyName);
+  const title = items.name(host.lobby.title);
   const counts = callCounts(call.call);
   // The installed dock mapping supplies the same device controls the dock
   // draws (toggle, permission, level) — no second device model here.
@@ -106,7 +109,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     participantCount={counts.joined}
     ringingCount={counts.ringing}
     {...(controls && !over && !barShown ? { mic: bareToggle(controls.mic), camera: bareToggle(controls.camera) } : {})}
-    shareSlot={joined ? <CallPageSharing
+    shareSlot={joined && items.share ? <CallPageSharing
       callId={call.call?.callId ?? null}
       tenant={host.tenant}
       actorId={host.self?.userId ?? null}
@@ -117,17 +120,18 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       screenShare={controls?.screenShare}
     /> : undefined}
     {...(joined && chat ? { onToggleChat: chat.toggle, chatOpen: chat.open, chatLabel: 'Message' } : {})}
-    {...(over || barShown || pageOwnsCall ? {} : { onToggleMedia, mediaOpen, mediaToggleLabel: `${people} — ${mediaOpen ? 'hide' : 'show'} call video` })}
+    {...(over || barShown || pageOwnsCall || !items.mediaToggle ? {} : { onToggleMedia, mediaOpen, mediaToggleLabel: `${people} — ${mediaOpen ? 'hide' : 'show'} call video` })}
     {...(call.phase === 'failed' ? { statusLabel: 'Connection failed' }
       : call.phase === 'calling' ? { statusLabel: `Calling ${host.lobby.title}…` } : {})}
     extras={<>
       {failureMessage && <span role="alert" title={failureMessage} className="max-w-[180px] truncate text-xs text-danger" data-testid="shell-call-error">{failureMessage}</span>}
-      {joined && !over && !meetingItems && <HuddleReactionBar />}
+      {joined && !over && !meetingItems && items.reactions && <HuddleReactionBar />}
+      <InterviewRoomBarItems lobbyName={host.lobby.lobbyName} callStartedAt={joined ? call.call?.startedAt ?? observedJoin.current?.at ?? null : null} />
       
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
       {!barShown && <DeviceSettings onClick={host.checkDevices} />}
     </>}
-    {...(meetingItems && joined && !over && !barShown ? { meetingItems } : {})}
+    {...(meetingItems && items.meeting && joined && !over && !barShown ? { meetingItems } : {})}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
     // The call bar takes three parts of the row's free width to the today strip's one: shared evenly, at 1280 with three people,
     // Milo's mark and a proposal count its last control (React) dropped under Message and the bar grew to two lines.
@@ -153,6 +157,7 @@ function FooterIdle() {
   const { session } = useSession();
   const composerMounted = focus.present;
   const lobby = host?.lobby ?? null;
+  const items = footerCallItems(lobby?.lobbyName);
   // The tenant's own places, or nothing at all without a grant or a huddle page (callShellModel.idleHuddleControls).
   const idle = idleHuddleControls({ tenant: session?.tenant, hasLobby: !!lobby, hasSocialGrant: (session?.grants.social?.length ?? 0) > 0 });
   if (!idle.show) return null;
@@ -186,11 +191,10 @@ function FooterIdle() {
     phase="idle"
     {...(startReason ? { startDisabledReason: startReason } : {})}
     {...(host?.startBound ? { onStart: host.startBound } : { onStart: noop })}
-    startLabel="Huddle"
+    startLabel={items.startLabel}
     compact={compact}
-    onToggleChat={() => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }}
-    chatLabel="Message"
-    {...(messageReason ? { chatDisabledReason: messageReason } : {})}
+    {...(items.idleMessage ? { onToggleChat: () => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }, chatLabel: 'Message' } : {})}
+    {...(messageReason && items.idleMessage ? { chatDisabledReason: messageReason } : {})}
     extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
     className="shell-collaboration-bar shrink-0 grow basis-[14rem] max-sm:grow-0 max-sm:basis-[7.5rem] border-l border-border"
     data-testid="shell-footer-context"
@@ -251,12 +255,13 @@ export function SocialFooter() {
     <AssistantConsentNotice />
     <AssistantBudgetAsk />
     <AssistantProposalAsk />
+    <InterviewRoomAsks lobbyName={host?.lobby?.lobbyName} />
     <MeetingTurnRunner />
     <AssistantPrivateAnswers />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
     {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
     <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">
-      <EmbeddedSocialEntry />
+      {(!drawn || footerCallItems(host?.lobby?.lobbyName).socialEntry) && <EmbeddedSocialEntry />}
       <TodayStripSlot placement="footer" activeCall={drawn} />
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
       <VoiceFooterSlot />
