@@ -143,3 +143,32 @@ describe.each([['memory', () => new MemorySaidStore()], ['sql', () => new SqlSai
     expect(await s.list('iv-2')).toHaveLength(1);
   });
 });
+
+// OWED O-225 (lane H8): the process stops after the said log's row is written and while the session is asked to speak. The
+// row is kept unspoken (a SQL store keeps it across the restart; the memory store stands in for it here) and nothing replays
+// it on its own afterwards: only a new approval is said. ("Repeat the question" may still read it: that is the candidate's
+// own request for the last approved question, answered from the log by design.)
+describe('a restart between the log row and the speech', () => {
+  it('the row stays unspoken and is never said later on its own', async () => {
+    const asked: string[] = [];
+    setSpeakDeps({
+      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`,
+      say: (_c, text) => { asked.push(text); return new Promise(() => { /* the process stops here: no answer, ever */ }); },
+    });
+    void sayApproved(IV, { kind: 'question', source: 'kit', text: 'Before the restart.', askedBy: 'u-wen' });
+    for (let i = 0; i < 10 && asked.length === 0; i += 1) await new Promise((r) => setImmediate(r));
+    expect(asked).toEqual(['Before the restart.']);
+    expect((await store.list('iv-1')).map((r) => [r.text, r.spoken])).toEqual([['Before the restart.', false]]);
+
+    // After the restart: fresh dependencies over the same stored rows.
+    const said: string[] = [];
+    setSpeakDeps({
+      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`,
+      say: async (_c, text) => { said.push(text); return 'spoken'; },
+    });
+    expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'After the restart.', askedBy: 'u-wen' })).said).toBe('spoken');
+    await noteHeldSpoken('iv-1', 'Before the restart.', 'u-wen');
+    expect(said).toEqual(['After the restart.']);
+    expect((await store.list('iv-1')).map((r) => [r.text, r.spoken])).toEqual([['Before the restart.', false], ['After the restart.', true]]);
+  });
+});
