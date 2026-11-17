@@ -2,7 +2,7 @@
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', aurora: {}, mock: { aurora: true } } }));
 jest.mock('../../role-registry.js', () => ({ roleRegistry: () => [] }));
 
-import { dueRings, ringKey, SOON_MINUTES } from '../soon.js';
+import { dueRings, resetSoonWarnings, ringKey, SOON_MINUTES, SOON_MINUTES_SETTING, soonMinutes } from '../soon.js';
 import { runSoonTick } from '../soon-sweep.js';
 import { notifyInterviewStartingSoon, setNotificationSink, type NotificationInputLike } from '../../social-notify.js';
 import type { Interview } from '../types.js';
@@ -63,6 +63,54 @@ describe('runSoonTick', () => {
   });
 });
 
+describe('INTERVIEWS_SOON_MINUTES (row I6.4)', () => {
+  beforeEach(() => resetSoonWarnings());
+  const read = (value: string | undefined) => { const lines: string[] = []; const n = soonMinutes(value === undefined ? {} : { [SOON_MINUTES_SETTING]: value }, (l) => lines.push(l)); return { n, lines }; };
+
+  it('defaults to 15 when unset or empty, without a warning', () => {
+    expect(read(undefined)).toEqual({ n: 15, lines: [] });
+    expect(read('  ')).toEqual({ n: 15, lines: [] });
+    expect(SOON_MINUTES).toBe(15);
+  });
+  it('takes a whole number from 5 to 120', () => {
+    expect(read('5').n).toBe(5);
+    expect(read(' 30 ').n).toBe(30);
+    expect(read('120').n).toBe(120);
+  });
+  it('falls back to 15 for a bad or out-of-range value, warning once per value and never throwing', () => {
+    for (const bad of ['4', '121', '0', '-10', '7.5', 'ten', '1e2', '0x10']) {
+      const r = read(bad);
+      expect(r.n).toBe(15);
+      expect(r.lines).toEqual([`[interviews] ${SOON_MINUTES_SETTING} must be a whole number from 5 to 120; using the default, 15.`]);
+    }
+    expect(read('121').lines).toEqual([]);
+  });
+  it('the tick rings at the deployment\'s lead and says that number', async () => {
+    const world = { openings: [{ id: 'op-1', title: 'Data Engineer', kit: { rounds: [{ id: 'r-1', name: 'System design' }] } }], applications: [{ id: 'ap-1', openingId: 'op-1' }] };
+    for (const minutes of [5, 15, 120]) {
+      const inside = iv({ id: `iv-in-${minutes}`, scheduledAt: at(minutes) });
+      const outside = iv({ id: `iv-out-${minutes}`, scheduledAt: at(minutes + 1) });
+      const ring = jest.fn(async () => []);
+      const sent = await runSoonTick({ now: () => NOW, load: async () => ({ ...world, interviews: [inside, outside] }) as never, ring, enabled: () => true, minutes: () => minutes }, new Set());
+      expect(sent).toBe(2);
+      expect(ring).toHaveBeenCalledTimes(1);
+      expect(ring).toHaveBeenCalledWith(expect.objectContaining({ interviewId: `iv-in-${minutes}`, minutes }));
+    }
+  });
+  it('the tick reads the setting on every pass', async () => {
+    const before = process.env[SOON_MINUTES_SETTING];
+    try {
+      process.env[SOON_MINUTES_SETTING] = '60';
+      const ring = jest.fn(async () => []);
+      const world = { openings: [{ id: 'op-1', title: 'Data Engineer', kit: { rounds: [{ id: 'r-1', name: 'System design' }] } }], applications: [{ id: 'ap-1', openingId: 'op-1' }], interviews: [iv({ scheduledAt: at(45) })] };
+      expect(await runSoonTick({ now: () => NOW, load: async () => world as never, ring, enabled: () => true }, new Set())).toBe(2);
+      expect(ring).toHaveBeenCalledWith(expect.objectContaining({ minutes: 60 }));
+    } finally {
+      if (before === undefined) delete process.env[SOON_MINUTES_SETTING]; else process.env[SOON_MINUTES_SETTING] = before;
+    }
+  });
+});
+
 describe('notifyInterviewStartingSoon', () => {
   let sent: Array<{ userId: string; input: NotificationInputLike }>;
   beforeEach(() => { sent = []; setNotificationSink({ notifyUser: async (userId, input) => { sent.push({ userId, input }); return {}; } }); });
@@ -81,5 +129,11 @@ describe('notifyInterviewStartingSoon', () => {
     }
     expect(sent[0]!.input.id).toBe(sent[1]!.input.id);
     expect(sent[2]!.input.id).not.toBe(sent[0]!.input.id);
+  });
+  it('says the deployment\'s lead: 5 and 120 minutes', async () => {
+    const ev = { interviewId: 'iv-1', scheduledAt: at(10), openingTitle: 'Data Engineer', roundName: 'System design', userIds: ['u-hugo'] };
+    await notifyInterviewStartingSoon({ ...ev, minutes: 5 });
+    await notifyInterviewStartingSoon({ ...ev, scheduledAt: at(11), minutes: 120 });
+    expect(sent.map((x) => x.input.title)).toEqual(['System design for Data Engineer starts in 5 minutes', 'System design for Data Engineer starts in 120 minutes']);
   });
 });
