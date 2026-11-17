@@ -60,7 +60,7 @@ function tablesExec(): SqlExec {
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
-const JONAH = 'iv-jonah-leadership';
+const JONAH = 'iv-g9r1y8lp';
 const first = (over: Partial<Scorecard> = {}): Scorecard => ({
   id: 'sc-new-1', interviewId: JONAH, interviewerId: 'u-wen', recommendation: 'yes', summary: 'Grounded examples.', submittedAt: AT, version: 1,
   changedAfterRecap: false, correctionReason: null,

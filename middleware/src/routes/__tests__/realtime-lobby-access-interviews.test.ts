@@ -30,8 +30,8 @@ import { recordingAccessAllowed, recordingDecision, usableAnswers } from '../../
 import { realtimeLobbyAccessRouter } from '../realtime-lobby-access.js';
 
 const SECRET = 'recording-decision-test-secret';
-const IV = 'iv-nadia-leadership';   // Wen leads, Hugo on the panel, accepted, op-em (Greta recruits, Amara hires)
-const OTHER = 'iv-aiko-coding';     // Wen leads, nobody else: Hugo is another round's interviewer here
+const IV = 'iv-n5z9f2cq';   // Wen leads, Hugo on the panel, accepted, op-em (Greta recruits, Amara hires)
+const OTHER = 'iv-c3k8w2ma';     // Wen leads, nobody else: Hugo is another round's interviewer here
 const LOBBY = `interviews:interview:${IV}`;
 const app = express().use(express.json()).use('/api/realtime', realtimeLobbyAccessRouter);
 

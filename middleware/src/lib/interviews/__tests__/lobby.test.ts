@@ -8,8 +8,8 @@ const staff = (over: Partial<StaffSeatFacts> = {}): StaffSeatFacts => ({ flagOn:
 
 describe('the lobby\'s name (C1)', () => {
   it('names one interview and reads it back; nothing else reads as a lobby', () => {
-    expect(interviewLobbyName('iv-mateo-design')).toBe('interviews:interview:iv-mateo-design');
-    expect(interviewOfLobby('interviews:interview:iv-mateo-design')).toBe('iv-mateo-design');
+    expect(interviewLobbyName('iv-k1p5w8ra')).toBe('interviews:interview:iv-k1p5w8ra');
+    expect(interviewOfLobby('interviews:interview:iv-k1p5w8ra')).toBe('iv-k1p5w8ra');
     for (const other of ['interviews:interview:', 'interviews:interview:a:b', 'presence:interviews:interview:iv-1', 'interviews:interviewx:iv-1',
       'orgiq:initiative:iv-1', `interviews:interview:${'x'.repeat(41)}`, 'interviews:interview:iv-1~breakout~r1']) {
       expect([other, interviewOfLobby(other)]).toEqual([other, null]);

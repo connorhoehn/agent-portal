@@ -45,7 +45,7 @@ describe('assigning a round', () => {
 
   it('a declined or cancelled round does not hold it: it may be assigned again', () => {
     const w = world();
-    w.interviews = w.interviews.map((i) => (i.id === 'iv-kwame-coding' ? { ...i, state: 'declined' as const } : i));
+    w.interviews = w.interviews.map((i) => (i.id === 'iv-h4m7c3vu' ? { ...i, state: 'declined' as const } : i));
     expect(checkAssignment({ ...good, applicationId: 'app-kwame' }, w, INTERVIEWERS).ok).toBe(true);
   });
 
@@ -128,7 +128,7 @@ describe('answering a seat', () => {
 });
 
 describe('reassigning', () => {
-  const declined = (): Interview => ({ ...interviewsFixture.rows().find((i) => i.id === 'iv-kwame-coding')!, state: 'declined',
+  const declined = (): Interview => ({ ...interviewsFixture.rows().find((i) => i.id === 'iv-h4m7c3vu')!, state: 'declined',
     declines: [{ userId: HUGO, seat: 'lead', reason: 'On leave that whole week.', at: AT }] });
 
   it('a declined round needs a new lead, who puts it back to assigned; the decline stays on the record', () => {
@@ -140,7 +140,7 @@ describe('reassigning', () => {
   });
 
   it('changing only the panel keeps the state and the acceptances of the seats that stay', () => {
-    const accepted: Interview = { ...interviewsFixture.rows().find((i) => i.id === 'iv-nadia-leadership')! };
+    const accepted: Interview = { ...interviewsFixture.rows().find((i) => i.id === 'iv-n5z9f2cq')! };
     expect(accepted.state).toBe('accepted');
     const seats = { leadId: WEN, panelIds: [HUGO, THIRD] };
     expect(checkReassignment(seats, accepted, INTERVIEWERS).ok).toBe(true);
@@ -151,7 +151,7 @@ describe('reassigning', () => {
   });
 
   it('a new lead drops the old lead\'s acceptance; someone moved between seats is asked again', () => {
-    const accepted: Interview = { ...interviewsFixture.rows().find((i) => i.id === 'iv-nadia-leadership')! };
+    const accepted: Interview = { ...interviewsFixture.rows().find((i) => i.id === 'iv-n5z9f2cq')! };
     const change = applyReassignment(accepted, { leadId: HUGO, panelIds: [WEN] });
     expect(change).toEqual({ leadId: HUGO, panelIds: [WEN], state: 'assigned', acceptances: [] });
     expect(newlySeated(accepted, { leadId: HUGO, panelIds: [WEN] })).toEqual([HUGO, WEN]);
@@ -161,7 +161,7 @@ describe('reassigning', () => {
     const live: Interview = { ...declined(), state: 'live' };
     expect(paths(checkReassignment({ leadId: WEN, panelIds: [] }, live, INTERVIEWERS))).toEqual(['state']);
     expect(paths(checkReassignment({ leadId: WEN, panelIds: [] }, { ...live, state: 'cancelled' }, INTERVIEWERS))).toEqual(['state']);
-    const assigned = interviewsFixture.rows().find((i) => i.id === 'iv-kwame-coding')!;
+    const assigned = interviewsFixture.rows().find((i) => i.id === 'iv-h4m7c3vu')!;
     expect(paths(checkReassignment({ leadId: HUGO, panelIds: [] }, assigned, INTERVIEWERS))).toEqual(['leadId']);
     expect(paths(checkReassignment({ leadId: HUGO, panelIds: [HUGO] }, assigned, INTERVIEWERS))).toEqual(['panelIds.0']);
   });

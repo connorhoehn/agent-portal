@@ -127,8 +127,8 @@ describe('the seed', () => {
 
 describe('exportPanelNotices (E8)', () => {
   it('each seat of the interview, with the version it acknowledged and when; null for an unknown interview', async () => {
-    const out = await exportPanelNotices('iv-nadia-leadership');
-    expect(out).toMatchObject({ interviewId: 'iv-nadia-leadership', currentVersion: CONSENT_NOTICE.version });
+    const out = await exportPanelNotices('iv-n5z9f2cq');
+    expect(out).toMatchObject({ interviewId: 'iv-n5z9f2cq', currentVersion: CONSENT_NOTICE.version });
     expect(out!.seats.map((s) => [s.userId, s.seat, s.acknowledged?.version, s.current])).toEqual([
       ['u-wen', 'lead', CONSENT_NOTICE.version, true],
       ['u-hugo', 'panel', EARLIER_NOTICE_VERSION, false],

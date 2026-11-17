@@ -98,10 +98,10 @@ const PRIYA = who('u-priya', 'access');
 
 // Nadia's leadership round has ended here (Wen leads, Hugo on the panel; Nadia accepted everything); Hugo's design round
 // for Nadia is cancelled. Ingrid's two seeded rounds (Hugo's coding, Wen's "Working together") are reviewed.
-const NADIA = 'iv-nadia-leadership';
-const JONAH = 'iv-jonah-leadership';
-const INGRID_CODING = 'iv-ingrid-coding';
-const INGRID_TOGETHER = 'iv-ingrid-together';
+const NADIA = 'iv-n5z9f2cq';
+const JONAH = 'iv-g9r1y8lp';
+const INGRID_CODING = 'iv-d7q4n9xe';
+const INGRID_TOGETHER = 'iv-f2b6t5zh';
 
 beforeAll(() => setCoachModelFactory(() => new ScriptedCoachModel()));
 afterAll(() => { setCoachModelFactory(null); setRecapDeps(null); });
@@ -112,7 +112,7 @@ beforeEach(() => {
   fixtureRegistry.resetAll('default');
   for (const i of interviewsFixture.rows()) {
     if (i.id === NADIA) { i.state = 'ended'; i.endedAt = '2026-11-16T10:00:00.000Z'; i.questionIds = ['q-em-struggling']; }
-    if (i.id === 'iv-nadia-design') i.state = 'cancelled';
+    if (i.id === 'iv-m8t3h6ng') i.state = 'cancelled';
   }
   setRecapDeps({
     consents: async () => ({ transcription: true, milo: true }),

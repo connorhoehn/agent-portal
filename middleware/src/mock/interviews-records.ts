@@ -5,8 +5,8 @@
 // nothing playable) and the transcript lines the meeting assistant would have stored. lib/interviews/record/ reads both
 // only in the mock world and only when no stored call of that interview is found.
 //
-//   iv-mateo-coding      Mateo's coding round, Hugo leads: a rate limiter, then retries with an idempotency key.
-//   iv-ingrid-together   Ingrid's "Working together" round, Wen leads: an incident she led, then a disagreement.
+//   iv-j6x2d9sb      Mateo's coding round, Hugo leads: a rate limiter, then retries with an idempotency key.
+//   iv-f2b6t5zh   Ingrid's "Working together" round, Wen leads: an incident she led, then a disagreement.
 //
 // The words line up with mock/interviews-suggestions.ts (the quotes those suggestions were based on, and the questions the
 // lead asked once they were answered). Seeded names only. Times follow mock/interviews.ts's `at()`: days from today's UTC
@@ -37,7 +37,7 @@ function lines(interviewId: string, start: () => string, said: Said[]): RecordLi
   return said.map(([m, s, who, text], i) => ({ interviewId, seq: i + 1, at: new Date(base + (m * 60 + s) * 1000).toISOString(), userId: who, text }));
 }
 
-const MATEO = 'guest:iv-mateo-coding';
+const MATEO = 'guest:iv-j6x2d9sb';
 const mateoStart = () => at(-3, 14);
 const MATEO_SAID: Said[] = [
   [0, 20, HUGO, "Hi Mateo, thanks for joining. I'm Hugo, I lead the payments platform team. We have about an hour, mostly coding."],
@@ -74,7 +74,7 @@ const MATEO_SAID: Said[] = [
   [57, 40, HUGO, 'Thanks Mateo, that was a good session. Greta will be in touch about next steps.'],
 ];
 
-const INGRID = 'guest:iv-ingrid-together';
+const INGRID = 'guest:iv-f2b6t5zh';
 const ingridStart = () => at(-6, 13);
 const INGRID_SAID: Said[] = [
   [0, 15, WEN, "Hi Ingrid, I'm Wen. This round is about how you work with other people, so it's stories rather than code."],
@@ -115,8 +115,8 @@ export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
   key: 'interviews.recordings',
   scenarios: {
     default: () => [
-      { interviewId: 'iv-mateo-coding', startedAt: mateoStart(), durationSeconds: 58 * 60 + 20 },
-      { interviewId: 'iv-ingrid-together', startedAt: ingridStart(), durationSeconds: 44 * 60 + 50 },
+      { interviewId: 'iv-j6x2d9sb', startedAt: mateoStart(), durationSeconds: 58 * 60 + 20 },
+      { interviewId: 'iv-f2b6t5zh', startedAt: ingridStart(), durationSeconds: 44 * 60 + 50 },
     ],
     empty: () => [],
   },
@@ -125,7 +125,7 @@ export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
 export const interviewRecordLinesFixture = defineFixture<RecordLineSeed>({
   key: 'interviews.record-lines',
   scenarios: {
-    default: () => [...lines('iv-mateo-coding', mateoStart, MATEO_SAID), ...lines('iv-ingrid-together', ingridStart, INGRID_SAID)],
+    default: () => [...lines('iv-j6x2d9sb', mateoStart, MATEO_SAID), ...lines('iv-f2b6t5zh', ingridStart, INGRID_SAID)],
     empty: () => [],
   },
 });

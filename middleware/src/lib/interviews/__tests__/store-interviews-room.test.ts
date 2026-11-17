@@ -52,14 +52,14 @@ describe.each([
   const read = async (id: string) => (await store.listInterviews()).find((i) => i.id === id)!;
 
   it('starts: the state goes live and the revision moves on; nothing else changes', async () => {
-    const before = await read('iv-nadia-leadership');
+    const before = await read('iv-n5z9f2cq');
     const out = await store.startInterview(before.id, before.revision);
     expect(out).toEqual({ ok: true, row: { ...before, state: 'live', revision: before.revision + 1 } });
     expect(await read(before.id)).toEqual({ ...before, state: 'live', revision: before.revision + 1 });
   });
 
   it('ends: the state goes ended with the time it ended', async () => {
-    const before = await read('iv-nadia-leadership');
+    const before = await read('iv-n5z9f2cq');
     const started = await store.startInterview(before.id, before.revision);
     if (!started.ok) throw new Error('start failed');
     const out = await store.endInterview(before.id, AT, started.row.revision);
@@ -67,7 +67,7 @@ describe.each([
   });
 
   it('a stale revision writes nothing and carries the row as it now is', async () => {
-    const before = await read('iv-mateo-design');
+    const before = await read('iv-k1p5w8ra');
     expect(await store.startInterview(before.id, before.revision + 5)).toEqual({ ok: false, reason: 'stale', row: before });
     expect(await store.endInterview(before.id, AT, before.revision - 1)).toEqual({ ok: false, reason: 'stale', row: before });
     expect(await read(before.id)).toEqual(before);

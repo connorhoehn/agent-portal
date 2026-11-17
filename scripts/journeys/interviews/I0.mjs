@@ -33,8 +33,8 @@ export default async function run({ portal, record, signIn, namesIn, shoot, home
     record('I0.5b', ok, `interviewer lands on ${new URL(page.url()).pathname}; desk rows ${JSON.stringify(names)}; first waits for "${states[0]}"; none of ${others.join(', ')}`);
     homes.push({ name: 'interviewer-my-interviews', shots: await shoot(page, 'interviewer-my-interviews', 'interviews-my-interviews-table') });
 
-    const theirs = await context.request.get(`${portal}/api/interviews/interviews/iv-aiko-coding`);
-    const mine = await context.request.get(`${portal}/api/interviews/interviews/iv-mateo-design`);
+    const theirs = await context.request.get(`${portal}/api/interviews/interviews/iv-c3k8w2ma`);
+    const mine = await context.request.get(`${portal}/api/interviews/interviews/iv-k1p5w8ra`);
     const theirCandidate = await context.request.get(`${portal}/api/interviews/candidates/cand-aiko`);
     record('I0.5d', theirs.status() === 404 && theirCandidate.status() === 404 && mine.status() === 200,
       `another interviewer's interview by address: ${theirs.status()}, its candidate: ${theirCandidate.status()}; their own: ${mine.status()}`);

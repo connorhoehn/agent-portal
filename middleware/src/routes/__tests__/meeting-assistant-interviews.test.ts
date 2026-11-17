@@ -40,9 +40,9 @@ import { interviewOpeningsFixture } from '../../mock/interviews.js';
 import { getUser } from '../../providers/identity.js';
 import type { Session } from '../../lib/session.js';
 
-const IV_CALL = 'call-iv'; const IV_LOBBY = 'interviews:interview:iv-nadia-leadership';
+const IV_CALL = 'call-iv'; const IV_LOBBY = 'interviews:interview:iv-n5z9f2cq';
 const WORK_CALL = 'call-work'; const WORK_LOBBY = 'orgiq:dm:u-alice:u-wen';
-// The seeded round iv-nadia-leadership (op-em): lead u-wen, panel u-hugo, recruiter u-greta, hiring manager u-amara. u-otto is made
+// The seeded round iv-n5z9f2cq (op-em): lead u-wen, panel u-hugo, recruiter u-greta, hiring manager u-amara. u-otto is made
 // hiring manager of another opening; u-alice is a Work member.
 const PEOPLE: Record<string, [tenant: string, role: string]> = {
   'u-wen': ['interviews', 'interviewer'], 'u-hugo': ['interviews', 'interviewer'], 'u-greta': ['interviews', 'recruiter'],
@@ -157,7 +157,7 @@ describe('who reaches which call', () => {
   it('the lobby rule: each tenant its own family, an unknown lobby is no interview', () => {
     expect(lobbyAgrees('interviews', IV_LOBBY)).toBe(true);
     expect(lobbyAgrees('interviews', WORK_LOBBY)).toBe(false);
-    expect(lobbyAgrees('interviews', 'interviews:pad:iv-nadia-leadership')).toBe(false);
+    expect(lobbyAgrees('interviews', 'interviews:pad:iv-n5z9f2cq')).toBe(false);
     expect(lobbyAgrees('interviews', null)).toBe(false);
     expect(lobbyAgrees('orgiq', IV_LOBBY)).toBe(false);
     expect(lobbyAgrees('orgiq', WORK_LOBBY)).toBe(true);

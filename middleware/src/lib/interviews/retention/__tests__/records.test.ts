@@ -12,12 +12,12 @@ afterEach(() => fixtureRegistry.resetAll('default'));
 describe('in memory', () => {
   const r = new MemoryRecordStatements();
   it('erases the consents and scorecards of the named interviews only, and a repeat erases nothing', async () => {
-    expect(await r.eraseConsents(['iv-ingrid-coding', 'iv-ingrid-together'])).toBe(2);
-    expect(await r.eraseConsents(['iv-ingrid-coding'])).toBe(0);
-    expect(interviewConsentsFixture.rows().map((c) => c.interviewId)).not.toContain('iv-ingrid-coding');
+    expect(await r.eraseConsents(['iv-d7q4n9xe', 'iv-f2b6t5zh'])).toBe(2);
+    expect(await r.eraseConsents(['iv-d7q4n9xe'])).toBe(0);
+    expect(interviewConsentsFixture.rows().map((c) => c.interviewId)).not.toContain('iv-d7q4n9xe');
     expect(interviewConsentsFixture.rows().length).toBeGreaterThan(0);
     const before = interviewScorecardsFixture.rows().length;
-    expect(await r.eraseScorecards(['iv-mateo-coding'])).toBeGreaterThan(0);
+    expect(await r.eraseScorecards(['iv-j6x2d9sb'])).toBeGreaterThan(0);
     expect(interviewScorecardsFixture.rows().length).toBeLessThan(before);
   });
   it('redacts a candidate once', async () => {

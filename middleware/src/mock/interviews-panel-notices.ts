@@ -19,8 +19,8 @@ export const interviewPanelNoticesFixture = defineFixture<PanelNoticeRow>({
   key: 'interviews.panel-notices',
   scenarios: {
     default: () => [
-      { userId: HUGO, noticeVersion: EARLIER_NOTICE_VERSION, acknowledgedAt: clock.daysAgo(14), interviewId: 'iv-ingrid-coding' },
-      { userId: WEN, noticeVersion: CONSENT_NOTICE.version, acknowledgedAt: clock.daysAgo(13), interviewId: 'iv-ingrid-together' },
+      { userId: HUGO, noticeVersion: EARLIER_NOTICE_VERSION, acknowledgedAt: clock.daysAgo(14), interviewId: 'iv-d7q4n9xe' },
+      { userId: WEN, noticeVersion: CONSENT_NOTICE.version, acknowledgedAt: clock.daysAgo(13), interviewId: 'iv-f2b6t5zh' },
     ],
     empty: () => [],
   },

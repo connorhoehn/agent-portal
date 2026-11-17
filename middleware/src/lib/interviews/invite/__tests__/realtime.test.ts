@@ -35,8 +35,8 @@ import { guestCallSession, guestOfContext, sessionHoldsInterviewSeat } from '../
 import { interviewsStore } from '../../store-select.js';
 
 const SECRET = 'guest-realtime-test-secret';
-const OWN = 'iv-mateo-design';          // the seed's technical round, Hugo's, ready
-const OTHER = 'iv-aiko-coding';         // another technical round
+const OWN = 'iv-k1p5w8ra';          // the seed's technical round, Hugo's, ready
+const OTHER = 'iv-c3k8w2ma';         // another technical round
 const guest: GuestPrincipal = {
   kind: 'interview-guest', inviteId: 'inv-1', interviewId: OWN, role: GUEST_ROLE, tenant: null, grants: {}, since: '2026-11-16T10:00:00.000Z', sessionTag: 'tag-1',
 };
@@ -117,7 +117,7 @@ const HOST_NAMES = [
   'orgiq:huddle:c1', 'reactions:orgiq:huddle:c1', `orgiq:huddle:c1~breakout~r1`, `meeting:interviews:interview:${OTHER}`, `call-lobby:interviews:interview:${OTHER}`,
   'doc:notes', `doc:ivpad:${OTHER}`, `presence:doc:ivpad:${OWN}`, 'social:flowrun:run-1', 'assessment:flowrun:run-1', 'social:deck:d1', 'presence:social:deck:d1',
   'social:ch:general', 'social:dm:guest:inv-1:u-hugo', 'social:team:t1:general', 'social:workgraph:conversation:social:ch:general',
-  'interviews:dm:guest:inv-1:u-hugo', 'interviews:lobby', 'presence:interviews:lobby', 'interviews:pad:iv-mateo-design', 'notifications:guest:inv-1',
+  'interviews:dm:guest:inv-1:u-hugo', 'interviews:lobby', 'presence:interviews:lobby', 'interviews:pad:iv-k1p5w8ra', 'notifications:guest:inv-1',
 ];
 
 describe('with guest realtime off, a guest token is refused everything', () => {

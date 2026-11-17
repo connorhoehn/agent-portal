@@ -103,17 +103,17 @@ describe('the seed', () => {
 
 describe('the module\'s reads (C4)', () => {
   it('consentsAnswered: only a set under the current notice counts', async () => {
-    expect(await consentsAnswered('iv-mateo-coding')).toBe(true);
-    expect(await consentsAnswered('iv-mateo-design')).toBe(false);
-    interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-mateo-coding')!.noticeVersion = 'older';
-    expect(await consentsAnswered('iv-mateo-coding')).toBe(false);
+    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(true);
+    expect(await consentsAnswered('iv-k1p5w8ra')).toBe(false);
+    interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-j6x2d9sb')!.noticeVersion = 'older';
+    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(false);
   });
 
   it('consentsFor: the stored answers, Milo held off without the transcript, null when nothing was answered', async () => {
-    expect(await consentsFor('iv-mateo-coding')).toEqual({ recording: true, transcription: true, milo: true });
-    expect(await consentsFor('iv-mateo-design')).toBeNull();
-    Object.assign(interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-mateo-coding')!, { transcription: false, milo: true });
-    expect(await consentsFor('iv-mateo-coding')).toEqual({ recording: true, transcription: false, milo: false });
+    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: true, transcription: true, milo: true });
+    expect(await consentsFor('iv-k1p5w8ra')).toBeNull();
+    Object.assign(interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-j6x2d9sb')!, { transcription: false, milo: true });
+    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: true, transcription: false, milo: false });
   });
 });
 

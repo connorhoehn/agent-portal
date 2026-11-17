@@ -32,11 +32,11 @@ export const interviewConsentsFixture = defineFixture<ConsentRecord>({
   scenarios: {
     default: () => [
       // Twenty minutes before each finished interview's start (mock/interviews.ts).
-      accepted('iv-ingrid-coding', at(-9, 13, 40)),
-      accepted('iv-ingrid-together', at(-6, 12, 40)),
-      accepted('iv-mateo-coding', at(-3, 13, 40)),
-      accepted('iv-ravi-coding', at(-2, 14, 40)),
-      accepted('iv-jonah-leadership', at(-1, 15, 40)),
+      accepted('iv-d7q4n9xe', at(-9, 13, 40)),
+      accepted('iv-f2b6t5zh', at(-6, 12, 40)),
+      accepted('iv-j6x2d9sb', at(-3, 13, 40)),
+      accepted('iv-p2v7j4ye', at(-2, 14, 40)),
+      accepted('iv-g9r1y8lp', at(-1, 15, 40)),
     ],
   },
 });

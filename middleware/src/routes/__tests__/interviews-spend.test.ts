@@ -113,9 +113,9 @@ describe('the opening\'s money: who reads it', () => {
   });
 
   it('held and spent money shows, from holds and the ledger', async () => {
-    const held = await reserveInterviewSpend({ interviewId: 'iv-aiko-coding', part: 'coach', key: 'c-1', estimateUsd: 2, expiresInMs: 60_000 });
+    const held = await reserveInterviewSpend({ interviewId: 'iv-c3k8w2ma', part: 'coach', key: 'c-1', estimateUsd: 2, expiresInMs: 60_000 });
     expect(held.ok).toBe(true);
-    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-ravi-coding:run:r-1', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'runner', costUsd: 1.5, costBasis: 'estimated' });
+    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-p2v7j4ye:run:r-1', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'runner', costUsd: 1.5, costBasis: 'estimated' });
     expect((await spendOf(GRETA, 'op-ios')).body.spend).toMatchObject({ spentUsd: 1.5, heldUsd: 2, leftUsd: 96.5 });
   });
 
@@ -164,8 +164,8 @@ describe('the recruiter sets the caps', () => {
 
 describe('Work\'s spend report leaves the interviews source out', () => {
   beforeEach(async () => {
-    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-aiko-coding:coach:c-1', initiativeId: null, boxId: null, actorId: 'u-hugo', model: 'nova', costUsd: 2.5, costBasis: 'reported' });
-    await reserveInterviewSpend({ interviewId: 'iv-ravi-coding', part: 'listening', key: 'l-1', estimateUsd: 3, expiresInMs: 60_000 });
+    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-c3k8w2ma:coach:c-1', initiativeId: null, boxId: null, actorId: 'u-hugo', model: 'nova', costUsd: 2.5, costBasis: 'reported' });
+    await reserveInterviewSpend({ interviewId: 'iv-p2v7j4ye', part: 'listening', key: 'l-1', estimateUsd: 3, expiresInMs: 60_000 });
   });
   const vera = who('u-vera', 'orgiq');
   const admin = who('u-operator', 'orgiq', 'admin');

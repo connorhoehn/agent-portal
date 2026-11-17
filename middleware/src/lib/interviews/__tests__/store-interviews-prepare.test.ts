@@ -37,14 +37,14 @@ describe.each([
   beforeEach(() => { store = make(); });
 
   it('stores the questions in order and the state, bumps the revision, and reads back the same', async () => {
-    const r = await store.setQuestions('iv-nadia-design', ['q-be-retry', 'q-be-ledger'], 'accepted', 1);
+    const r = await store.setQuestions('iv-m8t3h6ng', ['q-be-retry', 'q-be-ledger'], 'accepted', 1);
     expect(r).toMatchObject({ ok: true, row: { questionIds: ['q-be-retry', 'q-be-ledger'], state: 'accepted', revision: 2 } });
-    if (_name === 'memory') expect((await store.listInterviews()).find((i) => i.id === 'iv-nadia-design')).toEqual((r as { row: unknown }).row);
+    if (_name === 'memory') expect((await store.listInterviews()).find((i) => i.id === 'iv-m8t3h6ng')).toEqual((r as { row: unknown }).row);
   });
 
   it('a stale revision writes nothing and answers the row as it is; an unknown id is not found', async () => {
-    await store.setQuestions('iv-nadia-design', ['q-be-retry'], 'ready', 1);
-    const stale = await store.setQuestions('iv-nadia-design', ['q-be-ledger'], 'accepted', 1);
+    await store.setQuestions('iv-m8t3h6ng', ['q-be-retry'], 'ready', 1);
+    const stale = await store.setQuestions('iv-m8t3h6ng', ['q-be-ledger'], 'accepted', 1);
     expect(stale).toMatchObject({ ok: false, reason: 'stale', row: { questionIds: ['q-be-retry'], state: 'ready', revision: 2 } });
     expect(await store.setQuestions('iv-nope', [], 'accepted', 1)).toEqual({ ok: false, reason: 'not-found' });
   });

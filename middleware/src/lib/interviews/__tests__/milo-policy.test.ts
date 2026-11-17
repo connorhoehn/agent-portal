@@ -1,6 +1,6 @@
 // Milo's policy for an interview call (lib/interviews/milo-policy.ts, row I3.2), one method at a time, from each seat that matters:
 // the lead, a panel member, the recruiter, the opening's hiring manager, another opening's hiring manager, a Work user and the
-// candidate's guest id. The seeded round iv-nadia-leadership (op-em): lead u-wen, panel u-hugo, recruiter u-greta, hiring manager
+// candidate's guest id. The seeded round iv-n5z9f2cq (op-em): lead u-wen, panel u-hugo, recruiter u-greta, hiring manager
 // u-amara. The test makes u-otto hiring manager of op-backend, which is another opening.
 
 jest.mock('../../../config.js', () => ({
@@ -22,7 +22,7 @@ import {
 } from '../milo-policy.js';
 import { interviewSpendState } from '../spend.js';
 
-const IV = 'iv-nadia-leadership';
+const IV = 'iv-n5z9f2cq';
 const LOBBY = `interviews:interview:${IV}`;
 const CALL: PolicyCall = { callId: 'call-nadia', lobby: LOBBY, tenant: 'interviews' };
 const LEAD = 'u-wen'; const PANEL = 'u-hugo'; const RECRUITER = 'u-greta'; const HM = 'u-amara'; const OTHER_HM = 'u-otto'; const WORK = 'u-alice';
@@ -84,7 +84,7 @@ describe('inviteRefusal: the lead only (decision 20)', () => {
   });
 
   it('refuses the lead of another interview, a Work session holding the lead\'s id, and a call with no interview in its lobby', async () => {
-    expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: 'interviews:interview:iv-mateo-design' })).toBe(LEAD_ONLY); // u-hugo leads it
+    expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: 'interviews:interview:iv-k1p5w8ra' })).toBe(LEAD_ONLY); // u-hugo leads it
     expect(await P.inviteRefusal({ ...PEOPLE.lead, tenant: 'orgiq' }, CALL)).toBe(LEAD_ONLY);
     expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: 'interviews:interview:iv-nope' })).toBe(LEAD_ONLY);
     expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: null })).toBe(LEAD_ONLY);
@@ -227,7 +227,7 @@ describe('acknowledgement: the panel in the call, the candidate in the portal', 
     expect(await P.acknowledgedElsewhere!(CALL, [guestId, LEAD, 'guest:inv-unknown'])).toEqual([guestId]); // staff and strangers never count
     expect(asked.every((iv) => iv === IV)).toBe(true);
     // Another interview's call: this guest's invite is not for it.
-    expect(await P.acknowledgedElsewhere!({ ...CALL, lobby: 'interviews:interview:iv-mateo-design' }, [guestId])).toEqual([]);
+    expect(await P.acknowledgedElsewhere!({ ...CALL, lobby: 'interviews:interview:iv-k1p5w8ra' }, [guestId])).toEqual([]);
   });
 
   it('a consent source that fails counts as no answer', async () => {

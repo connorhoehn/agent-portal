@@ -76,7 +76,7 @@ import { join } from 'node:path';
 import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 import { consentBellChange, consentsSaved, offLabel } from '../../lib/interviews/consent-bell.js';
 
-const IV = 'iv-mateo-design'; // Hugo leads it; Wen has no seat on it; it is on Amara's opening (op-backend, Greta recruits).
+const IV = 'iv-k1p5w8ra'; // Hugo leads it; Wen has no seat on it; it is on Amara's opening (op-backend, Greta recruits).
 const V = CONSENT_NOTICE.version;
 const effects = (user: string) => request(app).get('/api/interviews/consent-effects').set('x-user', user);
 function guestCookie(res: { headers: Record<string, unknown> }): string {
@@ -161,7 +161,7 @@ describe('the recruiter\'s bell', () => {
     expect(input.action).toEqual({ label: 'Open Upcoming', href: '/interviews/upcoming' });
     expect(input.payload).toMatchObject({ tenant: 'interviews', kind: 'interview-consent-off', audience: 'recruiter' });
     const text = JSON.stringify(input);
-    for (const word of ['Mateo', 'cand-', 'iv-mateo', 'chose', 'declined']) expect([word, text.includes(word)]).toEqual([word, false]);
+    for (const word of ['Mateo', 'cand-', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'chose', 'declined']) expect([word, text.includes(word)]).toEqual([word, false]);
     sent = [];
     expect(await consentsSaved(IV, { recording: false, transcription: false, milo: false }, { recording: false, transcription: false, milo: false })).toEqual([]);
     expect(await consentsSaved(IV, { recording: false, transcription: false, milo: false }, { recording: true, transcription: true, milo: true })).toEqual(['u-greta']);
@@ -175,7 +175,7 @@ describe('the recruiter\'s bell', () => {
       expect(sent[0]!.input.title).toMatch(/cannot go ahead as set: no recording$/);
       expect(sent[0]!.input.body).toContain('cannot start as it is set up');
       const text = JSON.stringify(sent[0]!.input);
-      for (const word of ['Mateo', 'cand-', 'iv-mateo', 'chose', 'declined', 'INTERVIEWS_']) expect([word, text.includes(word)]).toEqual([word, false]);
+      for (const word of ['Mateo', 'cand-', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'chose', 'declined', 'INTERVIEWS_']) expect([word, text.includes(word)]).toEqual([word, false]);
       sent = [];
       // A part off that is not required reads as before.
       expect(await consentsSaved(IV, { recording: false, transcription: true, milo: true }, { recording: true, transcription: true, milo: false })).toEqual(['u-greta']);

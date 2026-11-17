@@ -92,9 +92,9 @@ const PRIYA = who('u-priya', 'access');
 
 // Nadia's leadership round has ended here: Wen leads, Hugo sits on the panel. Hugo's design round for Nadia is
 // cancelled in this world so that the leadership round is the only one he owes (see the last block for the other case).
-const NADIA = 'iv-nadia-leadership';
-const JONAH = 'iv-jonah-leadership';
-const MATEO_DESIGN = 'iv-mateo-design';
+const NADIA = 'iv-n5z9f2cq';
+const JONAH = 'iv-g9r1y8lp';
+const MATEO_DESIGN = 'iv-k1p5w8ra';
 
 beforeEach(() => {
   (listUsers as jest.Mock).mockResolvedValue(USERS);
@@ -103,7 +103,7 @@ beforeEach(() => {
   fixtureRegistry.resetAll('default');
   for (const i of interviewsFixture.rows()) {
     if (i.id === NADIA) { i.state = 'ended'; i.endedAt = '2026-11-16T10:00:00.000Z'; }
-    if (i.id === 'iv-nadia-design') i.state = 'cancelled';
+    if (i.id === 'iv-m8t3h6ng') i.state = 'cancelled';
   }
 });
 
@@ -230,7 +230,7 @@ describe('others hidden until yours is in', () => {
   });
 
   it('a round of the same candidate still to run keeps the others hidden', async () => {
-    for (const i of interviewsFixture.rows()) if (i.id === 'iv-nadia-design') i.state = 'accepted';
+    for (const i of interviewsFixture.rows()) if (i.id === 'iv-m8t3h6ng') i.state = 'accepted';
     await submit(WEN, NADIA);
     await submit(HUGO, NADIA);
     expect((await read(HUGO, NADIA)).body.scorecard).toMatchObject({ othersHidden: true, others: [] });

@@ -87,9 +87,9 @@ const OPERATOR = as('u-operator');
 const GUEST = as('guest:inv-1');
 const PRIYA = as('u-priya', 'access');
 
-const MATEO = 'iv-mateo-coding'; // Hugo leads, scored, recording stand-in and transcript seeded
-const NADIA = 'iv-nadia-leadership'; // Wen leads, Hugo on the panel; ended in this world
-const JONAH = 'iv-jonah-leadership'; // Wen leads, ended, nothing seeded
+const MATEO = 'iv-j6x2d9sb'; // Hugo leads, scored, recording stand-in and transcript seeded
+const NADIA = 'iv-n5z9f2cq'; // Wen leads, Hugo on the panel; ended in this world
+const JONAH = 'iv-g9r1y8lp'; // Wen leads, ended, nothing seeded
 
 beforeEach(() => {
   (listUsers as jest.Mock).mockResolvedValue(USERS);

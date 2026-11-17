@@ -22,15 +22,15 @@ export const interviewCoachLogFixture = defineFixture<CoachLogRecord>({
   scenarios: {
     default: () => [
       // Ingrid's "Working together" round (Wen leads; started at -6d 13:00).
-      { id: 'ml-ingrid-together-1', interviewId: 'iv-ingrid-together', kind: 'answer', askedBy: 'u-wen',
+      { id: 'ml-ingrid-together-1', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
         question: 'What did she say about the on-call lead?', answer: 'The candidate spoke of it in line 12.',
         sources: [{ seq: 12, quote: 'I paged the on-call lead and we split the investigation' }],
         code: null, askedAt: at(-6, 13, 12), modelId: MODEL, promptVersion: PROMPT_VERSION },
-      { id: 'ml-ingrid-together-2', interviewId: 'iv-ingrid-together', kind: 'answer', askedBy: 'u-wen',
+      { id: 'ml-ingrid-together-2', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
         question: 'Is she a strong candidate?', answer: '', sources: [],
         code: 'refused-judgement', askedAt: at(-6, 13, 25), modelId: 'none', promptVersion: PROMPT_VERSION },
       // Mateo's coding round (Hugo leads; started at -3d 14:00).
-      { id: 'ml-mateo-coding-1', interviewId: 'iv-mateo-coding', kind: 'answer', askedBy: 'u-hugo',
+      { id: 'ml-mateo-coding-1', interviewId: 'iv-j6x2d9sb', kind: 'answer', askedBy: 'u-hugo',
         question: 'Where did he talk about the window reset?', answer: '', sources: [],
         code: 'unsourced', askedAt: at(-3, 14, 20), modelId: MODEL, promptVersion: PROMPT_VERSION },
     ],

@@ -89,7 +89,7 @@ describe.each([
   });
 
   it('marks an interview reviewed at the revision it was made against, and bumps it', async () => {
-    const before = (await store.listInterviews()).find((i) => i.id === 'iv-ingrid-coding')!;
+    const before = (await store.listInterviews()).find((i) => i.id === 'iv-d7q4n9xe')!;
     expect(before.state).toBe('scored');
     expect(await store.markReviewed(before.id, before.revision)).toEqual({ ok: true, row: { ...before, state: 'reviewed', revision: before.revision + 1 } });
     expect(await store.markReviewed(before.id, before.revision)).toMatchObject({ ok: false, reason: 'stale', row: { state: 'reviewed' } });

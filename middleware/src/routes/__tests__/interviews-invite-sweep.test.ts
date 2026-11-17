@@ -21,8 +21,8 @@ import { join } from 'node:path';
 import { enumerateRoutes } from '../../mock/core/wire/routes.js';
 
 const ROOT = join(__dirname, '..', '..', '..');
-const OWN = 'iv-mateo-design';
-const OTHER = 'iv-aiko-coding';
+const OWN = 'iv-k1p5w8ra';
+const OTHER = 'iv-c3k8w2ma';
 const GUEST_ROUTES = new Set([
   'POST /api/interview-invite/exchange',
   'GET /api/interview-invite/interview',

@@ -138,10 +138,10 @@ describe('the seeded log', () => {
 
 describe('D6: eraseSuggestions', () => {
   it('removes those interviews\' rows from the log and says how many', async () => {
-    const before = interviewSuggestionsFixture.rows().filter((r) => r.interviewId === 'iv-mateo-coding').length;
+    const before = interviewSuggestionsFixture.rows().filter((r) => r.interviewId === 'iv-j6x2d9sb').length;
     expect(before).toBeGreaterThan(0);
-    expect(await eraseSuggestions(['iv-mateo-coding'])).toBe(before);
-    expect(interviewSuggestionsFixture.rows().some((r) => r.interviewId === 'iv-mateo-coding')).toBe(false);
+    expect(await eraseSuggestions(['iv-j6x2d9sb'])).toBe(before);
+    expect(interviewSuggestionsFixture.rows().some((r) => r.interviewId === 'iv-j6x2d9sb')).toBe(false);
     expect(interviewSuggestionsFixture.rows().length).toBeGreaterThan(0);
   });
 });

@@ -45,10 +45,10 @@ describe('ending', () => {
 
 describe('the room view', () => {
   it('a behavioural round: the seats, the chosen questions with their competency, the kit with its anchors', () => {
-    const i = row('iv-nadia-leadership');
+    const i = row('iv-n5z9f2cq');
     const { opening, candidate } = parts(i);
     const v = roomView(i, opening, candidate.name, HUGO, people)!;
-    expect(v).toMatchObject({ id: i.id, lobbyName: 'interviews:interview:iv-nadia-leadership', seat: 'panel', state: 'accepted', revision: i.revision,
+    expect(v).toMatchObject({ id: i.id, lobbyName: 'interviews:interview:iv-n5z9f2cq', seat: 'panel', state: 'accepted', revision: i.revision,
       round: { id: 'rd-leadership', type: 'behavioural', minutes: 60 }, candidate: { name: candidate.name } });
     expect(v.seats).toEqual([{ person: people(WEN), seat: 'lead' }, { person: people(HUGO), seat: 'panel' }]);
     expect(v.questions.map((q) => q.id)).toEqual(i.questionIds);
@@ -58,7 +58,7 @@ describe('the room view', () => {
   });
 
   it('each chosen question names its competency; a behavioural one has no starter code', () => {
-    const i = row('iv-jonah-leadership');
+    const i = row('iv-g9r1y8lp');
     const { opening, candidate } = parts(i);
     const v = roomView(i, opening, candidate.name, WEN, people)!;
     expect(v.questions.map((q) => q.id)).toEqual(['q-em-struggling', 'q-em-slip']);
@@ -66,7 +66,7 @@ describe('the room view', () => {
   });
 
   it('a technical round carries each question\'s starter code by language', () => {
-    const i = row('iv-aiko-coding');
+    const i = row('iv-c3k8w2ma');
     const { opening, candidate } = parts(i);
     const v = roomView(i, opening, candidate.name, WEN, people)!;
     expect(v.seat).toBe('lead');
@@ -74,7 +74,7 @@ describe('the room view', () => {
   });
 
   it('nothing about the candidate but their name; nothing at all without a seat', () => {
-    const i = row('iv-aiko-coding');
+    const i = row('iv-c3k8w2ma');
     const { opening, candidate } = parts(i);
     const text = JSON.stringify(roomView(i, opening, candidate.name, WEN, people));
     expect(text).not.toContain(candidate.email);

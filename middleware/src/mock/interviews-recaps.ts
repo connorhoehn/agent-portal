@@ -29,7 +29,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
     default: () => [
       // Ingrid's "Working together" round (ended at -6d 13:45).
       {
-        interviewId: 'iv-ingrid-together', state: 'ready', writtenAt: at(-6, 14, 50), modelId: MODEL, promptVersion: PROMPT_VERSION,
+        interviewId: 'iv-f2b6t5zh', state: 'ready', writtenAt: at(-6, 14, 50), modelId: MODEL, promptVersion: PROMPT_VERSION,
         attempts: 1, droppedCodes: [], droppedClaims: 0,
         content: {
           competencies: [{ id: 'communication', evidence: [said(8, 'I paged the on-call lead and we split the investigation')] }],
@@ -38,7 +38,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
       },
       // Mateo's coding round (ended at -3d 15:00).
       {
-        interviewId: 'iv-mateo-coding', state: 'ready', writtenAt: at(-3, 16, 0), modelId: MODEL, promptVersion: PROMPT_VERSION,
+        interviewId: 'iv-j6x2d9sb', state: 'ready', writtenAt: at(-3, 16, 0), modelId: MODEL, promptVersion: PROMPT_VERSION,
         attempts: 1, droppedCodes: [], droppedClaims: 0,
         content: {
           competencies: [{ id: 'problem-solving', evidence: [said(19, 'each key gets a fixed window that resets every minute')] }],
@@ -55,9 +55,9 @@ export const interviewRecapOpensFixture = defineFixture<RecapOpen>({
   scenarios: {
     default: () => [
       // The leads opened the recap after rating, with the ratings their scorecards then kept (so nothing changed after it).
-      { interviewId: 'iv-ingrid-together', interviewerId: 'u-wen', openedAt: at(-6, 14, 50),
+      { interviewId: 'iv-f2b6t5zh', interviewerId: 'u-wen', openedAt: at(-6, 14, 50),
         ratings: [{ competencyId: 'communication', rating: 3 }, { competencyId: 'collaboration', rating: 3 }] },
-      { interviewId: 'iv-mateo-coding', interviewerId: 'u-hugo', openedAt: at(-3, 16, 0),
+      { interviewId: 'iv-j6x2d9sb', interviewerId: 'u-hugo', openedAt: at(-3, 16, 0),
         ratings: [{ competencyId: 'problem-solving', rating: 3 }, { competencyId: 'code-quality', rating: 3 }] },
     ],
     empty: () => [],

@@ -120,10 +120,10 @@ describe('the seed and E7/E8', () => {
   });
 
   it('exports and erases through the index', async () => {
-    const exported = await exportRecap('iv-mateo-coding') as { recap: RecapRecord | null; opens: RecapOpen[] };
+    const exported = await exportRecap('iv-j6x2d9sb') as { recap: RecapRecord | null; opens: RecapOpen[] };
     expect(exported.recap?.state).toBe('ready');
     expect(exported.opens.map((o) => o.interviewerId)).toEqual(['u-hugo']);
-    expect(await eraseRecaps(['iv-mateo-coding'])).toBe(2);
-    expect(await exportRecap('iv-mateo-coding')).toEqual({ recap: null, opens: [] });
+    expect(await eraseRecaps(['iv-j6x2d9sb'])).toBe(2);
+    expect(await exportRecap('iv-j6x2d9sb')).toEqual({ recap: null, opens: [] });
   });
 });

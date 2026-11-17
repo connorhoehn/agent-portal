@@ -81,7 +81,7 @@ describe('consent records on the profile', () => {
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.body.reads).toBe('answers');
-    const item = res.body.items.find((i: { interviewId: string }) => i.interviewId === 'iv-ingrid-coding');
+    const item = res.body.items.find((i: { interviewId: string }) => i.interviewId === 'iv-d7q4n9xe');
     expect(item).toMatchObject({ answered: true, noticeVersion: CONSENT_NOTICE.version, exportable: true });
     expect(item.answers.milo).toEqual({ answer: expect.any(Boolean), at: expect.any(String) });
     expect(Object.keys(item.answers)).toEqual(['recording', 'transcription', 'milo']);
@@ -114,13 +114,13 @@ describe('consent records on the profile', () => {
 
 describe('the export of what Milo showed', () => {
   it('gives the recruiter the interview, the seeded suggestions whole and the notice, as an attachment', async () => {
-    const res = await exportOf('u-greta', 'iv-ingrid-together');
+    const res = await exportOf('u-greta', 'iv-f2b6t5zh');
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-disposition']).toMatch(/^attachment/);
     const doc = JSON.parse(res.text);
     expect(Object.keys(doc.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
-    expect(doc.interview).toMatchObject({ id: 'iv-ingrid-together', candidateId: CAND, state: 'scored' });
+    expect(doc.interview).toMatchObject({ id: 'iv-f2b6t5zh', candidateId: CAND, state: 'scored' });
     expect(JSON.stringify(doc.interview)).not.toMatch(/Ingrid/);
     const { suggestions } = doc.sections.suggestions;
     expect(suggestions.map((s: { id: string }) => s.id)).toEqual(['sg-ingrid-together-1', 'sg-ingrid-together-2']);
@@ -133,14 +133,14 @@ describe('the export of what Milo showed', () => {
   });
 
   it('counts the dropped attempts by code and gives no text for them', async () => {
-    const all = await Promise.all(['iv-ingrid-coding', 'iv-ingrid-together', 'iv-mateo-coding', 'iv-jonah-leadership'].map((id) => exportSuggestions(id) as Promise<{ dropped: Record<string, number> }>));
+    const all = await Promise.all(['iv-d7q4n9xe', 'iv-f2b6t5zh', 'iv-j6x2d9sb', 'iv-g9r1y8lp'].map((id) => exportSuggestions(id) as Promise<{ dropped: Record<string, number> }>));
     expect(all.some((a) => Object.keys(a.dropped).length > 0)).toBe(true);
   });
 
   it('a section that throws keeps its key with an error code and the export still succeeds', async () => {
     registerExportSection({ key: 'broken', read: async () => { throw new Error('boom'); } });
     try {
-      const res = await exportOf('u-greta', 'iv-ingrid-together');
+      const res = await exportOf('u-greta', 'iv-f2b6t5zh');
       expect(res.status).toBe(200);
       const doc = JSON.parse(res.text);
       expect(doc.sections.broken).toEqual({ error: 'unavailable' });
@@ -153,7 +153,7 @@ describe('the export of what Milo showed', () => {
   });
 
   it('is not-found for everyone who is not the recruiter, and for an unknown interview', async () => {
-    for (const who of ['u-hugo', 'u-amara', 'u-root']) expect((await exportOf(who, 'iv-ingrid-together')).status).toBe(404);
+    for (const who of ['u-hugo', 'u-amara', 'u-root']) expect((await exportOf(who, 'iv-f2b6t5zh')).status).toBe(404);
     expect((await exportOf('u-greta', 'iv-nobody')).status).toBe(404);
   });
 });

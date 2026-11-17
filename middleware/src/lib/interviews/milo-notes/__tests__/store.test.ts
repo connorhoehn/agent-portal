@@ -97,10 +97,10 @@ describe('the statements', () => {
 
 describe('E7 and E8', () => {
   it('erases the interviews\' rows and exports one interview\'s rows as logged', async () => {
-    const exported = await exportCoachLog('iv-ingrid-together') as { rows: CoachLogRecord[] };
+    const exported = await exportCoachLog('iv-f2b6t5zh') as { rows: CoachLogRecord[] };
     expect(exported.rows.map((r) => r.id)).toEqual(['ml-ingrid-together-1', 'ml-ingrid-together-2']);
-    expect(await eraseCoachLog(['iv-ingrid-together'])).toBe(2);
-    expect(interviewCoachLogFixture.rows().map((r) => r.interviewId)).toEqual(['iv-mateo-coding']);
+    expect(await eraseCoachLog(['iv-f2b6t5zh'])).toBe(2);
+    expect(interviewCoachLogFixture.rows().map((r) => r.interviewId)).toEqual(['iv-j6x2d9sb']);
     expect(await eraseCoachLog([])).toBe(0);
   });
 });

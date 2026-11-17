@@ -33,10 +33,10 @@ describe('reach by role', () => {
 describe('an interviewer', () => {
   it('reads the interviews they lead or sit on the panel of, and nothing of another interviewer\'s', () => {
     expect(ids(as('u-hugo', 'interviewer').interviews)).toEqual(
-      ['iv-ingrid-coding', 'iv-kwame-coding', 'iv-mateo-coding', 'iv-mateo-design', 'iv-nadia-design', 'iv-nadia-leadership']);
-    expect(ids(as('u-hugo', 'interviewer').interviews)).not.toContain('iv-aiko-coding');
+      ['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq']);
+    expect(ids(as('u-hugo', 'interviewer').interviews)).not.toContain('iv-c3k8w2ma');
     expect(ids(as('u-wen', 'interviewer').interviews)).toEqual(
-      ['iv-aiko-coding', 'iv-ingrid-together', 'iv-jonah-leadership', 'iv-nadia-leadership', 'iv-ravi-coding', 'iv-ravi-together']);
+      ['iv-c3k8w2ma', 'iv-f2b6t5zh', 'iv-g9r1y8lp', 'iv-n5z9f2cq', 'iv-p2v7j4ye', 'iv-r6d1k9wt']);
   });
 
   it('reads, through those interviews, only those candidates and openings', () => {
@@ -60,7 +60,7 @@ describe('a hiring manager', () => {
     expect(ids(amara.openings)).toEqual(['op-backend', 'op-em']);
     expect(amara.candidates).toHaveLength(8);
     expect(amara.candidates.map((c) => c.name)).not.toContain('Aiko Tanaka');
-    expect(ids(amara.interviews)).not.toContain('iv-ravi-coding');
+    expect(ids(amara.interviews)).not.toContain('iv-p2v7j4ye');
     expect(ids(amara.scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-mateo-coding']);
   });
 
@@ -117,12 +117,12 @@ describe('the wire shapes', () => {
 
   it('a panel seat reads as panel, the lead as lead', () => {
     const rows = index('u-hugo', 'interviewer').interviewRows();
-    expect(rows.find((r) => r.id === 'iv-nadia-leadership')!).toMatchObject({ seat: 'panel', lead: { name: 'Wen Zhao' }, panel: [{ name: 'Hugo Marchetti' }] });
-    expect(rows.find((r) => r.id === 'iv-nadia-design')!.seat).toBe('lead');
+    expect(rows.find((r) => r.id === 'iv-n5z9f2cq')!).toMatchObject({ seat: 'panel', lead: { name: 'Wen Zhao' }, panel: [{ name: 'Hugo Marchetti' }] });
+    expect(rows.find((r) => r.id === 'iv-m8t3h6ng')!.seat).toBe('lead');
   });
 
   it('a scored interview the viewer sat on without a scorecard of their own is still due for them', () => {
-    const i = world.interviews.find((x) => x.id === 'iv-mateo-coding')!;
+    const i = world.interviews.find((x) => x.id === 'iv-j6x2d9sb')!;
     expect(bucketFor({ ...i, panelIds: ['u-wen'] }, { id: 'u-wen', role: 'interviewer' }, world.scorecards)).toBe('scorecard-due');
     expect(bucketFor(i, { id: 'u-hugo', role: 'interviewer' }, world.scorecards)).toBe('done');
   });
@@ -141,7 +141,7 @@ describe('the wire shapes', () => {
 
   it('an interview record carries the chosen questions, the kit\'s competencies and the visible scorecards with names', () => {
     const ix = index('u-hugo', 'interviewer');
-    const rec = ix.interviewRecord(ix.world.interviews.find((i) => i.id === 'iv-mateo-coding')!)!;
+    const rec = ix.interviewRecord(ix.world.interviews.find((i) => i.id === 'iv-j6x2d9sb')!)!;
     expect(rec.questionsChosen.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry']);
     expect(rec.scorecards).toHaveLength(1);
     expect(rec.scorecards[0]!.ratings.map((r) => r.competency)).toEqual(['Problem solving', 'Code quality']);
@@ -151,7 +151,7 @@ describe('the wire shapes', () => {
     const ix = index('u-wen', 'interviewer');
     const rec = ix.candidateRecord(ix.candidates.get('cand-ingrid')!);
     expect(rec.applications).toHaveLength(1);
-    expect(rec.applications[0]!.interviews.map((i) => i.id)).toEqual(['iv-ingrid-together']);
+    expect(rec.applications[0]!.interviews.map((i) => i.id)).toEqual(['iv-f2b6t5zh']);
     // Wen's own is in, so the profile's rows carry the scorecards of the rounds she can read (her own round only here).
     expect(rec.applications[0]!.interviews[0]!.results.map((r) => r.interviewer.id)).toEqual(['u-wen']);
   });

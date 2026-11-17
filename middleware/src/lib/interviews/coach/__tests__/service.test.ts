@@ -11,7 +11,7 @@ import { answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type Coa
 import { MemorySuggestionStore } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
 
-const IV = 'iv-nadia-leadership';
+const IV = 'iv-n5z9f2cq';
 const WEN = { userId: 'u-wen' };
 const HUGO = { userId: 'u-hugo' };
 

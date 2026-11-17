@@ -83,7 +83,7 @@ app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, inte
 app.get('/api/anything-signed-in', requireSession(), (req, res) => { res.json({ sub: resolveSession(req)?.sub }); });
 app.use(errorHandler);
 
-const IV = 'iv-mateo-design';
+const IV = 'iv-k1p5w8ra';
 const as = (user: string) => ({
   post: (p: string) => request(app).post(`/api/interviews${p}`).set('x-user', user).send({}),
   get: (p: string) => request(app).get(`/api/interviews${p}`).set('x-user', user),
@@ -136,7 +136,7 @@ describe('the recruiter\'s routes', () => {
   });
 
   it('refuses a link for an interview that is over, and answers not-found for one that is not there', async () => {
-    expect((await GRETA.post('/interviews/iv-ingrid-coding/invite')).status).toBe(409);
+    expect((await GRETA.post('/interviews/iv-d7q4n9xe/invite')).status).toBe(409);
     expect((await GRETA.post('/interviews/iv-nope/invite')).status).toBe(404);
     expect((await GRETA.get('/interviews/iv-nope/invite')).status).toBe(404);
   });
@@ -183,12 +183,12 @@ describe('the exchange and the guest\'s read', () => {
   });
 
   it('answers a wrong, malformed, revoked, expired or closed link the same way, no sooner than the floor', async () => {
-    const revoked = await issue('iv-aiko-coding');
-    await GRETA.del('/interviews/iv-aiko-coding/invite');
-    const expired = await issue('iv-kwame-coding');
-    interviewInvitesFixture.rows().find((r) => r.interviewId === 'iv-kwame-coding')!.expiresAt = new Date(Date.now() - 1000).toISOString();
-    const closed = await issue('iv-nadia-design');
-    interviewsFixture.rows().find((i) => i.id === 'iv-nadia-design')!.state = 'cancelled';
+    const revoked = await issue('iv-c3k8w2ma');
+    await GRETA.del('/interviews/iv-c3k8w2ma/invite');
+    const expired = await issue('iv-h4m7c3vu');
+    interviewInvitesFixture.rows().find((r) => r.interviewId === 'iv-h4m7c3vu')!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const closed = await issue('iv-m8t3h6ng');
+    interviewsFixture.rows().find((i) => i.id === 'iv-m8t3h6ng')!.state = 'cancelled';
     const answers = [];
     for (const t of [newInviteToken(), 'not-a-token', '', 42, revoked, expired, closed]) {
       const startedAt = Date.now();
@@ -231,10 +231,10 @@ describe('the exchange and the guest\'s read', () => {
 
   it('one interview only: the guest\'s read answers for its own interview whatever it asks for', async () => {
     const cookie = guestCookie(await exchange(await issue()));
-    await issue('iv-aiko-coding');
-    const res = await request(app).get('/api/interview-invite/interview?id=iv-aiko-coding').set('Cookie', cookie);
+    await issue('iv-c3k8w2ma');
+    const res = await request(app).get('/api/interview-invite/interview?id=iv-c3k8w2ma').set('Cookie', cookie);
     expect(res.body.interview.round.name).toBe('System design');
-    expect((await request(app).get('/api/interview-invite/interview/iv-aiko-coding').set('Cookie', cookie)).status).toBe(404);
+    expect((await request(app).get('/api/interview-invite/interview/iv-c3k8w2ma').set('Cookie', cookie)).status).toBe(404);
   });
 
   it('a forged or borrowed cookie is no guest: a staff session value in the guest cookie, a guest value in the staff cookie', async () => {

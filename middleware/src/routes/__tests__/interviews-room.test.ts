@@ -92,8 +92,8 @@ beforeEach(() => {
 });
 
 // Wen leads Nadia's leadership round (accepted) with Hugo on the panel; Hugo leads Mateo's design round (ready), alone.
-const NADIA = 'iv-nadia-leadership';
-const MATEO = 'iv-mateo-design';
+const NADIA = 'iv-n5z9f2cq';
+const MATEO = 'iv-k1p5w8ra';
 const roomOf = async (as: ReturnType<typeof who>, id: string) => as.get(`/interviews/${id}/room`);
 
 describe('reading the room', () => {

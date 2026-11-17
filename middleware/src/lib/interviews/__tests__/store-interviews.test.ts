@@ -96,21 +96,21 @@ describe.each([
   });
 
   it('a taken id creates nothing', async () => {
-    expect(await store.createInterview({ ...NEW(), id: 'iv-kwame-coding' })).toBeNull();
-    expect((await read('iv-kwame-coding')).applicationId).toBe('app-kwame');
+    expect(await store.createInterview({ ...NEW(), id: 'iv-h4m7c3vu' })).toBeNull();
+    expect((await read('iv-h4m7c3vu')).applicationId).toBe('app-kwame');
   });
 
   it('answers a seat at the revision it was made against, and bumps it', async () => {
-    const before = await read('iv-kwame-coding');
+    const before = await read('iv-h4m7c3vu');
     const out = answerSeat(before, HUGO, { answer: 'decline', reason: 'On leave that whole week.' }, AT);
     if (!out.ok) throw new Error(out.message);
-    const r = await store.answerSeat('iv-kwame-coding', out.change, 1);
+    const r = await store.answerSeat('iv-h4m7c3vu', out.change, 1);
     expect(r).toMatchObject({ ok: true, row: { state: 'declined', revision: 2, declines: [{ userId: HUGO, seat: 'lead', reason: 'On leave that whole week.', at: AT }] } });
-    expect(await read('iv-kwame-coding')).toEqual((r as { row: Interview }).row);
+    expect(await read('iv-h4m7c3vu')).toEqual((r as { row: Interview }).row);
   });
 
   it('reassigns: the lead, the panel, the state and the acceptances; the declines stay', async () => {
-    const before = await read('iv-kwame-coding');
+    const before = await read('iv-h4m7c3vu');
     const out = answerSeat(before, HUGO, { answer: 'decline', reason: 'On leave that whole week.' }, AT);
     if (!out.ok) throw new Error(out.message);
     await store.answerSeat(before.id, out.change, 1);
@@ -121,7 +121,7 @@ describe.each([
   });
 
   it('a stale revision writes nothing and answers the row as it now is; an unknown id is not found', async () => {
-    const before = await read('iv-ravi-together');
+    const before = await read('iv-r6d1k9wt');
     const accept = answerSeat(before, WEN, { answer: 'accept' }, AT);
     if (!accept.ok) throw new Error(accept.message);
     expect((await store.answerSeat(before.id, accept.change, 1)).ok).toBe(true);
@@ -140,7 +140,7 @@ describe.each([
 ])('the %s store\'s time write', (_name, make) => {
   it('sets, changes and clears the time against the revision, leaving the state alone', async () => {
     const store = make();
-    const read = async () => (await store.listInterviews()).find((i) => i.id === 'iv-ravi-together')!;
+    const read = async () => (await store.listInterviews()).find((i) => i.id === 'iv-r6d1k9wt')!;
     const before = await read();
     const set = await store.setTime(before.id, '2031-03-04T15:30:00.000Z', before.revision);
     expect(set).toMatchObject({ ok: true, row: { scheduledAt: '2031-03-04T15:30:00.000Z', state: before.state, revision: before.revision + 1 } });
@@ -176,9 +176,9 @@ describe('the two stores agree after the same interview writes', () => {
     const { exec, seen } = interviewsTableExec();
     const sql = new SqlInterviewsStore(exec);
     const change = { leadId: WEN, panelIds: [], state: 'assigned' as const, acceptances: [] };
-    await sql.reassign('iv-kwame-coding', change, 1);
+    await sql.reassign('iv-h4m7c3vu', change, 1);
     expect(seen).toEqual([REASSIGN_SQL]);
-    await sql.reassign('iv-kwame-coding', change, 1);
+    await sql.reassign('iv-h4m7c3vu', change, 1);
     expect(seen).toEqual([REASSIGN_SQL, REASSIGN_SQL, GET_INTERVIEW_SQL]);
   });
 });

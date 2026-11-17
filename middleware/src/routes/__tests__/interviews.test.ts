@@ -107,16 +107,16 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(ios.body.opening).toMatchObject({ title: 'iOS Engineer', hiringManager: null, recruiter: { name: 'Greta Lindqvist' } });
     expect(ios.body.opening.competencies.map((c: { name: string }) => c.name)).toContain('Swift and SwiftUI');
     expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(11);
-    const aiko = await GRETA('/api/interviews/interviews/iv-aiko-coding');
+    const aiko = await GRETA('/api/interviews/interviews/iv-c3k8w2ma');
     expect(aiko.body.interview).toMatchObject({ candidate: { name: 'Aiko Tanaka' }, lead: { name: 'Wen Zhao' }, state: 'ready', seat: null });
     const ingrid = await GRETA('/api/interviews/candidates/cand-ingrid');
-    expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-ingrid-coding', 'iv-ingrid-together']);
+    expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-d7q4n9xe', 'iv-f2b6t5zh']);
     // The profile reads who moved each stage by name, and each round's readable results.
     const app = ingrid.body.candidate.applications[0];
     expect(app.history.every((h: { by: string | null; byName: string | null }) => (h.by === null) === (h.byName === null))).toBe(true);
     expect(app.history.some((h: { byName: string | null }) => h.byName === 'Greta Lindqvist')).toBe(true);
     expect(app.interviews.every((i: { results: unknown[] }) => Array.isArray(i.results))).toBe(true);
-    expect(app.interviews.find((i: { id: string }) => i.id === 'iv-ingrid-coding').results.length).toBeGreaterThan(0);
+    expect(app.interviews.find((i: { id: string }) => i.id === 'iv-d7q4n9xe').results.length).toBeGreaterThan(0);
   });
 
   it('an id that does not exist is a 404', async () => {
@@ -131,19 +131,19 @@ describe('an interviewer reads only the interviews assigned to them', () => {
     const res = await HUGO('/api/interviews/interviews');
     expect(res.status).toBe(200);
     const ids = res.body.items.map((i: { id: string }) => i.id).sort();
-    expect(ids).toEqual(['iv-ingrid-coding', 'iv-kwame-coding', 'iv-mateo-coding', 'iv-mateo-design', 'iv-nadia-design', 'iv-nadia-leadership']);
-    expect(res.body.items.find((i: { id: string }) => i.id === 'iv-kwame-coding').bucket).toBe('to-accept');
+    expect(ids).toEqual(['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq']);
+    expect(res.body.items.find((i: { id: string }) => i.id === 'iv-h4m7c3vu').bucket).toBe('to-accept');
   });
 
   it('cannot open another interviewer\'s interview, or its candidate or opening, by id', async () => {
-    expect((await HUGO('/api/interviews/interviews/iv-aiko-coding')).status).toBe(404);
+    expect((await HUGO('/api/interviews/interviews/iv-c3k8w2ma')).status).toBe(404);
     expect((await HUGO('/api/interviews/candidates/cand-aiko')).status).toBe(404);
     expect((await HUGO('/api/interviews/openings/op-ios')).status).toBe(404);
-    expect((await WEN('/api/interviews/interviews/iv-mateo-design')).status).toBe(404);
+    expect((await WEN('/api/interviews/interviews/iv-k1p5w8ra')).status).toBe(404);
   });
 
   it('opens their own interview, and through it the candidate and the opening', async () => {
-    const own = await HUGO('/api/interviews/interviews/iv-mateo-design');
+    const own = await HUGO('/api/interviews/interviews/iv-k1p5w8ra');
     expect(own.status).toBe(200);
     expect(own.body.interview).toMatchObject({ seat: 'lead', questionsChosen: [{ id: 'q-be-ledger' }] });
     expect((await HUGO('/api/interviews/candidates/cand-mateo')).status).toBe(200);
@@ -154,7 +154,7 @@ describe('an interviewer reads only the interviews assigned to them', () => {
     const res = await HUGO('/api/interviews/candidates');
     const ingrid = res.body.items.find((r: { candidate: { name: string } }) => r.candidate.name === 'Ingrid Solberg');
     expect(ingrid.lastResult).toMatchObject({ roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
-    const rec = await HUGO('/api/interviews/interviews/iv-ingrid-coding');
+    const rec = await HUGO('/api/interviews/interviews/iv-d7q4n9xe');
     expect(rec.body.interview.scorecards.map((s: { interviewer: { name: string } }) => s.interviewer.name)).toEqual(['Hugo Marchetti']);
   });
 });
@@ -169,7 +169,7 @@ describe('a hiring manager reads only their own openings and what hangs off them
   it('never the opening that is not theirs, nor its candidates or interviews', async () => {
     expect((await AMARA('/api/interviews/openings/op-ios')).status).toBe(404);
     expect((await AMARA('/api/interviews/candidates/cand-aiko')).status).toBe(404);
-    expect((await AMARA('/api/interviews/interviews/iv-ravi-coding')).status).toBe(404);
+    expect((await AMARA('/api/interviews/interviews/iv-p2v7j4ye')).status).toBe(404);
     const names = (await AMARA('/api/interviews/candidates')).body.items.map((r: { candidate: { name: string } }) => r.candidate.name);
     expect(names).toHaveLength(8);
     expect(names).not.toContain('Ravi Menon');
@@ -182,7 +182,7 @@ describe('everyone else gets the tenant\'s usual refusal', () => {
     ['an Access requester in Access', 'u-rhea', 'access', undefined],
     ['an Access admin in Access', 'u-priya', 'access', undefined],
   ])('%s: 403 at the mount, naming the tenant it needs', async (_label, id, tenant, role) => {
-    for (const p of ['/api/interviews/candidates', '/api/interviews/openings', '/api/interviews/interviews', '/api/interviews/interviews/iv-mateo-design']) {
+    for (const p of ['/api/interviews/candidates', '/api/interviews/openings', '/api/interviews/interviews', '/api/interviews/interviews/iv-k1p5w8ra']) {
       const res = await as(id, tenant, role)(p);
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({ requiredTenant: 'interviews' });

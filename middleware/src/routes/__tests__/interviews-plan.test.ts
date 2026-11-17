@@ -87,8 +87,8 @@ const GUEST = who('guest:inv-nadia');
 const PRIYA = who('u-priya', 'access');
 
 // Wen leads Nadia's leadership round (behavioural, 60 minutes, accepted) with Hugo on the panel; Hugo leads the design round.
-const IV = 'iv-nadia-leadership';
-const OTHER_ROUND = 'iv-nadia-design';
+const IV = 'iv-n5z9f2cq';
+const OTHER_ROUND = 'iv-m8t3h6ng';
 const draft = (as: ReturnType<typeof who>, id = IV) => as.post(`/interviews/${id}/plan-draft`);
 const planRows = () => interviewCoachLogFixture.rows().filter((r) => r.interviewId === IV && r.kind === 'plan');
 

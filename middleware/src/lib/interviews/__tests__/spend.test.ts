@@ -40,10 +40,10 @@ beforeEach(() => {
 
 describe('source ids', () => {
   it('a door id names the opening, the interview, the part and the key, and survives a top-up', () => {
-    const sid = interviewSpendSourceId({ openingId: 'op-ios', interviewId: 'iv-aiko-coding' }, 'run', 'r-1');
-    expect(sid).toBe('iv:op-ios:iv-aiko-coding:run:r-1');
-    expect(parseInterviewSourceId(topUpSourceId(sid, 2))).toEqual({ openingId: 'op-ios', interviewId: 'iv-aiko-coding', part: 'run', key: 'r-1' });
-    expect(parseInterviewSourceId('iv:op-ios:iv-aiko-coding:lunch:r-1')).toBeNull();
+    const sid = interviewSpendSourceId({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' }, 'run', 'r-1');
+    expect(sid).toBe('iv:op-ios:iv-c3k8w2ma:run:r-1');
+    expect(parseInterviewSourceId(topUpSourceId(sid, 2))).toEqual({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma', part: 'run', key: 'r-1' });
+    expect(parseInterviewSourceId('iv:op-ios:iv-c3k8w2ma:lunch:r-1')).toBeNull();
     expect(() => interviewSpendSourceId({ openingId: 'op-ios', interviewId: 'iv:x' }, 'run', 'r')).toThrow();
   });
 
@@ -81,39 +81,39 @@ describe('the decision', () => {
 
 describe('holding against the opening', () => {
   it('holds on no initiative and no person, keyed to the opening and the interview', async () => {
-    const r = await reserve('iv-aiko-coding', 2, 'c-1');
-    expect(r).toEqual({ ok: true, holdId: expect.any(String), sourceId: 'iv:op-ios:iv-aiko-coding:coach:c-1', amountUsd: 2 });
-    expect(ivHolds()).toEqual([expect.objectContaining({ initiativeId: null, actorId: null, grantId: null, sourceId: 'iv:op-ios:iv-aiko-coding:coach:c-1', status: 'held' })]);
-    expect(await interviewSpendState({ openingId: 'op-ios', interviewId: 'iv-aiko-coding' }))
+    const r = await reserve('iv-c3k8w2ma', 2, 'c-1');
+    expect(r).toEqual({ ok: true, holdId: expect.any(String), sourceId: 'iv:op-ios:iv-c3k8w2ma:coach:c-1', amountUsd: 2 });
+    expect(ivHolds()).toEqual([expect.objectContaining({ initiativeId: null, actorId: null, grantId: null, sourceId: 'iv:op-ios:iv-c3k8w2ma:coach:c-1', status: 'held' })]);
+    expect(await interviewSpendState({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' }))
       .toEqual({ openingCapUsd: 100, interviewCapUsd: 8, opening: { spentUsd: 0, heldUsd: 2 }, interview: { spentUsd: 0, heldUsd: 2 } });
   });
 
   it('the interview\'s cap: at it passes, past it refuses in plain words', async () => {
-    expect((await reserve('iv-aiko-coding', 5)).ok).toBe(true);
-    expect((await reserve('iv-aiko-coding', 3)).ok).toBe(true);
-    const over = await reserve('iv-aiko-coding', 0.5);
+    expect((await reserve('iv-c3k8w2ma', 5)).ok).toBe(true);
+    expect((await reserve('iv-c3k8w2ma', 3)).ok).toBe(true);
+    const over = await reserve('iv-c3k8w2ma', 0.5);
     expect(over).toEqual({ ok: false, refusal: { status: 403, body: expect.objectContaining({ gate: 'interview-cap', capUsd: 8, spentUsd: 0, heldUsd: 8, amountUsd: 0.5 }) } });
     expect(!over.ok && over.refusal.body['error']).toBe(
       "This interview has reached its spending cap of $8.00: $8.00 is already spent or set aside, so nothing is left, and this needs about $0.50. Nothing was started. The recruiter can raise the cap per interview on the opening's page.",
     );
     // Another interview on the same opening still has its own room.
-    expect((await reserve('iv-ravi-coding', 8)).ok).toBe(true);
+    expect((await reserve('iv-p2v7j4ye', 8)).ok).toBe(true);
   });
 
   it('the opening\'s cap counts every interview on it, held and spent', async () => {
     opening('op-em').budgetCapUsd = 15;
-    expect((await reserve('iv-nadia-design', 9)).ok).toBe(true);
-    await recordSpend({ source: 'interviews', sourceId: 'iv:op-em:iv-jonah-leadership:listening:l-1', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'm', costUsd: 4, costBasis: 'reported' });
-    const over = await reserve('iv-nadia-leadership', 3);
+    expect((await reserve('iv-m8t3h6ng', 9)).ok).toBe(true);
+    await recordSpend({ source: 'interviews', sourceId: 'iv:op-em:iv-g9r1y8lp:listening:l-1', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'm', costUsd: 4, costBasis: 'reported' });
+    const over = await reserve('iv-n5z9f2cq', 3);
     expect(!over.ok && over.refusal.body).toEqual(expect.objectContaining({ gate: 'opening-cap', capUsd: 15, spentUsd: 4, heldUsd: 9, amountUsd: 3 }));
     expect(!over.ok && over.refusal.body['error']).toContain('This opening has reached its spending cap of $15.00: $13.00 is already spent or set aside across its interviews, so $2.00 is left');
-    expect((await reserve('iv-nadia-leadership', 2)).ok).toBe(true);
+    expect((await reserve('iv-n5z9f2cq', 2)).ok).toBe(true);
     // Another opening's money is untouched.
-    expect((await reserve('iv-mateo-design', 9)).ok).toBe(true);
+    expect((await reserve('iv-k1p5w8ra', 9)).ok).toBe(true);
   });
 
   it('two holds racing at the cap: exactly one passes', async () => {
-    const both = await Promise.all([reserve('iv-aiko-coding', 5, 'a'), reserve('iv-aiko-coding', 5, 'b')]);
+    const both = await Promise.all([reserve('iv-c3k8w2ma', 5, 'a'), reserve('iv-c3k8w2ma', 5, 'b')]);
     expect(both.filter((r) => r.ok)).toHaveLength(1);
     expect(both.find((r) => !r.ok)).toEqual({ ok: false, refusal: expect.objectContaining({ body: expect.objectContaining({ gate: 'interview-cap' }) }) });
     expect(ivHolds()).toHaveLength(1);
@@ -121,14 +121,14 @@ describe('holding against the opening', () => {
 
   it('two holds racing at the opening\'s cap from different interviews: exactly one passes', async () => {
     opening('op-em').budgetCapUsd = 10;
-    const both = await Promise.all([reserve('iv-nadia-design', 6, 'a'), reserve('iv-nadia-leadership', 6, 'b')]);
+    const both = await Promise.all([reserve('iv-m8t3h6ng', 6, 'a'), reserve('iv-n5z9f2cq', 6, 'b')]);
     expect(both.filter((r) => r.ok)).toHaveLength(1);
     expect(both.find((r) => !r.ok)).toEqual({ ok: false, refusal: expect.objectContaining({ body: expect.objectContaining({ gate: 'opening-cap' }) }) });
   });
 
   it('an opening with no cap spends nothing, and the words tell the recruiter to set one', async () => {
     opening('op-ios').budgetCapUsd = null;
-    const r = await reserve('iv-aiko-coding', 0.01);
+    const r = await reserve('iv-c3k8w2ma', 0.01);
     expect(r).toEqual({ ok: false, refusal: { status: 403, body: expect.objectContaining({ gate: 'spend-hold' }) } });
     expect(!r.ok && r.refusal.body['error']).toBe("This opening has no spending cap yet, so nothing that costs money can start in its interviews. The recruiter can set one on the opening's page.");
     expect(ivHolds()).toHaveLength(0);
@@ -136,26 +136,26 @@ describe('holding against the opening', () => {
 
   it('the opening\'s own cap per interview wins over the default; null takes the default', async () => {
     process.env['INTERVIEWS_INTERVIEW_CAP_USD'] = '3';
-    expect((await reserve('iv-nadia-design', 3.01)).ok).toBe(false);
+    expect((await reserve('iv-m8t3h6ng', 3.01)).ok).toBe(false);
     opening('op-em').interviewCapUsd = 4;
-    expect((await reserve('iv-nadia-design', 3.01)).ok).toBe(true);
+    expect((await reserve('iv-m8t3h6ng', 3.01)).ok).toBe(true);
   });
 
   it('an interview nobody knows is refused without saying which', async () => {
     const r = await reserve('iv-nobody', 1);
     expect(!r.ok && r.refusal.body['error']).toBe('This spend is not tied to an interview, so nothing was started.');
-    expect((await reserveSpend({ initiativeId: null, actorId: null, source: 'interviews', sourceId: 'iv:op-ios:iv-nadia-design:coach:x', forecast: { costUsdP75: 1, costUsdP25: 0.25, confidence: 'prior' }, expiresInMs: 1000 })).kind).toBe('refused');
+    expect((await reserveSpend({ initiativeId: null, actorId: null, source: 'interviews', sourceId: 'iv:op-ios:iv-m8t3h6ng:coach:x', forecast: { costUsdP75: 1, costUsdP25: 0.25, confidence: 'prior' }, expiresInMs: 1000 })).kind).toBe('refused');
   });
 
   it('a kill switch stops it like every run', async () => {
     await setSwitch('fleet', true, 'test', 'u-ops');
-    const r = await reserve('iv-aiko-coding', 1);
+    const r = await reserve('iv-c3k8w2ma', 1);
     expect(!r.ok && r.refusal.status).toBe(423);
     await setSwitch('fleet', false, null, 'u-ops');
   });
 
   it('never counts against the person who caused it, or any initiative', async () => {
-    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-aiko-coding:coach:c-9', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'm', costUsd: 3, costBasis: 'reported' });
+    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-c3k8w2ma:coach:c-9', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'm', costUsd: 3, costBasis: 'reported' });
     expect((await userSpendThisPeriod('u-wen')).spentUsd).toBe(0);
     expect(spendHolds.rows().every((h) => h.actorId === null)).toBe(true);
   });
@@ -163,16 +163,16 @@ describe('holding against the opening', () => {
 
 describe('settling, topping up and giving back', () => {
   it('a known cost settles the hold and becomes spent', async () => {
-    const r = await reserve('iv-aiko-coding', 2, 'c-1');
+    const r = await reserve('iv-c3k8w2ma', 2, 'c-1');
     if (!r.ok) throw new Error('not held');
     await settleInterviewSpend({ sourceId: r.sourceId, costUsd: 1.25, basis: 'reported', model: 'nova', actorId: 'u-wen', provider: 'bedrock' });
     expect(ivHolds()[0]!.status).toBe('settled');
     expect(spendEntries.rows().filter((e) => e.source === 'interviews')).toEqual([expect.objectContaining({ source: 'interviews', sourceId: r.sourceId, initiativeId: null, costUsd: 1.25, trigger: 'interviews:coach' })]);
-    expect((await interviewSpendState({ openingId: 'op-ios', interviewId: 'iv-aiko-coding' })).interview).toEqual({ spentUsd: 1.25, heldUsd: 0 });
+    expect((await interviewSpendState({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' })).interview).toEqual({ spentUsd: 1.25, heldUsd: 0 });
   });
 
   it('an unknown cost leaves the hold standing until it expires', async () => {
-    const r = await reserve('iv-aiko-coding', 2, 'c-2');
+    const r = await reserve('iv-c3k8w2ma', 2, 'c-2');
     if (!r.ok) throw new Error('not held');
     await settleInterviewSpend({ sourceId: r.sourceId, costUsd: null, basis: 'unknown', model: null });
     expect(ivHolds()[0]!.status).toBe('held');
@@ -180,7 +180,7 @@ describe('settling, topping up and giving back', () => {
   });
 
   it('a top-up is judged by the same caps, and the attempt\'s ledger row settles it with its parent', async () => {
-    const r = await reserve('iv-aiko-coding', 5, 'run-1', 'run');
+    const r = await reserve('iv-c3k8w2ma', 5, 'run-1', 'run');
     if (!r.ok) throw new Error('not held');
     const topUp = (n: number, usd: number) => reserveSpend({
       initiativeId: null, actorId: null, source: 'interviews', sourceId: topUpSourceId(r.sourceId, n),
@@ -195,17 +195,17 @@ describe('settling, topping up and giving back', () => {
   });
 
   it('an attempt that never started gives its money back', async () => {
-    const r = await reserve('iv-aiko-coding', 8);
+    const r = await reserve('iv-c3k8w2ma', 8);
     if (!r.ok) throw new Error('not held');
     await releaseInterviewSpend([r.holdId]);
-    expect((await reserve('iv-aiko-coding', 8)).ok).toBe(true);
+    expect((await reserve('iv-c3k8w2ma', 8)).ok).toBe(true);
   });
 });
 
 describe('the meeting assistant\'s ids, when an interview call\'s policy names this source', () => {
   it('a call is tied to its interview by the interview\'s call', async () => {
-    interviewsFixture.rows().find((i) => i.id === 'iv-aiko-coding')!.callId = 'call-aiko';
-    expect(await interviewOfSpend('ma:call-aiko:x1')).toEqual({ openingId: 'op-ios', interviewId: 'iv-aiko-coding' });
+    interviewsFixture.rows().find((i) => i.id === 'iv-c3k8w2ma')!.callId = 'call-aiko';
+    expect(await interviewOfSpend('ma:call-aiko:x1')).toEqual({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' });
     const held = await reserveSpend({
       initiativeId: interviewsPayer({ inviterId: 'u-wen' }).initiativeId, actorId: 'u-wen', source: interviewsPayer({ inviterId: 'u-wen' }).source,
       sourceId: 'ma:call-aiko', forecast: { costUsdP75: 9, costUsdP25: 2, confidence: 'prior' }, expiresInMs: 60_000,
@@ -236,7 +236,7 @@ describe('the refusal\'s sentences', () => {
 
 describe('the opening\'s figures', () => {
   it('cap, held, spent and left; left is null with no cap', async () => {
-    await reserve('iv-aiko-coding', 2);
+    await reserve('iv-c3k8w2ma', 2);
     expect(await openingMoney(opening('op-ios'))).toEqual({
       capUsd: 100, interviewCapUsd: 8, defaultInterviewCapUsd: DEFAULT_INTERVIEW_CAP_USD, effectiveInterviewCapUsd: 8,
       spentUsd: 0, heldUsd: 2, leftUsd: 98, unknownCount: 0,

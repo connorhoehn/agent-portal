@@ -112,9 +112,9 @@ describe('asking for a deletion', () => {
       left: [{ kind: 'recording', why: 'no-service', retry: false }],
     });
     expect(res.body.deletion.doneAt).not.toBeNull();
-    expect(JSON.stringify(res.body)).not.toMatch(/iv-mateo|Álvarez|mail\.example/);
+    expect(JSON.stringify(res.body)).not.toMatch(/iv-j6x2d9sb|iv-k1p5w8ra|Álvarez|mail\.example/);
     expect(await resumeRows().get('cand-mateo')).toBeNull();
-    expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-mateo-coding')).toBe(true);
+    expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-j6x2d9sb')).toBe(true);
     const again = await GRETA.ask('cand-mateo');
     expect(again.body).toEqual({ deletion: res.body.deletion, created: false });
   });
@@ -153,7 +153,7 @@ describe('reading the deletion log', () => {
   it('says on each row whether it is late: open past its date, or finished after it', async () => {
     const day = 86_400_000;
     const at = (ms: number) => new Date(ms).toISOString();
-    const base = { candidateId: 'cand-mateo', interviewIds: ['iv-mateo-coding'], reason: 'request' as const, requestedBy: 'u-greta', removed: [], left: [], attempts: 1 };
+    const base = { candidateId: 'cand-mateo', interviewIds: ['iv-j6x2d9sb'], reason: 'request' as const, requestedBy: 'u-greta', removed: [], left: [], attempts: 1 };
     await deletionStore().insert({ ...base, id: 'del-late', requestedAt: at(Date.now() - 40 * day), dueBy: at(Date.now() - 10 * day), doneAt: null,
       left: [{ kind: 'recording', why: 'failed', retry: true }] });
     await deletionStore().insert({ ...base, id: 'del-done-late', requestedAt: at(Date.now() - 50 * day), dueBy: at(Date.now() - 20 * day), doneAt: at(Date.now() - 15 * day) });

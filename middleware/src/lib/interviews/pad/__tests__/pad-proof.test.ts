@@ -32,11 +32,11 @@ import { mintGuestRealtimeToken } from '../../invite/realtime.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
 
 const SECRET = 'test-realtime-secret';
-// The seed: iv-mateo-design is Hugo's technical round, iv-aiko-coding Wen's,
-// iv-nadia-leadership Wen's behavioural round. The proof seats Wen on Hugo's
+// The seed: iv-k1p5w8ra is Hugo's technical round, iv-c3k8w2ma Wen's,
+// iv-n5z9f2cq Wen's behavioural round. The proof seats Wen on Hugo's
 // panel too, so two people share one pad (the candidate's seat is row I2.2).
 const HUGO = 'u-hugo'; const WEN = 'u-wen'; const GRETA = 'u-greta'; const AMARA = 'u-amara'; const THEO = 'u-theo';
-const SHARED = 'iv-mateo-design'; const WENS = 'iv-aiko-coding'; const BEHAVIOURAL = 'iv-nadia-leadership';
+const SHARED = 'iv-k1p5w8ra'; const WENS = 'iv-c3k8w2ma'; const BEHAVIOURAL = 'iv-n5z9f2cq';
 
 class PanelStore extends MemoryInterviewsStore {
   override async listInterviews(): Promise<Interview[]> {
@@ -271,8 +271,8 @@ describe('the candidate\'s seat on the pad (row I2.2)', () => {
 
 describe('the pad\'s names and its document hook', () => {
   it('names a pad by its interview, within the library\'s 50-character channel cap', () => {
-    expect(padChannel('iv-mateo-design')).toBe('doc:ivpad:iv-mateo-design');
-    expect(padInterviewId('doc:ivpad:iv-mateo-design')).toBe('iv-mateo-design');
+    expect(padChannel('iv-k1p5w8ra')).toBe('doc:ivpad:iv-k1p5w8ra');
+    expect(padInterviewId('doc:ivpad:iv-k1p5w8ra')).toBe('iv-k1p5w8ra');
     const uuid = '0f8fad5b-d9cb-469f-a165-70867728950e';
     expect(padChannel(uuid)!.length).toBeLessThanOrEqual(50);
     expect(padChannel('x'.repeat(41))).toBeNull();
@@ -281,7 +281,7 @@ describe('the pad\'s names and its document hook', () => {
   });
 
   it('allows only reading, editing and carets, and only on a pad', () => {
-    const pad = padChannel('iv-mateo-design')!;
+    const pad = padChannel('iv-k1p5w8ra')!;
     for (const action of ['read', 'update', 'awareness'] as const) expect(padDocumentAuthz('c', pad, null, action)).toBe(true);
     for (const action of ['save', 'restore', 'metadata', 'create', 'delete', 'seed'] as const) expect(padDocumentAuthz('c', pad, null, action)).toBe(false);
     expect(padDocumentAuthz('c', 'doc:notes', null, 'read')).toBe(false);

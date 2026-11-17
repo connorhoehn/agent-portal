@@ -141,9 +141,9 @@ describe('who reads the debrief', () => {
     expect(a.stage).toBe('debrief');
     expect(a.basedOn).toBe(a.history.length);
     expect(a.competencies.length).toBeGreaterThan(0);
-    const coding = a.rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-ingrid-coding');
+    const coding = a.rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-d7q4n9xe');
     expect(coding).toMatchObject({ state: 'scored', lead: { id: 'u-hugo', name: 'Hugo Marchetti' }, due: [],
-      recapPath: '/api/interviews/interviews/iv-ingrid-coding/recap', recordPath: '/interviews/rounds/iv-ingrid-coding/record' });
+      recapPath: '/api/interviews/interviews/iv-d7q4n9xe/recap', recordPath: '/interviews/rounds/iv-d7q4n9xe/record' });
     expect(coding.scorecards).toHaveLength(1);
     expect(coding.scorecards[0]).toMatchObject({ interviewer: { id: 'u-hugo' }, recommendation: 'strong-yes', version: 1, changedAfterRecap: false, correctionReason: null, earlierVersions: 0 });
     expect(coding.scorecards[0].ratings[0]).toMatchObject({ competencyId: 'problem-solving', rating: 4, note: expect.any(String), competency: expect.any(String) });
@@ -155,7 +155,7 @@ describe('who reads the debrief', () => {
     const jonah = (await debrief(AMARA, 'cand-jonah')).body.debrief.applications[0];
     expect(jonah.rounds[0]).toMatchObject({ state: 'ended', scorecards: [], due: [{ id: 'u-wen', name: 'Wen Zhao' }] });
     const mateo = (await debrief(GRETA, 'cand-mateo')).body.debrief.applications[0];
-    expect(mateo.rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-mateo-design')).toMatchObject({ state: 'ready', due: [], recapPath: null, recordPath: null });
+    expect(mateo.rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-k1p5w8ra')).toMatchObject({ state: 'ready', due: [], recapPath: null, recordPath: null });
   });
 });
 
@@ -219,12 +219,12 @@ describe('the decision', () => {
     expect((await decide(AMARA, 'app-mateo', { decision: 'reject', reason: REASON, basedOn: 4 })).body.debrief.applications[0].stage).toBe('rejected');
     // Mateo's design round was ready, not scored: nothing is marked reviewed but the scored coding round.
     expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-mateo').map((i) => [i.id, i.state]))
-      .toEqual([['iv-mateo-coding', 'reviewed'], ['iv-mateo-design', 'ready']]);
+      .toEqual([['iv-j6x2d9sb', 'reviewed'], ['iv-k1p5w8ra', 'ready']]);
   });
 
   it('with no scorecard in, nothing is decided; with one still due, the decision records how many were missing', async () => {
     expect((await decide(AMARA, 'app-jonah', { decision: 'reject', reason: REASON, basedOn: 3 })).status).toBe(409);
-    const jonah = interviewsFixture.rows().find((i) => i.id === 'iv-jonah-leadership')!;
+    const jonah = interviewsFixture.rows().find((i) => i.id === 'iv-g9r1y8lp')!;
     jonah.panelIds = ['u-hugo'];
     interviewScorecardsFixture.rows().push({ id: 'sc-jonah-wen', interviewId: jonah.id, interviewerId: 'u-wen', ratings: [], recommendation: 'yes', summary: 's',
       submittedAt: '2026-11-16T10:00:00.000Z', version: 1, changedAfterRecap: false, correctionReason: null });
@@ -244,28 +244,28 @@ describe('the bells after the call', () => {
   const clean = () => { for (const s of sent) for (const w of NEVER) expect([w, textOf(s).includes(w), (s.input.action?.href ?? '').includes(w)]).toEqual([w, false, false]); };
 
   it('scorecard due: each seat of the round that ended, opening My interviews', async () => {
-    interviewsFixture.rows().find((i) => i.id === 'iv-jonah-leadership')!.panelIds = ['u-hugo'];
-    expect(await interviewEnded('iv-jonah-leadership')).toEqual(['u-wen', 'u-hugo']);
+    interviewsFixture.rows().find((i) => i.id === 'iv-g9r1y8lp')!.panelIds = ['u-hugo'];
+    expect(await interviewEnded('iv-g9r1y8lp')).toEqual(['u-wen', 'u-hugo']);
     expect(sent[0]!.input).toMatchObject({ title: 'Your scorecard is due: Leadership for Engineering Manager',
       action: { label: 'Open My interviews', href: '/interviews/my-interviews' }, payload: { tenant: 'interviews', kind: 'interview-scorecard-due', audience: 'interviewer' } });
-    expect(await interviewEnded('iv-mateo-design')).toEqual([]);
+    expect(await interviewEnded('iv-k1p5w8ra')).toEqual([]);
     clean();
   });
 
   it('submitted: the recruiter on every first version, the hiring manager once every seat\'s is in; a correction rings the recruiter only', async () => {
-    expect(await scorecardSubmitted('iv-ingrid-coding', 'u-hugo', 1)).toEqual(['u-greta', 'u-amara']);
+    expect(await scorecardSubmitted('iv-d7q4n9xe', 'u-hugo', 1)).toEqual(['u-greta', 'u-amara']);
     expect(sent[0]!.input).toMatchObject({ title: expect.stringMatching(/^Hugo Marchetti submitted a scorecard: .+ for Senior Backend Engineer$/),
-      action: { label: 'Open the debrief', href: '/interviews/rounds/iv-ingrid-coding/debrief' }, payload: { audience: 'recruiter', kind: 'interview-scorecard-submitted' } });
+      action: { label: 'Open the debrief', href: '/interviews/rounds/iv-d7q4n9xe/debrief' }, payload: { audience: 'recruiter', kind: 'interview-scorecard-submitted' } });
     expect(sent[1]!.input).toMatchObject({ title: expect.stringMatching(/^Every scorecard is in: /), payload: { audience: 'hiring-manager' } });
     sent = [];
-    expect(await scorecardSubmitted('iv-ingrid-coding', 'u-hugo', 2)).toEqual(['u-greta']);
+    expect(await scorecardSubmitted('iv-d7q4n9xe', 'u-hugo', 2)).toEqual(['u-greta']);
     expect(sent[0]!.input.title).toMatch(/^Hugo Marchetti corrected their scorecard: /);
     sent = [];
     // A panel member's first version while another seat is still due: the recruiter only.
-    interviewsFixture.rows().find((i) => i.id === 'iv-ingrid-coding')!.panelIds = ['u-wen'];
-    expect(await scorecardSubmitted('iv-ingrid-coding', 'u-hugo', 1)).toEqual(['u-greta']);
+    interviewsFixture.rows().find((i) => i.id === 'iv-d7q4n9xe')!.panelIds = ['u-wen'];
+    expect(await scorecardSubmitted('iv-d7q4n9xe', 'u-hugo', 1)).toEqual(['u-greta']);
     // Someone who has written nothing on the round rings nobody.
-    expect(await scorecardSubmitted('iv-ingrid-coding', 'u-other-hm', 1)).toEqual([]);
+    expect(await scorecardSubmitted('iv-d7q4n9xe', 'u-other-hm', 1)).toEqual([]);
     clean();
   });
 
@@ -273,14 +273,14 @@ describe('the bells after the call', () => {
     expect(await stageDecided('app-ingrid', 'u-amara')).toEqual(['u-greta']);
     expect(sent[0]!.input).toMatchObject({ title: 'A decision was recorded on Senior Backend Engineer',
       body: 'Recorded by Amara Okafor. Open the debrief to read it and arrange what follows.',
-      action: { href: expect.stringMatching(/^\/interviews\/rounds\/iv-ingrid-(coding|together)\/debrief$/) }, payload: { audience: 'recruiter', kind: 'interview-decided' } });
+      action: { href: expect.stringMatching(/^\/interviews\/rounds\/iv-(d7q4n9xe|f2b6t5zh)\/debrief$/) }, payload: { audience: 'recruiter', kind: 'interview-decided' } });
     expect(await stageDecided('app-nobody', 'u-amara')).toEqual([]);
     clean();
   });
 
   it('never throw, with no sink or an unknown round', async () => {
     setNotificationSink(null);
-    expect(await interviewEnded('iv-jonah-leadership')).toEqual([]);
+    expect(await interviewEnded('iv-g9r1y8lp')).toEqual([]);
     expect(await scorecardSubmitted('iv-nope', 'u-hugo', 1)).toEqual([]);
   });
 });

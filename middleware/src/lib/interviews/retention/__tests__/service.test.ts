@@ -155,7 +155,7 @@ describe('the sweep', () => {
 
 // ── a candidate's deletion request, over the mock world ─────────────────────
 
-const LOBBY = 'interviews:interview:iv-mateo-coding';
+const LOBBY = 'interviews:interview:iv-j6x2d9sb';
 const NOW = Date.now();
 const call = (over: Partial<AssistantRecord> = {}): AssistantRecord => ({
   callId: 'call-mateo', tenant: 'interviews', lobby: LOBBY, initiativeId: null, state: 'listening', invitedBy: 'u-hugo', invitedAt: NOW - 3 * DAY_MS, pausedBy: null,
@@ -197,14 +197,14 @@ describe('a candidate\'s deletion request', () => {
     const rec = recordingFetch((lobby) => (lobby === LOBBY ? 1 : 0));
     registerEraser(recordingEraser({ env: ENV, fetch: rec.f }));
     await heldCall(assistant);
-    await inviteStore().issueInvite({ interviewId: 'iv-mateo-design', tokenHash: 'b'.repeat(64), issuedBy: 'u-greta', issuedAt: new Date(NOW - DAY_MS).toISOString(), expiresAt: new Date(NOW + 9 * DAY_MS).toISOString() });
+    await inviteStore().issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'b'.repeat(64), issuedBy: 'u-greta', issuedAt: new Date(NOW - DAY_MS).toISOString(), expiresAt: new Date(NOW + 9 * DAY_MS).toISOString() });
     const resume = (await resumeRows().get('cand-mateo'))!;
     expect(await resumeBytes().get(resume.storageKey)).not.toBeNull();
 
     const { row, created } = await deleteCandidateMedia('cand-mateo', 'u-greta', deps);
     expect(created).toBe(true);
     expect(row).toMatchObject({ reason: 'request', requestedBy: 'u-greta', left: [], attempts: 1 });
-    expect(row.interviewIds.sort()).toEqual(['iv-mateo-coding', 'iv-mateo-design']);
+    expect(row.interviewIds.sort()).toEqual(['iv-j6x2d9sb', 'iv-k1p5w8ra']);
     expect(row.removed).toEqual([
       { kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'invite', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 },
       { kind: 'stage-reasons', count: 1 },
@@ -214,8 +214,8 @@ describe('a candidate\'s deletion request', () => {
 
     // The media is gone.
     expect(rec.sent.map((s) => [s.url, s.lobby, s.verified]).sort()).toEqual([
-      ['http://platform.test/internal/recordings/erase', 'interviews:interview:iv-mateo-coding', true],
-      ['http://platform.test/internal/recordings/erase', 'interviews:interview:iv-mateo-design', true],
+      ['http://platform.test/internal/recordings/erase', 'interviews:interview:iv-j6x2d9sb', true],
+      ['http://platform.test/internal/recordings/erase', 'interviews:interview:iv-k1p5w8ra', true],
     ]);
     expect(await assistant.lines('call-mateo', 0, 10)).toEqual([]);
     // Everything the meeting assistant's own age sweep would remove: the minutes (and their tombstone), turns, actions and the record.
@@ -224,11 +224,11 @@ describe('a candidate\'s deletion request', () => {
     expect(await assistant.listTurns('call-mateo')).toEqual([]);
     expect(await resumeRows().get('cand-mateo')).toBeNull();
     expect(await resumeBytes().get(resume.storageKey)).toBeNull();
-    expect((await inviteStore().latestInvite('iv-mateo-design'))?.revokedBy).toBe('u-greta');
+    expect((await inviteStore().latestInvite('iv-k1p5w8ra'))?.revokedBy).toBe('u-greta');
 
     // The records stay, without the contact details; the log names none of them.
-    expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-mateo-coding')).toBe(true);
-    expect(interviewScorecardsFixture.rows().some((s) => s.interviewId === 'iv-mateo-coding')).toBe(true);
+    expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-j6x2d9sb')).toBe(true);
+    expect(interviewScorecardsFixture.rows().some((s) => s.interviewId === 'iv-j6x2d9sb')).toBe(true);
     const cand = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!;
     expect(cand).toMatchObject({ name: 'Name removed', email: '', headline: '', location: '', notes: '', source: 'Careers page' });
     const logged = JSON.stringify(await deletionsOf('cand-mateo'));

@@ -88,19 +88,19 @@ const readRow = async (as: ReturnType<typeof who>, id: string) => (await as.get(
 
 describe('PUT /interviews/:id/questions', () => {
   it('the lead chooses in order; the record shows the plan and the state follows the time and the plan', async () => {
-    const before = await readRow(HUGO, 'iv-mateo-design');
+    const before = await readRow(HUGO, 'iv-k1p5w8ra');
     expect(before).toMatchObject({ canPrepare: true, state: 'ready', missing: null });
     expect(before.bank.length).toBe(4);
-    const r = await HUGO.put('/interviews/iv-mateo-design/questions', { revision: before.revision, questionIds: ['q-be-retry', 'q-be-ratelimit'] });
+    const r = await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: before.revision, questionIds: ['q-be-retry', 'q-be-ratelimit'] });
     expect(r.status).toBe(200);
     expect(r.body.interview).toMatchObject({ state: 'ready', missing: null });
     expect(r.body.interview.questionsChosen.map((q: { id: string }) => q.id)).toEqual(['q-be-retry', 'q-be-ratelimit']);
-    const cleared = await HUGO.put('/interviews/iv-mateo-design/questions', { revision: r.body.interview.revision, questionIds: [] });
+    const cleared = await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: r.body.interview.revision, questionIds: [] });
     expect(cleared.body.interview).toMatchObject({ state: 'accepted' });
   });
 
   it('a round with no time stays accepted after the plan is chosen, and the record says what it waits for', async () => {
-    const id = 'iv-mateo-design';
+    const id = 'iv-k1p5w8ra';
     const row = await readRow(HUGO, id);
     const at = await GRETA.put(`/interviews/${id}/time`, { revision: row.revision, scheduledAt: null });
     expect(at.status).toBe(200);
@@ -109,40 +109,40 @@ describe('PUT /interviews/:id/questions', () => {
   });
 
   it('a recruiter clearing the time later does not leave a ready round that is not ready', async () => {
-    const row = await readRow(HUGO, 'iv-mateo-design');
+    const row = await readRow(HUGO, 'iv-k1p5w8ra');
     expect(row.state).toBe('ready');
-    await GRETA.put('/interviews/iv-mateo-design/time', { revision: row.revision, scheduledAt: null });
-    expect((await readRow(HUGO, 'iv-mateo-design')).state).toBe('accepted');
+    await GRETA.put('/interviews/iv-k1p5w8ra/time', { revision: row.revision, scheduledAt: null });
+    expect((await readRow(HUGO, 'iv-k1p5w8ra')).state).toBe('accepted');
   });
 
   it('refuses a panel member (403), the recruiter (403) and an interviewer with no seat (404)', async () => {
     const body = { revision: 1, questionIds: ['q-be-retry'] };
-    expect((await WEN.put('/interviews/iv-nadia-leadership/questions', { ...body, questionIds: ['q-em-struggling'] })).status).toBe(200);
-    const panel = await HUGO.put('/interviews/iv-nadia-leadership/questions', { ...body, revision: 2, questionIds: ['q-em-slip'] });
+    expect((await WEN.put('/interviews/iv-n5z9f2cq/questions', { ...body, questionIds: ['q-em-struggling'] })).status).toBe(200);
+    const panel = await HUGO.put('/interviews/iv-n5z9f2cq/questions', { ...body, revision: 2, questionIds: ['q-em-slip'] });
     expect(panel.status).toBe(403);
-    expect((await GRETA.put('/interviews/iv-mateo-design/questions', body)).status).toBe(403);
-    expect((await OLA.put('/interviews/iv-mateo-design/questions', body)).status).toBe(404);
+    expect((await GRETA.put('/interviews/iv-k1p5w8ra/questions', body)).status).toBe(403);
+    expect((await OLA.put('/interviews/iv-k1p5w8ra/questions', body)).status).toBe(404);
   });
 
   it('answers 400 in words for a question from the wrong kind of round, a repeat and a round not yet accepted; 409 when stale', async () => {
-    const row = await readRow(HUGO, 'iv-mateo-design');
-    const wrong = await HUGO.put('/interviews/iv-mateo-design/questions', { revision: row.revision, questionIds: ['q-be-incident'] });
+    const row = await readRow(HUGO, 'iv-k1p5w8ra');
+    const wrong = await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: row.revision, questionIds: ['q-be-incident'] });
     expect(wrong.status).toBe(400);
     expect(wrong.body.error).toMatch(/not saved/);
     expect(wrong.body.fields[0].message).toMatch(/technical/);
-    expect((await HUGO.put('/interviews/iv-mateo-design/questions', { revision: row.revision, questionIds: ['q-be-retry', 'q-be-retry'] })).status).toBe(400);
-    expect((await HUGO.put('/interviews/iv-kwame-coding/questions', { revision: 1, questionIds: ['q-be-retry'] })).status).toBe(400);
-    const stale = await HUGO.put('/interviews/iv-mateo-design/questions', { revision: row.revision + 5, questionIds: ['q-be-retry'] });
+    expect((await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: row.revision, questionIds: ['q-be-retry', 'q-be-retry'] })).status).toBe(400);
+    expect((await HUGO.put('/interviews/iv-h4m7c3vu/questions', { revision: 1, questionIds: ['q-be-retry'] })).status).toBe(400);
+    const stale = await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: row.revision + 5, questionIds: ['q-be-retry'] });
     expect(stale.status).toBe(409);
-    expect(stale.body.interview.id).toBe('iv-mateo-design');
+    expect(stale.body.interview.id).toBe('iv-k1p5w8ra');
   });
 
   it('another tenant\'s session is refused at the mount', async () => {
     const other = who('u-priya', 'access', 'access-admin');
-    expect([403, 404]).toContain((await other.put('/interviews/iv-mateo-design/questions', { revision: 1, questionIds: [] })).status);
+    expect([403, 404]).toContain((await other.put('/interviews/iv-k1p5w8ra/questions', { revision: 1, questionIds: [] })).status);
   });
 
   it('the plan names nothing of the opening\'s money', async () => {
-    expect(JSON.stringify(await readRow(HUGO, 'iv-mateo-design'))).not.toMatch(/budget|spent|capUsd/i);
+    expect(JSON.stringify(await readRow(HUGO, 'iv-k1p5w8ra'))).not.toMatch(/budget|spent|capUsd/i);
   });
 });

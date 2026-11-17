@@ -51,17 +51,17 @@ describe('partState', () => {
 describe('recordingPart', () => {
   const yes = { recording: true };
   it('the mock stand-in: available with its duration, nothing playable', () => {
-    const r = recordingPart('iv-mateo-coding', yes, new Set());
+    const r = recordingPart('iv-j6x2d9sb', yes, new Set());
     expect(r).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
   });
   it('declined when the candidate said no, whatever else is there', () => {
-    expect(recordingPart('iv-mateo-coding', { recording: false }, new Set(['recording'])).state).toBe('declined');
+    expect(recordingPart('iv-j6x2d9sb', { recording: false }, new Set(['recording'])).state).toBe('declined');
   });
   it('deleted when the log removed it', () => {
-    expect(recordingPart('iv-mateo-coding', yes, new Set(['recording']))).toEqual({ state: 'deleted', playbackUrl: null, durationSeconds: null, standIn: false });
+    expect(recordingPart('iv-j6x2d9sb', yes, new Set(['recording']))).toEqual({ state: 'deleted', playbackUrl: null, durationSeconds: null, standIn: false });
   });
   it('none when the mock world has no stand-in for the interview', () => {
-    expect(recordingPart('iv-jonah-leadership', yes, new Set()).state).toBe('none');
+    expect(recordingPart('iv-g9r1y8lp', yes, new Set()).state).toBe('none');
   });
   it('outside the mock world: available on a yes (the page asks the media service), none without answers, never a URL', () => {
     expect(recordingPart('iv-x', yes, new Set(), false)).toEqual({ state: 'available', playbackUrl: null, durationSeconds: null, standIn: false });
@@ -91,7 +91,7 @@ describe('recordMarkers', () => {
 describe('recordTranscript', () => {
   const NOW = Date.parse('2026-11-10T14:00:00.000Z');
   const call = (over: Partial<AssistantRecord> = {}): AssistantRecord => ({
-    callId: 'call-1', tenant: 'interviews', lobby: 'interviews:interview:iv-mateo-coding', initiativeId: null, state: 'listening', invitedBy: 'u-hugo',
+    callId: 'call-1', tenant: 'interviews', lobby: 'interviews:interview:iv-j6x2d9sb', initiativeId: null, state: 'listening', invitedBy: 'u-hugo',
     invitedAt: NOW, pausedBy: null, leftAt: null, leftBy: null, acked: [], attendees: ['u-hugo'], presentAtInvite: [], requests: 0, linesStored: 0, nextSeq: 1,
     pendingRequests: [], ...over,
   });
@@ -106,7 +106,7 @@ describe('recordTranscript', () => {
     await store.appendLine(line(null, 'crosstalk', 12, 'c2'));
     await store.appendLine(line('guest:inv-1', 'I would use a token bucket.', 20, 'c3'));
     await store.transition('call-1', { from: ['listening'], to: 'left', by: 'u-hugo', at: NOW + 3_600_000 });
-    const t = await recordTranscript({ id: 'iv-mateo-coding', callId: null });
+    const t = await recordTranscript({ id: 'iv-j6x2d9sb', callId: null });
     expect(t).toEqual({
       callId: 'call-1', startedAt: '2026-11-10T14:00:00.000Z',
       lines: [
@@ -118,16 +118,16 @@ describe('recordTranscript', () => {
   });
 
   it('the seeded stand-in in the mock world when no call is stored', async () => {
-    const t = await recordTranscript({ id: 'iv-ingrid-together', callId: null });
-    expect(t?.lines.length).toBe(interviewRecordLinesFixture.rows().filter((l) => l.interviewId === 'iv-ingrid-together').length);
-    expect(t?.startedAt).toBe(interviewRecordingsFixture.rows().find((r) => r.interviewId === 'iv-ingrid-together')!.startedAt);
+    const t = await recordTranscript({ id: 'iv-f2b6t5zh', callId: null });
+    expect(t?.lines.length).toBe(interviewRecordLinesFixture.rows().filter((l) => l.interviewId === 'iv-f2b6t5zh').length);
+    expect(t?.startedAt).toBe(interviewRecordingsFixture.rows().find((r) => r.interviewId === 'iv-f2b6t5zh')!.startedAt);
     expect(new Set(t!.lines.map((l) => l.speaker))).toEqual(new Set(['Wen Zhao', 'Ingrid Solberg']));
     expect(t!.lines.some((l) => l.speaker.startsWith('guest:'))).toBe(false);
   });
 
   it('none: no call and no stand-in, or outside the mock world', async () => {
-    expect(await recordTranscript({ id: 'iv-jonah-leadership', callId: null })).toBeNull();
+    expect(await recordTranscript({ id: 'iv-g9r1y8lp', callId: null })).toBeNull();
     mockConfig.mock.aurora = false;
-    expect(await recordTranscript({ id: 'iv-mateo-coding', callId: null })).toBeNull();
+    expect(await recordTranscript({ id: 'iv-j6x2d9sb', callId: null })).toBeNull();
   });
 });

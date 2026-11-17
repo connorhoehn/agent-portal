@@ -117,14 +117,14 @@ describe('scored', () => {
 describe('others hidden until yours is in (scope.ts)', () => {
   // Nadia's leadership round: Wen leads, Hugo on the panel; ended here. Hugo also leads Nadia's design round.
   function world(cards: Scorecard[], designState: Interview['state'] = 'cancelled'): InterviewsWorld {
-    const interviews = interviewsFixture.rows().map((i) => (i.id === 'iv-nadia-leadership' ? { ...i, state: 'ended' as const }
-      : i.id === 'iv-nadia-design' ? { ...i, state: designState } : i));
+    const interviews = interviewsFixture.rows().map((i) => (i.id === 'iv-n5z9f2cq' ? { ...i, state: 'ended' as const }
+      : i.id === 'iv-m8t3h6ng' ? { ...i, state: designState } : i));
     return { openings: interviewOpeningsFixture.rows(), candidates: [], applications: [{ id: 'app-nadia', candidateId: 'cand-nadia', openingId: 'op-em', stage: 'interviewing', appliedAt: 'T', history: [] }],
       interviews, scorecards: [...interviewScorecardsFixture.rows(), ...cards] };
   }
-  const wens = card({ id: 'sc-w', interviewId: 'iv-nadia-leadership', interviewerId: 'u-wen' });
-  const hugos = card({ id: 'sc-h', interviewId: 'iv-nadia-leadership', interviewerId: 'u-hugo' });
-  const nadiaCards = (w: InterviewsWorld, id: string, role: string) => visibleWorld(w, { id, role }).scorecards.filter((s) => s.interviewId.startsWith('iv-nadia')).map((s) => s.id);
+  const wens = card({ id: 'sc-w', interviewId: 'iv-n5z9f2cq', interviewerId: 'u-wen' });
+  const hugos = card({ id: 'sc-h', interviewId: 'iv-n5z9f2cq', interviewerId: 'u-hugo' });
+  const nadiaCards = (w: InterviewsWorld, id: string, role: string) => visibleWorld(w, { id, role }).scorecards.filter((s) => s.interviewId.startsWith('iv-m8t3h6ng') || s.interviewId.startsWith('iv-n5z9f2cq')).map((s) => s.id);
 
   it('a panel member reads none of the others\' before their own is in, and all of them after', () => {
     expect(othersRevealed(world([wens]), 'u-hugo', 'app-nadia')).toBe(false);

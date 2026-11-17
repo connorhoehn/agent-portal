@@ -80,7 +80,7 @@ app.use('/api/interview-invite', interviewInviteRouter);
 app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
 app.use(errorHandler);
 
-const IV = 'iv-mateo-design'; // Hugo leads it; Wen has no seat on it; it is on Amara's opening.
+const IV = 'iv-k1p5w8ra'; // Hugo leads it; Wen has no seat on it; it is on Amara's opening.
 const V = CONSENT_NOTICE.version;
 const staff = (user: string, id = IV) => request(app).get(`/api/interviews/interviews/${id}/consents`).set('x-user', user);
 
@@ -217,9 +217,9 @@ describe('the panel\'s read', () => {
       expect([user, res.status, res.body]).toEqual([user, 200, { answered: true, off: ['transcription', 'milo'] }]);
     }
     // A panel member (Hugo sits on Wen's leadership round).
-    expect((await staff('u-hugo', 'iv-nadia-leadership')).body).toEqual({ answered: false, off: ['recording', 'transcription', 'milo'] });
-    expect((await staff('u-wen', 'iv-mateo-coding')).status).toBe(404);
-    expect((await staff('u-hugo', 'iv-mateo-coding')).body).toEqual({ answered: true, off: [] });
+    expect((await staff('u-hugo', 'iv-n5z9f2cq')).body).toEqual({ answered: false, off: ['recording', 'transcription', 'milo'] });
+    expect((await staff('u-wen', 'iv-j6x2d9sb')).status).toBe(404);
+    expect((await staff('u-hugo', 'iv-j6x2d9sb')).body).toEqual({ answered: true, off: [] });
   });
 
   it('answers not-found to the hiring manager, the admin, an interviewer with no seat and another tenant', async () => {
@@ -233,8 +233,8 @@ describe('the panel\'s read', () => {
   });
 
   it('keeps the answers the call started with after a notice change', async () => {
-    row('iv-mateo-coding')!.noticeVersion = 'older';
-    expect((await staff('u-greta', 'iv-mateo-coding')).body).toEqual({ answered: true, off: [] });
+    row('iv-j6x2d9sb')!.noticeVersion = 'older';
+    expect((await staff('u-greta', 'iv-j6x2d9sb')).body).toEqual({ answered: true, off: [] });
   });
 });
 
@@ -282,7 +282,7 @@ describe('a part the deployment requires (row I6.4)', () => {
     await answer(await guest(), { ...ALL_YES, recording: false });
     const items = (await effects()).body.items as Array<{ interviewId: string; blocked: boolean; off: string[] }>;
     expect(items.find((i) => i.interviewId === IV)).toEqual({ interviewId: IV, answered: true, off: ['recording'], blocked: true });
-    expect(items.find((i) => i.interviewId === 'iv-mateo-coding')).toMatchObject({ blocked: false });
+    expect(items.find((i) => i.interviewId === 'iv-j6x2d9sb')).toMatchObject({ blocked: false });
     expect((await staff('u-hugo')).body).toEqual({ answered: true, off: ['recording'] });
   });
 

@@ -91,8 +91,8 @@ const OPERATOR = who('u-operator');
 const PRIYA = who('u-priya', 'access');
 
 // Wen leads Nadia's leadership round with Hugo on the panel (made live here); Hugo leads Nadia's design round.
-const IV = 'iv-nadia-leadership';
-const OTHER_ROUND = 'iv-nadia-design';
+const IV = 'iv-n5z9f2cq';
+const OTHER_ROUND = 'iv-m8t3h6ng';
 const GIVEN = '2026-11-16T09:00:00.000Z';
 const postApproved = jest.fn(async () => true);
 
