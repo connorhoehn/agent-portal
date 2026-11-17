@@ -276,16 +276,18 @@ function ScorecardReadout({ card, competencies, round, testId }: { card: Scoreca
   const when = new Date(card.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   return (
     <DetailSection variant="heading" title={round ? `${card.interviewer.name}, ${round}` : card.interviewer.name} data-testid={testId}
-      hint={<MetaLine size="sm" items={[`Version ${card.version}`, `Submitted ${when}`, ...(card.correctionReason ? [`Corrected: ${card.correctionReason}`] : [])]} />}
-      actions={<Chip tone={recommendationTone(card.recommendation)} size="xs" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>}>
+      hint={<MetaLine size="sm" items={[`Version ${card.version}`, `Submitted ${when}`, ...(card.correctionReason ? [`Corrected: ${card.correctionReason}`] : [])]} />}>
       <Stack gap="md">
-        <WorkflowStepper aria-label="The steps of a scorecard" data-testid="interviews-scorecard-steps"
-          steps={SCORECARD_STEPS.map((id, i) => ({ step: i + 1, label: SCORECARD_STEP_LABELS[id], done: true, active: false }))} />
+        <Inline gap="lg" align="center" wrap>
+          <WorkflowStepper aria-label="The steps of a scorecard" data-testid="interviews-scorecard-steps"
+            steps={SCORECARD_STEPS.map((id, i) => ({ step: i + 1, label: SCORECARD_STEP_LABELS[id], done: true, active: false }))} />
+          <Chip tone={recommendationTone(card.recommendation)} size="xs" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>
+        </Inline>
         {card.ratings.map((r) => {
           const c = kit.get(r.competencyId);
           return (
             <Stack key={r.competencyId} gap="xs">
-              <Inline gap="md" align="start" wrap={false}>
+              <Inline gap="md" align="end" wrap={false}>
                 <RatingInput label={r.competency} readOnly value={r.rating} onChange={() => undefined}
                   options={([1, 2, 3, 4] as const).map((n) => ({ value: n, label: `${n} of 4` }))} />
                 {c && <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{c.anchors[r.rating]}</T>}

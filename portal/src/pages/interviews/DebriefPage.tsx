@@ -147,15 +147,18 @@ function DebriefWorkspace({ view, trail, onChanged }: { view: DebriefView; trail
   );
 }
 
+/** The table's cells hold prose: they wrap and take the height they need, never an ellipsis (decision 15). */
+const CELL_WRAPS = 'h-auto whitespace-normal py-2 align-top';
+
 function ApplicationRounds({ app, several }: { app: DebriefApplication; several: boolean }) {
   const blocked = app.decide && !app.decide.options.some((o) => o.allowed)
     ? app.decide.options.find((o) => o.decision === 'reject')?.refusal ?? null : null;
   const { columns, rows } = applicationSideBySide(app.rounds, app.competencies);
   // Every column is one interviewer's scorecard; the round's name leads each header and a rule starts each round's group.
   const tableColumns: DataTableColumn<SideRow>[] = [
-    { key: 'label', header: 'Competency', width: '176px', render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
+    { key: 'label', header: 'Competency', width: '176px', className: CELL_WRAPS, render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
     ...columns.map((c): DataTableColumn<SideRow> => ({
-      key: c.id, width: '300px', className: c.firstInRound ? 'border-l border-border' : undefined,
+      key: c.id, width: '300px', className: c.firstInRound ? `${CELL_WRAPS} border-l border-border` : CELL_WRAPS,
       header: <Stack gap="none"><T size="xs" tone="tertiary">{c.roundName}</T><T size="sm" weight="medium">{c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name}</T></Stack>,
       render: (r) => <SideCellView cell={r.cells[c.id] ?? { kind: 'none' }} />,
     })),
