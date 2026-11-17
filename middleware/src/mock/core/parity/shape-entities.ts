@@ -506,6 +506,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (i: { id: string }) => i.id,
   },
   {
+    name: 'interview_invites',
+    fixture: 'interviews.invites',
+    describes: 'The candidates\' links: none in the seed (a link is made on purpose); only each token\'s hash is kept.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_invites',
+    mockRows: async () => (await import('../../interviews-invites.js')).interviewInvitesFixture.rows('default'),
+    mockId: (i: { id: string }) => i.id,
+  },
+  {
     name: 'interview_scorecards',
     fixture: 'interviews.scorecards',
     describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary.',

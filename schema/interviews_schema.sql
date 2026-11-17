@@ -136,3 +136,29 @@ CREATE TABLE IF NOT EXISTS interview_scorecards (
   UNIQUE (interview_id, interviewer_id, version)
 );
 CREATE INDEX IF NOT EXISTS interview_scorecards_interview_idx ON interview_scorecards (interview_id);
+
+-- ── invites (row I2.1) ──────────────────────────────────────────────────────
+-- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,
+-- so a read of this table hands nobody a working link. One live invite per
+-- interview: issuing revokes the one before in the same statement, and the
+-- partial unique index holds the table to it. `expires_at` is the ceiling (30
+-- days after issue); the live expiry also follows the interview's time
+-- (lib/interviews/invite/rules.ts). `session_hash` names the one live guest
+-- session: a new opening of the link replaces it. This table, not
+-- interviews.invite_token_hash, is the truth about invites.
+CREATE TABLE IF NOT EXISTS interview_invites (
+  id               TEXT PRIMARY KEY,
+  interview_id     TEXT NOT NULL REFERENCES interviews(id),
+  token_hash       TEXT NOT NULL UNIQUE CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  issued_by        TEXT NOT NULL REFERENCES app_users(id),
+  issued_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at       TIMESTAMPTZ NOT NULL,
+  revoked_at       TIMESTAMPTZ,
+  revoked_by       TEXT REFERENCES app_users(id),
+  first_opened_at  TIMESTAMPTZ,
+  last_opened_at   TIMESTAMPTZ,
+  open_count       INTEGER NOT NULL DEFAULT 0 CHECK (open_count >= 0),
+  session_hash     TEXT
+);
+CREATE INDEX IF NOT EXISTS interview_invites_interview_idx ON interview_invites (interview_id, issued_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS interview_invites_one_live_idx ON interview_invites (interview_id) WHERE revoked_at IS NULL;
