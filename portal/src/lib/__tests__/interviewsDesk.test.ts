@@ -35,6 +35,9 @@ test('a live round is in Upcoming and first there, and the first tab shown is th
   assert.equal(firstDeskTab(deskTabCounts(ROWS)), 'to-accept');
   assert.equal(firstDeskTab(deskTabCounts([ROWS[2]!])), 'upcoming');
   assert.equal(firstDeskTab(deskTabCounts([])), 'upcoming');
+  // While a round is live the desk opens on Upcoming, where it is first, even with something to accept.
+  assert.equal(firstDeskTab(deskTabCounts(ROWS), true), 'upcoming');
+  assert.equal(firstDeskTab(deskTabCounts([ROWS[0]!]), true), 'to-accept');
 });
 
 test('Upcoming lists the rounds that have not finished, live first then soonest, with finished ones behind their own choice and counted', () => {

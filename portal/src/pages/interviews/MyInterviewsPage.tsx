@@ -56,7 +56,7 @@ const COLUMNS: DataTableColumn<InterviewRow>[] = [
     render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-desk-candidate" to={candidateHref(r.candidate.id)} />,
   },
   { key: 'round', header: 'Round', render: (r) => <T size="sm" title={`${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{r.round.name}</T> },
-  { key: 'opening', header: 'Opening', render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },
+  { key: 'opening', header: 'Opening', render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`}>{r.opening.title}</T> },
   {
     key: 'seat', header: 'With', render: (r) => (r.seat === 'panel'
       ? <PersonCell id={r.lead.id} name={r.lead.name} title={`${r.lead.name} leads; you are on the panel`} />
@@ -208,7 +208,7 @@ function MyInterviewsWorkspace() {
     const done = answered.get(r.id);
     if (done) return <T size="xs" tone="secondary" data-testid="interviews-desk-answered">{done}</T>;
     if (r.myAnswer !== 'to-answer') {
-      const prepare = r.bucket === 'to-prepare' || r.bucket === 'upcoming';
+      const prepare = !isLive(r) && (r.bucket === 'to-prepare' || r.bucket === 'upcoming');
       const card = hasScorecard(r);
       if (!prepare && !canOpenRoom(r) && !card) return null;
       return (
@@ -237,7 +237,7 @@ function MyInterviewsWorkspace() {
   const [picked, setPicked] = useState<DeskTab | null>(null);
   const all = data?.items ?? [];
   const counts = deskTabCounts(all);
-  const tab = picked ?? firstDeskTab(counts);
+  const tab = picked ?? firstDeskTab(counts, all.some(isLive));
   const inTab = deskTabRows(all, tab);
   const rows = inTab.filter((r) => matches(query, r.candidate.name, r.candidate.headline, r.round.name, r.opening.title, r.opening.team, r.lead.name, deskLabel(r)));
 
@@ -263,7 +263,7 @@ function MyInterviewsWorkspace() {
           {error ? (
             <UnavailableNotice error={error} what="your interviews" source="Interviews are read from the rounds assigned to you" onRetry={refresh} />
           ) : (
-            <DataTable narrow
+            <DataTable narrow rowHeight="content"
               data-testid="interviews-my-interviews-table"
               aria-label="My interviews"
               data={rows}

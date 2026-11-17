@@ -31,8 +31,9 @@ export function deskTabCounts(rows: readonly InterviewRow[]): Record<DeskTab, nu
   return counts;
 }
 
-/** The tab shown first: the first with rows, else Upcoming. */
-export function firstDeskTab(counts: Record<DeskTab, number>): DeskTab {
+/** The tab shown first: Upcoming while a round is live (it is first there), else the first with rows, else Upcoming. */
+export function firstDeskTab(counts: Record<DeskTab, number>, hasLive = false): DeskTab {
+  if (hasLive && counts.upcoming > 0) return 'upcoming';
   return DESK_TABS.find((t) => counts[t.value] > 0)?.value ?? 'upcoming';
 }
 

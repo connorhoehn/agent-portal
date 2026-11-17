@@ -57,3 +57,7 @@ test('a 404 table refuses a line with no route, no refused principal or an unkno
   assert.throws(() => parseRefusalTable('GET /api/x |'), /no refused principal/);
   assert.throws(() => parseRefusalTable('GET /api/x/{interviews.nobody} | recruiter'), /no seeded id/);
 });
+
+test('the round that is live now is one id in the fixture and in the walk\'s table', () => {
+  assert.ok(fixture.includes(`export const LIVE_INTERVIEW_ID = '${SEED.interviews.kwameLive}'`), 'LIVE_INTERVIEW_ID is not SEED.interviews.kwameLive');
+});

@@ -36,7 +36,8 @@ export const SEED = Object.freeze({
     jonahLeadership: 'iv-g9r1y8lp',  // ended yesterday, behavioural, lead Wen: Wen's scorecard is due
     mateoDesign: 'iv-k1p5w8ra',      // ready, technical, lead Hugo, tomorrow: the default interview for a candidate's visit
     aikoCoding: 'iv-c3k8w2ma',       // ready, technical, lead Wen, in 2 days
-    kwameCoding: 'iv-h4m7c3vu',      // assigned (nobody has answered), lead Hugo, in 3 days
+    kwameCoding: 'iv-h4m7c3vu',      // (the key is old) Kwame's system design round: assigned (nobody has answered), lead Hugo, in 3 days
+    kwameLive: 'iv-s4e8u2zk',        // Kwame's coding round, live since twelve minutes ago: lead Hugo, Wen on the panel, no call yet
     raviTogether: 'iv-r6d1k9wt',     // assigned, behavioural, lead Wen, in 4 days
     nadiaDesign: 'iv-m8t3h6ng',      // accepted, technical, lead Hugo, in 5 days
     nadiaLeadership: 'iv-n5z9f2cq',  // accepted, behavioural, lead Wen with Hugo on the panel, in 6 days

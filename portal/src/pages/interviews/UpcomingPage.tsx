@@ -48,7 +48,7 @@ function InviteCell({ row, status, link }: { row: InterviewRow; status: InviteSt
     <Stack gap="none">
       <Inline gap="xs" align="center" wrap={false}>
         {status && status.state !== 'none'
-          ? <T size="xs" tone="secondary" className="block max-w-[14rem] truncate" title={inviteLine(status, sentence)} data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>
+          ? <T size="xs" tone="secondary" title={inviteLine(status, sentence)} data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>
           : <T size="xs" tone="tertiary">No link yet</T>}
         {link && <CopyIdButton value={link} label={`Copy the invite link for ${row.candidate.name}`} data-testid="interviews-upcoming-copy" />}
       </Inline>
@@ -184,7 +184,7 @@ function UpcomingWorkspace() {
     {
       key: 'round', header: 'Opening and round',
       render: (r) => (
-        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[12rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
+        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{`${r.opening.title} · ${r.round.name}`}</T>
       ),
     },
     { key: 'people', header: 'Lead and panel', render: (r) => <PanelCell lead={r.lead} panel={r.panel} /> },
@@ -196,7 +196,7 @@ function UpcomingWorkspace() {
         return (
           <Stack gap="none">
             {isLive(r) ? <Chip tone="success" size="xs" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>}
-            {withConsent && <T size="xs" tone={!c?.answered ? 'secondary' : undefined} className="block max-w-[8.5rem] truncate" title={consents.data ? consentColumnLabel(c) : undefined} data-testid="interviews-upcoming-consent">{consents.data ? consentColumnLabel(c) : '—'}</T>}
+            {withConsent && <T size="xs" tone={!c?.answered ? 'secondary' : undefined} title={consents.data ? consentColumnLabel(c) : undefined} data-testid="interviews-upcoming-consent">{consents.data ? consentColumnLabel(c) : '—'}</T>}
           </Stack>
         );
       },
@@ -260,7 +260,7 @@ function UpcomingWorkspace() {
           {error ? (
             <UnavailableNotice error={error} what="the rounds" source="Rounds are read from the interviews assigned in this tenant" onRetry={refresh} />
           ) : (
-            <DataTable narrow
+            <DataTable narrow rowHeight="content"
               data-testid="interviews-upcoming-table"
               aria-label="Upcoming rounds"
               data={rows}

@@ -7,7 +7,8 @@
 // it, which is what the hiring manager's scope is walked against). Hugo
 // Marchetti interviews the backend and system design rounds, Wen Zhao the iOS
 // and behavioural ones. Twelve candidates across the stages, six interviews
-// coming up, four finished with scorecards and one finished yesterday whose
+// coming up, one live now (Kwame's coding round with Hugo and Wen, started twelve
+// minutes ago), four finished with scorecards and one finished yesterday whose
 // scorecard is still due.
 //
 // Live: the tables in schema/interviews_schema.sql (DDL only, the assessment
@@ -39,7 +40,7 @@ function at(days: number, hour: number, minute = 0): string {
 }
 
 /** The round that is live now: Kwame's coding round with Hugo and Wen, started twelve minutes ago by the mock clock. */
-export const LIVE_INTERVIEW_ID = 'iv-s4e8u2zk';
+export const LIVE_INTERVIEW_ID = 'iv-s4e8u2zk'; // keep equal to the literal in `interviewsFixture` (the walk's seed check reads that one)
 export const liveStart = (): string => new Date(clock.now().getTime() - 12 * 60_000).toISOString();
 
 export const GRETA = 'u-greta';
@@ -265,7 +266,7 @@ export const interviewsFixture = defineFixture<Interview>({
       interview({ id: 'iv-g9r1y8lp', app: 'app-jonah', round: 'rd-leadership', type: 'behavioural', lead: WEN, start: at(-1, 16), minutes: 60, state: 'ended',
         questions: ['q-em-struggling', 'q-em-slip'], assignedDaysAgo: 6, ended: at(-1, 17) }),
       // Live now: Kwame's first round, started twelve minutes ago (nobody has joined a call yet; Hugo opens the room).
-      interview({ id: LIVE_INTERVIEW_ID, app: 'app-kwame', round: 'rd-coding', type: 'technical', lead: HUGO, panel: [WEN], start: liveStart(), minutes: 60, state: 'live',
+      interview({ id: 'iv-s4e8u2zk', app: 'app-kwame', round: 'rd-coding', type: 'technical', lead: HUGO, panel: [WEN], start: liveStart(), minutes: 60, state: 'live',
         questions: ['q-be-ratelimit'], assignedDaysAgo: 2 }),
       // Coming up.
       interview({ id: 'iv-k1p5w8ra', app: 'app-mateo', round: 'rd-design', type: 'technical', lead: HUGO, start: at(1, 14), minutes: 60, state: 'ready',
