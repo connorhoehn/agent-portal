@@ -23,6 +23,9 @@ import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { inviteStore, type Invite } from './store.js';
 import { interviewsNow } from '../clock.js';
+import { invalidateForUser } from '../../gateway/authority-invalidation.js';
+// The guest's call identity, realtime.ts guestSubject's (not imported: realtime.ts → guest.ts → this file is a cycle).
+const guestSubject = (inviteId: string): string => `guest:${inviteId}`;
 
 export const ADMISSION_STATES = ['not-knocked', 'waiting', 'admitted', 'turned-away'] as const;
 export type AdmissionState = typeof ADMISSION_STATES[number];
@@ -107,6 +110,18 @@ export async function applyAdmission(inviteId: string, event: AdmissionEvent, no
     if (next === current) return { ok: true, admission: current };
     const written = await store.setAdmission(invite.id, invite.sessionHash, current.state,
       { admissionState: next.state, knockedAt: next.knockedAt, admissionDecidedAt: next.decidedAt });
+    // Out of the room (turned away, or back to waiting): the gateway's verdict cache drops every yes it holds for the
+    // guest now, so a cached call-chat yes never outlives the decision (with REALTIME_AUTHORITY_CACHE on).
+    if (written && next.state !== 'admitted') invalidateForUser(guestSubject(invite.id), 'interview-admission');
     return written ? { ok: true, admission: admissionOf(written) } : { ok: false, reason: 'stale' };
   });
+}
+
+/**
+ * The interview's guest loses the room (the link revoked or replaced, the interview ended): after that write commits,
+ * the gateway's verdict cache forgets every yes it holds for the guest of `invite` (or the interview's latest link).
+ */
+export async function forgetInterviewGuest(interviewId: string, reason: string, invite?: Pick<Invite, 'id'> | null): Promise<void> {
+  const which = invite !== undefined ? invite : await runWithDbTenant(INTERVIEWS_TENANT, () => inviteStore().latestInvite(interviewId));
+  if (which) invalidateForUser(guestSubject(which.id), reason);
 }

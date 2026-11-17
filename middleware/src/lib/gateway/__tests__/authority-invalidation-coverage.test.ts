@@ -91,6 +91,25 @@ const SURFACES: Surface[] = [
     known: ['deleteTeamImpl'],
   },
   {
+    // The interview's guest leaves the room: turned away (admission), the link revoked or replaced, the interview ended.
+    file: 'src/lib/interviews/invite/admission.ts',
+    sites: /\.setAdmission\(/,
+    calls: SEAM,
+    known: ['applyAdmission'],
+  },
+  {
+    file: 'src/routes/interviews/invite.ts',
+    sites: /\.(revokeInvite|issueInvite)\(/,
+    calls: /\bforgetInterviewGuest\(/,
+    known: [],
+  },
+  {
+    file: 'src/routes/interviews/room.ts',
+    sites: /\.endInterview\(/,
+    calls: /\bforgetInterviewGuest\(/,
+    known: [],
+  },
+  {
     file: 'src/lib/authz.ts',
     sites: /\bcache\.clear\(\)/,
     calls: SEAM,

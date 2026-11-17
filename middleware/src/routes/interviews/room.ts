@@ -21,6 +21,7 @@ import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
+import { forgetInterviewGuest } from '../../lib/interviews/invite/admission.js';
 
 export const roomRouter = Router();
 
@@ -80,5 +81,7 @@ roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revis
 roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, revision) => {
   const r = await interviewsStore().endInterview(i.id, interviewsNow().toISOString(), revision);
   if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
+  // The call is over for the candidate: the gateway's verdict cache forgets every yes it holds for the guest.
+  if (r.ok) await forgetInterviewGuest(i.id, 'interview-ended');
   return r;
 }));

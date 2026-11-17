@@ -20,6 +20,7 @@ import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { inviteCeiling, inviteStatus, issuable, type InviteStatus } from '../../lib/interviews/invite/rules.js';
 import { inviteStore, type Invite } from '../../lib/interviews/invite/store.js';
+import { forgetInterviewGuest } from '../../lib/interviews/invite/admission.js';
 import { hashInviteToken, newInviteToken } from '../../lib/interviews/invite/token.js';
 import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
@@ -64,9 +65,12 @@ inviteRouter.post('/interviews/:id/invite', manage, asyncHandler(async (req, res
   if (verdict !== 'ok') { res.status(409).json({ error: verdict === 'closed' ? CLOSED : PAST }); return; }
   const token = newInviteToken();
   const issuedAt = now.toISOString();
+  const replaced = await inviteStore().latestInvite(interview.id);
   const invite = await inviteStore().issueInvite({
     interviewId: interview.id, tokenHash: hashInviteToken(token), issuedBy: resolveSession(req)!.sub, issuedAt, expiresAt: inviteCeiling(issuedAt),
   });
+  // The link it replaced is revoked in the same write: its guest's cached verdicts go with it.
+  if (replaced) await forgetInterviewGuest(interview.id, 'interview-invite-replaced', replaced);
   const linkPath = `${GUEST_PAGE_PATH}#${token}`;
   res.setHeader('Cache-Control', 'no-store');
   res.status(201).json({ link: `${portalOrigin(req)}${linkPath}`, linkPath, invite: await statusView(invite, interview) });
@@ -81,6 +85,7 @@ inviteRouter.get('/interviews/:id/invite', manage, asyncHandler(async (req, res)
 inviteRouter.delete('/interviews/:id/invite', manage, asyncHandler(async (req, res) => {
   const interview = await interviewInScope(req);
   const latest = await inviteStore().revokeInvite(interview.id, interviewsNow().toISOString(), resolveSession(req)!.sub);
+  await forgetInterviewGuest(interview.id, 'interview-invite-revoked', latest);
   res.setHeader('Cache-Control', 'no-store');
   res.json({ invite: await statusView(latest, interview) });
 }));

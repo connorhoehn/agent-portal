@@ -26,7 +26,7 @@ import { enumerateRoutes } from '../../../../mock/core/wire/routes.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
 import { MemoryInterviewsStore } from '../../store.js';
 import { setInterviewsStore } from '../../store-select.js';
-import { applyAdmission } from '../admission.js';
+import { applyAdmission, forgetInterviewGuest } from '../admission.js';
 import { GUEST_ROLE, loadGuestSession, type GuestPrincipal } from '../guest.js';
 import { GUEST_DISPLAY_NAME, guestRealtimeClaims, guestRealtimeEnabled, mintGuestRealtimeToken } from '../realtime.js';
 import { MemoryInviteStore, setInviteStore } from '../store.js';
@@ -109,11 +109,10 @@ describe('with guest realtime on, admitted', () => {
       expect(await join(own)).toBe(false);
     });
 
-    // FINDING (lead): nothing on the turn-away path calls lib/gateway/authority-invalidation.ts, so with REALTIME_AUTHORITY_CACHE on a
-    // turned-away candidate's cached yes on the call's chat (`orgiq:huddle:<callId>`) keeps admitting chat frames until the cache's
-    // max age (5 s by default) or until the call runtime's own invalidate on leave. Fail closed would be an invalidateForUser of the
-    // guest's subject (or invalidateChannel of the interview's call chats) after the admission write commits.
-    it.failing('a turn-away tells the verdict cache, so no cached yes outlives it', async () => {
+    // Was a finding (H2): nothing on the turn-away path told the verdict cache, so with REALTIME_AUTHORITY_CACHE on a turned-away
+    // candidate's cached yes on the call's chat kept admitting frames for up to the cache's max age (5 s). applyAdmission now
+    // calls invalidateForUser of the guest's subject after the write commits; revoking, replacing the link and ending do the same.
+    it('a turn-away tells the verdict cache, so no cached yes outlives it', async () => {
       const seen: string[] = [];
       const target: AuthorityCacheTarget = {
         invalidateChannel: (c) => { seen.push(`channel:${c}`); },
@@ -124,6 +123,27 @@ describe('with guest realtime on, admitted', () => {
       try {
         await applyAdmission(inviteId, { kind: 'decide', admit: false });
         expect(seen.some((s) => s === `user:guest:${inviteId}` || s === 'all' || s.startsWith('channel:orgiq:huddle:'))).toBe(true);
+      } finally {
+        unbind();
+      }
+    });
+
+    it('revoking or replacing the link and ending the interview tell the verdict cache about the guest', async () => {
+      const seen: string[] = [];
+      const unbind = bindAuthorityCache({
+        invalidateChannel: (c) => { seen.push(`channel:${c}`); },
+        invalidateUser: (u) => { seen.push(`user:${u}`); },
+        clear: () => { seen.push('all'); },
+      });
+      try {
+        await forgetInterviewGuest(OWN, 'interview-ended');
+        expect(seen).toContain(`user:guest:${inviteId}`);
+        seen.length = 0;
+        await forgetInterviewGuest(OWN, 'interview-invite-revoked', { id: inviteId });
+        expect(seen).toEqual([`user:guest:${inviteId}`]);
+        seen.length = 0;
+        await forgetInterviewGuest(OWN, 'interview-invite-revoked', null);
+        expect(seen).toEqual([]);
       } finally {
         unbind();
       }
