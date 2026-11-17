@@ -39,10 +39,16 @@ const KIND_LABELS: Record<string, (n: number) => string> = {
   'contact-details': () => 'the contact details',
   'stage-reasons': (n) => (n === 1 ? 'the reasons written on 1 application\'s stage changes' : `the reasons written on ${n} applications' stage changes`),
   invite: (n) => (n === 1 ? '1 interview link turned off' : `${n} interview links turned off`),
+  'pad-log': () => 'the code pad history',
+  runs: (n) => (n === 1 ? '1 code run' : `${n} code runs`),
+  'said-log': () => 'what Milo said aloud',
+  recaps: () => 'Milo\'s recaps',
+  'coach-log': () => 'Milo\'s suggestions log',
 };
 const NAMES: Record<string, string> = {
   recording: 'the recordings', 'transcript-and-minutes': 'the transcript and minutes', 'code-log': 'the code log', scorecards: 'the scorecards',
   consents: 'the consent answers', suggestions: 'Milo\'s suggestion log', resume: 'the résumé', 'contact-details': 'the contact details', 'stage-reasons': 'the reasons written on stage changes', invite: 'the interview link',
+  'pad-log': 'the code pad history', runs: 'the code runs', 'said-log': 'what Milo said aloud', recaps: 'Milo\'s recaps', 'coach-log': 'Milo\'s suggestions log',
 };
 
 const capital = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);

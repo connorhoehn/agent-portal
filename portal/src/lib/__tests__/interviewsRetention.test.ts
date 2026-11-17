@@ -49,6 +49,15 @@ test('the reasons written on stage changes are named when they go', () => {
     'Removed the contact details and the reasons written on 2 applications\' stage changes.');
 });
 
+test('the code pad, its runs and Milo\'s logs each have their own words, never "other records" (hardening H5)', () => {
+  assert.equal(removedLine({ removed: [{ kind: 'pad-log', count: 1 }, { kind: 'runs', count: 2 }], doneAt: 'x', left: [] }),
+    'Removed the code pad history and 2 code runs.');
+  assert.equal(removedLine({ removed: [{ kind: 'runs', count: 1 }], doneAt: 'x', left: [] }), 'Removed 1 code run.');
+  assert.equal(removedLine({ removed: [{ kind: 'said-log', count: 4 }, { kind: 'recaps', count: 1 }, { kind: 'coach-log', count: 3 }], doneAt: 'x', left: [] }),
+    'Removed what Milo said aloud, Milo\'s recaps and Milo\'s suggestions log.');
+  assert.deepEqual(leftLines({ left: [{ kind: 'runs', why: 'failed', retry: true }] }), ['The code runs: not removed yet. It is tried again within the hour.']);
+});
+
 test('the prompt says what goes and what stays for how long, in two sentences', () => {
   const q = deletionQuestion({ mediaDays: 90, recordYears: 4, deletionDays: 30 });
   assert.equal(q.split('. ').length, 2);
