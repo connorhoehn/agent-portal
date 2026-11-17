@@ -52,7 +52,7 @@ export function GuestStepFrame({ title, description, step, fill = false, childre
     <PageFrame title={title} {...(description ? { description } : {})} body={fill ? 'fill' : 'scroll'}
       column="centered" columnWidth="4xl" data-testid="join-page">
       <Stack gap="lg" className={fill ? 'min-h-0 flex-1' : undefined}>
-        {step && <WorkflowStepper steps={walkedSteps(step)} aria-label="Your steps to the interview" data-testid="join-steps" />}
+        {step && <WorkflowStepper currentTone="primary" steps={walkedSteps(step)} aria-label="Your steps to the interview" data-testid="join-steps" />}
         {children}
       </Stack>
     </PageFrame>

@@ -84,7 +84,7 @@ export function CollectionRecordFrame({
     : loading && rows.length === 0 ? <LoadingState label={`Loading ${listLabel}…`} />
     : rows.length === 0 && empty && !search?.value ? <EmptyState title={empty.title} description={empty.description} />
     : rows.length === 0 ? <EmptyState title="Nothing matches" description={search?.value ? `Nothing matches “${search.value.trim()}”.` : `No ${listLabel} yet.`} />
-    : <GroupedList size={railType === 'app' ? 'sm' : 'md'} currentStyle="bar" groupHeading={railType === 'app' ? 'title' : 'label'} groupCountAlign="end" hideEmptyGroups
+    : <GroupedList scrollCurrentIntoView size={railType === 'app' ? 'sm' : 'md'} currentStyle="bar" groupHeading={railType === 'app' ? 'title' : 'label'} groupCountAlign="end" hideEmptyGroups
         groups={groups} rows={rows} currentId={currentId} onOpenRow={(row) => onOpen(row.id)} />;
   return (
     <ViewportFillRegion bottomGap={0} {...(testId ? { 'data-testid': testId } : {})}>

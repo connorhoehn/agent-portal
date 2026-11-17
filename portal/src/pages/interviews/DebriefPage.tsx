@@ -157,7 +157,7 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
   const tableColumns: DataTableColumn<SideRow>[] = [
     { key: 'label', header: 'Competency', width: '176px', render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
     ...columns.map((c): DataTableColumn<SideRow> => ({
-      key: c.id, width: '300px', group: c.roundId,
+      key: c.id, width: '300px', minWidth: '240px', group: c.roundId,
       header: c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name,
       render: (r) => <SideCellView cell={r.cells[c.id] ?? { kind: 'none' }} />,
     })),
