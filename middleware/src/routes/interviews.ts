@@ -19,6 +19,7 @@ import { retentionRouter } from './interviews/retention.js';
 import { requireAction } from '../lib/authz.js';
 import { admissionRouter } from './interviews/admission.js';
 import { indexFor, param } from '../lib/interviews/request.js';
+import { planRouter } from './interviews/plan.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { scorecardsRouter } from './interviews/scorecards.js';
 import { recapRouter } from './interviews/recap.js';
@@ -88,6 +89,7 @@ interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
 }));
 
 interviewsRouter.use(inviteRouter); // lane INVITE (row I2.1): issue, read and revoke the candidate's link
+interviewsRouter.use(planRouter); // lane PLAN (row I3.10): Milo drafts a question plan for the lead
 
 interviewsRouter.use(coachRouter); // lane COACH (row I3.3): Milo's suggestion for the lead, and the lead's answer
 interviewsRouter.use(miloRouter); // lane MILO-FOR-YOU (rows I3.6, I3.7): the live transcript, Milo's notes, the lead's private question
