@@ -289,7 +289,7 @@ export class WorldIndex {
       lead: this.people(i.leadId),
       panel: i.panelIds.map((p) => this.people(p)),
       scheduledAt: i.scheduledAt,
-      state: i.state,
+      state: readyState(i),
       bucket: bucketFor(i, this.viewer, this.world.scorecards),
       seat: i.leadId === this.viewer.id ? 'lead' : i.panelIds.includes(this.viewer.id) ? 'panel' : null,
       questions: i.questionIds.length,
