@@ -15,7 +15,7 @@
 // this resolves the round to its candidate's debrief.
 
 import {
-  Button, Chip, DataTable, DetailPage, DetailSection, Disclosure, Inline, LoadingState, MetaLine, Stack, T, type DataTableColumn,
+  Button, Chip, DataTable, DetailPage, DetailSection, Disclosure, Inline, LoadingState, MetaLine, Stack, T, type DataTableColumn, type DataTableColumnGroup,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useState } from 'react';
@@ -147,19 +147,18 @@ function DebriefWorkspace({ view, trail, onChanged }: { view: DebriefView; trail
   );
 }
 
-/** The table's cells hold prose: they wrap and take the height they need, never an ellipsis (decision 15). */
-const CELL_WRAPS = 'h-auto whitespace-normal py-2 align-top';
-
 function ApplicationRounds({ app, several }: { app: DebriefApplication; several: boolean }) {
   const blocked = app.decide && !app.decide.options.some((o) => o.allowed)
     ? app.decide.options.find((o) => o.decision === 'reject')?.refusal ?? null : null;
   const { columns, rows } = applicationSideBySide(app.rounds, app.competencies);
-  // Every column is one interviewer's scorecard; the round's name leads each header and a rule starts each round's group.
+  // One group per round (its header the round's name); each column is one interviewer's scorecard under it.
+  const columnGroups: DataTableColumnGroup[] = [];
+  for (const c of columns) if (!columnGroups.some((g) => g.key === c.roundId)) columnGroups.push({ key: c.roundId, header: c.roundName });
   const tableColumns: DataTableColumn<SideRow>[] = [
-    { key: 'label', header: 'Competency', width: '176px', className: CELL_WRAPS, render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
+    { key: 'label', header: 'Competency', width: '176px', render: (r) => <T size="sm" weight="medium" data-testid="interviews-debrief-row">{r.label}</T> },
     ...columns.map((c): DataTableColumn<SideRow> => ({
-      key: c.id, width: '300px', className: c.firstInRound ? `${CELL_WRAPS} border-l border-border` : CELL_WRAPS,
-      header: <Stack gap="none"><T size="xs" tone="tertiary">{c.roundName}</T><T size="sm" weight="medium">{c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name}</T></Stack>,
+      key: c.id, width: '300px', group: c.roundId,
+      header: c.version > 1 ? `${c.interviewer.name} (version ${c.version})` : c.interviewer.name,
       render: (r) => <SideCellView cell={r.cells[c.id] ?? { kind: 'none' }} />,
     })),
   ];
@@ -172,7 +171,7 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
       )}
       {app.rounds.length === 0 && <T size="sm" tone="secondary">No round has been assigned yet.</T>}
       {columns.length > 0 && (
-        <DataTable rowHeight="content" data-testid="interviews-debrief-side-by-side" aria-label={`${app.opening.title}: scorecards side by side`} data={rows} columns={tableColumns}
+        <DataTable rowHeight="content" stickyFirstColumn columnGroups={columnGroups} data-testid="interviews-debrief-side-by-side" aria-label={`${app.opening.title}: scorecards side by side`} data={rows} columns={tableColumns}
           keyField={(r) => r.id} staticRows="Each competency as each interviewer rated it, read in place" />
       )}
       {app.rounds.map((r) => <RoundBlock key={r.interviewId} round={r} />)}

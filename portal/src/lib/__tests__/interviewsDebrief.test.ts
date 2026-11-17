@@ -95,3 +95,12 @@ test('a round with no scorecard adds no column, and no rounds at all still gives
   assert.equal(applicationSideBySide([none], COMPETENCIES).rows.length, COMPETENCIES.length + 2);
   assert.equal(applicationSideBySide([], COMPETENCIES).rows.length, COMPETENCIES.length + 2);
 });
+
+test('five interviewers over two rounds give five columns, each under its round, wider than a 1280 window (the case the pinned Competency column is for)', () => {
+  const r1 = { interviewId: 'iv-1', name: 'Coding', scorecards: ['a', 'b', 'c'].map((id) => card(id, `Interviewer ${id}`)) };
+  const r2 = { interviewId: 'iv-2', name: 'Together', scorecards: ['d', 'e'].map((id) => card(id, `Interviewer ${id}`, { version: id === 'e' ? 2 : 1 })) };
+  const { columns, rows } = applicationSideBySide([r1, r2], COMPETENCIES);
+  assert.deepEqual(columns.map((c) => c.roundId), ['iv-1', 'iv-1', 'iv-1', 'iv-2', 'iv-2']);
+  assert.ok(176 + columns.length * 300 > 1280);
+  assert.deepEqual(Object.keys(rows[0]!.cells).sort(), ['a', 'b', 'c', 'd', 'e']);
+});

@@ -4,7 +4,7 @@
 // nothing. One line says what the round still waits for; once it is ready the lead can open the room (row I2.4).
 // The server decides everything (middleware lib/interviews/prepare.ts); a stale save shows what was saved.
 
-import { Button, ChevronIcon, Chip, DataTable, DetailPage, DetailSection, EmptyState, IconButton, Inline, MetaLine, Stack, T, TrashIcon, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, ChevronIcon, Chip, ContextColumn, DataTable, DetailPage, DetailSection, DocumentIcon, EmptyState, IconButton, Inline, MetaLine, Stack, T, TrashIcon, type ContextColumnState, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
@@ -41,6 +41,7 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
   const [draft, setDraft] = useState<PlanDraft | null>(null);
   const [asking, setAsking] = useState(false);
   const [askProblem, setAskProblem] = useState<string | null>(null);
+  const [resumeState, setResumeState] = useState<ContextColumnState>('wide');
   useEffect(() => { setPlan(saved); }, [saved]);
 
   const byId = new Map(record.bank.map((q) => [q.id, q]));
@@ -71,17 +72,17 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
   const suggestedLine = draft ? draftLine(draft) : null;
   const useDraft = () => { setPlan(planFromDraft(suggested, record.bank, record.maxQuestions)); setNote(null); };
   const draftColumns: DataTableColumn<DraftQuestion>[] = [
-    { key: 'prompt', header: 'Question', render: (d) => <T size="sm" title={byId.get(d.questionId)?.prompt} className="block max-w-[34rem] truncate" data-testid="interviews-draft-prompt">{byId.get(d.questionId)?.prompt ?? ''}</T> },
-    { key: 'why', header: 'Why', render: (d) => <T size="sm" tone="secondary" className="block max-w-[26rem] truncate" title={d.why}>{d.why}</T> },
+    { key: 'prompt', header: 'Question', render: (d) => <T size="sm" data-testid="interviews-draft-prompt">{byId.get(d.questionId)?.prompt ?? ''}</T> },
+    { key: 'why', header: 'Why', render: (d) => <T size="sm" tone="secondary">{d.why}</T> },
   ];
 
   const planColumns: DataTableColumn<BankQuestion>[] = [
     { key: 'n', header: '#', numeric: true, width: '48px', render: (q) => <T size="sm" tone="secondary">{plan.indexOf(q.id) + 1}</T> },
-    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} className="block max-w-[34rem] truncate" data-testid="interviews-plan-prompt">{q.prompt}</T> },
-    { key: 'competency', header: 'Competency', render: (q) => <T size="sm" tone="secondary" className="block max-w-[12rem] truncate">{q.competency}</T> },
+    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" data-testid="interviews-plan-prompt">{q.prompt}</T> },
+    { key: 'competency', header: 'Competency', render: (q) => <T size="sm" tone="secondary">{q.competency}</T> },
   ];
   const bankColumns: DataTableColumn<BankQuestion>[] = [
-    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} className="block max-w-[38rem] truncate" data-testid="interviews-bank-prompt">{q.prompt}</T> },
+    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" data-testid="interviews-bank-prompt">{q.prompt}</T> },
     { key: 'starter', header: 'Starter code', width: '120px', render: (q) => (q.hasStarter ? <T size="sm">Has starter code</T> : <T size="xs" tone="tertiary">—</T>) },
   ];
 
@@ -101,30 +102,36 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
 
   const planSection = (
     <Stack gap="md">
-      <DetailSection variant="heading" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}
-        actions={editable ? (
-          <Button size="sm" variant="primary" disabled={!dirty || busy} data-testid="interviews-plan-save" onClick={() => { void save(); }}>{busy ? 'Saving…' : 'Save plan'}</Button>
-        ) : undefined}>
+      <DetailSection variant="heading" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}>
         <Stack gap="sm">
+          {editable && (
+            <Inline gap="sm" align="center" wrap={false}>
+              <Button size="sm" variant="primary" disabled={!dirty || busy} data-testid="interviews-plan-save" onClick={() => { void save(); }}>{busy ? 'Saving…' : 'Save plan'}</Button>
+              <T size="xs" tone="tertiary">{dirty ? 'You have changes that are not saved yet.' : 'Everything here is saved.'}</T>
+            </Inline>
+          )}
           {record.missing && <T size="sm" tone="secondary" data-testid="interviews-prepare-missing">{record.missing}</T>}
           {!editable && <T size="sm" tone="secondary" data-testid="interviews-prepare-readonly">{readOnlyLine(record)}</T>}
           {problem && <T size="sm" tone="danger" role="alert" data-testid="interviews-plan-problem">{problem}</T>}
           {note && !problem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
           {planned.length === 0
             ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">Nothing in the plan yet. Add questions from the list below.</T>
-            : <DataTable narrow data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id}
+            : <DataTable narrow rowHeight="content" data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id}
               rowActions={editable ? planControls : undefined} rowActionsHeader="Order" rowActionsHeaderHidden />}
         </Stack>
       </DetailSection>
       {editable && record.seat === 'lead' && record.bank.length > 0 && (
-        <DetailSection variant="heading" title="Milo's suggested plan" hint="A suggestion from the kit. You choose."
-          actions={<Button size="sm" variant="secondary" disabled={asking} data-testid="interviews-draft-ask" onClick={() => { void ask(); }}>{asking ? 'Asking Milo…' : suggested.length ? 'Ask again' : 'Ask Milo for a plan'}</Button>}>
+        <DetailSection variant="heading" title="Milo's suggested plan" hint="A suggestion from the kit. You choose.">
           <Stack gap="sm">
+            <Inline gap="sm" align="center" wrap={false}>
+              <Button size="sm" variant="secondary" disabled={asking} data-testid="interviews-draft-ask" onClick={() => { void ask(); }}>{asking ? 'Asking Milo…' : suggested.length ? 'Ask again' : 'Ask Milo for a plan'}</Button>
+            </Inline>
             {askProblem && <T size="sm" tone="danger" role="alert" data-testid="interviews-draft-problem">{askProblem}</T>}
+            {!draft && !askProblem && <T size="sm" tone="secondary" data-testid="interviews-draft-intro">Milo reads the kit and this candidate, then proposes questions with a reason for each. Nothing changes in your plan until you use it.</T>}
             {suggestedLine && <T size="sm" tone="secondary" data-testid="interviews-draft-line">{suggestedLine}</T>}
             {suggested.length > 0 && (
               <>
-                <DataTable narrow data-testid="interviews-draft-table" aria-label="Milo's suggested plan" data={suggested} columns={draftColumns} keyField={(d) => d.questionId} />
+                <DataTable narrow rowHeight="content" data-testid="interviews-draft-table" aria-label="Milo's suggested plan" data={suggested} columns={draftColumns} keyField={(d) => d.questionId} />
                 <Inline gap="sm" wrap={false}>
                   <Button size="sm" variant="primary" data-testid="interviews-draft-use" onClick={useDraft}>Use this plan</Button>
                   <T size="xs" tone="tertiary">This replaces the selection above. Save it when you are happy with it.</T>
@@ -138,7 +145,7 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
         ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the bank is in your plan.'}</T>
         : groups.map((g) => (
           <DetailSection key={g.competencyId} variant="heading" title={g.name} hint={`${g.questions.length} to choose from`}>
-            <DataTable narrow data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id}
+            <DataTable narrow rowHeight="content" data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id}
               rowActions={editable ? (q) => (
                 <Button size="sm" variant="secondary" disabled={full} title={full ? `A round takes at most ${record.maxQuestions} questions.` : undefined}
                   data-testid="interviews-bank-add" onClick={() => setPlan((p) => [...p, q.id])}>Add</Button>
@@ -158,12 +165,12 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
       actions={canOpenRoom(record) && record.seat === 'lead'
         ? <Button size="sm" variant="primary" data-testid="interviews-prepare-room" onClick={() => void navigate(roomPath(record.id))}>Open the room</Button>
         : undefined}
+      aside={(
+        <ContextColumn state={resumeState} onStateChange={setResumeState} label="Résumé" activeId="resume" onActivate={() => setResumeState('wide')} data-testid="interviews-prepare-resume"
+          panels={[{ id: 'resume', label: 'Résumé', icon: <DocumentIcon size={16} />, content: <ResumeViewer candidateId={record.candidate.id} /> }]} />
+      )}
       tabs={[
         { id: 'plan', label: 'Questions', badge: plan.length || undefined, testId: 'interviews-prepare-tab-plan', content: planSection },
-        {
-          id: 'resume', label: 'Résumé', testId: 'interviews-prepare-tab-resume',
-          content: <Stack gap="none" className="h-[70vh] min-h-[28rem]" data-testid="interviews-prepare-resume"><ResumeViewer candidateId={record.candidate.id} /></Stack>,
-        },
         { id: 'competencies', label: 'Competencies', badge: record.competencies.length || undefined, testId: 'interviews-prepare-tab-competencies', content: <Competencies record={record} /> },
       ]} />
   );

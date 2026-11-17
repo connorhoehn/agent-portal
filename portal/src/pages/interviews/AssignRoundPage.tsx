@@ -85,7 +85,7 @@ export default function AssignRoundPage() {
 
   return (
     <Stack gap="none" className="h-full min-h-0 min-w-0" data-shell-flush>
-      <PageFrame title={title} breadcrumbs={trail} data-testid="interviews-assign-page"
+      <PageFrame title={title} breadcrumbs={trail} column="centered" columnWidth="4xl" data-testid="interviews-assign-page"
         description={round
           ? `${round.round.name} for ${record.candidate.name}, ${app.opening.title}. A new lead is asked to accept again; seats that stay keep their answer.`
           : `A round of ${app.opening.title} for ${record.candidate.name}. Each person you seat is asked to accept it. You set the time later.`}
@@ -96,7 +96,7 @@ export default function AssignRoundPage() {
               data-testid="interviews-assign-submit">{round ? 'Reassign' : 'Assign'}</Button>
           </Inline>
         )}>
-        <Stack gap="md" className="max-w-[56rem] pb-6" data-testid="interviews-assign-form">
+        <Stack gap="md" data-testid="interviews-assign-form">
           {error && <T size="sm" tone="danger" data-testid="interviews-assign-error">{error}</T>}
           {locked && <T size="sm" tone="secondary">This round has already started, so who sits on it can no longer change.</T>}
           {round && round.declines.length > 0 && (
