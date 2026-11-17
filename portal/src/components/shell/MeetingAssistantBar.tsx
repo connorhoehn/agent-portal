@@ -26,6 +26,8 @@ import { useLiveCallId } from '../../lib/liveCallId';
 import { useProposalQueue } from './AssistantProposalAsk';
 import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { hideAssistantNotice, noticeKey, useAssistantNoticeHidden } from '../../lib/assistantNoticeHidden';
+import { useCallHost } from '../../lib/conversationCall';
+import { useInterviewRoomSeat } from './InterviewRoomFooter';
 
 export { useLiveCallId };
 
@@ -58,7 +60,12 @@ function jumpToCard(callId: string, actionId: string, openChat: (() => void) | n
 export function AssistantBarControls() {
   const callId = useLiveCallId();
   const assistant = useMeetingAssistant(callId);
-  const { controls, view, busy } = assistant;
+  // An interview call (row I3.5): the lead keeps every control a work call shows; a panel member gets none of the lead's (the
+  // server refuses them anyway, LEAD_ONLY) and keeps the mark, Acknowledge and Mute for me. Any other call: unchanged.
+  const panelSeat = useInterviewRoomSeat(useCallHost()?.lobby?.lobbyName) === 'panel';
+  const { view, busy } = assistant;
+  const controls = panelSeat ? { ...assistant.controls, invite: false, pause: false, resume: false, dismiss: false, extend: false, inviteAgain: false } : assistant.controls;
+  const canSetVoice = assistant.canSetVoice && !panelSeat;
   const noticeClosed = useAssistantNoticeHidden(noticeKey(callId, view.period));
   const voice = useAssistantVoice(callId, assistant.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
@@ -108,7 +115,7 @@ export function AssistantBarControls() {
         ...(controls.acknowledge ? [{ label: 'Acknowledge', description: `${ASSISTANT_NAME} cannot hear you until you do`, icon: <CheckIcon size={14} />, onSelect: () => void assistant.acknowledge() }] : []),
         ...(controls.pause ? [{ label: `Pause ${ASSISTANT_NAME}`, icon: <PauseCircleIcon size={14} />, onSelect: () => void assistant.pause() }] : []),
         ...(controls.resume ? [{ label: `Resume ${ASSISTANT_NAME}`, icon: <PlayCircleIcon size={14} />, onSelect: () => void assistant.resume() }] : []),
-        ...(voiceMenu && assistant.canSetVoice ? [{ label: view.voice ? `Turn ${ASSISTANT_NAME}'s voice off` : `Turn ${ASSISTANT_NAME}'s voice on`, description: view.voice ? `${ASSISTANT_NAME}'s voice is on in this call` : `${ASSISTANT_NAME} answers aloud when asked`, icon: <SpeakerIcon size={14} />, onSelect: () => void assistant.setVoice(!view.voice) }] : []),
+        ...(voiceMenu && canSetVoice ? [{ label: view.voice ? `Turn ${ASSISTANT_NAME}'s voice off` : `Turn ${ASSISTANT_NAME}'s voice on`, description: view.voice ? `${ASSISTANT_NAME}'s voice is on in this call` : `${ASSISTANT_NAME} answers aloud when asked`, icon: <SpeakerIcon size={14} />, onSelect: () => void assistant.setVoice(!view.voice) }] : []),
         ...(voiceMenu ? [{ label: voice.muted ? `Unmute ${ASSISTANT_NAME} for me` : `Mute ${ASSISTANT_NAME} for me`, description: 'Only for you, in this call', icon: <SpeakerIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
         // What one extend buys and whose budget holds it; not offered at the call's hard maximum (controls.extend).
         ...(controls.extend ? [{ label: 'Extend time', ...(extend ? { description: extend } : left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void assistant.extend() }] : []),

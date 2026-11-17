@@ -204,9 +204,10 @@ export async function readSuggestion(interviewId: string, fetcher: typeof fetch 
 /** The answer; `gone` is a 409 (answered elsewhere, or the interview ended): the prompt clears quietly. */
 export async function answerSuggestion(
   interviewId: string, suggestionId: string, answer: SuggestionAnswerId,
-): Promise<{ ok: true } | { ok: false; gone: boolean; error: string }> {
-  const r = await writeJson<{ suggestion?: null }>(suggestionAnswerPath(interviewId, suggestionId), 'POST', { answer });
-  if (r.ok) return { ok: true };
+): Promise<{ ok: true; said?: MiloSaid; line?: string } | { ok: false; gone: boolean; error: string }> {
+  const r = await writeJson<{ suggestion?: null; said?: unknown; line?: unknown }>(suggestionAnswerPath(interviewId, suggestionId), 'POST', { answer });
+  // Row I3.5: after "Have Milo ask", whether Milo said it aloud, and the lead's one sentence when it could not.
+  if (r.ok) return { ok: true, ...saidOf(r.data) };
   return { ok: false, gone: r.status === 409, error: r.error ?? 'That did not go through. Try again.' };
 }
 
@@ -387,4 +388,66 @@ export function candidateLine(admission: Admission | null): string | null {
   if (admission.state === 'admitted') return 'Let in';
   if (admission.state === 'turned-away') return 'Asked to wait';
   return 'Not here yet';
+}
+
+// ── Milo asks aloud (rows I3.5, I3.8; decisions 9, 11; contract U10) ─────────────────────────────────────────────────
+/** How Milo's approved words went: aloud (and in the call chat), or in the call chat only. */
+export type MiloSaid = 'spoken' | 'chat';
+
+/** `said` and `line` read off an answer body; nothing for anything else. */
+export function saidOf(body: unknown): { said?: MiloSaid; line?: string } {
+  const b = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const said = b['said'] === 'spoken' || b['said'] === 'chat' ? b['said'] : undefined;
+  const line = typeof b['line'] === 'string' && b['line'].trim() ? b['line'].slice(0, 300) : undefined;
+  return { ...(said ? { said } : {}), ...(line ? { line } : {}) };
+}
+
+/** The prompt's receipt after "Have Milo ask": what happened, in a few words (the full sentence is the chat's or the line's). */
+export function miloAskReceipt(said: MiloSaid | undefined): string {
+  if (said === 'spoken') return 'Milo asked it aloud';
+  if (said === 'chat') return 'In the call chat only';
+  return SUGGESTION_RECEIPTS['milo-ask'];
+}
+
+export const sayPath = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/say`;
+
+/** "Have Milo ask" on a kit question: the server reads the words from the kit, posts them and says them. */
+export async function sayQuestion(interviewId: string, questionId: string): Promise<{ ok: true; said: MiloSaid; line: string } | { ok: false; error: string }> {
+  const r = await writeJson<{ said?: unknown; line?: unknown }>(sayPath(interviewId), 'POST', { questionId });
+  if (!r.ok) return { ok: false, error: r.error ?? 'That did not go through. Try again.' };
+  const { said, line } = saidOf(r.data);
+  return { ok: true, said: said ?? 'chat', line: line ?? 'The question is in the call chat.' };
+}
+
+/**
+ * A kit question to put in the pad once it is in sync (decision 11: "Have Milo ask" on a coding question also inserts it). The
+ * Questions tab queues it and opens the Pad tab; the lead's pad takes it when its editor is in sync (pad/InterviewPad.tsx).
+ */
+type PendingQuestion = { id: string; prompt: string; starter: ReadonlyArray<{ language: string; code: string }> };
+const pendingPad = new Map<string, PendingQuestion>();
+const padListeners = new Set<() => void>();
+export function queuePadQuestion(interviewId: string, q: PendingQuestion): void { pendingPad.set(interviewId, q); for (const l of padListeners) l(); }
+/** The queued question for this interview, once: taking it clears it. */
+export function takePadQuestion(interviewId: string): PendingQuestion | null { const q = pendingPad.get(interviewId) ?? null; pendingPad.delete(interviewId); return q; }
+/** Called when a question is queued; returns the unsubscribe. */
+export function onPadQuestion(fn: () => void): () => void { padListeners.add(fn); return () => { padListeners.delete(fn); }; }
+
+/**
+ * The candidate's room (contract U9): the question Milo last asked, read from the call chat's frames on the socket the page already
+ * holds. Only Milo's messages with the server's approved mark count, and of those only questions (not the `approvedAnswer` ones,
+ * which answer the candidate's two requests). Returns the newer question, or `current` when the frame holds none.
+ */
+export function lastAskedOf(frame: unknown, channel: string, current: string | null): string | null {
+  const f = frame && typeof frame === 'object' ? frame as Record<string, unknown> : null;
+  if (!f || f['channel'] !== channel || (f['type'] !== 'chat' && f['type'] !== 'chat:message' && f['type'] !== 'chat:history')) return current;
+  const list = Array.isArray(f['messages']) ? f['messages'] : f['message'] ? [f['message']] : [];
+  let found = current;
+  for (const m of list) {
+    const msg = m && typeof m === 'object' ? m as Record<string, unknown> : null;
+    const meta = msg?.['metadata'] && typeof msg['metadata'] === 'object' ? msg['metadata'] as Record<string, unknown> : null;
+    if (!meta || meta['assistant'] !== true || meta['approvedQuestion'] !== true || meta['approvedAnswer'] === true || meta['deleted'] === true) continue;
+    const text = typeof msg!['message'] === 'string' ? msg!['message'].trim() : '';
+    if (text) found = text.slice(0, 500);
+  }
+  return found;
 }

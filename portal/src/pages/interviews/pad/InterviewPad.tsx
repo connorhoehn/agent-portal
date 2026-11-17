@@ -22,6 +22,7 @@ import {
 } from '../../../lib/interviewsPad';
 
 export type { PadQuestion } from '../../../lib/interviewsPad';
+import { onPadQuestion, takePadQuestion } from '../../../lib/interviewsRoom';
 export type PadSeat = 'lead' | 'panel' | 'candidate';
 export interface InterviewPadHandle { getText(): string; getLanguage(): string; insertQuestion(q: PadQuestion): void; focus(): void }
 export interface InterviewPadProps {
@@ -62,7 +63,7 @@ function PadUnavailable({ ref, toolbarEnd, below, connection }: InterviewPadProp
   return <PadFrame connection={connection} toolbar={toolbarEnd ? <Toolbar size="sm" end={toolbarEnd} /> : null} below={below} />;
 }
 
-function SharedPad({ self, seat, questions, toolbarEnd, below, onPaste, onLocalEdit, onLanguageChange, onInsert, ref, gateway, documentId, channel }:
+function SharedPad({ interviewId, self, seat, questions, toolbarEnd, below, onPaste, onLocalEdit, onLanguageChange, onInsert, ref, gateway, documentId, channel }:
   InterviewPadProps & { gateway: GatewayContextValue; documentId: string; channel: string }) {
   const doc = useYjsDoc({ documentId, ws: gateway, onMessage: gateway.onMessage });
   const { ydoc, provider, synced } = doc;
@@ -102,6 +103,9 @@ function SharedPad({ self, seat, questions, toolbarEnd, below, onPaste, onLocalE
     if (plan.switched) onLanguageChange?.(plan.language);
     onInsert?.(q);
   }, [ydoc, onInsert, onLanguageChange]);
+
+  // Row I3.5 (lane SPEAK): a kit question "Have Milo ask" queued from the Questions tab goes in once the lead's pad is in sync.
+  useEffect(() => { if (seat !== 'lead' || connection !== 'synced') return undefined; const take = () => { const q = takePadQuestion(interviewId); if (q) insertQuestion(q); }; take(); return onPadQuestion(take); }, [seat, connection, interviewId, insertQuestion]);
 
   useImperativeHandle(ref, () => ({
     getText: () => editor.current?.getText() ?? ydoc?.getText(PAD_TEXT_NAME).toString() ?? '',

@@ -1,0 +1,90 @@
+// The candidate hears Milo (docs/interviews-tenant-plan.md decisions 9, 10; rows I3.5, I3.8; contract U9). Lane SPEAK's file;
+// GUEST leaves two marked places in JoinRoom.tsx and the integrator joins them.
+//
+//   GuestMiloVoice     plays Milo's voice on the socket the candidate's page already holds (GuestCallHost's): the `assistant-audio`
+//                      frames on the call chat's channel `orgiq:huddle:<callId>`, through the same player the Work footer uses
+//                      (lib/assistantVoice.ts). The server relays only approved words in an interview, so every frame that comes is
+//                      meant for the candidate's ears. One line: the question Milo last asked, read from the same channel's chat
+//                      frames (only messages with the server's approved mark, lib/interviewsRoom.ts `lastAskedOf`).
+//   GuestMiloRequests  "Repeat the question" and "How much time is left?": POST /api/interview-invite/milo/request, and the
+//                      server's sentence beside them. Milo also says it aloud when it is listening with its voice on.
+//
+// Neither opens a socket or joins a channel; both render nothing until the candidate is in the call.
+import { useEffect, useState, type JSX } from 'react';
+import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { SpeakerIcon } from '@connorhoehn/ui-components/video';
+import { useAssistantVoice } from '../../lib/assistantVoice';
+import { useGatewayFrames } from '../../lib/gatewayFrames';
+import { hasJoinedCall } from '../../components/shell/callShellModel';
+import { useCallHost } from '../../lib/conversationCall';
+import { lastAskedOf } from '../../lib/interviewsRoom';
+import { NO_ASSISTANT } from '../../lib/meetingAssistantModel';
+import { GUEST_API } from './guestApi';
+import type { GuestRoom } from './steps';
+
+/** The call the candidate is in now, or null before they join (or after they leave). */
+function useJoinedCallId(room: GuestRoom): string | null {
+  const host = useCallHost();
+  const call = host?.call;
+  const here = host?.lobby?.lobbyName === room.lobbyName;
+  return here && call && hasJoinedCall(call.call, call.phase) ? call.call?.callId ?? null : null;
+}
+
+/** The player is told the voice is on and Milo listening: the server only relays Milo's voice in an interview when it is. */
+const heardView = (callId: string) => ({ ...NO_ASSISTANT(callId), voice: true, phase: 'listening' as const });
+
+export function GuestMiloVoice({ room }: { room: GuestRoom }): JSX.Element | null {
+  const callId = useJoinedCallId(room);
+  const voice = useAssistantVoice(callId, heardView(callId ?? ''));
+  const { gateway } = useGatewayFrames();
+  const [asked, setAsked] = useState<string | null>(null);
+  useEffect(() => {
+    setAsked(null);
+    if (!callId) return undefined;
+    const channel = `orgiq:huddle:${callId}`;
+    return gateway.onMessage((frame) => setAsked((cur) => lastAskedOf(frame, channel, cur)));
+  }, [callId, gateway.onMessage]);
+  if (!callId || room.state !== 'open') return null;
+  return <Inline gap="sm" align="center" wrap={false} className="min-w-0 px-4 py-1" data-testid="guest-milo-voice"
+    data-voice-frames={voice.framesPlayed} data-voice-speaking={String(voice.speaking)}>
+    {voice.speaking && <Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Milo is speaking</Chip>}
+    {asked && <T size="sm" weight="medium" className="shrink-0">Milo asked</T>}
+    {asked && <T size="sm" truncate title={asked} data-testid="guest-milo-question">{asked}</T>}
+    {voice.needsGesture && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="guest-milo-enable-sound">Click to hear Milo</Button>}
+  </Inline>;
+}
+
+/** The two fixed requests (decision 10), as plain buttons, and the server's sentence. */
+export function GuestMiloRequests({ room }: { room: GuestRoom }): JSX.Element | null {
+  const callId = useJoinedCallId(room);
+  const [busy, setBusy] = useState(false);
+  const [line, setLine] = useState<string | null>(null);
+  if (!callId || room.state !== 'open') return null;
+  const ask = async (request: 'repeat' | 'time') => {
+    if (busy) return;
+    setBusy(true);
+    setLine(await requestFromMilo(request));
+    setBusy(false);
+  };
+  return <Inline gap="xs" align="center" wrap={false} className="shrink-0" data-testid="guest-milo-requests">
+    <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('repeat')} data-testid="guest-milo-repeat">Repeat the question</Button>
+    <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('time')} data-testid="guest-milo-time">How much time is left?</Button>
+    {line && <Tooltip content={line} placement="top">
+      <T size="xs" tone="secondary" truncate className="max-w-[16rem]" role="status" data-testid="guest-milo-line">{line}</T>
+    </Tooltip>}
+  </Inline>;
+}
+
+/** The request; a plain sentence whatever happens (the route's own, or one of ours when it does not answer). */
+async function requestFromMilo(request: 'repeat' | 'time'): Promise<string> {
+  try {
+    const res = await fetch(`${GUEST_API}/milo/request`, {
+      method: 'POST', credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ request }),
+    });
+    const body = await res.json().catch(() => null) as { line?: unknown; error?: unknown } | null;
+    if (res.ok && typeof body?.line === 'string') return body.line;
+    if (typeof body?.error === 'string') return body.error;
+  } catch { /* below */ }
+  return 'Milo could not answer just now. Try again in a moment.';
+}

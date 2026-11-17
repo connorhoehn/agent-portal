@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { ChatComposer, Disclosure, EmptyState, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, ChatComposer, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
@@ -43,6 +43,7 @@ import {
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, type RoomTabId,
+  queuePadQuestion, sayQuestion, type MiloSaid,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -129,11 +130,11 @@ function InterviewRoom({ id }: { id: string }) {
     void read();
     return () => { live = false; window.clearTimeout(timer); };
   }, [asking, id, roundMinutes]);
-  const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string }> => {
+  const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloSaid }> => {
     const out = await answerSuggestion(id, suggestionId, answer);
     if (!out.ok && !out.gone) return { error: out.error };
     setSuggestion((s) => (s?.id === suggestionId ? null : s));
-    return {};
+    return out.ok && out.said ? { said: out.said } : {};
   }, [id]);
 
   const leave = host?.call.leave;
@@ -241,21 +242,43 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
       </Stack>
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
         {tab === 'pad' && <PadTab room={room} />}
-        {tab === 'questions' && <Questions questions={room.questions} />}
-        {tab === 'plan' && <><Questions questions={room.questions} title="The plan" /><Competencies room={room} /></>}
+        {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
+          onAsked={type === 'technical' ? (q) => { queuePadQuestion(room.id, q); setTab('pad'); } : undefined} />}
+        {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}
         {tab === 'milo' && <MiloForYou room={room} {...milo} />}
       </Stack>}
   </SidePane>;
 }
 
-/** The chosen questions with their follow-ups: a technical round's Questions tab, a behavioural round's plan. */
-function Questions({ questions, title = 'Questions' }: { questions: RoomQuestion[]; title?: string }) {
+/**
+ * The chosen questions with their follow-ups: a technical round's Questions tab, a behavioural round's plan. For the lead while the
+ * interview is live (`asks`), each has "Have Milo ask" (row I3.5, decision 11): the server reads the question from the kit, posts it
+ * in the call chat and Milo says it aloud; in a technical round `onAsked` also puts it in the pad. The result is one plain line.
+ */
+function Questions({ questions, title = 'Questions', interviewId, asks = false, onAsked }: {
+  questions: RoomQuestion[]; title?: string; interviewId?: string; asks?: boolean; onAsked?: (q: RoomQuestion) => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ id: string; line: string; said: MiloSaid | null } | null>(null);
+  const ask = async (q: RoomQuestion) => {
+    if (!interviewId || busy) return;
+    setBusy(q.id);
+    const out = await sayQuestion(interviewId, q.id);
+    setBusy(null);
+    if (!out.ok) { setResult({ id: q.id, line: out.error, said: null }); return; }
+    setResult({ id: q.id, line: out.line, said: out.said });
+    onAsked?.(q);
+  };
   if (!questions.length) return <PageSection size="sm" title={title} empty="No questions were chosen for this round." />;
   return <PageSection size="sm" title={title} count={questions.length}>
     <Stack as="ol" gap="md" data-testid="interview-room-plan">
       {questions.map((q, n) => <Stack as="li" key={q.id} gap="xs">
-        <T size="xs" weight="medium" tone="secondary">{`${n + 1}. ${q.competency ?? 'Competency'}`}</T>
+        <Inline gap="sm" align="center" justify="between" wrap={false}>
+          <T size="xs" weight="medium" tone="secondary" truncate>{`${n + 1}. ${q.competency ?? 'Competency'}`}</T>
+          {asks && <Button size="sm" variant="secondary" disabled={busy !== null} onClick={() => void ask(q)} data-testid="interview-room-milo-ask">Have Milo ask</Button>}
+        </Inline>
         <T size="sm" wrap>{q.prompt}</T>
+        {result?.id === q.id && <T size="xs" tone={result.said === 'spoken' ? 'secondary' : 'warning'} wrap role="status" data-testid="interview-room-milo-said" data-said={result.said ?? 'error'}>{result.line}</T>}
         {q.followUps.length > 0 && <Disclosure summary={<T size="xs" tone="secondary">{`Follow-ups (${q.followUps.length})`}</T>} density="compact">
           <Stack as="ul" gap="xs">{q.followUps.map((f) => <T as="li" key={f} size="sm" wrap>{f}</T>)}</Stack>
         </Disclosure>}

@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Button, Chip, Inline, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, knockPromptId, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, knockPromptId, miloAskReceipt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -25,7 +25,8 @@ export interface InterviewRoomFooterState {
   suggestion: SuggestionView | null;
   /** The quiet line when the budget paused suggestions (the lead's only; null otherwise). */
   pausedLine: string | null;
-  answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string }>;
+  /** `said` (Have Milo ask): aloud, or in the call chat only (row I3.5). */
+  answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloSaid }>;
 }
 
 // One registration at a time: the room page that is mounted.
@@ -60,6 +61,16 @@ function useNow(stepMs: number): number {
     return () => window.clearInterval(t);
   }, [stepMs]);
   return now;
+}
+
+/**
+ * Whose interview call this is to the viewer, for Milo's bar controls (row I3.5): `lead` keeps them exactly as a work call shows
+ * them; `panel` gets none of the lead's (the server refuses everyone but the lead, milo-policy.ts LEAD_ONLY); null: not an
+ * interview call, so nothing changes.
+ */
+export function useInterviewRoomSeat(lobbyName: string | null | undefined): 'lead' | 'panel' | null {
+  const room = useRoomFor(lobbyName);
+  return room ? (room.lead ? 'lead' : 'panel') : null;
 }
 
 /** In the call bar's extras: time left, the consent chip, and the lead's End interview. */
@@ -123,7 +134,7 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
         const answer: SuggestionAnswerId = 'optionId' in a && (a.optionId === 'milo-ask' || a.optionId === 'skip') ? a.optionId : 'ask';
         const out = await room.answerSuggestion(sg.id, answer);
         if (out.error) return { error: out.error };
-        return { receipt: SUGGESTION_RECEIPTS[answer] };
+        return { receipt: answer === 'milo-ask' ? miloAskReceipt(out.said) : SUGGESTION_RECEIPTS[answer] };
       },
     });
     return list;
