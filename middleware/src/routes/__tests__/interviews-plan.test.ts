@@ -198,3 +198,51 @@ describe('the draft', () => {
     expect(planRows()).toHaveLength(0);
   });
 });
+
+describe('two asks almost at once (hardening H3, O-128)', () => {
+  it('a second ask while the first is drafting is told so in one line: one model call, one hold, one row', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const calls = jest.fn();
+    const inner = new ScriptedPlanModel();
+    setPlanDeps({ model: () => ({ kind: inner.kind, modelId: inner.modelId, draft: async (input) => { calls(); await gate; return inner.draft(input); } }) });
+    const first = draft(WEN).then((r) => r);
+    for (let i = 0; i < 50 && calls.mock.calls.length === 0; i += 1) await new Promise((r) => setTimeout(r, 5));
+    expect(calls).toHaveBeenCalledTimes(1);
+    const second = await draft(WEN);
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ plan: null, paused: null, line: 'Milo is already drafting a plan for this round.' });
+    release();
+    expect((await first).body.plan).not.toBeNull();
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(spendHolds.rows().filter((h) => h.source === 'interviews')).toHaveLength(1);
+    expect(planRows()).toHaveLength(1);
+  });
+
+  it('two asks sent in the same moment still make one model call', async () => {
+    const calls = jest.fn();
+    const inner = new ScriptedPlanModel();
+    setPlanDeps({ model: () => ({ kind: inner.kind, modelId: inner.modelId, draft: async (input) => { calls(); await new Promise((r) => setTimeout(r, 30)); return inner.draft(input); } }) });
+    const both = await Promise.all([draft(WEN), draft(WEN)]);
+    expect(calls).toHaveBeenCalledTimes(1);
+    expect(both.filter((r) => r.body.plan !== null)).toHaveLength(1);
+    expect(planRows()).toHaveLength(1);
+  });
+
+  // Found here: draftPlan checks its in-flight set BEFORE awaiting the earlier drafts and adds itself only AFTER, so two asks
+  // that both reach it before that read returns each draft (two model calls, two holds, and past the three-draft cap). Over
+  // HTTP with the memory log the read returns before the second request arrives; with the SQL log (a real round trip) two
+  // tabs a few milliseconds apart fall in that window. Held as it.failing and reported; not fixed here (money).
+  it.failing('two asks that reach the service in the same tick make one model call', async () => {
+    const { draftPlan } = await import('../../lib/interviews/plan/index.js');
+    const { interviewApplicationsFixture } = await import('../../mock/interviews.js');
+    const calls = jest.fn();
+    const inner = new ScriptedPlanModel();
+    setPlanDeps({ model: () => ({ kind: inner.kind, modelId: inner.modelId, draft: async (input) => { calls(); return inner.draft(input); } }) });
+    const interview = interviewsFixture.rows().find((i) => i.id === IV)!;
+    const app = interviewApplicationsFixture.rows().find((a) => a.id === interview.applicationId)!;
+    const ref = { interview, opening: interviewOpeningsFixture.rows().find((o) => o.id === app.openingId)! };
+    await Promise.all([draftPlan(ref, { userId: 'u-wen' }), draftPlan(ref, { userId: 'u-wen' })]);
+    expect(calls).toHaveBeenCalledTimes(1);
+  });
+});
