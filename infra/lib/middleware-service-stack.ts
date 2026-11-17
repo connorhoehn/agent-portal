@@ -20,7 +20,7 @@ import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import { microvmLabApiBase } from './microvm-network-stack';
 import { SFU_PORTS, sfuParameterNames } from './social-media-stack';
-import { meetingAssistantParameterNames, meetingAssistantProvider, meetingAssistantSinkSecretName } from './meeting-assistant-config';
+import { meetingAssistantParameterNames, meetingAssistantSinkSecretName } from './meeting-assistant-config';
 import { contextFlag } from './context-flags';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
@@ -1368,7 +1368,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     }
 
     // ── Meeting assistant, Milo (docs/meeting-assistant-design.md), `-c meetingAssistant=true` ──
-    // Listening needs three things besides the flag: a live provider, the media server's admin API (to arm
+    // Listening needs three things besides the flag: the OpenAI key, the media server's admin API (to arm
     // one audio tap per participant) and an address the media server posts audio to. The media server is
     // OrgIQ-SocialMedia; it gets the sink secret below as its LIVE_CAPTIONS_SHARED_SECRET and sends it on
     // every audio post, so a token read back from a tap listing is not enough on its own (audit B4).
@@ -1386,27 +1386,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
       containerSecrets['MEETING_ASSISTANT_SINK_SECRET'] = ecs.Secret.fromSecretsManager(sinkSecret);
       environment['MEETING_ASSISTANT_ENABLED'] = 'true';
 
-      const provider = meetingAssistantProvider(this.node.tryGetContext('meetingAssistantProvider'));
-      environment['MEETING_ASSISTANT_PROVIDER'] = provider;
-      if (provider === 'openai') {
-        useOpenAiKey();
-      } else {
-        // Amazon Transcribe streaming per participant, a Bedrock model for the reasoning and its tool calls,
-        // Amazon Polly for the voice (middleware lib/meeting-assistant/aws-session.ts). None of the three
-        // streaming or synthesis actions takes a resource; Bedrock is already granted (BedrockInvoke).
-        featurePolicy('MeetingAssistantTaskPolicy', [
-          new iam.PolicyStatement({
-            sid: 'MeetingAssistantTranscribe',
-            actions: ['transcribe:StartStreamTranscription', 'transcribe:StartStreamTranscriptionWebSocket'],
-            resources: ['*'],
-          }),
-          new iam.PolicyStatement({
-            sid: 'MeetingAssistantPolly',
-            actions: ['polly:SynthesizeSpeech'],
-            resources: ['*'],
-          }),
-        ]);
-      }
+      // The live session is OpenAI's (lib/meeting-assistant/live-session.ts): its transcription layer, and a background
+      // session with the tool catalogue whose calls come back as actions the asker's browser runs. Same key as `voice`.
+      useOpenAiKey();
 
       // Where the media server posts audio: the portal's public URL (CloudFront, the one path the ALB
       // admits), or -c meetingAssistantSinkBaseUrl=https://… The SFU's LIVE_CAPTIONS_ORIGIN is the same origin.

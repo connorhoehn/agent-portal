@@ -10,7 +10,6 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { interviewsSettingsEnv } from '../lib/middleware-service-stack';
-import { meetingAssistantProvider } from '../lib/meeting-assistant-config';
 import { PREFIX, foundationStack, middlewareServiceStack, newApp } from './helpers/stacks';
 import { statementsForRole } from './helpers/cfn';
 
@@ -82,27 +81,15 @@ describe('the meeting assistant', () => {
     assert.equal(Object.keys(t.findResources('AWS::SecretsManager::Secret')).filter((k) => /MeetingAssistant/.test(k)).length, 0);
   });
 
-  test('the AWS provider (the default): Transcribe and Polly grants, no OpenAI key', () => {
+  test('the OpenAI live session: the sink secret and the voice key, once even with voice=true', () => {
     const t = Template.fromStack(middlewareServiceStack({ meetingAssistant: 'true' }));
-    const env = envOf(t);
-    assert.equal(env['MEETING_ASSISTANT_ENABLED'], 'true');
-    assert.equal(env['MEETING_ASSISTANT_PROVIDER'], 'aws');
+    assert.equal(envOf(t)['MEETING_ASSISTANT_ENABLED'], 'true');
     assert.ok(secretNames(t).includes('MEETING_ASSISTANT_SINK_SECRET'));
-    assert.ok(!secretNames(t).includes('OPENAI_API_KEY'));
-    assert.ok(sids(t).includes('MeetingAssistantTranscribe') && sids(t).includes('MeetingAssistantPolly'));
+    assert.ok(secretNames(t).includes('OPENAI_API_KEY'));
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'orgiq/meeting-assistant/sink-secret' });
     t.hasResourceProperties('AWS::SSM::Parameter', { Name: '/orgiq/meeting-assistant/sink-secret-arn' });
-  });
-
-  test('the OpenAI provider reads the voice key and grants nothing else', () => {
-    const t = Template.fromStack(middlewareServiceStack({ meetingAssistant: 'true', meetingAssistantProvider: 'openai' }));
-    assert.equal(envOf(t)['MEETING_ASSISTANT_PROVIDER'], 'openai');
-    assert.ok(secretNames(t).includes('OPENAI_API_KEY'));
-    assert.ok(!sids(t).includes('MeetingAssistantTranscribe'));
-    // voice=true as well: one key, not two.
-    const both = Template.fromStack(middlewareServiceStack({ meetingAssistant: 'true', meetingAssistantProvider: 'openai', voice: 'true' }));
+    const both = Template.fromStack(middlewareServiceStack({ meetingAssistant: 'true', voice: 'true' }));
     assert.equal(secretNames(both).filter((n) => n === 'OPENAI_API_KEY').length, 1);
-    assert.throws(() => meetingAssistantProvider('gemini'), /aws or openai/);
   });
 
   test('first deploy: says what is missing; later deploy: the SFU address, its admin token and the portal URL', () => {

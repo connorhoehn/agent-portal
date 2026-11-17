@@ -517,11 +517,7 @@ print(json.dumps({r["name"]: r["value"] for r in rows}, separators=(",", ":")) i
       [[ -n "$MW_IV_SETTINGS" ]] && infer interviewsSettings "$MW_IV_SETTINGS"
     fi
     taskdef_env MW_MILO MEETING_ASSISTANT_ENABLED
-    if [[ "$MW_MILO" == "true" ]]; then
-      infer meetingAssistant true
-      taskdef_env MW_MILO_PROVIDER MEETING_ASSISTANT_PROVIDER
-      [[ "$MW_MILO_PROVIDER" == "aws" || "$MW_MILO_PROVIDER" == "openai" ]] && infer meetingAssistantProvider "$MW_MILO_PROVIDER"
-    fi
+    [[ "$MW_MILO" == "true" ]] && infer meetingAssistant true
   fi
 
   # The opt-in Social stacks. Each consumes the middleware's exports, so a

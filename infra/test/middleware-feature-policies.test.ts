@@ -37,7 +37,7 @@ test('each feature that grants the task role does so through its own managed pol
   const managed = Object.entries<any>(middlewareTemplate().Resources)
     .filter(([, r]) => r.Type === 'AWS::IAM::ManagedPolicy')
     .map(([id]) => id.replace(/[0-9A-F]{8}$/, ''));
-  for (const feature of ['MicrovmTaskPolicy', 'InterviewsTaskPolicy', 'MeetingAssistantTaskPolicy']) {
+  for (const feature of ['MicrovmTaskPolicy', 'InterviewsTaskPolicy']) {
     assert.ok(managed.includes(feature), `no ${feature} (found ${managed.join(', ')})`);
   }
 });

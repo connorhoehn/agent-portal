@@ -121,8 +121,7 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
     id: 'AwsSolutions-IAM5',
     reason: 'MiddlewareService feature policies (one managed policy per opt-in feature on the task role): the microVM runner\'s '
       + 'secret:<prefix>/github-app* and secret:<prefix>/github-user/* (one secret per linked person), the runs bucket\'s runs/* objects and '
-      + 'ssm /<prefix>/microvm/*; the interviews résumé bucket\'s objects (/*); the meeting assistant\'s Transcribe streaming, Polly and '
-      + 'Bedrock model actions, which have no resource-level permission.',
+      + 'ssm /<prefix>/microvm/*; the interviews résumé bucket\'s objects (/*).',
     stacks: ['MiddlewareService'],
     paths: ['*TaskPolicy'],
   },
