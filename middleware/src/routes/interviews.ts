@@ -32,6 +32,7 @@ import { recordsRouter } from './interviews/records.js';
 import { consentsRouter } from './interviews/consents.js';
 import { coachRouter } from './interviews/coach.js';
 import { miloRouter } from './interviews/milo.js';
+import { padRouter } from './interviews/pad.js';
 import { assignmentsRouter } from './interviews/assignments.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
@@ -92,6 +93,7 @@ interviewsRouter.use(inviteRouter); // lane INVITE (row I2.1): issue, read and r
 interviewsRouter.use(planRouter); // lane PLAN (row I3.10): Milo drafts a question plan for the lead
 
 interviewsRouter.use(coachRouter); // lane COACH (row I3.3): Milo's suggestion for the lead, and the lead's answer
+interviewsRouter.use(padRouter); // lane PADLOG (row I4.3)
 interviewsRouter.use(miloRouter); // lane MILO-FOR-YOU (rows I3.6, I3.7): the live transcript, Milo's notes, the lead's private question
 interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

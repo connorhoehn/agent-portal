@@ -21,6 +21,7 @@
 
 import express, { Router, type Request, type Response } from 'express';
 import { consentGuestRouter } from './interview-invite-consents.js';
+import { padGuestRouter } from './interview-invite-pad.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { runWithDbTenant } from '../providers/db-tenant.js';
 import { interviewsStore } from '../lib/interviews/store-select.js';
@@ -130,6 +131,7 @@ interviewInviteRouter.post('/exchange', interviewsFlagGate, rateLimit, asyncHand
   res.json({ interview: opened.view });
 }));
 
+interviewInviteRouter.use(padGuestRouter);
 interviewInviteRouter.use(consentGuestRouter);
 interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
