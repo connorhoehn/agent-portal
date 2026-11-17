@@ -24,7 +24,7 @@ import type { RetentionPeriods } from './periods.js';
 
 export type RetentionClass = 'media' | 'record';
 /** What a candidate's deletion log row may name. Never content, never a name, an address or a file name. */
-export type RemovedKind = 'recording' | 'transcript-and-minutes' | 'code-log' | 'scorecards' | 'consents' | 'suggestions' | 'resume' | 'contact-details' | 'stage-reasons' | 'invite' | (string & {});
+export type RemovedKind = 'recording' | 'transcript-and-minutes' | 'code-log' | 'scorecards' | 'consents' | 'suggestions' | 'recaps' | 'coach-log' | 'resume' | 'contact-details' | 'stage-reasons' | 'invite' | (string & {});
 
 export const OPEN_STATES: readonly InterviewState[] = ['assigned', 'accepted', 'ready', 'live'];
 const ENDED_STATES: readonly InterviewState[] = ['ended', 'scored', 'reviewed'];

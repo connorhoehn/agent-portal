@@ -32,7 +32,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
         interviewId: 'iv-ingrid-together', state: 'ready', writtenAt: at(-6, 14, 50), modelId: MODEL, promptVersion: PROMPT_VERSION,
         attempts: 1, droppedCodes: [], droppedClaims: 0,
         content: {
-          competencies: [{ id: 'communication', evidence: [said(13, 'I paged the on-call lead and we split the investigation')] }],
+          competencies: [{ id: 'communication', evidence: [said(8, 'I paged the on-call lead and we split the investigation')] }],
           notCovered: ['problem-solving', 'code-quality', 'system-design', 'collaboration'],
         },
       },
@@ -41,7 +41,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
         interviewId: 'iv-mateo-coding', state: 'ready', writtenAt: at(-3, 16, 0), modelId: MODEL, promptVersion: PROMPT_VERSION,
         attempts: 1, droppedCodes: [], droppedClaims: 0,
         content: {
-          competencies: [{ id: 'problem-solving', evidence: [said(21, 'each key gets a fixed window that resets every minute')] }],
+          competencies: [{ id: 'problem-solving', evidence: [said(19, 'each key gets a fixed window that resets every minute')] }],
           notCovered: ['code-quality', 'system-design', 'communication', 'collaboration'],
         },
       },

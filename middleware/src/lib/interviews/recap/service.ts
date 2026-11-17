@@ -24,6 +24,13 @@ import { DEFAULT_COACH_MODEL_ID, type CoachModelResult } from '../coach/model.js
 import { coachConsents } from '../coach/service.js';
 import { suggestionStore } from '../coach/store.js';
 import { assistantTranscript, type TranscriptSource } from '../coach/transcript.js';
+import { recordTranscript } from '../record/transcript.js';
+
+/** E1: the recap reads the interview record's transcript (which holds the mock world's seeded lines), else Milo's call record. */
+const recordOrAssistantTranscript: TranscriptSource = async (i) => {
+  const r = await recordTranscript(i);
+  return r ? { callId: r.callId, lastSeq: r.lines.at(-1)?.seq ?? 0, lines: r.lines.map(({ seq, side, text }) => ({ seq, side, text })) } : assistantTranscript(i);
+};
 import type { CoachLine } from '../coach/prompt.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
@@ -67,7 +74,7 @@ const defaultTaken: RecapDeps['taken'] = async (interviewId) => {
 const DEFAULTS: RecapDeps = {
   store: recapStore,
   consents: coachConsents,
-  transcript: assistantTranscript,
+  transcript: recordOrAssistantTranscript,
   taken: defaultTaken,
   model: makeRecapModel,
   reserve: reserveInterviewSpend,

@@ -17,6 +17,7 @@
 // refused at the action (403). A stale submit is 409 with the scorecard as it now reads. When every seated
 // person's scorecard is in, the interview moves to `scored` (one compare-and-set write).
 
+import { scorecardSubmitted } from '../../lib/interviews/result-bells.js';
 import { randomUUID } from 'node:crypto';
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
@@ -164,5 +165,6 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
     return;
   }
   await scoreIfComplete(i.id);
+  void scorecardSubmitted(i.id, session.sub, move.version); // the submitted / every-scorecard-in bells (I5.6)
   res.status(201).json({ scorecard: await readPage(req, id) });
 }));

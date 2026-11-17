@@ -18,6 +18,8 @@
 // The suggestion log's eraser is the coach's (`eraseSuggestions`), registered by the integrator.
 
 import { eraseSuggestions } from '../coach/index.js';
+import { eraseRecaps } from '../recap/index.js';
+import { eraseCoachLog } from '../milo-notes/index.js';
 import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import type { AssistantStore } from '../../meeting-assistant/store.js';
 import { EraserBusy, EraserSkipped, registerEraser, type Eraser } from './registry.js';
@@ -125,4 +127,6 @@ export function registerOwnErasers(): void {
   registerEraser(consentsEraser());
   registerEraser(scorecardsEraser());
   registerEraser({ kind: 'suggestions', class: 'record', erase: eraseSuggestions });
+  registerEraser({ kind: 'recaps', class: 'record', erase: eraseRecaps });
+  registerEraser({ kind: 'coach-log', class: 'record', erase: eraseCoachLog });
 }

@@ -10,6 +10,7 @@
 // exists. The writes are compare-and-set on the revision the page loaded: 409 with the row as it now is.
 // Both writes answer `{ interview }` as GET /interviews/:id gives it.
 
+import { interviewEnded } from '../../lib/interviews/result-bells.js';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
@@ -73,4 +74,8 @@ function roomWrite(move: (i: Interview, userId: string) => RoomMove, write: (i: 
 }
 
 roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision)));
-roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, (i, revision) => interviewsStore().endInterview(i.id, new Date().toISOString(), revision)));
+roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, revision) => {
+  const r = await interviewsStore().endInterview(i.id, new Date().toISOString(), revision);
+  if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
+  return r;
+}));
