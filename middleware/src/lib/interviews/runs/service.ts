@@ -26,7 +26,7 @@ import {
   DEFAULT_RUN_LIMITS, RUN_LANGUAGES, isTerminal, serviceResult,
   type Executor, type ExecutorOutput, type ExecutorRun, type RunLanguage, type RunLimits, type RunResult, type RunStatus, type RunStream,
 } from './executor.js';
-import { createMockExecutor } from './mock-executor.js';
+import { createExecutor } from './select.js';
 import { runStore, type RunPerson, type RunRecord, type RunStore, type StoredRunEvent } from './store.js';
 import {
   releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend,
@@ -147,8 +147,8 @@ export interface RunDeps {
 let defaultExecutor: Executor | null = null;
 const DEFAULTS: RunDeps = {
   store: runStore,
-  // The only backend this round. Real ones (rows I4.7–I4.9) are chosen here by setting.
-  executor: () => (defaultExecutor ??= createMockExecutor()),
+  // select.ts: the mock in the mock world, the AgentCore Code Interpreter on a cluster that names one, else none.
+  executor: () => (defaultExecutor ??= createExecutor()),
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,

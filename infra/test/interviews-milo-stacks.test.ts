@@ -10,7 +10,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { interviewsSettingsEnv } from '../lib/middleware-service-stack';
-import { PREFIX, foundationStack, middlewareServiceStack, newApp } from './helpers/stacks';
+import { PREFIX, capabilitiesStack, foundationStack, middlewareServiceStack, newApp } from './helpers/stacks';
 import { statementsForRole } from './helpers/cfn';
 
 const BUCKET = { interviewResumesBucketName: 'orgiq-interview-resumes-x', interviewResumesBucketArn: 'arn:aws:s3:::orgiq-interview-resumes-x' };
@@ -58,6 +58,33 @@ describe('the interviews tenant', () => {
     const msgs = Annotations.fromStack(stack).findWarning('*', Match.stringLikeRegexp('candidate cannot join'));
     assert.equal(msgs.length, 1);
     assert.throws(() => middlewareServiceStack({ interviews: 'true', interviewsGuestRealtime: 'true' }, BUCKET), /realtimeGateway/);
+  });
+
+  test('Capabilities: its own sandboxed interpreter, a role with no permissions, its id by name; only with the flag', () => {
+    assert.equal(Object.keys(Template.fromStack(capabilitiesStack()).findResources('AWS::BedrockAgentCore::CodeInterpreterCustom')).length, 1);
+    const t = Template.fromStack(capabilitiesStack({ interviews: 'true' }));
+    t.hasResourceProperties('AWS::BedrockAgentCore::CodeInterpreterCustom', { Name: 'orgiq_interview_runs', NetworkConfiguration: { NetworkMode: 'SANDBOX' } });
+    const [role] = Object.values<any>(t.findResources('AWS::IAM::Role')).filter((r) => r.Properties.RoleName === 'orgiq-interview-runs-execution-role');
+    assert.ok(role, 'no interview runs execution role');
+    assert.equal(role.Properties.Policies, undefined);
+    assert.equal(role.Properties.ManagedPolicyArns, undefined);
+    assert.equal(Object.values<any>(t.findResources('AWS::IAM::Policy')).filter((p) => JSON.stringify(p.Properties.Roles).includes('InterviewRunsExecutionRole')).length, 0);
+    t.hasResourceProperties('AWS::SSM::Parameter', { Name: '/orgiq/capabilities/interview-runs-interpreter-id' });
+  });
+
+  test('with the capability parameters: the interpreter id by name, sessions on that interpreter only', () => {
+    const t = Template.fromStack(middlewareServiceStack({ interviews: 'true', realtimeGateway: 'true' }, { ...BUCKET, capabilityParameters: true }));
+    assert.ok(secretNames(t).includes('INTERVIEWS_CODE_INTERPRETER_ID'));
+    assert.match(JSON.stringify(container(t).Secrets), /\/orgiq\/capabilities\/interview-runs-interpreter-id/);
+    const st = statementsForRole(t, 'orgiq-middleware-task-role').find((s) => s.Sid === 'InterviewRunSessions')!;
+    assert.deepEqual(st.Action, ['bedrock-agentcore:StartCodeInterpreterSession', 'bedrock-agentcore:InvokeCodeInterpreter', 'bedrock-agentcore:StopCodeInterpreterSession']);
+    assert.match(JSON.stringify(st.Resource), /code-interpreter-custom\/orgiq_interview_runs-\*/);
+    assert.throws(() => interviewsSettingsEnv('{"INTERVIEWS_RUN_BACKEND":"mock"}'), /not a settable/);
+    assert.throws(() => interviewsSettingsEnv('{"INTERVIEWS_CODE_INTERPRETER_ID":"x"}'), /not a settable/);
+
+    const bare = middlewareServiceStack({ interviews: 'true', realtimeGateway: 'true' }, BUCKET);
+    assert.ok(!secretNames(Template.fromStack(bare)).includes('INTERVIEWS_CODE_INTERPRETER_ID'));
+    assert.equal(Annotations.fromStack(bare).findWarning('*', Match.stringLikeRegexp('not set up')).length, 1);
   });
 
   test('interviewsSettings passes INTERVIEWS_* settings and refuses the rest', () => {

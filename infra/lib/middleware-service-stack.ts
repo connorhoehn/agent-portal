@@ -16,7 +16,7 @@ import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './realtime-alarms';
 import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
-import { capabilityParameterNames } from './agentcore-capabilities-stack';
+import { capabilityParameterNames, interviewRunsInterpreterName } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import { microvmLabApiBase } from './microvm-network-stack';
 import { SFU_PORTS, sfuParameterNames } from './social-media-stack';
@@ -1349,7 +1349,24 @@ export class MiddlewareServiceStack extends cdk.Stack {
           actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
           resources: [`${props.interviewResumesBucketArn}/*`],
         }),
+        // A candidate's Run (lib/interviews/runs/agentcore-executor.ts): one session per run on the tenant's own
+        // interpreter (OrgIQ-AgentCoreCapabilities with the same flag), scoped by its name.
+        ...(props.capabilityParameters ? [new iam.PolicyStatement({
+          sid: 'InterviewRunSessions',
+          actions: [
+            'bedrock-agentcore:StartCodeInterpreterSession',
+            'bedrock-agentcore:InvokeCodeInterpreter',
+            'bedrock-agentcore:StopCodeInterpreterSession',
+          ],
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:code-interpreter-custom/${interviewRunsInterpreterName(prefix)}-*`],
+        })] : []),
       ]);
+      if (props.capabilityParameters) {
+        containerSecrets['INTERVIEWS_CODE_INTERPRETER_ID'] = ecs.Secret.fromSsmParameter(
+          ssm.StringParameter.fromStringParameterName(this, 'InterviewRunsInterpreterIdParameter', capabilityParameterNames(prefix).interviewRunsInterpreterId));
+      } else {
+        featureWarn('interviews=true without the capability parameters: a candidate\'s Run answers "not set up".');
+      }
       // A candidate joins the call on this task's gateway with a guest realtime token. It needs the gateway,
       // and platform-api and the social gateway at the commits that refuse a guest outside its own interview
       // (scripts/docker/document-workspace-sources.json socialSources).
@@ -1895,7 +1912,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
 /**
  * `-c interviewsSettings='{"INTERVIEWS_INTERVIEW_CAP_USD":"6"}'`: the tenant's optional settings
  * (middleware lib/interviews/settings.ts lists each one). Only INTERVIEWS_* names, string values, and never
- * the three this stack owns.
+ * the ones this stack owns.
  */
 export function interviewsSettingsEnv(raw: unknown): Record<string, string> {
   if (raw === undefined || raw === null || raw === '') return {};
@@ -1904,7 +1921,7 @@ export function interviewsSettingsEnv(raw: unknown): Record<string, string> {
     try { parsed = JSON.parse(raw); } catch { throw new Error('--context interviewsSettings must be a JSON object'); }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('--context interviewsSettings must be a JSON object');
-  const owned = new Set(['INTERVIEWS_ENABLED', 'INTERVIEWS_RESUME_BUCKET', 'INTERVIEWS_GUEST_REALTIME']);
+  const owned = new Set(['INTERVIEWS_ENABLED', 'INTERVIEWS_RESUME_BUCKET', 'INTERVIEWS_GUEST_REALTIME', 'INTERVIEWS_CODE_INTERPRETER_ID', 'INTERVIEWS_RUN_BACKEND']);
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
     if (!/^INTERVIEWS_[A-Z0-9_]+$/.test(k) || owned.has(k)) throw new Error(`--context interviewsSettings: ${k} is not a settable interviews setting`);
