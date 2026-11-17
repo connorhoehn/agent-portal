@@ -9,21 +9,91 @@
 //
 // Pure: no clock, no session, no relay; the orchestrator (`sayHeldText`) does the holding and the sending.
 
-/** The words of a text, for comparing what was asked with what was said: lower case, letters and digits, single spaces. */
-export function spokenWords(text: string | null | undefined): string {
-  return (text ?? '')
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[‘’ʼ]/g, "'")
-    .replace(/'/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
+  'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const SCALES: Array<[number, string]> = [[1_000_000_000, 'billion'], [1_000_000, 'million'], [1_000, 'thousand']];
+
+function under1000(n: number): string {
+  const out: string[] = [];
+  if (n >= 100) { out.push(ONES[Math.floor(n / 100)], 'hundred'); n %= 100; }
+  if (n >= 20) { out.push(n % 10 ? `${TENS[Math.floor(n / 10)]}-${ONES[n % 10]}` : TENS[Math.floor(n / 10)]); }
+  else if (n > 0 || !out.length) out.push(ONES[n]);
+  return out.join(' ');
 }
 
-/** Did the session say exactly these words? Empty never matches. */
+/** A whole number in words ("59" → "fifty-nine"); past a trillion, digit by digit. */
+export function numberWords(digits: string): string {
+  const n = Number(digits);
+  if (!Number.isSafeInteger(n) || n >= 1_000_000_000_000) return digits.split('').map((d) => ONES[Number(d)]).join(' ');
+  if (n === 0) return 'zero';
+  const out: string[] = [];
+  let rest = n;
+  for (const [size, name] of SCALES) if (rest >= size) { out.push(under1000(Math.floor(rest / size)), name); rest %= size; }
+  if (rest > 0) out.push(under1000(rest));
+  return out.join(' ');
+}
+
+const ORDINAL_IRREGULAR: Record<string, string> = { one: 'first', two: 'second', three: 'third', five: 'fifth', eight: 'eighth', nine: 'ninth', twelve: 'twelfth' };
+
+/** An ordinal in words ("21st" → "twenty-first"). */
+export function ordinalWords(digits: string): string {
+  const card = numberWords(digits);
+  const m = /([a-z]+)$/.exec(card);
+  if (!m) return card;
+  const last = m[1];
+  const ord = ORDINAL_IRREGULAR[last] ?? (last.endsWith('y') ? `${last.slice(0, -1)}ieth` : `${last}th`);
+  return card.slice(0, card.length - last.length) + ord;
+}
+
+/**
+ * The text as it is read aloud: numbers, ordinals, decimals and "%" spelled out, everything else as written. Sent to the session in
+ * place of the approved text, so the provider reads the words it is asked to (its transcript says numbers in words anyway).
+ */
+export function speakableText(text: string): string {
+  return (text ?? '')
+    .replace(/(\d),(?=\d{3}\b)/g, '$1')
+    .replace(/(\d+)\s*%/g, '$1 percent')
+    .replace(/%/g, ' percent')
+    .replace(/\b(\d+)\.(\d+)\b/g, (_m, a: string, b: string) => `${numberWords(a)} point ${b.split('').map((d) => ONES[Number(d)]).join(' ')}`)
+    .replace(/\b(\d+)(st|nd|rd|th)\b/gi, (_m, d: string) => ordinalWords(d))
+    .replace(/\d+/g, (d) => numberWords(d));
+}
+
+const NUMBER_WORDS = new Set([...ONES, ...TENS.filter(Boolean), 'hundred', 'thousand', 'million', 'billion', 'point']);
+
+/**
+ * The words of a text, for comparing what was asked with what was said: lower case, letters only, single spaces; numbers and "%"
+ * in words, the unambiguous contractions expanded (n't, 're, 'll, 've, 'm), hyphens as spaces, "and" inside a number dropped.
+ */
+export function spokenWords(text: string | null | undefined): string {
+  const t = speakableText((text ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, ''))
+    .toLowerCase()
+    .replace(/[‘’ʼ`]/g, "'")
+    .replace(/\bcannot\b/g, 'can not')
+    .replace(/\bwon't\b/g, 'will not')
+    .replace(/\bshan't\b/g, 'shall not')
+    .replace(/\bcan't\b/g, 'can not')
+    .replace(/\b([a-z]+)n't\b/g, '$1 not')
+    .replace(/'re\b/g, ' are')
+    .replace(/'ll\b/g, ' will')
+    .replace(/'ve\b/g, ' have')
+    .replace(/\bi'm\b/g, 'i am')
+    .replace(/'/g, '');
+  const words = t.replace(/[^a-z]+/g, ' ').trim().split(' ').filter(Boolean);
+  return words.filter((w, i) => !(w === 'and' && NUMBER_WORDS.has(words[i - 1] ?? '') && NUMBER_WORDS.has(words[i + 1] ?? ''))).join(' ');
+}
+
+/**
+ * Did the session say these words? The same words in the same order once both sides are normalised (spokenWords), or, failing
+ * that, the same letters with the word breaks ignored ("failover" said as "fail over"). Any word added, dropped or changed still
+ * fails: it errs on withholding. Empty never matches.
+ */
 export function saidVerbatim(asked: string, transcript: string | null | undefined): boolean {
   const a = spokenWords(asked);
-  return a.length > 0 && a === spokenWords(transcript);
+  if (!a.length) return false;
+  const b = spokenWords(transcript);
+  return a === b || a.replace(/ /g, '') === b.replace(/ /g, '');
 }
 
 /** The shortest and longest time an approved utterance may take, from the request to its last frame and its final transcript. */

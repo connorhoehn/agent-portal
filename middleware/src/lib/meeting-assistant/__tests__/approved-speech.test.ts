@@ -29,7 +29,7 @@ import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type S
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { NOT_SAID_ALOUD, saidVerbatim, sayBoundMs, spokenWords } from '../approved-speech.js';
+import { NOT_SAID_ALOUD, numberWords, ordinalWords, saidVerbatim, sayBoundMs, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -104,6 +104,37 @@ describe('the words check (approved-speech.ts)', () => {
     expect(saidVerbatim(QUESTION, 'How would you design a rate limiter?')).toBe(false);
     expect(saidVerbatim('', '')).toBe(false);
     expect(saidVerbatim(QUESTION, null)).toBe(false);
+  });
+
+  it('normalises how a provider says the words: numbers, ordinals, percent, compounds, contractions', () => {
+    expect(numberWords('59')).toBe('fifty-nine');
+    expect(numberWords('999')).toBe('nine hundred ninety-nine');
+    expect(numberWords('1200')).toBe('one thousand two hundred');
+    expect(ordinalWords('21')).toBe('twenty-first');
+    expect(speakableText('About 59 minutes are left.')).toBe('About fifty-nine minutes are left.');
+    expect(saidVerbatim('About 59 minutes are left in this round.', 'About fifty-nine minutes are left in this round.')).toBe(true);
+    expect(saidVerbatim('About 59 minutes are left in this round.', 'About fifty nine minutes are left in this round')).toBe(true);
+    expect(saidVerbatim('We have 105 rows.', 'We have one hundred and five rows.')).toBe(true);
+    expect(saidVerbatim('Take the 1st and 3rd cases.', 'Take the first and third cases.')).toBe(true);
+    expect(saidVerbatim('Cut latency by 40%.', 'Cut latency by forty percent.')).toBe(true);
+    expect(saidVerbatim('A 2.5 second budget.', 'A two point five second budget.')).toBe(true);
+    expect(saidVerbatim('It handles 1,000 writes.', 'It handles one thousand writes.')).toBe(true);
+    expect(saidVerbatim('survives a region failover', 'survives a region fail over')).toBe(true);
+    expect(saidVerbatim('a double-entry ledger', 'a double entry ledger')).toBe(true);
+    expect(saidVerbatim('a write-ahead log', 'a writeahead log')).toBe(true);
+    expect(saidVerbatim("Don't skip the edge cases; you're fine.", 'Do not skip the edge cases; you are fine.')).toBe(true);
+    expect(saidVerbatim('You cannot retry it.', "You can't retry it.")).toBe(true);
+  });
+
+  it('still withholds a paraphrase or any word added, dropped or changed', () => {
+    expect(saidVerbatim('About 59 minutes are left in this round.', 'About sixty minutes are left in this round.')).toBe(false);
+    expect(saidVerbatim('About 59 minutes are left in this round.', 'About fifty-nine minutes left in this round.')).toBe(false);
+    expect(saidVerbatim('About 59 minutes are left in this round.', 'About fifty-nine minutes are left in this round. Good luck.')).toBe(false);
+    expect(saidVerbatim('Cut latency by 40%.', 'Cut latency by forty.')).toBe(false);
+    expect(saidVerbatim('survives a region failover', 'survives a regional failover')).toBe(false);
+    expect(saidVerbatim("Don't skip the edge cases.", 'Do skip the edge cases.')).toBe(false);
+    expect(saidVerbatim('Take the 1st case.', 'Take the third case.')).toBe(false);
+    expect(saidVerbatim(QUESTION, 'Walk me through how you would build a rate limiter for a public API.')).toBe(false);
   });
   it('the bound grows with the words and is capped', () => {
     expect(sayBoundMs('x')).toBeGreaterThanOrEqual(8000);

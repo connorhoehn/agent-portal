@@ -49,7 +49,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { saidVerbatim, sayBoundMs, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
+import { saidVerbatim, sayBoundMs, speakableText, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -1163,7 +1163,8 @@ export class AssistantRuntime {
       hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', 'timeout'); }, sayBoundMs(words));
       (hold.timer as { unref?: () => void }).unref?.();
       let asked = false;
-      try { asked = session.sayVerbatim!(id, words, (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); }); } catch { asked = false; }
+      // Sent with numbers spelled out, so the session reads them as written; the check compares against the approved text itself.
+      try { asked = session.sayVerbatim!(id, speakableText(words), (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); }); } catch { asked = false; }
       if (!asked) hold.finish('posted', 'refused');
     });
   }
