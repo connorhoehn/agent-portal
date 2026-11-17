@@ -7,16 +7,24 @@
 // and that shows the usual not-found page, never an error. Résumé, recordings
 // and the activity log arrive with their own rows.
 //
+// Row I1.6: a "Résumé" section below the rounds. Everyone who can open the profile reads the PDF in ResumeViewer;
+// the recruiter also sees its name, size, when and by whom, can upload or replace it (PDF, 10 MB, the server's
+// own sentence on a refusal) and remove it through a prompt in the composer's deck, never a dialog.
+//
 // Row I1.4: the recruiter assigns a round from the rounds list ("Assign a
 // round", its own form) and reassigns one that has not started. Who declined a
 // seat and why shows on its round for the recruiter and the hiring manager (the
 // server sends declines to nobody else); the hiring manager's view is read-only.
 
 import {
-  Avatar, Button, Chip, DataTable, DetailSection, Inline, KeyValue, LoadingState, PageHeader, Stack, T, WorkflowStepper,
+  Avatar, Button, Chip, DataTable, DetailSection, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
+import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -28,7 +36,9 @@ import {
   type CandidateProfile, type ProfileApplication, type ProfileRound, type StageMove,
 } from '../../lib/interviews';
 import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
+import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
+import ResumeViewer from './ResumeViewer';
 
 const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
   {
@@ -128,6 +138,7 @@ function CandidateProfile({ id }: { id: string }) {
         {applications.length === 0 && <T size="sm" tone="secondary" className="px-[var(--ui-page-gutter)]">This candidate has no application you can read.</T>}
         {applications.map((a) => <ApplicationSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id}
           assigns={['recruiter', 'admin'].includes(String(session?.role))} />)}
+        <ResumeSection candidateId={candidate.id} name={candidate.name} manages={['recruiter', 'admin'].includes(String(session?.role))} />
       </Stack>
     </Stack>
   );
@@ -165,6 +176,82 @@ function ApplicationSection({ app, several, candidateId, assigns }: { app: Profi
         <DataTable narrow data-testid="interviews-profile-history" aria-label="Stage history" data={moves} columns={MOVE_COLUMNS}
           keyField={(m) => `${m.stage}:${m.at}`} staticRows="Each move between stages, read in place" emptyMessage="No stage changes yet." />
       </DetailSection>
+    </Stack>
+  );
+}
+
+/** The résumé: the file for everyone who can open the profile; its facts and the three actions for the recruiter. */
+function ResumeSection({ candidateId, name, manages }: { candidateId: string; name: string; manages: boolean }) {
+  const { data, refresh } = useFetch<{ resume: ResumeRecord }>(manages ? resumePath(candidateId) : null);
+  const [version, setVersion] = useState(0);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [asked, setAsked] = useState(0);
+  const [removing, setRemoving] = useState(false);
+  const resume = data?.resume ?? null;
+  const reread = () => { setVersion((v) => v + 1); refresh(); };
+
+  const send = async (files: File[]) => {
+    const file = files[0];
+    if (!file || busy) return;
+    setProblem(null); setBusy(true);
+    const out = await uploadResume(candidateId, file);
+    setBusy(false);
+    if (!out.ok) { setProblem(out.error); return; }
+    reread();
+  };
+
+  const prompts = useMemo<ComposerPrompt[]>(() => {
+    if (!removing || !resume) return [];
+    const scope = `interviews-resume:${candidateId}`;
+    return [{
+      id: `${scope}:remove-${asked}`, scope, kind: 'choice', eyebrow: 'Remove the résumé', title: name,
+      fields: [{ label: 'File', value: resume.fileName }],
+      question: 'Remove this résumé? Nobody will be able to read it here until a new one is added.',
+      options: [{ id: 'remove', label: 'Remove', emphasis: 'danger' }, { id: 'keep', label: 'Keep it', emphasis: 'primary' }],
+      onAnswer: async (a) => {
+        if (!('optionId' in a) || a.optionId !== 'remove') { setRemoving(false); return { receipt: 'Kept. The résumé did not change.' }; }
+        const out = await removeResume(candidateId);
+        if (!out.ok) return { error: out.error };
+        setRemoving(false); setAsked((n) => n + 1); reread();
+        return { receipt: 'The résumé is removed.' };
+      },
+    }];
+  }, [removing, resume, candidateId, name, asked]);
+
+  const adapter = useMemo(() => collectionCommandAdapter({ noun: 'candidate' }, {
+    id: 'interviews-profile-commands', label: 'Candidate', placeholder: 'Refresh this candidate…',
+    setQuery: () => { throw new Error('This page has nothing to search. No changes were made.'); },
+    refresh: reread,
+    scopeNote: 'Refresh reloads the résumé shown. Removing it is asked here and never done by a typed command.',
+  }), []);
+
+  return (
+    <Stack gap="md" className="px-[var(--ui-page-gutter)] pb-4" data-testid="interviews-profile-resume-section">
+      <DetailSection variant="heading" title="Résumé" hint={manages && resume ? `${resume.fileName}, ${sizeLabel(resume.sizeBytes)}` : undefined}
+        actions={manages && resume ? (
+          <Button size="sm" variant="ghost" data-testid="interviews-resume-remove" onClick={() => { setAsked((n) => n + 1); setRemoving(true); }}>Remove</Button>
+        ) : undefined}>
+        <Stack gap="sm">
+          {manages && (
+            <Stack gap="xs">
+              {resume && (
+                <T size="sm" tone="secondary" data-testid="interviews-resume-facts">
+                  {`Added ${relativeTime(resume.uploadedAt)}${resume.uploadedBy ? ` by ${resume.uploadedBy.name}` : ''}.`}
+                </T>
+              )}
+              <FileUploadDrop accept="application/pdf,.pdf" maxSize={RESUME_MAX_BYTES} disabled={busy} data-testid="interviews-resume-upload"
+                label={busy ? 'Uploading…' : resume ? 'Replace: drop a PDF here, or click to choose' : 'Upload a résumé: drop a PDF here, or click to choose'}
+                onFiles={(files) => void send(files)} onError={setProblem} />
+              {problem && <T size="sm" tone="danger" role="alert" data-testid="interviews-resume-problem">{problem}</T>}
+            </Stack>
+          )}
+          <Stack gap="none" className="h-[70vh] min-h-[28rem]" data-testid="interviews-resume-frame">
+            <ResumeViewer candidateId={candidateId} version={version} />
+          </Stack>
+        </Stack>
+      </DetailSection>
+      {manages && <CollectionCommandHost adapter={adapter} prompts={prompts} />}
     </Stack>
   );
 }
