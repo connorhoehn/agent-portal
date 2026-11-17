@@ -16,6 +16,7 @@ import { Router, type Request } from 'express';
 import { config } from '../../config.js';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
+import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { inviteCeiling, inviteStatus, issuable, type InviteStatus } from '../../lib/interviews/invite/rules.js';
 import { inviteStore, type Invite } from '../../lib/interviews/invite/store.js';
@@ -24,9 +25,10 @@ import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const inviteRouter = Router();
-const manage = requireAction('ManageCandidates');
 
 const NO_INTERVIEW = 'There is no interview here that you can open.';
+// A member without ManageCandidates reads the same not-found (lib/interviews/gate.ts), never a 403.
+const manage = interviewsAction('ManageCandidates', NO_INTERVIEW);
 const CLOSED = 'This interview is declined, cancelled or over, so it cannot have a link.';
 const PAST = 'This interview\'s time has passed, so a link made now would not work. Set a new time first.';
 

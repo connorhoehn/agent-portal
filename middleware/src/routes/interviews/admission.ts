@@ -15,6 +15,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
+import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { staffHoldsInterviewSeat } from '../../lib/interviews/lobby.js';
 import { admissionOf, applyAdmission, NOT_KNOCKED, type Admission } from '../../lib/interviews/invite/admission.js';
@@ -24,9 +25,10 @@ import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const admissionRouter = Router();
-const conduct = requireAction('ConductInterview');
 
 const NO_INTERVIEW = 'There is no interview here that you can open.';
+// A member without ConductInterview reads the same not-found (lib/interviews/gate.ts), never a 403.
+const conduct = interviewsAction('ConductInterview', NO_INTERVIEW);
 const NOBODY = 'Nobody is waiting to be let in.';
 const CHANGED = 'The candidate\'s page changed while you were deciding. Look again.';
 

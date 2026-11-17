@@ -171,8 +171,9 @@ describe('starting and ending', () => {
 
   it.each([
     ['an interviewer without a seat', WEN, MATEO, 404],
-    ['the recruiter (no ConductInterview)', GRETA, NADIA, 403],
-    ['the hiring manager (no ConductInterview)', AMARA, NADIA, 403],
+    // No ConductInterview reads the room's not-found, never a 403 (lib/interviews/gate.ts).
+    ['the recruiter (no ConductInterview)', GRETA, NADIA, 404],
+    ['the hiring manager (no ConductInterview)', AMARA, NADIA, 404],
     ['the admin, no seat', OPERATOR, NADIA, 404],
     ['another tenant\'s role', PRIYA, NADIA, 403],
   ])('%s: refused on both writes', async (_label, as, id, status) => {

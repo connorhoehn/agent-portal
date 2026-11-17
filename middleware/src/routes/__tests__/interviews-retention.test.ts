@@ -128,9 +128,9 @@ describe('asking for a deletion', () => {
     expect(res.body.candidate.candidate).toMatchObject({ name: 'Name removed', location: '', headline: '' });
   });
 
-  it('everyone but the recruiter is refused, and a recruiter asking about a candidate that is not there gets not-found', async () => {
-    expect((await HUGO.ask('cand-mateo')).status).toBe(403);
-    expect((await AMARA.ask('cand-mateo')).status).toBe(403);
+  it('everyone but the recruiter is refused with not-found (never 403 inside the tenant), as is a recruiter asking about a candidate that is not there', async () => {
+    expect((await HUGO.ask('cand-mateo')).status).toBe(404);
+    expect((await AMARA.ask('cand-mateo')).status).toBe(404);
     expect((await ADMIN.ask('cand-mateo')).status).toBe(404);
     expect((await GRETA.ask('cand-nobody')).status).toBe(404);
     expect((await OUTSIDER.ask('cand-mateo')).status).toBe(403);

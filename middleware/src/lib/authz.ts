@@ -399,6 +399,18 @@ export function requireAnyAction(actions: string[]) {
 }
 
 export function requireAction(action: string) {
+  return requireActionOr(action, (req, res) => {
+    const session = resolveSession(req);
+    res.status(403).json({ error: 'Forbidden', action, role: session?.role, tenant: session?.tenant });
+  });
+}
+
+/**
+ * requireAction with the policy DENY answered by `denied` instead of the 403: a tenant whose rule is "not found,
+ * never forbidden" (routes/interviews, lib/interviews/gate.ts) passes a not-found. No session, the audit line and
+ * the 503 on an authorization failure are requireAction's own.
+ */
+export function requireActionOr(action: string, denied: (req: Request, res: Response, next: NextFunction) => void) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const session = resolveSession(req);
     if (!session) { denyUnauthenticated(req, res, action); return; }
@@ -409,7 +421,7 @@ export function requireAction(action: string) {
         next();
         return;
       }
-      res.status(403).json({ error: 'Forbidden', action, role: session.role, tenant: session.tenant });
+      denied(req, res, next);
     } catch (err) {
       // Authorization *infrastructure* failure (AVP unreachable, throttled,
       // IAM broken) — not a policy DENY. 503 keeps it distinguishable from

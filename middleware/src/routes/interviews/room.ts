@@ -14,6 +14,7 @@ import { interviewEnded } from '../../lib/interviews/result-bells.js';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
+import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { endMove, roomView, startMove, type RoomMove } from '../../lib/interviews/room.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
@@ -22,9 +23,10 @@ import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const roomRouter = Router();
-const conduct = requireAction('ConductInterview');
 
 const NO_INTERVIEW = 'There is no interview here that you can open.';
+// A member without ConductInterview reads the same not-found (lib/interviews/gate.ts), never a 403.
+const conduct = interviewsAction('ConductInterview', NO_INTERVIEW);
 const STALE = 'Someone else changed this interview while you were in the room. The room now shows what was saved: try again.';
 const OUT_OF_DATE = 'This page is out of date. Reload it and try again.';
 

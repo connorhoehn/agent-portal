@@ -16,6 +16,7 @@
 import { Router } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
+import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { deleteCandidateMedia, deletionsOf } from '../../lib/interviews/retention/service.js';
 import { retentionPeriods } from '../../lib/interviews/retention/periods.js';
@@ -24,9 +25,10 @@ import { doneLate, isOverdue } from '../../lib/interviews/retention/overdue.js';
 import { interviewsNowMs } from '../../lib/interviews/clock.js';
 
 export const retentionRouter = Router();
-const manage = requireAction('ManageCandidates');
 
 const NO_CANDIDATE = 'There is no candidate here that you can open.';
+// A member without ManageCandidates reads the same not-found (lib/interviews/gate.ts), never a 403.
+const manage = interviewsAction('ManageCandidates', NO_CANDIDATE);
 
 /** What the profile reads of a row: no interview ids, no candidate id beyond the path's, no content. */
 export interface DeletionView {

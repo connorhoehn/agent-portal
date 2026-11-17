@@ -141,11 +141,11 @@ describe('the recruiter\'s routes', () => {
     expect((await GRETA.get('/interviews/iv-nope/invite')).status).toBe(404);
   });
 
-  it.each([['an interviewer', 'u-hugo'], ['the other interviewer', 'u-wen'], ['the hiring manager', 'u-amara']])('%s may not issue, read or revoke a link (403)', async (_who, user) => {
+  it.each([['an interviewer', 'u-hugo'], ['the other interviewer', 'u-wen'], ['the hiring manager', 'u-amara']])('%s may not issue, read or revoke a link (not-found, never 403)', async (_who, user) => {
     const them = as(user);
-    expect((await them.post(`/interviews/${IV}/invite`)).status).toBe(403);
-    expect((await them.get(`/interviews/${IV}/invite`)).status).toBe(403);
-    expect((await them.del(`/interviews/${IV}/invite`)).status).toBe(403);
+    expect((await them.post(`/interviews/${IV}/invite`)).status).toBe(404);
+    expect((await them.get(`/interviews/${IV}/invite`)).status).toBe(404);
+    expect((await them.del(`/interviews/${IV}/invite`)).status).toBe(404);
   });
 
   it('another tenant\'s role is refused at the mount', async () => {
@@ -335,13 +335,13 @@ describe('the waiting room', () => {
     expect((await mine(again)).body.admission.state).toBe('not-knocked');
   });
 
-  it('only the lead decides; the recruiter and the hiring manager (no ConductInterview here: 403) and other interviewers (404) do not see the waiting room', async () => {
+  it('only the lead decides; the recruiter and the hiring manager (no ConductInterview) and other interviewers all read not-found', async () => {
     const cookie = await guest();
     await knock(cookie);
-    expect((await decide(GRETA, true)).status).toBe(403);
+    expect((await decide(GRETA, true)).status).toBe(404);
     expect((await decide(as('u-wen'), true)).status).toBe(404);
-    expect((await GRETA.get(`/interviews/${IV}/waiting`)).status).toBe(403);
-    expect((await as('u-amara').get(`/interviews/${IV}/waiting`)).status).toBe(403);
+    expect((await GRETA.get(`/interviews/${IV}/waiting`)).status).toBe(404);
+    expect((await as('u-amara').get(`/interviews/${IV}/waiting`)).status).toBe(404);
     expect((await decide(HUGO, 'yes')).status).toBe(400);
     expect((await mine(cookie)).body.admission.state).toBe('waiting');
   });
