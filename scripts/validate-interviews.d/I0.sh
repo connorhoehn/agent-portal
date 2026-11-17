@@ -45,7 +45,7 @@ row_I0.2() {
   need "app\\.use\\('/api/interviews', requireTenant\\('interviews'\\), interviewsFlagGate, interviewsRouter\\)" $MW/index.ts "the mount: requireTenant('interviews'), the flag, the router"
   needF "INTERVIEWS_ENABLED" $MW/lib/interviews/flag.ts "the server flag INTERVIEWS_ENABLED"
   needF "config.mock?.aurora === true" $MW/lib/interviews/flag.ts "the flag is on in the mock world when unset"
-  if has "tenant: 'interviews'" $MW/lib/tenant-channels.ts; then fail "a channel family for interviews exists before its row (I2.2)"; else ok "no interviews channel family yet: the partition denies every interviews: channel"; fi
+  if has "id: 'interviews:interview', tenant: 'interviews'" $MW/lib/tenant-channels.ts && has "read: tenantOnly\('interviews', 'ViewInterviews'\)" $MW/lib/tenant-channels.ts; then ok "the interviews channel family exists (row I2.2) and is the guarded one: the tenant's own members with ViewInterviews read it, nobody writes"; else fail "the interviews channel family is missing or no longer guarded by ViewInterviews"; fi
   needF "interviews: 'Candidates'" $MW/lib/social-notify.ts "notification label"
   needF "interviews: ['/interviews/']" $MW/lib/social-notify.ts "notification paths stay inside /interviews/"
   if grep -E "^export const VOICE_TENANTS" $MW/lib/voice/catalogue.ts | grep -q interviews; then fail "VOICE_TENANTS lists interviews, but its roles hold no VoiceNavigate"; else ok "voice: interviews is not a voice tenant (VOICE_TENANTS), and says why"; fi
@@ -58,7 +58,7 @@ row_I0.2() {
   n=$(count "tenant: 'interviews', group:" portal/src/components/shell/Layout.tsx); if [ "${n:-0}" -ge 3 ]; then ok "rail rows for interviews ($n: the three homes and the rows later lanes add)"; else fail "rail rows for interviews: $n, want at least the three homes"; fi
   needF "interviews: 'Candidates'" portal/src/components/shell/Layout.tsx "TENANT_LABELS.interviews"
   needF "interviews: ['Hire', 'Interview', 'System']" portal/src/components/shell/portalCommands.ts "palette group order"
-  want_count "tenant: 'interviews', group:" portal/src/components/shell/portalCommands.ts 3 "palette rows for interviews"
+  want_count "tenant: 'interviews', group:" portal/src/components/shell/portalCommands.ts 4 "palette rows for interviews: Candidates, My openings, My interviews and Upcoming (the recruiter's own page, the fourth), each a real destination"
   needF "interviews: { label: 'Candidates'" portal/src/pages/SelectContextPage.tsx "the picker's tile"
   for u in "${CAST[@]}"; do needF "{ id: '$u', persona:" portal/src/pages/SelectContextPage.tsx "the picker's cast has $u (demo logins)"; done
   needF '[data-tenant="interviews"] {' portal/src/app.css "light tenant colours"
