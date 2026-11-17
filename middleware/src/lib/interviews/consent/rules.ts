@@ -10,7 +10,10 @@
 //   The notice        an answer names the notice version it was given under; any other version is refused
 //                     (`stale-notice`) so the page shows the current text again.
 //   Until the call    answers can be given or changed while the interview is assigned, accepted or ready;
-//                     from `live` on (and on a declined or cancelled one) never.
+//                     from `live` on (and on a declined or cancelled one) never. One exception (contract U7):
+//                     a candidate who arrives after the lead has joined, with nothing stored for the current
+//                     notice, may give a first answer while the interview is `live`; a stored answer still
+//                     cannot change then, and `ended` and later stay closed for everyone.
 //   Each its own time a change stamps only the answers whose value changed; the set's `changedAt` is the
 //                     write's time. Every write appends one entry to the history (store.ts).
 
@@ -33,13 +36,20 @@ export function consentsChangeable(state: InterviewState): boolean {
   return OPEN_STATES.has(state);
 }
 
+/** A first answer after the start (U7): live, and nothing stored for the current notice. */
+export function firstAnswerWhileLive(state: InterviewState, stored: { noticeVersion: string } | null, currentVersion: string): boolean {
+  return state === 'live' && (stored === null || stored.noticeVersion !== currentVersion);
+}
+
 /**
  * Check a guest's answers against the current notice and the interview's state. The order of the refusals is
  * the order the page can act on them: a closed interview first (nothing to do), then a stale notice (show it
  * again), then an incomplete set.
  */
-export function checkAnswers(body: unknown, currentVersion: string, state: InterviewState): CheckedAnswers {
-  if (!consentsChangeable(state)) return { ok: false, reason: 'closed' };
+export function checkAnswers(
+  body: unknown, currentVersion: string, state: InterviewState, stored: { noticeVersion: string } | null,
+): CheckedAnswers {
+  if (!consentsChangeable(state) && !firstAnswerWhileLive(state, stored, currentVersion)) return { ok: false, reason: 'closed' };
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (b['noticeVersion'] !== currentVersion) return { ok: false, reason: 'stale-notice' };
   const { recording, transcription, milo } = b;

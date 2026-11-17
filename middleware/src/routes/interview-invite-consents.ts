@@ -72,7 +72,7 @@ consentGuestRouter.put('/consents', interviewsFlagGate, requireGuest(), asyncHan
   if (!interview) { refuse(res); return; }
   const store = consentStore();
   const before = await store.getConsent(interview.id);
-  const checked = checkAnswers(req.body, CONSENT_NOTICE.version, interview.state);
+  const checked = checkAnswers(req.body, CONSENT_NOTICE.version, interview.state, before);
   if (!checked.ok) {
     if (checked.reason === 'incomplete') { res.status(400).json({ error: INCOMPLETE }); return; }
     res.status(409).json({ error: checked.reason === 'closed' ? CLOSED : STALE_NOTICE, ...guestConsentsView(before) });

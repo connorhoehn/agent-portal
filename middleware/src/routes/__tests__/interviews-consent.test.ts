@@ -180,6 +180,32 @@ describe('the guest\'s consents', () => {
     expect(row()!.recording).toBe(true);
   });
 
+  it('takes a first answer after the lead has joined (U7), and then the knock; a stored answer still cannot change', async () => {
+    const cookie = await guest();
+    setState('live');
+    const knock = () => request(app).post('/api/interview-invite/knock').set('Cookie', cookie);
+    expect((await knock()).status).toBe(409); // nothing answered: no knock
+    const first = await answer(cookie, ALL_YES);
+    expect(first.status).toBe(200);
+    expect(row()!).toMatchObject({ recording: true, revision: 1 });
+    const changed = await answer(cookie, { ...ALL_YES, recording: false });
+    expect(changed.status).toBe(409);
+    expect(changed.body.error).toBe('Your interview has started, so these answers can no longer be changed.');
+    expect(row()!.recording).toBe(true);
+    const knocked = await knock();
+    expect(knocked.status).toBe(200);
+    expect(knocked.body.admission.state).toBe('waiting');
+  });
+
+  it('takes no first answer once the interview has ended', async () => {
+    const cookie = await guest();
+    setState('ended');
+    const res = await answer(cookie, ALL_YES);
+    // The guest's session ends with the interview (404 from the guest gate); the rule would refuse it too (409).
+    expect([404, 409]).toContain(res.status);
+    expect(row()).toBeUndefined();
+  });
+
   it('is refused once its invite is revoked', async () => {
     const cookie = await guest();
     await request(app).delete(`/api/interviews/interviews/${IV}/invite`).set('x-user', 'u-greta');
