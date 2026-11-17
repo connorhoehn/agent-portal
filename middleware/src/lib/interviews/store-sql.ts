@@ -2,16 +2,24 @@
 // The executor is injected so unit tests run the statements against canned rows
 // (__tests__/store.test.ts); production passes providers/aurora.ts `exec`. Each
 // statement's ORDER BY is store.ts ORDER, so both stores hand back the same order.
+//
+// Writes are compare-and-set statements (store.ts, "Writes"): the WHERE names the
+// revision the write was made against, so PostgreSQL decides a race and the loser
+// gets no row back; one read by id then tells "no such row" from "someone saved
+// first". Parameters use the Data API's `:name` binding; timestamps travel as ISO
+// text and JSONB as JSON text, each CAST in the statement; an absent value is NULL.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
-  Recommendation, RoundType, Scorecard, StageChange,
+  OpeningDetails, Recommendation, RoundType, Scorecard, StageChange,
 } from './types.js';
-import type { InterviewsStore } from './store.js';
+import type { InterviewsStore, NewOpening, WriteResult } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
-export const LIST_OPENINGS_SQL = `SELECT id, title, level, team, location, hiring_manager_id, recruiter_id, state, opened_at, kit, budget_cap_usd
+const OPENING_COLUMNS = 'id, title, level, team, location, hiring_manager_id, recruiter_id, state, opened_at, kit, budget_cap_usd, revision';
+
+export const LIST_OPENINGS_SQL = `SELECT ${OPENING_COLUMNS}
   FROM interview_openings ORDER BY opened_at DESC, id`;
 export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, source, resume_file_id, notes, created_at
   FROM interview_candidates ORDER BY name, id`;
@@ -24,6 +32,39 @@ export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, rat
   FROM interview_scorecards ORDER BY submitted_at, id`;
 
 export const INTERVIEWS_STATEMENTS = [LIST_OPENINGS_SQL, LIST_CANDIDATES_SQL, LIST_APPLICATIONS_SQL, LIST_INTERVIEWS_SQL, LIST_SCORECARDS_SQL] as const;
+
+// ── the openings writes (row I1.3) ──────────────────────────────────────────
+export const GET_OPENING_SQL = `SELECT ${OPENING_COLUMNS}
+  FROM interview_openings WHERE id = :id`;
+/** A taken id inserts nothing and returns no row. */
+export const INSERT_OPENING_SQL = `INSERT INTO interview_openings (${OPENING_COLUMNS})
+  VALUES (:id, :title, :level, :team, :location, :hiring_manager_id, :recruiter_id, :state, CAST(:opened_at AS TIMESTAMPTZ), CAST(:kit AS JSONB),
+    CAST(:budget_cap_usd AS NUMERIC), 1)
+  ON CONFLICT (id) DO NOTHING
+  RETURNING ${OPENING_COLUMNS}`;
+export const UPDATE_OPENING_DETAILS_SQL = `UPDATE interview_openings
+  SET title = :title, level = :level, team = :team, location = :location, hiring_manager_id = :hiring_manager_id, state = :state,
+    budget_cap_usd = CAST(:budget_cap_usd AS NUMERIC), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${OPENING_COLUMNS}`;
+export const REPLACE_OPENING_KIT_SQL = `UPDATE interview_openings
+  SET kit = CAST(:kit AS JSONB), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${OPENING_COLUMNS}`;
+
+export const OPENING_WRITE_STATEMENTS = [GET_OPENING_SQL, INSERT_OPENING_SQL, UPDATE_OPENING_DETAILS_SQL, REPLACE_OPENING_KIT_SQL] as const;
+
+const textParam = (name: string, value: string | null): SqlParameter =>
+  (value === null ? { name, value: { isNull: true } } : { name, value: { stringValue: value } });
+const intParam = (name: string, value: number): SqlParameter => ({ name, value: { longValue: value } });
+const capParam = (value: number | null): SqlParameter => textParam('budget_cap_usd', value === null ? null : value.toFixed(2));
+
+function detailParams(d: OpeningDetails): SqlParameter[] {
+  return [
+    textParam('title', d.title), textParam('level', d.level), textParam('team', d.team), textParam('location', d.location),
+    textParam('hiring_manager_id', d.hiringManagerId), textParam('state', d.state), capParam(d.budgetCapUsd),
+  ];
+}
 
 const str = (v: unknown): string => (v === null || v === undefined ? '' : String(v));
 const strOrNull = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
@@ -65,7 +106,7 @@ export function openingFromRow(r: Record<string, unknown>): Opening {
     id: str(r['id']), title: str(r['title']), level: str(r['level']), team: str(r['team']), location: str(r['location']),
     hiringManagerId: strOrNull(r['hiring_manager_id']), recruiterId: str(r['recruiter_id']), state: str(r['state']) as OpeningState,
     openedAt: isoOf(r['opened_at']), kit: json<OpeningKit>(r['kit'], { rounds: [], competencies: [], questions: [] }),
-    budgetCapUsd: numOrNull(r['budget_cap_usd']),
+    budgetCapUsd: numOrNull(r['budget_cap_usd']), revision: num(r['revision']),
   };
 }
 
@@ -108,4 +149,27 @@ export class SqlInterviewsStore implements InterviewsStore {
   async listApplications(): Promise<Application[]> { return (await this.exec(LIST_APPLICATIONS_SQL)).map(applicationFromRow); }
   async listInterviews(): Promise<Interview[]> { return (await this.exec(LIST_INTERVIEWS_SQL)).map(interviewFromRow); }
   async listScorecards(): Promise<Scorecard[]> { return (await this.exec(LIST_SCORECARDS_SQL)).map(scorecardFromRow); }
+
+  async createOpening(input: NewOpening): Promise<Opening | null> {
+    const rows = await this.exec(INSERT_OPENING_SQL, [
+      textParam('id', input.id), ...detailParams(input), textParam('recruiter_id', input.recruiterId),
+      textParam('opened_at', input.openedAt), textParam('kit', JSON.stringify(input.kit)),
+    ]);
+    return rows[0] ? openingFromRow(rows[0]) : null;
+  }
+
+  async updateOpeningDetails(id: string, details: OpeningDetails, revision: number): Promise<WriteResult<Opening>> {
+    return this.cas(id, await this.exec(UPDATE_OPENING_DETAILS_SQL, [textParam('id', id), intParam('revision', revision), ...detailParams(details)]));
+  }
+
+  async replaceOpeningKit(id: string, kit: OpeningKit, revision: number): Promise<WriteResult<Opening>> {
+    return this.cas(id, await this.exec(REPLACE_OPENING_KIT_SQL, [textParam('id', id), intParam('revision', revision), textParam('kit', JSON.stringify(kit))]));
+  }
+
+  /** A compare-and-set's answer: its returned row, else why there was none. */
+  private async cas(id: string, written: Record<string, unknown>[]): Promise<WriteResult<Opening>> {
+    if (written[0]) return { ok: true, row: openingFromRow(written[0]) };
+    const now = (await this.exec(GET_OPENING_SQL, [textParam('id', id)]))[0];
+    return now ? { ok: false, reason: 'stale', row: openingFromRow(now) } : { ok: false, reason: 'not-found' };
+  }
 }

@@ -13,17 +13,25 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MemoryInterviewsStore, ORDER, loadWorld, type InterviewsStore } from '../store.js';
 import {
-  INTERVIEWS_STATEMENTS, LIST_APPLICATIONS_SQL, LIST_CANDIDATES_SQL, LIST_INTERVIEWS_SQL, LIST_OPENINGS_SQL, LIST_SCORECARDS_SQL,
-  SqlInterviewsStore, isoOf, type SqlExec,
+  GET_OPENING_SQL, INSERT_OPENING_SQL, INTERVIEWS_STATEMENTS, LIST_APPLICATIONS_SQL, LIST_CANDIDATES_SQL, LIST_INTERVIEWS_SQL, LIST_OPENINGS_SQL,
+  LIST_SCORECARDS_SQL, OPENING_WRITE_STATEMENTS, REPLACE_OPENING_KIT_SQL, SqlInterviewsStore, UPDATE_OPENING_DETAILS_SQL, isoOf, type SqlExec,
 } from '../store-sql.js';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture,
 } from '../../../mock/interviews.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
-import type { InterviewsWorld } from '../types.js';
+import type { InterviewsWorld, Opening, OpeningDetails, OpeningKit } from '../types.js';
 
 const ts = (iso: string | null) => (iso === null ? null : iso.replace('T', ' ').replace('Z', ''));
 const shuffle = <T>(rows: T[]): T[] => rows.map((r, i) => [((i * 7919) % 13), r] as const).sort((a, b) => a[0] - b[0]).map(([, r]) => r);
+
+/** An opening as the Data API returns its row. */
+const openingCells = (o: Opening): Record<string, unknown> => ({
+  id: o.id, title: o.title, level: o.level, team: o.team, location: o.location, hiring_manager_id: o.hiringManagerId,
+  recruiter_id: o.recruiterId, state: o.state, opened_at: ts(o.openedAt), kit: JSON.stringify(o.kit),
+  budget_cap_usd: o.budgetCapUsd === null ? null : o.budgetCapUsd.toFixed(2), revision: o.revision,
+});
 
 /** The Data API's answer to each statement, from the same fixtures the memory store reads. */
 function dataApiExec(sorted: boolean): { exec: SqlExec; seen: string[] } {
@@ -31,11 +39,7 @@ function dataApiExec(sorted: boolean): { exec: SqlExec; seen: string[] } {
   const order = <T>(rows: T[], by: (a: T, b: T) => number) => (sorted ? [...rows].sort(by) : shuffle(rows));
   const exec: SqlExec = async (sql) => {
     seen.push(sql);
-    if (sql === LIST_OPENINGS_SQL) return order(interviewOpeningsFixture.rows(), ORDER.openings).map((o) => ({
-      id: o.id, title: o.title, level: o.level, team: o.team, location: o.location, hiring_manager_id: o.hiringManagerId,
-      recruiter_id: o.recruiterId, state: o.state, opened_at: ts(o.openedAt), kit: JSON.stringify(o.kit),
-      budget_cap_usd: o.budgetCapUsd === null ? null : o.budgetCapUsd.toFixed(2),
-    }));
+    if (sql === LIST_OPENINGS_SQL) return order(interviewOpeningsFixture.rows(), ORDER.openings).map(openingCells);
     if (sql === LIST_CANDIDATES_SQL) return order(interviewCandidatesFixture.rows(), ORDER.candidates).map((c) => ({
       id: c.id, name: c.name, email: c.email, headline: c.headline, location: c.location, source: c.source,
       resume_file_id: c.resumeFileId, notes: c.notes, created_at: ts(c.createdAt),
@@ -119,6 +123,121 @@ describe('the SQL store and the memory store agree', () => {
   });
 });
 
+// ── the openings writes (row I1.3) ──────────────────────────────────────────
+
+/**
+ * A Data API over a stateful interview_openings table, seeded from the fixtures: it runs the store's
+ * real write statements by their bound parameters, as PostgreSQL would (the compare-and-set's WHERE,
+ * ON CONFLICT DO NOTHING, RETURNING), and answers rows the way the Data API returns them.
+ */
+function openingsTableExec(): { exec: SqlExec; seen: string[] } {
+  const table = interviewOpeningsFixture.rows().map(openingCells);
+  const seen: string[] = [];
+  const bound = (params: SqlParameter[] = []) => new Map(params.map((p) => [p.name!, p.value!.isNull ? null : p.value!.stringValue ?? p.value!.longValue ?? null]));
+  const exec: SqlExec = async (sql, params) => {
+    seen.push(sql);
+    const b = bound(params);
+    const find = () => table.find((r) => r['id'] === b.get('id'));
+    if (sql === LIST_OPENINGS_SQL) return [...table].sort((x, y) => String(y['opened_at']).localeCompare(String(x['opened_at'])) || String(x['id']).localeCompare(String(y['id'])));
+    if (sql === GET_OPENING_SQL) return find() ? [find()!] : [];
+    if (sql === INSERT_OPENING_SQL) {
+      if (find()) return [];
+      const row = {
+        id: b.get('id'), title: b.get('title'), level: b.get('level'), team: b.get('team'), location: b.get('location'), hiring_manager_id: b.get('hiring_manager_id'),
+        recruiter_id: b.get('recruiter_id'), state: b.get('state'), opened_at: ts(String(b.get('opened_at'))), kit: b.get('kit'), budget_cap_usd: b.get('budget_cap_usd'), revision: 1,
+      };
+      table.push(row);
+      return [row];
+    }
+    if (sql === UPDATE_OPENING_DETAILS_SQL || sql === REPLACE_OPENING_KIT_SQL) {
+      const row = find();
+      if (!row || row['revision'] !== b.get('revision')) return [];
+      const cols = sql === REPLACE_OPENING_KIT_SQL ? ['kit'] : ['title', 'level', 'team', 'location', 'hiring_manager_id', 'state', 'budget_cap_usd'];
+      for (const c of cols) row[c] = b.get(c);
+      row['revision'] = Number(row['revision']) + 1;
+      return [row];
+    }
+    throw new Error(`unexpected statement: ${sql}`);
+  };
+  return { exec, seen };
+}
+
+const DETAILS: OpeningDetails = { title: 'Data Engineer', level: 'Senior', team: 'Analytics', location: 'Lisbon', hiringManagerId: null, state: 'open', budgetCapUsd: 7.5 };
+const KIT: OpeningKit = {
+  rounds: [{ id: 'rd-talk', name: 'Conversation', type: 'behavioural', minutes: 45 }],
+  competencies: [{ id: 'ownership', name: 'Ownership', lookFor: 'Finishes what they start.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } }],
+  questions: [{ id: 'q-own', prompt: 'Tell me about something you saw through.', followUps: ['What nearly stopped it?'], competencyId: 'ownership', roundType: 'behavioural' }],
+};
+const NEW: Parameters<InterviewsStore['createOpening']>[0] = { ...DETAILS, id: 'op-data', recruiterId: 'u-greta', openedAt: '2026-11-16T09:30:00.000Z', kit: KIT };
+
+describe.each([
+  ['memory', () => new MemoryInterviewsStore() as InterviewsStore],
+  ['sql', () => new SqlInterviewsStore(openingsTableExec().exec) as InterviewsStore],
+])('the %s store\'s openings writes', (_name, make) => {
+  let store: InterviewsStore;
+  beforeEach(() => { store = make(); });
+
+  it('creates an opening at revision 1 and reads it back whole', async () => {
+    const created = await store.createOpening(NEW);
+    expect(created).toEqual({ ...NEW, revision: 1 });
+    const listed = await store.listOpenings();
+    expect(listed.map((o) => o.id)).toEqual(['op-data', 'op-em', 'op-ios', 'op-backend']);
+    expect(listed[0]).toEqual(created);
+  });
+
+  it('a taken id creates nothing', async () => {
+    expect(await store.createOpening({ ...NEW, id: 'op-ios' })).toBeNull();
+    expect((await store.listOpenings()).find((o) => o.id === 'op-ios')!.title).toBe('iOS Engineer');
+  });
+
+  it('edits the details at the revision it was made against, and bumps it', async () => {
+    const r = await store.updateOpeningDetails('op-ios', { ...DETAILS, title: 'iOS Engineer, Payments', hiringManagerId: 'u-amara' }, 1);
+    expect(r).toMatchObject({ ok: true, row: { id: 'op-ios', title: 'iOS Engineer, Payments', hiringManagerId: 'u-amara', budgetCapUsd: 7.5, revision: 2 } });
+    const ios = (await store.listOpenings()).find((o) => o.id === 'op-ios')!;
+    expect(ios).toMatchObject({ title: 'iOS Engineer, Payments', team: 'Analytics', revision: 2 });
+    expect(ios.kit.rounds.map((x) => x.id)).toEqual(['rd-coding', 'rd-together']);
+  });
+
+  it('replaces the kit whole, leaving the details', async () => {
+    const r = await store.replaceOpeningKit('op-em', KIT, 1);
+    expect(r).toMatchObject({ ok: true, row: { kit: KIT, title: 'Engineering Manager', revision: 2 } });
+    expect((await store.listOpenings()).find((o) => o.id === 'op-em')!.kit).toEqual(KIT);
+  });
+
+  it('a stale revision writes nothing and answers the row as it now is; an unknown id is not found', async () => {
+    expect((await store.replaceOpeningKit('op-em', KIT, 1)).ok).toBe(true);
+    const stale = await store.updateOpeningDetails('op-em', DETAILS, 1);
+    expect(stale).toMatchObject({ ok: false, reason: 'stale', row: { id: 'op-em', title: 'Engineering Manager', revision: 2 } });
+    expect(await store.replaceOpeningKit('op-em', { ...KIT, questions: [] }, 1)).toMatchObject({ ok: false, reason: 'stale' });
+    expect((await store.listOpenings()).find((o) => o.id === 'op-em')!.kit).toEqual(KIT);
+    expect(await store.updateOpeningDetails('op-nowhere', DETAILS, 1)).toEqual({ ok: false, reason: 'not-found' });
+    expect(await store.replaceOpeningKit('op-nowhere', KIT, 1)).toEqual({ ok: false, reason: 'not-found' });
+  });
+});
+
+describe('the two stores agree after the same writes', () => {
+  it('row for row, field for field', async () => {
+    const mem = new MemoryInterviewsStore();
+    const sql = new SqlInterviewsStore(openingsTableExec().exec);
+    for (const s of [mem, sql] as InterviewsStore[]) {
+      await s.createOpening(NEW);
+      await s.updateOpeningDetails('op-backend', { ...DETAILS, budgetCapUsd: null }, 1);
+      await s.replaceOpeningKit('op-backend', KIT, 2);
+      await s.replaceOpeningKit('op-backend', KIT, 2);
+    }
+    expect(await sql.listOpenings()).toEqual(await mem.listOpenings());
+  });
+
+  it('a compare-and-set that writes runs one statement; one that loses reads the row once to say why', async () => {
+    const { exec, seen } = openingsTableExec();
+    const sql = new SqlInterviewsStore(exec);
+    await sql.replaceOpeningKit('op-em', KIT, 1);
+    expect(seen).toEqual([REPLACE_OPENING_KIT_SQL]);
+    await sql.replaceOpeningKit('op-em', KIT, 1);
+    expect(seen).toEqual([REPLACE_OPENING_KIT_SQL, REPLACE_OPENING_KIT_SQL, GET_OPENING_SQL]);
+  });
+});
+
 describe('every statement matches schema/interviews_schema.sql', () => {
   const ddl = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
   const tables = new Map<string, Set<string>>();
@@ -133,6 +252,20 @@ describe('every statement matches schema/interviews_schema.sql', () => {
 
   it('declares the five tables', () => {
     expect([...tables.keys()].sort()).toEqual(['interview_applications', 'interview_candidates', 'interview_openings', 'interview_scorecards', 'interviews']);
+  });
+
+  it.each(OPENING_WRITE_STATEMENTS.map((s) => [s.split('\n')[0]!.slice(0, 60), s]))('%s… writes and returns only declared columns', (_label, statement) => {
+    const cols = tables.get('interview_openings')!;
+    const named = [
+      ...(/INSERT INTO interview_openings \(([^)]+)\)/.exec(statement)?.[1]?.split(',') ?? []),
+      ...[...statement.matchAll(/(\w+) = (?:CAST\()?:?\w/g)].map((m) => m[1]!),
+      ...(/RETURNING ([\s\S]+)$/.exec(statement)?.[1]?.split(',') ?? []),
+      ...(/SELECT ([\s\S]+?)\s+FROM/.exec(statement)?.[1]?.split(',') ?? []),
+    ].map((c) => c.trim());
+    expect(named.length).toBeGreaterThan(1);
+    for (const c of named) expect([c, cols.has(c)]).toEqual([c, true]);
+    // An insert names every column, so a column added to the table is one the insert writes.
+    if (statement.startsWith('INSERT')) expect(/INSERT INTO interview_openings \(([^)]+)\)/.exec(statement)![1]!.split(',').map((c) => c.trim()).sort()).toEqual([...cols].sort());
   });
 
   it.each(INTERVIEWS_STATEMENTS.map((s) => [s.split('\n')[0]!.slice(0, 60), s]))('%s… names only declared columns', (_label, statement) => {

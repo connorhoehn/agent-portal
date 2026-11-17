@@ -6,16 +6,40 @@
 // store over schema/interviews_schema.sql otherwise. Both return the same
 // rows in the same order; __tests__/store.test.ts runs one contract over both.
 //
-// Phase 0 is reads only, and every read is a whole table: the tenant is one
-// hiring desk, and who may see which row is decided above the store, in one
-// pure place (scope.ts), so the two stores cannot disagree about it. When a
-// table outgrows a whole read the scope moves into the statement, not into
-// two copies of the rule.
+// Every read is a whole table: the tenant is one hiring desk, and who may see
+// which row is decided above the store, in one pure place (scope.ts), so the
+// two stores cannot disagree about it. When a table outgrows a whole read the
+// scope moves into the statement, not into two copies of the rule.
+//
+// Writes (row I1.3 is the first: OpeningWrites) follow one pattern later rows
+// copy. The store only writes: who may write and whether the input is good are
+// decided before it is called (the route, then kit.ts). Each write that
+// changes a row names the revision it was made against and is a
+// compare-and-set: it applies only while the row is still at that revision
+// and bumps it, so two editors never overwrite each other unseen. The answer
+// says which of the three things happened (written, no such row, or someone
+// saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Candidate, Interview, InterviewsWorld, Opening, Scorecard } from './types.js';
+import type { Application, Candidate, Interview, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard } from './types.js';
 
-export interface InterviewsStore {
+/** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
+export type WriteResult<T> = { ok: true; row: T } | { ok: false; reason: 'not-found' } | { ok: false; reason: 'stale'; row: T };
+
+/** A new opening, checked (kit.ts) and given its id, recruiter and time by the route. */
+export type NewOpening = OpeningDetails & Pick<Opening, 'id' | 'recruiterId' | 'openedAt' | 'kit'>;
+
+/** The recruiter's writes on openings (row I1.3; decision 2). */
+export interface OpeningWrites {
+  /** Insert at revision 1. Ids are chosen by the caller (kit.ts openingIdFor) and never reused; a taken id is `null`. */
+  createOpening(input: NewOpening): Promise<Opening | null>;
+  /** Replace the details (everything but the kit), against `revision`. */
+  updateOpeningDetails(id: string, details: OpeningDetails, revision: number): Promise<WriteResult<Opening>>;
+  /** Replace the kit as a whole, against `revision`. */
+  replaceOpeningKit(id: string, kit: OpeningKit, revision: number): Promise<WriteResult<Opening>>;
+}
+
+export interface InterviewsStore extends OpeningWrites {
   listOpenings(): Promise<Opening[]>;
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
@@ -43,6 +67,32 @@ export class MemoryInterviewsStore implements InterviewsStore {
   async listApplications(): Promise<Application[]> { return copy(interviewApplicationsFixture.rows()).sort(ORDER.applications); }
   async listInterviews(): Promise<Interview[]> { return copy(interviewsFixture.rows()).sort(ORDER.interviews); }
   async listScorecards(): Promise<Scorecard[]> { return copy(interviewScorecardsFixture.rows()).sort(ORDER.scorecards); }
+
+  async createOpening(input: NewOpening): Promise<Opening | null> {
+    const rows = interviewOpeningsFixture.rows();
+    if (rows.some((o) => o.id === input.id)) return null;
+    const row: Opening = { ...structuredClone(input), revision: 1 };
+    rows.push(row);
+    return structuredClone(row);
+  }
+
+  async updateOpeningDetails(id: string, details: OpeningDetails, revision: number): Promise<WriteResult<Opening>> {
+    return casOpening(id, revision, (o) => Object.assign(o, structuredClone(details)));
+  }
+
+  async replaceOpeningKit(id: string, kit: OpeningKit, revision: number): Promise<WriteResult<Opening>> {
+    return casOpening(id, revision, (o) => { o.kit = structuredClone(kit); });
+  }
+}
+
+/** The SQL statements' `WHERE id = :id AND revision = :revision`, in one tick. */
+function casOpening(id: string, revision: number, change: (o: Opening) => void): WriteResult<Opening> {
+  const row = interviewOpeningsFixture.rows().find((o) => o.id === id);
+  if (!row) return { ok: false, reason: 'not-found' };
+  if (row.revision !== revision) return { ok: false, reason: 'stale', row: structuredClone(row) };
+  change(row);
+  row.revision += 1;
+  return { ok: true, row: structuredClone(row) };
 }
 
 /** One snapshot of everything a phase 0 read looks at. */
