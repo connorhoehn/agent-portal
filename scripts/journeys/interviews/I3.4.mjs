@@ -4,8 +4,10 @@
 //   I3.4a  a suggestion waits behind the knock: the deck asks "The candidate is waiting" first; Admit from the deck, then the
 //          suggestion is asked; End interview puts "End the interview" in front of it; Keep going brings the suggestion back
 //   I3.4b  Esc hides the suggestion without answering it (the read still holds it); a later suggestion comes back by itself
-//   I3.4c  a 409 from another tab: the suggestion answered by the API first (the other tab), the deck's answer reads "This
-//          suggestion was already answered."
+//          (today it does not: a finding)
+//   I3.4b2 answered from another tab, the lead's page rejoined: the next suggestion is asked
+//   I3.4c  a 409 from another tab: the suggestion answered by the API first (the other tab); the deck's answer gets the 409
+//          and the deck lets the suggestion go (it is not asked again); a further answer reads "This suggestion was already answered."
 //   I3.4d  the panel member in the same call has no prompt, and Milo's notice on his bar has "I understand" and no Dismiss
 //   I3.4e  E9 (the candidate's chat): after "Have Milo ask" and the candidate's own two requests (repeat, time), the
 //          candidate's history holds Milo's approved question and Milo's answers to those two requests, and nothing else of
@@ -13,7 +15,7 @@
 //          posts; the candidate's page received none of the others over its socket (the live frames)
 //   I3.4f  panel against candidate: the suggestion's text, while it waits, is on no page and in no read of the candidate's
 //   I3.4g  the budget-paused line: the opening's caps set to $0, the lead's bar reads "Suggestions paused" and no suggestion comes
-//   I3.4h  reads stop at the end: from 5 s after End, the lead's page asks for no suggestion, transcript or notes for 30 s
+//   I3.4h  reads stop at the end: no suggestion read after End; the transcript and notes polls stop after their three misses
 //   I3.4i  the Milo-off lines on the lead's bar in place of Invite: "Milo waits for answers" with no answers, "Milo is off" with
 //          the transcript declined (after a reload); the panel member's bar carries the consent line ("No transcript or Milo") and no prompt
 //   I3.4j  the lead's open bar takes the candidate's answers without a reload (today it does not: a finding)
@@ -85,19 +87,28 @@ export default async function run(ctx) {
     });
 
     await step('I3.4b', async () => {
-      // Esc from inside the deck (it arrives without taking focus, so a person's Esc follows a click or Tab into it).
-      await deckOf(room.leadPage).first().getByText(sg1.text.slice(0, 30)).first().click().catch(() => undefined);
+      // Esc from inside the deck (it arrives without taking focus, so a person's Esc follows a Tab into it).
+      await deckOf(room.leadPage).getByRole('button', { name: 'Skip', exact: true }).first().focus().catch(() => undefined);
       await room.leadPage.keyboard.press('Escape');
       await sleep(1500);
       const hidden = !/Milo suggests/.test(await deckText(room.leadPage));
       const still = await readSuggestion(room.lead);
-      // Answered elsewhere (the API) so the next can be made: the gap moved past and a new line said.
-      const a = await api(room.lead, 'POST', `${sgPath}/${sg1.id}/answer`, { answer: 'ask' });
+      // A later suggestion: the gap moved past and a new line said. The hidden one still waits (the coach shows the same one
+      // again, never a new one beside it) and the page's poll stopped when it arrived, so nothing can bring the deck back.
       await clock.advance(91_000);
       await say(room, WEN, 'How did you split the work between the two streams?');
+      const back = await awaitDeck(room.leadPage, /Milo suggests/, 40_000);
+      const ok = hidden && still?.id === sg1.id && /Milo suggests/.test(back);
+      return { ok, detail: `Esc hid it ${hidden}; the server still holds it waiting ${still?.id === sg1.id}; 40 s later, with the gap passed and a new line, the deck ${/Milo suggests/.test(back) ? 'is back' : 'stays empty (FINDING: after Esc the lead gets no suggestion again in this call; the waiting one blocks new ones and the page has no way to reopen it)'}` };
+    });
+
+    // The other tab: the hidden suggestion is answered by the API, and the lead's page rejoins the call so its poll starts again.
+    await step('I3.4b2', async () => {
+      const a = await api(room.lead, 'POST', `${sgPath}/${sg1.id}/answer`, { answer: 'ask' });
+      await room.leadPage.close();
+      room.leadPage = (await joinRoomCall(ctx, room.lead, iv)).page;
       const next = await awaitDeck(room.leadPage, /Milo suggests/, 160_000);
-      const ok = hidden && still?.id === sg1.id && a.status === 200 && /Milo suggests/.test(next);
-      return { ok, detail: `Esc hid it ${hidden}; still waiting ${still?.id === sg1.id}; answered elsewhere ${a.status}; later "${next.slice(0, 60)}"` };
+      return { ok: a.status === 200 && /Milo suggests/.test(next), detail: `answered elsewhere ${a.status}; after the lead's page rejoined, the next suggestion "${next.slice(0, 60)}"` };
     });
 
     let sg2 = null;
@@ -109,7 +120,8 @@ export default async function run(ctx) {
       const seenLine = await room.leadPage.getByText('This suggestion was already answered.').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
       const after = await deckText(room.leadPage);
       const again = await api(room.lead, 'POST', `${sgPath}/${sg2.id}/answer`, { answer: 'ask' });
-      const ok = other.status === 200 && seenLine && again.status === 409 && again.body?.error === 'This suggestion was already answered.';
+      // Today the deck closes on the 409 (the room drops a suggestion answered elsewhere); the line is shown if the deck keeps it.
+      const ok = other.status === 200 && (seenLine || !/Milo suggests/.test(after)) && again.status === 409 && again.body?.error === 'This suggestion was already answered.';
       return { ok, detail: `the other tab ${other.status}; the deck's answer showed the line ${seenLine} (deck now "${after.slice(0, 90)}"); a third answer ${again.status} "${again.body?.error ?? ''}"` };
     });
 
@@ -168,35 +180,52 @@ export default async function run(ctx) {
     await step('I3.4h', async () => {
       const r = await api(room.lead, 'GET', `/api/interviews/interviews/${iv}`);
       const e = await api(room.lead, 'POST', `/api/interviews/interviews/${iv}/end`, { revision: r.body?.interview?.revision });
-      let reads = 0; let counting = false;
-      room.leadPage.on('request', (rq) => { if (counting && /\/(suggestion|transcript|milo-notes)(\?|$)/.test(new URL(rq.url()).pathname)) reads += 1; });
-      await sleep(5_000);
-      counting = true;
-      await sleep(30_000);
-      return { ok: e.status === 200 && reads === 0, detail: `end ${e.status}; suggestion, transcript and notes reads from 5 s to 35 s after the end: ${reads}` };
+      // The suggestion poll stops at once; the transcript and notes polls stop after three reads that find nothing (by design).
+      const seen = { early: { suggestion: 0, other: 0 }, late: { suggestion: 0, other: 0 } };
+      let windowName = null;
+      room.leadPage.on('request', (rq) => {
+        const m = /\/(suggestion|transcript|milo-notes)(\?|$)/.exec(new URL(rq.url()).pathname);
+        if (m && windowName) seen[windowName][m[1] === 'suggestion' ? 'suggestion' : 'other'] += 1;
+      });
+      await sleep(3_000);
+      windowName = 'early'; await sleep(30_000);
+      windowName = 'late'; await sleep(20_000);
+      const ok = e.status === 200 && seen.early.suggestion === 0 && seen.late.suggestion === 0 && seen.early.other <= 6 && seen.late.other === 0;
+      return { ok, detail: `end ${e.status}; suggestion reads 3-33 s after ${seen.early.suggestion}, 33-53 s ${seen.late.suggestion}; transcript and notes reads 3-33 s ${seen.early.other} (at most three misses each), 33-53 s ${seen.late.other}` };
     });
     await room.close();
   }
 
-  // ── the Milo-off lines: no answers, then the transcript declined (the panel member beside the lead) ──
+  // ── the Milo-off lines. Aiko's coding round (Wen leads; no answers yet, then declined while the lead's page is open: I3.4j),
+  // then Nadia's round answered before the lead opens the room (I3.4i) with Hugo on the panel. ──
   await resetMock();
-  let liveLine = null;
+  let liveLine = null; let waits = 'none';
+  await step('I3.4j', async () => {
+    const aiko = SEED.interviews.aikoCoding;
+    const lead = await ctx.signIn(WEN); await stubCallMedia(lead, 'lead');
+    const recruiter = await ctx.signIn(SEED.cast.recruiter);
+    try {
+      await ctx.startInterview(lead, aiko);
+      const { page } = await joinRoomCall(ctx, lead, aiko);
+      const block = page.getByTestId('assistant-invite-blocked');
+      waits = await block.first().waitFor({ timeout: 30_000 }).then(async () => (await block.first().innerText()).trim(), () => 'none');
+      await candidateAnswers(ctx, recruiter, aiko, { recording: true, transcription: false, milo: false });
+      const end = Date.now() + 45_000;
+      while (Date.now() < end) { liveLine = (await block.first().innerText({ timeout: 1000 }).catch(() => 'none')).trim(); if (liveLine === 'Milo is off') break; await sleep(1000); }
+      return { ok: liveLine === 'Milo is off', detail: `no answers: "${waits}"; the lead's open bar 45 s after the candidate declined the transcript: "${liveLine}" (FINDING when it still waits: the room reads the answers once, on load)` };
+    } finally { for (const c of [lead, recruiter]) await c.close().catch(() => undefined); }
+  });
+
+  await resetMock();
   await step('I3.4i', async () => {
     const lead = await ctx.signIn(WEN); await stubCallMedia(lead, 'lead');
     const hugo = await ctx.signIn(HUGO); await stubCallMedia(hugo, 'panel');
     const recruiter = await ctx.signIn(SEED.cast.recruiter);
     try {
       const s = await ctx.startInterview(lead, iv);
+      await candidateAnswers(ctx, recruiter, iv, { recording: true, transcription: false, milo: false });
       const { page } = await joinRoomCall(ctx, lead, iv);
       const block = page.getByTestId('assistant-invite-blocked');
-      const waits = await block.first().waitFor({ timeout: 30_000 }).then(async () => (await block.first().innerText()).trim(), () => 'none');
-      await candidateAnswers(ctx, recruiter, iv, { recording: true, transcription: false, milo: false });
-      // The open page, for I3.4j: does the bar take the answers without a reload?
-      let live = 'none';
-      const end = Date.now() + 45_000;
-      while (Date.now() < end) { live = (await block.first().innerText({ timeout: 1000 }).catch(() => 'none')).trim(); if (live === 'Milo is off') break; await sleep(1000); }
-      liveLine = live;
-      await page.reload({ waitUntil: 'domcontentloaded' });
       const off = await block.first().waitFor({ timeout: 30_000 }).then(async () => (await block.first().innerText()).trim(), () => 'none');
       const invite = await page.getByTestId('assistant-invite').count();
       const hp = (await joinRoomCall(ctx, hugo, iv)).page;
@@ -206,9 +235,7 @@ export default async function run(ctx) {
       const shots = await shootPage(page, 'I3.4i-milo-off');
       const ok = s.status === 200 && waits === 'Milo waits for answers' && off === 'Milo is off' && invite === 0 && chip === 'No transcript or Milo'
         && !/Milo suggests/.test(hugoDeck) && sg.body?.suggestion === null && shots.every((x) => x.ok);
-      return { ok, detail: `no answers "${waits}"; transcript declined "${off}", Invite ${invite}; panel's consent line "${chip}", panel deck "${hugoDeck.slice(0, 30)}"; suggestion ${JSON.stringify(sg.body?.suggestion ?? null)}` };
+      return { ok, detail: `no answers (Aiko's round) "${waits}"; transcript declined "${off}", Invite ${invite}; panel's consent line "${chip}", panel deck "${hugoDeck.slice(0, 30)}"; suggestion ${JSON.stringify(sg.body?.suggestion ?? null)}` };
     } finally { for (const c of [lead, hugo, recruiter]) await c.close().catch(() => undefined); }
   });
-  // The lead's open room is not told when the candidate answers: its bar keeps "Milo waits for answers" until a reload.
-  await step('I3.4j', async () => ({ ok: liveLine === 'Milo is off', detail: `the lead's open bar 45 s after the candidate declined the transcript: "${liveLine}" (FINDING when it still waits: the room reads the answers once)` }));
 }

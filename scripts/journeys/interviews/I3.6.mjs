@@ -9,6 +9,7 @@
 //          of the candidate's
 //   I3.6f  the off lines on the transcript read: Milo not invited, the candidate not answered, the transcript declined
 //   I3.6g  the budget pause: with the opening's caps at $0 the ask answers paused, no answer
+//   I3.6h  a round started early: its time line does not say it starts later (today it does: a finding)
 import { liveRoom, inject, sleep, guestReads, guestChatText, setCaps, candidateAnswers } from './h3-call.mjs';
 
 export default async function run(ctx) {
@@ -41,6 +42,7 @@ export default async function run(ctx) {
   };
 
   await resetMock();
+  let liveTimeLine = null;
   const panelSeat = { userId: HUGO, label: 'panel' };
   let room = null;
   try {
@@ -50,6 +52,7 @@ export default async function run(ctx) {
   }
   if (room) {
     let notesText = ''; let answerText = '';
+
     await step('I3.6a', async () => {
       await inject(ctx, room.callId, [
         { userId: WEN, text: 'Tell me about someone on your team who was struggling.' },
@@ -63,6 +66,7 @@ export default async function run(ctx) {
       const timeLine = api1.body?.notes?.time?.line ?? '';
       const comps = (api1.body?.notes?.competencies ?? []).map((c) => c.name);
       const shots = await shootPage(room.leadPage, 'I3.6a-milo-tab');
+      liveTimeLine = timeLine;
       const ok = api1.status === 200 && /min/.test(timeLine) && notesText.includes(timeLine) && comps.length > 0 && comps.every((c) => notesText.includes(c)) && shots.every((s) => s.ok);
       return { ok, detail: `notes ${api1.status}: time "${timeLine}", competencies ${comps.join(' / ')}; on the tab ${comps.every((c) => notesText.includes(c))}` };
     });
@@ -105,8 +109,15 @@ export default async function run(ctx) {
     await room.close();
   }
 
-  // The off lines, by the API on a live round with no call: not invited, not answered, declined.
+  // A round started before its set time (the lead may start early): the time line still counts to the set time.
+  await step('I3.6h', async () => ({ ok: typeof liveTimeLine === 'string' && !/^Starts in/.test(liveTimeLine),
+    detail: `the live round's time line: "${liveTimeLine}" (FINDING when it reads "Starts in": the notes count from the set time even after the lead started the round)` }));
+
+  // The off lines, by the API on a live round with no call: not invited, not answered, declined. Aiko's coding round (Wen
+  // leads): no earlier piece left a call of Milo's in its lobby (the mock reset keeps Milo's call records, and the newest
+  // record still listening in an interview's lobby is read as its transcript).
   await step('I3.6f', async () => {
+    const iv = SEED.interviews.aikoCoding;
     const lines = [];
     for (const answers of ['none-invited', null, { recording: true, transcription: false, milo: false }]) {
       await resetMock();

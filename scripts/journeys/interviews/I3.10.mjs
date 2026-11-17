@@ -63,8 +63,6 @@ export default async function run(ctx) {
       const second = await askOnce(page);
       const third = await askOnce(page);
       const fourth = await askOnce(page);
-      // The reasons Milo gave, for I3.10e (the API answer of the last real draft is not kept: read them off the third's table).
-      reasons = (await page.getByTestId('interviews-draft-table').first().innerText().catch(() => '')).split('\n').map((s) => s.trim()).filter((s) => s.length > 25);
       await page.close();
       const ok = second.rows.length > 0 && third.rows.length > 0 && (fourth.line === AT_MAX || fourth.problem === AT_MAX);
       return { ok, detail: `second ${second.rows.length}, third ${third.rows.length}, fourth: "${fourth.line || fourth.problem}"` };
@@ -114,10 +112,14 @@ export default async function run(ctx) {
   });
 
   await step('I3.10e', async () => {
-    if (!reasons.length) return { ok: false, detail: 'no reasons were read' };
     await resetMock();
     const greta = await signIn(SEED.cast.recruiter);
+    const lead = await signIn(WEN);
     try {
+      // The reasons Milo gives the lead for a draft (the scripted stand-in is deterministic from the kit).
+      const d = await api(lead, 'POST', `/api/interviews/interviews/${iv}/plan-draft`, {});
+      reasons = (d.body?.plan?.questions ?? []).map((q) => String(q.why ?? q.reason ?? '')).filter((r) => r.length > 0);
+      if (!reasons.length) return { ok: false, detail: `no reasons in the draft (${d.status} ${JSON.stringify(d.body).slice(0, 100)})` };
       const inv = await mintInvite(greta, iv);
       const g = await openGuest(inv.linkPath);
       try {
@@ -127,6 +129,6 @@ export default async function run(ctx) {
         const leaks = reasons.filter((r) => page.includes(r) || JSON.stringify(read.body ?? '').includes(r));
         return { ok: leaks.length === 0 && [401, 403, 404].includes(draft.status), detail: `${reasons.length} reasons; on the candidate's page or read: ${leaks.length}; the candidate's plan-draft ${draft.status}` };
       } finally { await g.context.close(); }
-    } finally { await greta.close(); }
+    } finally { await greta.close(); await lead.close(); }
   });
 }

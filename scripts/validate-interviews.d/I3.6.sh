@@ -11,7 +11,7 @@ row_I3_6() {
   if [ "$QUICK" -eq 0 ]; then
     jest_ok "the H3 Milo route edges" src/routes/__tests__/interviews-milo.H3.test.ts
     run_journey
-    for s in a b c d e f g; do journey_step "I3.6$s"; done
+    for s in a b c d e f g h; do journey_step "I3.6$s"; done
   fi
 }
 built_row I3.6 row_I3_6
