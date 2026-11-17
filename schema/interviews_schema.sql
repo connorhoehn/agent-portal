@@ -204,3 +204,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS interview_invites_one_live_idx ON interview_in
 ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS admission_state TEXT NOT NULL DEFAULT 'not-knocked' CHECK (admission_state IN ('not-knocked', 'waiting', 'admitted', 'turned-away'));
 ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS knocked_at TIMESTAMPTZ;
 ALTER TABLE interview_invites ADD COLUMN IF NOT EXISTS admission_decided_at TIMESTAMPTZ;
+
+-- ── deletion log (row I6.3) ─────────────────────────────────────────────────
+-- One row per deletion: a candidate's request (requested_by the recruiter who
+-- asked) or a sweep whose period ran out (requested_by NULL). What was removed
+-- is kinds and counts only ([{ kind, count }]); what is left is [{ kind, why,
+-- retry }]. Never content, a name, an address or a file name. A row with
+-- something left to retry has no done_at, and the next sweep finishes it
+-- (lib/interviews/retention/service.ts).
+CREATE TABLE IF NOT EXISTS interview_deletions (
+  id             TEXT PRIMARY KEY,
+  candidate_id   TEXT NOT NULL REFERENCES interview_candidates(id),
+  interview_ids  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reason         TEXT NOT NULL CHECK (reason IN ('request', 'media-period', 'record-period')),
+  requested_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  requested_by   TEXT REFERENCES app_users(id),
+  due_by         TIMESTAMPTZ NOT NULL,
+  done_at        TIMESTAMPTZ,
+  removed        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  left_behind    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  attempts       INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  revision       INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
+);
+CREATE INDEX IF NOT EXISTS interview_deletions_candidate_idx ON interview_deletions (candidate_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS interview_deletions_open_idx ON interview_deletions (requested_at) WHERE done_at IS NULL;

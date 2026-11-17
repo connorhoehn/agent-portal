@@ -138,6 +138,8 @@ export interface AssistantStore {
   purgeCall(callId: string): Promise<boolean>;
   /** Records in any of `states`, oldest invite first, at most `limit` (the boot reconcile, audit M5). */
   listByState(states: readonly AssistantState[], limit: number): Promise<AssistantRecord[]>;
+  /** Records of one call lobby, oldest invite first, at most `limit` (an interview's calls, for its retention: lib/interviews/retention). */
+  callsOfLobby(lobby: string, limit: number): Promise<AssistantRecord[]>;
   /** The call's minutes, or its tombstone (`deleted` set); null when none were written. */
   getMinutes(callId: string): Promise<MinutesRecord | null>;
   /** Write the call's minutes once; an existing row (minutes or tombstone) is returned with `created: false`. */
@@ -387,6 +389,10 @@ export class MemoryAssistantStore implements AssistantStore {
 
   async listByState(states: readonly AssistantState[], limit: number) {
     return [...this.records.values()].filter((r) => states.includes(r.state)).sort((a, b) => a.invitedAt - b.invitedAt || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
+  }
+
+  async callsOfLobby(lobby: string, limit: number) {
+    return [...this.records.values()].filter((r) => r.lobby === lobby).sort((a, b) => a.invitedAt - b.invitedAt || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
   }
 
   async getMinutes(callId: string) { const m = this.minutes.get(callId); return m ? copy(m) : null; }

@@ -406,6 +406,10 @@ export class SqlAssistantStore implements AssistantStore {
     const rows = await this.exec(`SELECT ${COLUMNS} FROM meeting_assistants WHERE state IN (${list(states)}) ORDER BY invited_at ASC, call_id ASC LIMIT :limit`, [n('limit', limit)]);
     return rows.map(recordFromRow);
   }
+  async callsOfLobby(lobby: string, limit: number) {
+    const rows = await this.exec(`SELECT ${COLUMNS} FROM meeting_assistants WHERE lobby = :lobby ORDER BY invited_at ASC, call_id ASC LIMIT :limit`, [s('lobby', lobby), n('limit', limit)]);
+    return rows.map(recordFromRow);
+  }
   async getMinutes(callId: string) {
     const rows = await this.exec(`SELECT ${MINUTES_COLUMNS} FROM meeting_minutes WHERE call_id = :call`, [s('call', callId)]);
     return rows[0] ? minutesFromRow(rows[0]) : null;

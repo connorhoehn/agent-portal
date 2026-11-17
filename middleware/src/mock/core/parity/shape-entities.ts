@@ -530,6 +530,23 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (i: { id: string }) => i.id,
   },
   {
+    name: 'interview_deletions',
+    fixture: 'interviews.deletions',
+    describes: 'The deletion log: none in the seed (a deletion is asked for, or a period runs out); kinds and counts only, never content or a name.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_deletions',
+    // The seed holds none, so the shape is checked against one sample row of the kind the service writes (a request with the recording service absent).
+    mockRows: async () => [
+      ...(await import('../../interviews-deletions.js')).interviewDeletionsFixture.rows('default'),
+      { id: 'del-sample', candidateId: 'cand-sample', interviewIds: ['iv-sample'], reason: 'request', requestedAt: '2026-11-16T09:00:00.000Z', requestedBy: 'u-greta',
+        dueBy: '2026-12-16T09:00:00.000Z', doneAt: '2026-11-16T09:00:01.000Z', removed: [{ kind: 'resume', count: 1 }], left: [{ kind: 'recording', why: 'no-service', retry: false }],
+        attempts: 1, revision: 2 },
+    ],
+    mockId: (r: { id: string }) => r.id,
+    // `left` is an SQL keyword, so the column is spelled out.
+    columnKey: { left_behind: 'left' },
+  },
+  {
     name: 'interview_scorecards',
     fixture: 'interviews.scorecards',
     describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary.',

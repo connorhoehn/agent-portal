@@ -169,6 +169,7 @@ BEGIN
       ('interview_consents',           'public.app_tenant_visible(''interviews'')'),
       ('interviews',                   'public.app_tenant_visible(''interviews'')'),
       ('interview_invites',            'public.app_tenant_visible(''interviews'')'),
+      ('interview_deletions',          'public.app_tenant_visible(''interviews'')'),
       ('interview_scorecards',         'public.app_tenant_visible(''interviews'')')
     ) AS t(tbl, predicate)
     UNION ALL
