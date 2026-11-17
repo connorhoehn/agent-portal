@@ -218,3 +218,46 @@ describe('the pad log against a guest', () => {
     expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
   });
 });
+
+describe('lane RUNS (rows I4.4, I4.5): the runs routes and a guest', () => {
+  let staff = '';
+  let guest = '';
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    const login = await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-greta' }) });
+    staff = cookieOf(login, 'orgiq.session');
+    const made = await fetch(`${base}/api/interviews/interviews/${OWN}/invite`, { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: '{}' });
+    const token = String(((await made.json()) as { linkPath: string }).linkPath).split('#')[1];
+    const opened = await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+    guest = cookieOf(opened, 'interviews.guest');
+  }, 60_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  const body = { runId: 'sweep-run-0001', language: 'python', entrypoint: 'main.py', files: [{ path: 'main.py', content: 'print("x")' }] };
+
+  it('refuses the guest every staff runs route, for its own interview and another', async () => {
+    for (const id of [OWN, OTHER]) {
+      for (const [method, path] of [
+        ['POST', `/api/interviews/interviews/${id}/runs`], ['GET', `/api/interviews/interviews/${id}/runs`], ['GET', `/api/interviews/interviews/${id}/runs/events`],
+        ['GET', `/api/interviews/interviews/${id}/runs/sweep-run-0001`], ['POST', `/api/interviews/interviews/${id}/runs/sweep-run-0001/cancel`],
+      ] as const) {
+        const answer = await call(method, path, guest, body);
+        expect([`${method} ${path}`, answer.status >= 400]).toEqual([`${method} ${path}`, true]);
+      }
+    }
+  });
+
+  it('the guest\'s own runs routes refuse it until the lead lets it in (and the interview is live)', async () => {
+    for (const [method, path] of [
+      ['POST', '/api/interview-invite/runs'], ['GET', '/api/interview-invite/runs'], ['GET', '/api/interview-invite/runs/events'],
+      ['GET', '/api/interview-invite/runs/sweep-run-0001'], ['POST', '/api/interview-invite/runs/sweep-run-0001/cancel'],
+    ] as const) {
+      const answer = await call(method, path, guest, body);
+      expect([`${method} ${path}`, answer.status, answer.body]).toEqual([`${method} ${path}`, 404, JSON.stringify({ error: 'This link no longer works.' })]);
+      // A staff session is no guest on them.
+      expect((await call(method, path, staff, body)).status).toBe(404);
+    }
+  });
+});
