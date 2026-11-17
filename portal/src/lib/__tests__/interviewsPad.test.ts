@@ -134,3 +134,19 @@ test('two pads share the text, the language follows, and Insert a question adds 
   assert.ok(candidate.getText(PAD_TEXT_NAME).toString().endsWith('}\n\n# Now in Python.\npass\n'));
   assert.ok(candidate.getText(PAD_TEXT_NAME).toString().startsWith('print("hi")\n'), 'nothing was cleared');
 });
+
+test('three people in one pad (lead, panel member, candidate) have three named carets', () => {
+  // No seeded technical round has a panel seat (the only one, iv-n5z9f2cq, is behavioural), so the three-caret pad is held here.
+  const seats = [
+    { seat: 'lead' as const, id: 'u-hugo', name: 'Hugo Marchetti' },
+    { seat: 'panel' as const, id: 'u-wen', name: 'Wen Zhao' },
+    { seat: 'candidate' as const, id: 'guest:inv-1', name: 'Nadia Petrova' },
+  ];
+  const names = seats.map((s) => caretName(s.seat, s.name));
+  assert.deepEqual(names, ['Hugo Marchetti', 'Wen Zhao', 'Candidate']);
+  assert.equal(new Set(names).size, 3);
+  // The two interviewers are told apart by colour as well as by name.
+  assert.notEqual(caretColor('u-hugo'), caretColor('u-wen'));
+  // The candidate's caret never carries their name, whatever the panel is called.
+  assert.equal(caretName('candidate', 'Hugo Marchetti'), 'Candidate');
+});

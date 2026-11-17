@@ -93,6 +93,17 @@ const WIDTH: Record<Width, string> = {
   full: 'w-full',
 };
 
+/** E-14: the room's stage box at its real size (the window left of the 560px pane, header to footer). */
+const ROOM_STAGES = [
+  { width: 1440, label: 'At 1440×900 the stage is 880×794', box: 'h-[794px] w-[880px]', fit: { width: 880, height: 794 } },
+  { width: 1280, label: 'At 1280×800 the stage is 720×694', box: 'h-[694px] w-[720px]', fit: { width: 720, height: 694 } },
+] as const;
+const STAGE_PEOPLE = [
+  { id: 'p-vera', displayName: 'Vera Green' },
+  { id: 'p-omar', displayName: 'Omar Haddad', isMuted: true },
+  { id: 'p-theo', displayName: 'Theo Chang' },
+];
+
 interface TileProps {
   id: string;
   component: string;
@@ -646,6 +657,26 @@ export default function ReferenceSheet() {
               <CallTileRow variant="dock" activeSpeakerId="p-vera" tileWidth={160} tileHeight={100}
                 participants={[{ id: 'p-vera', displayName: 'Vera Green' }, { id: 'p-omar', displayName: 'Omar Haddad', isMuted: true }, { id: 'p-theo', displayName: 'Theo Chang', ringing: true }]}
                 localParticipant={{ id: 'demo-user', displayName: 'Demo User', isLocal: true, cameraOff: true }} />
+            </Tile>
+            {/* The interview room's stage (UI round 3, lane ROOM-2): both rooms draw the call as the library's grid with fit="contain"
+                (pages/interviews/InterviewRoomPage.tsx and pages/join/JoinRoom.tsx, `CallBlock placement="pane" fit="contain"`), left of
+                a 560px pane between the header and the footer. One to four made-up people, in the stage's box at 1440×900 and 1280×800. */}
+            <Tile id="E-14" component="CallTileRow (grid, fitBox)" subpath="/video" state="the interview stage at 1440 and 1280: 1, 2, 3 and 4 people" width="full">
+              {ROOM_STAGES.map((stage) => (
+                <Stack key={stage.label} gap="xs">
+                  <T size="xs" tone="secondary">{stage.label}</T>
+                  <Inline gap="md" align="start" wrap>
+                    {[1, 2, 3, 4].map((count) => (
+                      <Stack key={count} gap="none" className={`${stage.box} min-h-0 overflow-hidden border border-border bg-surface`}
+                        data-testid={`room-stage-${stage.width}-${count}`}>
+                        <CallTileRow variant="grid" fitBox={{ width: stage.fit.width, height: stage.fit.height }}
+                          participants={STAGE_PEOPLE.slice(0, count - 1)} localParticipant={{ id: 'demo-user', displayName: 'Demo User', isLocal: true, cameraOff: true }}
+                          activeSpeakerId={count > 1 ? 'p-vera' : null} data-testid={`room-stage-${stage.width}-${count}-grid`} />
+                      </Stack>
+                    ))}
+                  </Inline>
+                </Stack>
+              ))}
             </Tile>
           </Section>
 

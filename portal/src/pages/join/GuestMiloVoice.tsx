@@ -12,7 +12,7 @@
 //
 // Neither opens a socket or joins a channel; both render nothing until the candidate is in the call.
 import { useEffect, useState, type JSX } from 'react';
-import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, Inline, T } from '@connorhoehn/ui-components/shared';
 import { SpeakerIcon } from '@connorhoehn/ui-components/video';
 import { useAssistantVoice } from '../../lib/assistantVoice';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
@@ -34,7 +34,7 @@ function useJoinedCallId(room: GuestRoom): string | null {
 /** The player is told the voice is on and Milo listening: the server only relays Milo's voice in an interview when it is. */
 const heardView = (callId: string) => ({ ...NO_ASSISTANT(callId), voice: true, phase: 'listening' as const });
 
-export function GuestMiloVoice({ room }: { room: GuestRoom }): JSX.Element | null {
+export function GuestMiloVoice({ room, line = null }: { room: GuestRoom; line?: string | null }): JSX.Element | null {
   const callId = useJoinedCallId(room);
   const voice = useAssistantVoice(callId, heardView(callId ?? ''));
   const { gateway } = useGatewayFrames();
@@ -52,27 +52,29 @@ export function GuestMiloVoice({ room }: { room: GuestRoom }): JSX.Element | nul
     {asked && <T size="sm" weight="medium" className="shrink-0">Milo asked</T>}
     {asked && <T size="sm" truncate title={asked} data-testid="guest-milo-question">{asked}</T>}
     {voice.needsGesture && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="guest-milo-enable-sound">Click to hear Milo</Button>}
+    {/* The server's sentence to the candidate's last request, on this line rather than in the bar, so the bar never wraps at 1280. */}
+    {line && <T size="xs" tone="secondary" truncate title={line} className="ml-auto shrink-0" role="status" data-testid="guest-milo-line">{line}</T>}
   </Inline>;
 }
 
-/** The two fixed requests (decision 10), as plain buttons, and the server's sentence. */
-export function GuestMiloRequests({ room }: { room: GuestRoom }): JSX.Element | null {
+/**
+ * The two fixed requests (decision 10), as plain buttons in the bar. The server's sentence goes to `onLine`: the room shows it on
+ * GuestMiloVoice's line above the bar (UI round 3: with both buttons, the time and the call's controls, the bar has no room left
+ * for a sentence at 1280).
+ */
+export function GuestMiloRequests({ room, onLine }: { room: GuestRoom; onLine(line: string | null): void }): JSX.Element | null {
   const callId = useJoinedCallId(room);
   const [busy, setBusy] = useState(false);
-  const [line, setLine] = useState<string | null>(null);
   if (!callId || room.state !== 'open') return null;
   const ask = async (request: 'repeat' | 'time') => {
     if (busy) return;
     setBusy(true);
-    setLine(await requestFromMilo(request));
+    onLine(await requestFromMilo(request));
     setBusy(false);
   };
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0" data-testid="guest-milo-requests">
     <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('repeat')} data-testid="guest-milo-repeat">Repeat the question</Button>
     <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('time')} data-testid="guest-milo-time">How much time is left?</Button>
-    {line && <Tooltip content={line} placement="top">
-      <T size="xs" tone="secondary" truncate className="max-w-[16rem]" role="status" data-testid="guest-milo-line">{line}</T>
-    </Tooltip>}
   </Inline>;
 }
 

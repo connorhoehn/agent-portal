@@ -43,7 +43,7 @@ import {
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, type RoomTabId,
-  queuePadQuestion, sayQuestion, type MiloSaid,
+  queuePadQuestion, sayQuestion, type MiloSaid, miloInviteBlock,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -107,6 +107,7 @@ function InterviewRoom({ id }: { id: string }) {
   const refreshConsents = consents.refresh;
   useEffect(() => { if (admission && admission.state !== 'not-knocked') refreshConsents(); }, [admission?.state, refreshConsents]); // eslint-disable-line react-hooks/exhaustive-deps
   const consent = consents.error ? null : consentChip(consents.data);
+  const miloBlock = consents.error ? null : miloInviteBlock(consents.data);
 
   // D7: Milo's suggestion, for the lead only, read on the server's wait while the interview is live and the lead is in the call.
   const [suggestion, setSuggestion] = useState<SuggestionView | null>(null);
@@ -154,11 +155,11 @@ function InterviewRoom({ id }: { id: string }) {
   }, [id]);
   const footer = useMemo<InterviewRoomFooterState | null>(() => (room && lobbyName ? {
     interviewId: room.id, lobbyName, lead: room.seat === 'lead', minutes: room.round.minutes,
-    consent, admission, end, answerKnock: knock,
+    consent, miloBlock, admission, end, answerKnock: knock,
     suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
     pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,
     answerSuggestion: answerAsk,
-  } : null), [room, lobbyName, consent?.label, consent?.tooltip, admission, end, knock, suggestion, paused, answerAsk]); // eslint-disable-line react-hooks/exhaustive-deps
+  } : null), [room, lobbyName, consent?.label, consent?.tooltip, miloBlock?.label, admission, end, knock, suggestion, paused, answerAsk]); // eslint-disable-line react-hooks/exhaustive-deps
   useRegisterInterviewRoomFooter(footer);
 
   if (error && !room) {
@@ -189,7 +190,8 @@ function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boo
       actionLabel="Open My interviews" onAction={onBack} testId="interview-room-closed" />;
   }
   const lead = room.seat === 'lead';
-  const waiting = lead ? candidateLine(admission) : null;
+  // Any seat reads whether the candidate is here (the panel waits with them for the lead).
+  const waiting = candidateLine(admission, room.seat);
   const facts = [
     { label: 'Candidate', value: room.candidate.name },
     { label: 'Round', value: `${room.round.name} · ${room.round.type === 'technical' ? 'Technical' : 'Behavioural'}` },

@@ -169,6 +169,9 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
   }, [chatOpen, technical]);
   const callId = host?.call.call?.callId ?? null;
   const view = roomView({ token: 'ready', joined, left });
+  // Milo's sentence to the candidate's last request: asked from the bar, shown on the line above it.
+  const [miloLine, setMiloLine] = useState<string | null>(null);
+  useEffect(() => { if (!joined) setMiloLine(null); }, [joined]);
 
   return <GuestShell bleed>
     <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 360, fitPrimaryPx: 480 }}>
@@ -183,11 +186,11 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
               testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
         </SidePaneSplit>
         {joined && callId && paneOpen && <GuestRoomPane room={room} callId={callId} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
-        <GuestMiloVoice room={room} />
+        <GuestMiloVoice room={room} line={miloLine} />
         <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
           <CallMediaOutlet />
           <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
-            <GuestCallBar room={room} chatOpen={chatOpen} onToggleChat={toggleChat} />
+            <GuestCallBar room={room} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloLine} />
           </Inline>
         </Stack>
       </Stack>
@@ -196,7 +199,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
 }
 
 /** The library's HuddleBar on the work-call model: Join before the call; microphone, camera, Message, Leave and the time left in it. */
-function GuestCallBar({ room, chatOpen, onToggleChat }: { room: GuestRoom; chatOpen: boolean; onToggleChat(): void }) {
+function GuestCallBar({ room, chatOpen, onToggleChat, onMiloLine }: { room: GuestRoom; chatOpen: boolean; onToggleChat(): void; onMiloLine(line: string | null): void }) {
   const host = useCallHost();
   const now = useNow(15_000);
   const observedJoin = useRef<{ callId: string; at: number } | null>(null);
@@ -237,7 +240,7 @@ function GuestCallBar({ room, chatOpen, onToggleChat }: { room: GuestRoom; chatO
     extras={<>
       {left && <T size="xs" weight="medium" tone={timeLeftTone(left)} className="whitespace-nowrap" data-testid="join-room-time-left">{left}</T>}
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="join-room-rejoin">Rejoin</Button>}
-      <GuestMiloRequests room={room} />
+      <GuestMiloRequests room={room} onLine={onMiloLine} />
     </>}
     onLeave={() => { void call.leave(); }}
     leaveLabel={over ? 'Dismiss' : 'Leave'}

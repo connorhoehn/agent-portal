@@ -27,7 +27,7 @@ import { useProposalQueue } from './AssistantProposalAsk';
 import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { hideAssistantNotice, noticeKey, useAssistantNoticeHidden } from '../../lib/assistantNoticeHidden';
 import { useCallHost } from '../../lib/conversationCall';
-import { useInterviewRoomSeat } from './InterviewRoomFooter';
+import { useInterviewRoomMiloBlock, useInterviewRoomSeat } from './InterviewRoomFooter';
 
 export { useLiveCallId };
 
@@ -62,7 +62,11 @@ export function AssistantBarControls() {
   const assistant = useMeetingAssistant(callId);
   // An interview call (row I3.5): the lead keeps every control a work call shows; a panel member gets none of the lead's (the
   // server refuses them anyway, LEAD_ONLY) and keeps the mark, Acknowledge and Mute for me. Any other call: unchanged.
-  const panelSeat = useInterviewRoomSeat(useCallHost()?.lobby?.lobbyName) === 'panel';
+  const interviewLobby = useCallHost()?.lobby?.lobbyName;
+  const panelSeat = useInterviewRoomSeat(interviewLobby) === 'panel';
+  // The lead of an interview call whose candidate kept Milo out (no answers yet, or the transcript declined): the bar says why
+  // in place of Invite. Null in any other call, so a work call's Invite is unchanged.
+  const miloBlock = useInterviewRoomMiloBlock(interviewLobby);
   const { view, busy } = assistant;
   const controls = panelSeat ? { ...assistant.controls, invite: false, pause: false, resume: false, dismiss: false, extend: false, inviteAgain: false } : assistant.controls;
   const canSetVoice = assistant.canSetVoice && !panelSeat;
@@ -96,7 +100,10 @@ export function AssistantBarControls() {
   // A standing reason Milo can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
   const refused = controls.left ? rejoinRefusedWords(view) : null;
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="assistant-bar">
-    {controls.invite && <Tooltip content={INVITE_HINT} placement="top">
+    {controls.invite && miloBlock && <Tooltip content={miloBlock.tooltip} placement="top">
+      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={miloBlock.tooltip} data-testid="assistant-invite-blocked">{miloBlock.label}</Chip>
+    </Tooltip>}
+    {controls.invite && !miloBlock && <Tooltip content={INVITE_HINT} placement="top">
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => void assistant.invite()} data-testid="assistant-invite">Invite {ASSISTANT_NAME}</Button>
     </Tooltip>}
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}

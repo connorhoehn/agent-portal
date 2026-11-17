@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, panelLine, roomPaneWidth,
+  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, miloInviteBlock, panelLine, roomPaneWidth,
   roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
 } from '../interviewsRoom.ts';
 
@@ -40,7 +40,7 @@ test('the round’s crumb names the candidate, then the round', () => {
 test('the footer’s time counts from the join, never from the set time, and says the round’s length before', () => {
   assert.equal(callTimeLabel(null, 60, T0), '60 min round');
   assert.equal(callTimeLabel(undefined, 45, T0), '45 min round');
-  assert.equal(callTimeLabel(T0 + 5 * MIN, 60, T0), '60 min round'); // a clock skew never reads "Starts in"
+  assert.equal(callTimeLabel(T0 + 5 * MIN, 60, T0), '60 min left'); // a clock skew never reads "Starts in", nor the round's length once the call is on
   assert.equal(callTimeLabel(T0, 60, T0), '60 min left');
   assert.equal(callTimeLabel(new Date(T0).toISOString(), 60, T0 + 20 * MIN), '40 min left');
   assert.equal(callTimeLabel(T0, 60, T0 + 75 * MIN), 'Over by 15 min');
@@ -48,17 +48,49 @@ test('the footer’s time counts from the join, never from the set time, and say
   for (const at of [T0, T0 + 30 * MIN, T0 + 90 * MIN]) assert.doesNotMatch(callTimeLabel(T0, 60, at) ?? '', /Starts in/);
 });
 
-test('the consent chip: not answered yet until the answers exist, then what is off, then nothing', () => {
-  assert.deepEqual(consentChip({ answered: false, off: ['recording', 'transcription', 'milo'] }),
-    { label: 'Not answered yet', tooltip: `${NOT_ANSWERED_LINE}.`, tone: 'neutral' });
+test('the consent chip: every combination the staff read can carry reads as plain sentences', () => {
+  const notAnswered = consentChip({ answered: false, off: ['recording', 'transcription', 'milo'] });
   assert.equal(NOT_ANSWERED_LINE, 'The candidate has not answered yet');
-  assert.deepEqual(consentChip({ answered: true, off: ['recording'] }),
-    { label: 'Recording off', tooltip: 'Recording is off for this interview.', tone: 'warning' });
-  assert.deepEqual(consentChip({ answered: true, off: ['transcription', 'milo'] }),
-    { label: '2 parts off', tooltip: 'Transcription and Milo are off for this interview.', tone: 'warning' });
-  assert.equal(consentChip({ answered: true, off: [] }), null);
+  assert.deepEqual(notAnswered, { label: 'Not answered yet',
+    tooltip: 'The candidate has not answered yet. Until they do, nothing is recorded or transcribed and Milo cannot join the call.', tone: 'neutral' });
+  // Not answered is never a refusal: no "said no", no "off", whatever the off list holds before the answers.
+  assert.doesNotMatch(`${notAnswered!.label} ${notAnswered!.tooltip}`, /said no|declined|refused| off\b/i);
+  assert.deepEqual(consentChip({ answered: false, off: [] }), notAnswered);
+  const cases: Array<[string[], string | null, string | null]> = [
+    [[], null, null],
+    [['recording'], 'Recording off', 'The candidate said no to recording, so the call is not recorded.'],
+    [['milo'], 'Milo off', 'The candidate said no to Milo, so Milo makes no suggestions in this call.'],
+    // The server writes Milo off with the transcript; a transcript alone reads the same.
+    [['transcription', 'milo'], 'No transcript or Milo', 'The candidate said no to the transcript, so nothing is transcribed and Milo cannot join the call.'],
+    [['transcription'], 'No transcript or Milo', 'The candidate said no to the transcript, so nothing is transcribed and Milo cannot join the call.'],
+    [['recording', 'milo'], 'Recording and Milo off', 'The candidate said no to recording, so the call is not recorded. The candidate said no to Milo, so Milo makes no suggestions in this call.'],
+    [['recording', 'transcription', 'milo'], 'No recording, transcript or Milo', 'The candidate said no to recording, so the call is not recorded. The candidate said no to the transcript, so nothing is transcribed and Milo cannot join the call.'],
+    [['milo', 'transcription', 'recording', 'milo'], 'No recording, transcript or Milo', 'The candidate said no to recording, so the call is not recorded. The candidate said no to the transcript, so nothing is transcribed and Milo cannot join the call.'],
+  ];
+  for (const [off, label, tooltip] of cases) {
+    const chip = consentChip({ answered: true, off: off as Array<'recording' | 'transcription' | 'milo'> });
+    if (label === null) { assert.equal(chip, null, off.join()); continue; }
+    assert.deepEqual(chip, { label, tooltip, tone: 'warning' }, off.join());
+    // Plain sentences: each starts with a capital and ends with a full stop; no part names or ids.
+    for (const sentence of chip!.tooltip.split(/(?<=\.) /)) assert.match(sentence, /^[A-Z][^.]*\.$/);
+    assert.doesNotMatch(chip!.tooltip, /transcription|interviews?:|_/);
+  }
+  // The longest label stays short enough for one line in the bar at 1280 (the shot measures it too).
+  assert.ok(Math.max(...cases.map(([, l]) => l?.length ?? 0)) <= 32);
   assert.equal(consentChip(null), null);
   assert.equal(consentChip(undefined), null);
+});
+
+test('Milo is not offered to the lead while the candidate’s answers keep it out', () => {
+  assert.deepEqual(miloInviteBlock({ answered: false, off: ['recording', 'transcription', 'milo'] }),
+    { label: 'Milo waits for answers', tooltip: 'Milo can join once the candidate has answered the recording and transcript questions.' });
+  assert.deepEqual(miloInviteBlock({ answered: true, off: ['transcription', 'milo'] }),
+    { label: 'Milo is off', tooltip: 'The candidate said no to the transcript, so Milo cannot join this call.' });
+  // Milo declined with the transcript accepted: Milo may still join to keep the transcript (no suggestions), so Invite stays.
+  assert.equal(miloInviteBlock({ answered: true, off: ['milo'] }), null);
+  assert.equal(miloInviteBlock({ answered: true, off: ['recording'] }), null);
+  assert.equal(miloInviteBlock({ answered: true, off: [] }), null);
+  assert.equal(miloInviteBlock(null), null);
 });
 
 test('before the call: the panel with the lead first, and where the candidate is', () => {
@@ -72,4 +104,7 @@ test('before the call: the panel with the lead first, and where the candidate is
   assert.equal(candidateLine({ state: 'waiting', knockedAt: 'x', decidedAt: null }), 'Waiting to be let in');
   assert.equal(candidateLine({ state: 'admitted', knockedAt: 'x', decidedAt: 'y' }), 'Let in');
   assert.equal(candidateLine({ state: 'turned-away', knockedAt: 'x', decidedAt: 'y' }), 'Asked to wait');
+  // A panel member reads the same, and who lets the candidate in.
+  assert.equal(candidateLine({ state: 'waiting', knockedAt: 'x', decidedAt: null }, 'panel'), 'Waiting for the lead to let them in');
+  assert.equal(candidateLine({ state: 'not-knocked', knockedAt: null, decidedAt: null }, 'panel'), 'Not here yet');
 });

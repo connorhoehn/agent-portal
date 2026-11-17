@@ -51,7 +51,9 @@ test('only the lead asks whether the candidate is waiting, and stops once they a
   assert.equal(pollsWaiting('lead', null, 'ready'), true);
   assert.equal(pollsWaiting('lead', waiting, 'live'), true);
   assert.equal(pollsWaiting('lead', { ...waiting, state: 'admitted' }, 'live'), false);
-  assert.equal(pollsWaiting('panel', null, 'live'), false);
+  assert.equal(pollsWaiting('panel', null, 'live'), true); // any seat reads whether the candidate is here
+  assert.equal(pollsWaiting('panel', { ...waiting, state: 'admitted' }, 'live'), false);
+  assert.equal(pollsWaiting(null, null, 'live'), false);
   assert.equal(pollsWaiting('lead', null, 'ended'), false);
   // A new knock is a new prompt.
   assert.notEqual(knockPromptId('iv-1', waiting), knockPromptId('iv-1', { ...waiting, knockedAt: 'k2' }));

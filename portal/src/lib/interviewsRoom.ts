@@ -103,7 +103,7 @@ export const WAITING_POLL_MS = 5_000;
 
 /** The lead asks while the room is open and the candidate is not yet in; a panel member never does. */
 export const pollsWaiting = (seat: 'lead' | 'panel' | null, admission: Admission | null, state: RoomState | null): boolean =>
-  seat === 'lead' && admission?.state !== 'admitted' && state !== null && ['accepted', 'ready', 'live'].includes(state);
+  seat !== null && admission?.state !== 'admitted' && state !== null && ['accepted', 'ready', 'live'].includes(state);
 
 /**
  * One read of C3's waiting route. Not found (SEAT's routes absent, or nothing to admit) and any failure read
@@ -354,25 +354,60 @@ export const roundCrumbLabel = (room: Pick<RoomView, 'round' | 'candidate'>): st
 
 /**
  * The footer's time while the call is on: counted from the call's start (the join), never from the set time, so a
- * call held early never reads "Starts in 1525 min". Before the start is known it says the round's length.
+ * call held early never reads "Starts in 1525 min". Before the start is known it says the round's length; once it is known
+ * the label is time left, also when the start reads a moment later than the page's clock.
  */
 export function callTimeLabel(callStartedAt: number | string | null | undefined, minutes: number, nowMs: number): string | null {
   if (minutes <= 0) return null;
   const start = roomStartMs(null, callStartedAt);
-  if (start === null || nowMs < start) return `${minutes} min round`;
-  return timeLeftLabel(start, minutes, nowMs);
+  if (start === null) return `${minutes} min round`;
+  // A start a moment ahead of this page's clock (the clock ticks every few seconds, or skews) is the start: the call is on.
+  return timeLeftLabel(start, minutes, Math.max(nowMs, start));
 }
 
-/** The consent chip in the footer: a short label and the full sentence as its tooltip. Null shows nothing. */
+/**
+ * The consent chip in the footer: a short label and the full sentence as its tooltip. Null shows nothing.
+ *
+ * Every combination the staff read can carry (`answered`, and the parts off: the server writes Milo off whenever the
+ * transcript is declined, lib/interviews/consent/rules.ts). The label says what is off in a few words; the tooltip says
+ * what the candidate answered and what that means for the call, in plain sentences. "Not answered yet" is never a
+ * refusal: nothing is off by the candidate's choice until they answer. A required part declined holds the candidate on
+ * their own page before they can knock (the held page's business); the chip only reports the answers as given.
+ */
 export interface ConsentChip { label: string; tooltip: string; tone: 'neutral' | 'warning' }
 export const NOT_ANSWERED_LINE = 'The candidate has not answered yet';
+const NOT_ANSWERED_TOOLTIP = `${NOT_ANSWERED_LINE}. Until they do, nothing is recorded or transcribed and Milo cannot join the call.`;
 export function consentChip(consents: { answered: boolean; off: readonly ConsentPart[] } | null | undefined): ConsentChip | null {
   if (!consents) return null;
-  if (!consents.answered) return { label: 'Not answered yet', tooltip: `${NOT_ANSWERED_LINE}.`, tone: 'neutral' };
-  const line = consentOffLine(consents.off);
-  if (!line) return null;
-  const parts = [...new Set(consents.off)].filter((p) => p in PART_WORDS);
-  return { label: parts.length === 1 ? `${PART_WORDS[parts[0]!]} off` : `${parts.length} parts off`, tooltip: `${line}.`, tone: 'warning' };
+  if (!consents.answered) return { label: 'Not answered yet', tooltip: NOT_ANSWERED_TOOLTIP, tone: 'neutral' };
+  const off = new Set(consents.off.filter((p) => p in PART_WORDS));
+  const recording = off.has('recording');
+  const transcript = off.has('transcription');
+  const milo = transcript || off.has('milo');
+  if (!recording && !milo) return null;
+  const label = recording && transcript ? 'No recording, transcript or Milo'
+    : recording && milo ? 'Recording and Milo off'
+      : recording ? 'Recording off'
+        : transcript ? 'No transcript or Milo'
+          : 'Milo off';
+  const sentences = [
+    recording ? 'The candidate said no to recording, so the call is not recorded.' : null,
+    transcript ? 'The candidate said no to the transcript, so nothing is transcribed and Milo cannot join the call.'
+      : milo ? 'The candidate said no to Milo, so Milo makes no suggestions in this call.' : null,
+  ].filter(Boolean);
+  return { label, tooltip: sentences.join(' '), tone: 'warning' };
+}
+
+/**
+ * Why the lead may not invite Milo, from the candidate's answers (lib/interviews/consent/effects.ts `miloMayBeInvited`:
+ * the transcript answer alone, and nothing before an answer). Null: Invite is offered as in a work call. With the
+ * transcript accepted and Milo declined, Milo may still join to keep the transcript, so Invite stays.
+ */
+export function miloInviteBlock(consents: { answered: boolean; off: readonly ConsentPart[] } | null | undefined): { label: string; tooltip: string } | null {
+  if (!consents) return null;
+  if (!consents.answered) return { label: 'Milo waits for answers', tooltip: 'Milo can join once the candidate has answered the recording and transcript questions.' };
+  if (consents.off.includes('transcription')) return { label: 'Milo is off', tooltip: 'The candidate said no to the transcript, so Milo cannot join this call.' };
+  return null;
 }
 
 /** Before the call: who sits on the panel, the lead first ("Hugo Marchetti (lead), Wen Zhao"). */
@@ -381,10 +416,13 @@ export function panelLine(seats: RoomView['seats']): string {
   return ordered.map((s) => (s.seat === 'lead' ? `${s.person.name} (lead)` : s.person.name)).join(', ') || 'Nobody is seated yet';
 }
 
-/** Before the call, for the lead: whether the candidate is here. Null when the room does not know (a panel seat). */
-export function candidateLine(admission: Admission | null): string | null {
+/**
+ * Before the call: whether the candidate is here, for any seat (the waiting read answers every seat; only the lead
+ * may let them in, so a panel member reads who does). Null when the room does not know yet.
+ */
+export function candidateLine(admission: Admission | null, seat: 'lead' | 'panel' = 'lead'): string | null {
   if (!admission) return null;
-  if (admission.state === 'waiting') return 'Waiting to be let in';
+  if (admission.state === 'waiting') return seat === 'lead' ? 'Waiting to be let in' : 'Waiting for the lead to let them in';
   if (admission.state === 'admitted') return 'Let in';
   if (admission.state === 'turned-away') return 'Asked to wait';
   return 'Not here yet';

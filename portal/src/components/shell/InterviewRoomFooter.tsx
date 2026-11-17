@@ -6,7 +6,7 @@
 // with the full sentence as a tooltip, so the row stays one line at 1280. Nothing renders unless
 // the shell's call is the registered interview's, so no other tenant's footer changes.
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Button, Chip, Inline, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { SUGGESTION_RECEIPTS, callTimeLabel, knockPromptId, miloAskReceipt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
@@ -17,6 +17,8 @@ export interface InterviewRoomFooterState {
   minutes: number;
   /** What the candidate answered (C4) as a chip: not answered yet, or what is off; null shows nothing. */
   consent: ConsentChip | null;
+  /** Why the lead may not invite Milo by the candidate's answers (lib/interviewsRoom.ts `miloInviteBlock`); null: Invite as in a work call. */
+  miloBlock: { label: string; tooltip: string } | null;
   /** C3's answer for the lead; null: nobody waiting (or the route is not there). */
   admission: Admission | null;
   end(): Promise<{ error?: string }>;
@@ -71,6 +73,11 @@ function useNow(stepMs: number): number {
 export function useInterviewRoomSeat(lobbyName: string | null | undefined): 'lead' | 'panel' | null {
   const room = useRoomFor(lobbyName);
   return room ? (room.lead ? 'lead' : 'panel') : null;
+}
+
+/** Why Milo may not be invited into this interview call by the candidate's answers; null for any other call (nothing changes there). */
+export function useInterviewRoomMiloBlock(lobbyName: string | null | undefined): { label: string; tooltip: string } | null {
+  return useRoomFor(lobbyName)?.miloBlock ?? null;
 }
 
 /** In the call bar's extras: time left, the consent chip, and the lead's End interview. */
@@ -128,7 +135,11 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
     const sg = room.lead ? room.suggestion : null;
     if (sg) list.push({
       ...base, id: suggestionPromptId(room.interviewId, sg.id), kind: 'choice', eyebrow: 'Milo suggests', title: sg.competency.name,
-      question: sg.text, ...(sg.basedOn ? { fields: [{ label: 'Based on', value: sg.basedOn, tone: 'neutral' as const }] } : {}),
+      question: sg.text,
+      // "Based on" is one line (the prompt presentation clamps it); the whole quote is its tooltip, one hover or focus away.
+      ...(sg.basedOn ? { fields: [{ label: 'Based on', value: <Tooltip content={sg.basedOn} placement="top">
+        <T size="xs" tone="secondary" truncate title={sg.basedOn} data-testid="interview-suggestion-based-on">{sg.basedOn}</T>
+      </Tooltip>, tone: 'neutral' as const }] } : {}),
       options: [{ id: 'ask', label: 'I’ll ask it', emphasis: 'primary' }, { id: 'milo-ask', label: 'Have Milo ask' }, { id: 'skip', label: 'Skip' }],
       onAnswer: async (a) => {
         const answer: SuggestionAnswerId = 'optionId' in a && (a.optionId === 'milo-ask' || a.optionId === 'skip') ? a.optionId : 'ask';
@@ -149,5 +160,6 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
   // Esc on the End question is "Keep going".
   useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);
   if (!room || !deck.active || deck.collapsed) return null;
-  return <ComposerPromptDeck deck={deck} className="mx-4 my-1" data-testid="interview-room-ask" />;
+  // The compact form (plain buttons, no key-hint row, facts on one line each): the room's pad and its output keep their height at 1280.
+  return <ComposerPromptDeck deck={deck} presentation="prompt" className="mx-4 my-1" data-testid="interview-room-ask" />;
 }
