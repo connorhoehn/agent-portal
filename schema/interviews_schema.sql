@@ -328,3 +328,36 @@ CREATE TABLE IF NOT EXISTS interview_panel_notices (
   interview_id     TEXT NOT NULL REFERENCES interviews(id),
   PRIMARY KEY (user_id, notice_version)
 );
+
+-- ── the pad log (row I4.3; decision 12) ─────────────────────────────────────
+-- A technical round's code pad as timed events: each edit (where and how many
+-- characters, never which), each paste (how many characters and lines, pasted
+-- or dropped), the language, a question inserted from the kit, and snapshots of
+-- the whole text (the only rows that carry text, at most 64 KB each). Who wrote
+-- it is a staff id (side `panel`) or the invite's guest id (side `candidate`).
+-- `seq` only grows within an interview: the store gives each post the next
+-- numbers after the last, and the primary key refuses a repeat. `at` is the
+-- server's time, `client_at` the browser's. Append-only; rows leave by
+-- interview through retention (decision 17: the code log is media, 90 days).
+-- Panel side only (decision 4).
+CREATE TABLE IF NOT EXISTS interview_pad_events (
+  interview_id  TEXT NOT NULL REFERENCES interviews(id),
+  seq           INTEGER NOT NULL CHECK (seq >= 1),
+  at            TIMESTAMPTZ NOT NULL,
+  client_at     TIMESTAMPTZ NOT NULL,
+  who_id        TEXT NOT NULL,
+  side          TEXT NOT NULL CHECK (side IN ('panel', 'candidate')),
+  kind          TEXT NOT NULL CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert')),
+  from_pos      INTEGER CHECK (from_pos >= 0),
+  inserted      INTEGER CHECK (inserted >= 0),
+  deleted       INTEGER CHECK (deleted >= 0),
+  doc_length    INTEGER CHECK (doc_length >= 0),
+  lines         INTEGER CHECK (lines >= 0),
+  via           TEXT CHECK (via IN ('paste', 'drop')),
+  language      TEXT,
+  question_id   TEXT,
+  text          TEXT CHECK (octet_length(text) <= 65536),
+  PRIMARY KEY (interview_id, seq),
+  CHECK ((kind = 'snapshot') = (text IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS interview_pad_events_snapshot_idx ON interview_pad_events (interview_id, seq) WHERE kind = 'snapshot';

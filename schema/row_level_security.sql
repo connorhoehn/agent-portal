@@ -169,6 +169,7 @@ BEGIN
       ('interview_resumes',            'public.app_tenant_visible(''interviews'')'),
       ('interview_applications',       'public.app_tenant_visible(''interviews'')'),
       ('interview_coach_log',          'public.app_tenant_visible(''interviews'')'),
+      ('interview_pad_events',         'public.app_tenant_visible(''interviews'')'),
       ('interview_consents',           'public.app_tenant_visible(''interviews'')'),
       ('interview_suggestions',        'public.app_tenant_visible(''interviews'')'),
       ('interviews',                   'public.app_tenant_visible(''interviews'')'),
