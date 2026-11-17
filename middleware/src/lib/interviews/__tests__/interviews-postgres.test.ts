@@ -52,7 +52,7 @@ const SCHEMA_FILES = [
 ];
 const INTERVIEW_TABLES = [
   'interview_runs', 'interview_pad_events', 'interview_panel_notices', 'interview_deletions', 'interview_invites', 'interview_said_log',
-  'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recaps', 'interview_suggestions', 'interview_consents',
+  'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recap_attempts', 'interview_recaps', 'interview_suggestions', 'interview_consents',
   'interviews', 'interview_applications', 'interview_resumes', 'interview_candidates', 'interview_openings',
 ];
 

@@ -2418,7 +2418,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews/candidates.ts:55"
+      "source": "src/routes/interviews/candidates.ts:56"
     },
     {
       "method": "GET",
@@ -2438,12 +2438,12 @@
     {
       "method": "POST",
       "path": "/api/interviews/candidates/:id/deletion",
-      "source": "src/routes/interviews/retention.ts:66"
+      "source": "src/routes/interviews/retention.ts:68"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id/deletions",
-      "source": "src/routes/interviews/retention.ts:77"
+      "source": "src/routes/interviews/retention.ts:79"
     },
     {
       "method": "DELETE",
@@ -2498,7 +2498,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/admit",
-      "source": "src/routes/interviews/admission.ts:56"
+      "source": "src/routes/interviews/admission.ts:58"
     },
     {
       "method": "POST",
@@ -2513,22 +2513,22 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/end",
-      "source": "src/routes/interviews/room.ts:78"
+      "source": "src/routes/interviews/room.ts:81"
     },
     {
       "method": "DELETE",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:79"
+      "source": "src/routes/interviews/invite.ts:85"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:73"
+      "source": "src/routes/interviews/invite.ts:79"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:58"
+      "source": "src/routes/interviews/invite.ts:61"
     },
     {
       "method": "POST",
@@ -2578,17 +2578,17 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/recap",
-      "source": "src/routes/interviews/recap.ts:82"
+      "source": "src/routes/interviews/recap.ts:90"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/recap/ask",
-      "source": "src/routes/interviews/recap.ts:101"
+      "source": "src/routes/interviews/recap.ts:111"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/recap/open",
-      "source": "src/routes/interviews/recap.ts:89"
+      "source": "src/routes/interviews/recap.ts:99"
     },
     {
       "method": "GET",
@@ -2598,7 +2598,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/room",
-      "source": "src/routes/interviews/room.ts:47"
+      "source": "src/routes/interviews/room.ts:50"
     },
     {
       "method": "GET",
@@ -2643,7 +2643,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/start",
-      "source": "src/routes/interviews/room.ts:77"
+      "source": "src/routes/interviews/room.ts:80"
     },
     {
       "method": "GET",
@@ -2668,7 +2668,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/waiting",
-      "source": "src/routes/interviews/admission.ts:50"
+      "source": "src/routes/interviews/admission.ts:52"
     },
     {
       "method": "GET",
