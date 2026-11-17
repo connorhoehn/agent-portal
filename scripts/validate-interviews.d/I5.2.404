@@ -22,4 +22,5 @@ POST /api/interviews/interviews/{interviews.mateoDesign}/recap/open | interviewe
 # POST ask: a seat that has opened the recap, once the round has ended. A seat that has not opened it, the recruiter, the
 # hiring manager and a guest get 404 (not 403), never a hint that the round exists. (The asking seat is walked in I5.2.)
 POST /api/interviews/interviews/{interviews.jonahLeadership}/recap/ask | recruiter hiringManager interviewer interviewer2 workOnly=403 anon=403 guest=403 | | {"question":"Where did they talk about testing?"}
-POST /api/interviews/interviews/{interviews.mateoCoding}/recap/ask | recruiter hiringManager interviewer2 interviewer workOnly=403 anon=403 guest=403 | | {"question":"Where did they talk about testing?"}
+# Hugo's open on Mateo's round is in the seeds, so his ask is answered (the scripted stand-in); the others have not opened it.
+POST /api/interviews/interviews/{interviews.mateoCoding}/recap/ask | recruiter hiringManager interviewer2 workOnly=403 anon=403 guest=403 | interviewer | {"question":"Where did they talk about testing?"}

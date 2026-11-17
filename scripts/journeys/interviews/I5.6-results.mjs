@@ -36,7 +36,7 @@ export default async function run(ctx) {
     const lines = got.lines.map(squash);
     const leaked = [...NAME, ...words].filter((w) => lines.join(' ').includes(w) || whole.includes(w));
     if (got.panel) await pages[key].keyboard.press('Escape');
-    return { lines, leaked };
+    return { lines, leaked, whole };
   };
 
   // ── I5.6r-a: the round ends ────────────────────────────────────────────────────────────────────────────────────────────
@@ -65,8 +65,8 @@ export default async function run(ctx) {
     const view = (await api(amara, 'GET', `/api/interviews/candidates/${SEED.candidates.kwame}/debrief`)).body.debrief.applications[0];
     const decided = await api(amara, 'POST', `/api/interviews/applications/${SEED.applications.kwame}/stage`, { decision: 'hold', reason: REASON, basedOn: view.basedOn });
     const rung = await ring('greta', /decision was recorded/i, [REASON, 'Hold', 'on-hold', SUMMARY_HUGO, SUMMARY_WEN]);
-    const ok = decided.status === 201 && rung.lines.length >= 1 && /A decision was recorded on Senior Backend Engineer/.test(rung.lines.join(' ')) && /Amara Okafor/.test(rung.lines.join(' ')) && rung.leaked.length === 0;
-    record('I5.6r-c', ok, `the recruiter's bell "${(rung.lines[0] ?? '').slice(0, 120)}"; about the candidate or the reason: ${JSON.stringify(rung.leaked)}`);
+    const ok = decided.status === 201 && rung.lines.length >= 1 && /A decision was recorded on Senior Backend Engineer/.test(rung.lines.join(' ')) && /Recorded by Amara Okafor/.test(rung.whole) && rung.leaked.length === 0;
+    record('I5.6r-c', ok, `the recruiter's bell "${(rung.lines[0] ?? '').slice(0, 120)}", read whole: "${(rung.whole.match(/Recorded by[^.]*\./) ?? [''])[0]}"; status ${decided.status}; about the candidate or the reason: ${JSON.stringify(rung.leaked)}`);
   } catch (e) { record('I5.6r-c', false, `decided: ${why(e)}`); }
 
   for (const p of Object.values(pages)) await p.close().catch(() => undefined);

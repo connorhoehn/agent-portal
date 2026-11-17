@@ -7,7 +7,7 @@
 //   I5.4d  one table per application with a column group per round; at 1280 the Competency column stays in view when the table
 //          is wider than the window (the page's layout, read with the answer widened to five scorecards)
 // plus the table I5.4.404 (the runner adds that step).
-import { consentIn, miloScoresIn, seen, squash, why } from './h4-kit.mjs';
+import { consentIn, failing, miloScoresIn, seen, squash, why } from './h4-kit.mjs';
 
 export default async function run(ctx) {
   const { SEED, portal, record, signIn, api, resetMock, shootPage } = ctx;
@@ -37,15 +37,23 @@ export default async function run(ctx) {
     const side = squash(await page.getByTestId('interviews-debrief-side-by-side').innerText());
     const people = app.rounds.flatMap((r) => r.scorecards.map((s) => s.interviewer.name));
     const shots = await shootPage(page, 'debrief-recruiter');
-    const ok = deckOptions === 0 && decideLine === 0 && app.decide === null && people.every((n) => side.includes(n)) && /of 4/.test(side) && app.rounds.length === 2
-      && !/\b(average|total|overall score|rank)\b/i.test(text) && !consentIn(text) && !miloScoresIn(text) && shots.every((s) => s.ok);
-    record('I5.4a', ok, `${name}: debrief reached from Last result; ${deckOptions} decision options, decide line ${decideLine}; ${app.rounds.length} rounds, scorecards by ${people.join(', ')}; nothing averaged or ranked; ${widths(shots)}`);
+    const checks = {
+      noDeck: deckOptions === 0, noDecideLine: decideLine === 0, routeOffersNone: app.decide === null, people: people.every((n) => side.includes(n)), ratings: /of 4/.test(side), rounds: app.rounds.length === 2,
+      noAverage: !/\b(average|total|overall score|rank)\b/i.test(text), consent: !consentIn(text), milo: !miloScoresIn(text), shots: shots.every((s) => s.ok),
+    };
+    const ok = Object.values(checks).every(Boolean);
+    record('I5.4a', ok, `[failing: ${failing(checks)}] ${name}: debrief reached from Last result; ${deckOptions} decision options, decide line ${decideLine}; ${app.rounds.length} rounds, scorecards by ${people.join(', ')}; nothing averaged or ranked; ${widths(shots)}`);
   } catch (e) { record('I5.4a', false, `the recruiter's debrief: ${why(e)}`); }
 
   // ── I5.4b: the recap's disclosure agrees with the route ───────────────────────────────────────────────────────────────
   try {
-    const round = app.rounds.find((r) => r.recapPath);
-    const route = (await api(greta, 'GET', round.recapPath)).body.recap;
+    let round = null;
+    let route = null;
+    for (const r of app.rounds) {
+      const got = (await api(greta, 'GET', r.recapPath)).body?.recap;
+      if (got?.state === 'ready') { round = r; route = got; break; }
+    }
+    if (!round) throw new Error('no round of this candidate has a recap that is ready');
     const block = page.getByTestId('interviews-debrief-round').filter({ hasText: round.name }).first();
     await block.getByTestId('interviews-debrief-recap').click();
     await page.waitForTimeout(1200);
@@ -113,9 +121,10 @@ export default async function run(ctx) {
     const w1440 = await measure(1440);
     const groups = ['Coding', 'Working together'].every((g) => w1280.headers.some((h) => h.includes(g)));
     const kept = (m) => m.scrolls && m.after !== null && Math.abs(m.after - m.left) <= 2 && m.cell !== null && Math.abs(m.cell - m.left) <= 2;
-    const ok = w1280.tables === 1 && groups && kept(w1280) && !w1280.pageSideways && !w1440.pageSideways;
+    const checks = { oneTable: w1280.tables === 1, groups, keptAt1280: kept(w1280), noSideways1280: !w1280.pageSideways, noSideways1440: !w1440.pageSideways };
+    const ok = Object.values(checks).every(Boolean);
     await shootPage(page, 'debrief-wide');
-    record('I5.4d', ok, `one table for the application; column groups ${JSON.stringify(w1280.headers.slice(0, 3))}…; at 1280 the table scrolls inside itself and, scrolled to the end, the Competency column is at x=${w1280.after} (table edge ${w1280.left}) with its cells at ${w1280.cell}; at 1440 it ${w1440.scrolls ? `scrolls and keeps it at ${w1440.after}` : 'fits'}; the page itself never scrolls sideways`);
+    record('I5.4d', ok, `[failing: ${failing(checks)}] one table for the application; column groups ${JSON.stringify(w1280.headers.slice(0, 3))}…; at 1280 the table scrolls inside itself and, scrolled to the end, the Competency column is at x=${w1280.after} (table edge ${w1280.left}) with its cells at ${w1280.cell}; at 1440 it ${w1440.scrolls ? `scrolls and keeps it at ${w1440.after}` : 'fits'}; the page scrolls sideways: ${w1280.pageSideways} at 1280, ${w1440.pageSideways} at 1440`);
   } catch (e) { record('I5.4d', false, `the wide table: ${why(e)}`); }
 
   await page.close();

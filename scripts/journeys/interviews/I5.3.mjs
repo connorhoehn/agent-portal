@@ -11,7 +11,7 @@
 //   I5.3f  others hidden until yours is in: Kwame's round (Hugo leads, Wen on the panel) ended, Hugo's scorecard in, Wen still
 //          sees nobody's until hers is in, then sees Hugo's
 // plus the table I5.3.404 (the runner adds that step).
-import { openBody, openRecapStep, rateAllUI, ratingGroups, scorecardBody, seen, squash, submitFromRecap, consentIn, miloScoresIn, tonesIn, why } from './h4-kit.mjs';
+import { failing, openBody, openRecapStep, rateAllUI, ratingGroups, scorecardBody, seen, squash, submitFromRecap, consentIn, miloScoresIn, tonesIn, why } from './h4-kit.mjs';
 
 const SUMMARY_1 = 'Gave concrete examples of coaching a teammate; one competency lowered after reading the recap.';
 const SUMMARY_2 = 'Gave concrete examples of coaching a teammate, and of moving a deadline early rather than late.';
@@ -77,10 +77,13 @@ export default async function run(ctx) {
     await seen(page, 'interviews-recap-competency');
     const again = await readRecap();
     const pageText = squash(await page.getByTestId('interviews-scorecard').innerText());
-    const ok = /recorded as they stand/.test(asked) && first.blocks === competencies && first.n >= 1 && sourced && first.tones === 0 && own === competencies
-      && stored?.state === 'ready' && again.blocks === competencies && again.n === first.n && /Your rating[^A-Z]*3 of 4/.test(again.text)
-      && !miloScoresIn(pageText) && !consentIn(pageText) && shots.every((s) => s.ok);
-    record('I5.3b', ok, `prompt "${asked.slice(0, 60)}…", ${first.blocks} competencies, ${first.n} statements each with its line and quote (${sourced}), tones ${first.tones}, own ratings shown ${own}; a reload at the recap step: ${again.blocks} competencies, ${again.n} statements; ${widths(shots)}`);
+    const checks = {
+      prompt: /recorded as they stand/.test(asked), blocks: first.blocks === competencies, statements: first.n >= 1, sourced, noTone: first.tones === 0, own: own === competencies,
+      stored: stored?.state === 'ready', reloadBlocks: again.blocks === competencies, reloadStatements: again.n === first.n, reloadOwn: /Your rating[^A-Z]*3 of 4/.test(again.text),
+      milo: !miloScoresIn(pageText), consent: !consentIn(pageText), shots: shots.every((s) => s.ok),
+    };
+    const ok = Object.values(checks).every(Boolean);
+    record('I5.3b', ok, `[failing: ${failing(checks)}] prompt "${asked.slice(0, 60)}…", ${first.blocks} competencies, ${first.n} statements each with its line and quote (${sourced}), tones ${first.tones}, own ratings shown ${own}; a reload at the recap step: ${again.blocks} competencies, ${again.n} statements; ${widths(shots)}`);
   } catch (e) { record('I5.3b', false, `rate and recap: ${why(e)}`); }
 
   // ── I5.3c: change a rating after the recap, then submit ───────────────────────────────────────────────────────────────
@@ -90,6 +93,7 @@ export default async function run(ctx) {
     await ratingGroups(page).first().getByRole('radio', { name: /^1 / }).click();
     await page.getByTestId('interviews-scorecard-to-recap').click(); // already recorded: no second prompt
     await seen(page, 'interviews-scorecard-recap-step');
+    await seen(page, 'interviews-recap-competency');
     const lowered = /Your rating[^A-Z]*1 of 4/.test(squash(await page.getByTestId('interviews-recap').innerText()));
     sentSummary = SUMMARY_1;
     await submitFromRecap(page, { recommendation: 'Yes', summary: SUMMARY_1 });
@@ -111,10 +115,13 @@ export default async function run(ctx) {
     const submitButtons = await page.getByTestId('interviews-scorecard-submit').count();
     const verdict = squash(await mine.getByTestId('interviews-scorecard-verdict').innerText());
     const shots = await shootPage(page, 'scorecard-submitted');
-    const ok = text.includes(SUMMARY_1) && sent.summary === SUMMARY_1 && sent.version === 1 && sent.ratings[0].rating === 1 && sent.ratings.slice(1).every((r) => r.rating === 3)
-      && ratingsShown.length === competencies && ratingsShown[0] === '1 of 4' && anchors === competencies && editable === 0 && correctButtons === 1 && submitButtons === 0
-      && /^Go, yes$/.test(verdict) && !miloScoresIn(text) && shots.every((s) => s.ok);
-    record('I5.3d', ok, `read back "${verdict}", ratings ${ratingsShown.join(', ')}, ${anchors} anchors, ${editable} editable fields, ${correctButtons} "Correct it", ${submitButtons} Submit; matches the route's version ${sent.version}; ${widths(shots)}`);
+    const checks = {
+      summaryShown: text.includes(SUMMARY_1), summaryRoute: sent.summary === SUMMARY_1, version: sent.version === 1, lowered: sent.ratings[0].rating === 1, rest: sent.ratings.slice(1).every((r) => r.rating === 3),
+      ratingsShown: ratingsShown.length === competencies, firstShown: ratingsShown[0] === '1 of 4', anchors: anchors === competencies, noFields: editable === 0, oneButton: correctButtons === 1 && submitButtons === 0,
+      verdict: /^Go, yes$/.test(verdict), milo: !miloScoresIn(text), shots: shots.every((s) => s.ok),
+    };
+    const ok = Object.values(checks).every(Boolean);
+    record('I5.3d', ok, `[failing: ${failing(checks)}] read back "${verdict}", ratings ${ratingsShown.join(', ')}, ${anchors} anchors, ${editable} editable fields, ${correctButtons} "Correct it", ${submitButtons} Submit; matches the route's version ${sent.version}; ${widths(shots)}`);
   } catch (e) { record('I5.3d', false, `read back: ${why(e)}`); }
 
   // ── I5.3e: a correction before the decision ───────────────────────────────────────────────────────────────────────────

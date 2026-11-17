@@ -10,7 +10,7 @@
 //          the page changed
 //   I5.5e  a correction after the decision is refused: the interviewer's page offers none and the route says 409
 // plus the table I5.5.404 (the runner adds that step).
-import { consentIn, miloScoresIn, scorecardBody, seen, squash, why } from './h4-kit.mjs';
+import { consentIn, failing, miloScoresIn, scorecardBody, seen, squash, why } from './h4-kit.mjs';
 
 const DECK = 'collection-command-composer-prompts';
 const REASON_ADVANCE = 'Both rounds were strong on what the payments team needs most.';
@@ -82,7 +82,7 @@ export default async function run(ctx) {
     const rung = await bells(grPage, /decision was recorded/i, { ms: 25_000 });
     const bellText = rung.lines.join(' | ');
     await grPage.close();
-    const ok = /Record "Advance" under your name/.test(asked) && after.stage === 'offer' && last.decision === 'advance' && last.reason === REASON_ADVANCE && last.byName === 'Amara Okafor'
+    const ok = /Record "Advance to an offer" under your name/.test(asked) && after.stage === 'offer' && last.decision === 'advance' && last.reason === REASON_ADVANCE && last.byName === 'Amara Okafor'
       && /Offer/.test(history) && history.includes(REASON_ADVANCE) && /Amara Okafor/.test(history) && rung.lines.length >= 1 && /Senior Backend Engineer/.test(bellText)
       && !bellText.includes(ingridName) && !bellText.includes(REASON_ADVANCE) && shots.every((s) => s.ok);
     record('I5.5b', ok, `confirm asked "${asked.slice(-95)}"; stage ${after.stage}, history ends "${last.decision}" by ${last.byName}; the Activity tab shows it with the reason; the recruiter's bell: "${bellText.slice(0, 90)}"; ${widths(shots)}`);
@@ -151,8 +151,12 @@ export default async function run(ctx) {
     const correct = await p.getByTestId('interviews-scorecard-correct').count();
     const shots = await shootPage(p, 'scorecard-reviewed');
     await p.close();
-    record('I5.5e', read.interview.state === 'reviewed' && read.canSubmit === false && refused.status === 409 && /can no longer be corrected/.test(refused.body?.error ?? '') && correct === 0 && /reviewed/i.test(text) && shots.every((s) => s.ok),
-      `after the decision the round is ${read.interview.state}; the route answers ${refused.status} "${refused.body?.error ?? ''}"; the page offers ${correct} "Correct it"; ${widths(shots)}`);
+    const checks = {
+      reviewed: read.interview.state === 'reviewed', cannotSubmit: read.canSubmit === false, status409: refused.status === 409, sentence: /can no longer be corrected/.test(refused.body?.error ?? ''),
+      noButton: correct === 0, doneChip: /\bDone\b/.test(text), shots: shots.every((s) => s.ok),
+    };
+    record('I5.5e', Object.values(checks).every(Boolean),
+      `[failing: ${failing(checks)}] after the decision the round is ${read.interview.state}; the route answers ${refused.status} "${refused.body?.error ?? ''}"; the page offers ${correct} "Correct it"; ${widths(shots)}`);
   } catch (e) { record('I5.5e', false, `correction after the decision: ${why(e)}`); }
 
   await page.close().catch(() => undefined);

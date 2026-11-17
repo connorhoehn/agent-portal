@@ -70,9 +70,13 @@ export function miloScoresIn(text) {
     .replace(/Milo does not rate or recommend\./g, ' ')
     .replace(/Milo finds what was said, and where; it does not judge the candidate\./g, ' ')
     .replace(/Milo can only find what was said[^.]*\./g, ' ');
-  const m = /Milo(?:'s)?[^.]{0,60}\b(?:rates?|rated|rating|scores?|scored|ranks?|ranked|recommends?|recommended|recommendation|verdict)\b[^.]{0,40}/i.exec(t);
+  // Milo as the one who rates ("Milo rates", "Milo's rating", "recommended by Milo"), not the page's own words near its name.
+  const m = /\bMilo\s+(?:rates|rated|scores|scored|ranks|ranked|recommends|recommended|gives|gave|thinks|believes)\b[^.]{0,40}|\bMilo(?:'s)?\s+(?:rating|score|ranking|recommendation|verdict|grade)\b[^.]{0,40}|\b(?:rated|scored|ranked|recommended|graded) by Milo\b/i.exec(t);
   return m ? m[0] : null;
 }
+
+/** The names of the checks that did not hold, for a step's detail line. */
+export const failing = (checks) => Object.entries(checks).filter(([, ok]) => !ok).map(([k]) => k).join(', ') || 'none';
 
 /** A consent answer anywhere on a page's words ("consent" itself, or what a declined answer would say). */
 export const consentIn = (text) => /\bconsent/i.test(text);
