@@ -280,3 +280,77 @@ describe('the flag', () => {
     expect((await GRETA.get(`/interviews/${IV}/invite`)).status).toBe(404);
   });
 });
+
+// ── Row I2.2 (lane SEAT): the waiting room and the guest's realtime token ─────────────────────────────────────
+describe('the waiting room', () => {
+  const HUGO = as('u-hugo');
+  const knock = (cookie: string) => request(app).post('/api/interview-invite/knock').set('Cookie', cookie).send();
+  const mine = (cookie: string) => request(app).get('/api/interview-invite/admission').set('Cookie', cookie);
+  const decide = (who: ReturnType<typeof as>, admit: unknown, id = IV) =>
+    request(app).post(`/api/interviews/interviews/${id}/admit`).set('x-user', who === HUGO ? 'u-hugo' : who === GRETA ? 'u-greta' : 'u-wen').send({ admit });
+  async function guest(): Promise<string> { return guestCookie(await exchange(await issue())); }
+
+  it('knock, wait, be let in: the guest and the lead read the same admission', async () => {
+    const cookie = await guest();
+    expect((await mine(cookie)).body).toEqual({ admission: { state: 'not-knocked', knockedAt: null, decidedAt: null } });
+    expect((await HUGO.get(`/interviews/${IV}/waiting`)).body.admission.state).toBe('not-knocked');
+    const knocked = await knock(cookie);
+    expect(knocked.status).toBe(200);
+    expect(knocked.body.admission).toMatchObject({ state: 'waiting', decidedAt: null });
+    expect((await HUGO.get(`/interviews/${IV}/waiting`)).body.admission.state).toBe('waiting');
+    const admitted = await decide(HUGO, true);
+    expect(admitted.status).toBe(200);
+    expect(admitted.body.admission.state).toBe('admitted');
+    expect((await mine(cookie)).body.admission.state).toBe('admitted');
+  });
+
+  it('turned away, the guest may knock again; a new opening of the link starts over', async () => {
+    const token = await issue();
+    const cookie = guestCookie(await exchange(token));
+    await knock(cookie);
+    expect((await decide(HUGO, false)).body.admission.state).toBe('turned-away');
+    expect((await decide(HUGO, true)).status).toBe(409);
+    expect((await knock(cookie)).body.admission.state).toBe('waiting');
+    const again = guestCookie(await exchange(token));
+    expect((await mine(again)).body.admission.state).toBe('not-knocked');
+  });
+
+  it('only the lead decides; the recruiter and the hiring manager (no ConductInterview here: 403) and other interviewers (404) do not see the waiting room', async () => {
+    const cookie = await guest();
+    await knock(cookie);
+    expect((await decide(GRETA, true)).status).toBe(403);
+    expect((await decide(as('u-wen'), true)).status).toBe(404);
+    expect((await GRETA.get(`/interviews/${IV}/waiting`)).status).toBe(403);
+    expect((await as('u-amara').get(`/interviews/${IV}/waiting`)).status).toBe(403);
+    expect((await decide(HUGO, 'yes')).status).toBe(400);
+    expect((await mine(cookie)).body.admission.state).toBe('waiting');
+  });
+
+  it('nobody to let in without a live link; a revoked link ends the guest\'s knock too', async () => {
+    expect((await decide(HUGO, true)).status).toBe(409);
+    const cookie = await guest();
+    await knock(cookie);
+    await GRETA.del(`/interviews/${IV}/invite`);
+    expect((await HUGO.get(`/interviews/${IV}/waiting`)).body.admission.state).toBe('not-knocked');
+    expect((await decide(HUGO, true)).status).toBe(409);
+    expect((await knock(cookie)).status).toBe(404);
+  });
+
+  it('the guest\'s realtime token: a token for its own interview under guest realtime, not-found when it is off', async () => {
+    const cookie = await guest();
+    const prev = process.env['INTERVIEWS_GUEST_REALTIME'];
+    try {
+      const res = await request(app).get('/api/interview-invite/realtime-token').set('Cookie', cookie);
+      expect(res.status).toBe(200);
+      expect(res.headers['cache-control']).toBe('no-store');
+      const claims = JSON.parse(Buffer.from(String(res.body.token).split('.')[1]!, 'base64url').toString('utf8'));
+      expect(claims).toMatchObject({ role: 'interview-guest', tenants: [], org: 'interviews', guest: { interviewId: IV } });
+      expect(Date.parse(res.body.expiresAt)).toBeGreaterThan(Date.now());
+      process.env['INTERVIEWS_GUEST_REALTIME'] = 'false';
+      expect((await request(app).get('/api/interview-invite/realtime-token').set('Cookie', cookie)).status).toBe(404);
+      expect((await request(app).get('/api/interview-invite/realtime-token')).status).toBe(404);
+    } finally {
+      if (prev === undefined) delete process.env['INTERVIEWS_GUEST_REALTIME']; else process.env['INTERVIEWS_GUEST_REALTIME'] = prev;
+    }
+  });
+});

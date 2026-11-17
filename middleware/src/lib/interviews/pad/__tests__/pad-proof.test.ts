@@ -25,6 +25,11 @@ import { setInterviewsStore } from '../../store-select.js';
 import type { Interview } from '../../types.js';
 import { padChannel, padDocumentId, padInterviewId } from '../channel.js';
 import { padDocumentAuthz } from '../feature.js';
+import { MemoryInviteStore, setInviteStore } from '../../invite/store.js';
+import { applyAdmission } from '../../invite/admission.js';
+import { loadGuestSession } from '../../invite/guest.js';
+import { mintGuestRealtimeToken } from '../../invite/realtime.js';
+import { fixtureRegistry } from '../../../../mock/core/index.js';
 
 const SECRET = 'test-realtime-secret';
 // The seed: iv-mateo-design is Hugo's technical round, iv-aiko-coding Wen's,
@@ -70,11 +75,20 @@ afterEach(() => {
   for (const p of open.splice(0)) { p.provider.destroy(); p.ws.close(); }
 });
 
+/** A guest token for `inviteId`'s current session, or the staff token of `sub` in `tenant`. */
+const GUEST = 'guest:';
 async function connectAs(sub: string, tenant: string): Promise<{ ws: WebSocket; frames: Frame[] }> {
-  const user = await getUser(sub, { authoritative: true });
-  if (!user) throw new Error(`no seed user ${sub}`);
-  const session = { sub, name: user.displayName, role: user.grants[tenant]?.[0], tenant, grants: user.grants, epoch: user.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
-  const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
+  let token: string;
+  if (sub.startsWith(GUEST)) {
+    const loaded = await loadGuestSession(sub.slice(GUEST.length), () => true, '');
+    if (!loaded) throw new Error(`no live guest ${sub}`);
+    ({ token } = await mintGuestRealtimeToken(loaded.principal, SECRET));
+  } else {
+    const user = await getUser(sub, { authoritative: true });
+    if (!user) throw new Error(`no seed user ${sub}`);
+    const session = { sub, name: user.displayName, role: user.grants[tenant]?.[0], tenant, grants: user.grants, epoch: user.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
+    ({ token } = await signRealtimeToken(realtimeClaims(session), SECRET));
+  }
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, ['bearer-token-v1', token]);
     const frames: Frame[] = [];
@@ -216,6 +230,42 @@ describe('the pad carried on the BFF gateway', () => {
   it('refuses everything while the tenant is switched off', async () => {
     process.env['INTERVIEWS_ENABLED'] = 'false';
     try { await refusedOn(await openPad(HUGO, SHARED)); } finally { delete process.env['INTERVIEWS_ENABLED']; }
+  });
+});
+
+describe('the candidate\'s seat on the pad (row I2.2)', () => {
+  const invites = new MemoryInviteStore();
+  beforeAll(() => setInviteStore(invites));
+  afterAll(() => { setInviteStore(null); fixtureRegistry.resetAll('default'); });
+
+  /** A link to `interviewId`, opened: the guest's subject, waiting or admitted. */
+  async function candidate(interviewId: string, admitted: boolean): Promise<string> {
+    const invite = await invites.issueInvite({ interviewId, tokenHash: (interviewId === SHARED ? 'a' : 'b').repeat(64), issuedBy: GRETA,
+      issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() });
+    await invites.recordOpening(invite.id, new Date().toISOString(), 'c'.repeat(64));
+    await applyAdmission(invite.id, { kind: 'knock' });
+    if (admitted) await applyAdmission(invite.id, { kind: 'decide', admit: true });
+    return `${GUEST}${invite.id}`;
+  }
+
+  it('the admitted candidate types into their own pad beside the lead, and both converge', async () => {
+    const guest = await candidate(SHARED, true);
+    const hugo = await openPad(HUGO, SHARED);
+    const mine = await openPad(guest, SHARED, 'interviews');
+    await until(() => subscribed(hugo) && subscribed(mine), 'both subscriptions');
+    mine.text.insert(0, 'def answer():\n');
+    hugo.text.insert(0, '# question 1\n');
+    await until(() => hugo.text.toString() === mine.text.toString() && mine.text.toString().includes('# question 1') && hugo.text.toString().includes('def answer'), 'the two texts to converge');
+  });
+
+  it('refuses a candidate of another interview on this pad', async () => {
+    const other = await candidate(WENS, true);
+    await refusedOn(await openPad(other, SHARED, 'interviews'));
+  });
+
+  it('refuses a candidate who is still waiting to be let in', async () => {
+    const waiting = await candidate(SHARED, false);
+    await refusedOn(await openPad(waiting, SHARED, 'interviews'));
   });
 });
 

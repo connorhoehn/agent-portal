@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { MemoryInviteStore, type InviteStore, type NewInvite } from '../store.js';
 import {
-  FIND_INVITE_BY_HASH_SQL, GET_INVITE_SQL, INVITE_STATEMENTS, ISSUE_INVITE_SQL, LATEST_INVITE_SQL, RECORD_OPENING_SQL, REVOKE_INVITE_SQL, SqlInviteStore,
+  FIND_INVITE_BY_HASH_SQL, GET_INVITE_SQL, INVITE_STATEMENTS, ISSUE_INVITE_SQL, LATEST_INVITE_SQL, RECORD_OPENING_SQL, REVOKE_INVITE_SQL, SET_ADMISSION_SQL, SqlInviteStore,
 } from '../store-sql.js';
 import type { SqlExec } from '../../store-sql.js';
 import { hashInviteToken, newInviteToken } from '../token.js';
@@ -35,6 +35,7 @@ function invitesTableExec(): { exec: SqlExec; seen: string[] } {
       const row = {
         id: v('id'), interview_id: v('interview_id'), token_hash: v('token_hash'), issued_by: v('issued_by'), issued_at: ts(v('issued_at')),
         expires_at: ts(v('expires_at')), revoked_at: null, revoked_by: null, first_opened_at: null, last_opened_at: null, open_count: 0, session_hash: null,
+        admission_state: 'not-knocked', knocked_at: null, admission_decided_at: null,
       };
       table.push(row);
       return out([row]);
@@ -56,6 +57,14 @@ function invitesTableExec(): { exec: SqlExec; seen: string[] } {
       r['last_opened_at'] = ts(v('at'));
       r['open_count'] = Number(r['open_count']) + 1;
       r['session_hash'] = v('session_hash');
+      r['admission_state'] = 'not-knocked'; r['knocked_at'] = null; r['admission_decided_at'] = null;
+      return out([r]);
+    }
+    if (sql === SET_ADMISSION_SQL) {
+      const r = table.find((x) => x['id'] === v('id') && x['revoked_at'] === null && x['session_hash'] === v('session_hash') && x['admission_state'] === v('was'));
+      if (!r) return [];
+      const orNull = (n: string) => ((params?.find((p) => p.name === n)?.value as { isNull?: boolean } | undefined)?.isNull ? null : ts(v(n)));
+      r['admission_state'] = v('admission_state'); r['knocked_at'] = orNull('knocked_at'); r['admission_decided_at'] = orNull('admission_decided_at');
       return out([r]);
     }
     throw new Error(`unexpected statement: ${sql.slice(0, 60)}`);
@@ -107,6 +116,21 @@ describe.each([
     await store.recordOpening(row.id, T(5), 'a'.repeat(64));
     const again = await store.recordOpening(row.id, T(9), 'b'.repeat(64));
     expect(again).toMatchObject({ firstOpenedAt: T(5), lastOpenedAt: T(9), openCount: 2, sessionHash: 'b'.repeat(64) });
+  });
+
+  it('keeps the current session\'s admission: a compare-and-set on the session and the state, reset by a new opening', async () => {
+    const row = await store.issueInvite(strip(draft('iv-1', 0)));
+    expect(row).toMatchObject({ admissionState: 'not-knocked', knockedAt: null, admissionDecidedAt: null });
+    await store.recordOpening(row.id, T(5), 'a'.repeat(64));
+    const waiting = await store.setAdmission(row.id, 'a'.repeat(64), 'not-knocked', { admissionState: 'waiting', knockedAt: T(6), admissionDecidedAt: null });
+    expect(waiting).toMatchObject({ admissionState: 'waiting', knockedAt: T(6), admissionDecidedAt: null });
+    expect(await store.setAdmission(row.id, 'a'.repeat(64), 'not-knocked', { admissionState: 'admitted', knockedAt: T(6), admissionDecidedAt: T(7) })).toBeNull();
+    expect(await store.setAdmission(row.id, 'b'.repeat(64), 'waiting', { admissionState: 'admitted', knockedAt: T(6), admissionDecidedAt: T(7) })).toBeNull();
+    expect(await store.setAdmission(row.id, 'a'.repeat(64), 'waiting', { admissionState: 'admitted', knockedAt: T(6), admissionDecidedAt: T(7) }))
+      .toMatchObject({ admissionState: 'admitted', admissionDecidedAt: T(7) });
+    expect(await store.recordOpening(row.id, T(9), 'b'.repeat(64))).toMatchObject({ admissionState: 'not-knocked', knockedAt: null, admissionDecidedAt: null });
+    await store.revokeInvite('iv-1', T(10), 'u-greta');
+    expect(await store.setAdmission(row.id, 'b'.repeat(64), 'not-knocked', { admissionState: 'waiting', knockedAt: T(10), admissionDecidedAt: null })).toBeNull();
   });
 
   it('revokes the live invite, and a revoked invite records no opening', async () => {
