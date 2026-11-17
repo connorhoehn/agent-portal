@@ -46,7 +46,39 @@ export interface OpeningDetails {
   location: string;
   hiringManagerId: string | null;
   state: OpeningState;
+  /** The opening's spending cap across all its interviews; null = none set, and nothing that costs money starts (row I0.6). */
   budgetCapUsd: number | null;
+  /** The cap per interview; null = the deployment's default. */
+  interviewCapUsd: number | null;
+}
+
+/** GET /openings/:id/spend (row I0.6): the recruiter's, the hiring manager's and the admin's view of the opening's money. */
+export interface OpeningMoney {
+  capUsd: number | null;
+  interviewCapUsd: number | null;
+  defaultInterviewCapUsd: number;
+  effectiveInterviewCapUsd: number;
+  spentUsd: number;
+  heldUsd: number;
+  leftUsd: number | null;
+  unknownCount: number;
+}
+
+/** Who reads an opening's money: never an interviewer (the server answers them not-found). */
+export const readsOpeningMoney = (role: string | null | undefined): boolean => role === 'recruiter' || role === 'hiring-manager' || role === 'admin';
+
+export const openingMoneyPath = (openingId: string): string => `${INTERVIEWS_API}/openings/${encodeURIComponent(openingId)}/spend`;
+
+const usd = (n: number): string => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** The money row's items: "Spending cap $150.00 · $0.00 spent · $0.00 set aside · $150.00 left · Up to $10.00 per interview". */
+export function moneyLine(m: OpeningMoney): string[] {
+  if (m.capUsd == null) return ['No spending cap yet: nothing that costs money can start in these interviews', `Up to ${usd(m.effectiveInterviewCapUsd)} per interview`];
+  return [
+    `Spending cap ${usd(m.capUsd)}`, `${usd(m.spentUsd)} spent`, `${usd(m.heldUsd)} set aside`, `${usd(m.leftUsd ?? 0)} left`,
+    `Up to ${usd(m.effectiveInterviewCapUsd)} per interview${m.interviewCapUsd == null ? ' (the default)' : ''}`,
+    ...(m.unknownCount ? [`${m.unknownCount} ${m.unknownCount === 1 ? 'cost' : 'costs'} not known yet`] : []),
+  ];
 }
 
 export interface FieldProblem { path: string; message: string }
@@ -58,9 +90,10 @@ export const padLine = (type: RoundType): string => (roundHasPad(type) ? 'Code p
 export const kitOf = (o: Pick<OpeningRecord, 'rounds' | 'competencies' | 'questions'>): OpeningKit =>
   structuredClone({ rounds: o.rounds, competencies: o.competencies, questions: o.questions });
 
-export const detailsOf = (o: OpeningRecord): OpeningDetails => ({
+/** The details form's values; the cap per interview comes from the opening's money (the record does not carry it). */
+export const detailsOf = (o: OpeningRecord, interviewCapUsd: number | null = null): OpeningDetails => ({
   title: o.title, level: o.level, team: o.team, location: o.location, hiringManagerId: o.hiringManager?.id ?? null, state: o.state,
-  budgetCapUsd: o.budgetCapUsd,
+  budgetCapUsd: o.budgetCapUsd, interviewCapUsd,
 });
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -178,4 +211,4 @@ export async function createOpening(details: OpeningDetails): Promise<SaveOutcom
   return { ok: false, error: r.error ?? 'The opening could not be created. Try again.', fields: r.data?.fields ?? [], stale: false };
 }
 
-export const BLANK_DETAILS: OpeningDetails = { title: '', level: '', team: '', location: '', hiringManagerId: null, state: 'open', budgetCapUsd: null };
+export const BLANK_DETAILS: OpeningDetails = { title: '', level: '', team: '', location: '', hiringManagerId: null, state: 'open', budgetCapUsd: null, interviewCapUsd: null };

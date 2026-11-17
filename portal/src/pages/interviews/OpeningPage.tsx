@@ -1,7 +1,8 @@
 // /interviews/openings/:id and /interviews/openings/:id/edit — one opening (docs/interviews-tenant-plan.md
 // "Pages", rows I1.3 and I1.8): its details, its kit (rounds, competencies, questions) and its candidates.
 // Everyone who may read the opening (the recruiter, its hiring manager, an interviewer with a round on it)
-// reads it here; only the recruiter edits, on /edit. Saving and discarding are asked in the composer's
+// reads it here; only the recruiter edits, on /edit. The recruiter, the hiring manager and the admin also see the
+// opening's money in one line under its details (row I0.6); an interviewer sees none. Saving and discarding are asked in the composer's
 // prompt deck, never a dialog; the server checks the kit and answers each problem on its field, and a save
 // made against an older revision is refused rather than overwriting someone else's (409).
 
@@ -21,7 +22,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { INTERVIEWS_API, ROUND_TYPE_LABELS, byStageLine, nextInterviewLine, type PipelineEntry, type RoundType } from '../../lib/interviews';
 import {
   OPENING_STATE_LABELS, PAD_LANGUAGES, PAD_LANGUAGE_LABELS, changesLine, detailsChanged, detailsOf, kitChanges, kitOf, padLine, problemsByPath,
-  saveDetails, saveKit, starterLine, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningRecord,
+  moneyLine, openingMoneyPath, readsOpeningMoney, saveDetails, saveKit, starterLine, type OpeningMoney, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningRecord,
 } from '../../lib/interviewsKit';
 import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
 import { KitEditor, type OpenRow } from './KitEditor';
@@ -59,6 +60,11 @@ function useOpeningTrail(o: OpeningRecord | null, editing: boolean): BreadcrumbI
 
 function OpeningWorkspace({ id, editing }: { id: string; editing: boolean }) {
   const { data, error, failure, refresh } = useFetch<{ opening: OpeningRecord }>(`${INTERVIEWS_API}/openings/${encodeURIComponent(id)}`);
+  const { session } = useSession();
+  const seesMoney = readsOpeningMoney(session?.role);
+  // An interviewer never asks: the server would answer not-found, and the page shows no money.
+  const money = useFetch<{ spend: OpeningMoney }>(seesMoney ? openingMoneyPath(id) : null);
+  const spend = money.data?.spend ?? null;
   const o = data?.opening ?? null;
   const trail = useOpeningTrail(o, editing);
   if (failure?.status === 404) {
@@ -66,26 +72,37 @@ function OpeningWorkspace({ id, editing }: { id: string; editing: boolean }) {
       description="It may have been removed, or it belongs to someone else's hiring." />;
   }
   if (error && !o) return <UnavailableNotice error={error} what="this opening" source="Openings are read from the interviews tenant" onRetry={refresh} />;
-  if (!o) return <DetailPage title="Opening" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the opening…</T></DetailPage>;
-  return editing ? <OpeningEditor opening={o} trail={trail} onSaved={refresh} /> : <OpeningView opening={o} trail={trail} />;
+  // The editor starts its draft from the money too (the cap per interview), so it waits for it.
+  if (!o || (editing && seesMoney && !spend && !money.error)) return <DetailPage title="Opening" breadcrumbs={trail}><T size="sm" tone="tertiary">Loading the opening…</T></DetailPage>;
+  const refreshAll = () => { refresh(); money.refresh(); };
+  return editing
+    ? <OpeningEditor opening={o} money={spend} trail={trail} onSaved={refreshAll} />
+    : <OpeningView opening={o} money={spend} trail={trail} />;
 }
 
-function OpeningMeta({ o }: { o: OpeningRecord }) {
-  return <MetaLine size="sm" data-testid="interviews-opening-meta" items={[
+function OpeningMeta({ o, money }: { o: OpeningRecord; money?: OpeningMoney | null }) {
+  const people = <MetaLine size="sm" data-testid="interviews-opening-meta" items={[
     o.team, o.level, o.location, o.hiringManager ? `Hiring manager ${o.hiringManager.name}` : 'No hiring manager named yet', `Recruiter ${o.recruiter.name}`,
   ]} />;
+  if (!money) return people;
+  return (
+    <Stack gap="xs">
+      {people}
+      <MetaLine size="sm" data-testid="interviews-opening-money" items={moneyLine(money)} />
+    </Stack>
+  );
 }
 
 // ── reading ──────────────────────────────────────────────────────────────────
 
-function OpeningView({ opening: o, trail }: { opening: OpeningRecord; trail: BreadcrumbItem[] | undefined }) {
+function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; money: OpeningMoney | null; trail: BreadcrumbItem[] | undefined }) {
   const navigate = useNavigate();
   const { can } = useCapabilities();
   const editable = can('ManageCandidates');
   return (
     <DetailPage data-testid="interviews-opening" title={o.title} breadcrumbs={trail}
       badge={<Chip tone={stateTone(o.state)} size="xs">{OPENING_STATE_LABELS[o.state]}</Chip>}
-      meta={<OpeningMeta o={o} />}
+      meta={<OpeningMeta o={o} money={money} />}
       actions={editable
         ? <Button size="sm" variant="secondary" data-testid="interviews-opening-edit" onClick={() => void navigate(`/interviews/openings/${encodeURIComponent(o.id)}/edit`)}>Edit kit</Button>
         : <T size="xs" tone="tertiary" data-testid="interviews-opening-readonly">Read only: the recruiter edits this kit.</T>}
@@ -192,12 +209,14 @@ function Pipeline({ o }: { o: OpeningRecord }) {
 
 type Ask = { kind: 'save' | 'discard' | 'close'; n: number };
 
-function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; trail: BreadcrumbItem[] | undefined; onSaved: () => void }) {
+function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRecord; money: OpeningMoney | null; trail: BreadcrumbItem[] | undefined; onSaved: () => void }) {
   const navigate = useNavigate();
   // The record the draft was started from: its revision is what a save is made against, whatever a refresh reads later.
   const [base, setBase] = useState(opening);
   const [kit, setKit] = useState<OpeningKit>(() => kitOf(opening));
-  const [details, setDetails] = useState<OpeningDetails>(() => detailsOf(opening));
+  // The cap per interview the draft was started from: the record does not carry it, the opening's money does.
+  const [baseCap, setBaseCap] = useState<number | null>(money?.interviewCapUsd ?? null);
+  const [details, setDetails] = useState<OpeningDetails>(() => detailsOf(opening, money?.interviewCapUsd ?? null));
   const [problems, setProblems] = useState<Map<string, string>>(new Map());
   const [open, setOpen] = useState<OpenRow | null>(null);
   const [tab, setTab] = useState('kit');
@@ -206,7 +225,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
   const view = `/interviews/openings/${encodeURIComponent(base.id)}`;
 
   const kitDiff = kitChanges(kitOf(base), kit);
-  const detailsDiff = detailsChanged(detailsOf(base), details);
+  const detailsDiff = detailsChanged(detailsOf(base, baseCap), details);
   const changes = changesLine(kitDiff, detailsDiff);
   const raise = (kind: Ask['kind']) => { setAsk({ kind, n: asked + 1 }); setAsked(asked + 1); };
 
@@ -229,6 +248,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
       if (!r.ok) { showProblems(r.fields, 'details'); return { error: r.error }; }
       latest = r.opening;
       setBase(latest);
+      setBaseCap(details.interviewCapUsd);
     }
     if (kitDiff.length) {
       const r = await saveKit(base.id, latest.revision, kit);
@@ -237,7 +257,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
     }
     setBase(latest);
     setKit(kitOf(latest));
-    setDetails(detailsOf(latest));
+    setDetails(detailsOf(latest, detailsDiff ? details.interviewCapUsd : baseCap));
     setProblems(new Map());
     setAsk(null);
     onSaved();
@@ -246,7 +266,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
 
   const discard = (thenClose: boolean) => {
     setKit(kitOf(base));
-    setDetails(detailsOf(base));
+    setDetails(detailsOf(base, baseCap));
     setProblems(new Map());
     setOpen(null);
     setAsk(null);
@@ -295,7 +315,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
     <>
       <DetailPage data-testid="interviews-opening-editor" title={base.title} breadcrumbs={trail}
         badge={<Chip tone={changes ? 'caution' : 'neutral'} size="xs">{changes ? 'Unsaved changes' : 'Saved'}</Chip>}
-        meta={<OpeningMeta o={base} />}
+        meta={<OpeningMeta o={base} money={money} />}
         actions={(
           <Inline gap="xs" wrap={false}>
             <Button size="sm" variant="ghost" data-testid="interviews-opening-close" onClick={() => (changes ? raise('close') : void navigate(view))}>Close</Button>
@@ -308,7 +328,7 @@ function OpeningEditor({ opening, trail, onSaved }: { opening: OpeningRecord; tr
           { id: 'kit', label: 'Kit', testId: 'interviews-opening-tab-kit', badge: kitDiff.length ? '•' : undefined,
             content: <KitEditor kit={kit} onChange={setKit} problems={problems} open={open} onOpen={setOpen} /> },
           { id: 'details', label: 'Details', testId: 'interviews-opening-tab-details', badge: detailsDiff ? '•' : undefined,
-            content: <OpeningDetailsForm details={details} onChange={setDetails} problems={problems} /> },
+            content: <OpeningDetailsForm details={details} onChange={setDetails} problems={problems} defaultInterviewCapUsd={money?.defaultInterviewCapUsd} /> },
         ]} />
       <CollectionCommandHost adapter={adapter} prompts={prompts} />
     </>
