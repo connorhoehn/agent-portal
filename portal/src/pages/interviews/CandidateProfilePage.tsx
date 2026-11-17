@@ -42,6 +42,8 @@ import {
   type CandidateProfile, type ProfileApplication, type ProfileRound, type StageMove,
 } from '../../lib/interviews';
 import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
+import { hasRecord, recordPath } from '../../lib/interviewsRecord';
+import { AppLink } from './interviewsCells';
 import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
 import {
   REDACTED_NAME, askedByLine, deletionQuestion, deletionState, deletionsPath, leftLines, removedLine, requestDeletion,
@@ -87,6 +89,12 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
         ? <T size="sm" tone="secondary" title={lines.join('\n')} className="block max-w-[22rem] truncate" data-testid="interviews-profile-round-declined">{lines[0]}</T>
         : <Dash />;
     },
+  },
+  {
+    key: 'record', header: 'Record',
+    render: (r) => (hasRecord(r.state)
+      ? <AppLink to={recordPath(r.id)} data-testid="interviews-profile-round-record">Open the record</AppLink>
+      : <Dash />),
   },
 ];
 

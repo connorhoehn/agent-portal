@@ -77,6 +77,7 @@ const INTERVIEWS_GROUPS: Record<string, string> = {
   // slot 5: a lane adds its entries just below this line
   prepare: 'Interview',
   scorecard: 'Interview',
+  record: 'Interview',
 };
 const INTERVIEWS_LABELS: Record<string, string> = {
   candidates: 'Candidates',
@@ -94,6 +95,7 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   // slot 5: a lane adds its entries just below this line
   prepare: 'Prepare',
   scorecard: 'Scorecard',
+  record: 'Record',
 };
 const ASSESSMENT_GROUPS: Record<string, string> = {
   teams: 'Assess', submissions: 'Assess', communication: 'Assess',
