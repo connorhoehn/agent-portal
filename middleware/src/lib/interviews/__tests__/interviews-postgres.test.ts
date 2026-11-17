@@ -344,8 +344,8 @@ async function seedWorld(): Promise<void> {
       expect(shown.every((r) => r !== null)).toBe(true);
       expect(shown[0]!.shownAt).toBe(shown[1]!.shownAt);
       const [a, b] = await Promise.all([
-        suggestions.answerSuggestion(MATEO_CODING, 'sug-pg-1', 'asked' as never, at(3)),
-        suggestions.answerSuggestion(MATEO_CODING, 'sug-pg-1', 'dismissed' as never, at(3)),
+        suggestions.answerSuggestion(MATEO_CODING, 'sug-pg-1', 'ask', at(3)),
+        suggestions.answerSuggestion(MATEO_CODING, 'sug-pg-1', 'skip', at(3)),
       ]);
       expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
       expect(await suggestions.eraseSuggestions([MATEO_CODING])).toBe(seeded.length + 1);
