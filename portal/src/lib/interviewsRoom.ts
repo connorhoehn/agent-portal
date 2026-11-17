@@ -225,3 +225,105 @@ export const pausedLine = (seat: 'lead' | 'panel' | null, paused: 'budget' | nul
 
 /** The consents line is for any seat on the interview (decision 5). */
 export const readsConsents = (seat: 'lead' | 'panel' | null, open: boolean): boolean => seat !== null && open;
+
+// ── E5: Milo for you and the live transcript (MILO-FOR-YOU; rows I3.6, I3.7; decisions 4, 6, 20, 21) ──
+// All three live in the room's one right pane. The panel (every seat) reads the notes and the transcript; only the
+// lead asks Milo privately. The candidate's room imports none of this.
+export interface LiveTranscriptLine { seq: number; at: string; side: 'candidate' | 'panel'; speaker: string; text: string }
+export interface LiveTranscriptRead { state: 'on' | 'off'; off: string | null; lines: LiveTranscriptLine[]; lastSeq: number }
+export interface MiloAskedItem { text: string; questionId: string | null; by: 'panel' | 'milo' }
+export interface MiloCompetencyNotes { id: string; name: string; asked: MiloAskedItem[]; toAsk: Array<{ questionId: string; text: string }> }
+export interface MiloTimeCheck { startedAt: string | null; minutesIn: number | null; minutes: number; minutesLeft: number | null; line: string }
+export interface MiloNotes { competencies: MiloCompetencyNotes[]; time: MiloTimeCheck }
+export interface MiloAskSource { seq: number; quote: string; speaker: string; at: string }
+export interface MiloAnswer { id: string; question: string; text: string; sources: MiloAskSource[]; askedAt: string }
+export interface MiloAskBody {
+  answer: MiloAnswer | null;
+  refused: string | null;
+  /** The one plain line to show when there is no answer. */
+  line: string | null;
+  paused: 'budget' | null;
+  retryAfterMs: number | null;
+}
+
+const miloBase = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}`;
+export const transcriptPath = (interviewId: string, after = 0): string => `${miloBase(interviewId)}/transcript${after > 0 ? `?after=${after}` : ''}`;
+export const miloNotesPath = (interviewId: string): string => `${miloBase(interviewId)}/milo-notes`;
+export const miloAskPath = (interviewId: string): string => `${miloBase(interviewId)}/milo-ask`;
+
+/** How often the pane reads the transcript and the notes while the interview is live. */
+export const TRANSCRIPT_POLL_MS = 5_000;
+export const MILO_NOTES_POLL_MS = 30_000;
+/** The exchanges the lead keeps in the pane (the newest first; older ones fold away). */
+export const MILO_ASK_KEPT = 5;
+export const MILO_QUESTION_MAX = 300;
+
+/** The pane reads Milo's parts only while the interview is live (the reads answer not-found otherwise). */
+export const pollsMilo = (seat: 'lead' | 'panel' | null, state: RoomState | null): boolean => seat !== null && state === 'live';
+/** The private question is the lead's alone (decision 20). */
+export const asksMilo = (seat: 'lead' | 'panel' | null, state: RoomState | null): boolean => seat === 'lead' && state === 'live';
+/** In a technical round the coding questions lead, so the transcript starts folded. */
+export const transcriptOpenByDefault = (roundType: RoundType): boolean => roundType !== 'technical';
+
+/** One transcript read; not found and any failure read as "no news" (null), so the pane keeps what it has. */
+export async function readLiveTranscript(interviewId: string, after: number, fetcher: typeof fetch = fetch): Promise<LiveTranscriptRead | null> {
+  try {
+    const res = await fetcher(transcriptPath(interviewId, after), { credentials: 'include' });
+    if (!res.ok) return null;
+    const t = ((await res.json()) as { transcript?: Partial<LiveTranscriptRead> }).transcript;
+    if (!t || (t.state !== 'on' && t.state !== 'off')) return null;
+    return { state: t.state, off: typeof t.off === 'string' ? t.off : null, lines: Array.isArray(t.lines) ? t.lines : [], lastSeq: typeof t.lastSeq === 'number' ? t.lastSeq : after };
+  } catch {
+    return null;
+  }
+}
+
+/** One notes read; null on not found or any failure. */
+export async function readMiloNotes(interviewId: string, fetcher: typeof fetch = fetch): Promise<MiloNotes | null> {
+  try {
+    const res = await fetcher(miloNotesPath(interviewId), { credentials: 'include' });
+    if (!res.ok) return null;
+    const n = ((await res.json()) as { notes?: MiloNotes }).notes;
+    return n && Array.isArray(n.competencies) && n.time ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The lead's private question. A refusal or a pause is an answer with a line, not an error. */
+export async function askMilo(interviewId: string, question: string): Promise<{ ok: true; body: MiloAskBody } | { ok: false; error: string }> {
+  const r = await writeJson<MiloAskBody>(miloAskPath(interviewId), 'POST', { question });
+  if (r.ok && r.data) return { ok: true, body: r.data };
+  if (r.status === 409 && r.data && typeof r.data.line === 'string') return { ok: true, body: r.data };
+  return { ok: false, error: r.error ?? 'That did not go through. Try again.' };
+}
+
+/** New lines appended after the ones held, once each, in order. */
+export function mergeTranscript(held: readonly LiveTranscriptLine[], next: readonly LiveTranscriptLine[]): LiveTranscriptLine[] {
+  const seen = new Set(held.map((l) => l.seq));
+  const add = next.filter((l) => !seen.has(l.seq));
+  return add.length ? [...held, ...add].sort((a, b) => a.seq - b.seq) : [...held];
+}
+
+/** The library transcript's segments: times from the first line, the speaker's name, the stored line's seq as the key. */
+export function liveTranscriptSegments(lines: readonly LiveTranscriptLine[]): Array<{ id: string; startMs: number; endMs: number; speakerId: string; speakerLabel: string; text: string }> {
+  const first = lines.length ? Date.parse(lines[0]!.at) : 0;
+  return lines.map((l, i) => {
+    const start = Math.max(0, (Date.parse(l.at) || first) - first);
+    const nextAt = lines[i + 1] ? Date.parse(lines[i + 1]!.at) - first : start;
+    return { id: String(l.seq), startMs: start, endMs: Math.max(start, nextAt), speakerId: l.side === 'candidate' ? 'candidate' : l.speaker, speakerLabel: l.speaker, text: l.text };
+  });
+}
+
+/** What the pane says when there is no answer: the server's line, or the budget's. */
+export const MILO_ASK_PAUSED_LINE = 'Milo’s answers are paused: this interview has reached its budget.';
+export const askLineOf = (body: MiloAskBody): string | null => (body.answer ? null : body.paused === 'budget' ? MILO_ASK_PAUSED_LINE : body.line);
+
+/** One kept exchange: the question, and Milo's answer or its one line. */
+export interface MiloExchange { key: string; question: string; answer: MiloAnswer | null; line: string | null }
+export function keepExchange(kept: readonly MiloExchange[], question: string, body: MiloAskBody, key: string): MiloExchange[] {
+  return [{ key, question, answer: body.answer, line: askLineOf(body) }, ...kept].slice(0, MILO_ASK_KEPT);
+}
+
+/** "Asked by Milo" for what Milo put in the call chat; nothing for what the panel asked itself. */
+export const askedByLabel = (by: MiloAskedItem['by']): string | null => (by === 'milo' ? 'Milo asked it' : null);

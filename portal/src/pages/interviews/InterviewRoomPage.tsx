@@ -8,7 +8,11 @@
 //     `grid` layout: tiles only, the host's bar owns mic, camera and Leave), taking the page's content area.
 //   - the one right pane: the shell's right column (`SidePane` through `SidePaneProvider`), open by default.
 //     Behavioural: Milo's context (the plan, the kit's competencies and anchors, Milo's notes). Technical: the
-//     coding questions with their starter code, read-only, until the pad (row I4.2) replaces them.
+//     coding questions with their starter code, read-only, until the pad (row I4.2) replaces them. Under either, while
+//     the interview is live (rows I3.6, I3.7; contract E5): Milo's notes for every seat (what was asked about per
+//     competency, what is still to ask, the time check), the lead's private question to Milo with its quoted answer,
+//     and the live transcript (folded in a technical round, where the coding questions lead). Nothing of it is in the
+//     footer, and the candidate's room imports none of it.
 //   - the footer: the work-call footer (SocialFooter) with the interview's own elements registered here
 //     (components/shell/InterviewRoomFooter.tsx): time left, End interview, the waiting candidate.
 //   - the rails: the shell's dialogue fold folds them while the pane is shown (useDialogueRailFold).
@@ -18,7 +22,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { CodeBlock, Disclosure, EmptyState, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ChatComposer, CodeBlock, Disclosure, EmptyState, KeyValue, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -30,6 +35,8 @@ import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents,
   suggestionReadBudgetMs, type SuggestionAnswerId, type SuggestionView, codeBlockLanguage, consentOffLine, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
+  MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
+  pollsMilo, readLiveTranscript, readMiloNotes, transcriptOpenByDefault, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -187,8 +194,8 @@ function RoomPane({ room }: { room: RoomView }) {
       {technical ? <CodingQuestions questions={room.questions} /> : <>
         <Plan questions={room.questions} />
         <Competencies room={room} />
-        <PageSection size="sm" title="Milo’s notes" empty="Milo’s notes for the panel show here during the call." />
       </>}
+      <MiloForYou room={room} />
     </Stack>
   </SidePane>;
 }
@@ -239,4 +246,146 @@ function CodingQuestions({ questions }: { questions: RoomQuestion[] }) {
       </Stack>
     </PageSection>)}
   </Stack>;
+}
+
+// ── Milo for you and the live transcript (rows I3.6, I3.7; contract E5) ─────────────────────────────────────────
+
+/** Consecutive empty reads (not found, or failing) after which a poll stops: the interview has ended or the route is gone. */
+const MILO_MISSES = 3;
+/** Each poll stops after the round's length plus half an hour (bounded, like the footer's suggestion). */
+const miloReads = (minutes: number, everyMs: number): number => Math.ceil(((Math.max(0, minutes) + 30) * 60_000) / everyMs);
+
+/** The transcript and the notes, read while the interview is live; stopped when it ends, when reads keep failing, or on unmount. */
+function useMiloPane(room: RoomView) {
+  const live = pollsMilo(room.seat, room.state);
+  const [lines, setLines] = useState<LiveTranscriptLine[]>([]);
+  const [off, setOff] = useState<string | null>(null);
+  const [notes, setNotes] = useState<MiloNotes | null>(null);
+  const minutes = room.round.minutes;
+  useEffect(() => {
+    if (!live) return;
+    let on = true;
+    let after = 0;
+    let reads = 0;
+    let misses = 0;
+    let timer: number | undefined;
+    const max = miloReads(minutes, TRANSCRIPT_POLL_MS);
+    const read = async () => {
+      if (!on || reads++ >= max || misses >= MILO_MISSES) return;
+      const t = await readLiveTranscript(room.id, after);
+      if (!on) return;
+      if (t) {
+        misses = 0;
+        setOff(t.state === 'off' ? t.off : null);
+        if (t.lines.length) setLines((held) => mergeTranscript(held, t.lines));
+        after = Math.max(after, t.lastSeq);
+      } else misses++;
+      timer = window.setTimeout(() => { void read(); }, TRANSCRIPT_POLL_MS);
+    };
+    void read();
+    return () => { on = false; window.clearTimeout(timer); };
+  }, [live, room.id, minutes]);
+  useEffect(() => {
+    if (!live) return;
+    let on = true;
+    let reads = 0;
+    let misses = 0;
+    let timer: number | undefined;
+    const max = miloReads(minutes, MILO_NOTES_POLL_MS);
+    const read = async () => {
+      if (!on || reads++ >= max || misses >= MILO_MISSES) return;
+      const n = await readMiloNotes(room.id);
+      if (!on) return;
+      if (n) { misses = 0; setNotes(n); } else misses++;
+      timer = window.setTimeout(() => { void read(); }, MILO_NOTES_POLL_MS);
+    };
+    void read();
+    return () => { on = false; window.clearTimeout(timer); };
+  }, [live, room.id, minutes]);
+  return { live, lines, off, notes };
+}
+
+function MiloForYou({ room }: { room: RoomView }) {
+  const { live, lines, off, notes } = useMiloPane(room);
+  return <>
+    <MiloNotesSection notes={live ? notes : null} />
+    {asksMilo(room.seat, room.state) && <AskMilo interviewId={room.id} />}
+    <TranscriptSection live={live} lines={lines} off={off} openByDefault={transcriptOpenByDefault(room.round.type)} />
+  </>;
+}
+
+/** What has been asked about per competency, what is still to ask, and the time check: never how the candidate did. */
+function MiloNotesSection({ notes }: { notes: MiloNotes | null }) {
+  if (!notes) return <PageSection size="sm" title="Milo’s notes" empty="Milo’s notes for the panel show here during the call." />;
+  return <PageSection size="sm" title="Milo’s notes" description={notes.time.line}>
+    <Stack gap="md" data-testid="interview-room-milo-notes">
+      {notes.competencies.map((c) => <Stack key={c.id} gap="xs" data-testid="interview-room-milo-competency">
+        <T size="xs" weight="medium" tone="secondary">{c.name}</T>
+        {c.asked.length === 0 && c.toAsk.length === 0 && <T size="sm" tone="tertiary">Nothing chosen or asked yet.</T>}
+        {c.asked.length > 0 && <Stack as="ul" gap="xs">
+          {c.asked.map((a) => <T as="li" key={a.text} size="sm" wrap>{askedByLabel(a.by) ? `${a.text} (${askedByLabel(a.by)})` : a.text}</T>)}
+        </Stack>}
+        {c.toAsk.length > 0 && <Stack gap="xs">
+          <T size="xs" tone="tertiary">Still to ask</T>
+          <Stack as="ul" gap="xs">{c.toAsk.map((q) => <T as="li" key={q.questionId} size="sm" tone="secondary" wrap>{q.text}</T>)}</Stack>
+        </Stack>}
+      </Stack>)}
+    </Stack>
+  </PageSection>;
+}
+
+/** The lead's private question: only the lead sees it; Milo answers from the transcript with quoted lines. */
+function AskMilo({ interviewId }: { interviewId: string }) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [kept, setKept] = useState<MiloExchange[]>([]);
+  const asked = useRef(0);
+  const send = useCallback(async () => {
+    const question = value.replace(/\s+/g, ' ').trim();
+    if (!question || busy) return;
+    setBusy(true);
+    setError(null);
+    const out = await askMilo(interviewId, question.slice(0, MILO_QUESTION_MAX));
+    setBusy(false);
+    if (!out.ok) { setError(out.error); return; }
+    setValue('');
+    setKept((k) => keepExchange(k, question, out.body, `ask-${++asked.current}`));
+  }, [value, busy, interviewId]);
+  const [latest, ...earlier] = kept;
+  return <PageSection size="sm" title="Ask Milo" description="Only you see this. Milo finds what was said, and where; it does not judge the candidate.">
+    <Stack gap="sm" data-testid="interview-room-milo-ask">
+      <ChatComposer value={value} onChange={(v) => setValue(v.slice(0, MILO_QUESTION_MAX))} onSubmit={() => { void send(); }} disabled={busy}
+        placeholder="Where did they talk about testing?" submitLabel="Ask" aria-label="Your question for Milo" />
+      {busy && <T size="xs" tone="tertiary">Milo is looking…</T>}
+      {error && <T size="xs" tone="danger" role="alert" wrap>{error}</T>}
+      {latest && <MiloExchangeView exchange={latest} />}
+      {earlier.length > 0 && <Disclosure density="compact" summary={<T size="xs" tone="secondary">{`Earlier questions (${earlier.length})`}</T>}>
+        <Stack gap="md">{earlier.map((x) => <MiloExchangeView key={x.key} exchange={x} />)}</Stack>
+      </Disclosure>}
+    </Stack>
+  </PageSection>;
+}
+
+function MiloExchangeView({ exchange }: { exchange: MiloExchange }) {
+  return <Stack gap="xs" data-testid="interview-room-milo-answer">
+    <T size="xs" tone="tertiary" wrap>{exchange.question}</T>
+    {exchange.answer ? <>
+      <T size="sm" wrap>{exchange.answer.text}</T>
+      {exchange.answer.sources.length > 0 && <Stack as="ul" gap="xs">
+        {exchange.answer.sources.map((s) => <T as="li" key={s.seq} size="xs" tone="secondary" wrap>{`Line ${s.seq}${s.speaker ? `, ${s.speaker}` : ''}: “${s.quote}”`}</T>)}
+      </Stack>}
+    </> : <T size="sm" tone="secondary" wrap>{exchange.line ?? ''}</T>}
+  </Stack>;
+}
+
+/** The call's transcript as it is said, for every seat; folded in a technical round. */
+function TranscriptSection({ live, lines, off, openByDefault }: { live: boolean; lines: LiveTranscriptLine[]; off: string | null; openByDefault: boolean }) {
+  const segments = useMemo(() => liveTranscriptSegments(lines), [lines]);
+  if (!live) return <PageSection size="sm" title="Transcript" empty="The transcript shows here during the call." />;
+  if (off && !lines.length) return <PageSection size="sm" title="Transcript" empty={off} />;
+  return <Disclosure density="compact" defaultOpen={openByDefault} summary={<T size="sm" weight="medium">Transcript</T>}>
+    <TranscriptPanel status="ready" follow title="Live transcript" segments={segments} emptyMessage="Nothing has been said yet."
+      data-testid="interview-room-transcript" />
+  </Disclosure>;
 }
