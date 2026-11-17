@@ -593,6 +593,8 @@ export const V2_RULES = [
   [/^(POST|PUT|PATCH|DELETE) \/api\/assessment\/knowledge\//, 'never', null, 'ManageKnowledge document content and sources'],
   [/^POST \/api\/assessment\/(teams(\/:[^/]+\/(evidence|intake\/\w+|scores\/apply|reset-assessment))?|submissions\/\w+)$|^(PATCH|DELETE) \/api\/assessment\/(teams|submissions)\//, 'never', null, 'scoring, intake and submissions are form work'],
   [/^POST \/api\/assessment\/canvas$/, 'never', null, 'canvas render'],
+  // Interviews
+  [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
   // Pipelines
   [/^POST \/api\/pipelines\/definitions\/:[^/]+\/dry-run$/, 'not-yet', 'queue_work', 'RunPipeline dry-run (G19)'],
   [/^POST \/api\/pipelines\/approvals\/:[^/]+\/decide$/, 'not-yet', 'decide', 'ApproveStep'],

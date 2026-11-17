@@ -2328,32 +2328,52 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:60"
+      "source": "src/routes/interviews.ts:48"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:66"
+      "source": "src/routes/interviews.ts:54"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/hiring-managers",
+      "source": "src/routes/interviews/openings.ts:70"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:74"
+      "source": "src/routes/interviews.ts:62"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:80"
+      "source": "src/routes/interviews.ts:68"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:46"
+      "source": "src/routes/interviews.ts:34"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/openings",
+      "source": "src/routes/interviews/openings.ts:76"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:52"
+      "source": "src/routes/interviews.ts:40"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/interviews/openings/:id/details",
+      "source": "src/routes/interviews/openings.ts:93"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/interviews/openings/:id/kit",
+      "source": "src/routes/interviews/openings.ts:105"
     },
     {
       "method": "POST",

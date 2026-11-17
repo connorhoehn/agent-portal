@@ -48,6 +48,14 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
   file: 'middleware/src/mock/core/wire/allow.ts',
   entries: [
     {
+      file: 'middleware/src/lib/interviews/__tests__/kit.test.ts',
+      field: 'level',
+      value: '',
+      reason:
+        'Deliberately empty. The test feeds the opening-details check a blank level ' +
+        'to prove it answers with one sentence on that field; the server never sends one.',
+    },
+    {
       file: 'middleware/src/lib/__tests__/authz-open-mode.test.ts',
       field: 'role',
       value: 'ghost',
