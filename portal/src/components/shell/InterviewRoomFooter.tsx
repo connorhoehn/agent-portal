@@ -8,12 +8,14 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, knockPromptId, miloAskReceipt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
   lobbyName: string;
   lead: boolean;
+  /** The candidate's name, for the call's tiles (the call knows them only by the invite's id). */
+  candidateName: string;
   minutes: number;
   /** What the candidate answered (C4) as a chip: not answered yet, or what is off; null shows nothing. */
   consent: ConsentChip | null;
@@ -73,6 +75,16 @@ function useNow(stepMs: number): number {
 export function useInterviewRoomSeat(lobbyName: string | null | undefined): 'lead' | 'panel' | null {
   const room = useRoomFor(lobbyName);
   return room ? (room.lead ? 'lead' : 'panel') : null;
+}
+
+/**
+ * The shell call host's directory while an interview room is mounted: the candidate's tile reads their name instead of the
+ * invite's id. With no room registered the directory comes back as it is (the same reference), so no other call changes.
+ */
+export function useInterviewRoomNameFor<F extends (userId: string) => { displayName: string; avatarUrl?: string } | null | undefined>(base: F): F {
+  const room = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const candidateName = room?.candidateName ?? null;
+  return useMemo(() => (candidateName === null ? base : staffRoomNameFor(base, candidateName) as F), [base, candidateName]);
 }
 
 /** Why Milo may not be invited into this interview call by the candidate's answers; null for any other call (nothing changes there). */

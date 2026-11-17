@@ -18,6 +18,8 @@ import { CallHostProvider } from '../../lib/conversationCall';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { realtimeEndpoints, type RealtimeToken, type RealtimeTokenSource } from '../../lib/realtimeToken';
 import { REALTIME_ENDPOINT_OVERRIDES } from '../../lib/useRealtimeEndpoints';
+import { guestRoomNameFor } from '../../lib/interviewsRoom';
+import type { GuestPanel } from './steps.ts';
 
 /** The candidate's own pre-join choices, kept apart from a staff member's on the same device. */
 const GUEST_PRE_JOIN_KEY = 'interviews.guest-prejoin.v1';
@@ -27,24 +29,28 @@ export interface GuestCallHostProps {
   token: RealtimeToken;
   tokens: RealtimeTokenSource;
   self: { userId: string; displayName: string };
+  /** Who the candidate meets (the lead's name and how many others), for the tiles' names. */
+  panel?: GuestPanel | null;
   children: ReactNode;
 }
 
-export function GuestCallHost({ token, tokens, self, children }: GuestCallHostProps) {
+export function GuestCallHost({ token, tokens, self, panel = null, children }: GuestCallHostProps) {
   return <OptionalGatewayProvider url={REALTIME_ENDPOINT_OVERRIDES.gatewayUrl} tokens={tokens}>
-    <GuestHost token={token} tokens={tokens} self={self}>{children}</GuestHost>
+    <GuestHost token={token} tokens={tokens} self={self} panel={panel}>{children}</GuestHost>
   </OptionalGatewayProvider>;
 }
 
-function GuestHost({ token, tokens, self, children }: GuestCallHostProps) {
+function GuestHost({ token, tokens, self, panel = null, children }: GuestCallHostProps) {
   const frames = useGatewayFrames();
   const { platformApiUrl, videoUrl } = realtimeEndpoints(token, REALTIME_ENDPOINT_OVERRIDES);
   const getIdToken = useCallback(async () => (await tokens.get()).token, [tokens]);
   const who = useMemo(() => ({ userId: self.userId, displayName: self.displayName }), [self.userId, self.displayName]);
+  // The tiles' names: the call knows the panel only by their ids, which the candidate must never read.
+  const nameFor = useMemo(() => guestRoomNameFor(self.userId, panel), [self.userId, panel?.lead, panel?.others]); // eslint-disable-line react-hooks/exhaustive-deps
   return <CallHostProvider scopeKey={JSON.stringify(['interviews', who.userId])} self={who} tenant="interviews"
     platformApiUrl={platformApiUrl} getIdToken={getIdToken} videoUrl={videoUrl}
     gateway={frames.gateway} gatewayConfigured={frames.configured} connectionState={frames.connectionState}
-    preJoinStorageKey={GUEST_PRE_JOIN_KEY} meeting={false} callNoun="call">
+    preJoinStorageKey={GUEST_PRE_JOIN_KEY} meeting={false} callNoun="call" nameFor={nameFor}>
     {children}
   </CallHostProvider>;
 }

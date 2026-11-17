@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, miloInviteBlock, panelLine, roomPaneWidth,
+  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, guestRoomNameFor, isGuestUserId, miloInviteBlock, staffRoomNameFor, panelLine, roomPaneWidth,
   roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
 } from '../interviewsRoom.ts';
 
@@ -107,4 +107,25 @@ test('before the call: the panel with the lead first, and where the candidate is
   // A panel member reads the same, and who lets the candidate in.
   assert.equal(candidateLine({ state: 'waiting', knockedAt: 'x', decidedAt: null }, 'panel'), 'Waiting for the lead to let them in');
   assert.equal(candidateLine({ state: 'not-knocked', knockedAt: null, decidedAt: null }, 'panel'), 'Not here yet');
+});
+
+test('the call’s tiles never show an id: the panel reads the candidate’s name, the candidate reads the lead or Interviewer', () => {
+  const directory = (id: string) => (id === 'u-hugo' ? { displayName: 'Hugo Marchetti' } : null);
+  const staff = staffRoomNameFor(directory, 'Nadia Petrova');
+  assert.deepEqual(staff('guest:inv-e624874a'), { displayName: 'Nadia Petrova' });
+  assert.deepEqual(staff('u-hugo'), { displayName: 'Hugo Marchetti' });
+  assert.equal(staff('u-unknown'), null); // the directory's answer, unchanged
+  assert.deepEqual(staffRoomNameFor(directory, ' ')('guest:x'), { displayName: 'Candidate' });
+  assert.equal(isGuestUserId('guest:inv-1'), true);
+  assert.equal(isGuestUserId('u-guest'), false);
+  // One interviewer: every staff id is the lead. A panel: everyone is "Interviewer" (the guest is told only the lead's name).
+  const alone = guestRoomNameFor('guest:inv-1', { lead: 'Hugo Marchetti', others: 0 });
+  assert.deepEqual(alone('u-hugo'), { displayName: 'Hugo Marchetti' });
+  assert.deepEqual(alone('guest:inv-1'), { displayName: 'Candidate' });
+  assert.equal(alone('agent:meeting-assistant'), null);
+  const panel = guestRoomNameFor('guest:inv-1', { lead: 'Wen Zhao', others: 1 });
+  assert.deepEqual(panel('u-wen'), { displayName: 'Interviewer' });
+  assert.deepEqual(panel('u-hugo'), { displayName: 'Interviewer' });
+  assert.deepEqual(guestRoomNameFor('guest:inv-1', null)('u-wen'), { displayName: 'Interviewer' });
+  for (const id of ['u-wen', 'u-hugo', 'guest:inv-1']) for (const f of [alone, panel]) assert.doesNotMatch(f(id)?.displayName ?? '', /^u-|guest:/);
 });

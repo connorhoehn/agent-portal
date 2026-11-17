@@ -187,12 +187,15 @@ export function AssistantConsentNotice() {
   const assistant = useMeetingAssistant(callId);
   const key = noticeKey(callId, assistant.view.period);
   const hidden = useAssistantNoticeHidden(key);
+  // An interview call's panel member may not dismiss Milo (the lead's alone, milo-policy.ts LEAD_ONLY): the notice keeps only
+  // "I understand" for them. Any other call: unchanged.
+  const panelSeat = useInterviewRoomSeat(useCallHost()?.lobby?.lobbyName) === 'panel';
   if (hidden || !noticeVisible(assistant.enabled, assistant.view)) return null;
   const text = noticeText(assistant.view);
   return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="assistant-consent-notice"
     title={text.title} description={text.body}
     acknowledgeLabel="I understand" onAcknowledge={assistant.busy ? () => {} : () => void assistant.acknowledge()}
-    secondaryLabel={DISMISS_LABEL} onSecondary={assistant.busy ? () => {} : () => assistant.askDismiss()}
+    {...(panelSeat ? {} : { secondaryLabel: DISMISS_LABEL, onSecondary: assistant.busy ? () => {} : () => assistant.askDismiss() })}
     onDismiss={() => { if (key) hideAssistantNotice(key); }} />;
 }
 

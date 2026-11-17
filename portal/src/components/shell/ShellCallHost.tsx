@@ -4,6 +4,7 @@
 // call block host (lib/conversationCall.tsx, ui-components 2.439). What stays
 // here is this app's: where Accept and People navigate, the call log, the
 // session check while media is live, and the huddle conversation.
+import { useInterviewRoomNameFor } from './InterviewRoomFooter';
 import { useCallback, useEffect, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useSession } from '../../lib/auth';
@@ -141,7 +142,8 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
   // Your tile's fallback face (the library draws it when video is off); none → initials.
   const selfAvatar = useSelfAvatar(!!session);
   // Names and portraits for people the call knows only by id (a page huddle rings nobody).
-  const nameFor = usePeopleDirectory(!!session);
+  // In an interview room the candidate's tile reads their name, not the invite's id (InterviewRoomFooter.tsx; the same function otherwise).
+  const nameFor = useInterviewRoomNameFor(usePeopleDirectory(!!session));
   const reporter = useRef({ baseUrl: platformApiUrl, selfId: session?.sub, selfName: session?.name ?? '' });
   reporter.current = { baseUrl: platformApiUrl, selfId: session?.sub, selfName: session?.name ?? '' };
   const onCallEvent = useCallback<OnCallHostEvent>((kind, event, ctx) => {

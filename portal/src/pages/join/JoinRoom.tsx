@@ -97,7 +97,7 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
   }
   if (!room || token.kind === 'loading') return <RoomFrame interview={interview}><LoadingState label="Opening the call" /></RoomFrame>;
 
-  return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self}>
+  return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self} panel={interview.panel ?? null}>
     <GuestRoomCall room={room} over={over} onEnded={finish} />
   </GuestCallHost>;
 }
@@ -138,7 +138,8 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
   const host = useCallHost();
   const phase = host?.call.phase ?? 'idle';
   const joined = call.here && hasJoinedCall(host?.call.call, phase);
-  const drawn = call.here && callDrawn(phase, true);
+  // A call the candidate left reads as left ("You left the call", Join again), never as an ended call with Dismiss: the interview is still on.
+  const drawn = call.here && callDrawn(phase, true) && phase !== 'ended';
 
   // Leave returns to a line that offers to rejoin.
   const [left, setLeft] = useState(false);
@@ -207,11 +208,11 @@ function GuestCallBar({ room, chatOpen, onToggleChat, onMiloLine }: { room: Gues
   const className = 'shrink-0 grow basis-[14rem]';
   if (!host) return null;
   const call = host.call;
-  const drawn = host.lobby?.lobbyName === room.lobbyName && callDrawn(call.phase, true);
+  const drawn = host.lobby?.lobbyName === room.lobbyName && callDrawn(call.phase, true) && call.phase !== 'ended';
 
   if (!drawn) {
     // The call is on with people in it: Join walks in. Otherwise Join opens it (the lead's join starts the interview).
-    const inLive = call.phase === 'idle' ? (call.call?.participants ?? []).filter((p) => !p.isLocal && (p.state === 'in-call' || p.state === 'reconnecting')) : [];
+    const inLive = call.phase === 'idle' || call.phase === 'ended' ? (call.call?.participants ?? []).filter((p) => !p.isLocal && (p.state === 'in-call' || p.state === 'reconnecting')) : [];
     if (inLive.length > 0) return <HuddleBar name={title} showContext={false} phase="joinable"
       liveParticipants={inLive.map((p) => ({ id: p.userId, displayName: p.displayName, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }))}
       participantCount={inLive.length} onJoin={() => { void call.rejoin(); }} joinLabel="Join the call"

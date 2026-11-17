@@ -154,7 +154,7 @@ function InterviewRoom({ id }: { id: string }) {
     return {};
   }, [id]);
   const footer = useMemo<InterviewRoomFooterState | null>(() => (room && lobbyName ? {
-    interviewId: room.id, lobbyName, lead: room.seat === 'lead', minutes: room.round.minutes,
+    interviewId: room.id, lobbyName, lead: room.seat === 'lead', candidateName: room.candidate.name, minutes: room.round.minutes,
     consent, miloBlock, admission, end, answerKnock: knock,
     suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
     pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,

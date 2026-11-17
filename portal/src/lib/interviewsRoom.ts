@@ -410,6 +410,33 @@ export function miloInviteBlock(consents: { answered: boolean; off: readonly Con
   return null;
 }
 
+/** The candidate's id in the call (middleware lib/interviews/invite/realtime.ts `guestSubject`: "guest:<invite>"). */
+export const isGuestUserId = (userId: string): boolean => userId.startsWith('guest:');
+
+type CallName = { displayName: string; avatarUrl?: string } | null | undefined;
+/**
+ * The panel's names for the call's tiles: the call knows the candidate only by the invite's id, which a person must never
+ * read, so the room names it with the candidate's name. Everyone else is the shell's directory, unchanged.
+ */
+export function staffRoomNameFor(base: (userId: string) => CallName, candidateName: string): (userId: string) => CallName {
+  return (userId) => (isGuestUserId(userId) ? { displayName: candidateName.trim() || 'Candidate' } : base(userId));
+}
+
+/**
+ * The candidate's names for the call's tiles. The guest's read names only the lead and counts the others (decision 3), with no
+ * ids, so: the candidate is "Candidate" to themselves (the tile says "You"); with no other interviewer every staff id is the
+ * lead; otherwise every interviewer reads "Interviewer". Never an id.
+ */
+export function guestRoomNameFor(selfId: string, panel: { lead: string | null; others: number } | null | undefined): (userId: string) => CallName {
+  const lead = panel?.lead?.trim() || null;
+  const alone = !!panel && !(panel.others > 0);
+  return (userId) => {
+    if (userId === selfId) return { displayName: 'Candidate' };
+    if (userId.startsWith('agent:')) return null;
+    return { displayName: alone && lead ? lead : 'Interviewer' };
+  };
+}
+
 /** Before the call: who sits on the panel, the lead first ("Hugo Marchetti (lead), Wen Zhao"). */
 export function panelLine(seats: RoomView['seats']): string {
   const ordered = [...seats].sort((a, b) => (a.seat === b.seat ? 0 : a.seat === 'lead' ? -1 : 1));
