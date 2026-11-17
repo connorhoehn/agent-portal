@@ -64,7 +64,10 @@ export async function staffRoom(ctx, who, interviewId, { width = 1440 } = {}) {
 /** Click the first visible button matching `name` in `scope`, then the pre-join dialog's own. */
 async function joinFrom(page, scope, name) {
   const btn = scope.getByRole('button', { name }).first();
-  await btn.waitFor({ timeout: 20_000 });
+  await btn.waitFor({ timeout: 20_000 }).catch(async () => {
+    const text = (await scope.first().innerText().catch(() => 'no such region')).replace(/\s+/g, ' ').slice(0, 200);
+    throw new Error(`no ${name} button; the region reads "${text}"`);
+  });
   await until(async () => !(await btn.isDisabled()), 20_000);
   await btn.click({ timeout: 8000 });
   await page.getByRole('dialog').getByRole('button', { name: /join|start|continue/i }).last().click({ timeout: 6000 }).catch(() => undefined);
@@ -95,14 +98,21 @@ export async function guestRoom(ctx, interviewId, lead, { width = 1440 } = {}) {
   if (a.status !== 200) throw new Error(`admit answered ${a.status}`);
   await page.getByTestId('join-room').first().waitFor({ timeout: 30_000 });
   await joinFrom(page, page.getByTestId('join-room-bar'), /join/i);
-  await page.getByTestId('join-room-pane').first().waitFor({ timeout: 30_000 });
+  await page.getByTestId('join-room-pane').first().waitFor({ timeout: 30_000 }).catch(async () => {
+    throw new Error(`the candidate's pane did not open; the room reads "${(await page.getByTestId('join-room').first().innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200)}"`);
+  });
   return { context, page, calls, token: invite.token };
 }
 
 export const pad = (page) => page.getByTestId('interview-pad').first();
 export const synced = (page, ms = 30_000) => page.locator('[data-testid="interview-pad"][data-connection="synced"]').first().waitFor({ timeout: ms }).then(() => true, () => false);
 /** The editor's text, line by line as the document holds it. */
-export const padText = (page) => pad(page).locator('.cm-content').evaluate((el) => [...el.querySelectorAll('.cm-line')].map((l) => l.textContent ?? '').join('\n')).catch(() => null);
+export const padText = (page) => pad(page).locator('.cm-content').evaluate((el) => [...el.querySelectorAll('.cm-line')].map((l) => {
+  // The other people's carets are widgets inside a line (their name, zero-width joiners): read the line without them.
+  const c = l.cloneNode(true);
+  for (const w of c.querySelectorAll('.cm-ySelectionCaret, .cm-ySelectionInfo, .cm-widgetBuffer')) w.remove();
+  return (c.textContent ?? '').replace(/\u2060/g, '');
+}).join('\n')).catch(() => null);
 /** The named carets of the other people drawn on this page. */
 export const carets = (page) => pad(page).locator('.cm-ySelectionInfo').allTextContents().then((a) => a.map((s) => s.trim()).filter(Boolean)).catch(() => []);
 
@@ -112,12 +122,18 @@ export async function typeInPad(page, text) {
   await page.keyboard.type(text, { delay: 15 });
 }
 
-/** The pad's language select (a native select under the library's Select). */
-export const languageOf = (page) => pad(page).getByTestId('interview-pad-language').evaluate((el) => (el instanceof HTMLSelectElement ? el.value : el.querySelector('select')?.value ?? null)).catch(() => null);
-export async function chooseLanguage(page, value) {
-  const el = pad(page).getByTestId('interview-pad-language');
-  const tag = await el.evaluate((e) => e.tagName).catch(() => '');
-  if (tag === 'SELECT') await el.selectOption(value); else await el.locator('select').selectOption(value);
+/** The pad's language (the library's Select: a native select, or its combobox showing the label). → the label shown, e.g. "JavaScript". */
+export const languageOf = (page) => pad(page).getByTestId('interview-pad-language').first().evaluate((el) => {
+  const sel = el instanceof HTMLSelectElement ? el : el.querySelector('select');
+  if (sel) return sel.options[sel.selectedIndex]?.text ?? sel.value;
+  return (el.textContent ?? '').trim();
+}).catch(() => null);
+export async function chooseLanguage(page, label) {
+  const el = pad(page).getByTestId('interview-pad-language').first();
+  const sel = await el.evaluate((e) => e instanceof HTMLSelectElement || !!e.querySelector('select')).catch(() => false);
+  if (sel) { await (await el.evaluate((e) => e instanceof HTMLSelectElement) ? el : el.locator('select')).selectOption({ label }); return; }
+  await el.click();
+  await page.getByRole('option', { name: label, exact: true }).first().click({ timeout: 5000 });
 }
 
 /** The run output pane's text, one line. */
