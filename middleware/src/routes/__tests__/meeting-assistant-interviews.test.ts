@@ -34,7 +34,8 @@ import { policyFamilies } from '../../lib/meeting-assistant/policy.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { setAssistantSpend, type ReserveInput } from '../../lib/meeting-assistant/spend.js';
-import { INTERVIEW_FAMILY, LEAD_ONLY, MILO_OFF_NO_TRANSCRIPT, setInterviewConsentSource } from '../../lib/interviews/milo-policy.js';
+import { CANNOT_LISTEN_PAST_ROUND, INTERVIEW_FAMILY, LEAD_ONLY, MILO_OFF_NO_TRANSCRIPT, setInterviewConsentSource } from '../../lib/interviews/milo-policy.js';
+import { lobbyGuard } from '../../lib/gateway/authority.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewOpeningsFixture } from '../../mock/interviews.js';
 import { getUser } from '../../providers/identity.js';
@@ -192,5 +193,32 @@ describe('in the interview\'s call', () => {
     for (const u of ['u-wen', 'u-hugo', 'u-greta', 'u-amara']) expect([u, (await send('get', IV_CALL, 'transcript', u)).status]).toEqual([u, 200]);
     expect((await send('get', IV_CALL, 'transcript', 'u-otto')).status).toBe(404);
     expect((await send('get', IV_CALL, 'proposals', 'u-otto')).status).toBe(404);
+  });
+});
+
+describe('the edges (hardening H3)', () => {
+  it('O-100: the gateway\'s partition refuses a Work user an interview\'s lobby, whatever the lobby\'s shape; the interviews session is let through to its seat check', () => {
+    const work = { userId: 'u-alice', org: 'orgiq', role: 'member', tenants: ['orgiq'] };
+    const workAdmin = { userId: 'u-alice', org: 'orgiq', role: 'admin', tenants: ['orgiq'] };
+    for (const lobby of [IV_LOBBY, 'interviews:interview:iv-new-one', 'interviews:interview:x']) {
+      expect([lobby, lobbyGuard(work, lobby)]).toEqual([lobby, false]);
+      expect([lobby, lobbyGuard(workAdmin, lobby)]).toEqual([lobby, false]);
+    }
+    // The lead's interviews session passes the partition; its seat is checked next (the gateway's interview call step).
+    expect(lobbyGuard({ userId: 'u-wen', org: 'interviews', role: 'interviewer', tenants: ['interviews'] }, IV_LOBBY)).toBe(true);
+    // The Work call stays Work's.
+    expect(lobbyGuard(work, WORK_LOBBY)).toBe(true);
+    expect(lobbyGuard({ userId: 'u-wen', org: 'interviews', role: 'interviewer', tenants: ['interviews'] }, WORK_LOBBY)).toBe(false);
+  });
+
+  it('O-103: the lead\'s extend at the round plus 15 is refused in one plain sentence and holds nothing more; a Work call still extends', async () => {
+    expect((await send('post', IV_CALL, 'invite', 'u-wen')).status).toBe(201);
+    const holds = reserved.length;
+    const res = await send('post', IV_CALL, 'extend', 'u-wen');
+    expect([res.status, res.body.error]).toEqual([409, CANNOT_LISTEN_PAST_ROUND]);
+    expect(CANNOT_LISTEN_PAST_ROUND).toBe("Milo can't listen past the end of this round.");
+    expect(reserved).toHaveLength(holds);
+    expect((await send('post', WORK_CALL, 'invite', 'u-alice')).status).toBe(201);
+    expect((await send('post', WORK_CALL, 'extend', 'u-alice')).status).toBe(200);
   });
 });
