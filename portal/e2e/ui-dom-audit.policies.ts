@@ -156,8 +156,23 @@ const INTERVIEWS_COLLECTION_PAGES = [
   // slot 5: a lane adds its entries just below this line
 ];
 const INTERVIEWS_COLLECTIONS = new RegExp(`^/interviews/(?:${INTERVIEWS_COLLECTION_PAGES.join('|')})$`);
+/**
+ * The reviewed pages that are not collections and carry no free-text composer (row E3, O-280). Each is a route the
+ * inventory reaches; the reason says what the page is instead. A page that gains a composer is `required` first,
+ * by the line above, so none of these can hide one.
+ */
+const INTERVIEWS_REVIEWED: Array<{ match: RegExp; reason: string }> = [
+  { match: /^\/interviews\/candidates\/[^/]+\/assign$/, reason: 'Assign a round is one form (which round, when, who leads, the panel) with a Submit action; it commands no collection.' },
+  { match: /^\/interviews\/openings\/[^/]+$/, reason: 'An opening\'s read view: its kit and rounds beside the Openings rail. Changes are made in the editor (/edit), where the composer docks.' },
+  { match: /^\/interviews\/rounds\/[^/]+\/prepare$/, reason: 'Prepare is one reading view of a round (its plan, the questions and the candidate\'s résumé); nothing on it is a collection to command.' },
+  { match: /^\/interviews\/rounds\/[^/]+\/scorecard$/, reason: 'The scorecard is a form (ratings, notes, a summary); its decisions are asked in the page\'s own prompt deck and saved with its own button.' },
+  { match: /^\/interviews\/rounds\/[^/]+\/record$/, reason: 'The meeting record plays a finished round (video, code and words on one clock); it is read, not commanded.' },
+  { match: /^\/interviews\/rounds\/[^/]+\/room$/, reason: 'The interview room is one call: its pane\'s Chat tab is the message input and the shell footer carries the call\'s controls.' },
+];
 function interviewsComposerPolicy(pathname: string, view: TenantViewEvidence): ComposerPolicy | undefined {
   if (INTERVIEWS_COLLECTIONS.test(pathname) || view.collection || view.listRoute || view.composer) return { mode: 'required' };
+  const reviewed = INTERVIEWS_REVIEWED.find((r) => r.match.test(pathname));
+  if (reviewed) return { mode: 'exempt', reason: reviewed.reason };
   return undefined;
 }
 
