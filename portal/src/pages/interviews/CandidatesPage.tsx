@@ -14,7 +14,7 @@ import { useSession } from '../../lib/auth';
 import { ofTotal } from '../../lib/plural';
 import { relativeTime } from '../../lib/relativeTime';
 import {
-  INTERVIEWS_API, STAGE_LABELS, STAGE_ORDER, lastResultLine, matches, nextInterviewLine, whenLabel,
+  INTERVIEWS_API, STAGE_LABELS, candidateHref, STAGE_ORDER, lastResultLine, matches, nextInterviewLine, whenLabel,
   type CandidateRow, type ItemsResponse,
 } from '../../lib/interviews';
 import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
@@ -23,7 +23,7 @@ import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 const COLUMNS: DataTableColumn<CandidateRow>[] = [
   {
     key: 'candidate', header: 'Candidate', sortable: true, compare: (a, b) => a.candidate.name.localeCompare(b.candidate.name),
-    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline} · ${r.candidate.location}`} testId="interviews-candidate-name" />,
+    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline} · ${r.candidate.location}`} testId="interviews-candidate-name" to={candidateHref(r.candidate.id)} />,
   },
   { key: 'opening', header: 'Opening', sortable: true, compare: (a, b) => a.opening.title.localeCompare(b.opening.title),
     render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },

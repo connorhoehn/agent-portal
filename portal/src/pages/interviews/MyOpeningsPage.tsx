@@ -14,7 +14,7 @@ import { useSession } from '../../lib/auth';
 import { plural } from '../../lib/plural';
 import { relativeTime } from '../../lib/relativeTime';
 import {
-  INTERVIEWS_API, STAGE_LABELS, byStageLine, lastResultLine, matches, nextInterviewLine, whenLabel,
+  INTERVIEWS_API, STAGE_LABELS, candidateHref, byStageLine, lastResultLine, matches, nextInterviewLine, whenLabel,
   type ApplicationStage, type ItemsResponse, type OpeningRow, type PipelineEntry,
 } from '../../lib/interviews';
 import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
@@ -28,7 +28,7 @@ interface Row extends PipelineEntry { opening: { id: string; title: string; team
 const COLUMNS: DataTableColumn<Row>[] = [
   {
     key: 'candidate', header: 'Candidate', sortable: true, compare: (a, b) => a.candidate.name.localeCompare(b.candidate.name),
-    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-pipeline-candidate" />,
+    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-pipeline-candidate" to={candidateHref(r.candidate.id)} />,
   },
   { key: 'opening', header: 'Opening', sortable: true, compare: (a, b) => a.opening.title.localeCompare(b.opening.title),
     render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },

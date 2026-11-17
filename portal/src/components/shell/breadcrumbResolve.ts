@@ -303,7 +303,10 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
 
   if (root === 'interviews') {
     const page = a ?? 'candidates';
-    return [{ label: INTERVIEWS_GROUPS[page] ?? 'Interviews' }, { label: INTERVIEWS_LABELS[page] ?? page }];
+    const trail: Crumb[] = [{ label: INTERVIEWS_GROUPS[page] ?? 'Interviews' }];
+    // A candidate's profile (Hire › Candidates › name); the page registers the name as the crumb's label.
+    if (page === 'candidates' && b) return [...trail, { label: INTERVIEWS_LABELS[page] ?? page, path: '/interviews/candidates' }, { label: shortId(b), id: b }];
+    return [...trail, { label: INTERVIEWS_LABELS[page] ?? page }];
   }
 
   if (root === 'settings') return [{ label: 'System' }, { label: 'Settings' }];

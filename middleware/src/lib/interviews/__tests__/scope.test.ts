@@ -148,5 +148,7 @@ describe('the wire shapes', () => {
     const rec = ix.candidateRecord(ix.candidates.get('cand-ingrid')!);
     expect(rec.applications).toHaveLength(1);
     expect(rec.applications[0]!.interviews.map((i) => i.id)).toEqual(['iv-ingrid-together']);
+    // An interviewer reads no other panel member's scorecard on the profile.
+    expect(rec.applications[0]!.interviews.every((i) => i.results.every((r) => r.interviewer.id === 'u-wen'))).toBe(true);
   });
 });

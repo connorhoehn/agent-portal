@@ -13,7 +13,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { ofTotal } from '../../lib/plural';
 import {
-  DESK_VIEWS, INTERVIEWS_API, ROUND_TYPE_LABELS, deskLabel, deskOrder, deskTone, inDeskView, matches, whenLabel,
+  DESK_VIEWS, INTERVIEWS_API, candidateHref, ROUND_TYPE_LABELS, deskLabel, deskOrder, deskTone, inDeskView, matches, whenLabel,
   type DeskView, type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
 import { PersonCell } from './interviewsCells';
@@ -26,7 +26,7 @@ const COLUMNS: DataTableColumn<InterviewRow>[] = [
   },
   {
     key: 'candidate', header: 'Candidate', sortable: true, compare: (a, b) => a.candidate.name.localeCompare(b.candidate.name),
-    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-desk-candidate" />,
+    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-desk-candidate" to={candidateHref(r.candidate.id)} />,
   },
   { key: 'round', header: 'Round', render: (r) => <T size="sm" title={`${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{r.round.name}</T> },
   { key: 'opening', header: 'Opening', render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },

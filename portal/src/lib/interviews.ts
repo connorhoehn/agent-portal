@@ -77,6 +77,26 @@ export interface InterviewRow {
 
 export interface ItemsResponse<T> { items: T[] }
 
+/** One move of an application between stages; `byName` is null for the candidate's own application. */
+export interface StageMove { stage: ApplicationStage; at: string; by: string | null; byName: string | null; reason: string | null }
+export interface RoundResult { interviewer: PersonRef; recommendation: Recommendation }
+export interface ProfileRound extends InterviewRow { results: RoundResult[] }
+export interface ProfileApplication {
+  applicationId: string;
+  opening: { id: string; title: string; team: string };
+  stage: ApplicationStage;
+  history: StageMove[];
+  interviews: ProfileRound[];
+}
+/** GET /api/interviews/candidates/:id. */
+export interface CandidateProfile {
+  candidate: { id: string; name: string; email: string; headline: string; location: string; source: string; createdAt: string };
+  applications: ProfileApplication[];
+}
+
+/** Where a candidate's profile lives. */
+export const candidateHref = (id: string): string => `/interviews/candidates/${encodeURIComponent(id)}`;
+
 // ── words ────────────────────────────────────────────────────────────────────
 
 export const STAGE_ORDER: readonly ApplicationStage[] = ['applied', 'screening', 'interviewing', 'debrief', 'offer', 'hired', 'on-hold', 'rejected', 'withdrawn'];
@@ -106,6 +126,41 @@ export function recommendationTone(r: Recommendation): ChipTone {
 }
 
 export const ROUND_TYPE_LABELS: Readonly<Record<RoundType, string>> = { technical: 'Technical', behavioural: 'Behavioural' };
+
+/** The stages a candidate moves through, in order; the other three end or pause the path. */
+export const STAGE_PATH: readonly ApplicationStage[] = ['applied', 'screening', 'interviewing', 'debrief', 'offer', 'hired'];
+
+export interface StageStep { step: number; label: string; done: boolean; active: boolean; description: string }
+
+/**
+ * The tracker's steps. The path always shows in order, the current stage marked
+ * and the ones reached before it done; a candidate on hold, not moving forward
+ * or withdrawn gets that stage as the last, active step after what they reached.
+ * `when` words a timestamp ("3 days ago").
+ */
+export function stageSteps(stage: ApplicationStage, history: ReadonlyArray<Pick<StageMove, 'stage' | 'at'>>, when: (iso: string) => string): StageStep[] {
+  const reachedAt = (s: ApplicationStage) => history.filter((h) => h.stage === s).map((h) => h.at).sort().pop();
+  const onPath = STAGE_PATH.includes(stage);
+  const labels = onPath ? STAGE_PATH : [...STAGE_PATH.filter((s) => reachedAt(s)), stage];
+  const current = labels.indexOf(stage);
+  return labels.map((s, i) => {
+    const at = reachedAt(s);
+    return { step: i + 1, label: STAGE_LABELS[s], done: i < current && (onPath ? true : !!at), active: i === current, description: at ? when(at) : '' };
+  });
+}
+
+/** What a round is waiting for, in words. */
+export function roundStatus(state: InterviewState): { label: string; tone: ChipTone } {
+  switch (state) {
+    case 'assigned': return { label: 'To accept', tone: 'warning' };
+    case 'accepted': case 'ready': return { label: 'Scheduled', tone: 'info' };
+    case 'live': return { label: 'In progress', tone: 'info' };
+    case 'ended': return { label: 'Scorecard due', tone: 'caution' };
+    case 'scored': case 'reviewed': return { label: 'Done', tone: 'success' };
+    case 'declined': return { label: 'Declined', tone: 'neutral' };
+    default: return { label: 'Cancelled', tone: 'neutral' };
+  }
+}
 
 /** What an interview on the viewer's desk is waiting for, in their words. */
 export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>): string {

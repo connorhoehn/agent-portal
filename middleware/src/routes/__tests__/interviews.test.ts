@@ -111,6 +111,12 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(aiko.body.interview).toMatchObject({ candidate: { name: 'Aiko Tanaka' }, lead: { name: 'Wen Zhao' }, state: 'ready', seat: null });
     const ingrid = await GRETA('/api/interviews/candidates/cand-ingrid');
     expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-ingrid-coding', 'iv-ingrid-together']);
+    // The profile reads who moved each stage by name, and each round's readable results.
+    const app = ingrid.body.candidate.applications[0];
+    expect(app.history.every((h: { by: string | null; byName: string | null }) => (h.by === null) === (h.byName === null))).toBe(true);
+    expect(app.history.some((h: { byName: string | null }) => h.byName === 'Greta Lindqvist')).toBe(true);
+    expect(app.interviews.every((i: { results: unknown[] }) => Array.isArray(i.results))).toBe(true);
+    expect(app.interviews.find((i: { id: string }) => i.id === 'iv-ingrid-coding').results.length).toBeGreaterThan(0);
   });
 
   it('an id that does not exist is a 404', async () => {

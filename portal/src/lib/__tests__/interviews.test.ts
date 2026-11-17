@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  byStageLine, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, stageTone, whenLabel,
+  byStageLine, candidateHref, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, whenLabel,
   type InterviewRow,
 } from '../interviews.ts';
 
@@ -72,4 +72,29 @@ test('search matches any shown field, case-insensitively', () => {
   assert.equal(matches('PAYMENTS', 'Mateo', 'Payments'), true);
   assert.equal(matches('swift', 'Mateo', null, undefined), false);
   assert.equal(matches('  ', 'x'), true);
+});
+
+test('stageSteps marks the stages reached as done and the current one active', () => {
+  const when = (iso: string) => `at ${iso.slice(0, 10)}`;
+  const steps = stageSteps('interviewing', [
+    { stage: 'applied', at: '2026-11-01T09:00:00Z' }, { stage: 'screening', at: '2026-11-03T09:00:00Z' }, { stage: 'interviewing', at: '2026-11-08T09:00:00Z' },
+  ], when);
+  assert.deepEqual(steps.map((s) => [s.label, s.done, s.active]), [
+    ['Applied', true, false], ['Screening', true, false], ['Interviewing', false, true], ['Debrief', false, false], ['Offer', false, false], ['Hired', false, false],
+  ]);
+  assert.equal(steps[2]!.description, 'at 2026-11-08');
+  assert.equal(steps[3]!.description, '');
+});
+
+test('stageSteps ends the track at the stage of a candidate on hold or not moving forward', () => {
+  const steps = stageSteps('rejected', [{ stage: 'applied', at: '2026-11-01T09:00:00Z' }, { stage: 'screening', at: '2026-11-03T09:00:00Z' }, { stage: 'rejected', at: '2026-11-04T09:00:00Z' }], () => 'x');
+  assert.deepEqual(steps.map((s) => [s.label, s.done, s.active]), [['Applied', true, false], ['Screening', true, false], ['Not moving forward', false, true]]);
+});
+
+test('roundStatus words each interview state and candidateHref addresses the profile', () => {
+  assert.equal(roundStatus('assigned').label, 'To accept');
+  assert.equal(roundStatus('ready').label, 'Scheduled');
+  assert.equal(roundStatus('ended').label, 'Scorecard due');
+  assert.equal(roundStatus('reviewed').label, 'Done');
+  assert.equal(candidateHref('cand-ingrid'), '/interviews/candidates/cand-ingrid');
 });

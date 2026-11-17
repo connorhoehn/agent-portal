@@ -106,8 +106,10 @@ export interface CandidateRecord {
     applicationId: string;
     opening: { id: string; title: string; team: string };
     stage: ApplicationStage;
-    history: StageChange[];
-    interviews: InterviewRow[];
+    /** Each move with who made it by name (null: the candidate's own application). */
+    history: Array<StageChange & { byName: string | null }>;
+    /** Each round with the scorecards the viewer may read (the world is already scoped; an interviewer reads only their own). */
+    interviews: Array<InterviewRow & { results: Array<{ interviewer: PersonRef; recommendation: Recommendation }> }>;
   }>;
 }
 
@@ -284,8 +286,12 @@ export class WorldIndex {
         const o = this.openings.get(a.openingId);
         if (!o) return [];
         return [{
-          applicationId: a.id, opening: { id: o.id, title: o.title, team: o.team }, stage: a.stage, history: a.history,
-          interviews: this.interviewsOf(a.id).map((i) => this.interviewRow(i)).filter((r): r is InterviewRow => r !== null),
+          applicationId: a.id, opening: { id: o.id, title: o.title, team: o.team }, stage: a.stage,
+          history: a.history.map((h) => ({ ...h, byName: h.by ? this.people(h.by).name : null })),
+          interviews: this.interviewsOf(a.id).flatMap((i) => {
+            const row = this.interviewRow(i);
+            return row ? [{ ...row, results: this.scorecardsOf(i.id).map((s) => ({ interviewer: this.people(s.interviewerId), recommendation: s.recommendation })) }] : [];
+          }),
         }];
       }),
     };
