@@ -120,19 +120,21 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
     <T size="sm" tone="secondary" wrap data-testid="interviews-record-recording-line">{recordingNote}</T>
   );
 
+  const outputBlock = runs.length > 0 ? (
+    <CodeRunOutput variant="flush" className="h-full min-h-0" data-testid="interviews-record-run-output"
+      status={runModel?.status ?? null} stdout={runModel?.stdout ?? ''} stderr={runModel?.stderr ?? ''} compileOutput={runModel?.compileOutput ?? ''}
+      truncated={runModel?.truncated ?? { stdout: false, stderr: false }} exitCode={runModel?.exitCode ?? null} timeMs={runModel?.timeMs ?? null}
+      peakMemoryMb={runModel?.peakMemoryMb ?? null} {...(runModel?.runBy ? { runBy: runModel.runBy } : {})}
+      {...(runModel?.languageLabel ? { languageLabel: runModel.languageLabel } : {})} {...(runModel?.runtimeVersion ? { runtimeVersion: runModel.runtimeVersion } : {})}
+      emptyMessage="Nothing had been run yet at this moment." />
+  ) : null;
+  const playback = (
+    <CodePlayback frames={frames} markers={playbackMarkers} durationMs={durationMs} timeMs={Math.min(timeMs, durationMs)} onTimeChange={moveTo}
+      emptyMessage="No code was written in this interview." className="h-full min-h-0 min-w-0" data-testid="interviews-record-code-playback" />
+  );
   const code = !technical ? null : !padLog.done ? <LoadingState label="Opening the code…" /> : (
-    <Stack gap="sm" className="min-w-0" data-testid="interviews-record-code">
-      <CodePlayback frames={frames} markers={playbackMarkers} durationMs={durationMs} timeMs={Math.min(timeMs, durationMs)} onTimeChange={moveTo}
-        emptyMessage="No code was written in this interview." className="min-w-0" data-testid="interviews-record-code-playback" />
-      {runs.length > 0 && (
-        <CodeRunOutput variant="framed" className="max-h-56 min-w-0" data-testid="interviews-record-run-output"
-          status={runModel?.status ?? null} stdout={runModel?.stdout ?? ''} stderr={runModel?.stderr ?? ''} compileOutput={runModel?.compileOutput ?? ''}
-          truncated={runModel?.truncated ?? { stdout: false, stderr: false }} exitCode={runModel?.exitCode ?? null} timeMs={runModel?.timeMs ?? null}
-          peakMemoryMb={runModel?.peakMemoryMb ?? null} {...(runModel?.runBy ? { runBy: runModel.runBy } : {})}
-          {...(runModel?.languageLabel ? { languageLabel: runModel.languageLabel } : {})} {...(runModel?.runtimeVersion ? { runtimeVersion: runModel.runtimeVersion } : {})}
-          emptyMessage="Nothing had been run yet at this moment." />
-      )}
-    </Stack>
+    <SplitPane orientation="vertical" className="h-full min-h-0" defaultRatio={0.62} minPrimaryPx={200} minSecondaryPx={120} dividerLabel="Resize the code and the run's output"
+      primary={playback} secondary={outputBlock} data-testid="interviews-record-code" />
   );
 
   const words = transcriptNote ? (
@@ -162,14 +164,19 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   );
 
   const left = (
-    <Stack gap="md" className="min-w-0 pr-3">
+    <Stack gap="md" className="h-full min-h-0 min-w-0 pr-3" data-testid="interviews-record-body">
       <DetailSection variant="heading" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>
-      {technical ? <DetailSection variant="heading" title="Code" hint="What was typed, moment by moment. Choosing a question, a run or a paste moves the recording and the words there." data-testid="interviews-record-code-section">{code}</DetailSection> : moments}
+      {technical
+        ? <Stack gap="xs" className="min-h-0 flex-1" data-testid="interviews-record-code-section">
+            <T size="sm" weight="medium">Code</T>
+            {code}
+          </Stack>
+        : <Stack gap="none" className="min-h-0 flex-1 overflow-y-auto">{moments}</Stack>}
     </Stack>
   );
 
   return (
-    <DetailPage data-testid="interviews-record" title={`${interview.candidate.name}, ${interview.round.name}`} breadcrumbs={trail}
+    <DetailPage data-testid="interviews-record" title={`${interview.candidate.name}, ${interview.round.name}`}
       badge={<Chip tone={status.tone} size="xs" data-testid="interviews-record-state">{status.label}</Chip>}
       meta={<MetaLine size="sm" items={[
         interview.opening.title,
@@ -178,7 +185,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
         lengthSeconds ? lengthOf(lengthSeconds) : `${interview.round.minutes} minutes planned`,
       ].filter((x): x is string => Boolean(x))} />}>
       <SplitPane className="h-[calc(100vh-14rem)] min-h-[32rem]" defaultRatio={0.58} minPrimaryPx={420} minSecondaryPx={320} dividerLabel="Resize the recording and the transcript"
-        primary={<Stack gap="none" className="h-full min-w-0 overflow-y-auto" data-testid="interviews-record-body">{left}</Stack>}
+        primary={left}
         secondary={<Stack gap="sm" className="h-full min-w-0 pl-3" data-testid="interviews-record-transcript">{words}</Stack>} />
     </DetailPage>
   );

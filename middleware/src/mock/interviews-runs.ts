@@ -52,9 +52,9 @@ export const interviewRunsFixture = defineFixture<RunRecord>({
   scenarios: {
     default: () => [
       // Mateo (-3d 14:00): the limiter fails on the first run, passes after the fix; the retry runs once, with the same key each time.
-      run({ interviewId: 'iv-j6x2d9sb', days: -3, hour: 14, runId: 'run-mateo-01', language: 'python', entrypoint: 'main.py', by: cand('iv-j6x2d9sb', 'Mateo'), s: 640, status: 'failed',
+      run({ interviewId: 'iv-j6x2d9sb', days: -3, hour: 14, runId: 'run-mateo-01', language: 'python', entrypoint: 'main.py', by: cand('iv-j6x2d9sb', 'Mateo'), s: 720, status: 'failed',
         stdout: '', stderr: 'Traceback (most recent call last):\n  File "main.py", line 3, in <module>\n    assert results == [True, True, True, False, False], results\nAssertionError: [True, True, True, True, True]\n', exitCode: 1, timeMs: 180, version: PY, source: LIMITER_FAILS }),
-      run({ interviewId: 'iv-j6x2d9sb', days: -3, hour: 14, runId: 'run-mateo-02', language: 'python', entrypoint: 'main.py', by: cand('iv-j6x2d9sb', 'Mateo'), s: 720, status: 'succeeded',
+      run({ interviewId: 'iv-j6x2d9sb', days: -3, hour: 14, runId: 'run-mateo-02', language: 'python', entrypoint: 'main.py', by: cand('iv-j6x2d9sb', 'Mateo'), s: 860, status: 'succeeded',
         stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 150, version: PY, source: LIMITER_PASSES }),
       // Ingrid's coding round (-9d 14:00).
       run({ interviewId: 'iv-d7q4n9xe', days: -9, hour: 14, runId: 'run-ingrid-01', language: 'python', entrypoint: 'main.py', by: cand('iv-d7q4n9xe', 'Ingrid'), s: 770, status: 'failed',
