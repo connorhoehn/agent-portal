@@ -73,7 +73,7 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { ackedBefore, newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
-import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { hasFamilyPolicies, payerFields, policyCallOf, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js';
+import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { familyOfLobby, hasFamilyPolicies, payerFields, policyCallOf, policyFamilies, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js'; import { INTERVIEW_FAMILY, registerInterviewsMiloPolicy } from '../lib/interviews/milo-policy.js'; import { interviewsEnabled } from '../lib/interviews/flag.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import {
@@ -118,7 +118,7 @@ function refuseMasquerade(req: Request, res: Response, next: NextFunction): void
   next();
 }
 
-meetingAssistantRouter.use(flagGate, requireTenant('orgiq'), refuseMasquerade);
+meetingAssistantRouter.use(flagGate, staffTenantGate, callTenantAgrees, refuseMasquerade); // Work's calls for Work, an interview's for the interviews tenant
 
 /** Attendance is written only for someone not yet on the record, so a poll from a known attendee reads and writes nothing more. */
 async function attendOnce(callId: string, userId: string): Promise<void> {
@@ -752,7 +752,7 @@ meetingAssistantRouter.post('/turns/:turnId/result', asyncHandler(async (req, re
  * or held one while the assistant was in the call, or is named by a proposal or is its executor (they must consent even if they were
  * never there; they see only those proposals). Everyone else gets the same 404 as "no such call".
  */
-interface ProposalViewer { session: Session; callId: string; record: AssistantRecord; seated: boolean; attendee: boolean }
+interface ProposalViewer { session: Session; callId: string; record: AssistantRecord; seated: boolean; attendee: boolean; access: ReadAccess }
 async function proposalViewer(req: Request): Promise<ProposalViewer> {
   const session = sessionOf(req); const callId = callIdOf(req);
   let record = await assistantStore().get(callId);
@@ -761,11 +761,11 @@ async function proposalViewer(req: Request): Promise<ProposalViewer> {
   try { await callChatRuntime().assertMember(callId, session, false); seated = true; } catch (e) { if (!(e instanceof AppError)) throw e; }
   if (seated && !record.attendees.includes(session.sub)) { await attendOnce(callId, session.sub).catch(() => undefined); record = (await assistantStore().get(callId)) ?? record; }
   if ((await assistantStore().getMinutes(callId))?.deleted) throw new NotFoundError('Not found');
-  return { session, callId, record, seated, attendee: record.attendees.includes(session.sub) };
+  return { session, callId, record, seated, attendee: record.attendees.includes(session.sub), access: await readsOf(session.sub, session.tenant, seated, record, session.role) };
 }
 
 const involves = (p: Proposal, userId: string): boolean => p.executor === userId || p.named.includes(userId);
-const visibleTo = (v: ProposalViewer, p: Proposal): boolean => readsOf(v.session.sub, v.session.tenant, v.seated, v.record).record || involves(p, v.session.sub);
+const visibleTo = (v: ProposalViewer, p: Proposal): boolean => v.access.record || involves(p, v.session.sub);
 /** The end of the call for expiry: when the assistant left (the call ending makes it leave). Null while it is in the call. */
 const endedAt = (record: AssistantRecord): number | null => (record.state === 'left' ? (record.leftAt ?? record.invitedAt) : null);
 
@@ -832,11 +832,11 @@ async function canRunNow(p: Proposal, record: AssistantRecord, viewer: string): 
   return true;
 }
 
-async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer, 'record' | 'seated' | 'attendee'>) {
+async function proposalView(p: Proposal, viewer: string, v: Pick<ProposalViewer, 'record' | 'seated' | 'attendee' | 'access'>) {
   const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : []), ...(p.askedBy ? [p.askedBy] : [])])];
   const faces = await facesOf(people); const names: Record<string, string> = Object.fromEntries(faces.map((f) => [f.userId, f.name])); // portraits read as the attendees' are
   const mine = p.responses.find((r) => r.userId === viewer);
-  const wasThere = readsOf(viewer, v.record.tenant, v.seated, v.record).record; // by the call's policy: by default, seated now or an attendee
+  const wasThere = v.access.record; // the viewer's, by the call's policy: by default, seated now or an attendee
   const answerable = ANSWERABLE.includes(p.state);
   const recordsAs = p.state === 'done' ? p.run?.recordedAs ?? null : answerable ? await decisionRecordedAs(assistantRuntime().proposalDeps, p, v.record.initiativeId) : null;
   return {
@@ -869,7 +869,7 @@ meetingAssistantRouter.get('/proposals', asyncHandler(async (req, res) => {
   const v = await proposalViewer(req);
   const all = await listProposalsFor(assistantStore(), v.callId, Date.now(), endedAt(v.record));
   const shown = all.filter((p) => visibleTo(v, p));
-  if (!readsOf(v.session.sub, v.session.tenant, v.seated, v.record).record && !shown.length) throw new NotFoundError('Not found');
+  if (!v.access.record && !shown.length) throw new NotFoundError('Not found');
   res.json({ callId: v.callId, proposals: await Promise.all(shown.map((p) => proposalView(p, v.session.sub, v))) });
 }));
 
@@ -948,7 +948,7 @@ function intParam(raw: unknown, name: string, min: number, max: number, fallback
  */
 export async function attendeeOf(session: Session, callId: string, part: keyof ReadAccess = 'record'): Promise<AssistantRecord> {
   const record = await assistantStore().get(callId);
-  if (!record || !readsOf(session.sub, session.tenant, false, record)[part]) throw new NotFoundError('Not found'); // the call's policy (by default this rule)
+  if (!record || !(await readsOf(session.sub, session.tenant, false, record, session.role))[part]) throw new NotFoundError('Not found'); // the call's policy (by default this rule)
   return record;
 }
 
@@ -1201,7 +1201,7 @@ watchCallEnd();
 
 /** `GET /api/meetings`: the meetings the caller attended with the assistant present, newest first. Never anyone else's. */
 export const meetingsRouter = Router();
-meetingsRouter.use(flagGate, requireTenant('orgiq'), refuseMasqueradeRead);
+meetingsRouter.use(flagGate, staffTenantGate, refuseMasqueradeRead); // each tenant lists its own family's meetings (lobbyAgrees)
 meetingsRouter.get('/', asyncHandler(async (req, res) => {
   const session = sessionOf(req);
   const limit = intParam(req.query['limit'], 'limit', 1, 100, 25);
@@ -1212,7 +1212,7 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   if (initiative !== undefined && (typeof initiative !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(initiative))) throw new ValidationError('Invalid initiative');
   const rows = await assistantStore().listMinutes({ tenant: session.tenant, userId: session.sub, limit, ...(initiative ? { initiativeId: initiative } : {}), ...(before ? { before } : {}) });
   const store = assistantStore(); const now = Date.now();
-  const meetings = await Promise.all(rows.filter((m) => policyForLobby(m.lobby).listsMeeting(m, session.sub)).map(async (m) => {
+  const meetings = await Promise.all(rows.filter((m) => lobbyAgrees(session.tenant, m.lobby) && policyForLobby(m.lobby).listsMeeting(m, session.sub)).map(async (m) => {
     const faces = await facesOf(m.attendees);
     const attendees = faces.map((a) => a.name);
     // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
@@ -1280,8 +1280,8 @@ async function inviterSeatOf(req: Request): Promise<{ session: Session; callId: 
 }
 
 /** What this person may read of the call's record, by its policy. `seated`: they hold a seat in the running call now. */
-function readsOf(userId: string, tenant: string, seated: boolean, record: AssistantRecord): ReadAccess {
-  return policyForLobby(record.lobby).reads({ userId, tenant, seated }, record);
+async function readsOf(userId: string, tenant: string, seated: boolean, record: AssistantRecord, role?: string): Promise<ReadAccess> {
+  return policyForLobby(record.lobby).reads({ userId, tenant, seated, ...(role !== undefined ? { role } : {}) }, record);
 }
 
 /** Does this person acknowledge Milo with the notice in the call (the default for everyone), not somewhere else? */
@@ -1309,3 +1309,47 @@ async function ackElsewhere(callId: string, userId: string): Promise<void> {
   await store.ack(callId, userId);
   await assistantAudio().refresh(callId).catch(() => undefined);
 }
+
+// ---- the tenant gate (interviews plan row I3.2), declared last as well ----
+
+const INTERVIEWS = 'interviews';
+const workTenant = requireTenant('orgiq');
+
+/**
+ * Who may reach these routes at all: a Work session (`requireTenant('orgiq')`, the admin's break-glass included), or, while the
+ * interviews tenant is on, an interviews session, which `callTenantAgrees` then holds to an interview's call. A guest holds no session
+ * and is refused here (401), as everyone else is (403).
+ */
+function staffTenantGate(req: Request, res: Response, next: NextFunction): void {
+  if (resolveSession(req)?.tenant === INTERVIEWS && interviewsEnabled()) { next(); return; }
+  workTenant(req, res, next);
+}
+
+/**
+ * Does a session in `tenant` reach a call in this lobby? An interviews session reaches an interview's call only, and only while its
+ * policy is registered (an interview under the default policy would read as a Work call); every other session reaches anything but
+ * an interview's call. An unknown lobby is no interview: Work's routes decide it as before, an interviews session gets nothing.
+ */
+export function lobbyAgrees(tenant: string, lobby: string | null | undefined): boolean {
+  const interview = familyOfLobby(lobby) === INTERVIEW_FAMILY;
+  if (tenant === INTERVIEWS) return interview && policyFamilies().includes(INTERVIEW_FAMILY);
+  return !interview;
+}
+
+/**
+ * Where the call is resolved: the call's lobby (Milo's record's, else the live call's) must agree with the session's tenant, so a Work
+ * session never reaches an interview's record and an interviews session never reaches Work's. The same 404 as no call at all. With no
+ * family policy registered nothing is read for a Work session (no interview call can be served then).
+ */
+function callTenantAgrees(req: Request, _res: Response, next: NextFunction): void {
+  const session = resolveSession(req); const callId = req.params['callId'];
+  if (!session || typeof callId !== 'string' || (session.tenant !== INTERVIEWS && !hasFamilyPolicies())) { next(); return; }
+  void (async () => {
+    const record = await assistantStore().get(callId).catch(() => null);
+    const lobby = record?.lobby ?? await callChatRuntime().lobbyOf(callId).catch(() => null);
+    return lobbyAgrees(session.tenant, lobby);
+  })().then((ok) => next(ok ? undefined : new NotFoundError('Not found')), next);
+}
+
+// Milo's policy for an interview call (lib/interviews/milo-policy.ts), registered once while the tenant is on.
+registerInterviewsMiloPolicy();

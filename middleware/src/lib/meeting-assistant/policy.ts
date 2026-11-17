@@ -7,9 +7,10 @@
 // everything after the invite reads it from the record. Each family may register one policy; a family with none registered gets
 // DEFAULT_POLICY, which is today's behaviour, Work's, for every lobby Milo can be invited into.
 //
-// What stays outside the seam on purpose: the routes' tenant gate (`requireTenant('orgiq')`) and the Cedar grant to invite
-// (`requireAction('InviteMeetingAssistant')`) stay on the route declarations, where the voice inventory reads them; a policy narrows
-// who may invite per call (`inviteRefusal`) after Cedar has said yes.
+// What stays outside the seam on purpose: the routes' tenant gate and the Cedar grant to invite (`requireAction('InviteMeetingAssistant')`)
+// stay on the route declarations, where the voice inventory reads them; a policy narrows who may invite per call (`inviteRefusal`)
+// after Cedar has said yes. The tenant gate lets a Work session through to Work's calls and an interviews session through to an
+// interview's call only (routes/meeting-assistant.ts `staffTenantGate` and `callTenantAgrees`).
 //
 // Shape: a new family's rules are a new policy object registered here, never a new branch in the orchestrator or the routes.
 import type { SpendSource } from '../../providers/spend-ledger.js';
@@ -57,8 +58,12 @@ export interface MeetingAssistantPolicy {
    * this person may, else the plain sentence they are refused with (403).
    */
   inviteRefusal(person: PolicyPerson & { role: string }, call: PolicyCall): Promise<string | null>;
-  /** What this person may read of the call's record. `seated`: they hold a seat in the running call now. */
-  reads(viewer: PolicyPerson & { seated: boolean }, record: AssistantRecord): ReadAccess;
+  /**
+   * What this person may read of the call's record. `seated`: they hold a seat in the running call now. `role`: their role in their
+   * session's tenant, when the reader has a session (a family whose readers are decided by role reads it; the default does not). A
+   * policy that must look something up answers with a promise.
+   */
+  reads(viewer: PolicyPerson & { seated: boolean; role?: string }, record: AssistantRecord): ReadAccess | Promise<ReadAccess>;
   /**
    * Whose budget pays for a listening period, its extensions, its minutes and its decision checks. `inviterId` is the person who
    * invited Milo into that period; `initiativeId` is the call's initiative, when it has one.
