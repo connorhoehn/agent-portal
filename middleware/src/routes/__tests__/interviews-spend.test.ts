@@ -192,3 +192,31 @@ describe('Work\'s spend report leaves the interviews source out', () => {
     expect((await request(app).get('/api/spend/report?groupBy=source&period=month').set('x-user', 'u-greta').set('x-tenant', 'interviews')).status).toBe(403);
   });
 });
+
+// Hardening (H1, O-004 and O-007): the caps' edges, read against the route as it answers today.
+describe('the caps at their edges', () => {
+  const detailsOf = async (id: string) => {
+    const o = (await GRETA.get(`/openings/${id}`)).body.opening;
+    return { revision: o.revision, title: o.title, level: o.level, team: o.team, location: o.location, hiringManagerId: o.hiringManager?.id ?? null, state: o.state, budgetCapUsd: o.budgetCapUsd };
+  };
+
+  it('a cap lowered below what is already spent is saved, and the money left is nothing, never negative', async () => {
+    await recordSpend({ source: 'interviews', sourceId: 'iv:op-ios:iv-p2v7j4ye:run:r-1', initiativeId: null, boxId: null, actorId: 'u-wen', model: 'runner', costUsd: 6, costBasis: 'estimated' });
+    const r = await GRETA.put('/openings/op-ios/details', { ...(await detailsOf('op-ios')), budgetCapUsd: 5, interviewCapUsd: 2 });
+    expect(r.status).toBe(200);
+    const money = (await spendOf(GRETA, 'op-ios')).body.spend;
+    expect(money).toMatchObject({ capUsd: 5, spentUsd: 6, leftUsd: 0 });
+    // What was spent is not undone, and a new hold against the exhausted cap is refused.
+    const held = await reserveInterviewSpend({ interviewId: 'iv-c3k8w2ma', part: 'coach', key: 'c-low', estimateUsd: 1, expiresInMs: 60_000 });
+    expect(held.ok).toBe(false);
+  });
+
+  it('a save against an old revision is 409 with the caps as saved, and changes nothing', async () => {
+    const stale = await detailsOf('op-em');
+    expect((await GRETA.put('/openings/op-em/details', { ...stale, budgetCapUsd: 60, interviewCapUsd: 6 })).status).toBe(200);
+    const second = await GRETA.put('/openings/op-em/details', { ...stale, budgetCapUsd: 90, interviewCapUsd: 9 });
+    expect(second.status).toBe(409);
+    expect(second.body.error).toMatch(/Someone else saved this opening/);
+    expect((await spendOf(GRETA, 'op-em')).body.spend).toMatchObject({ capUsd: 60, interviewCapUsd: 6 });
+  });
+});

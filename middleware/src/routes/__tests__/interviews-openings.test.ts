@@ -137,6 +137,18 @@ describe('the recruiter writes', () => {
     expect((await GRETA.post('/openings', DETAILS)).body.opening.id).toBe('op-data-engineer-2');
   });
 
+  it('creates an opening with both caps, and the money route reads them back (row I0.6)', async () => {
+    const res = await GRETA.post('/openings', { ...DETAILS, budgetCapUsd: 120, interviewCapUsd: 9.5 });
+    expect(res.status).toBe(201);
+    expect(res.body.opening).toMatchObject({ id: 'op-data-engineer', budgetCapUsd: 120 });
+    const spend = (await GRETA.get('/openings/op-data-engineer/spend')).body.spend;
+    expect(spend).toMatchObject({ capUsd: 120, interviewCapUsd: 9.5, effectiveInterviewCapUsd: 9.5, leftUsd: 120 });
+    // A per-interview cap above the opening's is refused on creation as it is on a save.
+    const over = await GRETA.post('/openings', { ...DETAILS, budgetCapUsd: 20, interviewCapUsd: 25 });
+    expect(over.status).toBe(400);
+    expect(over.body.fields).toEqual([{ path: 'interviewCapUsd', message: "The cap per interview cannot be more than the opening's spending cap." }]);
+  });
+
   it('names the hiring managers the details form may choose from', async () => {
     const res = await GRETA.get('/hiring-managers');
     expect(res.body).toEqual({ items: [{ id: 'u-amara', name: 'Amara Okafor' }] });

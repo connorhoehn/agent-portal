@@ -137,3 +137,45 @@ describe('notifyInterviewStartingSoon', () => {
     expect(sent.map((x) => x.input.title)).toEqual(['System design for Data Engineer starts in 5 minutes', 'System design for Data Engineer starts in 120 minutes']);
   });
 });
+
+// Hardening (H1, O-042 and O-043).
+describe('a busy tick and a restart', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, k) => iv({ id: `iv-${k}`, leadId: `u-lead-${k}`, panelIds: [] }));
+  const worldOf = (rows: Interview[]) => ({ openings: [{ id: 'op-1', title: 'Data Engineer', kit: { rounds: [{ id: 'r-1', name: 'System design' }] } }], applications: [{ id: 'ap-1', openingId: 'op-1' }], interviews: rows });
+
+  it('rings at most 200 in one tick and the rest on the next, each person once (O-042)', async () => {
+    const ring = jest.fn(async () => []);
+    const deps = { now: () => NOW, load: async () => worldOf(many(450)) as never, ring, enabled: () => true };
+    const keys = new Set<string>();
+    expect(await runSoonTick(deps, keys)).toBe(200);
+    expect(await runSoonTick(deps, keys)).toBe(200);
+    expect(await runSoonTick(deps, keys)).toBe(50);
+    expect(await runSoonTick(deps, keys)).toBe(0);
+    const told = ring.mock.calls.flatMap((c) => (c as unknown as Array<{ userIds: string[] }>)[0]!.userIds);
+    expect(told).toHaveLength(450);
+    expect(new Set(told).size).toBe(450);
+  });
+
+  // The set of what was rung lives in memory, so a restart inside the window rings the same person for the same time
+  // again under the SAME bell id. The ledger says the real notification store drops that repeat. It does not: the
+  // store (realtime-modules RedisNotificationStore) keeps each record as its own sorted-set member, and a record's
+  // timestamp differs between the two rings. Left failing so the checklist stays honest (a finding for the lead).
+  it.failing('after a restart the real notification store holds one bell for one person and one time (O-043)', async () => {
+    const { RedisNotificationStore } = await import('@connorhoehn/realtime-modules/notification');
+    const zsets = new Map<string, Map<string, number>>();
+    const redis = {
+      zAdd: async (key: string, e: { score: number; value: string }) => { (zsets.get(key) ?? zsets.set(key, new Map()).get(key)!).set(e.value, e.score); },
+      zRemRangeByRank: async () => 0, expire: async () => 1, hGetAll: async () => ({}), hSet: async () => 1,
+      zRange: async (key: string) => [...(zsets.get(key) ?? new Map<string, number>()).entries()].sort((a, b) => a[1] - b[1]).map(([v]) => v),
+    };
+    const store = new RedisNotificationStore({ redisClient: redis as never, logger: { error() {}, warn() {}, info() {}, debug() {} } as never });
+    let tick = Date.parse('2026-12-01T10:00:00.000Z');
+    setNotificationSink({ notifyUser: async (userId, input) => { await store.append(userId, { ...input, type: 'system', timestamp: new Date(tick++).toISOString() } as never); return {}; } });
+    try {
+      const deps = { now: () => NOW, load: async () => ({ openings: [], applications: [], interviews: [iv({ leadId: 'u-hugo', panelIds: [] })] }) as never, enabled: () => true };
+      await runSoonTick(deps, new Set<string>());   // the first run
+      await runSoonTick(deps, new Set<string>());   // the process restarted: nothing remembered
+      expect((await store.list('u-hugo')).filter((r) => /starts in/.test(r.title))).toHaveLength(1);
+    } finally { setNotificationSink(null); }
+  });
+});

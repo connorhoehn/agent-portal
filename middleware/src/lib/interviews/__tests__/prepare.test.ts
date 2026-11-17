@@ -57,3 +57,20 @@ describe('what', () => {
     }
   });
 });
+
+// Hardening (H1, O-036): the ceiling is a number of questions, so the limit itself is taken and one more is not.
+describe('the ceiling of questions in a plan', () => {
+  const big: OpeningKit = {
+    rounds: [], competencies: [],
+    questions: Array.from({ length: MAX_QUESTIONS + 1 }, (_, n) => ({ id: `qt${n}`, prompt: `q${n}`, followUps: [], competencyId: 'c', roundType: 'technical' as const })),
+  };
+  it('takes exactly the most it allows, in the order sent, and refuses one more with a sentence', () => {
+    const all = big.questions.map((q) => q.id);
+    const eight = checkQuestions({ questionIds: all.slice(0, MAX_QUESTIONS) }, iv(), big);
+    expect(MAX_QUESTIONS).toBe(8);
+    expect(eight).toEqual({ ok: true, value: { questionIds: all.slice(0, MAX_QUESTIONS) } });
+    const nine = checkQuestions({ questionIds: all }, iv(), big);
+    expect(nine.ok).toBe(false);
+    if (!nine.ok) expect(nine.problems[0]).toMatchObject({ path: 'questionIds', message: expect.stringMatching(/\.$/) });
+  });
+});

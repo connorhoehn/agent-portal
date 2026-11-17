@@ -45,6 +45,11 @@ import { MemoryResumeBytes, UnavailableResumeBytes } from '../../lib/interviews/
 import { RESUME_MAX_BYTES } from '../../lib/interviews/resume/rules.js';
 import { buildSimplePdf } from '../../mock/interviews-resumes.js';
 import { interviewCandidatesFixture } from '../../mock/interviews.js';
+import { browserOrigin } from '../../lib/browser-origin.js';
+import { readResume } from '../../lib/interviews/resume/service.js';
+import { sha256Hex } from '../../lib/interviews/resume/rules.js';
+import net from 'node:net';
+import type { AddressInfo } from 'node:net';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -275,5 +280,87 @@ describe('the flag', () => {
     expect((await GRETA.get(`${R('cand-mateo')}/file`)).status).toBe(404);
     expect((await GRETA.put(R('cand-mateo'), PDF)).status).toBe(404);
     expect((await GRETA.del(R('cand-mateo'))).status).toBe(404);
+  });
+});
+
+// Hardening (H1, O-030 and O-031): uploads at their edges, and the browser-origin check as index.ts orders it.
+describe('uploads at their edges', () => {
+  it('two uploads at once leave one record, and the stored bytes are the ones that record names (O-030)', async () => {
+    const a = buildSimplePdf(['First Person', 'Fictional headline', 'One line.']);
+    const b = buildSimplePdf(['Second Person', 'Fictional headline', 'Another line.']);
+    const both = await Promise.all([GRETA.put(R('cand-chloe'), a, 'application/pdf', 'a.pdf'), GRETA.put(R('cand-chloe'), b, 'application/pdf', 'b.pdf')]);
+    expect(both.map((r) => r.status)).toEqual([200, 200]);
+    const held = await readResume('cand-chloe');
+    expect(held).not.toBeNull();
+    expect(held!.resume.sha256).toBe(sha256Hex(held!.bytes));
+    expect([sha256Hex(a), sha256Hex(b)]).toContain(held!.resume.sha256);
+    expect(pointer('cand-chloe')).toBe(held!.resume.id);
+    expect((await GRETA.get(`${R('cand-chloe')}/file`)).status).toBe(200);
+  });
+
+  // A request written by hand, so the declared length and the bytes actually sent can disagree.
+  const raw = async (declared: number, sent: string): Promise<string> => {
+    const server = app.listen(0);
+    try {
+      const port = (server.address() as AddressInfo).port;
+      return await new Promise<string>((resolve) => {
+        const sock = net.connect(port, '127.0.0.1');
+        let got = '';
+        const finish = () => { sock.destroy(); resolve(got); };
+        sock.on('data', (d) => { got += d.toString(); if (/\r\n\r\n/.test(got)) setTimeout(finish, 50); });
+        sock.on('close', () => resolve(got));
+        sock.on('error', () => resolve(got));
+        sock.write(`PUT ${API}${R('cand-mateo')} HTTP/1.1\r\nHost: x\r\nx-user: u-greta\r\nx-tenant: interviews\r\nContent-Type: application/pdf\r\nContent-Length: ${declared}\r\n\r\n${sent}`);
+        setTimeout(() => sock.end(), 150);
+        setTimeout(finish, 2000);
+      });
+    } finally { server.close(); }
+  };
+
+  it('a Content-Length over the limit is refused before the body is read, whatever follows (O-030)', async () => {
+    const answer = await raw(RESUME_MAX_BYTES + 1, '%PDF-1.4 tiny');
+    expect(answer).toMatch(/^HTTP\/1\.1 413/);
+    expect(answer).toContain('That file is larger than 10 MB. Choose a smaller PDF.');
+    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+  });
+
+  it('a body cut short of its Content-Length never replaces the old résumé (O-030)', async () => {
+    const answer = await raw(5000, '%PDF-1.4 only a few bytes');
+    // The server either never answers a cut request or says the file could not be read; it does not store it.
+    if (answer) expect(answer).toMatch(/^HTTP\/1\.1 (400|413)/);
+    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+  });
+
+  it('a PDF by its first bytes that is corrupt inside is stored and read back as it came; the page says it cannot be shown (O-030)', async () => {
+    const corrupt = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from('this is not a pdf body, only a header that looks like one')]);
+    const put = await GRETA.put(R('cand-chloe'), corrupt, 'application/pdf', 'broken.pdf');
+    expect(put.status).toBe(200);
+    const file = await GRETA.get(`${R('cand-chloe')}/file`);
+    expect(file.status).toBe(200);
+    expect(Buffer.from(file.body as Buffer).equals(corrupt)).toBe(true);
+    expect(file.headers['content-security-policy']).toBe('sandbox');
+  });
+});
+
+describe('the browser-origin check, in the order index.ts mounts it (O-031)', () => {
+  const guarded = express();
+  guarded.use(browserOrigin);
+  guarded.use(app);
+  const put = (headers: Record<string, string>) => {
+    let r = request(guarded).put(`${API}${R('cand-chloe')}`).set('x-user', 'u-greta').set('x-tenant', 'interviews').set('Content-Type', 'application/pdf');
+    for (const [k, v] of Object.entries(headers)) r = r.set(k, v);
+    return r.send(PDF as never);
+  };
+
+  it('refuses a PUT from another origin before the route runs, and stores nothing', async () => {
+    const res = await put({ Origin: 'https://evil.example', Host: 'portal.test' });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Browser origin is not allowed' });
+    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
+  });
+
+  it('lets the API\'s own origin and a caller with no Origin through', async () => {
+    expect((await put({ Origin: 'http://portal.test', Host: 'portal.test' })).status).toBe(200);
+    expect((await put({})).status).toBe(200);
   });
 });

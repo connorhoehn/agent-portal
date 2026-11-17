@@ -59,6 +59,7 @@ const USERS: UserInfo[] = [
   u('u-amara', 'Amara Okafor', { interviews: ['hiring-manager'] }),
   u('u-priya', 'Priya Venkataraman', { access: ['access-admin'] }),
   u('u-operator', 'Platform Operator', { orgiq: ['admin'], interviews: ['admin'] }),
+  u('u-root', 'Root Admin', { orgiq: ['admin'] }),
 ];
 
 const app = express();
@@ -426,5 +427,28 @@ describe('the panel\'s notice asked again after it changes (row I6.4; F2)', () =
     // The `/interviews/:id` read would answer 404 "no interview here" for the id `panel-notice`.
     expect((await read(HUGO)).body.notice).toBeDefined();
     for (const as of [GRETA, AMARA]) expect((await read(as)).status).toBe(403);
+  });
+});
+
+// Hardening (H1, O-014 and O-019).
+describe('two writers and a caller with no interviews role', () => {
+  it('two recruiters assigning the same round at the same moment leave one round for it (O-014)', async () => {
+    const second = who('u-greta');
+    const both = await Promise.all([assign(), second.post('/interviews', LUCIA)]);
+    const statuses = both.map((r) => r.status).sort();
+    const lucia = (await GRETA.get('/interviews')).body.items.filter((i: { candidate: { id: string }; round: { id: string } }) => i.candidate.id === 'cand-lucia' && i.round.id === 'rd-coding');
+    // Whatever the two answers, the candidate must not end with the same round twice.
+    expect({ statuses, rounds: lucia.length }).toEqual({ statuses: [201, 400], rounds: 1 });
+  });
+
+  it('an admin whose grants hold nothing in this tenant may assign, break-glass, and is not told about their own write (O-019)', async () => {
+    const root = who('u-root', 'orgiq', 'admin');
+    const res = await root.post('/interviews', LUCIA);
+    expect(res.status).toBe(201);
+    await flush();
+    expect(sent.map((s) => s.userId).sort()).toEqual(['u-hugo', 'u-wen']);
+    // The same person with a role that holds no assign action is refused with the action named.
+    const manager = await who('u-root', 'orgiq', 'org-leader').post('/interviews', { ...LUCIA, roundId: 'rd-design' });
+    expect(manager.status).toBe(403);
   });
 });

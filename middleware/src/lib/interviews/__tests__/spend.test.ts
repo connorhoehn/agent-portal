@@ -246,3 +246,35 @@ describe('the opening\'s figures', () => {
     expect(await openingMoney(opening('op-em'))).toMatchObject({ interviewCapUsd: null, effectiveInterviewCapUsd: DEFAULT_INTERVIEW_CAP_USD, heldUsd: 0 });
   });
 });
+
+// Hardening (H1, O-006): a meeting-assistant id is tied to its interview through the live call's lobby and, separately,
+// through the lobby Milo's stored record kept. The two paths are told apart by what each one is given.
+describe('a call that is tied to its interview only through a lobby', () => {
+  const callChat = jest.requireActual<typeof import('../../call-chat.js')>('../../call-chat.js');
+  const storeSelect = jest.requireActual<typeof import('../../meeting-assistant/store-select.js')>('../../meeting-assistant/store-select.js');
+  afterEach(() => jest.restoreAllMocks());
+
+  it('through the live call: the runtime names the lobby and the stored record is never asked', async () => {
+    const lobbyOf = jest.fn(async (callId: string) => (callId === 'call-live' ? 'interviews:interview:iv-c3k8w2ma' : null));
+    jest.spyOn(callChat, 'callChatRuntime').mockReturnValue({ lobbyOf } as never);
+    const stored = jest.spyOn(storeSelect, 'assistantStore');
+    expect(await interviewOfSpend('ma:call-live:x1')).toEqual({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' });
+    expect(lobbyOf).toHaveBeenCalledWith('call-live');
+    expect(stored).not.toHaveBeenCalled();
+  });
+
+  it('through the stored record: the live call is gone (no runtime) and the record\'s lobby decides', async () => {
+    jest.spyOn(callChat, 'callChatRuntime').mockImplementation(() => { throw new Error('no runtime'); });
+    jest.spyOn(storeSelect, 'assistantStore').mockReturnValue({ get: async (id: string) => (id === 'call-ended' ? { lobby: 'interviews:interview:iv-c3k8w2ma' } : null) } as never);
+    expect(await interviewOfSpend('ma:call-ended:minutes')).toEqual({ openingId: 'op-ios', interviewId: 'iv-c3k8w2ma' });
+    expect(await interviewOfSpend('ma:call-unknown')).toBeNull();
+  });
+
+  it('a lobby that is not an interview\'s ties the call to nothing, by either path', async () => {
+    jest.spyOn(callChat, 'callChatRuntime').mockReturnValue({ lobbyOf: async () => 'work:huddle:abc' } as never);
+    expect(await interviewOfSpend('ma:call-work')).toBeNull();
+    jest.spyOn(callChat, 'callChatRuntime').mockImplementation(() => { throw new Error('no runtime'); });
+    jest.spyOn(storeSelect, 'assistantStore').mockReturnValue({ get: async () => ({ lobby: 'work:huddle:abc' }) } as never);
+    expect(await interviewOfSpend('ma:call-work')).toBeNull();
+  });
+});

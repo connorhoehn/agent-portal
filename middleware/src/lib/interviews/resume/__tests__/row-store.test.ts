@@ -139,3 +139,60 @@ describe('every statement matches schema/interviews_schema.sql', () => {
     expect(/CREATE TABLE IF NOT EXISTS interview_candidates \(([\s\S]*?)\n\);/.exec(ddl)![1]).toMatch(/resume_file_id\s+TEXT/);
   });
 });
+
+// Hardening (H1, O-029): a replace that fails midway, through the service that orders the put, the swap and the drop.
+describe('a replace that fails midway (the service\'s order: put the new bytes, swap the row, drop the old bytes)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { setResumeStores, storeResume, readResume } = require('../service.js') as typeof import('../service.js');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { MemoryResumeBytes } = require('../bytes-store.js') as typeof import('../bytes-store.js');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { buildSimplePdf } = require('../../../../mock/interviews-resumes.js') as typeof import('../../../../mock/interviews-resumes.js');
+  const NEWPDF = buildSimplePdf(['Replacement Person', 'Fictional headline', 'A line.']);
+  const upload = { candidateId: 'cand-mateo', bytes: NEWPDF, rawName: 'replacement.pdf', uploadedBy: 'u-greta' };
+  let bytes: InstanceType<typeof MemoryResumeBytes>;
+  let rows: ResumeRowStore;
+  beforeEach(() => {
+    fixtureRegistry.resetAll('default');
+    bytes = new MemoryResumeBytes();
+    rows = new MemoryResumeRows();
+    setResumeStores({ rows, bytes });
+  });
+  afterAll(() => setResumeStores({ rows: null, bytes: null }));
+  const seed = async () => { const old = (await rows.get('cand-mateo'))!; await bytes.put(old.storageKey, Buffer.from('%PDF-1.4 old')); return old; };
+
+  it('the new bytes cannot be put: nothing changes, the old row and bytes stand and the error reaches the caller', async () => {
+    const old = await seed();
+    jest.spyOn(bytes, 'put').mockRejectedValueOnce(new Error('bucket down'));
+    await expect(storeResume(upload)).rejects.toThrow('bucket down');
+    expect(await rows.get('cand-mateo')).toEqual(old);
+    expect((await readResume('cand-mateo'))?.bytes.toString()).toBe('%PDF-1.4 old');
+  });
+
+  it('the row cannot be swapped: the new bytes are taken back out, the old row and bytes stand', async () => {
+    const old = await seed();
+    jest.spyOn(rows, 'replace').mockRejectedValueOnce(new Error('database down'));
+    const removed: string[] = [];
+    const realRemove = bytes.remove.bind(bytes);
+    jest.spyOn(bytes, 'remove').mockImplementation(async (k: string) => { removed.push(k); return realRemove(k); });
+    await expect(storeResume(upload)).rejects.toThrow('database down');
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).not.toBe(old.storageKey);
+    expect(await bytes.get(removed[0]!)).toBeNull();
+    expect(await rows.get('cand-mateo')).toEqual(old);
+    expect((await readResume('cand-mateo'))?.bytes.toString()).toBe('%PDF-1.4 old');
+  });
+
+  it('the old bytes cannot be dropped after the swap: the upload still succeeds, one orphan is left that no row points to, and nothing personal is logged', async () => {
+    const old = await seed();
+    jest.spyOn(bytes, 'remove').mockRejectedValueOnce(new Error('delete refused'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const out = await storeResume(upload);
+    expect(out.ok).toBe(true);
+    expect((await rows.get('cand-mateo'))?.fileName).toBe('replacement.pdf');
+    expect(await bytes.get(old.storageKey)).not.toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/mateo|replacement|delete refused|Person/i);
+    warn.mockRestore();
+  });
+});

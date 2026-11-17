@@ -72,3 +72,19 @@ describe('the S3 bytes store', () => {
     expect(calls[0]).toMatchObject({ name: 'DeleteObjectCommand', input: { Bucket: 'the-bucket', Key: 'k' } });
   });
 });
+
+// Hardening (H1, O-028): a round trip against a real bucket. Written, gated, skipped by default: it needs a real S3 bucket
+// the caller owns (REAL_RESUME_S3=1 and INTERVIEWS_RESUME_BUCKET set, with AWS credentials in the environment). It writes one
+// small object under a throwaway key and removes it.
+const realS3 = process.env['REAL_RESUME_S3'] === '1' && !!process.env['INTERVIEWS_RESUME_BUCKET'];
+(realS3 ? describe : describe.skip)('the S3 bytes store against a real bucket (REAL_RESUME_S3=1)', () => {
+  it('puts, gets the same bytes, and removes: a second get finds nothing', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const store = new S3ResumeBytes(String(process.env['INTERVIEWS_RESUME_BUCKET']), async () => new S3Client({ region: process.env['AWS_REGION'] ?? 'us-east-1' }) as never);
+    const key = `interviews/resumes/h1-roundtrip/${Date.now()}.pdf`;
+    await store.put(key, PDF);
+    expect((await store.get(key))?.equals(PDF)).toBe(true);
+    await store.remove(key);
+    expect(await store.get(key)).toBeNull();
+  });
+});
