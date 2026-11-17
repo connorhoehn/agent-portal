@@ -22,6 +22,7 @@
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
 import type { Application, Candidate, Interview, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard } from './types.js';
+import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
 export type WriteResult<T> = { ok: true; row: T } | { ok: false; reason: 'not-found' } | { ok: false; reason: 'stale'; row: T };
@@ -39,7 +40,21 @@ export interface OpeningWrites {
   replaceOpeningKit(id: string, kit: OpeningKit, revision: number): Promise<WriteResult<Opening>>;
 }
 
-export interface InterviewsStore extends OpeningWrites {
+/**
+ * The writes on an interview (row I1.4): create a round, answer a seat, reassign it. Who may write and what
+ * the write becomes are decided first (the route, then assign.ts); these only write, compare-and-set on the
+ * interview's revision. Row I1.5 adds the time here; later rows add theirs the same way.
+ */
+export interface InterviewWrites {
+  /** Insert as given (assign.ts newInterview, revision 1). Ids are chosen by the route and never reused; a taken id is `null`. */
+  createInterview(input: Interview): Promise<Interview | null>;
+  /** A seat's answer: the state, the panel, the acceptances and the declines, against `revision`. */
+  answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>>;
+  /** New seats: the lead, the panel, the state and the acceptances that still hold, against `revision`. */
+  reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>>;
+}
+
+export interface InterviewsStore extends OpeningWrites, InterviewWrites {
   listOpenings(): Promise<Opening[]>;
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
@@ -83,6 +98,32 @@ export class MemoryInterviewsStore implements InterviewsStore {
   async replaceOpeningKit(id: string, kit: OpeningKit, revision: number): Promise<WriteResult<Opening>> {
     return casOpening(id, revision, (o) => { o.kit = structuredClone(kit); });
   }
+
+  async createInterview(input: Interview): Promise<Interview | null> {
+    const rows = interviewsFixture.rows();
+    if (rows.some((i) => i.id === input.id)) return null;
+    const row: Interview = { ...structuredClone(input), revision: 1 };
+    rows.push(row);
+    return structuredClone(row);
+  }
+
+  async answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => Object.assign(i, structuredClone(change)));
+  }
+
+  async reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => Object.assign(i, structuredClone(change)));
+  }
+}
+
+/** casOpening's twin for interviews. */
+function casInterview(id: string, revision: number, change: (i: Interview) => void): WriteResult<Interview> {
+  const row = interviewsFixture.rows().find((i) => i.id === id);
+  if (!row) return { ok: false, reason: 'not-found' };
+  if (row.revision !== revision) return { ok: false, reason: 'stale', row: structuredClone(row) };
+  change(row);
+  row.revision += 1;
+  return { ok: true, row: structuredClone(row) };
 }
 
 /** The SQL statements' `WHERE id = :id AND revision = :revision`, in one tick. */

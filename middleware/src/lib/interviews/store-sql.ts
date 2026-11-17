@@ -11,9 +11,10 @@
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
-  OpeningDetails, Recommendation, RoundType, Scorecard, StageChange,
+  OpeningDetails, Recommendation, RoundType, Scorecard, SeatAcceptance, SeatDecline, StageChange,
 } from './types.js';
 import type { InterviewsStore, NewOpening, WriteResult } from './store.js';
+import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -25,8 +26,9 @@ export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, 
   FROM interview_candidates ORDER BY name, id`;
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
-export const LIST_INTERVIEWS_SQL = `SELECT id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
-  assigned_by, assigned_at, invite_token_hash, call_id, ended_at
+const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
+  assigned_by, assigned_at, invite_token_hash, call_id, ended_at, acceptances, declines, revision`;
+export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
 export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap
   FROM interview_scorecards ORDER BY submitted_at, id`;
@@ -53,6 +55,30 @@ export const REPLACE_OPENING_KIT_SQL = `UPDATE interview_openings
   RETURNING ${OPENING_COLUMNS}`;
 
 export const OPENING_WRITE_STATEMENTS = [GET_OPENING_SQL, INSERT_OPENING_SQL, UPDATE_OPENING_DETAILS_SQL, REPLACE_OPENING_KIT_SQL] as const;
+
+// ── the interview writes (row I1.4) ─────────────────────────────────────────
+export const GET_INTERVIEW_SQL = `SELECT ${INTERVIEW_COLUMNS}
+  FROM interviews WHERE id = :id`;
+/** A taken id inserts nothing and returns no row. TEXT[] travels as JSON text and is turned into an array in the statement. */
+export const INSERT_INTERVIEW_SQL = `INSERT INTO interviews (${INTERVIEW_COLUMNS})
+  VALUES (:id, :application_id, :round_id, :type, :lead_id, ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))),
+    CAST(:scheduled_at AS TIMESTAMPTZ), :minutes, :state, ARRAY(SELECT jsonb_array_elements_text(CAST(:question_ids AS JSONB))),
+    :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :invite_token_hash, :call_id, CAST(:ended_at AS TIMESTAMPTZ),
+    CAST(:acceptances AS JSONB), CAST(:declines AS JSONB), 1)
+  ON CONFLICT (id) DO NOTHING
+  RETURNING ${INTERVIEW_COLUMNS}`;
+export const ANSWER_SEAT_SQL = `UPDATE interviews
+  SET state = :state, panel_ids = ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))),
+    acceptances = CAST(:acceptances AS JSONB), declines = CAST(:declines AS JSONB), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+export const REASSIGN_SQL = `UPDATE interviews
+  SET lead_id = :lead_id, panel_ids = ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))), state = :state,
+    acceptances = CAST(:acceptances AS JSONB), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+
+export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, ANSWER_SEAT_SQL, REASSIGN_SQL] as const;
 
 const textParam = (name: string, value: string | null): SqlParameter =>
   (value === null ? { name, value: { isNull: true } } : { name, value: { stringValue: value } });
@@ -130,7 +156,8 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
     leadId: str(r['lead_id']), panelIds: textArray(r['panel_ids']), scheduledAt: isoOrNull(r['scheduled_at']), minutes: num(r['minutes']),
     state: str(r['state']) as InterviewState, questionIds: textArray(r['question_ids']), assignedBy: str(r['assigned_by']),
     assignedAt: isoOf(r['assigned_at']), inviteTokenHash: strOrNull(r['invite_token_hash']), callId: strOrNull(r['call_id']),
-    endedAt: isoOrNull(r['ended_at']),
+    endedAt: isoOrNull(r['ended_at']), acceptances: json<SeatAcceptance[]>(r['acceptances'], []), declines: json<SeatDecline[]>(r['declines'], []),
+    revision: num(r['revision']),
   };
 }
 
@@ -171,5 +198,38 @@ export class SqlInterviewsStore implements InterviewsStore {
     if (written[0]) return { ok: true, row: openingFromRow(written[0]) };
     const now = (await this.exec(GET_OPENING_SQL, [textParam('id', id)]))[0];
     return now ? { ok: false, reason: 'stale', row: openingFromRow(now) } : { ok: false, reason: 'not-found' };
+  }
+
+  async createInterview(input: Interview): Promise<Interview | null> {
+    const rows = await this.exec(INSERT_INTERVIEW_SQL, [
+      textParam('id', input.id), textParam('application_id', input.applicationId), textParam('round_id', input.roundId), textParam('type', input.type),
+      textParam('lead_id', input.leadId), textParam('panel_ids', JSON.stringify(input.panelIds)), textParam('scheduled_at', input.scheduledAt),
+      intParam('minutes', input.minutes), textParam('state', input.state), textParam('question_ids', JSON.stringify(input.questionIds)),
+      textParam('assigned_by', input.assignedBy), textParam('assigned_at', input.assignedAt), textParam('invite_token_hash', input.inviteTokenHash),
+      textParam('call_id', input.callId), textParam('ended_at', input.endedAt),
+      textParam('acceptances', JSON.stringify(input.acceptances)), textParam('declines', JSON.stringify(input.declines)),
+    ]);
+    return rows[0] ? interviewFromRow(rows[0]) : null;
+  }
+
+  async answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(ANSWER_SEAT_SQL, [
+      textParam('id', id), intParam('revision', revision), textParam('state', change.state), textParam('panel_ids', JSON.stringify(change.panelIds)),
+      textParam('acceptances', JSON.stringify(change.acceptances)), textParam('declines', JSON.stringify(change.declines)),
+    ]));
+  }
+
+  async reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(REASSIGN_SQL, [
+      textParam('id', id), intParam('revision', revision), textParam('lead_id', change.leadId), textParam('panel_ids', JSON.stringify(change.panelIds)),
+      textParam('state', change.state), textParam('acceptances', JSON.stringify(change.acceptances)),
+    ]));
+  }
+
+  /** cas() for an interview. */
+  private async casInterview(id: string, written: Record<string, unknown>[]): Promise<WriteResult<Interview>> {
+    if (written[0]) return { ok: true, row: interviewFromRow(written[0]) };
+    const now = (await this.exec(GET_INTERVIEW_SQL, [textParam('id', id)]))[0];
+    return now ? { ok: false, reason: 'stale', row: interviewFromRow(now) } : { ok: false, reason: 'not-found' };
   }
 }

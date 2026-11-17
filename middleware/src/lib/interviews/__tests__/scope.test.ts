@@ -92,7 +92,7 @@ describe('the wire shapes', () => {
     expect(hugo.find((r) => r.candidate.name === 'Ingrid Solberg')!.lastResult).toMatchObject({ roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
   });
 
-  it('an interviewer\'s desk: to accept, upcoming, scorecards due, done', () => {
+  it('an interviewer\'s desk: to accept, to prepare, upcoming, scorecards due, done', () => {
     const desk = (id: string) => {
       const out: Record<string, string[]> = {};
       for (const r of index(id, 'interviewer').interviewRows()) (out[r.bucket] ??= []).push(r.candidate.name);
@@ -100,13 +100,15 @@ describe('the wire shapes', () => {
     };
     expect(desk('u-hugo')).toEqual({
       'done': ['Ingrid Solberg', 'Mateo Álvarez'],
-      'upcoming': ['Mateo Álvarez', 'Nadia Petrova', 'Nadia Petrova'],
+      'upcoming': ['Mateo Álvarez', 'Nadia Petrova'],
+      'to-prepare': ['Nadia Petrova'],
       'to-accept': ['Kwame Asante'],
     });
     expect(desk('u-wen')).toEqual({
       'done': ['Ingrid Solberg', 'Ravi Menon'],
       'scorecard-due': ['Jonah Whitaker'],
-      'upcoming': ['Aiko Tanaka', 'Nadia Petrova'],
+      'upcoming': ['Aiko Tanaka'],
+      'to-prepare': ['Nadia Petrova'],
       'to-accept': ['Ravi Menon'],
     });
   });

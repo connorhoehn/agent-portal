@@ -114,7 +114,13 @@ CREATE TABLE IF NOT EXISTS interviews (
   -- The invite link's token hash (row I2.1) and the call (row I2.2).
   invite_token_hash  TEXT,
   call_id            TEXT,
-  ended_at           TIMESTAMPTZ
+  ended_at           TIMESTAMPTZ,
+  -- Row I1.4: each seat's answer. [{ userId, seat, at }] for the seats held now that accepted;
+  -- [{ userId, seat, reason, at }] for every decline, kept across reassignments.
+  acceptances        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  declines           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- Bumped by every write; a write names the revision it was made against (compare-and-set).
+  revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);

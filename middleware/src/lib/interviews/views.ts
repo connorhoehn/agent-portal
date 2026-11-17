@@ -6,13 +6,15 @@ import type {
   ApplicationStage, Candidate, InterviewState, InterviewsWorld, Interview, KitCompetency, KitQuestion, KitRound, Opening,
   OpeningState, Recommendation, RoundType, Scorecard, StageChange, CompetencyRating,
 } from './types.js';
-import type { Viewer } from './scope.js';
+import { reachOf, type Viewer } from './scope.js';
+import { hasAccepted, isAnswerable, seatOf } from './assign.js';
+import type { Seat } from './types.js';
 
 export interface PersonRef { id: string; name: string }
 export type People = (id: string) => PersonRef;
 
 /** Where an interview sits on the viewer's desk. */
-export type Bucket = 'to-accept' | 'upcoming' | 'scorecard-due' | 'done' | 'closed';
+export type Bucket = 'to-accept' | 'to-prepare' | 'upcoming' | 'scorecard-due' | 'done' | 'closed';
 
 export interface InterviewBrief { id: string; roundName: string; type: RoundType; scheduledAt: string | null; state: InterviewState; lead: PersonRef }
 export interface ResultBrief { recommendation: Recommendation; roundName: string; interviewer: PersonRef; submittedAt: string }
@@ -88,6 +90,14 @@ export interface InterviewRow {
   questions: number;
   myScorecard: { recommendation: Recommendation; submittedAt: string } | null;
   scorecardsIn: number;
+  /** Each seat held now, the lead first, and whether its holder has accepted (row I1.4). */
+  seats: Array<{ person: PersonRef; seat: Seat; accepted: boolean }>;
+  /** The viewer's own seat: still to answer, or accepted; null without a seat. */
+  myAnswer: 'to-answer' | 'accepted' | null;
+  /** Who declined and why, oldest first. The recruiter and the hiring manager read them; an interviewer gets none. */
+  declines: Array<{ person: PersonRef; seat: Seat; reason: string; at: string }>;
+  /** The revision a write must name (row I1.4: compare-and-set). */
+  revision: number;
 }
 
 export interface ScorecardView {
@@ -135,7 +145,12 @@ function roundOf(opening: Opening | undefined, roundId: string): KitRound | unde
 
 export function bucketFor(interview: Interview, viewer: Viewer, scorecards: readonly Scorecard[]): Bucket {
   if (interview.state === 'declined' || interview.state === 'cancelled') return 'closed';
-  if (interview.state === 'assigned') return 'to-accept';
+  const seat = seatOf(interview, viewer.id);
+  // A seat still to answer needs the viewer, whatever the others have done (row I1.4).
+  if (seat && isAnswerable(interview.state) && !hasAccepted(interview, viewer.id, seat)) return 'to-accept';
+  if (interview.state === 'assigned') return seat ? 'upcoming' : 'to-accept';
+  // The lead has accepted and the round is not ready yet: a time and questions to come (rows I1.5, I1.7).
+  if (interview.state === 'accepted' && seat === 'lead') return 'to-prepare';
   if (OPEN_STATES.has(interview.state)) return 'upcoming';
   if (interview.state === 'ended') return 'scorecard-due';
   const seated = interview.leadId === viewer.id || interview.panelIds.includes(viewer.id);
@@ -270,6 +285,14 @@ export class WorldIndex {
       questions: i.questionIds.length,
       myScorecard: mine ? { recommendation: mine.recommendation, submittedAt: mine.submittedAt } : null,
       scorecardsIn: cards.length,
+      seats: [
+        { person: this.people(i.leadId), seat: 'lead' as const, accepted: hasAccepted(i, i.leadId, 'lead') },
+        ...i.panelIds.map((p) => ({ person: this.people(p), seat: 'panel' as const, accepted: hasAccepted(i, p, 'panel') })),
+      ],
+      myAnswer: (() => { const s = seatOf(i, this.viewer.id); return s ? (hasAccepted(i, this.viewer.id, s) ? 'accepted' : 'to-answer') : null; })(),
+      declines: reachOf(this.viewer.role) === 'assigned' ? []
+        : i.declines.map((d) => ({ person: this.people(d.userId), seat: d.seat, reason: d.reason, at: d.at })),
+      revision: i.revision,
     };
   }
 

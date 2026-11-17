@@ -132,6 +132,27 @@ export interface Application {
   history: StageChange[];
 }
 
+/** A seat on an interview (decision 20): the one lead, or one of up to two panel members. */
+export type Seat = 'lead' | 'panel';
+
+/** The person in a seat accepted it (row I1.4). Only the seats held now carry one: a reassignment drops the rest. */
+export interface SeatAcceptance {
+  userId: string;
+  seat: Seat;
+  at: string;
+}
+
+/**
+ * The person in a seat declined it, with their reason (row I1.4). Kept across reassignments so the
+ * recruiter and the hiring manager can read who declined and why; another interviewer never does.
+ */
+export interface SeatDecline {
+  userId: string;
+  seat: Seat;
+  reason: string;
+  at: string;
+}
+
 export interface Interview {
   id: string;
   applicationId: string;
@@ -154,6 +175,12 @@ export interface Interview {
   callId: string | null;
   /** When the call ended; null before. */
   endedAt: string | null;
+  /** Who accepted the seat they hold now (row I1.4). The lead's acceptance is also the move to `accepted`. */
+  acceptances: SeatAcceptance[];
+  /** Every decline, oldest first, kept across reassignments (row I1.4). */
+  declines: SeatDecline[];
+  /** Bumped by every write; a write names the revision it was made against (store.ts "Writes"). */
+  revision: number;
 }
 
 export interface CompetencyRating {

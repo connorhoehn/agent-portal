@@ -236,6 +236,12 @@ const interview = (s: InterviewSeed): Interview => ({
   id: s.id, applicationId: s.app, roundId: s.round, type: s.type, leadId: s.lead, panelIds: s.panel ?? [],
   scheduledAt: s.start, minutes: s.minutes, state: s.state, questionIds: s.questions ?? [],
   assignedBy: GRETA, assignedAt: clock.daysAgo(s.assignedDaysAgo), inviteTokenHash: null, callId: null, endedAt: s.ended ?? null,
+  // Row I1.4: past `assigned`, every seat has accepted (a day after the assignment); still `assigned`, nobody has yet.
+  acceptances: s.state === 'assigned' || s.state === 'declined' || s.state === 'cancelled' ? []
+    : [{ userId: s.lead, seat: 'lead' as const, at: clock.daysAgo(Math.max(s.assignedDaysAgo - 1, 0)) },
+      ...(s.panel ?? []).map((userId) => ({ userId, seat: 'panel' as const, at: clock.daysAgo(Math.max(s.assignedDaysAgo - 1, 0)) }))],
+  declines: [],
+  revision: 1,
 });
 
 export const interviewsFixture = defineFixture<Interview>({
