@@ -1,5 +1,11 @@
 // Milo's notes on fixed inputs (lib/interviews/milo-notes/notes.ts; row I3.6, the part with no model).
+jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
+import { MemoryAssistantStore } from '../../../meeting-assistant/store.js';
+import { setAssistantStore } from '../../../meeting-assistant/store-select.js';
+import { newAssistantSession, type AssistantRecord } from '../../../meeting-assistant/types.js';
 import { competencyNotes, notesStartMs, timeCheck, type NotesInput } from '../notes.js';
+import { notesFor, setMiloDeps, type MiloRef } from '../service.js';
+import { assistantLiveTranscript } from '../transcript.js';
 
 const INPUT: NotesInput = {
   competencies: [{ id: 'communication', name: 'Communication' }, { id: 'collaboration', name: 'Collaboration' }, { id: 'delivery', name: 'Delivery' }],
@@ -57,5 +63,64 @@ describe('timeCheck', () => {
     expect(notesStartMs('2026-11-17T10:00:00.000Z', 5)).toBe(start);
     expect(notesStartMs(null, 5)).toBe(5);
     expect(notesStartMs(null, null)).toBeNull();
+  });
+});
+
+describe('the edges (hardening H3, O-120): the notes over the meeting assistant\'s real transcript store', () => {
+  const IV = 'iv-long';
+  const CALL = 'call-long';
+  const T0 = Date.UTC(2026, 10, 17, 10, 0);
+  const SHIP = 'Walk me through the last thing you shipped.';
+  const INCIDENT = 'Tell me about an incident you led. What happened first?';
+  let store: MemoryAssistantStore;
+  let now: number;
+  const ref = (scheduledAt: string | null = null): MiloRef => ({
+    interview: { id: IV, callId: CALL, questionIds: ['q-incident', 'q-ship'], scheduledAt, minutes: 60, type: 'behavioural', leadId: 'u-wen' } as never,
+    opening: { kit: {
+      competencies: [{ id: 'communication', name: 'Communication' }, { id: 'delivery', name: 'Delivery' }],
+      questions: [{ id: 'q-incident', prompt: INCIDENT, competencyId: 'communication' }, { id: 'q-ship', prompt: SHIP, competencyId: 'delivery' }],
+    } } as never,
+    candidateName: 'Nadia Petrova', nameOf: (id) => id,
+  });
+  const say = async (userId: string, text: string, n: number) => {
+    await store.appendLine({ callId: CALL, userId, participantId: `${userId}-p`, speakerName: userId, text, at: T0 + n * 100, captionId: `c-${n}` });
+  };
+
+  beforeEach(async () => {
+    now = T0 + 20 * 60_000;
+    store = new MemoryAssistantStore(); setAssistantStore(store);
+    await store.create({
+      callId: CALL, tenant: 'interviews', lobby: `interviews:interview:${IV}`, initiativeId: null, state: 'listening', invitedBy: 'u-wen', invitedAt: T0, pausedBy: null, leftAt: null, leftBy: null,
+      acked: ['u-wen'], attendees: ['u-wen'], presentAtInvite: ['u-wen'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [], session: newAssistantSession(4500),
+    } as AssistantRecord);
+    setMiloDeps({ transcript: assistantLiveTranscript, consents: async () => ({ transcription: true, milo: true }), suggestions: async () => [], now: () => now });
+  });
+  afterEach(() => { setMiloDeps(null); setAssistantStore(null); });
+
+  it('more than 5000 lines: the notes read the first 5000 only, so a chosen question asked after line 5000 is still listed to ask', async () => {
+    for (let n = 1; n <= 5100; n += 1) {
+      const text = n === 4991 ? INCIDENT : n === 5051 ? SHIP : `Line ${n} of a very long call.`;
+      await say(n % 2 ? 'u-wen' : 'guest:inv-1', text, n);
+    }
+    const { notes } = await notesFor(ref());
+    const byId = Object.fromEntries(notes.competencies.map((c) => [c.id, c]));
+    expect(byId['communication']!.asked).toEqual([{ text: INCIDENT, questionId: 'q-incident', by: 'panel' }]);   // line 4991: read
+    expect(byId['delivery']!.asked).toEqual([]);                                                                      // line 5051: past the read
+    expect(byId['delivery']!.toAsk).toEqual([{ questionId: 'q-ship', text: SHIP }]);
+  });
+
+  it('Milo rejoined: its notes still count from when it first joined the call, unless the round has a set time', async () => {
+    await say('u-wen', INCIDENT, 1);
+    await store.transition(CALL, { from: ['listening'], to: 'left', by: 'u-wen', at: T0 + 10 * 60_000 });
+    const left = (await store.get(CALL))!;
+    expect(await store.rejoin(CALL, { leftAt: left.leftAt!, by: 'u-wen', at: T0 + 15 * 60_000, present: ['u-wen'], session: {} })).not.toBeNull();
+    await say('u-wen', SHIP, 2);
+    expect((await assistantLiveTranscript({ id: IV, callId: CALL }, 0))!.startedAtMs).toBe(T0);
+    const { notes } = await notesFor(ref());
+    expect(notes.time).toEqual({ startedAt: new Date(T0).toISOString(), minutesIn: 20, minutes: 60, minutesLeft: 40, line: '20 of 60 min, 40 min left.' });
+    // Both periods' lines are read: what was asked before the rejoin still counts.
+    expect(notes.competencies.flatMap((c) => c.asked.map((a) => a.questionId))).toEqual(['q-incident', 'q-ship']);
+    const set = await notesFor(ref(new Date(T0 + 5 * 60_000).toISOString()));
+    expect(set.notes.time.minutesIn).toBe(15);
   });
 });
