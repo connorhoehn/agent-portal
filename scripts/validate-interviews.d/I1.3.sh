@@ -25,7 +25,7 @@ row_I1.3() {
       src/lib/interviews/__tests__/kit.test.ts src/lib/interviews/__tests__/store.test.ts src/routes/__tests__/interviews-openings.test.ts src/lib/__tests__/authz-matrix.test.ts
     if ( cd portal && node --test src/lib/__tests__/interviewsKit.test.ts ) >"$LOGS/portal-interviews-kit.log" 2>&1; then ok "portal kit helpers: $(grep -E '^ℹ pass' "$LOGS/portal-interviews-kit.log")"; else fail "portal kit helpers (see $LOGS/portal-interviews-kit.log)"; fi
     run_journey
-    for s in I1.3a I1.3b I1.3c I1.3d; do journey_step "$s"; done
+    for s in I1.3a I1.3b I1.3c I1.3d I1.3e I1.3f I1.3g I1.3h; do journey_step "$s"; done
   fi
 }
 
