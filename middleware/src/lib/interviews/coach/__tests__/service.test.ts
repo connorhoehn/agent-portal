@@ -222,3 +222,27 @@ describe('the consent read (D4)', () => {
     expect(await consentsFor('iv-nobody')).toBeNull();
   });
 });
+
+// Lane SPEAK (row I3.5): after the log row and the chat post, the words are said aloud; `spoken` only when relayed.
+describe('Have Milo ask, said aloud (I3.5)', () => {
+  it('logs, posts, then says; spoken and `said: spoken` only when relayed; chat only otherwise', async () => {
+    const steps: string[] = [];
+    let out: 'spoken' | 'chat' | 'no-call' = 'spoken';
+    const speak = {
+      log: jest.fn(async (_i: unknown, input: { text: string }) => { steps.push('log'); return { id: 'said-1', text: input.text, askedBy: 'u-wen' } as never; }),
+      say: jest.fn(async () => { steps.push('say'); return out; }),
+    };
+    (deps.postApproved as jest.Mock).mockImplementation(async () => { steps.push('post'); return true; });
+    setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
+    let { suggestion } = await read();
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'spoken' });
+    expect(steps).toEqual(['log', 'post', 'say']);
+    expect((await store.listSuggestions(IV)).find((r) => r.id === suggestion!.id)).toMatchObject({ answer: 'milo-ask', spoken: true });
+    out = 'chat'; now += 10 * 60_000;
+    ({ suggestion } = await read());
+    if (suggestion) {
+      expect(await answerSuggestion(refOf(), WEN, suggestion.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat' });
+      expect((await store.listSuggestions(IV)).find((r) => r.id === suggestion!.id)).toMatchObject({ spoken: false });
+    }
+  });
+});
