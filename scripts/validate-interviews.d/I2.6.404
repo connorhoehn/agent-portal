@@ -1,0 +1,5 @@
+# Row I2.6 (this repository's half): D2 and D3 are asked with the caller's own realtime token as a bearer, never on a
+# cookie. A table's principals carry cookies only, so every one of them is refused before the rule (401); the rule per
+# role, with each person's own token, is walk step I2.6a.
+POST /api/realtime/recording-access | anon=401 guest=401 recruiter=401 interviewer=401 hiringManager=401 | | {}
+POST /api/realtime/recording-decision | anon=401 guest=401 recruiter=401 interviewer=401 | | {}

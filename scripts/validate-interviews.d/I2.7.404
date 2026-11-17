@@ -1,0 +1,10 @@
+# Row I2.7: panel seats. Nadia's leadership round: Wen leads, Hugo on the panel. Both read the room; only the lead
+# answers the knock and ends the call. The end carries a revision that is never the round's, so the lead's answer is a
+# 409 (not a refusal) and a panel member's is the route's own 403 ("only the lead"); the recruiter and the hiring
+# manager get the role gate's 403 at the writes (reported against the standing 404 rule).
+GET /api/interviews/interviews/{interviews.nadiaLeadership}/room | recruiter hiringManager guest=403 guest:nadiaLeadership=403 anon=403 workOnly=403 | interviewer interviewer2
+POST /api/interviews/interviews/{interviews.nadiaLeadership}/admit | interviewer recruiter=403 hiringManager=403 guest:nadiaLeadership=403 anon=403 | interviewer2 | {"admit":false}
+POST /api/interviews/interviews/{interviews.nadiaLeadership}/end | interviewer=403 recruiter=403 hiringManager=403 anon=403 | interviewer2 | {"revision":999999}
+# The live technical round (Hugo leads, Wen on the panel): both read the room; the panel member cannot end it.
+GET /api/interviews/interviews/{interviews.kwameLive}/room | recruiter hiringManager guest=403 anon=403 workOnly=403 | interviewer interviewer2
+POST /api/interviews/interviews/{interviews.kwameLive}/end | interviewer2=403 recruiter=403 hiringManager=403 anon=403 | interviewer | {"revision":999999}

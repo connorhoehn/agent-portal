@@ -1,0 +1,6 @@
+# Row I2.3: the candidate's own routes before the call (C2, C4). Answered for the guest only; staff and a caller with
+# no session get the guest refusal (not-found). A PUT with a stale notice is a 409 for the guest: not a refusal.
+GET /api/interview-invite/consents | anon recruiter interviewer interviewer2 hiringManager workOnly | guest
+PUT /api/interview-invite/consents | anon recruiter interviewer hiringManager | guest | {"noticeVersion":"not-the-notice","recording":true,"transcription":true,"milo":true}
+POST /api/interview-invite/knock | anon recruiter interviewer hiringManager | guest
+GET /api/interview-invite/admission | anon recruiter interviewer hiringManager | guest
