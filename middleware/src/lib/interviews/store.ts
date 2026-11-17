@@ -25,6 +25,11 @@ import type { Application, Candidate, Interview, InterviewState, InterviewsWorld
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
+/** The opening already holds a candidate with this address (case aside): the route answers 409 with its duplicate line. */
+export class DuplicateCandidateError extends Error {
+  constructor() { super('This person is already a candidate for this opening.'); this.name = 'DuplicateCandidateError'; }
+}
+
 export type WriteResult<T> = { ok: true; row: T } | { ok: false; reason: 'not-found' } | { ok: false; reason: 'stale'; row: T };
 
 /** A new opening, checked (kit.ts) and given its id, recruiter and time by the route. */
@@ -96,7 +101,10 @@ export interface InterviewsStore extends OpeningWrites, InterviewWrites, Scoreca
   /** One interview by id, or null: the gateway's per-delivery seat checks (the pad, the lobby) read this, not the whole table. */
   getInterview(id: string): Promise<Interview | null>;
   listScorecards(): Promise<Scorecard[]>;
-  /** Add a candidate and their application to an opening together (UI round 2, DESK-B). Ids are chosen by the route and never reused; a taken id is `null`. */
+  /**
+   * Add a candidate and their application to an opening together (UI round 2, DESK-B). Ids are chosen by the route and never reused; a taken id is `null`.
+   * The SQL store throws DuplicateCandidateError when the opening already holds this address (case aside), which the schema's unique rule enforces.
+   */
   createCandidate(candidate: Candidate, application: Application): Promise<{ candidate: Candidate; application: Application } | null>;
 }
 

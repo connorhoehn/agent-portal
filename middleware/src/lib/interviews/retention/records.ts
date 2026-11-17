@@ -65,7 +65,10 @@ function idList(ids: readonly string[]): { sql: string; params: SqlParameter[] }
 
 export const eraseConsentsSql = (list: string): string => `DELETE FROM interview_consents WHERE interview_id IN (${list}) RETURNING interview_id`;
 export const eraseScorecardsSql = (list: string): string => `DELETE FROM interview_scorecards WHERE interview_id IN (${list}) RETURNING id`;
-export const REDACT_CANDIDATE_SQL = `UPDATE interview_candidates
+/** The candidate's own fields, and the lower-cased address their applications hold for the one-per-opening rule, so it goes with the address. */
+export const REDACT_CANDIDATE_SQL = `WITH keys AS (
+    UPDATE interview_applications SET email_key = NULL WHERE candidate_id = :id AND email_key IS NOT NULL RETURNING id)
+  UPDATE interview_candidates
   SET name = :name, email = :email, headline = :headline, location = :location, notes = :notes
   WHERE id = :id AND NOT (name = :name AND email = :email)
   RETURNING id`;

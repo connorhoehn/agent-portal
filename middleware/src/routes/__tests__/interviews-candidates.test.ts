@@ -35,6 +35,7 @@ import { requireTenant } from '../../lib/authz.js';
 import { listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
+import { DuplicateCandidateError, MemoryInterviewsStore } from '../../lib/interviews/store.js';
 import type { Session } from '../../lib/session.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -115,6 +116,15 @@ describe('add a candidate', () => {
     expect(again.status).toBe(409);
     expect(again.body.error).toBe('This person is already a candidate for this opening.');
     expect((await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' })).status).toBe(201);
+  });
+
+  it('answers the same 409 when the store\'s unique rule stops a second add that passed the check at the same moment (hardening H5)', async () => {
+    const spy = jest.spyOn(MemoryInterviewsStore.prototype, 'createCandidate').mockRejectedValueOnce(new DuplicateCandidateError());
+    try {
+      const raced = await GRETA.post('/candidates', BODY);
+      expect(raced.status).toBe(409);
+      expect(raced.body.error).toBe('This person is already a candidate for this opening.');
+    } finally { spy.mockRestore(); }
   });
 
   it('answers 404 for an opening that is not there', async () => {

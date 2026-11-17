@@ -13,7 +13,7 @@ import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
   OpeningDetails, Recommendation, RoundType, Scorecard, SeatAcceptance, SeatDecline, StageChange,
 } from './types.js';
-import type { InterviewsStore, NewOpening, WriteResult } from './store.js';
+import { DuplicateCandidateError, type InterviewsStore, type NewOpening, type WriteResult } from './store.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
@@ -332,14 +332,18 @@ export class SqlInterviewsStore implements InterviewsStore {
     return now ? { ok: false, reason: 'stale', row: applicationFromRow(now) } : { ok: false, reason: 'not-found' };
   }
 
-  /** The candidate and their application in one statement, so neither is written alone; a taken id inserts nothing and returns no row. */
+  /**
+   * The candidate and their application in one statement, so neither is written alone; a taken id inserts nothing and returns no row.
+   * The application carries the address lower-cased as `email_key`, and the schema holds one per opening: a second add of the
+   * same person to the same opening, even at the same moment, fails the whole statement and is thrown as DuplicateCandidateError.
+   */
   static readonly CREATE_CANDIDATE_SQL = `WITH c AS (
     INSERT INTO interview_candidates (id, name, email, headline, location, source, resume_file_id, notes, created_at)
     VALUES (:candidate_id, :name, :email, :headline, :location, :source, NULL, '', CAST(:created_at AS TIMESTAMPTZ))
     ON CONFLICT (id) DO NOTHING
     RETURNING id)
-  INSERT INTO interview_applications (id, candidate_id, opening_id, stage, applied_at, history)
-  SELECT :application_id, c.id, :opening_id, :stage, CAST(:applied_at AS TIMESTAMPTZ), CAST(:history AS JSONB) FROM c
+  INSERT INTO interview_applications (id, candidate_id, opening_id, stage, applied_at, history, email_key)
+  SELECT :application_id, c.id, :opening_id, :stage, CAST(:applied_at AS TIMESTAMPTZ), CAST(:history AS JSONB), lower(btrim(:email)) FROM c
   ON CONFLICT (id) DO NOTHING
   RETURNING ${SqlInterviewsStore.APPLICATION_COLUMNS}`;
 
@@ -349,7 +353,10 @@ export class SqlInterviewsStore implements InterviewsStore {
       textParam('location', candidate.location), textParam('source', candidate.source), textParam('created_at', candidate.createdAt),
       textParam('application_id', application.id), textParam('opening_id', application.openingId), textParam('stage', application.stage),
       textParam('applied_at', application.appliedAt), textParam('history', JSON.stringify(application.history)),
-    ]);
+    ]).catch((e: unknown) => {
+      if (/interview_applications_opening_email_key/.test(String((e as Error)?.message ?? e))) throw new DuplicateCandidateError();
+      throw e;
+    });
     return rows[0] ? { candidate: structuredClone(candidate), application: applicationFromRow(rows[0]) } : null;
   }
 

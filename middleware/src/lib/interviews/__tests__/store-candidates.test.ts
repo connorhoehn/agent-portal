@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { fixtureRegistry } from '../../../mock/core/index.js';
-import { MemoryInterviewsStore, type InterviewsStore } from '../store.js';
+import { DuplicateCandidateError, MemoryInterviewsStore, type InterviewsStore } from '../store.js';
 import { LIST_APPLICATIONS_SQL, LIST_CANDIDATES_SQL, SqlInterviewsStore, type SqlExec } from '../store-sql.js';
 import type { Application, Candidate } from '../types.js';
 
@@ -65,5 +65,24 @@ describe('the statement and the schema', () => {
     const cols = /INSERT INTO interview_candidates \(([^)]+)\)/.exec(SqlInterviewsStore.CREATE_CANDIDATE_SQL)![1]!.split(',').map((c) => c.trim());
     for (const col of cols) expect(schema).toMatch(new RegExp(`\\n  ${col}\\s`));
     expect(SqlInterviewsStore.CREATE_CANDIDATE_SQL).toContain('FROM c');
+  });
+});
+
+// Hardening H5, finding 6: two adds of one address to one opening at once both passed the route's check. The schema now holds
+// the rule (a unique index on the opening and the lower-cased address the application carries), and the SQL store turns
+// that index's violation into DuplicateCandidateError, which the route answers with its 409 line.
+describe('one person once per opening, held by the schema', () => {
+  const schema = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
+  it('the schema holds a unique index on the opening and the lower-cased address, and the add writes that address', () => {
+    expect(schema).toContain('ALTER TABLE interview_applications ADD COLUMN IF NOT EXISTS email_key TEXT;');
+    expect(schema).toMatch(/CREATE UNIQUE INDEX IF NOT EXISTS interview_applications_opening_email_key ON interview_applications \(opening_id, email_key\)\s+WHERE email_key IS NOT NULL;/);
+    expect(SqlInterviewsStore.CREATE_CANDIDATE_SQL).toMatch(/history, email_key\)/);
+    expect(SqlInterviewsStore.CREATE_CANDIDATE_SQL).toContain('lower(btrim(:email))');
+  });
+  it('the index\'s violation is thrown as DuplicateCandidateError; any other failure passes through unchanged', async () => {
+    const dup = new SqlInterviewsStore(async () => { throw new Error('duplicate key value violates unique constraint "interview_applications_opening_email_key"'); });
+    await expect(dup.createCandidate(candidate(), application())).rejects.toBeInstanceOf(DuplicateCandidateError);
+    const other = new SqlInterviewsStore(async () => { throw new Error('connection reset'); });
+    await expect(other.createCandidate(candidate(), application())).rejects.toThrow('connection reset');
   });
 });

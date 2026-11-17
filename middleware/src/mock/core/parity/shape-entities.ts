@@ -493,6 +493,9 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     describes: 'One candidate on one opening, its stage and the history of stage decisions.',
     sqlFile: 'interviews_schema.sql',
     table: 'interview_applications',
+    unmodelledColumns: {
+      email_key: 'the candidate\'s address lower-cased, written by the SQL add only so the schema can hold one person once per opening; the memory store checks the address itself',
+    },
     mockRows: async () => (await import('../../interviews.js')).interviewApplicationsFixture.rows('default'),
     mockId: (a: { id: string }) => a.id,
   },

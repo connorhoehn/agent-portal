@@ -11,6 +11,7 @@ import { interviewsNow } from '../../lib/interviews/clock.js';
 import type { FieldProblem } from '../../lib/interviews/kit.js';
 import { indexFor } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
+import { DuplicateCandidateError } from '../../lib/interviews/store.js';
 import type { Application, Candidate } from '../../lib/interviews/types.js';
 
 export const candidatesRouter = Router();
@@ -78,7 +79,14 @@ candidatesRouter.post('/candidates', manage, asyncHandler(async (req, res) => {
     id: newId('app'), candidateId: candidate.id, openingId: v.openingId, stage: 'applied', appliedAt: at,
     history: [{ stage: 'applied', at, by: session.sub, reason: null }],
   };
-  const written = await store.createCandidate(candidate, application);
+  // The check above answers the usual case; two adds at once both pass it, and the schema's unique rule stops the second.
+  let written: Awaited<ReturnType<typeof store.createCandidate>>;
+  try {
+    written = await store.createCandidate(candidate, application);
+  } catch (e) {
+    if (e instanceof DuplicateCandidateError) { res.status(409).json({ error: DUPLICATE }); return; }
+    throw e;
+  }
   if (!written) { res.status(409).json({ error: 'The candidate was being added at the same moment. Try again.' }); return; }
   res.setHeader('Cache-Control', 'no-store');
   res.status(201).json(written);

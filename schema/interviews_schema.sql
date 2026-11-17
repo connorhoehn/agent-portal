@@ -94,6 +94,13 @@ CREATE TABLE IF NOT EXISTS interview_applications (
   UNIQUE (candidate_id, opening_id)
 );
 CREATE INDEX IF NOT EXISTS interview_applications_opening_idx ON interview_applications (opening_id);
+-- One person once per opening (hardening H5): the route checks the address before it adds, but two adds at once both
+-- passed that check. `email_key` is the candidate's address trimmed and lower-cased, written with the application by the
+-- add, so the rule holds across the two tables; a deletion request clears it with the address, so the person can apply
+-- again. Rows written before the column existed hold NULL and are not held to the rule.
+ALTER TABLE interview_applications ADD COLUMN IF NOT EXISTS email_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS interview_applications_opening_email_key ON interview_applications (opening_id, email_key)
+  WHERE email_key IS NOT NULL;
 
 -- ── interviews ──────────────────────────────────────────────────────────────
 -- One round of one application. `state` follows the plan's model:

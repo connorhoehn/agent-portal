@@ -52,6 +52,8 @@ describe('as SQL', () => {
     expect(seen[0]![0]).toBe('DELETE FROM interview_scorecards WHERE interview_id IN (:id0, :id1) RETURNING id');
     expect(seen[0]![1]).toEqual([{ name: 'id0', value: { stringValue: 'iv-1' } }, { name: 'id1', value: { stringValue: 'iv-2' } }]);
     expect(seen[1]![0]).toBe(REDACT_CANDIDATE_SQL);
+    // The lower-cased address the applications hold for the one-per-opening rule goes with the address (hardening H5, finding 6).
+    expect(REDACT_CANDIDATE_SQL).toMatch(/UPDATE interview_applications SET email_key = NULL WHERE candidate_id = :id/);
     expect(await r.redactStageReasons('cand-1')).toBe(2);
     expect(seen[2]![0]).toBe(REDACT_STAGE_REASONS_SQL);
     expect(seen[2]![1]).toEqual([{ name: 'id', value: { stringValue: 'cand-1' } }, { name: 'phrase', value: { stringValue: REDACTED_REASON } }]);
