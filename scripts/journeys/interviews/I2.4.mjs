@@ -6,8 +6,7 @@
 // the chat, Leave and rejoin, End through the deck, the chrome while live) is written below behind `callable` and
 // prints "NOT RUN <step>: …" when the call cannot start. Those steps run only on the social profile.
 //   I2.4a  the lead's room before the call: one title, then who, when, how long and the panel; the pane's tabs by round
-//          type (Pad, Questions, Milo, Chat; Plan, Milo, Chat), 560 to 760 px wide in a technical round, the questions in
-//          their tab; the trail is there before the call; one right pane and no shell chat pane; shots at both widths
+//          type (Pad, Questions, Milo, Chat; Plan, Milo, Chat), the questions in their tab; the trail is there before the call; one right pane and no shell chat pane; shots at both widths
 //   I2.4b  the knock in the lead's footer: "The candidate is waiting" with Admit and Not yet, the footer row one line at
 //          1280; Not yet from the deck → the candidate's turned-away line; knock again; Admit from the deck → the
 //          candidate's room
@@ -19,6 +18,7 @@
 //   I2.4f  turned away after being let in: the candidate's page moves to the ended page
 //   I2.4g  two tabs of one link in one window: the second opening is the window's session, and both tabs stay in
 //   I2.4h  guest realtime off (INTERVIEWS_GUEST_REALTIME=false in the environment): the room's cannot-open line
+//   I2.4o  the technical pane is 560 to 760 px wide at 1440 (FAILS today by one pixel: 559; a finding)
 //   I2.4i…  (a call only) both in the call, "2 joined" on both bars, tiles carry names, the chat both ways, Leave →
 //          "You left the call" → Join, the chrome folded while live and back after End, End through the deck with
 //          Keep going and Esc, Join while the gateway is still connecting
@@ -53,6 +53,7 @@ export default async function run(ctx) {
   const lead = await hugo.newPage();
   let callable = false;
   let guest = null;
+  let widthSeen = null;
 
   await step('I2.4a', async () => {
     await lead.goto(roomUrl(iv), { waitUntil: 'domcontentloaded' });
@@ -82,10 +83,15 @@ export default async function run(ctx) {
     await wp.close();
     const ok = title === 'The call has not started' && /Candidate\s*Mateo/.test(facts) && /Panel\s*Hugo Marchetti \(lead\)/.test(facts)
       && JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat"]' && JSON.stringify(bTabs) === '["Plan","Milo","Chat"]'
-      && width >= 560 && width <= 760 && hasQuestion && trail > 0 && panes === 1 && shellChat === 0 && shots.every((s) => s.ok)
+      && hasQuestion && trail > 0 && panes === 1 && shellChat === 0 && shots.every((s) => s.ok)
       && (callable || NO_PLATFORM.test(reason));
+    widthSeen = { width, card };
     return { ok, detail: `"${title}"; tabs ${tabs.join('/')} (technical, column ${width} px, card ${card} px), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
   });
+
+  // The technical pane's width (decision 21: 560 to 760 px at 1440), its own step: today the shell gives it 559 px, one
+  // pixel under the floor (a finding for the lead; the judge shows it as pending until it holds).
+  record('I2.4o', !!widthSeen && widthSeen.width >= 560 && widthSeen.width <= 760, `the technical pane's column at 1440: ${widthSeen ? `${widthSeen.width} px (card ${widthSeen.card} px)` : 'not measured'}; want 560 to 760`);
 
   await step('I2.4b', async () => {
     const invite = await mintInvite(greta, iv);
