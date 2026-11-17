@@ -150,6 +150,70 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 - The seed story has 11 interviews rather than 10: one finished round has its scorecard still due, so that state can be seen. The iOS opening has no hiring manager, so Amara Okafor does not see it.
 - The cast shows initials until portraits are made; their ids are listed as waiting for portraits.
 
+## I0.7 answer
+
+Written 16 November 2026 from this repository's code, the installed packages, and (read only) platform-api, realtime-modules and live-video-streaming. The websocket-gateway checkout has no source to read. Where this answer and "What exists" disagree on shared editing, this answer is the newer reading.
+
+### The pad's shared text
+
+**Decision: the middleware's own realtime gateway carries the pad.** realtime-modules already ships the CRDT service that the document gateways run (`collabDocs`, lifted from websocket-gateway). The middleware already serves a realtime gateway on `/ws` everywhere except production, and in production when `REALTIME_GATEWAY` is on. It is the socket the journeys use, and the one the interview's call, call chat and presence will use. The pad is one more feature on that socket: document `ivpad:<interviewId>` on channel `doc:ivpad:<interviewId>`. The client is the library's `GatewayProvider` through `useYjsDoc`, on the socket the portal already holds, and I4.1's editor binds to its `Y.Text` and awareness. The proof is built: `middleware/src/lib/interviews/pad/` plus two hook-ins, the feature in `lib/realtime-gateway.ts` and the `doc:` namespace in `lib/gateway/authority.ts`. Its test, `pad/__tests__/pad-proof.test.ts`, connects two people over a real socket, has both type at once and checks that they converge; it also checks that carets cross, that a late joiner catches up, and that everyone without a seat is refused.
+
+The options, priced:
+
+- A small y-protocols relay under `/api/interviews`. This needs a second socket path through the upgrade guard, its own token check, a client provider written from scratch (`y-websocket` is not installed), and a protocol nothing else speaks. The candidate would hold two sockets with two admissions. Not chosen: it rebuilds what the library ships.
+- The walk starts a local gateway. websocket-gateway is a container in the social profile, and the walks never start docker. Not possible here.
+- Production on websocket-gateway with a document grant, and the mock world on the relay. That is two carriers, and the walk would prove only the one production does not use. The candidate would also need a document grant, and websocket-gateway's session callback would have to know guests. Not chosen.
+
+**Checks.** Two checks guard every action, and both must pass:
+
+- The CRDT service's document hook allows only a pad's channel, and only reading, editing and carets. Creating, deleting, restoring, saving versions, renaming and seeding are refused.
+- The gateway's authority sends every `doc:` name to `admitPadChannel`. That function reloads the principal and requires all of these: the socket is in the interviews tenant, the role holds `ViewInterviews`, the round is technical, and the caller is its lead or on its panel. It then reloads the principal again.
+
+The decision runs on every subscribe, every edit and every delivery to a recipient. The recruiter, the hiring manager, interviewers on other rounds, other tenants and behavioural rounds are refused. So is any other `doc:` name, and so is everything while the tenant's flag is off.
+
+**What it costs to stay in step with production.** The service, the wire frames and the client are the library's, so they move with the realtime-modules pin. What stays with this repository:
+
+- Storage. Snapshots are in memory now. A deployment that keeps a pad across a restart, or runs more than one task, needs the library's Dynamo snapshot store and a Redis hot cache. Until then pads live under the gateway's existing one-task safeguard. The durable record is the pad log (I4.3).
+- Per-delivery cost. Each delivery lists the tenant's interviews, so I4.2 adds a read of one interview to the store.
+- Removed panel members. With `REALTIME_AUTHORITY_CACHE` on, a removed panel member keeps a cached yes for up to the cache's maximum age (5 seconds by default). I4.2 either drops pad verdicts when a panel changes or marks pad names uncacheable.
+- Interview ids must stay at 40 characters or fewer, because the library caps a document channel at 50.
+
+### The guest's seat
+
+What exists today:
+
+- The token bridge, `GET /api/session/realtime-token`, mints a 10-minute HS256 token from a signed session.
+- The middleware's gateway admits a socket on that token.
+- platform-api verifies the same token. Before it creates or joins a video session, it asks this middleware through `POST /api/realtime/lobby-access` and `/call-seat`.
+- live-video-streaming trusts platform-api's participant tokens and needs nothing new.
+
+What is missing:
+
+- **This repository: a guest principal.** Every gateway decision, and both of platform-api's questions, load the principal from the directory (`getLivePrincipal`). That refuses anyone without a user row, a matching epoch and a grant, so today a guest is refused everywhere.
+  - I2.1 mints the guest's realtime token: no tenants, a role with no Cedar file, and a claim naming its one interview.
+  - I2.2 loads a guest principal from its invite (not revoked, not expired) instead of from the directory, and adds three things that take that guest and the panel: the `interviews:interview:<id>` lobby family, the call chat for that lobby, and the pad rule. Everything else stays refused, because every other family, namespace and route needs a grant the guest does not hold.
+- **The waiting room: nothing exists.** Knocking in realtime-modules is client-side and only for direct calls, and platform-api keeps its admitted list only for those. So the waiting room lives here: the guest's lobby admission and pad seat are refused until the lead admits them. platform-api's existing question to this middleware then enforces it with no new protocol.
+- **platform-api: two changes, both in I2.2.**
+  - `LOBBY_AUTHORITY_TENANTS` defaults to orgiq, assessment, social and pipelines, so `interviews` must be added.
+  - A guest's token is a valid identity on every platform-api route, not only video sessions. platform-api must refuse it everywhere else, keyed on the guest claim. Its own prefix rule passes a guest for every `interviews:` lobby, so this middleware's answer remains the only per-interview gate, and it is asked every time.
+
+I2.1 changes only this repository. I2.2 changes this repository and platform-api. realtime-modules and live-video-streaming need nothing.
+
+### Recordings in the mock world
+
+Today platform-api records every lobby that is not a direct call, by default. The client's request decides, with no rule per lobby family and no question to this middleware. Any participant may play a recording back, and the candidate would be a participant. Share links play without signing in. The mock world has no media server: its only recordings are three fixture rows for Social lobbies, with nothing playable.
+
+So I2.6 is mostly media work:
+
+- **platform-api:** a recording decision for `interviews:` lobbies that asks this middleware whether every consent is in; playback that refuses guests (or asks this middleware); and share links turned off for the family.
+- **This repository:** the consents, recording settings that the server sets rather than the client, and the panel-only read.
+
+**What the walk can show:** the consents, the server's decision on whether a call asks to record (tests here and a walk step), and the record page (I5.1) on a seeded stand-in: a finished interview with a recording row and a transcript, panel side only, with the guest refused.
+
+**What must be checked by hand on the social profile:** that a real call records only with consent, that the recording plays for the panel, and that a guest's token cannot list or play it in platform-api.
+
+Rows changed: I2.2 and I2.6 now name platform-api and say how they are judged; I4.2 is judged on this carrier.
+
 ## Ledger
 
 Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited. The journey `journey:interviews` starts with I1.1 and gains a step with each row that names a walk step; it is not written at the end. Rows that change another repository say so: "library" is `ui-components`, "realtime" is `realtime-modules`, "media" is `platform-api`. Rows marked "install" need a package the owner installs first.
@@ -184,11 +248,11 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
 | I2.1 | Invite token and the guest identity (decision 3); the token leaves the address after first load | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
-| I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, a guest seat through the token bridge, the channel guard refusing a guest everywhere else (realtime, media) | gateway authority tests starting from a guest | I2.1, I0.7 | L |
+| I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, a guest seat through the token bridge, the channel guard refusing a guest everywhere else (realtime, media) | gateway authority tests starting from a guest, the pad proof among them (a guest of another interview, and one not yet admitted, refused); platform-api tests: a guest token refused outside its video session | I2.1, I0.7; media is platform-api (the tenant list, guest tokens); realtime-modules needs nothing (I0.7 answer) | L |
 | I2.3 | Portal: landing, the notice and three consents, device check, waiting room, admitted by the interviewer | walk with a second browser context as the candidate | I2.2 | L |
 | I2.4 | The interview room for both sides; the candidate's layout has no shell | walk step; screenshots at 1440 and 1280 | I2.3 | M |
 | I2.5 | Declined consent: what the interview runs without, what the recruiter is told, nothing shown against the candidate | tests per combination; walk step | I2.3 | M |
-| I2.6 | Recording only with consent (a rule in the media stack for this lobby family) and panel-only playback (media) | tests in the media stack and here; one real recording checked by hand on the social profile | I2.3 | M |
+| I2.6 | Recording only with consent (a rule in the media stack for this lobby family) and panel-only playback (media) | tests in the media stack (the family's decision waits for consent; a guest token cannot list or play; no share links) and here; the record page on the seeded stand-in, panel side only; one real recording checked by hand on the social profile | I2.3 | M |
 | I2.7 | Panel seats: up to two more panel members in the call; only the lead gets Milo's prompts | admission tests; walk step with a third context | I2.4 | S |
 
 ### Phase 3: Milo in the interview
@@ -211,7 +275,7 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
 | I4.1 | Library: a collaborative code editor (decision 11) (library; install) | library tests: two clients converge, carets, language switch | | L |
-| I4.2 | The pad in the room: its channel and grants, language choice, inserting a question (by the interviewer, and by "Have Milo ask") | walk with two contexts typing, carried as I0.7 decided | I4.1, I2.4, I0.7 | M |
+| I4.2 | The pad in the room: its channel and grants, language choice, inserting a question (by the interviewer, and by "Have Milo ask") | walk with two contexts typing on the gateway's pad (I0.7 answer); `pad-proof.test.ts` still passes, with the candidate's seat added | I4.1, I2.4, I0.7 | M |
 | I4.3 | The pad log: timed edits per person, pastes, snapshots | tests; a paste by the candidate shows as an event on the panel side | I4.2 | M |
 | I4.4 | The run interface, the queue, the mock executor, the output stream, the output pane, limits and cancel | executor contract tests any backend must pass; walk step where both people see one run | I4.2 | L |
 | I4.5 | The coach reads the pad and the last run | tests on fixed inputs | I4.4, I3.3 | S |
