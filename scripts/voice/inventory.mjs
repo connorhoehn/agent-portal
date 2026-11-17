@@ -595,6 +595,11 @@ export const V2_RULES = [
   [/^POST \/api\/assessment\/canvas$/, 'never', null, 'canvas render'],
   // Interviews
   [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
+  [/^POST \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
+  [/^(PUT|DELETE) \/api\/interviews\/candidates\/:[^/]+\/resume$/, 'never', null, 'a résumé file is uploaded or removed on the candidate page'],
+  [/^(POST|DELETE) \/api\/interviews\/interviews\/:[^/]+\/invite$/, 'never', null, 'an invite link is a secret shown once on the page; never read aloud'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/answer$/, 'not-yet', 'decide', 'accept or decline a seat on a round (ConductInterview)'],
+  [/^(POST \/api\/interviews\/interviews|PUT \/api\/interviews\/interviews\/:[^/]+\/(panel|time))$/, 'not-yet', 'update', 'assign a round, change its panel or set its time (AssignInterviews)'],
   // Pipelines
   [/^POST \/api\/pipelines\/definitions\/:[^/]+\/dry-run$/, 'not-yet', 'queue_work', 'RunPipeline dry-run (G19)'],
   [/^POST \/api\/pipelines\/approvals\/:[^/]+\/decide$/, 'not-yet', 'decide', 'ApproveStep'],
