@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, transcriptLine,
+  clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, sentencesOf, transcriptLine,
   type RecordLine,
 } from '../interviewsRecord.ts';
 
@@ -118,4 +118,28 @@ test('the code\'s empty line says why the code was removed, or that none was wri
   assert.equal(codeEmptyLine({ codeRemoved: 'request' }), 'The code from this interview was removed when the candidate asked for their data to be deleted.');
   assert.equal(codeEmptyLine({ codeRemoved: null }), 'No code was written in this interview.');
   assert.equal(codeEmptyLine({}), 'No code was written in this interview.');
+});
+
+test('one speaker\'s fragments are read as one sentence; finished sentences, other speakers and long gaps are not joined', () => {
+  const lines: RecordLine[] = [
+    { seq: 1, atMs: 10_000, side: 'panel', speaker: 'Hugo Marchetti', text: 'How would you reverse a linked list in' },
+    { seq: 2, atMs: 12_000, side: 'panel', speaker: 'Hugo Marchetti', text: 'place?' },
+    { seq: 3, atMs: 14_000, side: 'panel', speaker: 'Hugo Marchetti', text: 'Take your time.' },
+    { seq: 4, atMs: 20_000, side: 'candidate', speaker: 'Mateo Álvarez', text: 'I would keep a previous node' },
+    { seq: 5, atMs: 21_000, side: 'panel', speaker: 'Hugo Marchetti', text: 'Sure' },
+    { seq: 6, atMs: 23_000, side: 'candidate', speaker: 'Mateo Álvarez', text: 'and swap each next pointer' },
+    { seq: 7, atMs: 60_000, side: 'candidate', speaker: 'Mateo Álvarez', text: 'then return it' },
+  ];
+  const s = sentencesOf(lines);
+  assert.deepEqual(s.map((l) => [l.seq, l.atMs, l.text]), [
+    [1, 10_000, 'How would you reverse a linked list in place?'],
+    [3, 14_000, 'Take your time.'],
+    [4, 20_000, 'I would keep a previous node'],
+    [5, 21_000, 'Sure'],
+    [6, 23_000, 'and swap each next pointer'],
+    [7, 60_000, 'then return it'],
+  ]);
+  const seg = segmentsOf(lines, 0, 100_000);
+  assert.equal(seg[0]!.text, 'How would you reverse a linked list in place?');
+  assert.deepEqual([seg[0]!.startMs, seg[0]!.endMs], [10_000, 14_000]);
 });

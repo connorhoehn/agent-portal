@@ -105,11 +105,38 @@ export function offsetMs(recordStartedAt: string | null, recordingStartedAt: str
 /** The last line holds until the end of the recording, or this long when the end is unknown. */
 const LAST_LINE_MS = 30_000;
 
+/** The longest gap across which one speaker's unfinished line is joined to their next. */
+export const JOIN_GAP_MS = 10_000;
+/** A joined line stops growing here. */
+const JOIN_MAX_CHARS = 1_000;
+const ENDS_SENTENCE = /[.?!…]["'”’)\]]*$/;
+
 /**
- * The lines as the library's segments on the player's clock (`shiftMs` from offsetMs): each runs until the next line
- * starts, so a time inside the interview always lands on the line being said.
+ * One speaker's fragments joined into sentences, for reading: the live transcript stores what the provider sent, which can
+ * break a sentence anywhere ("…a linked list in" / "place."). A line that does not end a sentence takes the same speaker's
+ * next line when it follows within JOIN_GAP_MS; the joined line keeps the first one's seq and time. Stored lines are untouched.
  */
-export function segmentsOf(lines: readonly RecordLine[], shiftMs = 0, endMs: number | null = null): TranscriptSegment[] {
+export function sentencesOf(lines: readonly RecordLine[]): RecordLine[] {
+  const out: RecordLine[] = [];
+  for (const l of lines) {
+    const prev = out.at(-1);
+    const text = l.text.trim();
+    if (prev && prev.side === l.side && prev.speaker === l.speaker && !ENDS_SENTENCE.test(prev.text)
+      && l.atMs - prev.atMs <= JOIN_GAP_MS && prev.text.length + text.length < JOIN_MAX_CHARS && text) {
+      out[out.length - 1] = { ...prev, text: `${prev.text} ${text}` };
+      continue;
+    }
+    out.push({ ...l, text });
+  }
+  return out;
+}
+
+/**
+ * The lines as the library's segments on the player's clock (`shiftMs` from offsetMs), fragments joined (sentencesOf): each
+ * runs until the next line starts, so a time inside the interview always lands on the line being said.
+ */
+export function segmentsOf(given: readonly RecordLine[], shiftMs = 0, endMs: number | null = null): TranscriptSegment[] {
+  const lines = sentencesOf(given);
   return lines.map((l, i) => {
     const startMs = Math.max(0, l.atMs + shiftMs);
     const next = lines[i + 1];
