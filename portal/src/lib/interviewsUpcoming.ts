@@ -57,3 +57,27 @@ export function inviteLine(s: InviteStatus, when: (iso: string) => string): stri
     }
   }
 }
+
+// ── The Consent column (row I2.5): what each round runs without, for the recruiter ───────────────────────────────────────
+// Read from GET /consent-effects (the recruiter and the admin only). Plain words, never the candidate's reasons: the
+// recruiter is told so they can arrange what replaces a part.
+
+export type ConsentEffectPart = 'recording' | 'transcription' | 'milo';
+export interface ConsentEffect { interviewId: string; answered: boolean; off: ConsentEffectPart[] }
+
+export const CONSENT_EFFECTS_PATH = `${INTERVIEWS_API}/consent-effects`;
+
+/** Only the recruiter's Upcoming shows the column. */
+export const showsConsentColumn = (role: string | null | undefined): boolean => role === 'recruiter';
+
+const OFF_WORDS: Record<ConsentEffectPart, string> = { recording: 'no recording', transcription: 'no transcript', milo: 'no Milo' };
+const ORDER: readonly ConsentEffectPart[] = ['recording', 'transcription', 'milo'];
+
+/** "Not answered", "All on", or what is off ("No recording", "No transcript, no Milo"). */
+export function consentColumnLabel(effect: Pick<ConsentEffect, 'answered' | 'off'> | null | undefined): string {
+  if (!effect || !effect.answered) return 'Not answered';
+  const off = ORDER.filter((p) => effect.off.includes(p));
+  if (!off.length) return 'All on';
+  const text = off.map((p) => OFF_WORDS[p]).join(', ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}

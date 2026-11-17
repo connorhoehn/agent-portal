@@ -3,7 +3,8 @@
 // with the library's DateTimeField; the change is saved only after a confirm in the composer's prompt deck
 // (never a dialog), and the lead and panel are told. Times are kept in UTC and shown in the viewer's own zone,
 // named. A round with a time can have the candidate's invite link: made here, shown once with a copy control,
-// its status read from the invite routes, revoked through a prompt. Consent is a later row (I2.3): no column.
+// its status read from the invite routes, revoked through a prompt. The recruiter also sees a Consent column (row I2.5):
+// not answered, all on, or what the round runs without, so they can arrange what replaces it; never why.
 
 import { DateTimeField } from '@connorhoehn/ui-components';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -19,7 +20,9 @@ import {
   INTERVIEWS_API, ROUND_TYPE_LABELS, candidateHref, isTimeable, matches, roundStatus, upcomingOrder, whenLabel, whenWithZone, zoneName,
   type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
-import { inviteLine, issueInvite, revokeInvite, setRoundTime, type InviteStatus } from '../../lib/interviewsUpcoming';
+import {
+  CONSENT_EFFECTS_PATH, consentColumnLabel, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
+} from '../../lib/interviewsUpcoming';
 import { PanelCell, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -64,7 +67,11 @@ function InviteStatusLoader({ row, override, link, busy, onMake, onRevoke }: {
 }
 
 function UpcomingWorkspace() {
+  const { session } = useSession();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
+  const withConsent = showsConsentColumn(session?.role);
+  const consents = useFetch<ItemsResponse<ConsentEffect>>(withConsent ? CONSENT_EFFECTS_PATH : null, 30_000);
+  const consentOf = useMemo(() => new Map((consents.data?.items ?? []).map((c) => [c.interviewId, c])), [consents.data]);
   const [query, setQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('');
   const [editing, setEditing] = useState<string | null>(null);
@@ -156,6 +163,14 @@ function UpcomingWorkspace() {
       key: 'state', header: 'State', width: '112px',
       render: (r) => { const s = roundStatus(r.state); return <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>; },
     },
+    ...(withConsent ? [{
+      key: 'consent', header: 'Consent', width: '200px',
+      render: (r: InterviewRow) => {
+        const c = consentOf.get(r.id);
+        const label = consents.data ? consentColumnLabel(c) : '—';
+        return <T size="sm" tone={!c?.answered ? 'secondary' : undefined} data-testid="interviews-upcoming-consent">{label}</T>;
+      },
+    }] : []),
     {
       key: 'when', header: `Time (${zone})`, width: '280px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
       render: (r) => {
