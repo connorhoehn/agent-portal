@@ -300,7 +300,8 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   },
   'interviews/interviewer': {
     tenant: 'interviews',
-    granted: ['ViewInterviews', 'ConductInterview'],
+    // InviteMeetingAssistant: Milo in an interview (row I3.2); the interview's policy narrows it to the lead.
+    granted: ['ViewInterviews', 'ConductInterview', 'InviteMeetingAssistant'],
   },
   'interviews/hiring-manager': {
     tenant: 'interviews',
@@ -867,10 +868,17 @@ describe('CreateInitiative', () => {
 // Inviting the meeting assistant into a call (docs/meeting-assistant-design.md, decision 13).
 // ---------------------------------------------------------------------------
 describe('InviteMeetingAssistant', () => {
-  test('exactly the five orgiq roles hold it; admin passes as an override; no other tenant', () => {
+  test('exactly the five orgiq roles and the interviews interviewer hold it; admin passes as an override; no other tenant', () => {
     const holders = [...roles.entries()]
       .filter(([key, r]) => key !== '*/admin' && r.granted.includes('InviteMeetingAssistant'))
       .map(([key]) => key).sort();
-    expect(holders).toEqual(['orgiq/hr-admin', 'orgiq/member', 'orgiq/org-leader', 'orgiq/program-owner', 'orgiq/sme']);
+    expect(holders).toEqual(['interviews/interviewer', 'orgiq/hr-admin', 'orgiq/member', 'orgiq/org-leader', 'orgiq/program-owner', 'orgiq/sme']);
+  });
+
+  test('interviews: the interviewer holds it in its own tenant only; the recruiter and the hiring manager never', () => {
+    expect(role('interviews/interviewer').granted.includes('InviteMeetingAssistant')).toBe(true);
+    expect(role('interviews/recruiter').granted.includes('InviteMeetingAssistant')).toBe(false);
+    expect(role('interviews/hiring-manager').granted.includes('InviteMeetingAssistant')).toBe(false);
+    expect(role('interviews/interviewer').cedar).toMatch(/OrgIQ::Action::"InviteMeetingAssistant"[\s\S]*principal\.tenant == "interviews"/);
   });
 });
