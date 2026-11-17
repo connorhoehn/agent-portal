@@ -251,7 +251,7 @@ describe('every statement matches schema/interviews_schema.sql', () => {
   }
 
   it('declares the five tables', () => {
-    expect([...tables.keys()]).toEqual(expect.arrayContaining(['interview_applications', 'interview_candidates', 'interview_openings', 'interview_scorecards', 'interviews']));
+    expect([...tables.keys()]).toEqual(expect.arrayContaining(['interview_applications', 'interview_candidates', 'interview_invites', 'interview_openings', 'interview_scorecards', 'interviews']));
   });
 
   it.each(OPENING_WRITE_STATEMENTS.map((s) => [s.split('\n')[0]!.slice(0, 60), s]))('%s… writes and returns only declared columns', (_label, statement) => {

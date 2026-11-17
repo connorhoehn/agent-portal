@@ -10,6 +10,7 @@
 // The writes are sub-routers under routes/interviews/ (openings: row I1.3). Assign, accept, schedule and decide are later rows.
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { inviteRouter } from './interviews/invite.js';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { resumeRouter } from './interviews/resume.js';
 import { resumeRows } from '../lib/interviews/resume/service.js';
@@ -62,6 +63,8 @@ interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ candidate: ix.candidateRecord(c, await resumeRows().get(c.id)) });
 }));
+
+interviewsRouter.use(inviteRouter); // lane INVITE (row I2.1): issue, read and revoke the candidate's link
 
 interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

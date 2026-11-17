@@ -45,6 +45,9 @@ export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'progra
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
 export const COOKIE_NAME = 'orgiq.session';
+/** The interviews guest's cookie (lib/interviews/invite/guest.ts). Never read as a staff session; a request
+ * that carries it and no staff cookie is a guest, not an anonymous visitor, and never gets the demo identity. */
+export const GUEST_COOKIE_NAME = 'interviews.guest';
 // Cookie lifetime, env-tunable in hours (SESSION_MAX_AGE_H). Default is 12h,
 // down from the original 7 days: a laptop demo cookie should not outlive a
 // workday by much, and SSO re-auth is cheap — when the Cognito session is
@@ -598,6 +601,15 @@ export function sessionMiddleware() {
       // explicit as an epoch refusal. Only an absent cookie may use the
       // opt-in anonymous dev persona; login/config/picker still run normally.
       clearSessionCookie(res);
+      req.sessionInvalid = true;
+      next();
+      return;
+    }
+    // A guest (row I2.1) presents no staff credential, but it is not anonymous either: it must never become
+    // the demo identity, so every staff gate (resolveSession) refuses it exactly as it refuses a rejected
+    // cookie. The guest routes read the guest cookie themselves (requireGuest).
+    const guestOnly = (req as Request & { cookies?: Record<string, string> }).cookies?.[GUEST_COOKIE_NAME];
+    if (typeof guestOnly === 'string' && guestOnly.length > 0) {
       req.sessionInvalid = true;
       next();
       return;

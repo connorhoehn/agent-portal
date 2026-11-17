@@ -61,6 +61,7 @@ import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
 import { interviewsFlagGate, interviewsRouter } from './routes/interviews.js';
+import { interviewInviteRouter } from './routes/interview-invite.js';
 import { runsFacadeRouter } from './routes/runs.js';
 import { runReportsRouter } from './routes/run-reports.js';
 import { initiativeDecksRouter } from './routes/initiative-decks.js';
@@ -336,6 +337,9 @@ app.use('/api/admin/kb-registry', requireTenant('orgiq'), readForRolesElseAction
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
 app.use('/api/drop', dropRouter);
+// The candidate's door (row I2.1): the invite exchange and the guest's own interview, ungated by any
+// staff guard because a guest holds no session. requireGuest (lib/interviews/invite/guest.ts) is its gate.
+app.use('/api/interview-invite', interviewInviteRouter);
 // Assessment — tenant-guarded, but NOT at the mount: assessmentRouter applies
 // requireTenant('assessment') itself so it can exempt the agent-facing
 // POST /runs/:runId/complete callback (sessionless, self-gated by a service

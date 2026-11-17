@@ -1,0 +1,282 @@
+// The candidate's link (docs/interviews-tenant-plan.md row I2.1; decision 3): the recruiter's three routes
+// (routes/interviews/invite.ts), the exchange and the guest's read (routes/interview-invite.ts), and the guest
+// principal (lib/interviews/invite/guest.ts), mounted as index.ts mounts them behind the REAL session
+// middleware, with ManageCandidates decided from the REAL seeds/roles/*/*.cedar files.
+//
+//   recruiter       issues, reads and revokes a link; the link is answered once and never again
+//   hiring-manager  every invite route refused (403)
+//   interviewer     every invite route refused (403)
+//   another tenant  the tenant's usual refusal at the mount
+//   a guest         exchanges the link for its own cookie and reads its own interview, nothing more; refused
+//                   the moment the invite is revoked, expires, or a newer opening of the link replaces it
+//
+// The jest setup turns INSECURE_DEV_MODE on, so the demo fallback is live here: these tests also show a guest
+// never becomes the demo identity. The whole-surface sweep is interviews-invite-sweep.test.ts.
+
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', auth: { policyStoreId: undefined, sessionSigningSecretArn: '', cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true } },
+}));
+jest.mock('../../lib/role-registry.js', () => {
+  const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
+  const path = jest.requireActual<typeof import('node:path')>('node:path');
+  const root = path.join(__dirname, '..', '..', '..', 'seeds', 'roles');
+  const roles = fs.readdirSync(root, { withFileTypes: true }).filter((d: import('node:fs').Dirent) => d.isDirectory()).flatMap((d: import('node:fs').Dirent) =>
+    fs.readdirSync(path.join(root, d.name)).filter((f: string) => f.endsWith('.cedar')).map((f: string) => {
+      const cedar = fs.readFileSync(path.join(root, d.name, f), 'utf8').replace(/\/\/[^\n]*/g, '');
+      const caps = new Set<string>();
+      for (const block of cedar.split(/\bpermit\b/).slice(1)) {
+        for (const m of (block.split(';')[0] ?? '').matchAll(/OrgIQ::Action::"([^"]+)"/g)) caps.add(m[1]!);
+      }
+      return { id: f.replace(/\.cedar$/, ''), tenant: d.name, label: '', summary: '', capabilities: [...caps] };
+    }));
+  return { roleRegistry: () => [...roles, { id: 'admin', tenant: null, label: 'Admin', summary: '', capabilities: ['*'] }] };
+});
+jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
+  VerifiedPermissionsClient: class { send() { return Promise.resolve({}); } },
+  IsAuthorizedCommand: class {},
+}));
+jest.mock('../../providers/identity.js', () => ({ ...jest.requireActual('../../providers/identity.js'), listUsers: jest.fn() }));
+
+process.env['SESSION_SIGNING_KEY_DEV'] = 'interviews-invite-test-key';
+
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import request from '../../test-support/http.js';
+import { errorHandler } from '../../lib/async-handler.js';
+import { requireSession, requireTenant, resolveSession } from '../../lib/authz.js';
+import { COOKIE_NAME, GUEST_COOKIE_NAME, sessionMiddleware, signSession, type Session } from '../../lib/session.js';
+import { listUsers, type UserInfo } from '../../providers/identity.js';
+import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
+import { EXCHANGE_FLOOR_MS, interviewInviteRouter, resetInviteThrottle } from '../interview-invite.js';
+import { fixtureRegistry } from '../../mock/core/index.js';
+import { interviewInvitesFixture } from '../../mock/interviews-invites.js';
+import { interviewsFixture } from '../../mock/interviews.js';
+import { newInviteToken } from '../../lib/interviews/invite/token.js';
+
+const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
+  ({ id, displayName, email: null, personId: null, epoch: 0, grants });
+const USERS: UserInfo[] = [
+  u('u-greta', 'Greta Lindqvist', { interviews: ['recruiter'] }),
+  u('u-hugo', 'Hugo Marchetti', { interviews: ['interviewer'] }),
+  u('u-wen', 'Wen Zhao', { interviews: ['interviewer'] }),
+  u('u-amara', 'Amara Okafor', { interviews: ['hiring-manager'] }),
+  u('u-priya', 'Priya Venkataraman', { access: ['access-admin'] }),
+];
+
+const app = express();
+app.use(express.json());
+app.use(cookieParser());
+app.use(sessionMiddleware());
+// A staff persona by header, standing in for the signed cookie the real login sets.
+app.use((req, _res, next) => {
+  const me = USERS.find((x) => x.id === String(req.headers['x-user'] ?? ''));
+  if (me) {
+    const tenant = Object.keys(me.grants)[0]!;
+    req.session = { sub: me.id, name: me.displayName, tenant, role: me.grants[tenant]![0], grants: me.grants, iat: 0, epoch: 0 } as Session;
+    req.sessionInvalid = false;
+  }
+  next();
+});
+app.use('/api/interview-invite', interviewInviteRouter);
+app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
+app.get('/api/anything-signed-in', requireSession(), (req, res) => { res.json({ sub: resolveSession(req)?.sub }); });
+app.use(errorHandler);
+
+const IV = 'iv-mateo-design';
+const as = (user: string) => ({
+  post: (p: string) => request(app).post(`/api/interviews${p}`).set('x-user', user).send({}),
+  get: (p: string) => request(app).get(`/api/interviews${p}`).set('x-user', user),
+  del: (p: string) => request(app).delete(`/api/interviews${p}`).set('x-user', user),
+});
+const GRETA = as('u-greta');
+
+/** The guest cookie's `name=value` from a Set-Cookie answer. */
+function guestCookie(res: { headers: Record<string, unknown> }): string {
+  const set = ([] as string[]).concat((res.headers['set-cookie'] as string[] | undefined) ?? []);
+  const line = set.find((c) => c.startsWith(`${GUEST_COOKIE_NAME}=`));
+  if (!line) throw new Error('no guest cookie was set');
+  return line.split(';')[0]!;
+}
+const exchange = (token: unknown) => request(app).post('/api/interview-invite/exchange').send({ token });
+const readAsGuest = (cookie: string) => request(app).get('/api/interview-invite/interview').set('Cookie', cookie);
+async function issue(id = IV): Promise<string> {
+  const res = await GRETA.post(`/interviews/${id}/invite`);
+  expect(res.status).toBe(201);
+  return String(res.body.linkPath).split('#')[1]!;
+}
+
+beforeEach(() => {
+  (listUsers as jest.Mock).mockResolvedValue(USERS);
+  delete process.env['INTERVIEWS_ENABLED'];
+  fixtureRegistry.resetAll('default');
+  resetInviteThrottle();
+});
+
+describe('the recruiter\'s routes', () => {
+  it('issues a link once: the token rides in the fragment, the answer is not cached, and no later read shows it', async () => {
+    const res = await GRETA.post(`/interviews/${IV}/invite`);
+    expect(res.status).toBe(201);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body.linkPath).toMatch(/^\/join#[A-Za-z0-9_-]{43}$/);
+    expect(res.body.invite).toMatchObject({ state: 'live', issuedBy: { id: 'u-greta', name: 'Greta Lindqvist' }, openCount: 0, revokedAt: null });
+    const token = String(res.body.linkPath).split('#')[1]!;
+    const status = await GRETA.get(`/interviews/${IV}/invite`);
+    expect(status.status).toBe(200);
+    expect(JSON.stringify(status.body)).not.toContain(token);
+    expect(JSON.stringify(status.body)).not.toMatch(/[0-9a-f]{64}/);
+    expect(JSON.stringify(interviewInvitesFixture.rows())).not.toContain(token);
+  });
+
+  it('issuing again revokes the link before it', async () => {
+    const first = await issue();
+    await issue();
+    expect((await exchange(first)).status).toBe(404);
+    expect(interviewInvitesFixture.rows().filter((r) => r.interviewId === IV && r.revokedAt === null)).toHaveLength(1);
+  });
+
+  it('refuses a link for an interview that is over, and answers not-found for one that is not there', async () => {
+    expect((await GRETA.post('/interviews/iv-ingrid-coding/invite')).status).toBe(409);
+    expect((await GRETA.post('/interviews/iv-nope/invite')).status).toBe(404);
+    expect((await GRETA.get('/interviews/iv-nope/invite')).status).toBe(404);
+  });
+
+  it.each([['an interviewer', 'u-hugo'], ['the other interviewer', 'u-wen'], ['the hiring manager', 'u-amara']])('%s may not issue, read or revoke a link (403)', async (_who, user) => {
+    const them = as(user);
+    expect((await them.post(`/interviews/${IV}/invite`)).status).toBe(403);
+    expect((await them.get(`/interviews/${IV}/invite`)).status).toBe(403);
+    expect((await them.del(`/interviews/${IV}/invite`)).status).toBe(403);
+  });
+
+  it('another tenant\'s role is refused at the mount', async () => {
+    expect((await as('u-priya').post(`/interviews/${IV}/invite`)).status).toBe(403);
+  });
+
+  it('revokes the live link and says so in the status', async () => {
+    await issue();
+    const res = await GRETA.del(`/interviews/${IV}/invite`);
+    expect(res.status).toBe(200);
+    expect(res.body.invite).toMatchObject({ state: 'revoked' });
+    expect(res.body.invite.revokedAt).not.toBeNull();
+  });
+});
+
+describe('the exchange and the guest\'s read', () => {
+  it('trades a live link for a guest cookie of its own, scoped to the guest routes, and shows the opening, the round and the time', async () => {
+    const token = await issue();
+    const res = await exchange(token);
+    expect(res.status).toBe(200);
+    const set = ([] as string[]).concat(res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith(`${GUEST_COOKIE_NAME}=`))!;
+    expect(set).toMatch(/Path=\/api\/interview-invite/);
+    expect(set).toMatch(/HttpOnly/);
+    expect(set).toMatch(/SameSite=Strict/);
+    expect(([] as string[]).concat(res.headers['set-cookie'] as unknown as string[]).some((c) => c.startsWith(`${COOKIE_NAME}=`))).toBe(false);
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+    const iv = interviewsFixture.rows().find((i) => i.id === IV)!;
+    expect(res.body.interview).toEqual({ opening: { title: expect.any(String) }, round: { name: 'System design', minutes: iv.minutes }, scheduledAt: iv.scheduledAt });
+    const read = await readAsGuest(guestCookie(res));
+    expect(read.status).toBe(200);
+    expect(read.body).toEqual(res.body);
+    // Nothing of the panel or the candidate's record.
+    const text = JSON.stringify(read.body);
+    for (const name of ['Hugo', 'Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-']) expect(text).not.toContain(name);
+  });
+
+  it('answers a wrong, malformed, revoked, expired or closed link the same way, no sooner than the floor', async () => {
+    const revoked = await issue('iv-aiko-coding');
+    await GRETA.del('/interviews/iv-aiko-coding/invite');
+    const expired = await issue('iv-kwame-coding');
+    interviewInvitesFixture.rows().find((r) => r.interviewId === 'iv-kwame-coding')!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const closed = await issue('iv-nadia-design');
+    interviewsFixture.rows().find((i) => i.id === 'iv-nadia-design')!.state = 'cancelled';
+    const answers = [];
+    for (const t of [newInviteToken(), 'not-a-token', '', 42, revoked, expired, closed]) {
+      const startedAt = Date.now();
+      const res = await exchange(t);
+      answers.push({ status: res.status, body: res.body, cookie: res.headers['set-cookie'] ?? null, slow: Date.now() - startedAt >= EXCHANGE_FLOOR_MS - 5 });
+    }
+    expect(new Set(answers.map((a) => JSON.stringify(a))).size).toBe(1);
+    expect(answers[0]).toEqual({ status: 404, body: { error: 'This link no longer works.' }, cookie: null, slow: true });
+  });
+
+  it('reuse: the link keeps working, every opening is recorded, and a new opening ends the guest session before it', async () => {
+    const token = await issue();
+    const first = guestCookie(await exchange(token));
+    const second = guestCookie(await exchange(token));
+    expect((await readAsGuest(first)).status).toBe(404);
+    expect((await readAsGuest(second)).status).toBe(200);
+    const status = (await GRETA.get(`/interviews/${IV}/invite`)).body.invite;
+    expect(status.openCount).toBe(2);
+    expect(status.firstOpenedAt).not.toBeNull();
+  });
+
+  it('revocation ends the guest at once', async () => {
+    const cookie = guestCookie(await exchange(await issue()));
+    expect((await readAsGuest(cookie)).status).toBe(200);
+    await GRETA.del(`/interviews/${IV}/invite`);
+    const res = await readAsGuest(cookie);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'This link no longer works.' });
+  });
+
+  it('expiry ends the guest at once, and so does the interview closing', async () => {
+    const cookie = guestCookie(await exchange(await issue()));
+    interviewInvitesFixture.rows().find((r) => r.interviewId === IV && r.revokedAt === null)!.expiresAt = new Date(Date.now() - 1).toISOString();
+    expect((await readAsGuest(cookie)).status).toBe(404);
+    fixtureRegistry.resetAll('default');
+    const again = guestCookie(await exchange(await issue()));
+    interviewsFixture.rows().find((i) => i.id === IV)!.state = 'ended';
+    expect((await readAsGuest(again)).status).toBe(404);
+  });
+
+  it('one interview only: the guest\'s read answers for its own interview whatever it asks for', async () => {
+    const cookie = guestCookie(await exchange(await issue()));
+    await issue('iv-aiko-coding');
+    const res = await request(app).get('/api/interview-invite/interview?id=iv-aiko-coding').set('Cookie', cookie);
+    expect(res.body.interview.round.name).toBe('System design');
+    expect((await request(app).get('/api/interview-invite/interview/iv-aiko-coding').set('Cookie', cookie)).status).toBe(404);
+  });
+
+  it('a forged or borrowed cookie is no guest: a staff session value in the guest cookie, a guest value in the staff cookie', async () => {
+    const staff = await signSession({ sub: 'u-greta', tenant: 'interviews', role: 'recruiter', grants: { interviews: ['recruiter'] }, iat: Math.floor(Date.now() / 1000), epoch: 0 } as Session);
+    expect((await readAsGuest(`${GUEST_COOKIE_NAME}=${staff}`)).status).toBe(404);
+    const guest = guestCookie(await exchange(await issue())).split('=').slice(1).join('=');
+    const res = await request(app).get('/api/anything-signed-in').set('Cookie', `${COOKIE_NAME}=${guest}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('the exchange is throttled per client', async () => {
+    let last = 0;
+    for (let i = 0; i < 31; i++) last = (await exchange('x')).status;
+    expect(last).toBe(429);
+  }, 30_000);
+});
+
+describe('a guest against the staff side, and staff against the guest side', () => {
+  it('a guest cookie alone is never the demo identity: every staff gate refuses it', async () => {
+    const cookie = guestCookie(await exchange(await issue()));
+    expect((await request(app).get('/api/anything-signed-in')).status).toBe(200); // the demo fallback is live here
+    expect((await request(app).get('/api/anything-signed-in').set('Cookie', cookie)).status).toBe(401);
+    expect((await request(app).get(`/api/interviews/interviews/${IV}`).set('Cookie', cookie)).status).toBe(401);
+    expect((await request(app).get(`/api/interviews/interviews/${IV}/invite`).set('Cookie', cookie)).status).toBe(401);
+    expect((await request(app).post(`/api/interviews/interviews/${IV}/invite`).set('Cookie', cookie).send({})).status).toBe(401);
+  });
+
+  it('a recruiter on the guest routes is not a guest, and keeps their own session while holding a guest cookie', async () => {
+    expect((await request(app).get('/api/interview-invite/interview').set('x-user', 'u-greta')).status).toBe(404);
+    const cookie = guestCookie(await exchange(await issue()));
+    const res = await request(app).get(`/api/interviews/interviews/${IV}/invite`).set('x-user', 'u-greta').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('the flag', () => {
+  it('with INTERVIEWS_ENABLED off, the exchange, the guest\'s read and the recruiter\'s routes are not found', async () => {
+    const token = await issue();
+    const cookie = guestCookie(await exchange(token));
+    process.env['INTERVIEWS_ENABLED'] = 'false';
+    expect((await exchange(token)).status).toBe(404);
+    expect((await readAsGuest(cookie)).status).toBe(404);
+    expect((await GRETA.post(`/interviews/${IV}/invite`)).status).toBe(404);
+    expect((await GRETA.get(`/interviews/${IV}/invite`)).status).toBe(404);
+  });
+});
