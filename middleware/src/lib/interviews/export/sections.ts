@@ -1,4 +1,7 @@
 // The export's own two sections (row I6.2): the suggestion log as stored, and the notice with the candidate's answers.
+import { exportRecap } from '../recap/index.js';
+import { exportCoachLog } from '../milo-notes/index.js';
+import { exportPanelNotices } from '../consent/panel-notice.js';
 import { CONSENT_NOTICE } from '../consent/notice.js';
 import { consentStore } from '../consent/store.js';
 import { suggestionStore, type SuggestionRecord } from '../coach/store.js';
@@ -36,3 +39,7 @@ export async function exportNotices(interviewId: string): Promise<unknown> {
 
 registerExportSection({ key: 'suggestions', read: exportSuggestions });
 registerExportSection({ key: 'notices', read: exportNotices });
+// Round 5 combine (E8): the recap, the lead's private answers and the panel's notice acknowledgements.
+registerExportSection({ key: 'recap', read: exportRecap });
+registerExportSection({ key: 'milo-for-you', read: exportCoachLog });
+registerExportSection({ key: 'panel-notices', read: exportPanelNotices });

@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T04:38:07.927Z",
-  "serverHandlerSha": "2c47b8b255f89b59b46f9cb5db503cf8fa8b7fe43de2291f62d7e975aa5a0b2d",
+  "capturedAt": "2026-11-17T05:28:57.885Z",
+  "serverHandlerSha": "a14eb6f083c93bc38da3f8acc59b992130007542e4edfe479b1d63a3687ff1ba",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5178,9 +5178,133 @@
           "technical"
         ],
         "candidate.applications[].interviews[].state": [
-          "reviewed"
+          "scored"
         ],
         "candidate.applications[].stage": [
+          "debrief"
+        ]
+      }
+    },
+    "GET /api/interviews/candidates/:id/consents": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].answered": "boolean",
+        "items[].answeredAt": "string",
+        "items[].answers": "object",
+        "items[].answers.milo": "object",
+        "items[].answers.milo.answer": "boolean",
+        "items[].answers.milo.at": "string",
+        "items[].answers.recording": "object",
+        "items[].answers.recording.answer": "boolean",
+        "items[].answers.recording.at": "string",
+        "items[].answers.transcription": "object",
+        "items[].answers.transcription.answer": "boolean",
+        "items[].answers.transcription.at": "string",
+        "items[].interviewId": "string",
+        "items[].noticeVersion": "string",
+        "items[].roundName": "string",
+        "items[].state": "string",
+        "reads": "string"
+      },
+      "values": {
+        "items[].state": [
+          "scored"
+        ]
+      }
+    },
+    "GET /api/interviews/candidates/:id/debrief": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "debrief": "object",
+        "debrief.applications": "array",
+        "debrief.applications[]": "object",
+        "debrief.applications[].applicationId": "string",
+        "debrief.applications[].basedOn": "number",
+        "debrief.applications[].competencies": "array",
+        "debrief.applications[].competencies[]": "object",
+        "debrief.applications[].competencies[].anchors": "object",
+        "debrief.applications[].competencies[].anchors.1": "string",
+        "debrief.applications[].competencies[].anchors.2": "string",
+        "debrief.applications[].competencies[].anchors.3": "string",
+        "debrief.applications[].competencies[].anchors.4": "string",
+        "debrief.applications[].competencies[].id": "string",
+        "debrief.applications[].competencies[].name": "string",
+        "debrief.applications[].decide": "null",
+        "debrief.applications[].history": "array",
+        "debrief.applications[].history[]": "object",
+        "debrief.applications[].history[].at": "string",
+        "debrief.applications[].history[].by": "null|string",
+        "debrief.applications[].history[].byName": "null|string",
+        "debrief.applications[].history[].decision": "null",
+        "debrief.applications[].history[].reason": "null|string",
+        "debrief.applications[].history[].scorecardsMissing": "null",
+        "debrief.applications[].history[].stage": "string",
+        "debrief.applications[].opening": "object",
+        "debrief.applications[].opening.id": "string",
+        "debrief.applications[].opening.team": "string",
+        "debrief.applications[].opening.title": "string",
+        "debrief.applications[].rounds": "array",
+        "debrief.applications[].rounds[]": "object",
+        "debrief.applications[].rounds[].due": "array",
+        "debrief.applications[].rounds[].endedAt": "string",
+        "debrief.applications[].rounds[].interviewId": "string",
+        "debrief.applications[].rounds[].lead": "object",
+        "debrief.applications[].rounds[].lead.id": "string",
+        "debrief.applications[].rounds[].lead.name": "string",
+        "debrief.applications[].rounds[].minutes": "number",
+        "debrief.applications[].rounds[].name": "string",
+        "debrief.applications[].rounds[].panel": "array",
+        "debrief.applications[].rounds[].recapPath": "string",
+        "debrief.applications[].rounds[].recordPath": "string",
+        "debrief.applications[].rounds[].scheduledAt": "string",
+        "debrief.applications[].rounds[].scorecards": "array",
+        "debrief.applications[].rounds[].scorecards[]": "object",
+        "debrief.applications[].rounds[].scorecards[].changedAfterRecap": "boolean",
+        "debrief.applications[].rounds[].scorecards[].correctionReason": "null",
+        "debrief.applications[].rounds[].scorecards[].earlierVersions": "number",
+        "debrief.applications[].rounds[].scorecards[].id": "string",
+        "debrief.applications[].rounds[].scorecards[].interviewer": "object",
+        "debrief.applications[].rounds[].scorecards[].interviewer.id": "string",
+        "debrief.applications[].rounds[].scorecards[].interviewer.name": "string",
+        "debrief.applications[].rounds[].scorecards[].ratings": "array",
+        "debrief.applications[].rounds[].scorecards[].ratings[]": "object",
+        "debrief.applications[].rounds[].scorecards[].ratings[].competency": "string",
+        "debrief.applications[].rounds[].scorecards[].ratings[].competencyId": "string",
+        "debrief.applications[].rounds[].scorecards[].ratings[].note": "string",
+        "debrief.applications[].rounds[].scorecards[].ratings[].rating": "number",
+        "debrief.applications[].rounds[].scorecards[].recommendation": "string",
+        "debrief.applications[].rounds[].scorecards[].submittedAt": "string",
+        "debrief.applications[].rounds[].scorecards[].summary": "string",
+        "debrief.applications[].rounds[].scorecards[].version": "number",
+        "debrief.applications[].rounds[].state": "string",
+        "debrief.applications[].rounds[].type": "string",
+        "debrief.applications[].stage": "string",
+        "debrief.candidate": "object",
+        "debrief.candidate.headline": "string",
+        "debrief.candidate.id": "string",
+        "debrief.candidate.name": "string"
+      },
+      "values": {
+        "debrief.applications[].history[].stage": [
+          "applied",
+          "debrief",
+          "interviewing",
+          "screening"
+        ],
+        "debrief.applications[].rounds[].state": [
+          "scored"
+        ],
+        "debrief.applications[].rounds[].type": [
+          "behavioural",
+          "technical"
+        ],
+        "debrief.applications[].stage": [
           "debrief"
         ]
       }
@@ -5305,7 +5429,6 @@
           "assigned",
           "ended",
           "ready",
-          "reviewed",
           "scored"
         ]
       }
@@ -5409,7 +5532,7 @@
           "technical"
         ],
         "interview.state": [
-          "reviewed"
+          "scored"
         ]
       }
     },
@@ -5436,6 +5559,33 @@
           "none"
         ]
       }
+    },
+    "GET /api/interviews/interviews/:id/milo-export": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/milo-notes": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/recap": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "recap": "object",
+        "recap.competencies": "array",
+        "recap.notCovered": "array",
+        "recap.paused": "null",
+        "recap.state": "string",
+        "recap.writtenAt": "null"
+      },
+      "values": {
+        "recap.state": [
+          "none"
+        ]
+      }
+    },
+    "GET /api/interviews/interviews/:id/record": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/room": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
@@ -5507,11 +5657,14 @@
           "technical"
         ],
         "scorecard.interview.state": [
-          "reviewed"
+          "scored"
         ]
       }
     },
     "GET /api/interviews/interviews/:id/suggestion": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/transcript": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/waiting": {
@@ -5550,6 +5703,7 @@
         "items[].pipeline[].candidate.headline": "string",
         "items[].pipeline[].candidate.id": "string",
         "items[].pipeline[].candidate.name": "string",
+        "items[].pipeline[].debriefReady": "boolean",
         "items[].pipeline[].lastResult": "null|object",
         "items[].pipeline[].lastResult.interviewer": "object",
         "items[].pipeline[].lastResult.interviewer.id": "string",
@@ -5655,6 +5809,7 @@
         "opening.pipeline[].candidate.headline": "string",
         "opening.pipeline[].candidate.id": "string",
         "opening.pipeline[].candidate.name": "string",
+        "opening.pipeline[].debriefReady": "boolean",
         "opening.pipeline[].lastResult": "null",
         "opening.pipeline[].nextInterview": "null|object",
         "opening.pipeline[].nextInterview.id": "string",
@@ -11925,7 +12080,6 @@
         "ok",
         "open",
         "ready",
-        "reviewed",
         "scored"
       ]
     },

@@ -119,8 +119,8 @@ describe('the export of what Milo showed', () => {
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-disposition']).toMatch(/^attachment/);
     const doc = JSON.parse(res.text);
-    expect(Object.keys(doc.sections).sort()).toEqual(['notices', 'suggestions']);
-    expect(doc.interview).toMatchObject({ id: 'iv-ingrid-together', candidateId: CAND, state: 'reviewed' });
+    expect(Object.keys(doc.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
+    expect(doc.interview).toMatchObject({ id: 'iv-ingrid-together', candidateId: CAND, state: 'scored' });
     expect(JSON.stringify(doc.interview)).not.toMatch(/Ingrid/);
     const { suggestions } = doc.sections.suggestions;
     expect(suggestions.map((s: { id: string }) => s.id)).toEqual(['sg-ingrid-together-1', 'sg-ingrid-together-2']);
