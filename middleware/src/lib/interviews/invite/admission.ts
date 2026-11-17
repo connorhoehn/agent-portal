@@ -11,7 +11,8 @@
 //   not-knocked    a fresh session: every new exchange of the link starts here (the store's recordOpening).
 //   waiting        the guest knocked. Allowed only when `knockPrecondition` says yes (CONSENT's consents, wired
 //                  at combine; the default says yes), from not-knocked or turned-away.
-//   admitted       the lead let them in. Only the lead decides (routes/interviews/admission.ts).
+//   admitted       the lead let them in. Only the lead decides (routes/interviews/admission.ts), and not while the
+//                  answers leave off a part the deployment requires (row I6.4).
 //   turned-away    the lead said no, from waiting or admitted. The guest may knock again.
 //
 // The admission dies with the invite: a revoked or expired invite has no guest at all (guest.ts), and a revoked
@@ -62,16 +63,28 @@ export function nextAdmission(current: Admission, event: AdmissionEvent, now: Da
 }
 
 // ── C8: what must be true before a guest may knock ───────────────────────────
-type KnockPrecondition = (interviewId: string) => Promise<boolean>;
+// The precondition answers yes (`true`), or why not: `unanswered` (the steps before the knock are not done; a plain
+// `false` reads the same) or `declined-required` (the answers leave off a part this deployment requires, row I6.4: the
+// page tells that apart and shows its own page instead of the waiting room).
+export type KnockRefusal = 'unanswered' | 'declined-required';
+type KnockPrecondition = (interviewId: string) => Promise<boolean | KnockRefusal>;
 const ALWAYS: KnockPrecondition = async () => true;
 let precondition: KnockPrecondition = ALWAYS;
-/** The integrator gives this CONSENT's `consentsAnswered` at combine. Null puts the default (always yes) back. */
+/** The consents module gives this its `knockCheck`. Null puts the default (always yes) back. */
 export function setKnockPrecondition(fn: KnockPrecondition | null): void { precondition = fn ?? ALWAYS; }
-export async function knockPrecondition(interviewId: string): Promise<boolean> {
-  try { return (await precondition(interviewId)) === true; } catch { return false; }
+/** True when the guest may knock, else why not. A precondition that throws says `unanswered`. */
+export async function knockPrecondition(interviewId: string): Promise<true | KnockRefusal> {
+  try {
+    const answer = await precondition(interviewId);
+    if (answer === true) return true;
+    return answer === 'declined-required' ? 'declined-required' : 'unanswered';
+  } catch { return 'unanswered'; }
 }
 
-export type AdmissionWrite = { ok: true; admission: Admission } | { ok: false; reason: 'not-allowed' | 'stale' | 'no-guest' | 'precondition' };
+export type AdmissionWrite =
+  | { ok: true; admission: Admission }
+  | { ok: false; reason: 'not-allowed' | 'stale' | 'no-guest' }
+  | { ok: false; reason: 'precondition'; why: KnockRefusal };
 
 /** Apply `event` to the invite's current session, against the row as it is now. */
 export async function applyAdmission(inviteId: string, event: AdmissionEvent, now = new Date()): Promise<AdmissionWrite> {
@@ -79,7 +92,14 @@ export async function applyAdmission(inviteId: string, event: AdmissionEvent, no
     const store = inviteStore();
     const invite = await store.getInvite(inviteId);
     if (!invite || invite.revokedAt !== null || !invite.sessionHash) return { ok: false, reason: 'no-guest' };
-    if (event.kind === 'knock' && !await knockPrecondition(invite.interviewId)) return { ok: false, reason: 'precondition' };
+    if (event.kind === 'knock') {
+      const may = await knockPrecondition(invite.interviewId);
+      if (may !== true) return { ok: false, reason: 'precondition', why: may };
+    }
+    // A guest who knocked and then declined a part this deployment requires is not let in: the call cannot start as set up.
+    if (event.kind === 'decide' && event.admit && await knockPrecondition(invite.interviewId) === 'declined-required') {
+      return { ok: false, reason: 'precondition', why: 'declined-required' };
+    }
     const current = admissionOf(invite);
     const next = nextAdmission(current, event, now);
     if (!next) return { ok: false, reason: 'not-allowed' };

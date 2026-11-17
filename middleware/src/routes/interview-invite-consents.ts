@@ -2,7 +2,8 @@
 // row I2.3; contract C4). Mounted on the guest's router (routes/interview-invite.ts) with one line.
 //
 //   GET /consents   the current notice and the answers stored under it (all null when none, or when they
-//                   were given under an older notice: the candidate is asked again).
+//                   were given under an older notice: the candidate is asked again), and `required`: the parts
+//                   this deployment needs for the call to start (row I6.4). Declining one is still stored.
 //   PUT /consents   body { noticeVersion, recording, transcription, milo }: all three answers at once, each a
 //                   real yes or no (lib/interviews/consent/rules.ts). Declining the transcript stores Milo as
 //                   declined. 400 for an incomplete set, 409 for a stale notice (the answer carries the
@@ -17,7 +18,8 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { interviewsStore } from '../lib/interviews/store-select.js';
 import { GUEST_REFUSAL, requireGuest } from '../lib/interviews/invite/guest.js';
 import { CONSENT_NOTICE, type ConsentNotice } from '../lib/interviews/consent/notice.js';
-import { checkAnswers, stampAnswers } from '../lib/interviews/consent/rules.js';
+import { checkAnswers, stampAnswers, type ConsentPart } from '../lib/interviews/consent/rules.js';
+import { requiredConsents } from '../lib/interviews/consent/required.js';
 import { consentStore, type ConsentRecord } from '../lib/interviews/consent/store.js';
 import type { Interview } from '../lib/interviews/types.js';
 import { interviewsFlagGate } from './interviews.js';
@@ -30,6 +32,8 @@ export interface GuestConsentsView {
   notice: ConsentNotice;
   answers: { recording: boolean | null; transcription: boolean | null; milo: boolean | null };
   answeredAt: string | null;
+  /** The parts this deployment requires for the call to start (row I6.4; contract F3), in the notice's order. */
+  required: ConsentPart[];
 }
 
 const INCOMPLETE = 'Answer all three questions, yes or no, before you continue.';
@@ -38,7 +42,7 @@ const CLOSED = 'Your interview has started, so these answers can no longer be ch
 const RACED = 'Your answers were just saved from another window. Check them here, then continue.';
 
 /** Answers under an older notice are not shown back: the candidate answers the current text afresh. */
-export function guestConsentsView(record: ConsentRecord | null): GuestConsentsView {
+export function guestConsentsView(record: ConsentRecord | null, required: ConsentPart[] = requiredConsents()): GuestConsentsView {
   const current = record && record.noticeVersion === CONSENT_NOTICE.version ? record : null;
   return {
     notice: { version: CONSENT_NOTICE.version, title: CONSENT_NOTICE.title, paragraphs: [...CONSENT_NOTICE.paragraphs] },
@@ -46,6 +50,7 @@ export function guestConsentsView(record: ConsentRecord | null): GuestConsentsVi
       ? { recording: current.recording, transcription: current.transcription, milo: current.milo }
       : { recording: null, transcription: null, milo: null },
     answeredAt: current ? current.changedAt : null,
+    required: [...required],
   };
 }
 

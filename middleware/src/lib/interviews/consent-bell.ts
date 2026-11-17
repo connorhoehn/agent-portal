@@ -1,7 +1,8 @@
 // The recruiter is told when a round runs without a part (docs/interviews-tenant-plan.md decision 5, row I2.5): a bell to the
 // recruiter who owns the opening when the candidate's answers are first complete with a part off, and again only when the set
 // of parts that are off changes (including back to nothing off, so a replacement can be called off). The bell names the
-// opening, the round and the parts, never the candidate (lib/social-notify.ts `notifyInterviewConsentOff`).
+// opening, the round and the parts, never the candidate (lib/social-notify.ts `notifyInterviewConsentOff`). When a part off is
+// one this deployment requires (row I6.4, consent/required.ts), the same bell says the round cannot go ahead as set.
 //
 // Called from the candidate's consent write with one line the integrator adds to routes/interview-invite-consents.ts, after
 // the `if (!result.ok) { … }` block of PUT /consents and before `res.json(...)`:
@@ -12,6 +13,7 @@
 import { runWithDbTenant } from '../../providers/db-tenant.js';
 import { notifyInterviewConsentOff } from '../social-notify.js';
 import { partsOffOf, type ConsentAnswersIn, type OffPart } from './consent/effects.js';
+import { declinedRequired, requiredConsents } from './consent/required.js';
 import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT } from './types.js';
@@ -42,7 +44,8 @@ export async function consentsSaved(interviewId: string, before: ConsentAnswersI
     const opening = application && world.openings.find((o) => o.id === application.openingId);
     if (!interview || !opening) return [];
     const roundName = opening.kit.rounds.find((r) => r.id === interview.roundId)?.name ?? 'A round';
-    return await notifyInterviewConsentOff({ interviewId, openingTitle: opening.title, roundName, recruiterId: opening.recruiterId, offLabel: offLabel(off) });
+    const blocked = declinedRequired(after, requiredConsents()).length > 0;
+    return await notifyInterviewConsentOff({ interviewId, openingTitle: opening.title, roundName, recruiterId: opening.recruiterId, offLabel: offLabel(off), blocked });
   } catch {
     return [];
   }

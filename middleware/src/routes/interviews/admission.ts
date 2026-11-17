@@ -61,5 +61,5 @@ admissionRouter.post('/interviews/:id/admit', conduct, asyncHandler(async (req, 
   if (!inviteId) { res.status(409).json({ error: NOBODY }); return; }
   const written = await applyAdmission(inviteId, { kind: 'decide', admit });
   if (written.ok) { res.json({ admission: written.admission }); return; }
-  res.status(409).json({ error: written.reason === 'stale' ? CHANGED : NOBODY });
+  res.status(409).json({ error: written.reason === 'stale' || written.reason === 'precondition' ? CHANGED : NOBODY });
 }));

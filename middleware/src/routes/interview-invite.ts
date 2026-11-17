@@ -141,6 +141,7 @@ interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyn
 // ── Row I2.2 (lane SEAT): the guest's realtime token and the waiting room ────────────────────────────────────
 
 const NOT_YET = 'Finish the steps on this page before you ask to join.';
+const NEEDED_PART = 'Your answers are saved. This interview needs a part you said no to, so it cannot start as it is set up.';
 
 /** The guest's realtime token. Not-found while guest realtime is off: platform-api would take it as an identity (realtime.ts). */
 interviewInviteRouter.get('/realtime-token', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
@@ -166,6 +167,11 @@ interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHa
   const written = await applyAdmission(req.guest!.inviteId, { kind: 'knock' });
   if (written.ok) { res.json({ admission: written.admission }); return; }
   if (written.reason === 'no-guest') { res.status(404).json(GUEST_REFUSAL); return; }
+  if (written.reason === 'precondition' && written.why === 'declined-required') {
+    // Row I6.4: the answer stands; the page shows its own page for this, told apart by `reason`.
+    res.status(409).json({ error: NEEDED_PART, reason: 'declined-required' });
+    return;
+  }
   res.status(409).json({ error: written.reason === 'precondition' ? NOT_YET : 'Something changed on this page. Try again.' });
 }));
 

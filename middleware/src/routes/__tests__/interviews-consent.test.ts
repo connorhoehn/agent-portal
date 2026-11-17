@@ -50,6 +50,7 @@ import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewsFixture } from '../../mock/interviews.js';
 import { interviewConsentsFixture } from '../../mock/interviews-consents.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
+import '../../lib/interviews/consent/index.js'; // wires the knock's precondition, as index.ts does
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -116,7 +117,7 @@ describe('the guest\'s consents', () => {
     expect(res.headers['referrer-policy']).toBe('no-referrer');
     expect(res.body).toEqual({
       notice: { version: V, title: CONSENT_NOTICE.title, paragraphs: CONSENT_NOTICE.paragraphs },
-      answers: { recording: null, transcription: null, milo: null }, answeredAt: null,
+      answers: { recording: null, transcription: null, milo: null }, answeredAt: null, required: [],
     });
   });
 
@@ -234,6 +235,63 @@ describe('the panel\'s read', () => {
   it('keeps the answers the call started with after a notice change', async () => {
     row('iv-mateo-coding')!.noticeVersion = 'older';
     expect((await staff('u-greta', 'iv-mateo-coding')).body).toEqual({ answered: true, off: [] });
+  });
+});
+
+describe('a part the deployment requires (row I6.4)', () => {
+  const SETTING = 'INTERVIEWS_REQUIRED_CONSENTS';
+  const knock = (cookie: string) => request(app).post('/api/interview-invite/knock').set('Cookie', cookie);
+  const effects = () => request(app).get('/api/interviews/consent-effects').set('x-user', 'u-greta');
+  afterEach(() => { delete process.env[SETTING]; });
+
+  it('the guest reads which parts are required, before answering and after', async () => {
+    process.env[SETTING] = 'milo';
+    const cookie = await guest();
+    expect((await read(cookie)).body.required).toEqual(['transcription', 'milo']);
+    expect((await answer(cookie, ALL_YES)).body.required).toEqual(['transcription', 'milo']);
+  });
+
+  it('declining a required part is stored and stamped as any answer; the knock is refused with its own reason', async () => {
+    process.env[SETTING] = 'recording';
+    const cookie = await guest();
+    const saved = await answer(cookie, { ...ALL_YES, recording: false });
+    expect(saved.status).toBe(200);
+    expect(saved.body.answers).toEqual({ recording: false, transcription: true, milo: true });
+    expect(row()!).toMatchObject({ recording: false, revision: 1 });
+    expect(row()!.history).toHaveLength(1);
+    const refused = await knock(cookie);
+    expect(refused.status).toBe(409);
+    expect(refused.body.reason).toBe('declined-required');
+    expect(JSON.stringify(refused.body)).not.toMatch(/recording|transcription|milo|INTERVIEWS_/);
+    // Changing the answer lets the knock through.
+    expect((await answer(cookie, ALL_YES)).status).toBe(200);
+    const knocked = await knock(cookie);
+    expect(knocked.status).toBe(200);
+    expect(knocked.body.admission.state).toBe('waiting');
+  });
+
+  it('an unanswered knock keeps its own answer, without the new reason', async () => {
+    process.env[SETTING] = 'recording';
+    const refused = await knock(await guest());
+    expect(refused.status).toBe(409);
+    expect(refused.body.reason).toBeUndefined();
+  });
+
+  it('the recruiter\'s column says the round cannot go ahead; the lead is still told only what is off', async () => {
+    process.env[SETTING] = 'recording';
+    await answer(await guest(), { ...ALL_YES, recording: false });
+    const items = (await effects()).body.items as Array<{ interviewId: string; blocked: boolean; off: string[] }>;
+    expect(items.find((i) => i.interviewId === IV)).toEqual({ interviewId: IV, answered: true, off: ['recording'], blocked: true });
+    expect(items.find((i) => i.interviewId === 'iv-mateo-coding')).toMatchObject({ blocked: false });
+    expect((await staff('u-hugo')).body).toEqual({ answered: true, off: ['recording'] });
+  });
+
+  it('the default deployment is unchanged: a declined part knocks and nothing is blocked', async () => {
+    const cookie = await guest();
+    expect((await read(cookie)).body.required).toEqual([]);
+    await answer(cookie, { ...ALL_YES, recording: false, transcription: false });
+    expect((await knock(cookie)).status).toBe(200);
+    expect(((await effects()).body.items as Array<{ blocked: boolean }>).every((i) => !i.blocked)).toBe(true);
   });
 });
 

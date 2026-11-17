@@ -111,14 +111,14 @@ describe('GET /consent-effects: the recruiter\'s read', () => {
     const res = await effects('u-greta');
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
-    expect(itemFor(res.body)).toEqual({ interviewId: IV, answered: false, off: ['recording', 'transcription', 'milo'] });
-    for (const item of res.body.items) expect(Object.keys(item).sort()).toEqual(['answered', 'interviewId', 'off']);
+    expect(itemFor(res.body)).toEqual({ interviewId: IV, answered: false, off: ['recording', 'transcription', 'milo'], blocked: false });
+    for (const item of res.body.items) expect(Object.keys(item).sort()).toEqual(['answered', 'blocked', 'interviewId', 'off']);
     const cookie = await guest();
     expect((await answer(cookie, { recording: false, transcription: true, milo: true })).status).toBe(200);
-    expect(itemFor((await effects('u-greta')).body)).toEqual({ interviewId: IV, answered: true, off: ['recording'] });
+    expect(itemFor((await effects('u-greta')).body)).toEqual({ interviewId: IV, answered: true, off: ['recording'], blocked: false });
     expect((await answer(cookie, { recording: true, transcription: false, milo: true })).status).toBe(200);
-    expect(itemFor((await effects('u-greta')).body)).toEqual({ interviewId: IV, answered: true, off: ['transcription', 'milo'] });
-    expect(itemFor((await effects('u-root')).body)).toEqual({ interviewId: IV, answered: true, off: ['transcription', 'milo'] });
+    expect(itemFor((await effects('u-greta')).body)).toEqual({ interviewId: IV, answered: true, off: ['transcription', 'milo'], blocked: false });
+    expect(itemFor((await effects('u-root')).body)).toEqual({ interviewId: IV, answered: true, off: ['transcription', 'milo'], blocked: false });
   });
 
   it('is not-found for the lead, another interviewer and the hiring manager; another tenant never reaches it', async () => {
@@ -166,6 +166,23 @@ describe('the recruiter\'s bell', () => {
     expect(await consentsSaved(IV, { recording: false, transcription: false, milo: false }, { recording: false, transcription: false, milo: false })).toEqual([]);
     expect(await consentsSaved(IV, { recording: false, transcription: false, milo: false }, { recording: true, transcription: true, milo: true })).toEqual(['u-greta']);
     expect(sent[0]!.input.title).toMatch(/everything on again$/);
+  });
+
+  it('says the round cannot go ahead as set when a part off is one the deployment requires (row I6.4)', async () => {
+    process.env['INTERVIEWS_REQUIRED_CONSENTS'] = 'recording';
+    try {
+      expect(await consentsSaved(IV, null, { recording: false, transcription: true, milo: true })).toEqual(['u-greta']);
+      expect(sent[0]!.input.title).toMatch(/cannot go ahead as set: no recording$/);
+      expect(sent[0]!.input.body).toContain('cannot start as it is set up');
+      const text = JSON.stringify(sent[0]!.input);
+      for (const word of ['Mateo', 'cand-', 'iv-mateo', 'chose', 'declined', 'INTERVIEWS_']) expect([word, text.includes(word)]).toEqual([word, false]);
+      sent = [];
+      // A part off that is not required reads as before.
+      expect(await consentsSaved(IV, { recording: false, transcription: true, milo: true }, { recording: true, transcription: true, milo: false })).toEqual(['u-greta']);
+      expect(sent[0]!.input.title).toMatch(/runs with no Milo$/);
+    } finally {
+      delete process.env['INTERVIEWS_REQUIRED_CONSENTS'];
+    }
   });
 
   it('rings nobody for an unknown interview and never throws', async () => {

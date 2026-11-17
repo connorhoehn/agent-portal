@@ -890,6 +890,8 @@ export interface InterviewConsentOffEvent {
   recruiterId: string;
   /** What is off now, in plain words ("no recording, no Milo"); empty when everything is back on. */
   offLabel: string;
+  /** A part off is one the deployment requires (row I6.4): the round cannot go ahead as set up. */
+  blocked?: boolean;
 }
 
 /**
@@ -903,10 +905,13 @@ export async function notifyInterviewConsentOff(ev: InterviewConsentOffEvent): P
     return await notify([ev.recruiterId], {
       id: `interview-consent:${roundKey(ev.interviewId)}:${ev.recruiterId}:${Date.now().toString(36)}`,
       type: 'system',
-      title: ev.offLabel ? `${round} runs with ${ev.offLabel}` : `${round} runs with everything on again`,
-      body: ev.offLabel
-        ? 'The interview goes ahead without that part. Open Upcoming to arrange what replaces it.'
-        : 'The recording, the transcript and Milo are all on for this round now.',
+      title: ev.offLabel && ev.blocked ? `${round} cannot go ahead as set: ${ev.offLabel}`
+        : ev.offLabel ? `${round} runs with ${ev.offLabel}` : `${round} runs with everything on again`,
+      body: ev.offLabel && ev.blocked
+        ? 'This interview needs a part the candidate said no to, so it cannot start as it is set up. The candidate has been told you will be in touch. Open Upcoming to arrange what happens next.'
+        : ev.offLabel
+          ? 'The interview goes ahead without that part. Open Upcoming to arrange what replaces it.'
+          : 'The recording, the transcript and Milo are all on for this round now.',
       payload: { tenant: 'interviews', kind: 'interview-consent-off', audience: 'recruiter' },
       action: { label: 'Open Upcoming', href: '/interviews/upcoming' },
     });

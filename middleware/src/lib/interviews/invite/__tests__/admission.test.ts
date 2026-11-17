@@ -79,11 +79,23 @@ describe('the admission on the invite', () => {
     const invite = await opened();
     const asked: string[] = [];
     setKnockPrecondition(async (id) => { asked.push(id); return false; });
-    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toEqual({ ok: false, reason: 'precondition' });
+    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toEqual({ ok: false, reason: 'precondition', why: 'unanswered' });
     expect(asked).toEqual(['iv-1']);
     setKnockPrecondition(async () => { throw new Error('down'); });
-    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toEqual({ ok: false, reason: 'precondition' });
+    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toEqual({ ok: false, reason: 'precondition', why: 'unanswered' });
     setKnockPrecondition(null);
     expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toMatchObject({ ok: true });
+  });
+
+  it('a declined required part (row I6.4) is its own refusal, for the knock and for the lead letting them in', async () => {
+    const invite = await opened();
+    let answer: true | 'declined-required' = 'declined-required';
+    setKnockPrecondition(async () => answer);
+    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toEqual({ ok: false, reason: 'precondition', why: 'declined-required' });
+    answer = true; // the candidate changed the answer
+    expect(await applyAdmission(invite.id, { kind: 'knock' }, NOW)).toMatchObject({ ok: true, admission: { state: 'waiting' } });
+    answer = 'declined-required'; // and declined again while waiting
+    expect(await applyAdmission(invite.id, { kind: 'decide', admit: true }, NOW)).toEqual({ ok: false, reason: 'precondition', why: 'declined-required' });
+    expect(await applyAdmission(invite.id, { kind: 'decide', admit: false }, NOW)).toMatchObject({ ok: true, admission: { state: 'turned-away' } });
   });
 });
