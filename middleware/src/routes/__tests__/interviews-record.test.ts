@@ -159,6 +159,16 @@ describe('the parts', () => {
     expect((await WEN(record(MATEO))).body.record).toBeUndefined();
   });
 
+  it('the header reads when it actually started, once that is kept, not when it was set for', async () => {
+    const before = (await HUGO(record(MATEO))).body.record.interview;
+    const row = interviewsFixture.rows().find((i) => i.id === MATEO)!;
+    const ran = new Date(Date.parse(before.startedAt) + 26 * 3600_000).toISOString();
+    row.startedAt = ran;
+    try {
+      expect((await HUGO(record(MATEO))).body.record.interview.startedAt).toBe(ran);
+    } finally { delete row.startedAt; }
+  });
+
   it('a behavioural round has no runs and no questions to insert; every finished technical round has a failing and a passing run', async () => {
     const b = (await WEN(record('iv-f2b6t5zh'))).body.record;
     expect(b.runs).toEqual([]);

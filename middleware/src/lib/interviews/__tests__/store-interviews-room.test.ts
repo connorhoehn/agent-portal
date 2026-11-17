@@ -32,7 +32,7 @@ function roomTableExec(): SqlExec {
     if (sql === SqlInterviewsStore.START_INTERVIEW_SQL || sql === SqlInterviewsStore.END_INTERVIEW_SQL) {
       const row = find();
       if (!row || row['revision'] !== b.get('revision')) return [];
-      if (sql === SqlInterviewsStore.START_INTERVIEW_SQL) row['state'] = 'live';
+      if (sql === SqlInterviewsStore.START_INTERVIEW_SQL) { row['state'] = 'live'; if (b.get('started_at')) row['started_at'] = ts(String(b.get('started_at'))); }
       else { row['state'] = 'ended'; row['ended_at'] = ts(String(b.get('ended_at'))); }
       row['revision'] = Number(row['revision']) + 1;
       return [row];
@@ -56,6 +56,13 @@ describe.each([
     const out = await store.startInterview(before.id, before.revision);
     expect(out).toEqual({ ok: true, row: { ...before, state: 'live', revision: before.revision + 1 } });
     expect(await read(before.id)).toEqual({ ...before, state: 'live', revision: before.revision + 1 });
+  });
+
+  it('starts with when it started: the record clock and header read it', async () => {
+    const before = await read('iv-n5z9f2cq');
+    const out = await store.startInterview(before.id, before.revision, AT);
+    expect(out).toEqual({ ok: true, row: { ...before, state: 'live', startedAt: AT, revision: before.revision + 1 } });
+    expect((await read(before.id)).startedAt).toBe(AT);
   });
 
   it('ends: the state goes ended with the time it ended', async () => {

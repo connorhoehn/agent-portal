@@ -177,6 +177,8 @@ export interface Interview {
   /** The invite link's token hash (row I2.1); null until one is issued. */
   /** The call this interview runs in (row I2.2); null until then. */
   callId: string | null;
+  /** When the lead started it (moved it to live); absent before, and on rows written before this was kept. */
+  startedAt?: string | null;
   /** When the call ended; null before. */
   endedAt: string | null;
   /** Who accepted the seat they hold now (row I1.4). The lead's acceptance is also the move to `accepted`. */

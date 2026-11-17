@@ -54,7 +54,8 @@ export interface InterviewWrites {
   /** Insert as given (assign.ts newInterview, revision 1). Ids are chosen by the route and never reused; a taken id is `null`. */
   createInterview(input: Interview): Promise<Interview | null>;
   /** The room (row I2.4): the state to `live`, against `revision`. Whether it may move is room.ts startMove. */
-  startInterview(id: string, revision: number): Promise<WriteResult<Interview>>;
+  /** Live from now; `startedAt` is when it actually started (the record's clock and header). */
+  startInterview(id: string, revision: number, startedAt?: string): Promise<WriteResult<Interview>>;
   /** The room (row I2.4): the state to `ended` with `endedAt`, against `revision`. Whether it may move is room.ts endMove. */
   endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>>;
   /** A seat's answer: the state, the panel, the acceptances and the declines, against `revision`. */
@@ -149,8 +150,8 @@ export class MemoryInterviewsStore implements InterviewsStore {
     return casOpening(id, revision, (o) => { o.kit = structuredClone(kit); });
   }
 
-  async startInterview(id: string, revision: number): Promise<WriteResult<Interview>> {
-    return casInterview(id, revision, (i) => { i.state = 'live'; });
+  async startInterview(id: string, revision: number, startedAt?: string): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { i.state = 'live'; if (startedAt) i.startedAt = startedAt; });
   }
 
   async endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>> {

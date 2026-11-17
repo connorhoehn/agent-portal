@@ -123,6 +123,7 @@ CREATE TABLE IF NOT EXISTS interviews (
   assigned_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   -- The call (row I2.2).
   call_id            TEXT,
+  started_at         TIMESTAMPTZ,
   ended_at           TIMESTAMPTZ,
   -- Row I1.4: each seat's answer. [{ userId, seat, at }] for the seats held now that accepted;
   -- [{ userId, seat, reason, at }] for every decline, kept across reassignments.
@@ -132,6 +133,8 @@ CREATE TABLE IF NOT EXISTS interviews (
   revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
 ALTER TABLE interviews DROP COLUMN IF EXISTS invite_token_hash;
+-- When the lead started it (the record's clock and header show when it ran, not when it was set for); for tables made before it.
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);
 

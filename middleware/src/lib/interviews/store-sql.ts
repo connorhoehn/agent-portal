@@ -27,7 +27,7 @@ export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, 
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
 const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
-  assigned_by, assigned_at, call_id, ended_at, acceptances, declines, revision`;
+  assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
 export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason
@@ -166,6 +166,7 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
     leadId: str(r['lead_id']), panelIds: textArray(r['panel_ids']), scheduledAt: isoOrNull(r['scheduled_at']), minutes: num(r['minutes']),
     state: str(r['state']) as InterviewState, questionIds: textArray(r['question_ids']), assignedBy: str(r['assigned_by']),
     assignedAt: isoOf(r['assigned_at']), callId: strOrNull(r['call_id']),
+    ...(isoOrNull(r['started_at']) ? { startedAt: isoOrNull(r['started_at']) } : {}),
     endedAt: isoOrNull(r['ended_at']), acceptances: json<SeatAcceptance[]>(r['acceptances'], []), declines: json<SeatDecline[]>(r['declines'], []),
     revision: num(r['revision']),
   };
@@ -217,7 +218,7 @@ export class SqlInterviewsStore implements InterviewsStore {
 
   /** The room's two writes (row I2.4), compare-and-set like the rest. */
   static readonly START_INTERVIEW_SQL = `UPDATE interviews
-  SET state = 'live', revision = revision + 1
+  SET state = 'live', started_at = COALESCE(CAST(:started_at AS TIMESTAMPTZ), started_at), revision = revision + 1
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
   static readonly END_INTERVIEW_SQL = `UPDATE interviews
@@ -225,8 +226,8 @@ export class SqlInterviewsStore implements InterviewsStore {
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
 
-  async startInterview(id: string, revision: number): Promise<WriteResult<Interview>> {
-    return this.casInterview(id, await this.exec(SqlInterviewsStore.START_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision)]));
+  async startInterview(id: string, revision: number, startedAt?: string): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.START_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision), textParam('started_at', startedAt ?? null)]));
   }
 
   async endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>> {

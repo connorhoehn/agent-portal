@@ -89,7 +89,8 @@ export async function readRecord(s: RecordSubject): Promise<InterviewRecordView>
     removed: removed.has('transcript-and-minutes'),
     present: (transcript?.lines.length ?? 0) > 0,
   });
-  const startedAt = transcript?.startedAt ?? i.scheduledAt ?? null;
+  // The record's clock and header: when it actually started, else when the transcript began, else the set time.
+  const startedAt = i.startedAt ?? transcript?.startedAt ?? i.scheduledAt ?? null;
   const round = s.opening.kit.rounds.find((r) => r.id === i.roundId);
   return {
     interview: {

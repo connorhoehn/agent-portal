@@ -77,7 +77,7 @@ function roomWrite(move: (i: Interview, userId: string) => RoomMove, write: (i: 
   });
 }
 
-roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision)));
+roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision, interviewsNow().toISOString())));
 roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, revision) => {
   const r = await interviewsStore().endInterview(i.id, interviewsNow().toISOString(), revision);
   if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
