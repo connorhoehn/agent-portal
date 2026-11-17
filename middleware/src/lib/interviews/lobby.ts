@@ -91,7 +91,7 @@ export function guestSeatRule(f: GuestSeatFacts): boolean {
 // ── Staff, read now ──────────────────────────────────────────────────────────
 
 const findInterview = async (interviewId: string): Promise<Interview | null> =>
-  runWithDbTenant(INTERVIEWS_TENANT, async () => (await interviewsStore().listInterviews()).find((i) => i.id === interviewId) ?? null);
+  runWithDbTenant(INTERVIEWS_TENANT, () => interviewsStore().getInterview(interviewId));
 
 /** Does this (already current) staff session hold a seat in `interviewId`'s call now? */
 export async function staffHoldsInterviewSeat(session: Session, interviewId: string, opts: { pad?: boolean } = {}): Promise<boolean> {

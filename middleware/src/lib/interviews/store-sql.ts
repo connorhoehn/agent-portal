@@ -186,6 +186,10 @@ export class SqlInterviewsStore implements InterviewsStore {
   async listCandidates(): Promise<Candidate[]> { return (await this.exec(LIST_CANDIDATES_SQL)).map(candidateFromRow); }
   async listApplications(): Promise<Application[]> { return (await this.exec(LIST_APPLICATIONS_SQL)).map(applicationFromRow); }
   async listInterviews(): Promise<Interview[]> { return (await this.exec(LIST_INTERVIEWS_SQL)).map(interviewFromRow); }
+  async getInterview(id: string): Promise<Interview | null> {
+    const row = (await this.exec(GET_INTERVIEW_SQL, [textParam('id', id)]))[0];
+    return row ? interviewFromRow(row) : null;
+  }
   async listScorecards(): Promise<Scorecard[]> { return (await this.exec(LIST_SCORECARDS_SQL)).map(scorecardFromRow); }
 
   async createOpening(input: NewOpening): Promise<Opening | null> {

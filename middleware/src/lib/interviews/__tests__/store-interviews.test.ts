@@ -200,3 +200,15 @@ describe('the interview write statements match schema/interviews_schema.sql', ()
     if (statement.startsWith('INSERT')) expect(/INSERT INTO interviews \(([^)]+)\)/.exec(statement)![1]!.split(',').map((c) => c.trim()).sort()).toEqual([...cols].sort());
   });
 });
+
+describe.each([
+  ['memory', () => new MemoryInterviewsStore() as InterviewsStore],
+  ['sql', () => new SqlInterviewsStore(interviewsTableExec().exec) as InterviewsStore],
+])('the %s store\'s read of one interview', (_name, make) => {
+  it('returns the same row the whole read has, and null for an unknown id', async () => {
+    const store = make();
+    const all = await store.listInterviews();
+    expect(await store.getInterview(all[0]!.id)).toEqual(all[0]);
+    expect(await store.getInterview('iv-none')).toBeNull();
+  });
+});

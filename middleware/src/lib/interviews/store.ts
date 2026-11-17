@@ -93,6 +93,8 @@ export interface InterviewsStore extends OpeningWrites, InterviewWrites, Scoreca
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
   listInterviews(): Promise<Interview[]>;
+  /** One interview by id, or null: the gateway's per-delivery seat checks (the pad, the lobby) read this, not the whole table. */
+  getInterview(id: string): Promise<Interview | null>;
   listScorecards(): Promise<Scorecard[]>;
 }
 
@@ -115,6 +117,10 @@ export class MemoryInterviewsStore implements InterviewsStore {
   async listCandidates(): Promise<Candidate[]> { return copy(interviewCandidatesFixture.rows()).sort(ORDER.candidates); }
   async listApplications(): Promise<Application[]> { return copy(interviewApplicationsFixture.rows()).sort(ORDER.applications); }
   async listInterviews(): Promise<Interview[]> { return copy(interviewsFixture.rows()).sort(ORDER.interviews); }
+  async getInterview(id: string): Promise<Interview | null> {
+    const row = interviewsFixture.rows().find((i) => i.id === id);
+    return row ? structuredClone(row) : null;
+  }
   async listScorecards(): Promise<Scorecard[]> { return copy(interviewScorecardsFixture.rows()).sort(ORDER.scorecards); }
 
   async createOpening(input: NewOpening): Promise<Opening | null> {

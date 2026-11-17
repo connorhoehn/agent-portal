@@ -38,11 +38,20 @@ const SECRET = 'test-realtime-secret';
 const HUGO = 'u-hugo'; const WEN = 'u-wen'; const GRETA = 'u-greta'; const AMARA = 'u-amara'; const THEO = 'u-theo';
 const SHARED = 'iv-k1p5w8ra'; const WENS = 'iv-c3k8w2ma'; const BEHAVIOURAL = 'iv-n5z9f2cq';
 
+// The panel of the shared round; a test may take Wen off it to prove the next delivery is refused.
+let sharedPanel: string[] = [WEN];
 class PanelStore extends MemoryInterviewsStore {
+  readonly byIdReads: string[] = [];
   override async listInterviews(): Promise<Interview[]> {
-    return (await super.listInterviews()).map((i) => i.id === SHARED ? { ...i, panelIds: [WEN] } : i);
+    return (await super.listInterviews()).map((i) => i.id === SHARED ? { ...i, panelIds: [...sharedPanel] } : i);
+  }
+  override async getInterview(id: string): Promise<Interview | null> {
+    this.byIdReads.push(id);
+    const row = await super.getInterview(id);
+    return row && row.id === SHARED ? { ...row, panelIds: [...sharedPanel] } : row;
   }
 }
+const store = new PanelStore();
 
 type Frame = Record<string, unknown> & { type?: string; action?: string; code?: string; channel?: string };
 type Pad = { ws: WebSocket; frames: Frame[]; channel: string; doc: Y.Doc; provider: GatewayProvider; text: Y.Text };
@@ -55,9 +64,10 @@ const open: Pad[] = [];
 beforeAll(async () => {
   process.env['REALTIME_JWT_SECRET'] = SECRET;
   delete process.env['INTERVIEWS_ENABLED'];
-  setInterviewsStore(new PanelStore());
+  setInterviewsStore(store);
   server = http.createServer((_req, res) => { res.statusCode = 404; res.end(); });
-  dispose = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0 }).dispose;
+  // The verdict cache on, as a deployment may run it: a pad's verdicts must never be served from it.
+  dispose = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, authorityCache: true }).dispose;
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as AddressInfo).port;
 });
@@ -178,6 +188,38 @@ describe('the pad carried on the BFF gateway', () => {
     await until(() => [...wen.provider.awareness.getStates().values()].some(s => (s as { user?: { name?: string } }).user?.name === 'Hugo'), 'Hugo\'s caret at Wen');
   });
 
+  it('stops delivering to a panel member the moment they are taken off the panel, with the verdict cache on', async () => {
+    const hugo = await openPad(HUGO, SHARED);
+    const wen = await openPad(WEN, SHARED);
+    await until(() => subscribed(hugo) && subscribed(wen), 'both subscriptions');
+    hugo.text.insert(0, 'first line\n');
+    await until(() => wen.text.toString().includes('first line'), 'the first line at Wen');
+    sharedPanel = [];
+    try {
+      hugo.text.insert(hugo.text.length, 'after the change\n');
+      await until(() => hugo.provider.persistenceState === 'saved', 'Hugo\'s second edit to persist');
+      await settle();
+      expect(wen.text.toString()).not.toContain('after the change');
+      // Her own writes are refused too.
+      wen.text.insert(0, 'still here?\n');
+      await until(() => wen.provider.persistenceState === 'error', 'Wen\'s write to be refused');
+      await settle();
+      expect(hugo.text.toString()).not.toContain('still here?');
+    } finally { sharedPanel = [WEN]; }
+  });
+
+  it('reads the one interview for each decision, never the whole table', async () => {
+    const listSpy = jest.spyOn(store, 'listInterviews');
+    store.byIdReads.length = 0;
+    const hugo = await openPad(HUGO, SHARED);
+    await until(() => subscribed(hugo), 'Hugo on his pad');
+    hugo.text.insert(0, 'x');
+    await until(() => hugo.provider.persistenceState === 'saved', 'the edit to persist');
+    expect(store.byIdReads.length).toBeGreaterThan(0);
+    expect(store.byIdReads.every((id) => id === SHARED)).toBe(true);
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
   it('refuses a person whose interview is another one, and keeps their edits out', async () => {
     const wen = await openPad(WEN, WENS);
     await until(() => subscribed(wen), 'Wen on her own pad');
@@ -256,6 +298,11 @@ describe('the candidate\'s seat on the pad (row I2.2)', () => {
     mine.text.insert(0, 'def answer():\n');
     hugo.text.insert(0, '# question 1\n');
     await until(() => hugo.text.toString() === mine.text.toString() && mine.text.toString().includes('# question 1') && hugo.text.toString().includes('def answer'), 'the two texts to converge');
+    // Each sees the other's named caret.
+    hugo.provider.awareness.setLocalStateField('user', { name: 'Hugo', color: '#336699' });
+    mine.provider.awareness.setLocalStateField('user', { name: 'Candidate', color: '#993366' });
+    const names = (p: Pad) => [...p.provider.awareness.getStates().values()].map(s => (s as { user?: { name?: string } }).user?.name);
+    await until(() => names(mine).includes('Hugo') && names(hugo).includes('Candidate'), 'the carets to cross');
   });
 
   it('refuses a candidate of another interview on this pad', async () => {

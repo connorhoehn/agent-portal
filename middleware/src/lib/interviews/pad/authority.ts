@@ -31,7 +31,7 @@ const TENANT = 'interviews';
 export async function padSeatHolds(session: Session, interviewId: string): Promise<boolean> {
   if (session.tenant !== TENANT) return false;
   if (!await isAllowed({ sub: session.sub, tenant: session.tenant, role: session.role }, 'ViewInterviews')) return false;
-  const interview = (await interviewsStore().listInterviews()).find((i) => i.id === interviewId);
+  const interview = await interviewsStore().getInterview(interviewId);
   if (!interview || interview.type !== 'technical') return false;
   return interview.leadId === session.sub || interview.panelIds.includes(session.sub);
 }
