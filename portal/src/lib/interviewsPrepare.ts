@@ -48,3 +48,34 @@ export function bankGroups(bank: readonly BankQuestion[], competencies: Readonly
 }
 
 export const samePlan = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+
+// ---- Milo's suggested plan (row I3.10; contract E6) ------------------------------------------------------------------------------
+
+export interface DraftQuestion { questionId: string; why: string }
+/** POST …/plan-draft: advisory; nothing is saved by it. `line` is the one plain sentence when there is no plan. */
+export interface PlanDraft { plan: { questions: DraftQuestion[] } | null; paused: null | 'budget'; line: string | null }
+export type DraftOutcome = { ok: true; draft: PlanDraft } | { ok: false; error: string };
+
+export const BUDGET_PAUSED_LINE = 'Milo is paused for this opening until its budget is raised, so no plan can be drafted. You can still choose the questions yourself.';
+export const NO_PLAN_LINE = 'Milo could not draft a plan this time. Choose the questions yourself below.';
+
+export async function askForPlan(id: string): Promise<DraftOutcome> {
+  const r = await writeJson<PlanDraft>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/plan-draft`, 'POST', {});
+  if (!r.ok) return { ok: false, error: r.data?.line ?? r.error ?? 'Milo could not be asked just now. Try again.' };
+  return { ok: true, draft: { plan: r.data?.plan ?? null, paused: r.data?.paused ?? null, line: r.data?.line ?? null } };
+}
+
+/** The one plain line under the button for a draft with no plan; null when there is a plan. */
+export function draftLine(d: PlanDraft): string | null {
+  if (d.plan && d.plan.questions.length) return null;
+  if (d.paused === 'budget') return BUDGET_PAUSED_LINE;
+  return d.line ?? NO_PLAN_LINE;
+}
+
+/** What "Use this plan" puts in the page's own selection: the draft's questions that are still in the bank, in order, each once, at most `max`. */
+export function planFromDraft(draft: readonly DraftQuestion[], bank: ReadonlyArray<{ id: string }>, max: number): string[] {
+  const inBank = new Set(bank.map((q) => q.id));
+  const out: string[] = [];
+  for (const d of draft) if (inBank.has(d.questionId) && !out.includes(d.questionId) && out.length < max) out.push(d.questionId);
+  return out;
+}

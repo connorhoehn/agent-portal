@@ -24,3 +24,16 @@ test('paths and plan comparison', () => {
   assert.equal(samePlan(['a', 'b'], ['a', 'b']), true);
   assert.equal(samePlan(['a', 'b'], ['b', 'a']), false);
 });
+
+test('"Use this plan" fills the selection with the draft\'s bank questions, in order, once each, within the cap', async () => {
+  const { planFromDraft, draftLine, BUDGET_PAUSED_LINE, NO_PLAN_LINE } = await import('../interviewsPrepare.ts');
+  const bank = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const draft = [{ questionId: 'c', why: 'x' }, { questionId: 'gone', why: 'x' }, { questionId: 'a', why: 'x' }, { questionId: 'c', why: 'x' }, { questionId: 'b', why: 'x' }];
+  assert.deepEqual(planFromDraft(draft, bank, 8), ['c', 'a', 'b']);
+  assert.deepEqual(planFromDraft(draft, bank, 2), ['c', 'a']);
+  assert.deepEqual(planFromDraft([], bank, 8), []);
+  assert.equal(draftLine({ plan: { questions: draft }, paused: null, line: null }), null);
+  assert.equal(draftLine({ plan: null, paused: 'budget', line: null }), BUDGET_PAUSED_LINE);
+  assert.equal(draftLine({ plan: null, paused: null, line: null }), NO_PLAN_LINE);
+  assert.equal(draftLine({ plan: null, paused: null, line: 'Three plans.' }), 'Three plans.');
+});

@@ -13,7 +13,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, ROUND_TYPE_LABELS, roundStatus, whenWithZone } from '../../lib/interviews';
 import { moved } from '../../lib/interviewsKit';
-import { bankGroups, canOpenRoom, roomPath, samePlan, savePlan, type BankQuestion, type InterviewRecord } from '../../lib/interviewsPrepare';
+import { askForPlan, bankGroups, canOpenRoom, draftLine, planFromDraft, roomPath, samePlan, savePlan, type BankQuestion, type DraftQuestion, type InterviewRecord, type PlanDraft } from '../../lib/interviewsPrepare';
 import ResumeViewer from './ResumeViewer';
 
 export default function PreparePage() {
@@ -38,6 +38,9 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [draft, setDraft] = useState<PlanDraft | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askProblem, setAskProblem] = useState<string | null>(null);
   useEffect(() => { setPlan(saved); }, [saved]);
 
   const byId = new Map(record.bank.map((q) => [q.id, q]));
@@ -56,6 +59,21 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
     setNote('Your plan is saved.');
     onChanged();
   };
+
+  const ask = async () => {
+    setAsking(true); setAskProblem(null);
+    const out = await askForPlan(record.id);
+    setAsking(false);
+    if (!out.ok) { setAskProblem(out.error); return; }
+    setDraft(out.draft);
+  };
+  const suggested = draft?.plan?.questions ?? [];
+  const suggestedLine = draft ? draftLine(draft) : null;
+  const useDraft = () => { setPlan(planFromDraft(suggested, record.bank, record.maxQuestions)); setNote(null); };
+  const draftColumns: DataTableColumn<DraftQuestion>[] = [
+    { key: 'prompt', header: 'Question', render: (d) => <T size="sm" title={byId.get(d.questionId)?.prompt} className="block max-w-[34rem] truncate" data-testid="interviews-draft-prompt">{byId.get(d.questionId)?.prompt ?? ''}</T> },
+    { key: 'why', header: 'Why', render: (d) => <T size="sm" tone="secondary" className="block max-w-[26rem] truncate" title={d.why}>{d.why}</T> },
+  ];
 
   const planColumns: DataTableColumn<BankQuestion>[] = [
     { key: 'n', header: '#', numeric: true, width: '48px', render: (q) => <T size="sm" tone="secondary">{plan.indexOf(q.id) + 1}</T> },
@@ -98,6 +116,24 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
               rowActions={editable ? planControls : undefined} rowActionsHeader="Order" rowActionsHeaderHidden />}
         </Stack>
       </DetailSection>
+      {editable && record.seat === 'lead' && record.bank.length > 0 && (
+        <DetailSection variant="heading" title="Milo's suggested plan" hint="A suggestion from the kit. You choose."
+          actions={<Button size="sm" variant="secondary" disabled={asking} data-testid="interviews-draft-ask" onClick={() => { void ask(); }}>{asking ? 'Asking Milo…' : suggested.length ? 'Ask again' : 'Ask Milo for a plan'}</Button>}>
+          <Stack gap="sm">
+            {askProblem && <T size="sm" tone="danger" role="alert" data-testid="interviews-draft-problem">{askProblem}</T>}
+            {suggestedLine && <T size="sm" tone="secondary" data-testid="interviews-draft-line">{suggestedLine}</T>}
+            {suggested.length > 0 && (
+              <>
+                <DataTable narrow data-testid="interviews-draft-table" aria-label="Milo's suggested plan" data={suggested} columns={draftColumns} keyField={(d) => d.questionId} />
+                <Inline gap="sm" wrap={false}>
+                  <Button size="sm" variant="primary" data-testid="interviews-draft-use" onClick={useDraft}>Use this plan</Button>
+                  <T size="xs" tone="tertiary">This replaces the selection above. Save it when you are happy with it.</T>
+                </Inline>
+              </>
+            )}
+          </Stack>
+        </DetailSection>
+      )}
       {groups.length === 0
         ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the bank is in your plan.'}</T>
         : groups.map((g) => (
