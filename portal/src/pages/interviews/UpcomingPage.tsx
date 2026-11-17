@@ -8,8 +8,9 @@
 
 import { DateTimeField } from '@connorhoehn/ui-components';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { Button, Chip, CollectionToolbar, CopyIdButton, DataTable, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, CollectionToolbar, CopyIdButton, DataTable, DropdownMenu, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
@@ -23,6 +24,8 @@ import {
 import {
   CONSENT_EFFECTS_PATH, consentColumnLabel, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
 } from '../../lib/interviewsUpcoming';
+import { finishedCount, isLive, upcomingRows, type UpcomingShow } from '../../lib/interviewsDesk';
+import { roomHref } from '../../lib/interviewsRoom';
 import { PanelCell, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -39,35 +42,26 @@ export default function UpcomingPage() {
   return <UpcomingWorkspace key={`${session?.sub}:${session?.tenant}:${session?.role}`} />;
 }
 
-/** One round's link: its status, made or revoked in place. The link itself is only in the page's memory, from the answer that made it. */
-function InviteCell({ row, status, link, busy, onMake, onRevoke }: {
-  row: InterviewRow; status: InviteStatus | null; link: string | undefined; busy: boolean; onMake(): void; onRevoke(): void;
-}) {
-  const live = status?.state === 'live';
+/** One round's link: what became of it, and the copy control for a link just made. Making and revoking are in the row's menu. */
+function InviteCell({ row, status, link }: { row: InterviewRow; status: InviteStatus | null; link: string | undefined }) {
   return (
     <Stack gap="none">
       <Inline gap="xs" align="center" wrap={false}>
-        <Button size="sm" variant="ghost" disabled={busy} data-testid="interviews-upcoming-invite" onClick={onMake}>{live ? 'New link…' : 'Invite link'}</Button>
-        {live && <Button size="sm" variant="ghost" disabled={busy} data-testid="interviews-upcoming-revoke" onClick={onRevoke}>Revoke…</Button>}
+        {status && status.state !== 'none'
+          ? <T size="xs" tone="secondary" className="block max-w-[15rem] truncate" title={inviteLine(status, sentence)} data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>
+          : <T size="xs" tone="tertiary">No link yet</T>}
         {link && <CopyIdButton value={link} label={`Copy the invite link for ${row.candidate.name}`} data-testid="interviews-upcoming-copy" />}
       </Inline>
       {link && <T size="xs" tone="secondary" data-testid="interviews-upcoming-link-once">Link made. Copy it now: it is not shown again.</T>}
-      {status && status.state !== 'none' && <T size="xs" tone="secondary" data-testid="interviews-upcoming-invite-status">{inviteLine(status, sentence)}</T>}
     </Stack>
   );
 }
 
-/** One round's time: what it is and the way to change it. The field itself opens above the table, not in the cell. */
-function TimeCell({ row, done, error, onEdit, onClear }: {
-  row: InterviewRow; done: string | undefined; error: string | null; onEdit(): void; onClear(): void;
-}) {
+/** One round's time: what it is, and the note after a change. Changing and clearing it are in the row's menu. */
+function TimeCell({ row, done, error }: { row: InterviewRow; done: string | undefined; error: string | null }) {
   return (
     <Stack gap="none">
-      <Inline gap="xs" align="center" wrap={false}>
-        <T size="sm" tone={row.scheduledAt ? undefined : 'secondary'} title={row.scheduledAt ? new Date(row.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(row.scheduledAt)}</T>
-        <Button size="sm" variant="ghost" data-testid="interviews-upcoming-set-time" onClick={onEdit}>{row.scheduledAt ? 'Change…' : 'Set time…'}</Button>
-        {row.scheduledAt && <Button size="sm" variant="ghost" data-testid="interviews-upcoming-clear-time" onClick={onClear}>Clear…</Button>}
-      </Inline>
+      <T size="sm" tone={row.scheduledAt ? undefined : 'secondary'} className="block max-w-[11rem] truncate" title={row.scheduledAt ? new Date(row.scheduledAt).toLocaleString() : undefined} data-testid="interviews-upcoming-when">{whenWithZone(row.scheduledAt)}</T>
       {done && <T size="xs" tone="secondary" data-testid="interviews-upcoming-saved">{done}</T>}
       {error && <T size="xs" tone="danger">{error}</T>}
     </Stack>
@@ -75,15 +69,35 @@ function TimeCell({ row, done, error, onEdit, onClear }: {
 }
 
 /** Reads a row's invite status once the row has a time. */
-function InviteStatusLoader({ row, override, link, busy, onMake, onRevoke }: {
-  row: InterviewRow; override: InviteStatus | undefined; link: string | undefined; busy: boolean; onMake(status: InviteStatus | null): void; onRevoke(): void;
+function InviteStatusLoader({ row, override, link }: { row: InterviewRow; override: InviteStatus | undefined; link: string | undefined }) {
+  const { data } = useFetch<{ invite: InviteStatus }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(row.id)}/invite`, undefined, { share: true });
+  return <InviteCell row={row} status={override ?? data?.invite ?? null} link={link} />;
+}
+
+/** The row's actions: Join for a live round, and one menu for the time and the link. */
+function RowActions({ row, override, busy, onJoin, onSetTime, onClearTime, onMake, onRevoke }: {
+  row: InterviewRow; override: InviteStatus | undefined; busy: boolean; onJoin(): void; onSetTime(): void; onClearTime(): void; onMake(status: InviteStatus | null): void; onRevoke(): void;
 }) {
-  const { data } = useFetch<{ invite: InviteStatus }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(row.id)}/invite`);
+  const timeable = isTimeable(row.state);
+  const { data } = useFetch<{ invite: InviteStatus }>(timeable && row.scheduledAt ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(row.id)}/invite` : null, undefined, { share: true });
   const status = override ?? data?.invite ?? null;
-  return <InviteCell row={row} status={status} link={link} busy={busy} onMake={() => onMake(status)} onRevoke={onRevoke} />;
+  const live = status?.state === 'live';
+  const items = [
+    ...(timeable ? [{ label: row.scheduledAt ? 'Change the time…' : 'Set the time…', onSelect: onSetTime }] : []),
+    ...(timeable && row.scheduledAt ? [{ label: 'Clear the time…', onSelect: onClearTime }] : []),
+    ...(timeable && row.scheduledAt && !busy ? [{ label: live ? 'Make a new link…' : 'Make the invite link', onSelect: () => onMake(status) }] : []),
+    ...(timeable && row.scheduledAt && live && !busy ? [{ label: 'Revoke the link…', danger: true, onSelect: onRevoke }] : []),
+  ];
+  return (
+    <Inline gap="xs" align="center" wrap={false}>
+      {isLive(row) && <Button size="sm" variant="primary" data-testid="interviews-upcoming-join" onClick={onJoin}>Join</Button>}
+      {items.length > 0 && <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${row.round.name} with ${row.candidate.name}`} align="end" triggerTestId="interviews-upcoming-actions" sections={[{ items }]} />}
+    </Inline>
+  );
 }
 
 function UpcomingWorkspace() {
+  const navigate = useNavigate();
   const { session } = useSession();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
   const withConsent = showsConsentColumn(session?.role);
@@ -91,6 +105,7 @@ function UpcomingWorkspace() {
   const consentOf = useMemo(() => new Map((consents.data?.items ?? []).map((c) => [c.interviewId, c])), [consents.data]);
   const [query, setQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('');
+  const [show, setShow] = useState<UpcomingShow>('not-finished');
   const [editing, setEditing] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [asked, setAsked] = useState(0);
@@ -169,16 +184,16 @@ function UpcomingWorkspace() {
     {
       key: 'round', header: 'Opening and round',
       render: (r) => (
-        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[22rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
+        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[18rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
       ),
     },
     { key: 'people', header: 'Lead and panel', render: (r) => <PanelCell lead={r.lead} panel={r.panel} /> },
     {
       key: 'state', header: 'State', width: '112px',
-      render: (r) => { const s = roundStatus(r.state); return <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>; },
+      render: (r) => { const s = roundStatus(r.state); return isLive(r) ? <Chip tone="success" size="xs" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>; },
     },
     ...(withConsent ? [{
-      key: 'consent', header: 'Consent', width: '200px',
+      key: 'consent', header: 'Consent', width: '168px',
       render: (r: InterviewRow) => {
         const c = consentOf.get(r.id);
         const label = consents.data ? consentColumnLabel(c) : '—';
@@ -186,29 +201,29 @@ function UpcomingWorkspace() {
       },
     }] : []),
     {
-      key: 'when', header: `Time (${zone})`, width: '280px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
+      key: 'when', header: `Time (${zone})`, width: '188px', sortable: true, compare: (a, b) => upcomingOrder(a, b),
       render: (r) => (isTimeable(r.state)
-        ? <TimeCell row={r} done={saved.get(r.id)} error={rowError?.id === r.id ? rowError.text : null}
-            onEdit={() => { setRowError(null); setEditing(r.id); }} onClear={() => ask({ kind: 'time', row: r, iso: null })} />
-        : <T size="sm" tone="secondary" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>),
+        ? <TimeCell row={r} done={saved.get(r.id)} error={rowError?.id === r.id ? rowError.text : null} />
+        : <T size="sm" tone="secondary" className="block max-w-[11rem] truncate" title={r.scheduledAt ? new Date(r.scheduledAt).toLocaleString() : undefined}>{whenWithZone(r.scheduledAt)}</T>),
     },
     {
-      key: 'invite', header: 'Invite link', width: '260px',
+      key: 'invite', header: 'Invite link', width: '200px',
       render: (r) => (r.scheduledAt && isTimeable(r.state)
-        ? <InviteStatusLoader row={r} override={statuses.get(r.id)} link={links.get(r.id)} busy={busy === r.id}
-            onMake={(s) => (s?.state === 'live' ? ask({ kind: 'replace', row: r }) : void make(r))} onRevoke={() => ask({ kind: 'revoke', row: r })} />
+        ? <InviteStatusLoader row={r} override={statuses.get(r.id)} link={links.get(r.id)} />
         : <T size="xs" tone="tertiary">{r.scheduledAt ? '—' : 'Set a time first'}</T>),
     },
   ];
 
-  const all = [...(data?.items ?? [])].filter((r) => r.state !== 'declined' && r.state !== 'cancelled').sort(upcomingOrder);
+  const everything = data?.items ?? [];
+  const all = upcomingRows(everything, show);
+  const finished = finishedCount(everything);
   const editingRow = editing ? all.find((r) => r.id === editing) ?? null : null;
   const rows = all.filter((r) => (timeFilter === '' || (timeFilter === 'timed') === (r.scheduledAt !== null))
     && matches(query, r.candidate.name, r.candidate.headline, r.opening.title, r.opening.team, r.round.name, r.lead.name, ...r.panel.map((p) => p.name)));
 
   const adapter = interviewsCollectionAdapter('upcoming', {
     setQuery, refresh,
-    setFilter: (v) => setTimeFilter((v === 'no-time' || v === 'timed' ? v : '') as TimeFilter),
+    setFilter: (v) => { setShow(v === 'finished' ? 'finished' : 'not-finished'); setTimeFilter((v === 'no-time' || v === 'timed' ? v : '') as TimeFilter); },
   });
 
   return (
@@ -219,10 +234,16 @@ function UpcomingWorkspace() {
           <CollectionToolbar {...{
             label: 'Upcoming filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search rounds', 'aria-label': 'Search rounds' },
-            filters: [{
-              id: 'time', label: 'Time', value: timeFilter, emptyValue: '', onChange: (v: string) => setTimeFilter((v || '') as TimeFilter),
-              options: [{ value: 'timed', label: 'Has a time' }, { value: 'no-time', label: 'No time yet' }],
-            }],
+            filters: [
+              {
+                id: 'show', label: 'Show', value: show, emptyValue: 'not-finished', onChange: (v: string) => setShow(v === 'finished' ? 'finished' : 'not-finished'),
+                options: [{ value: 'not-finished', label: 'Not finished' }, { value: 'finished', label: data ? `Finished (${finished})` : 'Finished' }],
+              },
+              {
+                id: 'time', label: 'Time', value: timeFilter, emptyValue: '', onChange: (v: string) => setTimeFilter((v || '') as TimeFilter),
+                options: [{ value: 'timed', label: 'Has a time' }, { value: 'no-time', label: 'No time yet' }],
+              },
+            ],
             summary: data ? ofTotal(rows.length, all.length, 'round') : undefined,
             onRefresh: refresh, refreshing: isLoading,
           }} />
@@ -243,9 +264,16 @@ function UpcomingWorkspace() {
               data={rows}
               columns={COLUMNS}
               keyField={(r) => r.id}
+              rowActions={(r) => (
+                <RowActions row={r} override={statuses.get(r.id)} busy={busy === r.id} onJoin={() => void navigate(roomHref(r.id))}
+                  onSetTime={() => { setRowError(null); setEditing(r.id); }} onClearTime={() => ask({ kind: 'time', row: r, iso: null })}
+                  onMake={(s) => (s?.state === 'live' ? ask({ kind: 'replace', row: r }) : void make(r))} onRevoke={() => ask({ kind: 'revoke', row: r })} />
+              )}
+              rowActionsHeader="Actions"
+              rowActionsHeaderHidden
               loading={isLoading && !data}
               pageSize={25}
-              emptyMessage={query.trim() || timeFilter ? 'No round matches this search and filter.' : 'No rounds are assigned yet.'}
+              emptyMessage={query.trim() || timeFilter ? 'No round matches this search and filter.' : show === 'finished' ? 'No round has finished yet.' : 'Nothing is coming up. Rounds you assign appear here.'}
             />
           )}
         </Stack>

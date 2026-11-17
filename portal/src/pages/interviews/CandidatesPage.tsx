@@ -4,13 +4,15 @@
 // (GET /api/interviews/candidates). Reads only: moving a candidate, assigning
 // a round and the candidate profile are later rows. The last result opens the debrief (row I5.4).
 
-import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import { ofTotal } from '../../lib/plural';
 import { relativeTime } from '../../lib/relativeTime';
 import {
@@ -49,6 +51,8 @@ export default function CandidatesPage() {
 }
 
 function CandidatesWorkspace() {
+  const navigate = useNavigate();
+  const { can } = useCapabilities();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<CandidateRow>>(`${INTERVIEWS_API}/candidates`, 30_000);
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('');
@@ -63,7 +67,10 @@ function CandidatesWorkspace() {
 
   return (
     <CollectionCommandPage data-testid="interviews-candidates" title="Candidates"
-      description="Everyone in the hiring pipeline: the opening, where they stand and what happens next.">
+      description="Everyone in the hiring pipeline: the opening, where they stand and what happens next."
+      headerActions={can('ManageCandidates')
+        ? <Button size="sm" variant="primary" data-testid="interviews-add-candidate" onClick={() => void navigate('/interviews/candidates/new')}>Add a candidate</Button>
+        : undefined}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
           <CollectionToolbar {...{

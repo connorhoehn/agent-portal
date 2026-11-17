@@ -22,7 +22,7 @@
 // has "Open the room". Scoring (I5.3) is a later row.
 
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { Button, Chip, CollectionToolbar, DataTable, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, CollectionToolbar, DataTable, Disclosure, Inline, Stack, T, Tabs, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
@@ -32,9 +32,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { ofTotal } from '../../lib/plural';
 import {
-  DESK_VIEWS, INTERVIEWS_API, candidateHref, ROUND_TYPE_LABELS, deskLabel, deskOrder, deskTone, inDeskView, matches, whenLabel,
-  type DeskView, type InterviewRow, type ItemsResponse,
+  INTERVIEWS_API, candidateHref, ROUND_TYPE_LABELS, deskLabel, deskTone, matches, whenLabel,
+  type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
+import { DESK_TABS, deskTabCounts, deskTabRows, firstDeskTab, isLive, type DeskTab } from '../../lib/interviewsDesk';
+import { roomHref } from '../../lib/interviewsRoom';
 import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
 import { hasScorecard, scorecardPath } from '../../lib/interviewsScorecard';
 import {
@@ -56,16 +58,17 @@ const COLUMNS: DataTableColumn<InterviewRow>[] = [
   { key: 'round', header: 'Round', render: (r) => <T size="sm" title={`${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{r.round.name}</T> },
   { key: 'opening', header: 'Opening', render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },
   {
-    key: 'role', header: 'Seat', width: '80px',
-    render: (r) => <T size="sm" tone={r.seat === 'lead' ? undefined : 'secondary'} data-testid="interviews-desk-seat">{r.seat === 'lead' ? 'Lead' : r.seat === 'panel' ? 'Panel' : '—'}</T>,
-  },
-  {
     key: 'seat', header: 'With', render: (r) => (r.seat === 'panel'
       ? <PersonCell id={r.lead.id} name={r.lead.name} title={`${r.lead.name} leads; you are on the panel`} />
       : r.panel.length ? <PersonCell id={r.panel[0]!.id} name={r.panel[0]!.name} title={`${r.panel.map((p) => p.name).join(', ')} on the panel; you lead`} />
         : <T size="sm" tone="secondary">You lead</T>),
   },
-  { key: 'desk', header: 'Waiting for', width: '176px', render: (r) => <Chip tone={deskTone(r)} size="xs" data-testid="interviews-desk-state">{deskLabel(r)}</Chip> },
+  {
+    key: 'desk', header: 'Waiting for', width: '176px',
+    render: (r) => (isLive(r)
+      ? <Chip tone="success" size="xs" data-testid="interviews-desk-live">Live now</Chip>
+      : <Chip tone={deskTone(r)} size="xs" data-testid="interviews-desk-state">{deskLabel(r)}</Chip>),
+  },
 ];
 
 export default function MyInterviewsPage() {
@@ -137,9 +140,11 @@ function MyInterviewsWorkspace() {
         {
           label: 'The notice the candidate reads',
           value: (
-            <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-text">
-              {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
-            </Stack>
+            <Disclosure density="compact" variant="plain" summary="Read the notice" data-testid="interviews-panel-notice-fold">
+              <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-text">
+                {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
+              </Stack>
+            </Disclosure>
           ),
         },
       ],
@@ -176,9 +181,11 @@ function MyInterviewsWorkspace() {
         {
           label: 'The notice the candidate reads',
           value: (
-            <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-changed-text">
-              {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
-            </Stack>
+            <Disclosure density="compact" variant="plain" summary="Read the notice" data-testid="interviews-panel-notice-changed-fold">
+              <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-changed-text">
+                {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
+              </Stack>
+            </Disclosure>
           ),
         },
       ],
@@ -210,7 +217,9 @@ function MyInterviewsWorkspace() {
             onClick={() => void navigate(scorecardPath(r.id))}>{r.bucket === 'scorecard-due' ? 'Fill in the scorecard' : 'Your scorecard'}</Button>}
           {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'ghost'} data-testid="interviews-desk-prepare"
             onClick={() => void navigate(preparePath(r.id))}>{r.seat === 'lead' ? 'Prepare' : 'Read the plan'}</Button>}
-          {canOpenRoom(r) && <Button size="sm" variant="secondary" data-testid="interviews-desk-room" onClick={() => void navigate(roomPath(r.id))}>Open the room</Button>}
+          {isLive(r) && r.seat !== null
+            ? <Button size="sm" variant="primary" data-testid="interviews-desk-join" onClick={() => void navigate(roomHref(r.id))}>Join</Button>
+            : canOpenRoom(r) && <Button size="sm" variant="secondary" data-testid="interviews-desk-room" onClick={() => void navigate(roomPath(r.id))}>Open the room</Button>}
         </Inline>
       );
     }
@@ -225,15 +234,16 @@ function MyInterviewsWorkspace() {
       </Stack>
     );
   };
-  const [view, setView] = useState<DeskView>('open');
-  const all = [...(data?.items ?? [])].sort(deskOrder);
-  const count = (v: DeskView) => all.filter((r) => inDeskView(r, v)).length;
-  const rows = all.filter((r) => inDeskView(r, view)
-    && matches(query, r.candidate.name, r.candidate.headline, r.round.name, r.opening.title, r.opening.team, r.lead.name, deskLabel(r)));
+  const [picked, setPicked] = useState<DeskTab | null>(null);
+  const all = data?.items ?? [];
+  const counts = deskTabCounts(all);
+  const tab = picked ?? firstDeskTab(counts);
+  const inTab = deskTabRows(all, tab);
+  const rows = inTab.filter((r) => matches(query, r.candidate.name, r.candidate.headline, r.round.name, r.opening.title, r.opening.team, r.lead.name, deskLabel(r)));
 
   const adapter = interviewsCollectionAdapter('my-interviews', {
     setQuery, refresh,
-    setFilter: (v) => setView((DESK_VIEWS.some((d) => d.value === v) ? v : 'open') as DeskView),
+    setFilter: (v) => setPicked(DESK_TABS.some((d) => d.value === v) ? (v as DeskTab) : null),
   });
 
   return (
@@ -244,13 +254,12 @@ function MyInterviewsWorkspace() {
           <CollectionToolbar {...{
             label: 'Interview filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search your interviews', 'aria-label': 'Search your interviews' },
-            filters: [{
-              id: 'desk', label: 'Show', value: view, emptyValue: 'open', onChange: (v: string) => setView((v || 'open') as DeskView),
-              options: DESK_VIEWS.map((d) => ({ value: d.value, label: data ? `${d.label} (${count(d.value)})` : d.label })),
-            }],
-            summary: data ? ofTotal(rows.length, all.length, 'interview') : undefined,
+            summary: data ? ofTotal(rows.length, inTab.length, 'interview') : undefined,
             onRefresh: refresh, refreshing: isLoading,
-          }} />
+          }}>
+            <Tabs aria-label="Your interviews" size="sm" value={tab} onValueChange={(v) => setPicked(v as DeskTab)} getItemTestId={(i) => `interviews-desk-tab-${i.id}`}
+              items={DESK_TABS.map((d) => ({ id: d.value, label: d.label, badge: data ? counts[d.value] : undefined }))} />
+          </CollectionToolbar>
           {error ? (
             <UnavailableNotice error={error} what="your interviews" source="Interviews are read from the rounds assigned to you" onRetry={refresh} />
           ) : (
@@ -265,7 +274,7 @@ function MyInterviewsWorkspace() {
               rowActionsHeaderHidden
               loading={isLoading && !data}
               pageSize={25}
-              emptyMessage={query.trim() ? 'No interview matches this search.' : view === 'open' ? 'Nothing needs you and nothing is coming up.' : 'No interviews in this view.'}
+              emptyMessage={query.trim() ? 'No interview matches this search.' : 'Nothing here right now.'}
             />
           )}
         </Stack>
