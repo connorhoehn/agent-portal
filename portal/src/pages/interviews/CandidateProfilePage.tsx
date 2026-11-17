@@ -68,7 +68,7 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
   },
   {
     key: 'status', header: 'Status', width: '136px',
-    render: (r) => { const s = roundStatus(r.state); return <Chip tone={s.tone} size="xs" data-testid="interviews-profile-round-status">{s.label}</Chip>; },
+    render: (r) => { const s = roundStatus(r.state); return <Chip tone={s.tone} size="sm" data-testid="interviews-profile-round-status">{s.label}</Chip>; },
   },
   {
     key: 'result', header: 'Result',
@@ -76,7 +76,7 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
       ? (
         <Inline gap="xs" wrap>
           {r.results.map((x) => (
-            <Chip key={x.interviewer.id} tone={recommendationTone(x.recommendation)} size="xs"
+            <Chip key={x.interviewer.id} tone={recommendationTone(x.recommendation)} size="sm"
               title={`${RECOMMENDATION_LABELS[x.recommendation]} from ${x.interviewer.name}`}>
               {r.results.length > 1 ? `${RECOMMENDATION_LABELS[x.recommendation]} · ${x.interviewer.name.split(' ')[0]}` : RECOMMENDATION_LABELS[x.recommendation]}
             </Chip>
@@ -276,7 +276,7 @@ function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApp
           onClick={() => navigate(assignHref(candidateId, { application: app.applicationId }))}>Assign a round</Button>
       ) : undefined}>
       <DataTable narrow rowHeight="content" data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds} columns={ROUND_COLUMNS}
-        keyField={(r) => r.id} emptyMessage="No round has been assigned yet."
+        keyField={(r) => r.id} staticRows="Each round with its status and result; its record opens from the Record column" emptyMessage="No round has been assigned yet."
         {...(assigns ? {
           rowActionsHeader: 'Change', rowActionsHeaderHidden: true,
           rowActions: (r: ProfileRound) => (canReassign(r.state) ? (
@@ -425,7 +425,7 @@ const DELETION_COLUMNS: DataTableColumn<DeletionView>[] = [
     },
   },
   { key: 'by', header: 'By', render: (r) => <T size="sm">{askedByLine(r)}</T> },
-  { key: 'state', header: 'Status', width: '120px', render: (r) => { const s = deletionState(r); return <Chip tone={s.tone} size="xs">{s.label}</Chip>; } },
+  { key: 'state', header: 'Status', width: '120px', render: (r) => { const s = deletionState(r); return <Chip tone={s.tone} size="sm">{s.label}</Chip>; } },
 ];
 
 /** The deletion log and, for the recruiter, the prompt that asks for one. Hooks only; the section draws it. */

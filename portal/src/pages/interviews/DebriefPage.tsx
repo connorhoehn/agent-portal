@@ -174,23 +174,23 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
         <DataTable rowHeight="content" stickyFirstColumn columnGroups={columnGroups} data-testid="interviews-debrief-side-by-side" aria-label={`${app.opening.title}: scorecards side by side`} data={rows} columns={tableColumns}
           keyField={(r) => r.id} staticRows="Each competency as each interviewer rated it, read in place" />
       )}
-      {app.rounds.map((r) => <RoundBlock key={r.interviewId} round={r} />)}
+      {app.rounds.map((r) => <RoundBlock key={r.interviewId} round={r} nested={several} />)}
     </Stack>
   );
   return several
-    ? <DetailSection variant="heading" title={app.opening.title} hint={STAGE_LABELS[app.stage]} actions={<StageChip stage={app.stage} />}>{body}</DetailSection>
+    ? <DetailSection variant="heading" as="h2" title={app.opening.title} hint={STAGE_LABELS[app.stage]} actions={<StageChip stage={app.stage} />}>{body}</DetailSection>
     : body;
 }
 
 /** What the table does not say about one round: when it was, who sat on it, who is still due, and Milo's recap under it. */
-function RoundBlock({ round }: { round: DebriefRound }) {
+function RoundBlock({ round, nested }: { round: DebriefRound; nested: boolean }) {
   const navigate = useNavigate();
   const status = roundStatus(round.state);
   const empty = roundEmptyLine(round);
   const due = dueLine(round);
   const notes = round.scorecards.flatMap(scorecardNotes);
   return (
-    <DetailSection variant="heading" title={round.name} data-testid="interviews-debrief-round"
+    <DetailSection variant="heading" as={nested ? 'h3' : 'h2'} title={round.name} data-testid="interviews-debrief-round"
       hint={<MetaLine size="sm" items={[
         `${ROUND_TYPE_LABELS[round.type]}, ${round.minutes} minutes`,
         round.endedAt ? `Ended ${relativeTime(round.endedAt)}` : round.scheduledAt ? `Set for ${new Date(round.scheduledAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'No time set',
@@ -198,7 +198,7 @@ function RoundBlock({ round }: { round: DebriefRound }) {
       actions={(
         <Inline gap="sm" align="center" wrap={false}>
           <PanelCell lead={round.lead} panel={round.panel} />
-          <Chip tone={status.tone} size="xs">{status.label}</Chip>
+          <Chip tone={status.tone} size="sm">{status.label}</Chip>
           {round.recordPath && (
             <Button size="sm" variant="ghost" data-testid="interviews-debrief-record" onClick={() => navigate(round.recordPath!)}>Open the record</Button>
           )}
@@ -220,14 +220,14 @@ function SideCellView({ cell }: { cell: SideCell }) {
       return (
         <Stack gap="xs">
           <Inline gap="xs" align="start" wrap={false}>
-            <Chip size="xs" tone="neutral">{`${cell.rating} of 4`}</Chip>
+            <Chip size="sm" tone="neutral">{`${cell.rating} of 4`}</Chip>
             <T size="sm">{cell.anchor}</T>
           </Inline>
           {cell.note && <T size="sm" tone="secondary">{cell.note}</T>}
         </Stack>
       );
     case 'recommendation':
-      return <Chip size="xs" tone={recommendationTone(cell.recommendation)}>{RECOMMENDATION_LABELS[cell.recommendation]}</Chip>;
+      return <Chip size="sm" tone={recommendationTone(cell.recommendation)}>{RECOMMENDATION_LABELS[cell.recommendation]}</Chip>;
     case 'summary':
       return <T size="sm">{cell.text}</T>;
     default:
@@ -273,7 +273,7 @@ const MOVE_COLUMNS: DataTableColumn<DebriefMove>[] = [
   { key: 'by', header: 'By', render: (m) => (m.byName ? <T size="sm">{m.byName}</T> : <T size="sm" tone="secondary">The candidate</T>) },
   {
     key: 'decision', header: 'Decision', width: '176px',
-    render: (m) => (m.decision ? <Chip size="xs" tone={decisionTone(m.decision)}>{DECISION_DONE[m.decision]}</Chip> : <Dash />),
+    render: (m) => (m.decision ? <Chip size="sm" tone={decisionTone(m.decision)}>{DECISION_DONE[m.decision]}</Chip> : <Dash />),
   },
   {
     key: 'reason', header: 'Why',

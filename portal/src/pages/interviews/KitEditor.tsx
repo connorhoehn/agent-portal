@@ -54,7 +54,7 @@ function ListProblems({ problems, list }: { problems: ReadonlyMap<string, string
   return <Stack gap="xs" data-testid={`interviews-kit-${list}-problems`}>{lines.map(([p, m]) => <T key={p} size="xs" tone="danger">{m}</T>)}</Stack>;
 }
 
-const NeedsFixing = () => <Chip tone="danger" size="xs">Needs fixing</Chip>;
+const NeedsFixing = () => <Chip tone="danger" size="sm">Needs fixing</Chip>;
 
 export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
   const set = (patch: Partial<OpeningKit>) => onChange({ ...kit, ...patch });
@@ -129,7 +129,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-round"
           onClick={() => set({ rounds: [...kit.rounds, blankRound(newId('rd', allIds(kit)), kinds.includes('technical') ? 'behavioural' : 'technical')] })}>Add round</Button>}>
         <Stack gap="xs">
-          <DataTable narrow aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id}
+          <DataTable narrow aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id} staticRows="Each round of the kit, edited in the row"
             emptyMessage="No rounds yet. Add the first one."
             rowActions={(r) => {
               const i = kit.rounds.indexOf(r);

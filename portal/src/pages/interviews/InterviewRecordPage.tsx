@@ -155,7 +155,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
               onClick={() => moveTo(markerTime(m))} data-testid="interviews-record-marker">
               <Inline gap="sm" align="center" wrap={false} className="min-w-0">
                 <T size="xs" tone="tertiary" tabular>{clockOf(markerTime(m))}</T>
-                <Chip size="xs" tone={m.kind === 'milo-asked' ? 'info' : 'neutral'}>{MARKER_LABELS[m.kind]}</Chip>
+                <Chip size="sm" tone={m.kind === 'milo-asked' ? 'info' : 'neutral'}>{MARKER_LABELS[m.kind]}</Chip>
                 <T size="sm" truncate title={m.label}>{m.label}</T>
               </Inline>
             </Button>
@@ -179,7 +179,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
 
   return (
     <DetailPage data-testid="interviews-record" title={`${interview.candidate.name}, ${interview.round.name}`}
-      badge={<Chip tone={status.tone} size="xs" data-testid="interviews-record-state">{status.label}</Chip>}
+      badge={<Chip tone={status.tone} size="sm" data-testid="interviews-record-state">{status.label}</Chip>}
       meta={<MetaLine size="sm" items={[
         interview.opening.title,
         ROUND_TYPE_LABELS[interview.round.type],

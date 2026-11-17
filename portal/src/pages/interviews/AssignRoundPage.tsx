@@ -51,7 +51,8 @@ export default function AssignRoundPage() {
 
   const back = () => navigate(candidateHref(id));
   const title = roundId ? 'Reassign a round' : 'Assign a round';
-  const trail = base ? [...base.slice(0, -1), { label: record?.candidate.name ?? 'Candidate', href: candidateHref(id) }, { label: title }] : undefined;
+  // The shell's trail already names the candidate (the crumb label above); only the last step is this page's own.
+  const trail = base ? [...base.slice(0, -1), { label: title }] : undefined;
 
   if (profile.error && !record) {
     return /404|not found/i.test(profile.error)

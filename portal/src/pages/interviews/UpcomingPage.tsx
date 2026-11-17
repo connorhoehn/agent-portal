@@ -195,7 +195,7 @@ function UpcomingWorkspace() {
         const c = consentOf.get(r.id);
         return (
           <Stack gap="none">
-            {isLive(r) ? <Chip tone="success" size="xs" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="xs" data-testid="interviews-upcoming-state">{s.label}</Chip>}
+            {isLive(r) ? <Chip tone="success" size="sm" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="sm" data-testid="interviews-upcoming-state">{s.label}</Chip>}
             {withConsent && <T size="xs" tone={!c?.answered ? 'secondary' : undefined} title={consents.data ? consentColumnLabel(c) : undefined} data-testid="interviews-upcoming-consent">{consents.data ? consentColumnLabel(c) : '—'}</T>}
           </Stack>
         );

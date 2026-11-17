@@ -228,6 +228,30 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
   { tenant: 'interviews', path: '/interviews/openings' },
 ];
 
+/** Every staff page of the Candidates tenant a signed-in role reaches by address, each walked as the
+ *  seeded role that uses it (the sweep user cannot open them). Ids are the mock seed's
+ *  (middleware/src/mock/interviews.ts): cand-ingrid has a debrief, iv-k1p5w8ra is coming up (Hugo),
+ *  iv-g9r1y8lp is ended with Wen's scorecard due, iv-d7q4n9xe is scored with Hugo's submitted. */
+export const INTERVIEWS_STAFF_ROUTES: ReadonlyArray<{ path: string; user: string; pattern?: string }> = [
+  { path: '/interviews/candidates', user: 'u-greta' },
+  { path: '/interviews/candidates/cand-ingrid', user: 'u-greta', pattern: '/interviews/candidates/:id' },
+  { path: '/interviews/candidates/new', user: 'u-greta' },
+  { path: '/interviews/candidates/cand-mateo/assign', user: 'u-greta', pattern: '/interviews/candidates/:id/assign' },
+  { path: '/interviews/upcoming', user: 'u-greta' },
+  { path: '/interviews/openings', user: 'u-greta' },
+  { path: '/interviews/openings/op-backend', user: 'u-greta', pattern: '/interviews/openings/:id' },
+  { path: '/interviews/openings/op-backend/edit', user: 'u-greta', pattern: '/interviews/openings/:id/edit' },
+  { path: '/interviews/openings/new', user: 'u-greta' },
+  { path: '/interviews/my-openings', user: 'u-amara' },
+  { path: '/interviews/candidates/cand-ingrid/debrief', user: 'u-amara', pattern: '/interviews/candidates/:id/debrief' },
+  { path: '/interviews/my-interviews', user: 'u-hugo' },
+  { path: '/interviews/rounds/iv-k1p5w8ra/prepare', user: 'u-hugo', pattern: '/interviews/rounds/:id/prepare' },
+  { path: '/interviews/rounds/iv-g9r1y8lp/scorecard', user: 'u-wen', pattern: '/interviews/rounds/:id/scorecard (to fill)' },
+  { path: '/interviews/rounds/iv-d7q4n9xe/scorecard', user: 'u-hugo', pattern: '/interviews/rounds/:id/scorecard (submitted)' },
+  { path: '/interviews/rounds/iv-d7q4n9xe/record', user: 'u-hugo', pattern: '/interviews/rounds/:id/record' },
+  { path: '/interviews/rounds/iv-k1p5w8ra/room', user: 'u-hugo', pattern: '/interviews/rounds/:id/room (before the call)' },
+];
+
 /** The chat-rail frame measurements (docs/rail-parity-goal.md decision 6), each as its user.
  *  The bare /iq/communication opens the user's default conversation (a depth-3
  *  record that folds the primary rail by rule 8), so the shallow destinations
@@ -328,6 +352,8 @@ export function staticInventory(): InventoryRoute[] {
   const out: InventoryRoute[] = [];
   const seen = new Set<string>();
   const add = (r: InventoryRoute) => { if (!seen.has(r.path)) { seen.add(r.path); out.push(enrich(r)); } };
+  // The Candidates staff pages first, so each is walked as its own role rather than the sweep user.
+  for (const r of INTERVIEWS_STAFF_ROUTES) add({ tenant: 'interviews', path: r.path, source: 'registry', user: r.user, pattern: r.pattern });
   for (const p of sources().registryPaths) add({ tenant: tenantOf(p), path: p, source: 'registry' });
   for (const id of SOCIAL_SURFACE_IDS) add({ tenant: 'social', path: `/social/${id}`, source: 'surface' });
   for (const id of PIPELINES_SURFACE_IDS) add({ tenant: 'pipelines', path: `/pipelines/${id}`, source: 'surface' });

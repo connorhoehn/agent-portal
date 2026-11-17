@@ -102,7 +102,7 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
 
   const planSection = (
     <Stack gap="md">
-      <DetailSection variant="heading" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}>
+      <DetailSection variant="heading" as="h2" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}>
         <Stack gap="sm">
           {editable && (
             <Inline gap="sm" align="center" wrap={false}>
@@ -116,12 +116,12 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
           {note && !problem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
           {planned.length === 0
             ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">Nothing in the plan yet. Add questions from the list below.</T>
-            : <DataTable narrow rowHeight="content" data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id}
+            : <DataTable narrow rowHeight="content" data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id} staticRows="Each question in your plan, with its order controls"
               rowActions={editable ? planControls : undefined} rowActionsHeader="Order" rowActionsHeaderHidden />}
         </Stack>
       </DetailSection>
       {editable && record.seat === 'lead' && record.bank.length > 0 && (
-        <DetailSection variant="heading" title="Milo's suggested plan" hint="A suggestion from the kit. You choose.">
+        <DetailSection variant="heading" as="h2" title="Milo's suggested plan" hint="A suggestion from the kit. You choose.">
           <Stack gap="sm">
             <Inline gap="sm" align="center" wrap={false}>
               <Button size="sm" variant="secondary" disabled={asking} data-testid="interviews-draft-ask" onClick={() => { void ask(); }}>{asking ? 'Asking Milo…' : suggested.length ? 'Ask again' : 'Ask Milo for a plan'}</Button>
@@ -131,7 +131,7 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
             {suggestedLine && <T size="sm" tone="secondary" data-testid="interviews-draft-line">{suggestedLine}</T>}
             {suggested.length > 0 && (
               <>
-                <DataTable narrow rowHeight="content" data-testid="interviews-draft-table" aria-label="Milo's suggested plan" data={suggested} columns={draftColumns} keyField={(d) => d.questionId} />
+                <DataTable narrow rowHeight="content" data-testid="interviews-draft-table" aria-label="Milo's suggested plan" data={suggested} columns={draftColumns} keyField={(d) => d.questionId} staticRows="Each question Milo suggests, read in place" />
                 <Inline gap="sm" wrap={false}>
                   <Button size="sm" variant="primary" data-testid="interviews-draft-use" onClick={useDraft}>Use this plan</Button>
                   <T size="xs" tone="tertiary">This replaces the selection above. Save it when you are happy with it.</T>
@@ -144,8 +144,8 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
       {groups.length === 0
         ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the bank is in your plan.'}</T>
         : groups.map((g) => (
-          <DetailSection key={g.competencyId} variant="heading" title={g.name} hint={`${g.questions.length} to choose from`}>
-            <DataTable narrow rowHeight="content" data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id}
+          <DetailSection key={g.competencyId} variant="heading" as="h2" title={g.name} hint={`${g.questions.length} to choose from`}>
+            <DataTable narrow rowHeight="content" data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id} staticRows="Each question in the kit, with a button to add it"
               rowActions={editable ? (q) => (
                 <Button size="sm" variant="secondary" disabled={full} title={full ? `A round takes at most ${record.maxQuestions} questions.` : undefined}
                   data-testid="interviews-bank-add" onClick={() => setPlan((p) => [...p, q.id])}>Add</Button>
@@ -157,7 +157,7 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
 
   return (
     <DetailPage data-testid="interviews-prepare" title={`${record.candidate.name}, ${record.round.name}`} breadcrumbs={trail}
-      badge={<Chip tone={status.tone} size="xs" data-testid="interviews-prepare-state">{status.label}</Chip>}
+      badge={<Chip tone={status.tone} size="sm" data-testid="interviews-prepare-state">{status.label}</Chip>}
       meta={<MetaLine size="sm" data-testid="interviews-prepare-meta" items={[
         record.opening.title, `${ROUND_TYPE_LABELS[record.round.type]}, ${record.round.minutes} minutes`, whenWithZone(record.scheduledAt),
         record.seat === 'lead' ? 'You lead' : record.seat === 'panel' ? `${record.lead.name} leads` : `${record.lead.name} leads`,
@@ -188,7 +188,7 @@ function Competencies({ record }: { record: InterviewRecord }) {
   return (
     <Stack gap="md" data-testid="interviews-prepare-competencies">
       {record.competencies.map((c) => (
-        <DetailSection key={c.id} variant="heading" title={c.name} hint={c.lookFor}>
+        <DetailSection key={c.id} variant="heading" as="h2" title={c.name} hint={c.lookFor}>
           <Stack gap="xs">
             {([1, 2, 3, 4] as const).map((n) => <T key={n} size="sm" tone="secondary">{`${n}. ${c.anchors[n]}`}</T>)}
           </Stack>

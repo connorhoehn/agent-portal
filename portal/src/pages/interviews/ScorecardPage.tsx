@@ -148,7 +148,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       {correctingLine}
       <T size="sm" tone="secondary">Rate each competency from your own judgement first. Milo&apos;s recap comes next, then your recommendation.</T>
       {competencies.map((c) => (
-        <DetailSection key={c.id} variant="heading" title={c.name} hint={c.lookFor}>
+        <DetailSection key={c.id} variant="heading" as="h2" title={c.name} hint={c.lookFor}>
           <Stack gap="sm">
             <RatingInput label={`Your rating for ${c.name}`} required value={draft.ratings[c.id] ?? null} onChange={(v) => setRating(c.id, v)} options={scaleOf(c)}
               data-testid="interviews-scorecard-rating" />
@@ -193,7 +193,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const decideStep = (
     <Stack gap="md" data-testid="interviews-scorecard-decide-step">
       {correctingLine}
-      <DetailSection variant="heading" title="Your recommendation" hint="Your own judgement of this round.">
+      <DetailSection variant="heading" as="h2" title="Your recommendation" hint="Your own judgement of this round.">
         <Stack gap="sm">
           <RadioGroup<Recommendation | ''> name={`recommendation-${interview.id}`} orientation="horizontal" value={draft.recommendation ?? ''}
             onChange={(v) => setDraft((d) => ({ ...d, recommendation: v || null }))} options={[...RECOMMENDATION_CHOICES]} data-testid="interviews-scorecard-recommendation" />
@@ -258,7 +258,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
 
   return (
     <DetailPage data-testid="interviews-scorecard" title={`${interview.candidate.name}, ${interview.round.name}`} breadcrumbs={trail}
-      badge={<Chip tone={status.tone} size="xs" data-testid="interviews-scorecard-state">{status.label}</Chip>}
+      badge={<Chip tone={status.tone} size="sm" data-testid="interviews-scorecard-state">{status.label}</Chip>}
       meta={<MetaLine size="sm" items={[
         interview.opening.title, `${ROUND_TYPE_LABELS[interview.round.type]}, ${interview.round.minutes} minutes`,
         mine ? `Your scorecard is in (version ${mine.version})` : seated ? (view.refusal ?? 'Your scorecard is due') : 'You read the submissions here',
@@ -275,13 +275,13 @@ function ScorecardReadout({ card, competencies, round, testId }: { card: Scoreca
   const kit = new Map(competencies.map((c) => [c.id, c]));
   const when = new Date(card.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   return (
-    <DetailSection variant="heading" title={round ? `${card.interviewer.name}, ${round}` : card.interviewer.name} data-testid={testId}
+    <DetailSection variant="heading" as="h2" title={round ? `${card.interviewer.name}, ${round}` : card.interviewer.name} data-testid={testId}
       hint={<MetaLine size="sm" items={[`Version ${card.version}`, `Submitted ${when}`, ...(card.correctionReason ? [`Corrected: ${card.correctionReason}`] : [])]} />}>
       <Stack gap="md">
         <Inline gap="lg" align="center" wrap>
           <WorkflowStepper aria-label="The steps of a scorecard" data-testid="interviews-scorecard-steps"
             steps={SCORECARD_STEPS.map((id, i) => ({ step: i + 1, label: SCORECARD_STEP_LABELS[id], done: true, active: false }))} />
-          <Chip tone={recommendationTone(card.recommendation)} size="xs" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>
+          <Chip tone={recommendationTone(card.recommendation)} size="sm" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>
         </Inline>
         {card.ratings.map((r) => {
           const c = kit.get(r.competencyId);

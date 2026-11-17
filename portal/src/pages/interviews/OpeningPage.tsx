@@ -7,7 +7,7 @@
 // made against an older revision is refused rather than overwriting someone else's (409).
 
 import {
-  Button, Chip, CodeEditor, DataTable, DetailPage, DetailSection, EmptyState, Inline, MetaLine, Stack, T, type BreadcrumbItem, type DataTableColumn,
+  Button, Chip, CodeEditor, DataTable, DetailPage, DetailSection, EmptyState, Inline, MetaLine, Stack, T, Tabs, type BreadcrumbItem, type DataTableColumn, type DetailPageTab,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
@@ -36,6 +36,33 @@ const stateTone = (s: OpeningRecord['state']) => (s === 'open' ? 'success' : s =
 interface RailModel { rows: OpeningListRow[]; query: string; setQuery: (q: string) => void; loading: boolean; error: string | null; retry: () => void }
 /** The openings the viewer may see, as the list rail beside an open opening; null for an interviewer, who has no Openings list. */
 const RailContext = createContext<RailModel | null>(null);
+
+/**
+ * The opening as a record: beside the list rail the frame's header already carries the page's one title
+ * ("Openings"), so the opening's name is a heading section with its tabs under it (the profile's shape); on its own
+ * it is the library's DetailPage.
+ */
+function OpeningHeadTabs({ testId, title, badge, meta, actions, trail, tabs, activeTab, onTabChange }: {
+  testId: string; title: string; badge: ReactNode; meta: ReactNode; actions: ReactNode; trail: BreadcrumbItem[] | undefined;
+  tabs: DetailPageTab[]; activeTab?: string; onTabChange?: (id: string) => void;
+}) {
+  const framed = useContext(RailContext) !== null;
+  const [own, setOwn] = useState(tabs[0]!.id);
+  const current = activeTab ?? own;
+  if (!framed) {
+    return <DetailPage data-testid={testId} title={title} breadcrumbs={trail} badge={badge} meta={meta} actions={actions}
+      {...(onTabChange ? { activeTab: current, onTabChange } : {})} tabs={tabs} />;
+  }
+  return (
+    <Stack gap="md" data-testid={testId}>
+      <DetailSection variant="heading" as="h2" first title={title} hint={badge} actions={actions}>{meta}</DetailSection>
+      <Tabs idPrefix={testId} aria-label={`${title} sections`} variant="underline" size="sm" value={current}
+        onValueChange={(v) => (onTabChange ?? setOwn)(v)} getItemTestId={(i) => tabs.find((t) => t.id === i.id)?.testId ?? `${testId}-tab-${i.id}`}
+        items={tabs.map(({ id, label, badge: b }) => ({ id, label, ...(b !== undefined ? { badge: b } : {}) }))} />
+      {tabs.find((t) => t.id === current)?.content}
+    </Stack>
+  );
+}
 
 export default function OpeningPage({ editing = false }: { editing?: boolean }) {
   const { id = '' } = useParams();
@@ -138,8 +165,8 @@ function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; mon
   const editable = can('ManageCandidates');
   return (
     <OpeningFrame id={o.id} title={o.title}>
-    <DetailPage data-testid="interviews-opening" title={o.title} breadcrumbs={trail}
-      badge={<Chip tone={stateTone(o.state)} size="xs">{OPENING_STATE_LABELS[o.state]}</Chip>}
+    <OpeningHeadTabs testId="interviews-opening" title={o.title} trail={trail}
+      badge={<Chip tone={stateTone(o.state)} size="sm">{OPENING_STATE_LABELS[o.state]}</Chip>}
       meta={<OpeningMeta o={o} money={money} />}
       actions={editable
         ? <Button size="sm" variant="secondary" data-testid="interviews-opening-edit" onClick={() => void navigate(`/interviews/openings/${encodeURIComponent(o.id)}/edit`)}>Edit kit</Button>
@@ -181,26 +208,30 @@ function KitView({ o }: { o: OpeningRecord }) {
   return (
     <Stack gap="lg" className="pb-6" data-testid="interviews-kit-view">
       <DetailSection title="Rounds" as="h2" hint={String(o.rounds.length)} first>
-        <DataTable narrow aria-label="Rounds" data={o.rounds} columns={roundColumns} keyField={(r) => r.id} data-testid="interviews-kit-rounds" />
+        <DataTable narrow aria-label="Rounds" data={o.rounds} columns={roundColumns} keyField={(r) => r.id} data-testid="interviews-kit-rounds" staticRows="Each round of the kit, read in place" />
       </DetailSection>
       <DetailSection title="Competencies" as="h2" hint={String(o.competencies.length)}>
-        <DataTable narrow rowHeight="content" aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" />
+        <DataTable narrow rowHeight="content" aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" staticRows="Each competency of the kit, read in place" />
       </DetailSection>
-      {kinds.map((t) => {
-        const qs = byType(t);
-        const open = qs.find((q) => q.id === openQuestion) ?? null;
-        return (
-          <DetailSection key={t} title={`${ROUND_TYPE_LABELS[t]} questions`} as="h2" hint={String(qs.length)}>
-            <Stack gap="sm">
-              <DataTable narrow rowHeight="content" aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
-                data-testid={`interviews-kit-${t}-questions`} selectedKey={open?.id ?? null}
-                onRowClick={(q) => setOpenQuestion(openQuestion === q.id ? null : q.id)}
-                emptyMessage={`No ${t} questions yet.`} />
-              {open && <QuestionDetail q={open} competency={names.get(open.competencyId) ?? ''} />}
-            </Stack>
-          </DetailSection>
-        );
-      })}
+      <DetailSection title="Questions" as="h2" hint={String(o.questions.length)}>
+        <Stack gap="md">
+          {kinds.map((t) => {
+            const qs = byType(t);
+            const open = qs.find((q) => q.id === openQuestion) ?? null;
+            return (
+              <DetailSection key={t} title={`${ROUND_TYPE_LABELS[t]} questions`} as="h3" hint={String(qs.length)} first>
+                <Stack gap="sm">
+                  <DataTable narrow rowHeight="content" aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
+                    data-testid={`interviews-kit-${t}-questions`} selectedKey={open?.id ?? null}
+                    onRowClick={(q) => setOpenQuestion(openQuestion === q.id ? null : q.id)}
+                    emptyMessage={`No ${t} questions yet.`} />
+                  {open && <QuestionDetail q={open} competency={names.get(open.competencyId) ?? ''} />}
+                </Stack>
+              </DetailSection>
+            );
+          })}
+        </Stack>
+      </DetailSection>
     </Stack>
   );
 }
@@ -356,8 +387,8 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
 
   return (
     <OpeningFrame id={base.id} title={base.title} guard={guard} footer={<CollectionCommandHost adapter={adapter} prompts={prompts} />}>
-      <DetailPage data-testid="interviews-opening-editor" title={base.title} breadcrumbs={trail}
-        badge={<Chip tone={changes ? 'caution' : 'neutral'} size="xs">{changes ? 'Unsaved changes' : 'Saved'}</Chip>}
+      <OpeningHeadTabs testId="interviews-opening-editor" title={base.title} trail={trail}
+        badge={<Chip tone={changes ? 'caution' : 'neutral'} size="sm">{changes ? 'Unsaved changes' : 'Saved'}</Chip>}
         meta={<OpeningMeta o={base} money={money} />}
         actions={(
           <Inline gap="xs" wrap={false}>

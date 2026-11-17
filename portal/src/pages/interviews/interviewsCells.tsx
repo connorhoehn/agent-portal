@@ -45,26 +45,26 @@ export function PanelCell({ lead, panel }: { lead: { id: string; name: string };
   return (
     <Inline gap="sm" align="center" wrap={false}>
       <PersonCell id={lead.id} name={lead.name} title={panel.length ? `${lead.name} leads, with ${panel.map((p) => p.name).join(', ')}` : `${lead.name} leads`} />
-      {panel.length > 0 && <AvatarGroup size={20} items={panel.map((p) => ({ name: p.name, src: PORTRAITS.get(p.id) || undefined }))} />}
+      {panel.length > 0 && <AvatarGroup size={24} items={panel.map((p) => ({ name: p.name, src: PORTRAITS.get(p.id) || undefined }))} />}
     </Inline>
   );
 }
 
 export function StageChip({ stage }: { stage: ApplicationStage }) {
-  return <Chip tone={stageTone(stage)} size="xs">{STAGE_LABELS[stage]}</Chip>;
+  return <Chip tone={stageTone(stage)} size="sm">{STAGE_LABELS[stage]}</Chip>;
 }
 
 /** The latest scorecard as "Yes · Coding", or "Scorecard due" while one is owed, or a dash. */
 export function ResultChip({ result, due = false }: { result: ResultBrief | null; due?: boolean }) {
   if (result) {
     return (
-      <Chip tone={recommendationTone(result.recommendation)} size="xs"
+      <Chip tone={recommendationTone(result.recommendation)} size="sm"
         title={`${RECOMMENDATION_LABELS[result.recommendation]} from ${result.interviewer.name} after ${result.roundName}`}>
         {lastResultLine(result)}
       </Chip>
     );
   }
-  if (due) return <Chip tone="caution" size="xs">Scorecard due</Chip>;
+  if (due) return <Chip tone="caution" size="sm">Scorecard due</Chip>;
   return <T size="xs" tone="tertiary">—</T>;
 }
 
@@ -84,7 +84,7 @@ export function DebriefLink({ candidateId }: { candidateId: string }) {
  */
 export function DebriefResultCell({ candidateId, result, due = false, ready = false }: { candidateId: string; result: ResultBrief | null; due?: boolean; ready?: boolean }) {
   const { session } = useSession();
-  const chip = ready ? <Chip tone="accent" size="xs" title="Every round that went ahead is scored">Ready to decide</Chip> : <ResultChip result={result} due={due} />;
+  const chip = ready ? <Chip tone="accent" size="sm" title="Every round that went ahead is scored">Ready to decide</Chip> : <ResultChip result={result} due={due} />;
   if (!readsDebrief(session?.role) || !(result || due || ready)) return chip;
   return <AppLink to={debriefHref(candidateId)} data-testid="interviews-result-debrief">{chip}</AppLink>;
 }
