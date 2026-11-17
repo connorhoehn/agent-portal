@@ -308,6 +308,11 @@ export function runByLabel(view: RunView | null, selfId: string | null): string 
   if (selfId && view.startedBy.id === selfId) return 'Run by you';
   return `Run by ${view.startedBy.name}`;
 }
+/** The version after the language's name: the backend writes "Python 3.12.7", the header already says "Python". */
+export function runtimeVersionLabel(version: string, languageLabel: string | undefined): string {
+  if (languageLabel && version.toLowerCase().startsWith(`${languageLabel.toLowerCase()} `)) return version.slice(languageLabel.length + 1).trim() || version;
+  return version;
+}
 export function runOutputModel(entry: RunEntry | null, selfId: string | null = null): RunOutputModel {
   if (!entry) return { status: null, stdout: '', stderr: '', compileOutput: '', truncated: { stdout: false, stderr: false }, exitCode: null, timeMs: null, peakMemoryMb: null };
   const r = entry.view?.result ?? null;
@@ -325,7 +330,7 @@ export function runOutputModel(entry: RunEntry | null, selfId: string | null = n
     peakMemoryMb: r?.peakMemoryMb ?? null,
     ...(runByLabel(entry.view, selfId) ? { runBy: runByLabel(entry.view, selfId)! } : {}),
     ...(language && LANGUAGE_NAMES[language] ? { languageLabel: LANGUAGE_NAMES[language] } : {}),
-    ...(r?.runtimeVersion ? { runtimeVersion: r.runtimeVersion } : {}),
+    ...(r?.runtimeVersion ? { runtimeVersion: runtimeVersionLabel(r.runtimeVersion, language ? LANGUAGE_NAMES[language] : undefined) } : {}),
   };
 }
 

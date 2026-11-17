@@ -120,6 +120,8 @@ test('the output\'s model: nothing run yet, a finished run, a failure, a compile
     exitCode: 0, timeMs: 42, peakMemoryMb: 12, runBy: 'Run by Hugo Lindqvist', languageLabel: 'Python', runtimeVersion: '3.12',
   });
   assert.equal(runOutputModel(latestRun(done), 'u-hugo').runBy, 'Run by you');
+  const named = fold([{ type: 'view', run: view('r9', { status: 'succeeded', result: result({ runtimeVersion: 'Python 3.12.7' }) }) }]);
+  assert.equal(runOutputModel(latestRun(named)).runtimeVersion, '3.12.7', 'the language is not said twice');
   // The candidate's run on the panel's side; the panel's run on the candidate's side reads "Interviewer" (the server's stand-in).
   const cand = fold([{ type: 'view', run: view('r2', { startedBy: { id: 'guest:inv', name: 'Candidate', side: 'candidate' } }) }]);
   assert.equal(runOutputModel(latestRun(cand), 'u-hugo').runBy, 'Run by Candidate');
