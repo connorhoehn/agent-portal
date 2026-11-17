@@ -133,8 +133,10 @@ export function postApprovedQuestion(callId: string, text: string, opts: PostOpt
  * question again, the time left, or the one fixed sentence). It carries the approved mark, so the candidate reads it, and the
  * `approvedAnswer` mark, so a page that shows "the question Milo last asked" can tell it from a question.
  */
-export function postApprovedAnswer(callId: string, text: string, opts: PostOptions = {}): Promise<ChatMessage | null> {
-  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', [APPROVED_QUESTION_KEY]: true, approvedAnswer: true } }, opts);
+export function postApprovedAnswer(callId: string, text: string, opts: PostOptions = {}, asker?: { askedBy: string; askedByName: string }): Promise<ChatMessage | null> {
+  // An answer to someone's request is a reply labelled with who asked (decision 6), still carrying the approved mark.
+  const who = asker ? { kind: 'assistant-reply' as const, askedBy: asker.askedBy, askedByName: asker.askedByName, private: false as const } : { kind: 'assistant-notice' as const };
+  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, ...who, [APPROVED_QUESTION_KEY]: true, approvedAnswer: true } }, opts);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

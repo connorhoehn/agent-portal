@@ -65,6 +65,9 @@ export interface AssistantReplyMetadata extends AssistantBase {
   askedByName: string;
   /** Always false in a chat message; a private reply is never a chat message (postPrivately). */
   private?: false;
+  /** With both marks: Milo's answer to a fixed request, said from held text (chat.ts `postApprovedAnswer` with an asker). */
+  approvedQuestion?: true;
+  approvedAnswer?: true;
 }
 
 export interface AssistantActionMetadata extends AssistantBase {
@@ -137,7 +140,8 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
   }
   if (m['kind'] === 'assistant-reply') {
     if (!str(m['askedBy'], 128) || !str(m['askedByName'], 128)) return null;
-    return { ...base, kind: 'assistant-reply', askedBy: m['askedBy'], askedByName: m['askedByName'], ...(m['private'] === false ? { private: false as const } : {}) };
+    return { ...base, kind: 'assistant-reply', askedBy: m['askedBy'], askedByName: m['askedByName'], ...(m['private'] === false ? { private: false as const } : {}),
+      ...(m[APPROVED_QUESTION_KEY] === true && m['approvedAnswer'] === true ? { approvedQuestion: true as const, approvedAnswer: true as const } : {}) };
   }
   if (m['kind'] === 'assistant-action') {
     const tool = m['tool'] as Record<string, unknown> | undefined;

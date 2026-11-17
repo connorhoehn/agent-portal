@@ -1478,7 +1478,7 @@ export class AssistantRuntime {
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
         if (held !== null) {
           // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
-          const posted = await postApprovedAnswer(callId, held).catch(() => null);
+          const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await nameOf(e.askedBy) }).catch(() => null);
           const said = posted ? await this.sayHeldText(callId, held, e.askedBy) : 'posted';
           await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, spoken: said === 'spoken' }).catch(() => undefined);
           continue;

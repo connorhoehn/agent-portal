@@ -2333,7 +2333,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:184"
+      "source": "src/routes/interview-invite.ts:191"
     },
     {
       "method": "GET",
@@ -2348,17 +2348,22 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:106"
+      "source": "src/routes/interview-invite.ts:107"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:138"
+      "source": "src/routes/interview-invite.ts:140"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:170"
+      "source": "src/routes/interview-invite.ts:177"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/milo/request",
+      "source": "src/routes/interview-invite-milo.ts:34"
     },
     {
       "method": "POST",
@@ -2368,12 +2373,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:152"
+      "source": "src/routes/interview-invite.ts:159"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:195"
+      "source": "src/routes/interview-invite.ts:202"
     },
     {
       "method": "GET",
@@ -2408,12 +2413,17 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:76"
+      "source": "src/routes/interviews.ts:78"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/candidates",
+      "source": "src/routes/interviews/candidates.ts:55"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:85"
+      "source": "src/routes/interviews.ts:87"
     },
     {
       "method": "GET",
@@ -2473,7 +2483,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:100"
+      "source": "src/routes/interviews.ts:102"
     },
     {
       "method": "POST",
@@ -2483,7 +2493,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:111"
+      "source": "src/routes/interviews.ts:113"
     },
     {
       "method": "POST",
@@ -2523,7 +2533,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/milo-ask",
-      "source": "src/routes/interviews/milo.ts:61"
+      "source": "src/routes/interviews/milo.ts:70"
     },
     {
       "method": "GET",
@@ -2533,7 +2543,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/milo-notes",
-      "source": "src/routes/interviews/milo.ts:54"
+      "source": "src/routes/interviews/milo.ts:63"
     },
     {
       "method": "POST",
@@ -2616,6 +2626,11 @@
       "source": "src/routes/interviews/runs.ts:126"
     },
     {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/say",
+      "source": "src/routes/interviews/milo.ts:89"
+    },
+    {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/scorecard",
       "source": "src/routes/interviews/scorecards.ts:114"
@@ -2633,12 +2648,12 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/suggestion",
-      "source": "src/routes/interviews/coach.ts:38"
+      "source": "src/routes/interviews/coach.ts:39"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/suggestion/:suggestionId/answer",
-      "source": "src/routes/interviews/coach.ts:47"
+      "source": "src/routes/interviews/coach.ts:48"
     },
     {
       "method": "PUT",
@@ -2648,7 +2663,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/transcript",
-      "source": "src/routes/interviews/milo.ts:46"
+      "source": "src/routes/interviews/milo.ts:55"
     },
     {
       "method": "GET",
@@ -2663,7 +2678,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:56"
+      "source": "src/routes/interviews.ts:57"
     },
     {
       "method": "POST",
@@ -2673,7 +2688,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:64"
+      "source": "src/routes/interviews.ts:65"
     },
     {
       "method": "PUT",

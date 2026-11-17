@@ -597,6 +597,8 @@ export const V2_RULES = [
   [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
   [/^(POST|PUT) \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log and its runs belong to the room, never to the voice navigator'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/say$/, 'never', null, 'Milo saying an approved question aloud is the lead\'s choice in the room, never the voice navigator\'s'],
+  [/^POST \/api\/interviews\/candidates$/, 'never', null, 'hiring setup (ManageCandidates): adding a candidate is done on the form'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],
   [/^POST \/api\/interviews\/applications\/:[^/]+\/stage$/, 'never', null, 'the stage decision is the hiring manager\'s, with a reason, on the debrief'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(milo-ask|plan-draft|recap\/open)$/, 'never', null, 'Milo\'s private answers, plan drafts and the recap are read on their pages, never by voice'],
