@@ -1,0 +1,178 @@
+// An opening's kit on the portal side (docs/interviews-tenant-plan.md, rows I1.3 and I1.8): the shapes
+// GET /api/interviews/openings[/:id] answers, the editor's pure helpers, and the two writes. The server
+// checks every kit (middleware lib/interviews/kit.ts) and answers each problem as one sentence on a path
+// (`questions.2.prompt`); the editor shows it on that field. Ids are made here so a new question can
+// probe a new competency before either is saved, and are never shown.
+
+import { INTERVIEWS_API, type OpeningRow, type RoundType } from './interviews.ts';
+import { writeJson } from './writeJson.ts';
+
+export type PadLanguage = 'python' | 'swift' | 'javascript' | 'typescript' | 'java' | 'go' | 'cpp';
+export const PAD_LANGUAGES: readonly PadLanguage[] = ['python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp'];
+export const PAD_LANGUAGE_LABELS: Readonly<Record<PadLanguage, string>> = {
+  python: 'Python', swift: 'Swift', javascript: 'JavaScript', typescript: 'TypeScript', java: 'Java', go: 'Go', cpp: 'C++',
+};
+export type OpeningState = 'open' | 'paused' | 'closed';
+export const OPENING_STATE_LABELS: Readonly<Record<OpeningState, string>> = { open: 'Open', paused: 'Paused', closed: 'Closed' };
+
+export interface KitRound { id: string; name: string; type: RoundType; minutes: number }
+export interface KitCompetency { id: string; name: string; lookFor: string; anchors: { 1: string; 2: string; 3: string; 4: string } }
+export interface KitQuestion {
+  id: string;
+  prompt: string;
+  followUps: string[];
+  competencyId: string;
+  roundType: RoundType;
+  starter?: Partial<Record<PadLanguage, string>>;
+}
+export interface OpeningKit { rounds: KitRound[]; competencies: KitCompetency[]; questions: KitQuestion[] }
+
+/** GET /openings: a row gains the kit at a glance. */
+export interface OpeningListRow extends OpeningRow {
+  kitSize: { competencies: number; questions: Record<RoundType, number> };
+}
+/** GET /openings/:id. */
+export interface OpeningRecord extends OpeningListRow {
+  competencies: KitCompetency[];
+  questions: KitQuestion[];
+  budgetCapUsd: number | null;
+  revision: number;
+}
+
+export interface OpeningDetails {
+  title: string;
+  level: string;
+  team: string;
+  location: string;
+  hiringManagerId: string | null;
+  state: OpeningState;
+  budgetCapUsd: number | null;
+}
+
+export interface FieldProblem { path: string; message: string }
+
+/** Only a technical round has the code pad; a behavioural round never does (row I1.8). */
+export const roundHasPad = (type: RoundType): boolean => type === 'technical';
+export const padLine = (type: RoundType): string => (roundHasPad(type) ? 'Code pad' : 'No code pad');
+
+export const kitOf = (o: Pick<OpeningRecord, 'rounds' | 'competencies' | 'questions'>): OpeningKit =>
+  structuredClone({ rounds: o.rounds, competencies: o.competencies, questions: o.questions });
+
+export const detailsOf = (o: OpeningRecord): OpeningDetails => ({
+  title: o.title, level: o.level, team: o.team, location: o.location, hiringManagerId: o.hiringManager?.id ?? null, state: o.state,
+  budgetCapUsd: o.budgetCapUsd,
+});
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "3 rounds · 4 technical, 2 behavioural questions" — the Openings table's kit cell. */
+export function kitLine(row: Pick<OpeningListRow, 'rounds' | 'kitSize'>): string {
+  if (row.rounds.length === 0) return 'No kit yet';
+  const { technical, behavioural } = row.kitSize.questions;
+  const qs = technical + behavioural === 0 ? 'no questions'
+    : technical && behavioural ? `${technical} technical, ${behavioural} behavioural ${behavioural + technical === 1 ? 'question' : 'questions'}`
+      : plural(technical + behavioural, technical ? 'technical question' : 'behavioural question');
+  return `${plural(row.rounds.length, 'round')} · ${qs}`;
+}
+
+/** "Coding 60 min · System design 60 min" for a title attribute. */
+export const roundsLine = (rounds: readonly KitRound[]): string => rounds.map((r) => `${r.name} ${r.minutes} min`).join(' · ');
+
+/** "Python, Go" — the languages a question has starter code in. */
+export const starterLine = (q: KitQuestion): string =>
+  PAD_LANGUAGES.filter((l) => q.starter?.[l] !== undefined).map((l) => PAD_LANGUAGE_LABELS[l]).join(', ');
+
+/** A fresh id for a new item: `<prefix>-` and six letters or digits, not one of `taken`. */
+export function newId(prefix: 'rd' | 'c' | 'q', taken: ReadonlySet<string>, random: () => number = Math.random): string {
+  for (;;) {
+    const id = `${prefix}-${Array.from({ length: 6 }, () => '0123456789abcdefghijklmnopqrstuvwxyz'[Math.floor(random() * 36)]).join('')}`;
+    if (!taken.has(id)) return id;
+  }
+}
+
+/** The list with item `index` moved one place up (-1) or down (1); unchanged at either end. */
+export function moved<T>(list: readonly T[], index: number, delta: -1 | 1): T[] {
+  const to = index + delta;
+  if (index < 0 || index >= list.length || to < 0 || to >= list.length) return [...list];
+  const next = [...list];
+  [next[index], next[to]] = [next[to]!, next[index]!];
+  return next;
+}
+
+export const blankRound = (id: string, type: RoundType = 'technical'): KitRound => ({ id, name: '', type, minutes: type === 'technical' ? 60 : 45 });
+export const blankCompetency = (id: string): KitCompetency => ({ id, name: '', lookFor: '', anchors: { 1: '', 2: '', 3: '', 4: '' } });
+export const blankQuestion = (id: string, roundType: RoundType, competencyId: string): KitQuestion => ({ id, prompt: '', followUps: [], competencyId, roundType });
+
+/** What changed between the saved kit and the draft, for the save and discard prompts ("1 question added"). */
+export function kitChanges(before: OpeningKit, after: OpeningKit): string[] {
+  const out: string[] = [];
+  const list = <T extends { id: string }>(a: readonly T[], b: readonly T[], one: string, many: string) => {
+    const was = new Map(a.map((x) => [x.id, x]));
+    const now = new Set(b.map((x) => x.id));
+    const added = b.filter((x) => !was.has(x.id)).length;
+    const removed = a.filter((x) => !now.has(x.id)).length;
+    const edited = b.filter((x) => was.has(x.id) && JSON.stringify(was.get(x.id)) !== JSON.stringify(x)).length;
+    if (added) out.push(`${plural(added, one, many)} added`);
+    if (edited) out.push(`${plural(edited, one, many)} edited`);
+    if (removed) out.push(`${plural(removed, one, many)} removed`);
+    const kept = a.filter((x) => now.has(x.id)).map((x) => x.id);
+    const order = b.filter((x) => was.has(x.id)).map((x) => x.id);
+    if (!added && !removed && kept.join() !== order.join()) out.push(`${many} reordered`);
+  };
+  list(before.rounds, after.rounds, 'round', 'rounds');
+  list(before.competencies, after.competencies, 'competency', 'competencies');
+  list(before.questions, after.questions, 'question', 'questions');
+  return out;
+}
+
+export const detailsChanged = (a: OpeningDetails, b: OpeningDetails): boolean => JSON.stringify(a) !== JSON.stringify(b);
+
+/** "1 question added · the details" — a change list for a prompt, or null when nothing changed. */
+export function changesLine(kit: readonly string[], details: boolean): string | null {
+  const parts = [...kit, ...(details ? ['details edited'] : [])];
+  if (!parts.length) return null;
+  const line = parts.join(' · ');
+  return line[0]!.toUpperCase() + line.slice(1);
+}
+
+/** The server's problems by path, and the paths each list's rows have problems on (to mark the row). */
+export function problemsByPath(problems: readonly FieldProblem[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const p of problems) if (!m.has(p.path)) m.set(p.path, p.message);
+  return m;
+}
+/** Row positions in `list` with a problem on any of their fields. */
+export function rowsWithProblems(problems: ReadonlyMap<string, string>, list: 'rounds' | 'competencies' | 'questions'): Set<number> {
+  const rows = new Set<number>();
+  for (const path of problems.keys()) {
+    const m = new RegExp(`^${list}\\.(\\d+)\\.`).exec(path);
+    if (m) rows.add(Number(m[1]));
+  }
+  return rows;
+}
+
+// ── the writes ──────────────────────────────────────────────────────────────
+
+export type SaveOutcome =
+  | { ok: true; opening: OpeningRecord }
+  | { ok: false; error: string; fields: FieldProblem[]; stale: boolean };
+
+async function put(path: string, body: unknown): Promise<SaveOutcome> {
+  const r = await writeJson<{ opening?: OpeningRecord; fields?: FieldProblem[] }>(`${INTERVIEWS_API}${path}`, 'PUT', body);
+  if (r.ok && r.data?.opening) return { ok: true, opening: r.data.opening };
+  return { ok: false, error: r.error ?? 'The change could not be saved. Try again.', fields: r.data?.fields ?? [], stale: r.status === 409 };
+}
+
+export const saveKit = (openingId: string, revision: number, kit: OpeningKit): Promise<SaveOutcome> =>
+  put(`/openings/${encodeURIComponent(openingId)}/kit`, { revision, kit });
+
+export const saveDetails = (openingId: string, revision: number, details: OpeningDetails): Promise<SaveOutcome> =>
+  put(`/openings/${encodeURIComponent(openingId)}/details`, { revision, ...details });
+
+export async function createOpening(details: OpeningDetails): Promise<SaveOutcome> {
+  const r = await writeJson<{ opening?: OpeningRecord; fields?: FieldProblem[] }>(`${INTERVIEWS_API}/openings`, 'POST', details);
+  if (r.ok && r.data?.opening) return { ok: true, opening: r.data.opening };
+  return { ok: false, error: r.error ?? 'The opening could not be created. Try again.', fields: r.data?.fields ?? [], stale: false };
+}
+
+export const BLANK_DETAILS: OpeningDetails = { title: '', level: '', team: '', location: '', hiringManagerId: null, state: 'open', budgetCapUsd: null };

@@ -225,6 +225,7 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
   // Interviews: the recruiter's Candidates, every application in the tenant. The interviewer's and
   // the hiring manager's desks are their own roles' (journey:interviews walks each as its role).
   { tenant: 'interviews', path: '/interviews/candidates' },
+  { tenant: 'interviews', path: '/interviews/openings' },
 ];
 
 /** The chat-rail frame measurements (docs/rail-parity-goal.md decision 6), each as its user.

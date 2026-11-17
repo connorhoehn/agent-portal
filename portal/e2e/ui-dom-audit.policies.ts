@@ -149,6 +149,7 @@ const INTERVIEWS_COLLECTION_PAGES = [
   'my-openings',
   // slot 1: a lane adds its entries just below this line
   // slot 2: a lane adds its entries just below this line
+  'openings',
   // slot 3: a lane adds its entries just below this line
   // slot 4: a lane adds its entries just below this line
   // slot 5: a lane adds its entries just below this line

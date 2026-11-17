@@ -66,6 +66,8 @@ export interface OpeningRow {
 export interface OpeningRecord extends OpeningRow {
   competencies: KitCompetency[];
   questions: KitQuestion[];
+  /** Spend cap per interview in US dollars (decision 18); null while none is set. */
+  budgetCapUsd: number | null;
   /** The revision a write must name (row I1.3: compare-and-set). */
   revision: number;
 }
@@ -237,7 +239,7 @@ export class WorldIndex {
   }
 
   openingRecord(o: Opening): OpeningRecord {
-    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions, revision: o.revision };
+    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions, budgetCapUsd: o.budgetCapUsd, revision: o.revision };
   }
 
   interviewRow(i: Interview): InterviewRow | null {
