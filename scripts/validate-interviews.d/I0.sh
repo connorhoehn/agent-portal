@@ -55,7 +55,7 @@ row_I0.2() {
   needF '<RequireTenant tenant="interviews" fallback={<OtherWorkspace tenant="interviews" />}>' portal/src/App.tsx "under RequireTenant, refusing with the other-workspace page"
   needF "INTERVIEWS_ENABLED" portal/src/lib/features.ts "portal flag INTERVIEWS_ENABLED (VITE_ENABLE_INTERVIEWS)"
   needF "INTERVIEWS_ENABLED ?" portal/src/App.tsx "App.tsx honours the portal flag"
-  want_count "tenant: 'interviews', group:" portal/src/components/shell/Layout.tsx 3 "rail rows for interviews"
+  n=$(count "tenant: 'interviews', group:" portal/src/components/shell/Layout.tsx); if [ "${n:-0}" -ge 3 ]; then ok "rail rows for interviews ($n: the three homes and the rows later lanes add)"; else fail "rail rows for interviews: $n, want at least the three homes"; fi
   needF "interviews: 'Interviews'" portal/src/components/shell/Layout.tsx "TENANT_LABELS.interviews"
   needF "interviews: ['Hire', 'Interview', 'System']" portal/src/components/shell/portalCommands.ts "palette group order"
   want_count "tenant: 'interviews', group:" portal/src/components/shell/portalCommands.ts 3 "palette rows for interviews"
