@@ -56,10 +56,26 @@ export const PAD_LINE_COMMENT: Readonly<Record<PadLanguage, string>> = {
   python: '#', swift: '//', javascript: '//', typescript: '//', java: '//', go: '//', cpp: '//',
 };
 
-/** The prompt as a comment block: every line commented, blank lines kept as a bare comment marker. */
-export function commentBlock(prompt: string, language: PadLanguage): string {
+/** How wide an inserted comment line may be, marker included: it reads in the room's pane without scrolling sideways. */
+export const PAD_COMMENT_WIDTH = 60;
+
+/** One line of prose broken at spaces so each piece fits `width` (a word longer than that stays whole). */
+function wrapWords(line: string, width: number): string[] {
+  const out: string[] = [];
+  let cur = '';
+  for (const word of line.trim().split(/\s+/)) {
+    if (cur && cur.length + 1 + word.length > width) { out.push(cur); cur = word; } else cur = cur ? `${cur} ${word}` : word;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/** The prompt as a comment block: every line commented and wrapped to `width`, blank lines kept as a bare comment marker. */
+export function commentBlock(prompt: string, language: PadLanguage, width = PAD_COMMENT_WIDTH): string {
   const mark = PAD_LINE_COMMENT[language];
-  return prompt.replace(/\r\n?/g, '\n').trim().split('\n').map((line) => (line.trim() ? `${mark} ${line.trimEnd()}` : mark)).join('\n');
+  const room = Math.max(16, width - mark.length - 1);
+  return prompt.replace(/\r\n?/g, '\n').trim().split('\n')
+    .flatMap((line) => (line.trim() ? wrapWords(line, room).map((piece) => `${mark} ${piece}`) : [mark])).join('\n');
 }
 
 /** A question as the pad takes it (U2's `PadQuestion`; the room's `RoomQuestion` fits it as it is). */

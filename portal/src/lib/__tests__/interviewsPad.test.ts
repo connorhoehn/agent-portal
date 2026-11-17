@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Y from 'yjs';
 import {
-  PAD_CARET_COLORS, PAD_DOCUMENT_PREFIX, PAD_LANGUAGE_KEY, PAD_META_NAME, PAD_TEXT_NAME, applyQuestion, caretColor, caretName, commentBlock,
+  PAD_CARET_COLORS, PAD_COMMENT_WIDTH, PAD_DOCUMENT_PREFIX, PAD_LANGUAGE_KEY, PAD_META_NAME, PAD_TEXT_NAME, applyQuestion, caretColor, caretName, commentBlock,
   isPadLanguage, isPadRefusal, isPadSnapshot, padChannel, padConnection, padDocumentId, padLanguageOf, questionInsertion, questionLabel,
   readSharedLanguage, writeSharedLanguage, type PadQuestion,
 } from '../interviewsPad.ts';
@@ -35,6 +35,15 @@ test('a prompt becomes a comment block in the language\'s comment syntax', () =>
   assert.equal(commentBlock('Reverse a list.\n\nKeep it O(n).  ', 'python'), '# Reverse a list.\n#\n# Keep it O(n).');
   assert.equal(commentBlock('Reverse a list.', 'go'), '// Reverse a list.');
   assert.equal(commentBlock('A\r\nB', 'cpp'), '// A\n// B');
+});
+
+test('a long prompt wraps at spaces so the pane never scrolls sideways', () => {
+  const prompt = 'Design the write path for a double-entry ledger that records card captures and refunds, survives a region failover and never loses or duplicates an entry.';
+  const lines = commentBlock(prompt, 'go').split('\n');
+  assert.ok(lines.length > 1);
+  for (const l of lines) { assert.ok(l.startsWith('// '), l); assert.ok(l.length <= PAD_COMMENT_WIDTH, l); }
+  assert.equal(lines.map((l) => l.slice(3)).join(' '), prompt, 'no word lost or split');
+  assert.equal(commentBlock('x'.repeat(80), 'python'), `# ${'x'.repeat(80)}`, 'a word longer than the line stays whole');
 });
 
 const Q: PadQuestion = { id: 'q1', prompt: 'Merge two sorted lists.', starter: [

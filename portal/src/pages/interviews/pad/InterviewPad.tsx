@@ -114,9 +114,9 @@ function SharedPad({ self, seat, questions, toolbarEnd, below, onPaste, onLocalE
   const editable = connection === 'synced';
   const lead = seat === 'lead' && !!questions?.length;
   const toolbar = <Toolbar size="sm" aria-label="Code pad" end={toolbarEnd} data-testid="interview-pad-toolbar">
-    <Select size="sm" value={language} options={LANGUAGE_OPTIONS} aria-label="Language" disabled={!editable}
+    <Select size="sm" value={language} options={LANGUAGE_OPTIONS} aria-label="Language" disabled={!editable} wrapperClassName="w-36 shrink-0"
       onChange={(e) => chooseLanguage(e.target.value)} data-testid="interview-pad-language" />
-    {lead && <DropdownMenu trigger="Insert a question" triggerLabel="Insert a question" triggerVariant="secondary" disabled={!editable}
+    {lead && <DropdownMenu trigger="Insert a question" triggerLabel="Insert a question" triggerVariant="secondary" triggerClassName="whitespace-nowrap" disabled={!editable}
       triggerTestId="interview-pad-insert" sections={[{ scroll: true, items: questions!.map((q, n) => ({
         id: q.id, label: `Question ${n + 1}`, description: questionLabel(q), onSelect: () => insertQuestion(q),
       })) }]} />}
