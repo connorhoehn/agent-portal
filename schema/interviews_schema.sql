@@ -314,3 +314,18 @@ CREATE TABLE IF NOT EXISTS interview_deletions (
 );
 CREATE INDEX IF NOT EXISTS interview_deletions_candidate_idx ON interview_deletions (candidate_id, requested_at DESC);
 CREATE INDEX IF NOT EXISTS interview_deletions_open_idx ON interview_deletions (requested_at) WHERE done_at IS NULL;
+
+-- ── the panel's notice (decision 5, its last sentence) ──────────────────────
+-- One row per interviewer and notice version: the interviewer acknowledged the
+-- candidate's notice (lib/interviews/consent/notice.ts) on their way to
+-- accepting a seat, so they know the call records and transcribes them too.
+-- "Once": a second acknowledgement of the same version keeps the first. Not
+-- consent: an Accept is refused until the current version is acknowledged.
+-- `interview_id` is the round they were accepting when they acknowledged it.
+CREATE TABLE IF NOT EXISTS interview_panel_notices (
+  user_id          TEXT NOT NULL REFERENCES app_users(id),
+  notice_version   TEXT NOT NULL,
+  acknowledged_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  interview_id     TEXT NOT NULL REFERENCES interviews(id),
+  PRIMARY KEY (user_id, notice_version)
+);

@@ -173,6 +173,7 @@ BEGIN
       ('interview_suggestions',        'public.app_tenant_visible(''interviews'')'),
       ('interviews',                   'public.app_tenant_visible(''interviews'')'),
       ('interview_invites',            'public.app_tenant_visible(''interviews'')'),
+      ('interview_panel_notices',      'public.app_tenant_visible(''interviews'')'),
       ('interview_deletions',          'public.app_tenant_visible(''interviews'')'),
       ('interview_scorecards',         'public.app_tenant_visible(''interviews'')')
     ) AS t(tbl, predicate)

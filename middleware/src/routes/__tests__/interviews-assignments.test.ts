@@ -44,6 +44,8 @@ import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { admitTenantNotification, setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
+import { interviewPanelNoticesFixture } from '../../mock/interviews-panel-notices.js';
+import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import type { Session } from '../../lib/session.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -106,6 +108,8 @@ const assign = async (body: object = LUCIA) => GRETA.post('/interviews', body);
 const rowOf = async (as: ReturnType<typeof who>, id: string) => (await as.get(`/interviews/${id}`)).body.interview;
 /** Every word a bell shows or carries, for the "nothing about the candidate" checks. */
 const bellText = () => JSON.stringify(sent.map((s) => s.item));
+/** `userId` acknowledged the current panel notice (a fixture row, as the seed keeps Wen's). */
+const readNotice = (userId: string) => interviewPanelNoticesFixture.rows().push({ userId, noticeVersion: CONSENT_NOTICE.version, acknowledgedAt: new Date().toISOString(), interviewId: 'iv-kwame-coding' });
 
 describe('assigning a round', () => {
   it('the recruiter assigns: a new round, assigned with no time, under a new id that says nothing about the candidate', async () => {
@@ -155,6 +159,9 @@ describe('assigning a round', () => {
 });
 
 describe('answering a seat', () => {
+  // The panel's notice (decision 5): in the seed Hugo read an earlier version, so these start after he read the current one.
+  beforeEach(() => { readNotice('u-hugo'); });
+
   it('the lead accepts: assigned → accepted, and the round moves to their "to prepare"; no bell', async () => {
     const res = await HUGO.post('/interviews/iv-kwame-coding/answer', { revision: 1, answer: 'accept' });
     expect(res.status).toBe(200);
@@ -241,6 +248,7 @@ describe('reassigning', () => {
 
   it('after a panel member declines, the recruiter fills the seat; the accepted lead keeps the round accepted', async () => {
     const id = (await assign()).body.interview.id;
+    readNotice('u-hugo');
     await HUGO.post(`/interviews/${id}/answer`, { revision: 1, answer: 'accept' });
     await WEN.post(`/interviews/${id}/answer`, { revision: 2, answer: 'decline', reason: 'Clashes with my on-call week.' });
     const res = await GRETA.put(`/interviews/${id}/panel`, { revision: 3, leadId: 'u-hugo', panelIds: ['u-third'] });
@@ -305,5 +313,84 @@ describe('the bell is shown only while the role is held', () => {
     (getUser as jest.Mock).mockImplementation(async (id: string) => (id === 'u-hugo' ? u('u-hugo', 'Hugo Marchetti', { orgiq: ['member'] }) : null));
     expect(await admitTenantNotification('u-hugo', bell)).toBe(false);
     expect(await admitTenantNotification('u-greta', { payload: { tenant: 'interviews', audience: 'recruiter' } })).toBe(false);
+  });
+});
+
+describe('the panel\'s notice at Accept (decision 5)', () => {
+  const noticeRows = (userId: string) => interviewPanelNoticesFixture.rows().filter((r) => r.userId === userId);
+
+  it('the lead who has not read the current notice is asked for it, and nothing changes', async () => {
+    const res = await HUGO.post('/interviews/iv-kwame-coding/answer', { revision: 1, answer: 'accept' });
+    expect(res.status).toBe(409);
+    expect(res.body.needsNotice).toMatchObject({ version: CONSENT_NOTICE.version, title: CONSENT_NOTICE.title, text: CONSENT_NOTICE.paragraphs.join('\n\n') });
+    expect(res.body.needsNotice.panelLine).toMatch(/applies to you too/);
+    expect(await rowOf(GRETA, 'iv-kwame-coding')).toMatchObject({ state: 'assigned', revision: 1 });
+    await flush();
+    expect(sent).toEqual([]);
+  });
+
+  it('the lead acknowledges the current version, then accepts; once per version, the first time kept', async () => {
+    const ack = await HUGO.post('/interviews/iv-kwame-coding/panel-notice', { version: CONSENT_NOTICE.version });
+    expect(ack.status).toBe(201);
+    expect(ack.body.acknowledgement.version).toBe(CONSENT_NOTICE.version);
+    const again = await HUGO.post('/interviews/iv-kwame-coding/panel-notice', { version: CONSENT_NOTICE.version });
+    expect(again.status).toBe(200);
+    expect(again.body.acknowledgement.at).toBe(ack.body.acknowledgement.at);
+    expect(noticeRows('u-hugo').map((r) => [r.noticeVersion, r.interviewId])).toEqual([['2026-11-02.1', 'iv-ingrid-coding'], [CONSENT_NOTICE.version, 'iv-kwame-coding']]);
+    const res = await HUGO.post('/interviews/iv-kwame-coding/answer', { revision: 1, answer: 'accept' });
+    expect(res.status).toBe(200);
+    expect(res.body.interview).toMatchObject({ state: 'accepted', myAnswer: 'accepted' });
+  });
+
+  it('a panel member: refused without it, accepted with it; Wen, who read the current one in the seed, goes straight through', async () => {
+    const id = (await assign({ ...LUCIA, leadId: 'u-wen', panelIds: ['u-hugo'] })).body.interview.id;
+    const refused = await HUGO.post(`/interviews/${id}/answer`, { revision: 1, answer: 'accept' });
+    expect(refused.status).toBe(409);
+    expect(refused.body.needsNotice.version).toBe(CONSENT_NOTICE.version);
+    expect((await WEN.post(`/interviews/${id}/answer`, { revision: 1, answer: 'accept' })).status).toBe(200);
+    expect((await HUGO.post(`/interviews/${id}/panel-notice`, { version: CONSENT_NOTICE.version })).status).toBe(201);
+    const res = await HUGO.post(`/interviews/${id}/answer`, { revision: 2, answer: 'accept' });
+    expect(res.status).toBe(200);
+    expect((await rowOf(GRETA, id)).panel).toEqual([expect.objectContaining({ id: 'u-hugo' })]);
+  });
+
+  it('a stale version is refused with the current notice; a missing one is a 400; neither keeps a row', async () => {
+    const stale = await HUGO.post('/interviews/iv-kwame-coding/panel-notice', { version: '2026-11-02.1' });
+    expect(stale.status).toBe(409);
+    expect(stale.body.needsNotice.version).toBe(CONSENT_NOTICE.version);
+    expect((await HUGO.post('/interviews/iv-kwame-coding/panel-notice', {})).status).toBe(400);
+    expect(noticeRows('u-hugo')).toHaveLength(1);
+    expect((await HUGO.post('/interviews/iv-kwame-coding/answer', { revision: 1, answer: 'accept' })).status).toBe(409);
+  });
+
+  it('declining never needs the notice', async () => {
+    const res = await HUGO.post('/interviews/iv-kwame-coding/answer', { revision: 1, answer: 'decline', reason: 'On leave that whole week.' });
+    expect(res.status).toBe(200);
+    expect(res.body.interview).toMatchObject({ state: 'declined' });
+  });
+
+  it('someone else\'s acknowledgement does not count, and the body names nobody', async () => {
+    // Wen posts naming Hugo: it is kept for Wen (who holds a seat on this round), never for Hugo.
+    const id = (await assign()).body.interview.id;
+    expect((await WEN.post(`/interviews/${id}/panel-notice`, { version: CONSENT_NOTICE.version, userId: 'u-hugo' })).status).toBe(200);
+    expect(noticeRows('u-hugo').map((r) => r.noticeVersion)).toEqual(['2026-11-02.1']);
+    expect((await HUGO.post(`/interviews/${id}/answer`, { revision: 1, answer: 'accept' })).status).toBe(409);
+  });
+
+  it('the recruiter and the hiring manager cannot post one; a stranger finds nothing; a seatless admin is refused', async () => {
+    const body = { version: CONSENT_NOTICE.version, userId: 'u-hugo' };
+    expect((await GRETA.post('/interviews/iv-kwame-coding/panel-notice', body)).status).toBe(403);
+    expect((await AMARA.post('/interviews/iv-kwame-coding/panel-notice', body)).status).toBe(403);
+    expect((await WEN.post('/interviews/iv-kwame-coding/panel-notice', body)).status).toBe(404);
+    expect((await who('u-third').post('/interviews/iv-kwame-coding/panel-notice', body)).status).toBe(404);
+    expect((await who('u-operator', 'interviews', 'admin').post('/interviews/iv-kwame-coding/panel-notice', body)).status).toBe(403);
+    expect(noticeRows('u-hugo')).toHaveLength(1);
+    expect(noticeRows('u-greta').length + noticeRows('u-amara').length + noticeRows('u-operator').length).toBe(0);
+  });
+
+  it('rounds accepted under an earlier version stay accepted', async () => {
+    // Hugo accepted iv-nadia-design and sits on iv-nadia-leadership's panel under the earlier notice.
+    expect((await rowOf(HUGO, 'iv-nadia-design')).myAnswer).toBe('accepted');
+    expect((await rowOf(HUGO, 'iv-nadia-leadership')).myAnswer).toBe('accepted');
   });
 });

@@ -583,6 +583,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     columnKey: { left_behind: 'left' },
   },
   {
+    name: 'interview_panel_notices',
+    fixture: 'interviews.panel-notices',
+    describes: 'The panel\'s notice acknowledgements: Wen on the current notice, Hugo on an earlier one, so his next Accept asks him to read it.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_panel_notices',
+    mockRows: async () => (await import('../../interviews-panel-notices.js')).interviewPanelNoticesFixture.rows('default'),
+    mockId: (n: { userId: string; noticeVersion: string }) => `${n.userId}:${n.noticeVersion}`,
+  },
+  {
     name: 'interview_scorecards',
     fixture: 'interviews.scorecards',
     describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary; each a first version, so no correction reason.',

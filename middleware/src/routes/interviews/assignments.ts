@@ -20,6 +20,11 @@
 //                       with the row as it now is when someone else wrote first.
 //   6. the answer       the row as the read route shapes it, from a fresh read; then the bell (lib/social-notify.ts),
 //                       never awaited by the answer and never carrying anything about the candidate.
+//
+// The panel's notice (decision 5, its last sentence; lib/interviews/consent/panel-notice.ts): accepting a seat, lead or
+// panel, is refused with 409 `{ needsNotice }` and changes nothing until the session's own person has acknowledged the
+// CURRENT version of the candidate's notice; POST /interviews/:id/panel-notice keeps that acknowledgement, once per
+// person and version. Declining never needs it. Rounds accepted under an earlier version stay accepted.
 
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
@@ -28,6 +33,8 @@ import {
   answerSeat, applyReassignment, assignProblemsLine, checkAnswer, checkAssignment, checkReassignment, checkTime, interviewIdFor, newInterview, newlySeated, timeProblemsLine,
 } from '../../lib/interviews/assign.js';
 import type { FieldProblem } from '../../lib/interviews/kit.js';
+import { acknowledgedCurrent, checkAcknowledgement, panelNoticeOf } from '../../lib/interviews/consent/panel-notice.js';
+import { panelNoticeStore } from '../../lib/interviews/consent/panel-notice-store.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
@@ -43,6 +50,7 @@ const conduct = requireAction('ConductInterview');
 const NO_INTERVIEW = 'There is no interview here that you can open.';
 const STALE = 'Someone else changed this round while you were looking at it. It now shows what was saved: check it, then make your change again.';
 const OUT_OF_DATE = 'This page is out of date. Reload it and make the change again.';
+const NEEDS_NOTICE = 'Read the notice about recording and transcripts before you accept. The interviewers are recorded too.';
 
 /** The people who may sit on a round: holders of the interviewer role in this tenant. */
 async function interviewers(): Promise<Array<{ id: string; name: string }>> {
@@ -124,12 +132,45 @@ assignmentsRouter.post('/interviews/:id/answer', conduct, asyncHandler(async (re
     res.status(out.reason === 'no-seat' ? 403 : 409).json({ error: out.message, interview: ix.interviewRow(i) });
     return;
   }
+  // The panel's notice: an Accept waits for the current version's acknowledgement; nothing is written until then.
+  if (checked.value.answer === 'accept' && !(await acknowledgedCurrent(session.sub))) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(409).json({ error: NEEDS_NOTICE, needsNotice: panelNoticeOf(), interview: ix.interviewRow(i) });
+    return;
+  }
   const words = bellWords(ix, i);
   const written = await interviewsStore().answerSeat(i.id, out.change, revision);
   await answerWrite(req, res, written);
   if (written.ok && checked.value.answer === 'decline') {
     void recruiters().then((ids) => notifyInterviewDeclined({ interviewId: i.id, ...words, recruiterIds: ids, declinerId: session.sub, seat: out.seat }));
   }
+}));
+
+/**
+ * Acknowledge the panel's notice on the way to accepting a seat on this round. Body: `{ version }`, the notice version
+ * the page showed. Always for the session's own person: the body names nobody, so a recruiter or a hiring manager
+ * (who hold no ConductInterview) cannot post one, and an interviewer cannot post one for a colleague. The round must
+ * be in scope (404) and the person must hold a seat on it (403), as answering does. A version that is not the
+ * current one is 409 with the current notice. A second acknowledgement of the same version keeps the first.
+ */
+assignmentsRouter.post('/interviews/:id/panel-notice', conduct, asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  const ix = await indexFor(req);
+  const i = ix.world.interviews.find((x) => x.id === param(req, 'id'));
+  if (!i) throw new NotFoundError(NO_INTERVIEW);
+  res.setHeader('Cache-Control', 'no-store');
+  if (i.leadId !== session.sub && !i.panelIds.includes(session.sub)) {
+    res.status(403).json({ error: 'You do not have a seat on this round, so there is no notice for you to read here.' });
+    return;
+  }
+  const checked = checkAcknowledgement(req.body);
+  if (!checked.ok) {
+    if (checked.reason === 'invalid') { res.status(400).json({ error: checked.message, fields: [{ path: 'version', message: checked.message }] }); return; }
+    res.status(409).json({ error: checked.message, needsNotice: panelNoticeOf() });
+    return;
+  }
+  const kept = await panelNoticeStore().acknowledge({ userId: session.sub, noticeVersion: checked.version, acknowledgedAt: new Date().toISOString(), interviewId: i.id });
+  res.status(kept.created ? 201 : 200).json({ acknowledgement: { version: kept.row.noticeVersion, at: kept.row.acknowledgedAt } });
 }));
 
 /** Change who sits on a round. Body: `{ revision, leadId, panelIds }`. */
