@@ -209,6 +209,8 @@ export const DESK_VIEWS: ReadonlyArray<{ value: DeskView; label: string }> = [
   { value: 'done', label: 'Done' },
 ];
 export function inDeskView(row: InterviewRow, view: DeskView): boolean {
+  // "Upcoming" is a round the viewer has accepted and that has a time (row I1.5).
+  if (view === 'upcoming') return (row.state === 'accepted' || row.state === 'ready') && row.scheduledAt !== null && (row.bucket === 'upcoming' || row.bucket === 'to-prepare');
   return view === 'open' ? row.bucket === 'to-accept' || row.bucket === 'to-prepare' || row.bucket === 'upcoming' || row.bucket === 'scorecard-due' : row.bucket === view;
 }
 
@@ -261,3 +263,24 @@ export function matches(query: string, ...fields: Array<string | null | undefine
   if (!q) return true;
   return fields.some((f) => (f ?? '').toLowerCase().includes(q));
 }
+
+/** The viewer's own zone, named: "Europe/London", else "UTC". */
+export function zoneName(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+}
+
+/** A time in the viewer's own zone with the zone's short name: "Thu 4 Mar, 15:30 GMT". "No time set" for none. */
+export function whenWithZone(iso: string | null, nowMs: number = Date.now(), timeZone?: string): string {
+  if (!iso || Number.isNaN(Date.parse(iso))) return 'No time set';
+  const zone = new Intl.DateTimeFormat('en-GB', { timeZone, timeZoneName: 'short' }).formatToParts(new Date(iso)).find((p) => p.type === 'timeZoneName')?.value ?? zoneName();
+  return `${whenLabel(iso, nowMs, timeZone)} ${zone}`;
+}
+
+/** Upcoming's order: by time, rounds without a time last, then by candidate. */
+export function upcomingOrder(a: Pick<InterviewRow, 'scheduledAt' | 'candidate'>, b: Pick<InterviewRow, 'scheduledAt' | 'candidate'>): number {
+  if (!a.scheduledAt !== !b.scheduledAt) return a.scheduledAt ? -1 : 1;
+  return (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? '') || a.candidate.name.localeCompare(b.candidate.name);
+}
+
+/** Rounds the recruiter may still time: not started, not closed. */
+export const isTimeable = (state: InterviewState): boolean => state === 'assigned' || state === 'accepted' || state === 'ready';

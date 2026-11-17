@@ -252,6 +252,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/interviews/openings',      label: 'Openings',      tenant: 'interviews', group: 'Hire', requireRoles: ['recruiter', 'hiring-manager', 'admin'] },
   // slot 3: a lane adds its entries just below this line
   // slot 4: a lane adds its entries just below this line
+  { path: '/interviews/upcoming',     label: 'Upcoming',      tenant: 'interviews', group: 'Hire', requireRoles: ['recruiter', 'admin'] },
   // slot 5: a lane adds its entries just below this line
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
   // Logging (G37; the voice sessions of G20 are one source): dev server + the voice navigator flag, like its route.

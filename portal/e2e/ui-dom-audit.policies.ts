@@ -152,6 +152,7 @@ const INTERVIEWS_COLLECTION_PAGES = [
   'openings',
   // slot 3: a lane adds its entries just below this line
   // slot 4: a lane adds its entries just below this line
+  'upcoming',
   // slot 5: a lane adds its entries just below this line
 ];
 const INTERVIEWS_COLLECTIONS = new RegExp(`^/interviews/(?:${INTERVIEWS_COLLECTION_PAGES.join('|')})$`);

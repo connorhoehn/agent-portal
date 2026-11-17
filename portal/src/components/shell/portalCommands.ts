@@ -361,6 +361,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['opening', 'role', 'requisition', 'candidates', 'stage', 'decide'] },
   { label: 'My interviews',      hint: 'Interviews to accept, coming up and to score', path: '/interviews/my-interviews',           tenant: 'interviews', group: 'Interview', pageId: 'my-interviews', roles: ['interviewer'],
     keywords: ['interview', 'schedule', 'accept', 'scorecard', 'upcoming'] },
+  { label: 'Upcoming',           hint: 'Rounds by time, and the time to set', path: '/interviews/upcoming',                      tenant: 'interviews', group: 'Hire', pageId: 'upcoming', roles: ['recruiter'],
+    keywords: ['upcoming', 'schedule', 'time', 'interview', 'invite', 'link'] },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;

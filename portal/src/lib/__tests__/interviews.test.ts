@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  byStageLine, candidateHref, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, whenLabel,
+  byStageLine, candidateHref, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, upcomingOrder, whenLabel, whenWithZone,
   type InterviewRow,
 } from '../interviews.ts';
 
@@ -101,4 +101,19 @@ test('roundStatus words each interview state and candidateHref addresses the pro
   assert.equal(roundStatus('ended').label, 'Scorecard due');
   assert.equal(roundStatus('reviewed').label, 'Done');
   assert.equal(candidateHref('cand-ingrid'), '/interviews/candidates/cand-ingrid');
+});
+
+test('"Upcoming" in the desk is a round accepted with a time', () => {
+  assert.equal(inDeskView(row({ bucket: 'to-prepare', state: 'accepted', scheduledAt: '2026-11-25T10:00:00Z' }), 'upcoming'), true);
+  assert.equal(inDeskView(row({ bucket: 'upcoming', state: 'ready', scheduledAt: '2026-11-25T10:00:00Z' }), 'upcoming'), true);
+  assert.equal(inDeskView(row({ bucket: 'to-prepare', state: 'accepted', scheduledAt: null }), 'upcoming'), false);
+  assert.equal(inDeskView(row({ bucket: 'upcoming', state: 'assigned', scheduledAt: '2026-11-25T10:00:00Z' }), 'upcoming'), false);
+});
+
+test('Upcoming sorts by time, rounds without a time last, and names the zone', () => {
+  const r = (id: string, scheduledAt: string | null) => ({ id, scheduledAt, candidate: { id, name: id, headline: '' } });
+  const sorted = [r('none', null), r('late', '2026-12-01T10:00:00Z'), r('soon', '2026-11-20T10:00:00Z')].sort(upcomingOrder);
+  assert.deepEqual(sorted.map((x) => x.id), ['soon', 'late', 'none']);
+  assert.equal(whenWithZone(null), 'No time set');
+  assert.match(whenWithZone('2026-12-01T10:00:00Z', Date.parse('2026-11-16T00:00:00Z'), 'UTC'), /^Tue 1 Dec, 10:00 UTC$/);
 });

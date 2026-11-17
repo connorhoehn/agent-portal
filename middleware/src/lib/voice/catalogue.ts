@@ -244,6 +244,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'candidates', path: '/interviews/candidates', tenants: ['interviews'], roles: ['recruiter'] },
   { id: 'my-openings', path: '/interviews/my-openings', tenants: ['interviews'], roles: ['hiring-manager'] },
   { id: 'my-interviews', path: '/interviews/my-interviews', tenants: ['interviews'], roles: ['interviewer'] },
+  { id: 'upcoming', path: '/interviews/upcoming', tenants: ['interviews'], roles: ['recruiter'] },
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
 

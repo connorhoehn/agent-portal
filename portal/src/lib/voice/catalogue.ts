@@ -178,6 +178,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'candidates', tenants: ['interviews'], roles: ['recruiter'] },
   { id: 'my-openings', tenants: ['interviews'], roles: ['hiring-manager'] },
   { id: 'my-interviews', tenants: ['interviews'], roles: ['interviewer'] },
+  { id: 'upcoming', tenants: ['interviews'], roles: ['recruiter'] },
   { id: 'workspaces', tenants: ['*'] },
 ];
 
