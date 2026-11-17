@@ -40,7 +40,7 @@ import { requireTenant } from '../../lib/authz.js';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
-import { interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
+import { interviewApplicationsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
 import type { Session } from '../../lib/session.js';
 import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 import { interviewEnded, scorecardSubmitted, stageDecided } from '../../lib/interviews/result-bells.js';
@@ -282,5 +282,132 @@ describe('the bells after the call', () => {
     setNotificationSink(null);
     expect(await interviewEnded('iv-g9r1y8lp')).toEqual([]);
     expect(await scorecardSubmitted('iv-nope', 'u-hugo', 1)).toEqual([]);
+  });
+});
+
+// Hardening H4 (O-155): the three cases the first pass left open.
+describe('a late scorecard after a hold', () => {
+  const JONAH = 'iv-g9r1y8lp';
+  const scorecardBody = async (as: Who, id: string) => {
+    const page = (await as.get(`/interviews/${id}/scorecard`)).body.scorecard;
+    return {
+      ratings: page.competencies.map((c: { id: string }, n: number) => ({ competencyId: c.id, rating: (n % 4) + 1, note: '' })),
+      recommendation: 'yes', summary: 'Clear examples throughout.', basedOn: page.mine?.version ?? 0,
+    };
+  };
+
+  /** Jonah's round with Hugo beside Wen: Wen's is in, Hugo's is due, so a hold has a scorecard to stand on and one still missing. */
+  function hugoDue() {
+    interviewsFixture.rows().find((i) => i.id === JONAH)!.panelIds = ['u-hugo'];
+    interviewScorecardsFixture.rows().push({ id: 'sc-jonah-wen', interviewId: JONAH, interviewerId: 'u-wen', ratings: [], recommendation: 'yes', summary: 's',
+      submittedAt: '2026-11-16T10:00:00.000Z', version: 1, changedAfterRecap: false, correctionReason: null });
+  }
+
+  it('a hold with Hugo\'s scorecard still due is recorded with one missing; his scorecard then arrives and reads in the round, while the decision keeps what it said', async () => {
+    hugoDue();
+    const held = await decide(AMARA, 'app-jonah', { decision: 'hold', reason: REASON, basedOn: 3 });
+    expect(held.status).toBe(201);
+    expect(held.body.debrief.applications[0].history[3]).toMatchObject({ decision: 'hold', scorecardsMissing: 1 });
+    expect(held.body.debrief.applications[0].stage).toBe('on-hold');
+    expect(interviewsFixture.rows().find((i) => i.id === JONAH)!.state).toBe('ended'); // not every seat was in, so nothing was scored to review
+
+    const late = await HUGO.post(`/interviews/${JONAH}/scorecard`, await scorecardBody(HUGO, JONAH));
+    expect(late.status).toBe(201);
+    const a = (await debrief(AMARA, 'cand-jonah')).body.debrief.applications[0];
+    expect(a.rounds[0]).toMatchObject({ state: 'scored', due: [] });
+    expect(a.rounds[0].scorecards.map((s: { interviewer: { id: string } }) => s.interviewer.id).sort()).toEqual(['u-hugo', 'u-wen']);
+    // The entry is the record of what the hiring manager knew then: it is never edited, and the stage did not move.
+    expect(a.history[3]).toMatchObject({ decision: 'hold', scorecardsMissing: 1 });
+    expect(a.stage).toBe('on-hold');
+    expect(a.basedOn).toBe(4);
+  });
+
+  it('after the late scorecard the held candidate can still be rejected from the page as it now reads, and the round is reviewed', async () => {
+    hugoDue();
+    await decide(AMARA, 'app-jonah', { decision: 'hold', reason: REASON, basedOn: 3 });
+    await HUGO.post(`/interviews/${JONAH}/scorecard`, await scorecardBody(HUGO, JONAH));
+    const next = await decide(AMARA, 'app-jonah', { decision: 'reject', reason: 'The role needs more people leadership than this round showed.', basedOn: 4 });
+    expect(next.status).toBe(201);
+    const a = next.body.debrief.applications[0];
+    expect(a.history.slice(3).map((h: { decision: string; scorecardsMissing: number }) => [h.decision, h.scorecardsMissing])).toEqual([['hold', 1], ['reject', 0]]);
+    expect(interviewsFixture.rows().find((i) => i.id === JONAH)!.state).toBe('reviewed');
+  });
+});
+
+describe('a hiring manager with two applications', () => {
+  /** Ingrid also applied to the Engineering Manager opening, Amara\'s second: two applications, one candidate, one hiring manager. */
+  function second() {
+    const first = interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid')!;
+    interviewApplicationsFixture.rows().push({ ...first, id: 'app-ingrid-em', openingId: 'op-em', stage: 'interviewing', history: first.history.slice(0, 3).map((h) => ({ ...h })) });
+  }
+
+  it('the debrief lists both, each with its own stage and basedOn; deciding one leaves the other alone', async () => {
+    second();
+    const before = (await debrief(AMARA, 'cand-ingrid')).body.debrief.applications;
+    expect(before.map((a: { applicationId: string }) => a.applicationId).sort()).toEqual(['app-ingrid', 'app-ingrid-em']);
+    const em = before.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid-em');
+    expect(em).toMatchObject({ stage: 'interviewing', basedOn: 3 });
+    expect(em.rounds).toEqual([]);
+
+    const r = await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 });
+    expect(r.status).toBe(201);
+    const after = r.body.debrief.applications;
+    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid')).toMatchObject({ stage: 'offer', basedOn: 5 });
+    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid-em')).toMatchObject({ stage: 'interviewing', basedOn: 3 });
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid-em')!.history).toHaveLength(3);
+  });
+
+  it('a page read for one application\'s basedOn does not authorise the other: the other is judged on its own history and its own rounds', async () => {
+    second();
+    const stale = await decide(AMARA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 4 });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toMatch(/changed while you were reading/);
+    // On its own history it is current, but it has no round with a scorecard in, so nothing can be decided yet.
+    const current = await decide(AMARA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 3 });
+    expect(current.status).toBe(409);
+    expect(current.body.error).not.toMatch(/changed while you were reading/);
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid-em')!.history).toHaveLength(3);
+  });
+
+  it('the recruiter reads both and decides neither; another opening\'s hiring manager gets neither', async () => {
+    second();
+    expect((await debrief(GRETA, 'cand-ingrid')).body.debrief.applications).toHaveLength(2);
+    expect((await decide(GRETA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 3 })).status).toBe(403);
+    expect((await debrief(OTHER_HM, 'cand-ingrid')).status).toBe(404);
+  });
+});
+
+describe('a correction after the decision', () => {
+  const CODING = 'iv-d7q4n9xe';
+  const correction = async (as: Who, id: string) => {
+    const page = (await as.get(`/interviews/${id}/scorecard`)).body.scorecard;
+    return as.post(`/interviews/${id}/scorecard`, {
+      ratings: page.competencies.map((c: { id: string }) => ({ competencyId: c.id, rating: 1, note: '' })),
+      recommendation: 'no', summary: 'Second thoughts.', reason: 'I misremembered the second question.', basedOn: page.mine.version,
+    });
+  };
+
+  it('before the decision the lead may correct; once the hiring manager has decided, the round is reviewed and the correction is refused', async () => {
+    const early = await correction(HUGO, CODING);
+    expect(early.status).toBe(201);
+    expect(early.body.scorecard.mine).toMatchObject({ version: 2, correctionReason: 'I misremembered the second question.' });
+
+    expect((await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(201);
+    expect(interviewsFixture.rows().find((i) => i.id === CODING)!.state).toBe('reviewed');
+
+    const late = await correction(HUGO, CODING);
+    expect(late.status).toBe(409);
+    expect(late.body.error).toMatch(/reviewed, so its scorecards can no longer be corrected/);
+    const read = (await HUGO.get(`/interviews/${CODING}/scorecard`)).body.scorecard;
+    expect(read).toMatchObject({ canSubmit: false, mine: { version: 2 } });
+    // The decision is the record: what was submitted stays as it was.
+    expect(interviewScorecardsFixture.rows().filter((s) => s.interviewId === CODING && s.interviewerId === 'u-hugo').map((s) => s.version)).toEqual([1, 2]);
+  });
+
+  it('after the decision nobody else on the round may correct either, and the first-version path is closed too', async () => {
+    await decide(AMARA, 'app-ingrid', { decision: 'hold', reason: REASON, basedOn: 4 });
+    const together = 'iv-f2b6t5zh';
+    expect((await correction(WEN, together)).status).toBe(409);
+    expect(interviewsFixture.rows().find((i) => i.id === together)!.state).toBe('reviewed');
   });
 });

@@ -96,3 +96,19 @@ test('a refusal from platform-api reads as no recording; a failure as unreachabl
   const broken = (async () => { throw new Error('offline'); }) as unknown as typeof fetch;
   assert.equal((await loadInterviewMedia('iv-1', signal, { source, fetchImpl: broken, platformApiUrl: 'https://api.example' })).state, 'unreachable');
 });
+
+// Hardening H4 (O-136): a recording still being processed shows none. The platform answers the playback token with a
+// media state that is not playable and no address; the page must not invent one from a live stream.
+test('a recording still processing shows none: no player, the plain no-recording line, and never a live address', async () => {
+  const source = { get: async () => ({ token: 'tok', expiresAt: Date.now() + 60_000 }) } as never;
+  const signal = new AbortController().signal;
+  const listed = [{ recordingId: 'r-1', lobbyName: 'interviews:interview:iv-1', startedAt: '2026-11-10T14:00:00.000Z' }];
+  const answering = (playback: unknown) => (async (url: string) => (
+    url.includes('/playback-token') ? new Response(JSON.stringify(playback)) : new Response(JSON.stringify({ items: listed }))
+  )) as unknown as typeof fetch;
+  for (const playback of [{ mediaState: 'processing' }, { mediaState: 'processing', composedUrl: null, playlistUrl: null, token: 'tok-2' }, { mediaState: 'pending', composedUrl: 'not-a-url' }]) {
+    const m = await loadInterviewMedia('iv-1', signal, { source, fetchImpl: answering(playback), platformApiUrl: 'https://api.example' });
+    assert.deepEqual(m, { state: 'none', url: null, startedAt: '2026-11-10T14:00:00.000Z' }, JSON.stringify(playback));
+    assert.match(recordingLine({ state: 'available', playbackUrl: null, durationSeconds: 3500 }, m.state)!, /no recording of this interview/);
+  }
+});

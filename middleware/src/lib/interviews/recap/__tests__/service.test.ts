@@ -7,8 +7,8 @@ import { interviewRecapOpensFixture, interviewRecapsFixture } from '../../../../
 import type { CoachModelResult } from '../../coach/model.js';
 import type { CoachTranscript } from '../../coach/transcript.js';
 import { ScriptedRecapModel, type RecapModel } from '../model.js';
-import type { RecapInput } from '../prompt.js';
-import { checkOpenRatings, openRecap, ratingsAtRecap, readRecap, RECAP_MAX_ATTEMPTS, resetRecapAttempts, setRecapDeps, type RecapDeps, type RecapRef } from '../service.js';
+import { RECAP_MAX_LINES, type RecapInput } from '../prompt.js';
+import { checkOpenRatings, eraseRecapRows, openRecap, ratingsAtRecap, readRecap, recapInput, RECAP_MAX_ATTEMPTS, resetRecapAttempts, setRecapDeps, type RecapDeps, type RecapRef } from '../service.js';
 import { MemoryRecapStore } from '../store.js';
 
 // Nadia's leadership round, made to have ended: the Engineering Manager kit (behavioural).
@@ -182,5 +182,137 @@ describe('the ratings an open takes', () => {
     expect(checkOpenRatings({ ratings: ratings(2).map((r, n) => (n ? r : { ...r, rating: 5 })) }, ref.opening)).toBeNull();
     expect(checkOpenRatings({ ratings: [...ratings(2).slice(1), { competencyId: 'charisma', rating: 2 }] }, ref.opening)).toBeNull();
     expect(checkOpenRatings({}, ref.opening)).toBeNull();
+  });
+});
+
+// Hardening H4 (O-146): the four cases the first pass left open.
+describe('erase, then open', () => {
+  it('after the record is erased the recap is gone for every reader, and an open with no words left writes nothing', async () => {
+    await openRecap(refOf(), WEN, ratings());
+    expect((await readRecap(refOf())).state).toBe('ready');
+    expect(await eraseRecapRows([IV])).toBeGreaterThan(0);
+    expect((await readRecap(refOf())).state).toBe('none');
+    expect(await ratingsAtRecap(IV, 'u-wen')).toBeNull();
+    transcript = null; // the transcript went with the record
+    const reopened = await openRecap(refOf(), WEN, ratings(2));
+    expect(reopened.state).toBe('no-transcript');
+    expect(await store.getRecap(IV)).toBeNull();
+    expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(2)); // a new open is the first open again
+  });
+
+  it('erasing forgets the attempt count too, so an erased interview is not left half-spent', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const model = answering('not json');
+    deps.model.mockReturnValue(model);
+    await openRecap(refOf(), WEN, ratings()); // three dropped attempts: a failed row
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS);
+    await eraseRecapRows([IV]);
+    expect((await readRecap(refOf())).state).toBe('none');
+    await openRecap(refOf(), WEN, ratings());
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS * 2);
+    warn.mockRestore();
+  });
+});
+
+describe('the attempt counter across a restart', () => {
+  it('a failed row survives a restart, so readers still see none and no new call is made', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const model = answering('not json');
+    deps.model.mockReturnValue(model);
+    await openRecap(refOf(), WEN, ratings());
+    resetRecapAttempts(); // a restart: the in-memory counts are gone, the store's rows are not
+    expect((await openRecap(refOf(), HUGO, ratings())).state).toBe('none');
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS);
+    warn.mockRestore();
+  });
+
+  it('PINNED: attempts that wrote no row are counted in memory only, so a restart after two failures allows three more calls', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const model = answering('not json');
+    deps.model.mockReturnValue(model);
+    // Two attempts fail, then the hold is refused on the third: no row is written, the count stands at two.
+    deps.reserve.mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
+      .mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
+      .mockResolvedValueOnce({ ok: false, refusal: { status: 402, body: {} } });
+    expect((await openRecap(refOf(), WEN, ratings())).state).toBe('paused');
+    expect(model.write).toHaveBeenCalledTimes(2);
+    resetRecapAttempts();
+    await openRecap(refOf(), HUGO, ratings());
+    expect(model.write).toHaveBeenCalledTimes(5);
+    warn.mockRestore();
+  });
+
+  it.failing('should hold: "at most 3 model calls per interview, ever" survives a restart', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const model = answering('not json');
+    deps.model.mockReturnValue(model);
+    deps.reserve.mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
+      .mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
+      .mockResolvedValueOnce({ ok: false, refusal: { status: 402, body: {} } });
+    await openRecap(refOf(), WEN, ratings());
+    resetRecapAttempts();
+    await openRecap(refOf(), HUGO, ratings());
+    warn.mockRestore();
+    expect((model.write as jest.Mock).mock.calls.length).toBeLessThanOrEqual(RECAP_MAX_ATTEMPTS);
+  });
+});
+
+describe('more than 400 lines', () => {
+  const longTranscript = (n: number): CoachTranscript => ({ callId: 'call-1', lastSeq: n, lines: Array.from({ length: n }, (_, i) => ({
+    seq: i + 1, side: i % 2 === 0 ? 'panel' as const : 'candidate' as const, text: i % 2 === 0 ? `Question ${i + 1}?` : `Answer ${i + 1}, I set up a weekly one-to-one.`,
+  })) });
+
+  it('the model is given the newest 400 lines, in order, and none of the older ones', async () => {
+    transcript = longTranscript(450);
+    const model = answering('{"competencies":[],"notCovered":[]}');
+    deps.model.mockReturnValue(model);
+    await openRecap(refOf(), WEN, ratings());
+    const given = (model.write as jest.Mock).mock.calls[0]![0] as RecapInput;
+    expect(given.lines).toHaveLength(RECAP_MAX_LINES);
+    expect(given.lines[0]!.seq).toBe(51);
+    expect(given.lines.at(-1)!.seq).toBe(450);
+  });
+
+  it('a statement that cites a line cut from the request is dropped, not trusted', async () => {
+    transcript = longTranscript(450);
+    const cid = firstQuestion().competencyId;
+    const cites = (seq: number) => JSON.stringify({ competencies: [{ id: cid, evidence: [{ text: 'The candidate described a weekly one-to-one.', seq, quote: `Answer ${seq}, I set up a weekly one-to-one.` }] }], notCovered: [] });
+    deps.model.mockReturnValue(answering(cites(10)));
+    await openRecap(refOf(), WEN, ratings());
+    expect(await store.getRecap(IV)).toMatchObject({ state: 'ready', droppedClaims: 1, content: { competencies: [] } });
+    await store.eraseRecaps([IV]);
+    resetRecapAttempts();
+    deps.model.mockReturnValue(answering(cites(450)));
+    await openRecap(refOf(), WEN, ratings());
+    expect(await store.getRecap(IV)).toMatchObject({ droppedClaims: 0, content: { competencies: [{ id: cid }] } });
+  });
+
+  it('blank lines are not counted toward the 400, and a short transcript is read whole', () => {
+    const lines = [...longTranscript(300).lines, { seq: 301, side: 'candidate' as const, text: '   ' }];
+    expect(recapInput(refOf(), lines, []).lines).toHaveLength(300);
+    expect(recapInput(refOf(), longTranscript(450).lines, []).lines).toHaveLength(RECAP_MAX_LINES);
+  });
+});
+
+describe('the kit gained a competency after the recap was written', () => {
+  const plusOne = (ref: RecapRef): RecapRef => ({
+    ...ref, opening: { ...ref.opening, kit: { ...ref.opening.kit, competencies: [...ref.opening.kit.competencies, { ...ref.opening.kit.competencies[0]!, id: 'added-later', name: 'Added later' }] } },
+  });
+
+  it('the stored recap reads as before, with the new competency listed as not covered, in the kit\'s order', async () => {
+    await openRecap(refOf(), WEN, ratings());
+    const before = await readRecap(refOf());
+    const after = await readRecap(plusOne(refOf()));
+    expect(after.state).toBe('ready');
+    expect(after.competencies).toEqual(before.competencies);
+    expect(after.notCovered.map((c) => c.id)).toEqual([...before.notCovered.map((c) => c.id), 'added-later']);
+    expect(after.notCovered.at(-1)).toEqual({ id: 'added-later', name: 'Added later' });
+  });
+
+  it('a later open must rate the new competency too; the first person\'s stored ratings stand as they were', async () => {
+    await openRecap(refOf(), WEN, ratings(3));
+    expect(checkOpenRatings({ ratings: ratings(3) }, plusOne(refOf()).opening)).toBeNull();
+    expect(checkOpenRatings({ ratings: [...ratings(3), { competencyId: 'added-later', rating: 3 }] }, plusOne(refOf()).opening)).toHaveLength(ratings(3).length + 1);
+    expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(3));
   });
 });
