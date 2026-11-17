@@ -458,6 +458,18 @@ describe('capability boundaries that must not regress', () => {
     }
   });
 
+  test('interviews openings (row I1.3): creating an opening and editing its details or kit is ManageCandidates, the recruiter\'s alone', () => {
+    // routes/interviews/openings.ts gates every write on ManageCandidates (decision 2 gives openings and candidates to one
+    // role; lib/authz.ts CAPABILITY_ACTIONS names openings under it). The hiring manager reads their opening's kit and the
+    // interviewer the kit of an opening they have a round on (lib/interviews/scope.ts), but neither may write it, and no
+    // other tenant's role, an admin-like one included, holds it.
+    expect(has('interviews/recruiter', 'ManageCandidates')).toBe(true);
+    expect(has('interviews/hiring-manager', 'ManageCandidates')).toBe(false);
+    expect(has('interviews/interviewer', 'ManageCandidates')).toBe(false);
+    expect(has('access/access-admin', 'ManageCandidates')).toBe(false);
+    expect(role('interviews/hiring-manager').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ManageCandidates"[\s\S]*principal\.role == "hiring-manager"/);
+  });
+
   test('an orgiq member cannot view the assessment tenant', () => {
     expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });

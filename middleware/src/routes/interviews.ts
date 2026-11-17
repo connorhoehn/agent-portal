@@ -7,13 +7,14 @@
 // shaped. A row outside the viewer's scope does not exist: 404, never 403, so
 // an interviewer cannot learn another interviewer's interview ids by probing.
 //
-// Phase 0 has no writes. Assign, accept, schedule and decide are later rows.
+// The writes are sub-routers under routes/interviews/ (openings: row I1.3). Assign, accept, schedule and decide are later rows.
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
+import { openingsRouter } from './interviews/openings.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
 export function interviewsFlagGate(_req: Request, res: Response, next: NextFunction): void {
@@ -28,6 +29,7 @@ interviewsRouter.use(requireAction('ViewInterviews'));
 // here, after the ViewInterviews gate: interviewsRouter.use(myRouter). Request helpers (indexFor, peopleLookup,
 // param) are in lib/interviews/request.ts.
 
+interviewsRouter.use(openingsRouter); // lane KIT (row I1.3): create an opening, edit its details, replace its kit
 
 interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
