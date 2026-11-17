@@ -14,8 +14,15 @@
 //   I0.5g  a Work-only persona at an interviews address gets the other-workspace page, the address kept
 //   I1.1   the three homes at 1440 and 1280 px: a table above the fold, no horizontal scroll
 // Screenshots of each home at both widths go to --out.
-// Pieces: every scripts/journeys/interviews/[0-9A-Z]*.mjs (not lib.mjs) runs in name order; its default export
-// receives the shared context from interviews/lib.mjs. A lane adds a step by adding a piece, not by editing this file.
+// Pieces: every scripts/journeys/interviews/[0-9A-Z]*.mjs (not lib.mjs, seed.mjs or harness-check.mjs) runs in name
+// order; its default export receives the shared context from interviews/lib.mjs. A lane adds a step by adding a
+// piece, not by editing this file.
+// Tables: after the pieces, every scripts/validate-interviews.d/<row>.404 runs as one step named `<row>.404`
+// ("this route answers 404 to these principals"; the format is at parseRefusalTable in interviews/seed.mjs).
+//
+//   -- --only I2.1,I2.3     run only the pieces and tables whose name starts with one of these (a lane's own rows;
+//                           a piece that reads what an earlier piece left, like I1.1, needs that piece named too)
+//   -- --harness-check      run interviews/harness-check.mjs instead: one pass over every helper in lib.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -23,11 +30,27 @@ import { createContext } from './interviews/lib.mjs';
 
 const ctx = await createContext();
 const dir = fileURLToPath(new URL('./interviews/', import.meta.url));
-const pieces = fs.readdirSync(dir).filter((f) => /^[0-9A-Z].*\.mjs$/.test(f) && f !== 'lib.mjs').sort();
+const tablesDir = fileURLToPath(new URL('../validate-interviews.d/', import.meta.url));
+const onlyAt = process.argv.indexOf('--only');
+const only = onlyAt >= 0 ? String(process.argv[onlyAt + 1] ?? '').split(',').filter(Boolean) : null;
+const wanted = (name) => !only || only.some((o) => name === o || name.startsWith(`${o}.`) || name.startsWith(`${o}-`));
+const harnessCheck = process.argv.includes('--harness-check');
+const pieces = harnessCheck ? ['harness-check.mjs']
+  : fs.readdirSync(dir).filter((f) => /^[0-9A-Z].*\.mjs$/.test(f) && f !== 'lib.mjs' && wanted(f.replace(/\.mjs$/, ''))).sort();
+const tables = harnessCheck ? [] : fs.readdirSync(tablesDir).filter((f) => /\.404$/.test(f) && wanted(f.replace(/\.404$/, ''))).sort();
 try {
   for (const piece of pieces) {
     const mod = await import(pathToFileURL(path.join(dir, piece)).href);
     await mod.default(ctx);
+  }
+  for (const table of tables) {
+    const step = table; // "<row>.404"
+    try {
+      const r = await ctx.refusals(path.join(tablesDir, table));
+      ctx.record(step, r.ok, r.ok ? `${r.checked} answers as the table says` : (r.failures.slice(0, 6).join('; ') || 'the table checked nothing'));
+    } catch (e) {
+      ctx.record(step, false, `the table did not run: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
+    }
   }
 } catch (err) {
   ctx.record('journey', false, `stopped: ${err instanceof Error ? err.message : String(err)}`);
