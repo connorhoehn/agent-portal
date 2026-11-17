@@ -45,6 +45,8 @@ export interface PipelineEntry {
   lastResult: ResultBrief | null;
   /** A round has ended and its scorecard is not in yet. */
   scorecardDue: boolean;
+  /** Every round that went ahead is scored and at least one waits for a decision: the debrief leads (row I5.5). */
+  debriefReady: boolean;
 }
 
 export interface OpeningRow {
@@ -158,6 +160,12 @@ export const UNKNOWN_ROUND = 'Round';
 
 function roundOf(opening: Opening | undefined, roundId: string): KitRound | undefined {
   return opening?.kit.rounds.find((r) => r.id === roundId);
+}
+
+/** Every round that went ahead is scored or reviewed, none is still to run or still owes a scorecard, and one waits for a decision. */
+export function debriefReady(interviews: readonly Interview[]): boolean {
+  const held = interviews.filter((i) => i.state !== 'declined' && i.state !== 'cancelled');
+  return held.some((i) => i.state === 'scored') && held.every((i) => DONE_STATES.has(i.state));
 }
 
 export function bucketFor(interview: Interview, viewer: Viewer, scorecards: readonly Scorecard[]): Bucket {
@@ -287,6 +295,7 @@ export class WorldIndex {
           stageChangedAt: a.history[a.history.length - 1]?.at ?? a.appliedAt,
           nextInterview: this.nextInterview(a.id), lastResult: this.lastResult(a.id),
           scorecardDue: this.interviewsOf(a.id).some((i) => i.state === 'ended'),
+          debriefReady: debriefReady(this.interviewsOf(a.id)),
         }];
       }),
     };

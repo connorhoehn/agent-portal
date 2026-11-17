@@ -13,6 +13,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { inviteRouter } from './interviews/invite.js';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { resumeRouter } from './interviews/resume.js';
+import { debriefRouter } from './interviews/debrief.js';
 import { resumeRows } from '../lib/interviews/resume/service.js';
 import { retentionRouter } from './interviews/retention.js';
 import { requireAction } from '../lib/authz.js';
@@ -72,6 +73,7 @@ interviewsRouter.get('/candidates', asyncHandler(async (req, res) => {
 
 interviewsRouter.use(consentsRouter); // lane CONSENT (row I2.3): what the panel is told about the candidate's consents
 interviewsRouter.use(retentionRouter); // lane RETENTION (row I6.3): a candidate's deletion request and deletion log
+interviewsRouter.use(debriefRouter); // lane DEBRIEF (rows I5.4, I5.5): the debrief and the hiring manager's stage decision, E4
 interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const c = ix.candidates.get(param(req, 'id'));

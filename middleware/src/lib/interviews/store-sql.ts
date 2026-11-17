@@ -301,6 +301,33 @@ export class SqlInterviewsStore implements InterviewsStore {
     return latest ? { ok: false, reason: 'stale', row: scorecardFromRow(latest) } : { ok: false, reason: 'not-found' };
   }
 
+  /** The stage decision's writes (row I5.5; store.ts ApplicationWrites, InterviewWrites markReviewed). */
+  static readonly MARK_REVIEWED_SQL = `UPDATE interviews
+  SET state = 'reviewed', revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+  static readonly APPLICATION_COLUMNS = 'id, candidate_id, opening_id, stage, applied_at, history';
+  /** Appends `:change` (a one-entry JSON array) only while the history still has `:based_on` entries; the stage becomes the entry's. */
+  static readonly DECIDE_STAGE_SQL = `UPDATE interview_applications
+  SET stage = :stage, history = history || CAST(:change AS JSONB)
+  WHERE id = :id AND jsonb_array_length(history) = :based_on
+  RETURNING ${SqlInterviewsStore.APPLICATION_COLUMNS}`;
+  static readonly GET_APPLICATION_SQL = `SELECT ${SqlInterviewsStore.APPLICATION_COLUMNS}
+  FROM interview_applications WHERE id = :id`;
+
+  async markReviewed(id: string, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.MARK_REVIEWED_SQL, [textParam('id', id), intParam('revision', revision)]));
+  }
+
+  async decideStage(id: string, change: StageChange, basedOn: number): Promise<WriteResult<Application>> {
+    const written = await this.exec(SqlInterviewsStore.DECIDE_STAGE_SQL, [
+      textParam('id', id), textParam('stage', change.stage), textParam('change', JSON.stringify([change])), intParam('based_on', basedOn),
+    ]);
+    if (written[0]) return { ok: true, row: applicationFromRow(written[0]) };
+    const now = (await this.exec(SqlInterviewsStore.GET_APPLICATION_SQL, [textParam('id', id)]))[0];
+    return now ? { ok: false, reason: 'stale', row: applicationFromRow(now) } : { ok: false, reason: 'not-found' };
+  }
+
   /** cas() for an interview. */
   private async casInterview(id: string, written: Record<string, unknown>[]): Promise<WriteResult<Interview>> {
     if (written[0]) return { ok: true, row: interviewFromRow(written[0]) };

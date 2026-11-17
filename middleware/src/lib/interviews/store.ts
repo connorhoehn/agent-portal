@@ -21,7 +21,7 @@
 // saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard } from './types.js';
+import type { Application, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
@@ -62,6 +62,8 @@ export interface InterviewWrites {
   setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>>;
   /** The scorecard (row I5.3): `ended` → `scored` once every seated person's is in (scorecard.ts isScoredNow), against `revision`. */
   markScored(id: string, revision: number): Promise<WriteResult<Interview>>;
+  /** The stage decision (row I5.5): `scored` → `reviewed` once the hiring manager has decided on the application, against `revision`. */
+  markReviewed(id: string, revision: number): Promise<WriteResult<Interview>>;
 }
 
 /**
@@ -71,11 +73,22 @@ export interface InterviewWrites {
  * version of (interview, interviewer) is `row.version - 1` (none, for version 1). Otherwise it is `stale` with that
  * latest version as it now is (`not-found` when there is none, which only a forged version number reaches).
  */
+/**
+ * The hiring manager's stage decision (row I5.5; decision 15). The history is append-only: a decision is never
+ * edited, a later one is a new entry. Who may decide and where it moves are decided first (the route, then
+ * debrief/rules.ts); this only writes. The compare-and-set is on the history's length: the entry appends, and the
+ * stage becomes its stage, only while the history still has `basedOn` entries; otherwise it is `stale` with the
+ * application as it now is.
+ */
+export interface ApplicationWrites {
+  decideStage(id: string, change: StageChange, basedOn: number): Promise<WriteResult<Application>>;
+}
+
 export interface ScorecardWrites {
   addScorecardVersion(row: Scorecard): Promise<WriteResult<Scorecard>>;
 }
 
-export interface InterviewsStore extends OpeningWrites, InterviewWrites, ScorecardWrites {
+export interface InterviewsStore extends OpeningWrites, InterviewWrites, ScorecardWrites, ApplicationWrites {
   listOpenings(): Promise<Opening[]>;
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
@@ -164,6 +177,19 @@ export class MemoryInterviewsStore implements InterviewsStore {
       return latest ? { ok: false, reason: 'stale', row: structuredClone(latest) } : { ok: false, reason: 'not-found' };
     }
     rows.push(structuredClone(row));
+    return { ok: true, row: structuredClone(row) };
+  }
+
+  async markReviewed(id: string, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { i.state = 'reviewed'; });
+  }
+
+  async decideStage(id: string, change: StageChange, basedOn: number): Promise<WriteResult<Application>> {
+    const row = interviewApplicationsFixture.rows().find((a) => a.id === id);
+    if (!row) return { ok: false, reason: 'not-found' };
+    if (row.history.length !== basedOn) return { ok: false, reason: 'stale', row: structuredClone(row) };
+    row.history.push(structuredClone(change));
+    row.stage = change.stage;
     return { ok: true, row: structuredClone(row) };
   }
 }

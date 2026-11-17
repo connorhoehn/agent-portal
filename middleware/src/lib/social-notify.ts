@@ -915,3 +915,116 @@ export async function notifyInterviewConsentOff(ev: InterviewConsentOffEvent): P
     return [];
   }
 }
+
+// ── The interviews tenant, after the call (row I5.6: scorecard due, submitted, decided; lane DEBRIEF) ──────────
+//
+// Same shape as the bells above: the opening's title and the round's name, the actor's name where there is one,
+// never the candidate, a rating, a recommendation or a reason. Each opens the place to act by the round's id, so no
+// candidate id is stored in the shared notification store either (/interviews/rounds/:id/debrief resolves it).
+
+const debriefOfRound = (interviewId: string): string => `/interviews/rounds/${encodeURIComponent(interviewId)}/debrief`;
+
+export interface InterviewScorecardDueEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The lead and the panel of the round that ended. */
+  userIds: readonly string[];
+}
+
+/** A round ended → each seat, once, a bell that opens My interviews where the scorecard is due. */
+export async function notifyInterviewScorecardDue(ev: InterviewScorecardDueEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const sent: string[] = [];
+    for (const userId of new Set(ev.userIds)) {
+      sent.push(...await notify([userId], {
+        id: `interview-scorecard-due:${roundKey(ev.interviewId)}:${userId}`,
+        type: 'system',
+        title: `Your scorecard is due: ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+        body: 'The interview has ended. Fill in your scorecard from My interviews.',
+        payload: { tenant: 'interviews', kind: 'interview-scorecard-due', audience: 'interviewer' },
+        action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-scorecard-due producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+export interface InterviewScorecardInEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  authorId: string;
+  /** The opening's recruiter: told of every first version and every correction. */
+  recruiterId: string;
+  /** True for a correction (a version after the first). */
+  corrected: boolean;
+  /** The opening's hiring manager when this first version was the last seat's; null otherwise. */
+  allInTo: string | null;
+}
+
+/** A scorecard was submitted or corrected → the recruiter; the last seat's first version → also the hiring manager. Opens the debrief. */
+export async function notifyInterviewScorecardIn(ev: InterviewScorecardInEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const round = `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`;
+    const who = await displayName(ev.authorId);
+    const sent: string[] = [];
+    if (ev.recruiterId !== ev.authorId) {
+      sent.push(...await notify([ev.recruiterId], {
+        id: `interview-scorecard-in:${roundKey(ev.interviewId)}:${roundKey(ev.authorId)}:${ev.recruiterId}:${Date.now().toString(36)}`,
+        type: 'system',
+        title: ev.corrected ? `${who} corrected their scorecard: ${round}` : `${who} submitted a scorecard: ${round}`,
+        body: ev.corrected ? 'The earlier version stays readable. Open the debrief to read the new one.' : 'Open the debrief to read it beside the others.',
+        payload: { tenant: 'interviews', kind: ev.corrected ? 'interview-scorecard-corrected' : 'interview-scorecard-submitted', audience: 'recruiter', actorId: ev.authorId },
+        action: { label: 'Open the debrief', href: debriefOfRound(ev.interviewId) },
+      }));
+    }
+    if (!ev.corrected && ev.allInTo && ev.allInTo !== ev.authorId) {
+      sent.push(...await notify([ev.allInTo], {
+        id: `interview-scorecards-all-in:${roundKey(ev.interviewId)}:${ev.allInTo}`,
+        type: 'system',
+        title: `Every scorecard is in: ${round}`,
+        body: 'Open the debrief to read them side by side.',
+        payload: { tenant: 'interviews', kind: 'interview-scorecards-all-in', audience: 'hiring-manager' },
+        action: { label: 'Open the debrief', href: debriefOfRound(ev.interviewId) },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-scorecard-in producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+export interface InterviewDecidedEvent {
+  /** A round of the application, so the bell opens its debrief without naming the candidate. */
+  interviewId: string;
+  applicationId: string;
+  openingTitle: string;
+  recruiterId: string;
+  deciderId: string;
+}
+
+/** The hiring manager recorded a decision → the opening's recruiter. Says that one was recorded and by whom; the decision and the reason are on the page. */
+export async function notifyInterviewDecided(ev: InterviewDecidedEvent): Promise<string[]> {
+  try {
+    if (!sink || ev.recruiterId === ev.deciderId) return [];
+    const who = await displayName(ev.deciderId);
+    return await notify([ev.recruiterId], {
+      id: `interview-decided:${roundKey(ev.applicationId)}:${ev.recruiterId}:${Date.now().toString(36)}`,
+      type: 'system',
+      title: `A decision was recorded on ${snippet(ev.openingTitle, 80)}`,
+      body: `Recorded by ${who}. Open the debrief to read it and arrange what follows.`,
+      payload: { tenant: 'interviews', kind: 'interview-decided', audience: 'recruiter', actorId: ev.deciderId },
+      action: { label: 'Open the debrief', href: debriefOfRound(ev.interviewId) },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] interview-decided producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}

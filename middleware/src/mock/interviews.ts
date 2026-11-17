@@ -248,10 +248,10 @@ export const interviewsFixture = defineFixture<Interview>({
   key: 'interviews.interviews',
   scenarios: {
     default: () => [
-      // Finished, with scorecards.
-      interview({ id: 'iv-ingrid-coding', app: 'app-ingrid', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-9, 14), minutes: 60, state: 'reviewed',
+      // Finished, with scorecards. Ingrid's two wait for Amara's decision (row I5.5); the decision marks them reviewed.
+      interview({ id: 'iv-ingrid-coding', app: 'app-ingrid', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-9, 14), minutes: 60, state: 'scored',
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 15, ended: at(-9, 15) }),
-      interview({ id: 'iv-ingrid-together', app: 'app-ingrid', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'reviewed',
+      interview({ id: 'iv-ingrid-together', app: 'app-ingrid', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'scored',
         questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 13, 45) }),
       interview({ id: 'iv-mateo-coding', app: 'app-mateo', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 60, state: 'scored',
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 15) }),
