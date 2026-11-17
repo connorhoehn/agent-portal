@@ -140,4 +140,20 @@ describe('add a candidate', () => {
     expect((await WEN.post('/candidates', { ...BODY, openingId: 'op-nowhere' })).status).toBe(403);
     expect((await who('u-operator', 'interviews', 'admin').post('/candidates', BODY)).status).toBe(201);
   });
+  it('lets only one of two recruiters adding the same email to one opening at once win: one 201, one 409, one row (hardening H1b)', async () => {
+    const admin = who('u-operator', 'interviews', 'admin');
+    const [a, b] = await Promise.all([GRETA.post('/candidates', BODY), admin.post('/candidates', { ...BODY, email: BODY.email.toUpperCase() })]);
+    expect([a.status, b.status].sort()).toEqual([201, 409]);
+    const rows = (await GRETA.get('/candidates')).body.items as Array<{ candidate: { name: string }; opening: { id: string } }>;
+    expect(rows.filter((r) => r.candidate.name === BODY.name && r.opening.id === 'op-backend')).toHaveLength(1);
+  });
+
+  it('shows an added candidate to that opening\'s hiring manager and to no interviewer without a round on them (hardening H1b)', async () => {
+    const added = (await GRETA.post('/candidates', BODY)).body.candidate.id as string;
+    const seen = async (w: ReturnType<typeof who>) => ((await w.get('/candidates')).body.items as Array<{ candidate: { id: string } }>).some((r) => r.candidate.id === added);
+    expect(await seen(AMARA)).toBe(true);
+    expect(await seen(HUGO)).toBe(false);
+    expect(await seen(WEN)).toBe(false);
+    expect((await HUGO.get(`/candidates/${added}`)).status).toBe(404);
+  });
 });
