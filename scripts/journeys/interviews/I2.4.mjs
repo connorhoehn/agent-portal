@@ -60,8 +60,9 @@ export default async function run(ctx) {
     const title = (await lead.getByTestId('interview-room-idle').getByTestId('page-header').innerText()).trim();
     const facts = await lead.getByTestId('interview-room-idle').getByTestId('key-value').innerText();
     const tabs = (await lead.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
-    // The pane's frame (the shell's right column): the tabs' own box sits inside its border.
-    const width = Math.round((await lead.getByTestId('page-conversation-pane').boundingBox())?.width ?? 0);
+    // The width the shell gives the pane is its right column's (shell-split-secondary); the pane's card sits inside it.
+    const width = Math.round((await lead.getByTestId('shell-split-secondary').boundingBox())?.width ?? 0);
+    const card = Math.round((await lead.getByTestId('interview-room-pane').boundingBox())?.width ?? 0);
     const trail = await lead.getByText('My interviews', { exact: true }).count();
     const panes = await lead.getByTestId('page-conversation-pane').count();
     const shellChat = await lead.locator('[data-testid^="shell-huddle"], [data-testid="huddle-chat-pane"]').count();
@@ -83,7 +84,7 @@ export default async function run(ctx) {
       && JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat"]' && JSON.stringify(bTabs) === '["Plan","Milo","Chat"]'
       && width >= 560 && width <= 760 && hasQuestion && trail > 0 && panes === 1 && shellChat === 0 && shots.every((s) => s.ok)
       && (callable || NO_PLATFORM.test(reason));
-    return { ok, detail: `"${title}"; tabs ${tabs.join('/')} (technical, ${width} px), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
+    return { ok, detail: `"${title}"; tabs ${tabs.join('/')} (technical, column ${width} px, card ${card} px), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
   });
 
   await step('I2.4b', async () => {
