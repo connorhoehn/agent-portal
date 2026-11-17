@@ -1,0 +1,7 @@
+# Row I6.3, a candidate's deletion request and the deletion log.
+# Asking: the recruiter only. ManageCandidates is checked first, so every other role gets the action gate's 403 on every
+# id alike (routes/interviews/retention.ts). The recruiter's line sends no confirmation: 400, nothing removed.
+POST /api/interviews/candidates/{candidates.mateo}/deletion | interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 anon=403 guest=403 | recruiter | {"confirm":false}
+# The log: the recruiter and the opening's hiring manager.
+GET /api/interviews/candidates/{candidates.mateo}/deletions | interviewer interviewer2 workOnly=403 anon=403 guest=403 | recruiter hiringManager
+GET /api/interviews/candidates/{candidates.ravi}/deletions  | hiringManager interviewer | recruiter
