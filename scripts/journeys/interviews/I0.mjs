@@ -2,6 +2,8 @@
 // the shared context from interviews/lib.mjs.
 export default async function run({ portal, record, signIn, namesIn, shoot, homes }) {
   // ── I0.5a: the recruiter ────────────────────────────────────────────────
+  // The seed counts days from UTC midnight and the page shows local time, so the next interview reads "Tomorrow 09:00"
+  // or, in the hours after UTC midnight, a dated label ("Wed 18 Nov, 09:00"): either passes.
   {
     const context = await signIn('u-greta');
     const page = await context.newPage();
@@ -10,7 +12,7 @@ export default async function run({ portal, record, signIn, namesIn, shoot, home
     const names = await namesIn(page, 'interviews-candidates-table', 'interviews-candidate-name', 'Mateo Álvarez');
     const want = ['Mateo Álvarez', 'Ingrid Solberg', 'Aiko Tanaka', 'Ravi Menon', 'Nadia Petrova', 'Jonah Whitaker', 'Chloé Martin', 'Elif Demir'];
     const text = await page.getByTestId('interviews-candidates-table').innerText();
-    const ok = names.length === 12 && want.every((n) => names.includes(n)) && /System design · Tomorrow \d\d:\d\d/.test(text) && /Yes · Coding/.test(text)
+    const ok = names.length === 12 && want.every((n) => names.includes(n)) && /System design · (Tomorrow|[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2},) \d\d:\d\d/.test(text) && /Yes · Coding/.test(text)
       && !/\b(cand|app|iv|op|sc)-[a-z]/.test(text);
     record('I0.5a', ok, `recruiter lands on ${new URL(page.url()).pathname}; ${names.length} candidate rows; next interview and last result shown; no ids in the table`);
     homes.push({ name: 'recruiter-candidates', shots: await shoot(page, 'recruiter-candidates', 'interviews-candidates-table') });
