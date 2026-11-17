@@ -19,6 +19,7 @@ import { admissionRouter } from './interviews/admission.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { prepareRouter } from './interviews/prepare.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
+import { roomRouter } from './interviews/room.js';
 import { openingsRouter } from './interviews/openings.js';
 import { consentsRouter } from './interviews/consents.js';
 import { assignmentsRouter } from './interviews/assignments.js';
@@ -39,6 +40,7 @@ interviewsRouter.use(requireAction('ViewInterviews'));
 interviewsRouter.use(openingsRouter); // lane KIT (row I1.3): create an opening, edit its details, replace its kit
 interviewsRouter.use(assignmentsRouter); // lane ASSIGN (row I1.4): assign a round, answer a seat, reassign
 
+interviewsRouter.use(roomRouter); // lane ROOM (row I2.4): the panel's room, start and end the interview
 interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   res.setHeader('Cache-Control', 'no-store');

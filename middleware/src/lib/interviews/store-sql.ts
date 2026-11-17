@@ -210,6 +210,24 @@ export class SqlInterviewsStore implements InterviewsStore {
     return now ? { ok: false, reason: 'stale', row: openingFromRow(now) } : { ok: false, reason: 'not-found' };
   }
 
+  /** The room's two writes (row I2.4), compare-and-set like the rest. */
+  static readonly START_INTERVIEW_SQL = `UPDATE interviews
+  SET state = 'live', revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+  static readonly END_INTERVIEW_SQL = `UPDATE interviews
+  SET state = 'ended', ended_at = CAST(:ended_at AS TIMESTAMPTZ), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+
+  async startInterview(id: string, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.START_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision)]));
+  }
+
+  async endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.END_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision), textParam('ended_at', endedAt)]));
+  }
+
   async createInterview(input: Interview): Promise<Interview | null> {
     const rows = await this.exec(INSERT_INTERVIEW_SQL, [
       textParam('id', input.id), textParam('application_id', input.applicationId), textParam('round_id', input.roundId), textParam('type', input.type),
