@@ -1,0 +1,4 @@
+# Row I1.5: a round's time. Only the recruiter sets, changes or clears it. A body of {} writes nothing: the recruiter is
+# answered 400 (no revision), never refused. Wen has no seat on Hugo's round and cannot see it (404 inside the tenant's
+# scope), and the lead is refused the action itself (403).
+PUT /api/interviews/interviews/{interviews.nadiaDesign}/time  | interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 anon=403 guest=403 | recruiter | {}

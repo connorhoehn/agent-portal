@@ -1,0 +1,15 @@
+# Row I1.4: assign a round, answer a seat, the panel's notice, reassign. A body of {} writes nothing: an allowed
+# principal is answered 400 (a sentence), never refused. The tenant gate answers 403 to a person with no grant, no
+# session and a candidate's guest cookie; a role without the action is 403; a round outside the caller's scope is 404.
+#
+# who may read the people a seat can hold
+GET  /api/interviews/interviewers                                        | hiringManager=403 interviewer=403 interviewer2=403 workOnly=403 anon=403 guest=403 | recruiter
+# assign
+POST /api/interviews/interviews                                          | hiringManager=403 interviewer=403 interviewer2=403 workOnly=403 anon=403 guest=403 | recruiter | {}
+# answer: Wen holds no seat on Kwame's design round and cannot even see it; the recruiter and the hiring manager hold no ConductInterview
+POST /api/interviews/interviews/{interviews.kwameCoding}/answer          | interviewer2 recruiter=403 hiringManager=403 workOnly=403 anon=403 guest=403 | interviewer | {}
+# the panel's notice: the status read and the acknowledgement
+GET  /api/interviews/interviews/panel-notice                             | recruiter=403 hiringManager=403 workOnly=403 anon=403 guest=403 | interviewer interviewer2
+POST /api/interviews/interviews/{interviews.kwameCoding}/panel-notice    | interviewer2 recruiter=403 hiringManager=403 workOnly=403 anon=403 guest=403 | interviewer | {}
+# reassign: only the recruiter
+PUT  /api/interviews/interviews/{interviews.kwameCoding}/panel           | hiringManager=403 interviewer=403 interviewer2=403 workOnly=403 anon=403 guest=403 | recruiter | {}
