@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
-  suggestionReadBudgetMs, suggestionWaitMs,
+  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
 
@@ -125,4 +125,65 @@ test('a panel member never sees a paused line; the lead sees it only for the bud
   assert.equal(readsConsents('panel', true), true);
   assert.equal(readsConsents('lead', false), false);
   assert.equal(readsConsents(null, true), false);
+});
+
+// The hook itself cannot be rendered in the portal's node runner (no DOM), so the loop it runs is tested directly.
+function pollHarness(deadline: number, answers: Array<Awaited<ReturnType<typeof readSuggestion>>>) {
+  let nowMs = 0;
+  const timers = new Map<number, { fn: () => void; ms: number }>();
+  let nextTimer = 1;
+  let reads = 0;
+  const seen: unknown[] = [];
+  const stop = startSuggestionPoll({
+    read: async () => answers[Math.min(reads++, answers.length - 1)],
+    onRead: (o) => { seen.push(o); },
+    now: () => nowMs, deadline,
+    setTimer: (fn, ms) => { const id = nextTimer++; timers.set(id, { fn, ms }); return id; },
+    clearTimer: (t) => { timers.delete(t as number); },
+  });
+  const tick = async () => { const [id, t] = [...timers][0] ?? []; if (id === undefined) return false; timers.delete(id); t!.fn(); await new Promise((r) => setImmediate(r)); return true; };
+  return { stop, timers, tick, reads: () => reads, seen, setNow: (n: number) => { nowMs = n; } };
+}
+const none = (retryAfterMs: number) => ({ ...NO_SUGGESTION, retryAfterMs });
+
+test('the suggestion poll reads again on the server\'s wait, stops when one arrives, and stops at its deadline', async () => {
+  const h = pollHarness(1000, [none(30_000), none(30_000), { ...NO_SUGGESTION, suggestion: SG }]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(h.reads(), 1);
+  assert.equal([...h.timers.values()][0].ms, 30_000);
+  assert.equal(await h.tick(), true);
+  assert.equal(h.reads(), 2);
+  assert.equal(await h.tick(), true);
+  assert.equal(h.reads(), 3);
+  assert.equal(h.timers.size, 0, 'no further read is scheduled once a suggestion arrived');
+  const late = pollHarness(1000, [none(30_000)]);
+  await new Promise((r) => setImmediate(r));
+  late.setNow(1001);
+  await late.tick();
+  assert.equal(late.reads(), 1, 'past the deadline the next read does not happen');
+  assert.equal(late.timers.size, 0);
+});
+
+test('stopping the suggestion poll clears its timer and drops a read that was still in flight', async () => {
+  const h = pollHarness(1_000_000, [none(10_000)]);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(h.timers.size, 1);
+  h.stop();
+  assert.equal(h.timers.size, 0);
+  let release!: (v: Awaited<ReturnType<typeof readSuggestion>>) => void;
+  const seen: unknown[] = [];
+  const stop = startSuggestionPoll({
+    read: () => new Promise((r) => { release = r; }), onRead: (o) => seen.push(o), now: () => 0, deadline: 10,
+    setTimer: () => { throw new Error('must not schedule after stop'); }, clearTimer: () => {},
+  });
+  stop();
+  release(none(10_000));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(seen.length, 0);
+});
+
+test('the footer builds a suggestion prompt only for the lead\'s registration', () => {
+  assert.equal(suggestionForPrompt(true, SG), SG);
+  assert.equal(suggestionForPrompt(false, SG), null);
+  assert.equal(suggestionForPrompt(true, null), null);
 });

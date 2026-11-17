@@ -183,6 +183,35 @@ export const pollsSuggestion = (
   seat: 'lead' | 'panel' | null, state: RoomState | null, joined: boolean, waiting: SuggestionView | null,
 ): boolean => seat === 'lead' && state === 'live' && joined && !waiting;
 
+/** The suggestion the footer turns into a prompt: only the lead's registration gets one. */
+export const suggestionForPrompt = (lead: boolean, suggestion: SuggestionView | null): SuggestionView | null => (lead ? suggestion : null);
+
+/**
+ * The poll loop behind the room's suggestion read: reads on the server's wait, stops at the deadline or once a
+ * suggestion arrives, and the returned function stops it for good (clears the pending timer).
+ */
+export function startSuggestionPoll(opts: {
+  read(): Promise<SuggestionRead>;
+  onRead(out: SuggestionRead): void;
+  now(): number;
+  deadline: number;
+  setTimer(fn: () => void, ms: number): unknown;
+  clearTimer(t: unknown): void;
+}): () => void {
+  let live = true;
+  let timer: unknown;
+  const read = async () => {
+    if (!live || opts.now() > opts.deadline) return;
+    const out = await opts.read();
+    if (!live) return;
+    opts.onRead(out);
+    if (out.suggestion) return;
+    timer = opts.setTimer(() => { void read(); }, out.retryAfterMs);
+  };
+  void read();
+  return () => { live = false; opts.clearTimer(timer); };
+}
+
 /** One read. Not found (not the lead, or no route) and any failure read as no suggestion. */
 export async function readSuggestion(interviewId: string, fetcher: typeof fetch = fetch): Promise<SuggestionRead> {
   try {

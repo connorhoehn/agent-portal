@@ -38,7 +38,7 @@ import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents,
-  suggestionReadBudgetMs, type SuggestionAnswerId, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
+  suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
@@ -118,18 +118,12 @@ function InterviewRoom({ id }: { id: string }) {
   useEffect(() => {
     if (!asking) return;
     suggestionDeadline.current ??= Date.now() + suggestionReadBudgetMs(roundMinutes);
-    let live = true;
-    let timer: number | undefined;
-    const read = async () => {
-      if (!live || Date.now() > (suggestionDeadline.current ?? 0)) return;
-      const out = await readSuggestion(id);
-      if (!live) return;
-      setPaused(out.paused);
-      if (out.suggestion) { setSuggestion(out.suggestion); return; }
-      timer = window.setTimeout(() => { void read(); }, out.retryAfterMs);
-    };
-    void read();
-    return () => { live = false; window.clearTimeout(timer); };
+    return startSuggestionPoll({
+      read: () => readSuggestion(id),
+      onRead: (out) => { setPaused(out.paused); if (out.suggestion) setSuggestion(out.suggestion); },
+      now: Date.now, deadline: suggestionDeadline.current ?? 0,
+      setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (t) => window.clearTimeout(t as number | undefined),
+    });
   }, [asking, id, roundMinutes]);
   const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloSaid }> => {
     const out = await answerSuggestion(id, suggestionId, answer);
