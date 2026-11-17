@@ -37,8 +37,17 @@ export const ACTION_STATUSES: readonly AssistantActionStatus[] = ['waiting', 'co
  */
 export interface AssistantBase { assistant: true; displayName: string }
 
+/**
+ * The server's mark on a question an interview's lead approved for Milo to ask ("Have Milo ask", interviews decision 9). Set only by
+ * chat.ts `postApprovedQuestion`; a person's send that carries it is refused (claimsAssistant). In an interview call it is the one
+ * kind of Milo's message a guest reads (lib/call-chat.ts `guestMaySee`, interviews contract E9).
+ */
+export const APPROVED_QUESTION_KEY = 'approvedQuestion' as const;
+
 export interface AssistantNoticeMetadata extends AssistantBase {
   kind: 'assistant-notice';
+  /** An approved question (APPROVED_QUESTION_KEY): posted as a plain line of Milo's, with no asker. */
+  approvedQuestion?: true;
   /** The closing notice names the meeting it is about; the portal links to that meeting's page from it. */
   meetingCallId?: string;
   /** The minutes notice only: what the minutes hold, so the chat draws them as a card. The text is the summary's first sentences. */
@@ -98,7 +107,7 @@ export const isAssistantKind = (kind: unknown): boolean => typeof kind === 'stri
 /** Does a metadata bag carry anything only the assistant may carry? Used to refuse a person's send. */
 export function claimsAssistant(metadata: Record<string, unknown> | undefined | null): boolean {
   if (!metadata) return false;
-  return 'assistant' in metadata || isAssistantKind(metadata['kind']);
+  return 'assistant' in metadata || APPROVED_QUESTION_KEY in metadata || isAssistantKind(metadata['kind']);
 }
 
 const str = (v: unknown, max = 2000): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
@@ -121,7 +130,8 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
   const base = { assistant: true as const, displayName: str(m['displayName'], 64) ? m['displayName'] : ASSISTANT_NAME };
   if (m['kind'] === 'assistant-notice') {
     const minutes = minutesCounts(m['minutes']);
-    return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}) };
+    return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}),
+      ...(m[APPROVED_QUESTION_KEY] === true ? { approvedQuestion: true as const } : {}) };
   }
   if (m['kind'] === 'assistant-reply') {
     if (!str(m['askedBy'], 128) || !str(m['askedByName'], 128)) return null;

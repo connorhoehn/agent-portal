@@ -28,7 +28,7 @@ import { onProposalChanged } from './proposals.js';
 import type { Proposal } from './types.js';
 import { policyCallOf, policyForLobby } from './policy.js';
 import {
-  ASSISTANT_NAME, ASSISTANT_USER_ID, DELETED_RECORD_LINE, LEGACY_DELETED_RECORD_LINES, isAssistantUserId,
+  APPROVED_QUESTION_KEY, ASSISTANT_NAME, ASSISTANT_USER_ID, DELETED_RECORD_LINE, LEGACY_DELETED_RECORD_LINES, isAssistantUserId,
   type ActionInput, type AssistantActionStatus, type AssistantMetadata, type ReplyInput,
 } from './chat-types.js';
 
@@ -118,6 +118,14 @@ export function postNotice(callId: string, text: string, opts: PostOptions = {})
 /** A notice that must never fail the route that caused it: the state change already happened. */
 export async function postNoticeQuietly(callId: string, text: string, opts: PostOptions = {}): Promise<void> {
   try { await postNotice(callId, text, opts); } catch (error) { console.warn('[meeting-assistant] notice not posted', (error as Error).message); }
+}
+
+/**
+ * A question an interview's lead approved for Milo to ask (interviews decision 9, contract E9): the approved words as a plain line of
+ * Milo's, with no asker named, carrying the server's mark (APPROVED_QUESTION_KEY), the one kind of Milo's message the candidate reads.
+ */
+export function postApprovedQuestion(callId: string, text: string, opts: PostOptions = {}): Promise<ChatMessage | null> {
+  return postAsAssistant(callId, { text, metadata: { assistant: true, displayName: ASSISTANT_NAME, kind: 'assistant-notice', [APPROVED_QUESTION_KEY]: true } }, opts);
 }
 
 // ---------------------------------------------------------------------------------------------------------------

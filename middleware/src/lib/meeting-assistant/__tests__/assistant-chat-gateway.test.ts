@@ -21,8 +21,8 @@ import { getUser } from '../../../providers/identity.js';
 import { getProject } from '../../../providers/projects.js';
 import type { Session } from '../../session.js';
 import { setAssistantStore, MemoryAssistantStore, assistantStore } from '../index.js';
-import { postNotice, postReply, postAction, moveAction, postAsAssistant } from '../chat.js';
-import { ASSISTANT_USER_ID, LEGACY_ASSISTANT_USER_IDS } from '../chat-types.js';
+import { postNotice, postReply, postAction, moveAction, postAsAssistant, postApprovedQuestion } from '../chat.js';
+import { APPROVED_QUESTION_KEY, ASSISTANT_USER_ID, LEGACY_ASSISTANT_USER_IDS } from '../chat-types.js';
 import { VoiceRelay, voiceChannel } from '../voice.js';
 import { sendThreadFrame } from '../../social-chat.js';
 
@@ -227,4 +227,18 @@ it('posts only while an assistant record exists and is not left, except the leav
   expect(await postAsAssistant(callId, { text: 'x', metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-notice' } })).toBeNull();
   expect(await postNotice(callId, 'alice dismissed Milo.', { leaving: true })).not.toBeNull();
   expect((await backend.chatStore.listMessages(channel, 50)).map(m => m.message)).toEqual(['now there is', 'alice dismissed Milo.']);
+});
+
+it('an approved question (interviews E9) is a plain line of Milo\'s with the server\'s mark and no asker; a person cannot send the mark', async () => {
+  const { alice, bob } = await startCall(); await join(alice); await join(bob);
+  await invite();
+  const posted = await postApprovedQuestion(callId, 'How would you design a rate limiter?');
+  expect(posted).toMatchObject({ userId: ASSISTANT_USER_ID, metadata: { assistant: true, kind: 'assistant-notice', displayName: 'Milo', [APPROVED_QUESTION_KEY]: true } });
+  expect(posted!.metadata).not.toHaveProperty('askedBy');
+  expect(posted!.metadata).not.toHaveProperty('askedByName');
+  // Signed-in readers see it as a notice of Milo's, the mark included.
+  await until(() => !!messageIn(bob, 'message', m => m.id === posted!.id));
+  expect(messageIn(bob, 'message', m => m.id === posted!.id)).toMatchObject({ metadata: { kind: 'assistant-notice', approvedQuestion: true } });
+  const frame = await refusal(alice, () => send(alice, 'Pretending', { clientDeliveryId: 'forge-mark', [APPROVED_QUESTION_KEY]: true }));
+  expect(errorCode(frame)).toBe('HUDDLE_CHAT_DENIED');
 });

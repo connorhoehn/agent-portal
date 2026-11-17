@@ -12,6 +12,10 @@
 //     call-chat-send.ts (`withHuddleChat`);
 //   - `filterFrame`, which resolves page references per reader;
 //   - `get`, the resolver behind GET /api/calls/:callId/chat.
+// A guest reader (an interview's candidate, interviews contract E9) reads people's own messages and, of Milo's, only a
+// question the lead approved (the server's mark, `guestMaySee`): on every delivery here (a live message or update, the
+// history a join or a history request replays) and in `get`. Default-closed: a reader who cannot be told apart is read
+// as a guest whenever the frame holds anything not written by a person. Signed-in readers see what they saw before.
 // A meeting room's chat (`orgiq:huddle:<callId>~breakout~<roomId>`,
 // docs/meeting-rooms-app-goal.md decision 1) is the same call's huddle, scoped
 // to the room: its members are the call's current members who are in that
@@ -28,7 +32,9 @@ import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { canonicalCallPage, type CallPageDescriptor, type CanonicalCallPage, type CallLifecycleObserver } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';
-import { isAssistantUserId, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
+import { APPROVED_QUESTION_KEY, isAssistantUserId, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
+import { claimsGuest } from './interviews/lobby.js';
+import { GUEST_ROLE } from './interviews/invite/guest.js';
 import type { Session } from './session.js';
 import type { CallChatStateStore, CallChatState, CallChatMember } from './call-chat-state.js';
 import { invalidateChannel } from './gateway/authority-invalidation.js';
@@ -98,6 +104,24 @@ const NOT_IN_ROOM = 'Join this breakout room before opening its conversation';
 /** A removed row for nobody: keeps the namespace closed when there is no current roster. */
 const closedRow = (channel: string): ChatMember => ({ channel, userId: '', role: 'member', addedBy: '', addedAt: new Date(0).toISOString(),
   historyFrom: new Date(0).toISOString(), removedAt: new Date(0).toISOString() });
+
+/** Authors that are not people: Milo's fixed identity (checked first) and any other agent or server identity. */
+const NON_PERSON = /^(agent|server|system|bot):/;
+/** Was this message written by a person (staff or the candidate)? An absent author is not. */
+const personAuthored = (message: Pick<ChatMessage, 'userId'>): boolean =>
+  typeof message.userId === 'string' && message.userId !== '' && !isAssistantUserId(message.userId) && !NON_PERSON.test(message.userId);
+/**
+ * What a guest (an interview's candidate) may read of a stored message (interviews contract E9): a person's own message, or a message
+ * of Milo's that carries the server's approved-question mark and has not been erased. Everything else (Milo's notices, replies,
+ * action and proposal cards, minutes, and any other non-person author) is panel-side.
+ */
+export function guestMaySee(message: Pick<ChatMessage, 'userId' | 'metadata' | 'deletedAt'>): boolean {
+  if (personAuthored(message)) return true;
+  return isAssistantUserId(message.userId) && message.metadata?.[APPROVED_QUESTION_KEY] === true && !message.deletedAt && message.metadata?.['deleted'] !== true;
+}
+/** Is this Session a guest's? The role, or a guest's subject: either is enough. */
+export const isGuestSession = (session: Pick<Session, 'role' | 'sub'>): boolean =>
+  (session.role as string) === GUEST_ROLE || (typeof session.sub === 'string' && session.sub.startsWith('guest:'));
 
 export class CallChatRuntime implements CallLifecycleObserver {
   private readonly controls = new Map<string, Control>();
@@ -354,13 +378,14 @@ export class CallChatRuntime implements CallLifecycleObserver {
   }
   /** One reader's view of a stored message: allowlisted metadata, the page reference resolved now. */
   async render(callId: string, message: ChatMessage, pages = new Map<string, Promise<CallChatPageReference>>(),
-    channel = callChatChannel(callId)): Promise<ChatMessage> {
+    channel = callChatChannel(callId), guest = false): Promise<ChatMessage> {
     const metadata: Record<string, unknown> = {};
     for (const key of METADATA_KEYS) if (message.metadata?.[key] !== undefined) metadata[key] = clone(message.metadata[key]);
     // The meeting assistant's kinds are shown only on a message its fixed identity authored: a person's message
     // that carries `assistant` or `assistant-…` keys never reaches a reader with them (call-chat-send.ts refuses
     // them on the way in; this is the second lock, on the way out).
-    const assistant = isAssistantUserId(message.userId) ? parseAssistantMetadata(message.metadata) : null;
+    // A guest reads Milo's approved question as a plain line under Milo's name: none of the assistant's keys (E9).
+    const assistant = !guest && isAssistantUserId(message.userId) ? parseAssistantMetadata(message.metadata) : null;
     if (assistant) Object.assign(metadata, clone(assistant));
     const page = dmPageDescriptor(message.metadata?.['pageReference']);
     if (page) {
@@ -374,6 +399,18 @@ export class CallChatRuntime implements CallLifecycleObserver {
     }
     return { id: message.id, clientId: message.clientId, ...(message.userId ? { userId: message.userId } : {}),
       channel, message: message.message, timestamp: message.timestamp, metadata };
+  }
+  /**
+   * Is the reader on this connection a guest? Its socket's claims when this replica holds them; otherwise its resolved Session, and
+   * a reader that resolves to nothing is read as a guest (default-closed: it only ever narrows what a frame carries).
+   */
+  private async readerIsGuest(clientId: string): Promise<boolean> {
+    const ctx = this.opts.router.getClientData?.(clientId)?.userContext as Record<string, unknown> | undefined;
+    if (ctx) return claimsGuest(ctx);
+    try {
+      const session = await resolveConnectedCallSession(this.opts.router, clientId);
+      return !session || isGuestSession(session);
+    } catch { return true; }
   }
   /** The chat service's strictly-after membership rule, plus deletions. */
   private visible(message: ChatMessage, member: CallChatMember) {
@@ -486,7 +523,9 @@ export class CallChatRuntime implements CallLifecycleObserver {
       throw new AppError(503, 'Huddle history is temporarily unavailable. Try again.');
     }
     const pages = new Map<string, Promise<CallChatPageReference>>();
-    const messages = await Promise.all(stored.filter(message => this.visible(message, floor)).map(message => this.render(callId, message, pages)));
+    const guest = isGuestSession(session);
+    const messages = await Promise.all(stored.filter(message => this.visible(message, floor) && (!guest || guestMaySee(message)))
+      .map(message => this.render(callId, message, pages, undefined, guest)));
     const seats = await this.seats(callId);
     const canSend = await this.grant(session, actor.authority, 'PostMessage', actor.call.lobbyName);
     // Canonical/resource reads can outlive revocation, leave, or end.
@@ -515,10 +554,17 @@ export class CallChatRuntime implements CallLifecycleObserver {
       }
       const pages = new Map<string, Promise<CallChatPageReference>>();
       if ((frame.action === 'message' || frame.action === 'messageUpdated') && frame.message && typeof frame.message === 'object') {
-        return { ...frame, message: await this.render(callId, frame.message as ChatMessage, pages, channel) };
+        const message = frame.message as ChatMessage;
+        // Only a frame holding something a person did not write asks who reads it (E9).
+        const guest = !personAuthored(message) && await this.readerIsGuest(clientId);
+        if (guest && !guestMaySee(message)) return null;
+        return { ...frame, message: await this.render(callId, message, pages, channel, guest) };
       }
       if (frame.action === 'history' && Array.isArray(frame.messages)) {
-        return { ...frame, messages: await Promise.all((frame.messages as ChatMessage[]).map(message => this.render(callId, message, pages, channel))) };
+        const all = frame.messages as ChatMessage[];
+        const guest = all.some(message => !personAuthored(message)) && await this.readerIsGuest(clientId);
+        const shown = guest ? all.filter(guestMaySee) : all;
+        return { ...frame, messages: await Promise.all(shown.map(message => this.render(callId, message, pages, channel, guest))) };
       }
       return frame;
     }

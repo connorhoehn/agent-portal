@@ -43,9 +43,10 @@ export interface CoachDeps {
   newId: () => string;
 }
 
-const defaultPost: CoachDeps['postApproved'] = async (callId, text, lead) => {
-  const { nameOf, postReply } = await import('../../meeting-assistant/chat.js');
-  return (await postReply(callId, { text, askedBy: lead.userId, askedByName: await nameOf(lead.userId) })) !== null;
+const defaultPost: CoachDeps['postApproved'] = async (callId, text) => {
+  // E9: a plain question with the server's approved mark (no asker named), the one kind of Milo's message the candidate reads.
+  const { postApprovedQuestion } = await import('../../meeting-assistant/chat.js');
+  return (await postApprovedQuestion(callId, text)) !== null;
 };
 
 /**

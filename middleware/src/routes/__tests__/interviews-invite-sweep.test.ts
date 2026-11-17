@@ -136,8 +136,10 @@ describe('a guest against every route the server mounts', () => {
       if (r.path.startsWith('/api/interviews') && r.path.includes(':')) targets.push({ method: r.method, path: fill(r.path, OTHER), key: `${key} (another interview)` });
     }
     expect(targets.length).toBeGreaterThan(200);
+    const statusOf = new Map<string, number>();
     for (const t of targets) {
       const asGuest = await call(t.method, t.path, guest);
+      statusOf.set(t.key, asGuest.status);
       if (asGuest.status >= 400) { refused++; continue; }
       const rejected = await call(t.method, t.path, 'orgiq.session=not.a-session');
       if (rejected.status === asGuest.status && rejected.body === asGuest.body) publicRoutes.push(`${t.key} ${asGuest.status}`);
@@ -146,6 +148,12 @@ describe('a guest against every route the server mounts', () => {
     // The guest's cookie is still good after the walk, so the refusals above were refusals of a live guest.
     expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
     expect(leaks).toEqual([]);
+    // The call chat's REST reads (contract E9): the resolver, a pinned or linked message, the pins, and /summarize over the chat.
+    // A guest reads its call's chat only over its socket, filtered there (lib/call-chat.ts guestMaySee); every REST read refuses it.
+    for (const key of ['GET /api/calls/:callId/chat', 'GET /api/chat/message', 'GET /api/chat/pins', 'POST /api/conversations/summarize/run']) {
+      expect([key, statusOf.has(key)]).toEqual([key, true]);
+      expect([key, (statusOf.get(key) ?? 0) >= 400]).toEqual([key, true]);
+    }
     expect(refused).toBeGreaterThan(targets.length * 0.9);
     // What the public surface is, for the record (health, config, the sign-in page's lists): printed, not hidden.
     console.log(`guest sweep: ${targets.length} requests, ${refused} refused, ${publicRoutes.length} public:\n  ${publicRoutes.join('\n  ')}`);
