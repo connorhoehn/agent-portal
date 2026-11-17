@@ -849,3 +849,35 @@ export async function notifyInterviewDeclined(ev: InterviewDeclinedEvent): Promi
     return [];
   }
 }
+
+export interface InterviewStartingSoonEvent {
+  interviewId: string;
+  /** The scheduled instant the bell is for; part of its id, so a moved time rings again and the same time never twice. */
+  scheduledAt: string;
+  minutes: number;
+  openingTitle: string;
+  roundName: string;
+  userIds: readonly string[];
+}
+
+/** A round is about to start → its lead and panel, once each per scheduled time, a bell that opens My interviews. Says no more than the title, the round and the minutes. */
+export async function notifyInterviewStartingSoon(ev: InterviewStartingSoonEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const sent: string[] = [];
+    for (const userId of new Set(ev.userIds)) {
+      sent.push(...await notify([userId], {
+        id: `interview-soon:${roundKey(ev.interviewId)}:${userId}:${roundKey(ev.scheduledAt)}`,
+        type: 'system',
+        title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} starts in ${ev.minutes} minutes`,
+        body: 'Open My interviews to get ready.',
+        payload: { tenant: 'interviews', kind: 'interview-starting-soon', audience: 'interviewer' },
+        action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-starting-soon producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}

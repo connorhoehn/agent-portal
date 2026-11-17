@@ -6,7 +6,7 @@ import type {
   ApplicationStage, Candidate, InterviewState, InterviewsWorld, Interview, KitCompetency, KitQuestion, KitRound, Opening,
   OpeningState, Recommendation, RoundType, Scorecard, StageChange, CompetencyRating,
 } from './types.js';
-import { reachOf, type Viewer } from './scope.js';
+import { mayReadOpeningMoney, reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { Seat } from './types.js';
@@ -70,7 +70,7 @@ export interface OpeningRecord extends OpeningRow {
   competencies: KitCompetency[];
   questions: KitQuestion[];
   /** Spend cap per interview in US dollars (decision 18); null while none is set. */
-  budgetCapUsd: number | null;
+  budgetCapUsd?: number | null;
   /** The revision a write must name (row I1.3: compare-and-set). */
   revision: number;
 }
@@ -267,7 +267,9 @@ export class WorldIndex {
   }
 
   openingRecord(o: Opening): OpeningRecord {
-    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions, budgetCapUsd: o.budgetCapUsd, revision: o.revision };
+    // The cap is money: only the people who may read the opening's spend (scope.ts mayReadOpeningMoney) are sent it.
+    const money = mayReadOpeningMoney(this.viewer.role) ? { budgetCapUsd: o.budgetCapUsd } : {};
+    return { ...this.openingRow(o), competencies: o.kit.competencies, questions: o.kit.questions, ...money, revision: o.revision };
   }
 
   interviewRow(i: Interview): InterviewRow | null {

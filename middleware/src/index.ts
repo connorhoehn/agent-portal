@@ -54,6 +54,7 @@ import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
+import { startInterviewsSoonSweep } from './lib/interviews/soon-sweep.js';
 import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer } from './lib/meeting-assistant/reconcile.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
@@ -396,6 +397,8 @@ app.use('/api/calls/:callId/assistant', meetingAssistantRouter);
 app.use('/api/meetings', meetingsRouter);
 // The sweeps run whether or not the feature is on: turning it off must not keep stored words for ever (audit M4).
 startMeetingAssistantSweeps();
+// "Starting soon" bells for interviews (row I5.6); does nothing while the interviews flag is off.
+startInterviewsSoonSweep();
 if (meetingAssistantEnabled()) announceSinkSecret();
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));

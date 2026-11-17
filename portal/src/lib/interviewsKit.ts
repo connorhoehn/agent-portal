@@ -35,7 +35,8 @@ export interface OpeningListRow extends OpeningRow {
 export interface OpeningRecord extends OpeningListRow {
   competencies: KitCompetency[];
   questions: KitQuestion[];
-  budgetCapUsd: number | null;
+  /** Sent only to the people who may read the opening's money (recruiter, its hiring manager, admin). */
+  budgetCapUsd?: number | null;
   revision: number;
 }
 
@@ -93,7 +94,7 @@ export const kitOf = (o: Pick<OpeningRecord, 'rounds' | 'competencies' | 'questi
 /** The details form's values; the cap per interview comes from the opening's money (the record does not carry it). */
 export const detailsOf = (o: OpeningRecord, interviewCapUsd: number | null = null): OpeningDetails => ({
   title: o.title, level: o.level, team: o.team, location: o.location, hiringManagerId: o.hiringManager?.id ?? null, state: o.state,
-  budgetCapUsd: o.budgetCapUsd, interviewCapUsd,
+  budgetCapUsd: o.budgetCapUsd ?? null, interviewCapUsd,
 });
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

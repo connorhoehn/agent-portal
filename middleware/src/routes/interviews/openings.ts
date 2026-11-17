@@ -34,6 +34,7 @@ import { openingMoney } from '../../lib/interviews/spend.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Opening } from '../../lib/interviews/types.js';
+import { mayReadOpeningMoney } from '../../lib/interviews/scope.js';
 import { listUsers } from '../../providers/identity.js';
 
 export const openingsRouter = Router();
@@ -95,14 +96,11 @@ openingsRouter.post('/openings', manage, asyncHandler(async (req, res) => {
   res.status(201).json({ opening: ix.openingRecord(o) });
 }));
 
-/** Who reads an opening's money: its recruiters, its hiring manager (scope already narrows them to their own openings) and the admin. */
-const MONEY_READERS = new Set(['recruiter', 'hiring-manager', 'admin']);
-
 /** The opening's caps and what is held, spent and left. Not found for anyone who may not read its money. */
 openingsRouter.get('/openings/:id/spend', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const o = ix.openings.get(param(req, 'id'));
-  if (!o || !MONEY_READERS.has(resolveSession(req)!.role)) throw new NotFoundError(NO_OPENING);
+  if (!o || !mayReadOpeningMoney(resolveSession(req)!.role)) throw new NotFoundError(NO_OPENING);
   res.setHeader('Cache-Control', 'no-store');
   res.json({ spend: await openingMoney(o) });
 }));

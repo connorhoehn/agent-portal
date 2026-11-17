@@ -22,6 +22,10 @@ export interface Viewer {
   role: string;
 }
 
+/** Who reads an opening's money: its recruiters, its hiring manager (scope already narrows them to their own openings) and the admin. */
+const MONEY_READERS: ReadonlySet<string> = new Set(['recruiter', 'hiring-manager', 'admin']);
+export const mayReadOpeningMoney = (role: string): boolean => MONEY_READERS.has(role);
+
 export type Reach = 'everything' | 'assigned' | 'own-openings' | 'nothing';
 
 export function reachOf(role: string): Reach {

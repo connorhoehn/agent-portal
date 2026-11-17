@@ -232,6 +232,17 @@ describe('everyone else: the writes are the recruiter\'s (decision 2)', () => {
     expect((await kitOf('op-ios')).revision).toBe(1);
   });
 
+  it('the opening record carries its spending cap only to those who may read the opening\'s money', async () => {
+    expect((await GRETA.put('/openings/op-ios/details', { revision: 1, ...DETAILS, budgetCapUsd: 50 })).status).toBe(200);
+    const cap = async (w: ReturnType<typeof who>) => (await w.get('/openings/op-ios')).body.opening;
+    expect((await cap(GRETA)).budgetCapUsd).toBe(50);
+    expect((await cap(AMARA)).budgetCapUsd).toBe(50);
+    expect((await cap(who('u-operator', 'orgiq', 'admin'))).budgetCapUsd).toBe(50);
+    const wen = await cap(WEN);
+    expect(wen.competencies.length).toBeGreaterThan(0);
+    expect('budgetCapUsd' in wen).toBe(false);
+  });
+
   it('the recruiter writing an opening that does not exist: 404, before the input is read', async () => {
     const res = await GRETA.put('/openings/op-nowhere/kit', { revision: 1, kit: {} });
     expect(res.status).toBe(404);
