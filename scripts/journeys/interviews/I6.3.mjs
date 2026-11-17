@@ -120,7 +120,7 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
     const sections = await page.getByTestId('interviews-profile-deletions-section').count();
     const r = await api(hugo, 'GET', `/api/interviews/candidates/${mateo}/deletions`);
     const ask = await api(hugo, 'POST', `/api/interviews/candidates/${mateo}/deletion`, { confirm: true });
-    record('I6.3c', sections === 0 && r.status === 404 && ask.status === 403, `interviewer: ${sections} Deletions sections; the log ${r.status}; asking ${ask.status}`);
+    record('I6.3c', sections === 0 && r.status === 404 && ask.status === 404, `interviewer: ${sections} Deletions sections; the log ${r.status}; asking ${ask.status}`);
     await hugo.close();
   } catch (e) { record('I6.3c', false, `stopped: ${String(e?.message ?? e).split('\n')[0]}`); }
 
