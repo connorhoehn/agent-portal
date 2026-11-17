@@ -8,6 +8,7 @@
 // click, confirmed in place on the row; Decline asks for the reason in the
 // composer's prompt deck (never a dialog), and the recruiter is told.
 //
+// Row I5.3: a "Scorecard due" row opens the scorecard; a round whose scorecard is in opens it read-only.
 // Row I1.7: rows in "To prepare" and "Upcoming" open the Prepare page; a ready or live round the viewer sits on also
 // has "Open the room". Scoring (I5.3) is a later row.
 
@@ -26,6 +27,7 @@ import {
   type DeskView, type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
 import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
+import { hasScorecard, scorecardPath } from '../../lib/interviewsScorecard';
 import { REASON_MAX, acceptSeat, declineSeat, reasonProblem } from '../../lib/interviewsAssign';
 import { PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
@@ -107,9 +109,12 @@ function MyInterviewsWorkspace() {
     if (done) return <T size="xs" tone="secondary" data-testid="interviews-desk-answered">{done}</T>;
     if (r.myAnswer !== 'to-answer') {
       const prepare = r.bucket === 'to-prepare' || r.bucket === 'upcoming';
-      if (!prepare && !canOpenRoom(r)) return null;
+      const card = hasScorecard(r);
+      if (!prepare && !canOpenRoom(r) && !card) return null;
       return (
         <Inline gap="xs" wrap={false}>
+          {card && <Button size="sm" variant={r.bucket === 'scorecard-due' ? 'primary' : 'ghost'} data-testid="interviews-desk-scorecard"
+            onClick={() => void navigate(scorecardPath(r.id))}>{r.bucket === 'scorecard-due' ? 'Fill in the scorecard' : 'Your scorecard'}</Button>}
           {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'ghost'} data-testid="interviews-desk-prepare"
             onClick={() => void navigate(preparePath(r.id))}>{r.seat === 'lead' ? 'Prepare' : 'Read the plan'}</Button>}
           {canOpenRoom(r) && <Button size="sm" variant="secondary" data-testid="interviews-desk-room" onClick={() => void navigate(roomPath(r.id))}>Open the room</Button>}
