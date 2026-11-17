@@ -1,0 +1,8 @@
+# Row I3.10: Milo's question plan, the lead's only while the round is accepted or ready. Mateo's design round (ready, Hugo
+# leads): the lead is not refused (a draft); another round's interviewer, the recruiter and the hiring manager get the one
+# not-found; the tenant gate stops the guest, anon and a Work-only person (403).
+POST /api/interviews/interviews/{interviews.mateoDesign}/plan-draft | interviewer2 recruiter hiringManager guest=403 guest:mateoDesign=403 anon=403 workOnly=403 | interviewer | {}
+# The panel member of Nadia's leadership round (Hugo) gets not-found; its lead (Wen) is not refused.
+POST /api/interviews/interviews/{interviews.nadiaLeadership}/plan-draft | interviewer recruiter hiringManager guest:nadiaLeadership=403 | interviewer2 | {}
+# A live round answers its lead with the one plain line (409), never a draft; nobody else learns it exists.
+POST /api/interviews/interviews/{interviews.kwameLive}/plan-draft | interviewer2 recruiter hiringManager guest:kwameLive=403 | interviewer=409 | {}

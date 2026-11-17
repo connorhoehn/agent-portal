@@ -1,0 +1,8 @@
+# Row I3.7: the live transcript, the panel's side of a live interview. Kwame's live coding round: the lead and the panel
+# member read it, and so do the recruiter and the opening's hiring manager (Backend is Amara's); the tenant gate stops the
+# guest, anon and a Work-only person (403).
+GET /api/interviews/interviews/{interviews.kwameLive}/transcript | guest=403 guest:kwameLive=403 anon=403 workOnly=403 | interviewer interviewer2 recruiter hiringManager
+# Not live: nobody reads a ready round's transcript (Mateo's design round), its own lead included.
+GET /api/interviews/interviews/{interviews.mateoDesign}/transcript | interviewer interviewer2 recruiter hiringManager guest=403 anon=403
+# The hiring manager of another opening: Amara is not the iOS opening's (Aiko's coding round is ready; this is its scope, not its state).
+GET /api/interviews/interviews/{interviews.aikoCoding}/transcript | hiringManager interviewer

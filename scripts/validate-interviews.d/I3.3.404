@@ -1,0 +1,10 @@
+# Row I3.3: Milo's suggestion for the lead. Kwame's live coding round (Hugo leads, Wen on the panel): the lead reads it;
+# the panel member, the recruiter and the hiring manager get the one not-found (they hold no lead's seat); the tenant gate
+# stops the guest, anon and a Work-only person (403). An answer to a suggestion that is not this lead's is not-found for
+# everyone, the lead included (`sg-none` names no suggestion: the lead's real answers are the walk's I3.3 steps).
+GET /api/interviews/interviews/{interviews.kwameLive}/suggestion | interviewer2 recruiter hiringManager guest=403 guest:kwameLive=403 anon=403 workOnly=403 | interviewer
+POST /api/interviews/interviews/{interviews.kwameLive}/suggestion/sg-none/answer | interviewer interviewer2 recruiter hiringManager guest:kwameLive=403 anon=403 workOnly=403 | | {"answer":"skip"}
+# Another round's interviewer: Wen holds no seat on Mateo's design round (Hugo leads).
+GET /api/interviews/interviews/{interviews.mateoDesign}/suggestion | interviewer2 recruiter hiringManager guest=403 anon=403 workOnly=403
+# The panel member of Nadia's leadership round (Hugo, beside Wen who leads) gets no suggestion either.
+GET /api/interviews/interviews/{interviews.nadiaLeadership}/suggestion | interviewer recruiter hiringManager guest:nadiaLeadership=403 | interviewer2

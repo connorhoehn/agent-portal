@@ -1,0 +1,8 @@
+# Row I3.6: Milo for you, live. Kwame's live coding round (Hugo leads, Wen on the panel). Notes: the round's seats only
+# (the recruiter and the hiring manager hold no seat: not-found). Ask: the lead only. The tenant gate stops the guest, anon
+# and a Work-only person (403).
+GET /api/interviews/interviews/{interviews.kwameLive}/milo-notes | recruiter hiringManager guest=403 guest:kwameLive=403 anon=403 workOnly=403 | interviewer interviewer2
+POST /api/interviews/interviews/{interviews.kwameLive}/milo-ask | interviewer2 recruiter hiringManager guest:kwameLive=403 anon=403 workOnly=403 | interviewer | {"question":"What did the candidate say about tests?"}
+# Not live: Mateo's design round is ready, so its notes are not-found to its own lead; another round's interviewer (Wen) gets not-found.
+GET /api/interviews/interviews/{interviews.mateoDesign}/milo-notes | interviewer interviewer2 recruiter hiringManager
+POST /api/interviews/interviews/{interviews.mateoDesign}/milo-ask | interviewer2 recruiter hiringManager | | {"question":"What did the candidate say about tests?"}
