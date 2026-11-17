@@ -29,6 +29,7 @@ import { consentEffectsRouter } from './interviews/consent-effects.js';
 import { openingsRouter } from './interviews/openings.js';
 import { consentsRouter } from './interviews/consents.js';
 import { coachRouter } from './interviews/coach.js';
+import { miloRouter } from './interviews/milo.js';
 import { assignmentsRouter } from './interviews/assignments.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
@@ -87,6 +88,7 @@ interviewsRouter.get('/candidates/:id', asyncHandler(async (req, res) => {
 interviewsRouter.use(inviteRouter); // lane INVITE (row I2.1): issue, read and revoke the candidate's link
 
 interviewsRouter.use(coachRouter); // lane COACH (row I3.3): Milo's suggestion for the lead, and the lead's answer
+interviewsRouter.use(miloRouter); // lane MILO-FOR-YOU (rows I3.6, I3.7): the live transcript, Milo's notes, the lead's private question
 interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   res.setHeader('Cache-Control', 'no-store');
