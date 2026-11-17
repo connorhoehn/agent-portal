@@ -132,13 +132,14 @@ describe('the statements', () => {
 describe('D6: eraseRuns', () => {
   it('removes those interviews\' runs and says how many', async () => {
     fixtureRegistry.resetAll('default');
+    interviewRunsFixture.rows().length = 0;
     interviewRunsFixture.rows().push(run('r-1', 'iv-j6x2d9sb', 1), run('r-2', 'iv-j6x2d9sb', 2), run('r-3', 'iv-d7q4n9xe', 3));
     expect(await eraseRuns(['iv-j6x2d9sb'])).toBe(2);
     expect(interviewRunsFixture.rows().map((r) => r.runId)).toEqual(['r-3']);
     expect(await eraseRuns([])).toBe(0);
   });
-  it('the seed holds no run', () => {
+  it('the seed holds runs only for the finished technical rounds (row I5.1)', () => {
     fixtureRegistry.resetAll('default');
-    expect(interviewRunsFixture.rows('default')).toEqual([]);
+    expect([...new Set(interviewRunsFixture.rows('default').map((r) => r.interviewId))].sort()).toEqual(['iv-d7q4n9xe', 'iv-j6x2d9sb', 'iv-p2v7j4ye']);
   });
 });

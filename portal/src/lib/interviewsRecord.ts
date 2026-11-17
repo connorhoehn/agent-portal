@@ -7,6 +7,7 @@
 // middleware's /recording-access every time (round 4). The mock world has no media server; its stand-in says so.
 import type { TranscriptSegment } from '@connorhoehn/ui-components/video';
 import { recordingPlaybackUrl, type RecordingPlayback } from '../pages/projects/initiativeRecordingApi.ts';
+import type { RunView } from './interviewsPad.ts';
 import { INTERVIEWS_API, type InterviewState, type RoundType } from './interviews.ts';
 import { realtimeEndpoints, realtimeTokenSource, type RealtimeTokenSource } from './realtimeToken.ts';
 
@@ -27,6 +28,10 @@ export interface InterviewRecordView {
   recording: { state: PartState; playbackUrl: string | null; durationSeconds: number | null; standIn?: boolean };
   transcript: { state: PartState; lines: RecordLine[] };
   markers: RecordMarker[];
+  /** A technical round's runs, oldest first; empty for a behavioural round (and for an older server). */
+  runs?: RunView[];
+  /** The questions chosen for a technical round: what the pad's inserted question is called. */
+  questions?: { id: string; prompt: string }[];
 }
 
 export const recordPath = (interviewId: string): string => `/interviews/rounds/${encodeURIComponent(interviewId)}/record`;

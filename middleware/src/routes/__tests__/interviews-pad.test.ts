@@ -283,11 +283,11 @@ describe('the panel\'s read', () => {
 
   it('reads after a seq', async () => {
     const res = await HUGO.get(`/interviews/${ENDED}/pad/log?after=7`);
-    expect(res.body.events.map((e: { seq: number }) => e.seq)).toEqual([8, 9]);
-    expect(res.body.lastSeq).toBe(9);
-    const none = await HUGO.get(`/interviews/${ENDED}/pad/log?after=9`);
-    expect(none.body).toEqual({ events: [], lastSeq: 9, more: false });
-    expect((await HUGO.get(`/interviews/${ENDED}/pad/log?after=nonsense`)).body.events).toHaveLength(9);
+    expect(res.body.events.map((e: { seq: number }) => e.seq)).toEqual([8, 9, 10, 11, 12]);
+    expect(res.body.lastSeq).toBe(12);
+    const none = await HUGO.get(`/interviews/${ENDED}/pad/log?after=12`);
+    expect(none.body).toEqual({ events: [], lastSeq: 12, more: false });
+    expect((await HUGO.get(`/interviews/${ENDED}/pad/log?after=nonsense`)).body.events).toHaveLength(12);
   });
 
   it('is the same not-found for anyone else, a round not started, and a behavioural round', async () => {

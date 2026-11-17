@@ -6,9 +6,17 @@
 // RecordingPlayer when platform-api has media for the viewer (it asks the middleware every time); otherwise one plain
 // line says why there is nothing to play. The transcript is the library's TranscriptPanel, time-aligned to the player
 // when it plays; the markers move the transcript (and the player) to that moment. No download, no share, no copy-all.
+//
+// One clock (row I5.1): in a technical round the code the pad held plays back beside the recording (the library's
+// CodePlayback, frames from the pad log's snapshots, markers for questions, runs and pastes) and a chosen run shows
+// its output under the code. The page's time is the interview's own (ms from its start); a real recording is on the
+// player's clock, `shift` apart, and the player's ref handle does the seeking. With no recording (declined, or none in
+// the mock world) the page keeps the time itself, so the code, the words and the markers still move together.
 import { Button, Chip, DetailPage, DetailSection, Inline, LoadingState, MetaLine, Stack, T } from '@connorhoehn/ui-components/shared';
-import { RecordingPlayer, TranscriptPanel } from '@connorhoehn/ui-components/video';
-import { useEffect, useMemo, useState } from 'react';
+import { CodePlayback, CodeRunOutput } from '@connorhoehn/ui-components/code-pad';
+import { SplitPane } from '@connorhoehn/ui-components/shared';
+import { RecordingPlayer, TranscriptPanel, type RecordingPlayerHandle } from '@connorhoehn/ui-components/video';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
@@ -16,9 +24,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { ROUND_TYPE_LABELS, roundStatus, whenLabel } from '../../lib/interviews';
 import {
-  MARKER_LABELS, clockOf, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordApi, recordingLine, segmentsOf, transcriptLine,
+  MARKER_LABELS, clockOf, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
+import { runOutputModel, type RunView } from '../../lib/interviewsPad';
+import { framesOf, markersOf, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
 
@@ -50,18 +60,50 @@ function useInterviewMedia(record: InterviewRecordView): InterviewMedia | null {
   return ask ? media : null;
 }
 
+/** The pad log, read to its end; null while it loads or when the panel's read does not answer. */
+function usePadLog(interviewId: string, technical: boolean): { events: PadLogEvent[] | null; done: boolean } {
+  const [state, setState] = useState<{ events: PadLogEvent[] | null; done: boolean }>({ events: null, done: !technical });
+  useEffect(() => {
+    if (!technical) return undefined;
+    const ctl = new AbortController();
+    void readWholePadLog(async (after) => {
+      try {
+        const res = await fetch(padLogUrl(interviewId, after), { credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer', signal: ctl.signal });
+        return res.ok ? await res.json() : null;
+      } catch { return null; }
+    }).then((events) => { if (!ctl.signal.aborted) setState({ events, done: true }); });
+    return () => ctl.abort();
+  }, [interviewId, technical]);
+  return state;
+}
+
 function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail: Trail }) {
   const { interview, recording, transcript, markers } = record;
+  const technical = interview.round.type === 'technical';
   const media = useInterviewMedia(record);
   const playing = media?.state === 'playable' && media.url ? media.url : null;
-  // The record counts from the interview's start; a real recording from its own. The transcript and markers move onto the player's clock.
+  // The record counts from the interview's start; a real recording from its own. `shift` is how far the recording's clock is ahead.
   const shift = playing ? offsetMs(interview.startedAt, media!.startedAt) : 0;
   const endMs = recording.durationSeconds ? recording.durationSeconds * 1000 : null;
-  const segments = useMemo(() => segmentsOf(transcript.lines, shift, endMs), [transcript.lines, shift, endMs]);
-  const [currentMs, setCurrentMs] = useState<number | null>(null);
-  // The player restarts at a chosen moment (the library's RecordingPlayer takes no seek; a media fragment starts it there).
-  const [startAt, setStartAt] = useState(0);
-  const moveTo = (ms: number) => { setCurrentMs(ms); if (playing) setStartAt(ms); };
+  const segments = useMemo(() => segmentsOf(transcript.lines, 0, endMs), [transcript.lines, endMs]);
+  const player = useRef<RecordingPlayerHandle>(null);
+  // The page's one time, ms from the interview's start. The player (when there is one) sets it as it plays.
+  const [timeMs, setTimeMs] = useState(0);
+  const moveTo = useCallback((ms: number) => {
+    setTimeMs(ms);
+    player.current?.seek(Math.max(0, ms + shift) / 1000);
+  }, [shift]);
+
+  const padLog = usePadLog(interview.id, technical);
+  const runs: RunView[] = record.runs ?? [];
+  const frames = useMemo(() => framesOf(padLog.events ?? [], interview.startedAt), [padLog.events, interview.startedAt]);
+  const playbackMarkers: PlaybackMarker[] = useMemo(() => markersOf({
+    events: padLog.events ?? [], startedAt: interview.startedAt, recordMarkers: markers, runs, questions: record.questions ?? [],
+  }), [padLog.events, interview.startedAt, markers, runs, record.questions]);
+  const durationMs = useMemo(() => playbackDurationMs(record, Math.max(0, ...frames.map((f) => f.atMs), ...playbackMarkers.map((m) => m.atMs), ...transcript.lines.map((l) => l.atMs))),
+    [record, frames, playbackMarkers, transcript.lines]);
+  const run = runAtTime(runs, interview.startedAt, timeMs);
+  const runModel = useMemo(() => (run ? runOutputModel({ runId: run.runId, view: run, events: {}, seen: 0 }) : null), [run]);
 
   const status = roundStatus(interview.state);
   const lengthSeconds = recording.durationSeconds
@@ -69,13 +111,61 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const recordingNote = recordingLine(recording, media?.state ?? null);
   const transcriptNote = transcriptLine(transcript.state);
 
-  const player = playing ? (
-    <RecordingPlayer key={`${playing}:${startAt}`} playlistUrl={playFrom(playing, startAt)} autoPlay={startAt > 0} hideDownload className="aspect-video w-full"
-      onTimeUpdate={(seconds) => setCurrentMs(seconds * 1000)} />
+  const recordingPart = playing ? (
+    <RecordingPlayer key={playing} ref={player} playlistUrl={playing} hideDownload className="aspect-video w-full"
+      onTimeUpdate={(seconds) => setTimeMs(Math.max(0, seconds * 1000 - shift))} />
   ) : recording.state === 'available' && !recording.standIn && !media ? (
     <LoadingState label="Looking for the recording…" />
   ) : (
     <T size="sm" tone="secondary" wrap data-testid="interviews-record-recording-line">{recordingNote}</T>
+  );
+
+  const code = !technical ? null : !padLog.done ? <LoadingState label="Opening the code…" /> : (
+    <Stack gap="sm" className="min-w-0" data-testid="interviews-record-code">
+      <CodePlayback frames={frames} markers={playbackMarkers} durationMs={durationMs} timeMs={Math.min(timeMs, durationMs)} onTimeChange={moveTo}
+        emptyMessage="No code was written in this interview." className="min-w-0" data-testid="interviews-record-code-playback" />
+      {runs.length > 0 && (
+        <CodeRunOutput variant="framed" className="max-h-56 min-w-0" data-testid="interviews-record-run-output"
+          status={runModel?.status ?? null} stdout={runModel?.stdout ?? ''} stderr={runModel?.stderr ?? ''} compileOutput={runModel?.compileOutput ?? ''}
+          truncated={runModel?.truncated ?? { stdout: false, stderr: false }} exitCode={runModel?.exitCode ?? null} timeMs={runModel?.timeMs ?? null}
+          peakMemoryMb={runModel?.peakMemoryMb ?? null} {...(runModel?.runBy ? { runBy: runModel.runBy } : {})}
+          {...(runModel?.languageLabel ? { languageLabel: runModel.languageLabel } : {})} {...(runModel?.runtimeVersion ? { runtimeVersion: runModel.runtimeVersion } : {})}
+          emptyMessage="Nothing had been run yet at this moment." />
+      )}
+    </Stack>
+  );
+
+  const words = transcriptNote ? (
+    <DetailSection variant="heading" first title="Transcript"><T size="sm" tone="secondary" wrap data-testid="interviews-record-transcript-line">{transcriptNote}</T></DetailSection>
+  ) : (
+    <TranscriptPanel status="ready" segments={segments} currentTimeMs={timeMs} onSeek={moveTo}
+      emptyMessage="Nothing was transcribed in this interview." data-testid="interviews-record-transcript-panel" />
+  );
+
+  const moments = (
+    <DetailSection variant="heading" title="Moments" hint="When a question was asked. Choosing one moves the transcript there." data-testid="interviews-record-markers">
+      {markers.length ? (
+        <Stack gap="xs">
+          {markers.map((m) => (
+            <Button key={`${m.kind}:${m.atMs}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
+              onClick={() => moveTo(markerTime(m))} data-testid="interviews-record-marker">
+              <Inline gap="sm" align="center" wrap={false} className="min-w-0">
+                <T size="xs" tone="tertiary" tabular>{clockOf(markerTime(m))}</T>
+                <Chip size="xs" tone={m.kind === 'milo-asked' ? 'info' : 'neutral'}>{MARKER_LABELS[m.kind]}</Chip>
+                <T size="sm" truncate title={m.label}>{m.label}</T>
+              </Inline>
+            </Button>
+          ))}
+        </Stack>
+      ) : <T size="sm" tone="secondary">No question was marked in this interview.</T>}
+    </DetailSection>
+  );
+
+  const left = (
+    <Stack gap="md" className="min-w-0 pr-3">
+      <DetailSection variant="heading" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>
+      {technical ? <DetailSection variant="heading" title="Code" hint="What was typed, moment by moment. Choosing a question, a run or a paste moves the recording and the words there." data-testid="interviews-record-code-section">{code}</DetailSection> : moments}
+    </Stack>
   );
 
   return (
@@ -87,35 +177,9 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
         interview.startedAt ? whenLabel(interview.startedAt) : null,
         lengthSeconds ? lengthOf(lengthSeconds) : `${interview.round.minutes} minutes planned`,
       ].filter((x): x is string => Boolean(x))} />}>
-      <Stack gap="lg" className="grid min-w-0 items-start lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]" data-testid="interviews-record-body">
-        <Stack gap="md" className="min-w-0">
-          <DetailSection variant="heading" first title="Recording" data-testid="interviews-record-recording">{player}</DetailSection>
-          <DetailSection variant="heading" title="Moments" hint="When a question was asked. Choosing one moves the transcript there." data-testid="interviews-record-markers">
-            {markers.length ? (
-              <Stack gap="xs">
-                {markers.map((m) => (
-                  <Button key={`${m.kind}:${m.atMs}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
-                    onClick={() => moveTo(markerTime(m, shift))} data-testid="interviews-record-marker">
-                    <Inline gap="sm" align="center" wrap={false} className="min-w-0">
-                      <T size="xs" tone="tertiary" tabular>{clockOf(markerTime(m, shift))}</T>
-                      <Chip size="xs" tone={m.kind === 'milo-asked' ? 'info' : 'neutral'}>{MARKER_LABELS[m.kind]}</Chip>
-                      <T size="sm" truncate title={m.label}>{m.label}</T>
-                    </Inline>
-                  </Button>
-                ))}
-              </Stack>
-            ) : <T size="sm" tone="secondary">No question was marked in this interview.</T>}
-          </DetailSection>
-        </Stack>
-        <Stack gap="sm" className="min-w-0" data-testid="interviews-record-transcript">
-          {transcriptNote ? (
-            <DetailSection variant="heading" title="Transcript"><T size="sm" tone="secondary" wrap data-testid="interviews-record-transcript-line">{transcriptNote}</T></DetailSection>
-          ) : (
-            <TranscriptPanel status="ready" segments={segments} currentTimeMs={currentMs} onSeek={moveTo}
-              emptyMessage="Nothing was transcribed in this interview." data-testid="interviews-record-transcript-panel" />
-          )}
-        </Stack>
-      </Stack>
+      <SplitPane className="h-[calc(100vh-14rem)] min-h-[32rem]" defaultRatio={0.58} minPrimaryPx={420} minSecondaryPx={320} dividerLabel="Resize the recording and the transcript"
+        primary={<Stack gap="none" className="h-full min-w-0 overflow-y-auto" data-testid="interviews-record-body">{left}</Stack>}
+        secondary={<Stack gap="sm" className="h-full min-w-0 pl-3" data-testid="interviews-record-transcript">{words}</Stack>} />
     </DetailPage>
   );
 }

@@ -7,6 +7,9 @@
 //
 //   iv-j6x2d9sb      Mateo's coding round, Hugo leads: a rate limiter, then retries with an idempotency key.
 //   iv-f2b6t5zh   Ingrid's "Working together" round, Wen leads: an incident she led, then a disagreement.
+//   iv-d7q4n9xe   Ingrid's coding round, Hugo leads: the rate limiter again, then the retries.
+//   iv-p2v7j4ye   Ravi's coding round in Swift, Wen leads: a paged list, then a debounced search.
+//   iv-g9r1y8lp   Jonah's leadership round, Wen leads: a teammate who struggled, then a slipped deadline.
 //
 // The words line up with mock/interviews-suggestions.ts (the quotes those suggestions were based on, and the questions the
 // lead asked once they were answered). Seeded names only. Times follow mock/interviews.ts's `at()`: days from today's UTC
@@ -111,12 +114,110 @@ const INGRID_SAID: Said[] = [
   [44, 20, WEN, 'Thanks Ingrid, it was good to talk. Greta will be in touch.'],
 ];
 
+const INGRID_CODE = 'guest:iv-d7q4n9xe';
+const ingridCodeStart = () => at(-9, 14);
+const INGRID_CODE_SAID: Said[] = [
+  [0, 20, HUGO, "Hi Ingrid, I'm Hugo, I lead the payments platform team. This one is mostly coding, so we'll share a pad."],
+  [0, 40, INGRID_CODE, 'Hi Hugo, great to meet you. Ready when you are.'],
+  [1, 35, HUGO, 'The first problem is a rate limiter: bursts of up to N requests, refilling at R tokens a second. Say what you are thinking as you go.'],
+  [2, 10, INGRID_CODE, 'Can I assume a single process and one limiter per key?'],
+  [2, 25, HUGO, 'Yes, to start with.'],
+  [3, 30, INGRID_CODE, "I'll keep the tokens and the time of the last refill, and work the refill out when a request arrives instead of on a timer."],
+  [6, 20, INGRID_CODE, "I'm writing the constructor now: capacity, rate, tokens start full."],
+  [8, 40, INGRID_CODE, 'Then allow: add elapsed time times the rate, cap at capacity, and take one token if there is one.'],
+  [12, 30, INGRID_CODE, "Let me run it with a burst of five and see what comes back."],
+  [13, 5, INGRID_CODE, "That's a mistake of mine: I forgot the key argument, so the call is wrong. Fixing the signature."],
+  [14, 10, HUGO, 'While you fix it, what would you do if two threads called allow at once?'],
+  [14, 50, INGRID_CODE, 'A lock around the refill and the take. I would keep it per key so different keys do not wait on each other.'],
+  [15, 50, INGRID_CODE, 'Running it again.'],
+  [16, 20, HUGO, 'Good, that passes. What is the one test you would add?'],
+  [16, 55, INGRID_CODE, 'A refill test with a fake clock: drain the bucket, move the clock one second, expect exactly R tokens back.'],
+  [26, 40, HUGO, 'Second problem: wrap a flaky payment-provider call with retries, backoff and an idempotency key.'],
+  [27, 40, INGRID_CODE, 'The key is made once per charge and sent on every attempt, so a retry can never double-charge.'],
+  [29, 10, INGRID_CODE, "Backoff starts at a hundred milliseconds, doubles, adds jitter, and I only retry timeouts and server errors."],
+  [32, 30, HUGO, 'How long do you keep the key?'],
+  [33, 5, INGRID_CODE, 'Longer than the longest retry window plus the provider\'s own dedupe window, so a day is a reasonable default.'],
+  [34, 45, INGRID_CODE, 'Running it against a provider that fails twice first.'],
+  [35, 20, HUGO, 'Three calls, one charge. That is what I wanted to see.'],
+  [52, 10, HUGO, 'We are near time. What would you like to ask me?'],
+  [52, 40, INGRID_CODE, 'What does on-call look like for the payments team?'],
+  [55, 10, HUGO, 'Thanks Ingrid. Greta will be in touch about the next step.'],
+];
+
+const RAVI_CODE = 'guest:iv-p2v7j4ye';
+const raviStart = () => at(-2, 15);
+const RAVI_SAID: Said[] = [
+  [0, 20, WEN, "Hi Ravi, I'm Wen. We'll build two small things in Swift on a shared pad. Talk through it as you go."],
+  [0, 40, RAVI_CODE, 'Hi Wen, thanks for having me.'],
+  [1, 25, WEN, 'First: a paginated list that loads the next page as the user nears the end, and keeps the pages it has when the app goes offline.'],
+  [2, 15, RAVI_CODE, "I'd put the paging in a model object and have the list ask it to load more when a row near the end appears."],
+  [3, 5, WEN, 'How do you avoid loading the same page twice?'],
+  [3, 40, RAVI_CODE, 'I keep a set of the pages already requested and check it before asking, so a fast scroll cannot send the same request twice.'],
+  [6, 30, RAVI_CODE, "I'm writing the list view first, with the row's appear handler calling the model."],
+  [9, 20, RAVI_CODE, 'I have the model from an earlier project, so I will paste it in and adapt it rather than retype it.'],
+  [11, 10, WEN, 'Fine. Say what you are changing.'],
+  [12, 0, RAVI_CODE, 'The page number comes from the item count, and I insert it into the set before the request goes out.'],
+  [14, 40, RAVI_CODE, "Let me run it to see the loading call happen once."],
+  [15, 20, RAVI_CODE, 'It stops with the fatal error. The second call asked for page two again, so my guard is too late.'],
+  [16, 10, WEN, 'What does that tell you?'],
+  [16, 45, RAVI_CODE, 'That I need to mark the page before the request starts, not when it returns. I will move that line up.'],
+  [20, 30, WEN, 'And what does the user see while offline?'],
+  [21, 10, RAVI_CODE, 'The pages already loaded, and a small banner saying the next page could not be reached, with a retry.'],
+  [31, 40, WEN, 'Second problem: debounce a search field so a request goes out only after the user stops typing for 300 milliseconds, and cancel the one already in flight.'],
+  [32, 30, RAVI_CODE, 'I would hold the pending work as a task, cancel it on every keystroke and start a new one that sleeps first.'],
+  [36, 15, RAVI_CODE, 'Cancelling the task also cancels the request it started, as long as the request is awaited inside it.'],
+  [38, 50, WEN, 'How would you test the timing without waiting in the test?'],
+  [39, 30, RAVI_CODE, 'Pass in a clock the test controls, so the test moves time forward instead of sleeping.'],
+  [41, 15, RAVI_CODE, 'Running it with two quick changes: the first search is cancelled and only the second returns.'],
+  [42, 0, WEN, 'That is the behaviour I was after.'],
+  [54, 30, WEN, 'We are almost at time. What questions do you have?'],
+  [55, 0, RAVI_CODE, 'How are the iOS and Android teams split on shared features?'],
+  [57, 10, WEN, 'Thanks Ravi. Greta will be in touch.'],
+];
+
+const JONAH = 'guest:iv-g9r1y8lp';
+const jonahStart = () => at(-1, 16);
+const JONAH_SAID: Said[] = [
+  [0, 15, WEN, "Hi Jonah, I'm Wen. This round is about how you lead a team, so we'll mostly talk through real situations."],
+  [0, 35, JONAH, 'Hi Wen, thanks. Looking forward to it.'],
+  [1, 20, WEN, 'Tell me about someone on your team who was struggling. What did you notice first?'],
+  [2, 10, JONAH, 'A senior engineer who had been quick to review started leaving pull requests for days. I noticed it in the review queue before anyone told me.'],
+  [3, 0, JONAH, "I didn't want to guess, so I asked him in our one-to-one how the work was going and listened."],
+  [4, 20, WEN, 'What did he say?'],
+  [4, 50, JONAH, 'That he had been moved onto an on-call rotation without being asked and was tired, and that he felt he could not say so.'],
+  [6, 10, WEN, 'What did you do about it?'],
+  [6, 55, JONAH, 'I took him out of the rotation for a month and asked the team to cover it, and I told the team why in general terms.'],
+  [8, 30, JONAH, 'I also asked myself why he could not raise it, and that was on me. I had never said out loud that it was fine to push back.'],
+  [9, 40, WEN, 'Mm-hm.'],
+  [10, 40, WEN, 'How did the conversation start?'],
+  [11, 15, JONAH, 'I set up a weekly one-to-one with him and we agreed a plan: the rotation change, a lighter month, and a check-in at the end.'],
+  [12, 30, WEN, 'What did you say in that first conversation, and what did you agree to check on afterwards?'],
+  [13, 20, JONAH, 'I said what I had seen, not what I had decided. We agreed to look at his review times and at how he felt about the load, in a month.'],
+  [15, 30, WEN, 'And how did it turn out?'],
+  [16, 10, JONAH, 'His review times came back in three weeks. He took the rotation again after the month, with a fairer schedule.'],
+  [18, 40, WEN, 'Would you do anything differently?'],
+  [19, 20, JONAH, 'I would have noticed sooner. I now look at review times and on-call load every month, before anyone has to tell me.'],
+  [24, 0, WEN, "Second question. Tell me about a deadline you let slip, and what you did when you knew."],
+  [24, 50, JONAH, 'A migration for a large customer. I told the team on Monday we would be a week late and I told the customer the same day.'],
+  [26, 30, JONAH, "I'd rather hand over a late date early than an on-time date I did not believe."],
+  [28, 10, WEN, 'What did the customer say?'],
+  [28, 40, JONAH, 'They were unhappy for a day and then asked for a daily note, which we gave them. We shipped on the new date.'],
+  [31, 30, WEN, 'What did you change in how you plan?'],
+  [32, 10, JONAH, 'I ask the team for a range, not a date, and I put the risky piece first.'],
+  [52, 0, WEN, "We're nearly at time. What would you like to ask me?"],
+  [52, 30, JONAH, 'How does the team decide who takes the on-call rotation, and how often is it reviewed?'],
+  [53, 20, WEN, 'Thanks Jonah. Greta will be in touch.'],
+];
+
 export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
   key: 'interviews.recordings',
   scenarios: {
     default: () => [
       { interviewId: 'iv-j6x2d9sb', startedAt: mateoStart(), durationSeconds: 58 * 60 + 20 },
       { interviewId: 'iv-f2b6t5zh', startedAt: ingridStart(), durationSeconds: 44 * 60 + 50 },
+      { interviewId: 'iv-d7q4n9xe', startedAt: ingridCodeStart(), durationSeconds: 55 * 60 + 40 },
+      { interviewId: 'iv-p2v7j4ye', startedAt: raviStart(), durationSeconds: 57 * 60 + 10 },
+      { interviewId: 'iv-g9r1y8lp', startedAt: jonahStart(), durationSeconds: 53 * 60 + 40 },
     ],
     empty: () => [],
   },
@@ -125,7 +226,8 @@ export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
 export const interviewRecordLinesFixture = defineFixture<RecordLineSeed>({
   key: 'interviews.record-lines',
   scenarios: {
-    default: () => [...lines('iv-j6x2d9sb', mateoStart, MATEO_SAID), ...lines('iv-f2b6t5zh', ingridStart, INGRID_SAID)],
+    default: () => [...lines('iv-j6x2d9sb', mateoStart, MATEO_SAID), ...lines('iv-f2b6t5zh', ingridStart, INGRID_SAID),
+      ...lines('iv-d7q4n9xe', ingridCodeStart, INGRID_CODE_SAID), ...lines('iv-p2v7j4ye', raviStart, RAVI_SAID), ...lines('iv-g9r1y8lp', jonahStart, JONAH_SAID)],
     empty: () => [],
   },
 });

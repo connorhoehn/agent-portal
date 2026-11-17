@@ -134,7 +134,7 @@ describe('U3 and the eraser, through the chosen store', () => {
     expect(latest).toMatchObject({ language: 'python' });
     expect(latest!.text).toContain('def clamp');
     expect(await latestPadSnapshot('iv-k1p5w8ra')).toBeNull();
-    const seeded = interviewPadLogFixture.rows().length;
+    const seeded = interviewPadLogFixture.rows().filter((r) => r.interviewId === 'iv-j6x2d9sb').length;
     expect(await erasePadLog(['iv-j6x2d9sb'])).toBe(seeded);
     expect(await latestPadSnapshot('iv-j6x2d9sb')).toBeNull();
     expect(await erasePadLog([])).toBe(0);

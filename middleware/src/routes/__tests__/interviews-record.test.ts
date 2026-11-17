@@ -41,6 +41,7 @@ import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewsFixture } from '../../mock/interviews.js';
+import { interviewRecordLinesFixture, interviewRecordingsFixture } from '../../mock/interviews-records.js';
 import type { Session } from '../../lib/session.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -89,7 +90,7 @@ const PRIYA = as('u-priya', 'access');
 
 const MATEO = 'iv-j6x2d9sb'; // Hugo leads, scored, recording stand-in and transcript seeded
 const NADIA = 'iv-n5z9f2cq'; // Wen leads, Hugo on the panel; ended in this world
-const JONAH = 'iv-g9r1y8lp'; // Wen leads, ended, nothing seeded
+const JONAH = 'iv-g9r1y8lp'; // Wen leads, ended, recording stand-in and transcript seeded
 
 beforeEach(() => {
   (listUsers as jest.Mock).mockResolvedValue(USERS);
@@ -145,6 +146,40 @@ describe('the parts', () => {
     expect(r.markers).toEqual([{ kind: 'milo-asked', atMs: 18 * 60_000 + 20_000, label: 'What happens to a request that arrives just as the window resets?' }]);
   });
 
+  it('the runs of a technical round ride the record, oldest first, under the same rule, with no guest id and no source', async () => {
+    const r = (await HUGO(record(MATEO))).body.record;
+    expect(r.runs.map((x: { status: string }) => x.status)).toEqual(['failed', 'succeeded']);
+    expect(r.runs[0].startedBy).toEqual({ id: 'candidate', name: 'Mateo', side: 'candidate' });
+    expect(r.runs[1].result).toMatchObject({ exitCode: 0, stdout: expect.stringContaining('ok') });
+    expect(Date.parse(r.runs[0].queuedAt)).toBeLessThan(Date.parse(r.runs[1].queuedAt));
+    expect(JSON.stringify(r)).not.toContain('source');
+    expect(r.questions.map((q: { id: string }) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry']);
+    // Every reader the record allows reads them; every refusal above refuses them too (the runs ride the record's own route).
+    expect((await GRETA(record(MATEO))).body.record.runs).toHaveLength(2);
+    expect((await WEN(record(MATEO))).body.record).toBeUndefined();
+  });
+
+  it('a behavioural round has no runs and no questions to insert; every finished technical round has a failing and a passing run', async () => {
+    const b = (await WEN(record('iv-f2b6t5zh'))).body.record;
+    expect(b.runs).toEqual([]);
+    expect(b.questions).toEqual([]);
+    for (const id of ['iv-d7q4n9xe', 'iv-j6x2d9sb', 'iv-p2v7j4ye']) {
+      const who = id === 'iv-p2v7j4ye' ? WEN : HUGO;
+      const t = (await who(record(id))).body.record;
+      const statuses = t.runs.map((x: { status: string }) => x.status);
+      expect(statuses).toContain('failed');
+      expect(statuses).toContain('succeeded');
+      expect(t.transcript.state).toBe('available');
+      expect(t.recording.state).toBe('available');
+    }
+  });
+
+  it('a finished behavioural round that had no stand-in before now has a full record', async () => {
+    const j = (await WEN(record('iv-g9r1y8lp'))).body.record;
+    expect(j.transcript.lines.length).toBeGreaterThan(10);
+    expect(j.markers.length).toBe(1);
+  });
+
   it('declined: the candidate said no to the recording, then to the transcript; nothing else of the answers shows', async () => {
     const c = interviewConsentsFixture.rows().find((x) => x.interviewId === MATEO)!;
     c.recording = false;
@@ -167,6 +202,9 @@ describe('the parts', () => {
   });
 
   it('none: a finished interview with nothing kept still has its markers', async () => {
+    // The seed gives every finished interview a full record; take Jonah's stand-ins away to see the empty one.
+    interviewRecordingsFixture.rows().splice(0, interviewRecordingsFixture.rows().length, ...interviewRecordingsFixture.rows().filter((x) => x.interviewId !== JONAH));
+    interviewRecordLinesFixture.rows().splice(0, interviewRecordLinesFixture.rows().length, ...interviewRecordLinesFixture.rows().filter((x) => x.interviewId !== JONAH));
     const r = (await WEN(record(JONAH))).body.record;
     expect(r.recording).toEqual({ state: 'none', playbackUrl: null, durationSeconds: null, standIn: false });
     expect(r.transcript).toEqual({ state: 'none', lines: [] });

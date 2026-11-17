@@ -61,7 +61,7 @@ describe('recordingPart', () => {
     expect(recordingPart('iv-j6x2d9sb', yes, new Set(['recording']))).toEqual({ state: 'deleted', playbackUrl: null, durationSeconds: null, standIn: false });
   });
   it('none when the mock world has no stand-in for the interview', () => {
-    expect(recordingPart('iv-g9r1y8lp', yes, new Set()).state).toBe('none');
+    expect(recordingPart('iv-k1p5w8ra', yes, new Set()).state).toBe('none');
   });
   it('outside the mock world: available on a yes (the page asks the media service), none without answers, never a URL', () => {
     expect(recordingPart('iv-x', yes, new Set(), false)).toEqual({ state: 'available', playbackUrl: null, durationSeconds: null, standIn: false });
@@ -126,7 +126,7 @@ describe('recordTranscript', () => {
   });
 
   it('none: no call and no stand-in, or outside the mock world', async () => {
-    expect(await recordTranscript({ id: 'iv-g9r1y8lp', callId: null })).toBeNull();
+    expect(await recordTranscript({ id: 'iv-k1p5w8ra', callId: null })).toBeNull();
     mockConfig.mock.aurora = false;
     expect(await recordTranscript({ id: 'iv-j6x2d9sb', callId: null })).toBeNull();
   });

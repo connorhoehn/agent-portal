@@ -56,7 +56,8 @@ describe('the pad log\'s eraser (row I4.3; decision 17)', () => {
     expect(seeded).toBeGreaterThan(0);
     expect(await eraser.erase(['iv-f2b6t5zh'])).toBe(0);
     expect(await eraser.erase(['iv-j6x2d9sb'])).toBe(seeded);
-    expect(interviewPadLogFixture.rows()).toEqual([]);
+    expect(interviewPadLogFixture.rows().some((r) => r.interviewId === 'iv-j6x2d9sb')).toBe(false);
+    expect(interviewPadLogFixture.rows().length).toBeGreaterThan(0);
     fixtureRegistry.resetAll('default');
   });
 });

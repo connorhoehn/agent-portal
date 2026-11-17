@@ -214,7 +214,7 @@ describe('the panel side', () => {
     const res = await HUGO.post(`${API}/${IV}/runs`, runBody());
     expect(res.status).toBe(402);
     expect(res.body).toEqual({ error: expect.stringMatching(/no spending cap yet, so nothing that costs money can start/) });
-    expect(interviewRunsFixture.rows()).toEqual([]);
+    expect(interviewRunsFixture.rows()).toHaveLength(interviewRunsFixture.rows('default').length);
   });
 
   it('everyone else gets the one not-found, whatever the reason', async () => {
@@ -235,7 +235,7 @@ describe('the panel side', () => {
     state(IV, 'ended');
     expect(await nf(HUGO, IV)).toEqual([404, 404, 404, 404, 404]);
     expect((await staff('u-priya').get(`${API}/${IV}/runs`)).status).toBe(403);
-    expect(interviewRunsFixture.rows()).toEqual([]);
+    expect(interviewRunsFixture.rows()).toHaveLength(interviewRunsFixture.rows('default').length);
   });
 
   it('/interviews/:id/runs is the runs list, not the interview read', async () => {
