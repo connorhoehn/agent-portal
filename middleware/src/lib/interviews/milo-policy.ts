@@ -21,6 +21,7 @@
 //   rings, listsMeeting   the panel side only, never a guest (a guest has no bell and no Meetings list).
 //   relaysLiveSpeech      never (decision 9: nothing the live model says reaches an interview, by voice or in chat).
 //   answerFromHeldText    absent until row I3.8.
+//   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
 import { visibleWorld } from './scope.js';
@@ -144,6 +145,9 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   rings: (_call, userId) => !isGuestId(userId),
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,
+  // Decision 17: an interview's transcript and minutes are media, kept 90 days by default or until a deletion request, and removed
+  // by the interviews retention (retention/erasers.ts `transcript-and-minutes`), never by the meeting assistant's 30-day sweep.
+  keepsOwnRetention: true,
 });
 
 let unregister: (() => void) | null = null;

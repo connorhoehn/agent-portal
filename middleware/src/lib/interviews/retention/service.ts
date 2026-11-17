@@ -86,8 +86,9 @@ function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewId
   const registered = (cls: 'media' | 'record'): Step[] => erasersOf(cls).map((e) => ({ kind: e.kind, run: () => e.erase(ids) }));
   const resume: Step = { kind: 'resume', run: async () => ((await d.removeResume(row.candidateId)) ? 1 : 0) };
   const contact: Step = { kind: 'contact-details', run: () => d.records().redactCandidate(row.candidateId) };
+  const reasons: Step = { kind: 'stage-reasons', run: () => d.records().redactStageReasons(row.candidateId) };
   if (row.reason === 'media-period') return registered('media');
-  if (row.reason === 'record-period') return [...registered('record'), ...(withCandidate ? [resume, contact] : [])];
+  if (row.reason === 'record-period') return [...registered('record'), ...(withCandidate ? [resume, contact, reasons] : [])];
   const invite: Step = {
     kind: 'invite',
     run: async () => {
@@ -96,7 +97,7 @@ function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewId
       return n;
     },
   };
-  return [...registered('media'), invite, resume, contact];
+  return [...registered('media'), invite, resume, contact, reasons];
 }
 
 /** A row's steps that are still to do: everything the first time, then only what is left to retry. */

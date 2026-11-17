@@ -5,11 +5,15 @@
 // is still `listening` or `paused` is not swept, unless nothing has served it for longer than the hard maximum plus a margin (it is then
 // ended first, as of its last heartbeat). No audio exists to delete. The same sweep expires proposals whose 72 hours after the
 // call are up (meeting consent); that only ends them, it never runs one.
+// A call whose lobby family's policy keeps its own retention (policy.ts `keepsOwnRetention`: an interview call) is left out of the
+// age rules entirely, its lines, minutes, turns, actions, record and chat; its own module removes them. The abandoned-call ending
+// and the proposals' expiry apply to it as to every call.
 import { config } from '../../config.js';
 import type { AssistantStore } from './store.js';
 import { assistantLimits } from './limits.js';
 import { sessionOf } from './types.js';
 import { expireDueProposals } from './proposals.js';
+import { familiesKeepingOwnRetention } from './policy.js';
 
 const DAY_MS = 86_400_000;
 /** How many expired calls one sweep removes; the next hourly sweep takes the rest. */
@@ -45,10 +49,11 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
     if (heartbeat >= abandonedBefore) continue;
     try { await endAbandoned(record.callId, Math.max(heartbeat, record.invitedAt)); } catch (e) { console.warn('[meeting-assistant] retention could not end an abandoned call', (e as Error).message); }
   }
-  const lines = await store.sweepLines(cutoff);
-  await store.sweepMinutes(cutoff);
+  const keep = familiesKeepingOwnRetention();
+  const lines = await store.sweepLines(cutoff, keep);
+  await store.sweepMinutes(cutoff, keep);
   const eraseChat = opts.eraseChat ?? defaultEraseChat;
-  for (const call of await store.expiredCalls(cutoff, SWEEP_CALLS_PER_RUN)) {
+  for (const call of await store.expiredCalls(cutoff, SWEEP_CALLS_PER_RUN, keep)) {
     try {
       // The stored words (lines, requests, tool arguments, result text) go first and for certain; only then the chat step, which may be down.
       // A call whose chat step fails keeps its record, emptied, and the next sweep tries the chat again.

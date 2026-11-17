@@ -54,7 +54,7 @@ function clockDeps(world: InterviewsWorld, at: { now: number }, extra: Partial<R
   return {
     now: () => at.now, load: async () => world, enabled: () => true, periods: () => ({ ...DEFAULT_PERIODS }), newId: () => `del-${(n += 1)}`,
     removeResume: async (c) => { removed.push(c); return true; },
-    records: () => ({ eraseConsents: async () => 0, eraseScorecards: async () => 0, redactCandidate: async (c) => { redacted.push(c); return 1; } }),
+    records: () => ({ eraseConsents: async () => 0, eraseScorecards: async () => 0, redactCandidate: async (c) => { redacted.push(c); return 1; }, redactStageReasons: async () => 0 }),
     removed, redacted, ...extra,
   };
 }
@@ -207,6 +207,7 @@ describe('a candidate\'s deletion request', () => {
     expect(row.interviewIds.sort()).toEqual(['iv-mateo-coding', 'iv-mateo-design']);
     expect(row.removed).toEqual([
       { kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'invite', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 },
+      { kind: 'stage-reasons', count: 1 },
     ]);
     expect(row.doneAt).toBe(new Date(NOW).toISOString());
     expect(Date.parse(row.dueBy) - NOW).toBe(30 * DAY_MS);
@@ -217,7 +218,10 @@ describe('a candidate\'s deletion request', () => {
       ['http://platform.test/internal/recordings/erase', 'interviews:interview:iv-mateo-design', true],
     ]);
     expect(await assistant.lines('call-mateo', 0, 10)).toEqual([]);
-    expect((await assistant.getMinutes('call-mateo'))?.deleted).toBeTruthy();
+    // Everything the meeting assistant's own age sweep would remove: the minutes (and their tombstone), turns, actions and the record.
+    expect(await assistant.getMinutes('call-mateo')).toBeNull();
+    expect(await assistant.get('call-mateo')).toBeNull();
+    expect(await assistant.listTurns('call-mateo')).toEqual([]);
     expect(await resumeRows().get('cand-mateo')).toBeNull();
     expect(await resumeBytes().get(resume.storageKey)).toBeNull();
     expect((await inviteStore().latestInvite('iv-mateo-design'))?.revokedBy).toBe('u-greta');

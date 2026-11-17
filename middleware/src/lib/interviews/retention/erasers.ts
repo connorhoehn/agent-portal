@@ -9,8 +9,11 @@
 //                                   without the secret, a refusal or a timeout is a failure the next sweep retries.
 //   transcript-and-minutes  media   every call Milo kept for the interview's lobby, through the meeting assistant's own
 //                                   `eraseCall` (the stored lines, the minutes become a tombstone, Milo's chat lines are
-//                                   replaced), as the inviter's delete does. One count per call that still held words. A
-//                                   call Milo is listening to cannot be erased: EraserBusy, retried.
+//                                   replaced), as the inviter's delete does, and then `purgeCall`: the tombstone, the turns,
+//                                   the actions, the proposals and the record go too, which is everything the meeting
+//                                   assistant's own age sweep removes for a call (its sweep leaves interview calls to this
+//                                   one, policy.ts `keepsOwnRetention`). One count per call that still held words. A call
+//                                   Milo is listening to cannot be erased: EraserBusy, retried.
 //   consents, scorecards    record  records.ts's own statements.
 // The suggestion log's eraser is the coach's (`eraseSuggestions`), registered by the integrator.
 
@@ -94,6 +97,8 @@ export function callWordsEraser(deps: Partial<CallWordsDeps> = {}): Eraser {
           const minutes = await store.getMinutes(call.callId);
           const lines = await d.eraseCall(store, call.callId, 'retention', d.now());
           if (lines === null) { busy = true; continue; }
+          // What the age sweep would also remove: the record and everything left under it (false only if Milo came back meanwhile).
+          if (!(await store.purgeCall(call.callId))) { busy = true; continue; }
           if (lines > 0 || (minutes !== null && !minutes.deleted)) erased += 1;
         }
       }

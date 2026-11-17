@@ -127,13 +127,16 @@ export interface AssistantStore {
   dueTurns(nowMs: number, limit: number): Promise<AssistantTurn[]>;
   /** Move a turn; null when it is unknown or not in one of `change.from` (two results settle once). */
   moveTurn(callId: string, turnId: string, change: TurnChange): Promise<AssistantTurn | null>;
-  /** Delete lines at or before `cutoffMs` (epoch), except the lines of a call that is still `listening` or `paused`. Returns how many went. */
-  sweepLines(cutoffMs: number): Promise<number>;
+  /**
+   * Delete lines at or before `cutoffMs` (epoch), except the lines of a call that is still `listening` or `paused`, and of a call whose
+   * lobby is in one of `keep` (lobby families whose policy keeps its own retention, policy.ts). Returns how many went.
+   */
+  sweepLines(cutoffMs: number, keep?: readonly string[]): Promise<number>;
   /**
    * Calls whose age is at or before `cutoffMs` (`leftAt` when set, else `invitedAt`) and that are not `listening` or `paused`, oldest
-   * first, at most `limit`: what the retention sweep removes whole (audit M3).
+   * first, at most `limit`: what the retention sweep removes whole (audit M3). A call whose lobby is in one of `keep` is never one.
    */
-  expiredCalls(cutoffMs: number, limit: number): Promise<AssistantRecord[]>;
+  expiredCalls(cutoffMs: number, limit: number, keep?: readonly string[]): Promise<AssistantRecord[]>;
   /** Delete everything stored for the call: lines, minutes or tombstone, turns, actions and the record. Refuses (false) a call that is `listening` or `paused`, or unknown. */
   purgeCall(callId: string): Promise<boolean>;
   /** Records in any of `states`, oldest invite first, at most `limit` (the boot reconcile, audit M5). */
@@ -179,8 +182,8 @@ export interface AssistantStore {
   claimMinutesNotice(callId: string, at: number): Promise<boolean>;
   /** Record the work item made for action item `index` of live minutes, only when that item has none yet. True when recorded. */
   setActionItemWorkItem(callId: string, index: number, workItemId: string): Promise<boolean>;
-  /** Delete minutes and tombstones created at or before `cutoffMs`. Returns how many went. */
-  sweepMinutes(cutoffMs: number): Promise<number>;
+  /** Delete minutes and tombstones created at or before `cutoffMs`, except those of a lobby in one of `keep`. Returns how many went. */
+  sweepMinutes(cutoffMs: number, keep?: readonly string[]): Promise<number>;
   /** Record a proposal; an existing (call, id) is returned as it is with `created: false`. */
   createProposal(proposal: Proposal): Promise<{ proposal: Proposal; created: boolean }>;
   getProposal(callId: string, id: string): Promise<Proposal | null>;
@@ -202,6 +205,10 @@ export interface MinutesFilter { tenant: string; userId: string; initiativeId?: 
 
 const copy = <T>(v: T): T => structuredClone(v);
 const addTo = (list: string[], id: string): void => { if (!list.includes(id)) list.push(id); };
+
+/** Is `lobby` in one of these lobby families (`<tenant>:<family>`, the lobby itself or anything under it)? */
+export const inFamilies = (lobby: string | null | undefined, families: readonly string[]): boolean =>
+  !!lobby && families.some((f) => lobby === f || lobby.startsWith(`${f}:`));
 
 export class MemoryAssistantStore implements AssistantStore {
   private readonly records = new Map<string, AssistantRecord>();
@@ -360,11 +367,13 @@ export class MemoryAssistantStore implements AssistantStore {
     return copy(t);
   }
 
-  async sweepLines(cutoffMs: number) {
+  async sweepLines(cutoffMs: number, families: readonly string[] = []) {
     let gone = 0;
     for (const [callId, rows] of this.transcript) {
-      const state = this.records.get(callId)?.state;
+      const record = this.records.get(callId);
+      const state = record?.state;
       if (state === 'listening' || state === 'paused') continue;
+      if (record && inFamilies(record.lobby, families)) continue;
       const keep = rows.filter((l) => l.at > cutoffMs);
       gone += rows.length - keep.length;
       if (keep.length) this.transcript.set(callId, keep); else this.transcript.delete(callId);
@@ -372,8 +381,8 @@ export class MemoryAssistantStore implements AssistantStore {
     return gone;
   }
 
-  async expiredCalls(cutoffMs: number, limit: number) {
-    return [...this.records.values()].filter((r) => r.state !== 'listening' && r.state !== 'paused' && (r.leftAt ?? r.invitedAt) <= cutoffMs)
+  async expiredCalls(cutoffMs: number, limit: number, keep: readonly string[] = []) {
+    return [...this.records.values()].filter((r) => r.state !== 'listening' && r.state !== 'paused' && (r.leftAt ?? r.invitedAt) <= cutoffMs && !inFamilies(r.lobby, keep))
       .sort((a, b) => (a.leftAt ?? a.invitedAt) - (b.leftAt ?? b.invitedAt) || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
   }
 
@@ -494,9 +503,9 @@ export class MemoryAssistantStore implements AssistantStore {
     return true;
   }
 
-  async sweepMinutes(cutoffMs: number) {
+  async sweepMinutes(cutoffMs: number, keep: readonly string[] = []) {
     let gone = 0;
-    for (const [id, m] of this.minutes) if (m.createdAt <= cutoffMs) { this.minutes.delete(id); gone += 1; }
+    for (const [id, m] of this.minutes) if (m.createdAt <= cutoffMs && !inFamilies(m.lobby, keep)) { this.minutes.delete(id); gone += 1; }
     return gone;
   }
 

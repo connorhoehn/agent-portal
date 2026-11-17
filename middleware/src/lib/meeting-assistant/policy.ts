@@ -92,6 +92,12 @@ export interface MeetingAssistantPolicy {
    * the policy's fixed requests (it then goes to the model as usual). Absent: there are none.
    */
   answerFromHeldText?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
+  /**
+   * The family keeps its calls' stored words for its own period and removes them itself (the interviews retention: media 90 days,
+   * or a deletion request). True: the meeting assistant's age sweep leaves the call's lines, minutes, turns, actions, record and
+   * chat alone; the abandoned-call ending and the proposals' expiry still apply. Absent or false: the sweep removes them (Work).
+   */
+  readonly keepsOwnRetention?: boolean;
 }
 
 /** Today's behaviour, for every lobby Milo can be invited into. */
@@ -115,6 +121,7 @@ export const DEFAULT_POLICY: MeetingAssistantPolicy = Object.freeze<MeetingAssis
   rings: () => true,
   listsMeeting: () => true,
   relaysLiveSpeech: () => true,
+  keepsOwnRetention: false,
 });
 
 const FAMILY = /^([a-z][a-z0-9-]{0,31}):([a-z][a-z0-9-]{0,31})(?::|$)/;
@@ -143,6 +150,11 @@ export function policyFamilies(): string[] { return [...policies.keys()].sort();
 
 /** Is any family's policy registered? While none is, every call's policy is the default and nothing needs to be looked up. */
 export function hasFamilyPolicies(): boolean { return policies.size > 0; }
+
+/** The families whose policy keeps its own retention: the meeting assistant's age sweep leaves their calls alone (retention.ts). */
+export function familiesKeepingOwnRetention(): string[] {
+  return [...policies].filter(([, policy]) => policy.keepsOwnRetention === true).map(([family]) => family).sort();
+}
 
 /** The policy of a lobby: its family's, or the default. */
 export function policyForLobby(lobby: string | null | undefined): MeetingAssistantPolicy {

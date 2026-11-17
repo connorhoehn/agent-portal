@@ -24,7 +24,7 @@ import type { RetentionPeriods } from './periods.js';
 
 export type RetentionClass = 'media' | 'record';
 /** What a candidate's deletion log row may name. Never content, never a name, an address or a file name. */
-export type RemovedKind = 'recording' | 'transcript-and-minutes' | 'code-log' | 'scorecards' | 'consents' | 'suggestions' | 'resume' | 'contact-details' | 'invite' | (string & {});
+export type RemovedKind = 'recording' | 'transcript-and-minutes' | 'code-log' | 'scorecards' | 'consents' | 'suggestions' | 'resume' | 'contact-details' | 'stage-reasons' | 'invite' | (string & {});
 
 export const OPEN_STATES: readonly InterviewState[] = ['assigned', 'accepted', 'ready', 'live'];
 const ENDED_STATES: readonly InterviewState[] = ['ended', 'scored', 'reviewed'];
@@ -95,3 +95,5 @@ export const REDACTED_NAME = 'Name removed';
 export interface ContactFields { name: string; email: string; headline: string; location: string; notes: string }
 export const REDACTED_CONTACT: Readonly<ContactFields> = Object.freeze({ name: REDACTED_NAME, email: '', headline: '', location: '', notes: '' });
 export const isRedacted = (c: Pick<ContactFields, 'name' | 'email'>): boolean => c.name === REDACTED_NAME && c.email === '';
+/** What every reason written on a deleted candidate's stage moves becomes (records.ts `redactStageReasons`). */
+export const REDACTED_REASON = 'Reason removed.';

@@ -20,6 +20,16 @@ const LINE_COLUMNS = 'call_id, seq, user_id, participant_id, speaker_name, text,
 const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, args_digest, status, created_at, decided_by, decided_at, result_text';
 const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, claim_id, claimed_at, proposal_id';
 const iso = (ms: number): string => new Date(ms).toISOString();
+/**
+ * `(<lobby> in one of these families)`: the lobby is the family or sits under it (`<family>:…`), with its parameters; empty when
+ * there are none. A family is `[a-z0-9-]` segments and a colon (policy.ts familyOfLobby), so it holds no LIKE wildcard.
+ */
+function keptLobbies(families: readonly string[]): { sql: string; params: SqlParameter[] } {
+  if (!families.length) return { sql: '', params: [] };
+  const params: SqlParameter[] = [];
+  const terms = families.map((f, i) => { params.push(s(`keep${i}`, f), s(`keepUnder${i}`, `${f}:%`)); return `COALESCE(lobby, '') = :keep${i} OR COALESCE(lobby, '') LIKE :keepUnder${i}`; });
+  return { sql: `(${terms.join(' OR ')})`, params };
+}
 
 /** The record's period (types.ts `periodOf`) in SQL: the earlier periods kept in the session, plus one. */
 const PERIOD_SQL = `(CASE WHEN jsonb_typeof(session->'periods') = 'array' THEN jsonb_array_length(session->'periods') ELSE 0 END + 1)`;
@@ -367,21 +377,23 @@ export class SqlAssistantStore implements AssistantStore {
     return rows[0] ? turnFromRow(rows[0]) : null;
   }
 
-  async sweepLines(cutoffMs: number) {
+  async sweepLines(cutoffMs: number, keep: readonly string[] = []) {
+    const k = keptLobbies(keep);
     const rows = await this.exec(
       `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE at <= :cutoff::timestamptz
-                       AND call_id NOT IN (SELECT call_id FROM meeting_assistants WHERE state IN ('listening', 'paused')) RETURNING 1) SELECT count(*) AS removed FROM gone`,
-      [s('cutoff', iso(cutoffMs))],
+                       AND call_id NOT IN (SELECT call_id FROM meeting_assistants WHERE state IN ('listening', 'paused')${k.sql ? ` OR ${k.sql}` : ''}) RETURNING 1) SELECT count(*) AS removed FROM gone`,
+      [s('cutoff', iso(cutoffMs)), ...k.params],
     );
     return Number(rows[0]?.['removed'] ?? 0);
   }
 
-  async expiredCalls(cutoffMs: number, limit: number) {
+  async expiredCalls(cutoffMs: number, limit: number, keep: readonly string[] = []) {
+    const k = keptLobbies(keep);
     const rows = await this.exec(
       `SELECT ${COLUMNS} FROM meeting_assistants
-       WHERE state NOT IN ('listening', 'paused') AND COALESCE(left_at, invited_at) <= :cutoff::timestamptz
+       WHERE state NOT IN ('listening', 'paused') AND COALESCE(left_at, invited_at) <= :cutoff::timestamptz${k.sql ? ` AND NOT ${k.sql}` : ''}
        ORDER BY COALESCE(left_at, invited_at) ASC, call_id ASC LIMIT :limit`,
-      [s('cutoff', iso(cutoffMs)), n('limit', limit)],
+      [s('cutoff', iso(cutoffMs)), n('limit', limit), ...k.params],
     );
     return rows.map(recordFromRow);
   }
@@ -570,10 +582,11 @@ export class SqlAssistantStore implements AssistantStore {
     return rows.length > 0;
   }
 
-  async sweepMinutes(cutoffMs: number) {
+  async sweepMinutes(cutoffMs: number, keep: readonly string[] = []) {
+    const k = keptLobbies(keep);
     const rows = await this.exec(
-      `WITH gone AS (DELETE FROM meeting_minutes WHERE created_at <= :cutoff::timestamptz RETURNING 1) SELECT count(*) AS removed FROM gone`,
-      [s('cutoff', iso(cutoffMs))],
+      `WITH gone AS (DELETE FROM meeting_minutes WHERE created_at <= :cutoff::timestamptz${k.sql ? ` AND NOT ${k.sql}` : ''} RETURNING 1) SELECT count(*) AS removed FROM gone`,
+      [s('cutoff', iso(cutoffMs)), ...k.params],
     );
     return Number(rows[0]?.['removed'] ?? 0);
   }
