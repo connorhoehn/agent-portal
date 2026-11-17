@@ -8,12 +8,15 @@
 // What is typed before Submit is kept in this browser only, per interview, and cleared on submit
 // (lib/interviewsScorecard.ts loadDraft / saveDraft / clearDraft).
 //
-// RECAP STEP (row I5.2, round 5): Milo's recap is opened between the ratings and the recommendation, in the form
-// below at the line marked RECAP STEP; nothing is drawn for it this round.
+// Milo's recap (row I5.2, decision 14) sits between the ratings and the recommendation: "Continue to the recap" asks once,
+// in the prompt deck, that the ratings will be recorded as they stand, then shows each competency's own rating beside
+// Milo's evidence (each statement with the transcript line it quotes); "Back to my ratings" may change them, which the
+// scorecard then records as changed after the recap (the server's fact). The recruiter and the hiring manager read the
+// recap read-only under the scorecards. Milo's evidence carries no rating, tone or colour.
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, Chip, DetailPage, DetailSection, EmptyState, FormField, Inline, MetaLine, RadioGroup, Stack, T, Textarea,
+  Button, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea,
 } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useEffect, useMemo, useState } from 'react';
@@ -25,8 +28,9 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
-  RECOMMENDATION_CHOICES, bodyOf, clearDraft, draftFrom, emptyDraft, loadDraft, missingFrom, othersLine, saveDraft, scaleOf, submitScorecard,
-  type Draft, type Rating, type ScorecardPageView, type ScorecardVersion,
+  RECOMMENDATION_CHOICES, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
+  othersLine, previousStep, recapStateLine, recapUrl, saveDraft, scaleOf, submitScorecard,
+  type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
@@ -54,7 +58,10 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const [correcting, setCorrecting] = useState(false);
   const editing = view.canSubmit && (mine === null || correcting);
   const [draft, setDraft] = useState<Draft>(() => loadDraft(interview.id, basedOn) ?? (mine ? draftFrom(mine) : emptyDraft()));
-  const [asking, setAsking] = useState<'submit' | 'reason' | null>(null);
+  const [asking, setAsking] = useState<'submit' | 'reason' | 'recap' | null>(null);
+  // What the open answered; after a reload the recap step reads it again (GET), since the open is already stored.
+  const [recap, setRecap] = useState<RecapBody | null>(null);
+  const goTo = (step: ScorecardStep) => setDraft((d) => ({ ...d, step }));
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => { if (editing) saveDraft(interview.id, basedOn, draft); }, [editing, interview.id, basedOn, draft]);
   // A draft saved while correcting reopens the correction.
@@ -78,6 +85,24 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           setCorrecting(true);
           setAsking(null);
           return { receipt: 'Correcting' };
+        },
+      }];
+    }
+    if (asking === 'recap') {
+      return [{
+        id: `${scope}:recap:${basedOn}`, scope, eyebrow: 'Milo\'s recap', title: `${interview.candidate.name}, ${interview.round.name}`, kind: 'choice',
+        question: basedOn > 0
+          ? 'If this is the first time you open Milo\'s recap for this round, your ratings will be recorded as they stand before it is shown. A rating you change afterwards shows on the scorecard as changed after the recap.'
+          : 'Your ratings will be recorded as they stand before Milo\'s recap is shown. You can still change them afterwards; the scorecard will show that they changed after the recap.',
+        options: [{ id: 'open', label: 'Continue to the recap', emphasis: 'primary' }, { id: 'keep', label: 'Keep rating' }],
+        onAnswer: async (a) => {
+          if (!('optionId' in a) || a.optionId !== 'open') { setAsking(null); return { receipt: 'Still rating' }; }
+          const out = await openRecap(interview.id, openBodyOf(draft, competencies));
+          setAsking(null);
+          if (!out.ok) { setProblem(out.error); return { error: out.error }; }
+          setRecap(out.recap);
+          setDraft((d) => ({ ...d, recapOpened: true, step: 'recap' }));
+          return { receipt: 'Ratings recorded' };
         },
       }];
     }
@@ -111,9 +136,16 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const setRating = (cid: string, v: number | null) => setDraft((d) => ({ ...d, ratings: { ...d.ratings, [cid]: (v as Rating | null) } }));
   const setNote = (cid: string, v: string) => setDraft((d) => ({ ...d, notes: { ...d.notes, [cid]: v } }));
 
-  const form = (
+  const rated = allRated(draft, competencies);
+  const deck = <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />;
+  const correctingLine = draft.reason && basedOn > 0
+    ? <T size="sm" tone="secondary" data-testid="interviews-scorecard-reason">{`Correcting version ${basedOn}. Your reason: ${draft.reason}`}</T> : null;
+  const problemLine = problem ? <T size="sm" tone="danger" role="alert" data-testid="interviews-scorecard-problem">{problem}</T> : null;
+
+  const rateStep = (
     <Stack gap="md" data-testid="interviews-scorecard-form">
-      {draft.reason && basedOn > 0 && <T size="sm" tone="secondary" data-testid="interviews-scorecard-reason">{`Correcting version ${basedOn}. Your reason: ${draft.reason}`}</T>}
+      {correctingLine}
+      <T size="sm" tone="secondary">Rate each competency from your own judgement first. Milo&apos;s recap comes next, then your recommendation.</T>
       {competencies.map((c) => (
         <DetailSection key={c.id} variant="heading" title={c.name} hint={c.lookFor}>
           <Stack gap="sm">
@@ -128,7 +160,37 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           </Stack>
         </DetailSection>
       ))}
-      {/* RECAP STEP (row I5.2, round 5): Milo's recap opens here, between the ratings and the recommendation. */}
+      <Stack gap="sm">
+        {!rated && <T size="sm" tone="secondary" data-testid="interviews-scorecard-missing">{missing[0]}</T>}
+        {problemLine}
+        <T size="xs" tone="tertiary">What you type here is kept in this browser only until you submit.</T>
+        {deck}
+        <Inline gap="sm">
+          <Button size="sm" variant="primary" disabled={!rated || asking !== null} data-testid="interviews-scorecard-to-recap"
+            onClick={() => { setProblem(null); if (draft.recapOpened) goTo('recap'); else setAsking('recap'); }}>Continue to the recap</Button>
+          {correcting && (
+            <Button size="sm" variant="ghost" data-testid="interviews-scorecard-cancel-correction"
+              onClick={() => { clearDraft(interview.id, basedOn); setDraft(draftFrom(mine!)); setCorrecting(false); setAsking(null); }}>Stop correcting</Button>
+          )}
+        </Inline>
+      </Stack>
+    </Stack>
+  );
+
+  const recapStep = (
+    <Stack gap="md" data-testid="interviews-scorecard-recap-step">
+      {correctingLine}
+      <RecapView interviewId={interview.id} competencies={competencies} initial={recap} ratings={draft.ratings} />
+      <Inline gap="sm">
+        <Button size="sm" variant="secondary" data-testid="interviews-scorecard-back-to-ratings" onClick={() => goTo(previousStep('recap'))}>Back to my ratings</Button>
+        <Button size="sm" variant="primary" data-testid="interviews-scorecard-to-decide" onClick={() => goTo(nextStep('recap'))}>Continue</Button>
+      </Inline>
+    </Stack>
+  );
+
+  const decideStep = (
+    <Stack gap="md" data-testid="interviews-scorecard-decide-step">
+      {correctingLine}
       <DetailSection variant="heading" title="Your recommendation" hint="Your own judgement of this round.">
         <Stack gap="sm">
           <RadioGroup<Recommendation | ''> name={`recommendation-${interview.id}`} orientation="horizontal" value={draft.recommendation ?? ''}
@@ -143,12 +205,13 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       </DetailSection>
       <Stack gap="sm">
         {missing.length > 0 && <T size="sm" tone="secondary" data-testid="interviews-scorecard-missing">{missing.join(' ')}</T>}
-        {problem && <T size="sm" tone="danger" role="alert" data-testid="interviews-scorecard-problem">{problem}</T>}
+        {problemLine}
         <T size="xs" tone="tertiary">What you type here is kept in this browser only until you submit.</T>
-        <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />
+        {deck}
         <Inline gap="sm">
           <Button size="sm" variant="primary" disabled={missing.length > 0 || asking !== null} data-testid="interviews-scorecard-submit"
             onClick={() => { setProblem(null); setAsking('submit'); }}>{basedOn > 0 ? 'Submit the correction' : 'Submit'}</Button>
+          <Button size="sm" variant="ghost" data-testid="interviews-scorecard-back-to-recap" onClick={() => goTo(previousStep('decide'))}>Back to the recap</Button>
           {correcting && (
             <Button size="sm" variant="ghost" data-testid="interviews-scorecard-cancel-correction"
               onClick={() => { clearDraft(interview.id, basedOn); setDraft(draftFrom(mine!)); setCorrecting(false); setAsking(null); }}>Stop correcting</Button>
@@ -157,6 +220,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       </Stack>
     </Stack>
   );
+
+  const form = draft.step === 'recap' ? recapStep : draft.step === 'decide' ? decideStep : rateStep;
 
   const mineTab = editing ? form : mine ? (
     <Stack gap="md">
@@ -177,6 +242,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           {s.earlier.length > 0 && <Versions versions={s.earlier} competencies={competencies} />}
         </Stack>
       ))}
+      {!seated && interview.endedAt !== null && <RecapView interviewId={interview.id} competencies={competencies} initial={null} ratings={null} />}
     </Stack>
   );
 
@@ -235,3 +301,58 @@ function Versions({ versions, competencies }: { versions: readonly ScorecardVers
   );
 }
 
+
+/**
+ * Milo's recap, per competency in the kit's order: the viewer's own rating (in the scorecard's recap step) beside Milo's
+ * evidence, each statement with the transcript line it quotes, or "Nothing was said about this". Read-only for the
+ * recruiter and the hiring manager (no ratings). No rating, tone or colour is ever attached to Milo's evidence.
+ */
+function RecapView({ interviewId, competencies, initial, ratings }: {
+  interviewId: string; competencies: readonly KitCompetency[]; initial: RecapBody | null; ratings: Draft['ratings'] | null;
+}) {
+  const { data, error, failure } = useFetch<{ recap: RecapBody }>(initial ? null : recapUrl(interviewId));
+  const recap = initial ?? data?.recap ?? null;
+  const readers = ratings === null;
+  // A reader who may not read it (the round has not ended) gets nothing drawn.
+  if (failure?.status === 404) return null;
+  const body = (() => {
+    if (error && !recap) return <T size="sm" tone="secondary">Milo&apos;s recap could not be loaded. Reload the page to try again.</T>;
+    if (!recap) return <T size="sm" tone="tertiary">Loading Milo&apos;s recap…</T>;
+    const line = recapStateLine(recap, readers);
+    if (line) return <T size="sm" tone="secondary" data-testid="interviews-recap-state">{line}</T>;
+    return (
+      <Stack gap="md">
+        {competencies.map((c) => {
+          const evidence = evidenceFor(recap, c.id);
+          const mine = ratings?.[c.id] ?? null;
+          return (
+            <DetailSection key={c.id} variant="heading" title={c.name} data-testid="interviews-recap-competency">
+              <KeyValue items={[
+                ...(readers ? [] : [{ label: 'Your rating', value: mine ? `${mine} of 4: ${c.anchors[mine]}` : 'Not rated', muted: !mine }]),
+                {
+                  label: 'Milo\'s evidence',
+                  muted: evidence.length === 0,
+                  value: evidence.length === 0 ? 'Nothing was said about this' : (
+                    <Stack gap="xs">
+                      {evidence.map((e) => (
+                        <Disclosure key={`${e.source.seq}:${e.text}`} variant="plain" summary={<T size="sm">{e.text}</T>} data-testid="interviews-recap-claim">
+                          <T size="sm" tone="secondary">{`Line ${e.source.seq} of the transcript: “${e.source.quote}”`}</T>
+                        </Disclosure>
+                      ))}
+                    </Stack>
+                  ),
+                },
+              ]} />
+            </DetailSection>
+          );
+        })}
+      </Stack>
+    );
+  })();
+  return (
+    <DetailSection variant="heading" title="Milo's recap" data-testid="interviews-recap"
+      hint="What the candidate said about each competency, each with the line of the transcript it comes from. Milo does not rate or recommend.">
+      {body}
+    </DetailSection>
+  );
+}

@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SCORECARD_STEPS, bodyOf, clearDraft, draftFrom, emptyDraft, hasScorecard, loadDraft, missingFrom, othersLine, saveDraft, scaleOf, scorecardPath,
+  SCORECARD_STEPS, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
+  previousStep, recapStateLine, recapUrl, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
 
@@ -41,7 +42,7 @@ test('the submit carries ratings in the kit\'s order, trimmed notes, never an au
 
 test('a correction starts from the latest version as submitted', () => {
   const card = { ratings: [{ competencyId: 'ownership', rating: 3, note: 'n', competency: 'Ownership' }], recommendation: 'yes', summary: 's' } as unknown as ScorecardView;
-  assert.deepEqual(draftFrom(card), { ratings: { ownership: 3 }, notes: { ownership: 'n' }, recommendation: 'yes', summary: 's', reason: '' });
+  assert.deepEqual(draftFrom(card), { ratings: { ownership: 3 }, notes: { ownership: 'n' }, recommendation: 'yes', summary: 's', reason: '', step: 'rate', recapOpened: false });
 });
 
 test('what the viewer reads of the others: hidden until theirs is in, none yet, or the list', () => {
@@ -75,6 +76,51 @@ test('the draft is kept per interview and version in this browser, and cleared o
   assert.doesNotThrow(() => clearDraft('iv-1', 0, broken));
 });
 
-test('the recap step has one named place, between rating and the recommendation, and is not drawn this round', () => {
-  assert.deepEqual([...SCORECARD_STEPS], ['rate', 'decide']);
+const memoryStore = (): DraftStore => {
+  const m = new Map<string, string>();
+  return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v); }, removeItem: (k) => { m.delete(k); } };
+};
+
+test('rate first, then Milo\'s recap, then the go or no-go (decision 14)', () => {
+  assert.deepEqual([...SCORECARD_STEPS], ['rate', 'recap', 'decide']);
+  assert.equal(nextStep('rate'), 'recap');
+  assert.equal(nextStep('recap'), 'decide');
+  assert.equal(nextStep('decide'), 'decide');
+  assert.equal(previousStep('decide'), 'recap');
+  assert.equal(previousStep('recap'), 'rate');
+  assert.equal(previousStep('rate'), 'rate');
+  assert.equal(emptyDraft().step, 'rate');
+});
+
+test('the recap opens only with every competency rated, and the open carries the ratings and nothing else', () => {
+  const d = { ...emptyDraft(), ratings: { ownership: 4 as const }, notes: { ownership: 'private note' }, summary: 'x' };
+  assert.equal(allRated(d, KIT), false);
+  const all = { ...d, ratings: { ownership: 4 as const, clarity: 2 as const } };
+  assert.equal(allRated(all, KIT), true);
+  assert.deepEqual(openBodyOf(all, KIT), { ratings: [{ competencyId: 'ownership', rating: 4 }, { competencyId: 'clarity', rating: 2 }] });
+});
+
+test('the draft resumes a step past the ratings only when the recap was opened from it', () => {
+  const store = memoryStore();
+  saveDraft('iv-1', 0, { ...emptyDraft(), step: 'decide', recapOpened: true }, store);
+  assert.equal(loadDraft('iv-1', 0, store)?.step, 'decide');
+  saveDraft('iv-1', 0, { ...emptyDraft(), step: 'decide', recapOpened: false }, store);
+  assert.equal(loadDraft('iv-1', 0, store)?.step, 'rate');
+  store.setItem('interviews:scorecard-draft:iv-1:0', JSON.stringify({ step: 'somewhere', recapOpened: true }));
+  assert.equal(loadDraft('iv-1', 0, store)?.step, 'rate');
+  // A draft saved before the recap step existed reads as at the ratings.
+  store.setItem('interviews:scorecard-draft:iv-1:0', JSON.stringify({ summary: 'old' }));
+  assert.deepEqual([loadDraft('iv-1', 0, store)?.step, loadDraft('iv-1', 0, store)?.recapOpened], ['rate', false]);
+});
+
+test('Milo\'s recap: one sentence when there is nothing to show, and the evidence per competency', () => {
+  assert.equal(recapStateLine({ state: 'ready' }), null);
+  assert.match(recapStateLine({ state: 'no-transcript' })!, /without a transcript/);
+  assert.match(recapStateLine({ state: 'paused' })!, /budget/);
+  assert.match(recapStateLine({ state: 'none' })!, /could not write/);
+  assert.match(recapStateLine({ state: 'none' }, true)!, /no recap for this interview yet/);
+  const recap = { competencies: [{ id: 'ownership', name: 'Ownership', evidence: [{ text: 'The candidate said: “I shipped it”', source: { kind: 'transcript' as const, seq: 4, quote: 'I shipped it' } }] }] };
+  assert.equal(evidenceFor(recap, 'ownership').length, 1);
+  assert.deepEqual(evidenceFor(recap, 'clarity'), []);
+  assert.equal(recapUrl('iv 1'), '/api/interviews/interviews/iv%201/recap');
 });

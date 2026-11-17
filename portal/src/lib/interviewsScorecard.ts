@@ -56,10 +56,15 @@ export const RECOMMENDATION_CHOICES: ReadonlyArray<{ value: Recommendation; labe
 ];
 
 /**
- * The form's steps, in order. RECAP STEP (row I5.2, round 5): Milo's recap goes between 'rate' and 'decide'; opening
- * it records the ratings as they stand (`Draft.ratingsAtRecap`), which the submit then carries.
+ * The form's steps, in order (decision 14): rate from your own judgement, then Milo's recap, then the go or no-go.
+ * Continuing to the recap records the ratings as they stand, on the server (POST …/recap/open); the server compares the
+ * submitted ratings against that record, so going back to change a rating is allowed and shows on the scorecard.
  */
-export const SCORECARD_STEPS = ['rate', 'decide'] as const;
+export const SCORECARD_STEPS = ['rate', 'recap', 'decide'] as const;
+export type ScorecardStep = typeof SCORECARD_STEPS[number];
+
+export const nextStep = (s: ScorecardStep): ScorecardStep => SCORECARD_STEPS[Math.min(SCORECARD_STEPS.indexOf(s) + 1, SCORECARD_STEPS.length - 1)]!;
+export const previousStep = (s: ScorecardStep): ScorecardStep => SCORECARD_STEPS[Math.max(SCORECARD_STEPS.indexOf(s) - 1, 0)]!;
 
 /** What the form holds before Submit. */
 export interface Draft {
@@ -69,18 +74,25 @@ export interface Draft {
   summary: string;
   /** Only when correcting a submitted scorecard. */
   reason: string;
+  /** Where the person is in the form. */
+  step: ScorecardStep;
+  /** The recap was opened from this draft: going back to it asks nothing again (the server keeps the first open only). */
+  recapOpened: boolean;
 }
 
-export const emptyDraft = (): Draft => ({ ratings: {}, notes: {}, recommendation: null, summary: '', reason: '' });
+export const emptyDraft = (): Draft => ({ ratings: {}, notes: {}, recommendation: null, summary: '', reason: '', step: 'rate', recapOpened: false });
 
-/** A correction starts from the latest version as submitted. */
+/** A correction starts from the latest version as submitted, back at the ratings. */
 export function draftFrom(card: ScorecardView): Draft {
   return {
     ratings: Object.fromEntries(card.ratings.map((r) => [r.competencyId, r.rating])),
     notes: Object.fromEntries(card.ratings.map((r) => [r.competencyId, r.note])),
-    recommendation: card.recommendation, summary: card.summary, reason: '',
+    recommendation: card.recommendation, summary: card.summary, reason: '', step: 'rate', recapOpened: false,
   };
 }
+
+/** Every competency rated: what "Continue to the recap" needs. */
+export const allRated = (d: Pick<Draft, 'ratings'>, competencies: readonly KitCompetency[]): boolean => competencies.every((c) => !!d.ratings[c.id]);
 
 /** The scale's labels for one competency: its anchors, lowest first. */
 export const scaleOf = (c: KitCompetency): Array<{ value: number; label: string }> => ([1, 2, 3, 4] as const).map((n) => ({ value: n, label: c.anchors[n] }));
@@ -129,7 +141,10 @@ export function loadDraft(interviewId: string, basedOn: number, store: DraftStor
     const raw = store?.getItem(draftKey(interviewId, basedOn));
     if (!raw) return null;
     const d = JSON.parse(raw) as Partial<Draft>;
-    return { ...emptyDraft(), ...d, ratings: { ...(d.ratings ?? {}) }, notes: { ...(d.notes ?? {}) } };
+    const opened = d.recapOpened === true;
+    // A step past the ratings is only resumed when the recap was opened from this draft.
+    const step = opened && (SCORECARD_STEPS as readonly string[]).includes(d.step ?? '') ? d.step! : 'rate';
+    return { ...emptyDraft(), ...d, step, recapOpened: opened, ratings: { ...(d.ratings ?? {}) }, notes: { ...(d.notes ?? {}) } };
   } catch { return null; }
 }
 
@@ -150,4 +165,44 @@ export async function submitScorecard(interviewId: string, body: Record<string, 
     `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/scorecard`, 'POST', body);
   if (r.ok) return { ok: true, view: r.data?.scorecard ?? null };
   return { ok: false, error: r.data?.fields?.[0]?.message ?? r.error ?? 'Your scorecard could not be submitted. Try again.', stale: r.status === 409, view: r.data?.scorecard ?? null };
+}
+
+// ── Milo's recap (row I5.2, contract E3) ────────────────────────────────────
+
+export interface RecapClaim { text: string; source: { kind: 'transcript'; seq: number; quote: string } }
+/** E3: what POST …/recap/open and GET …/recap answer. Milo's evidence carries no rating, tone or score. */
+export interface RecapBody {
+  state: 'ready' | 'none' | 'no-transcript' | 'paused';
+  paused: null | 'budget';
+  writtenAt: string | null;
+  competencies: Array<{ id: string; name: string; evidence: RecapClaim[] }>;
+  notCovered: Array<{ id: string; name: string }>;
+}
+
+export const recapUrl = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/recap`;
+
+/** What "Continue to the recap" posts: the ratings as they stand, nothing else (no notes, no recommendation). */
+export function openBodyOf(d: Pick<Draft, 'ratings'>, competencies: readonly KitCompetency[]): { ratings: Array<{ competencyId: string; rating: Rating }> } {
+  return { ratings: competencies.map((c) => ({ competencyId: c.id, rating: d.ratings[c.id]! })) };
+}
+
+/** One sentence for a recap that has nothing to show; null when it is ready. */
+export function recapStateLine(r: Pick<RecapBody, 'state'>, forReaders = false): string | null {
+  if (r.state === 'no-transcript') return 'This interview ran without a transcript, so Milo has no recap for it.';
+  if (r.state === 'paused') return 'Milo could not write the recap because this opening\'s interview budget is used up. Your scorecard does not need it.';
+  if (r.state === 'none') return forReaders ? 'Milo has no recap for this interview yet.' : 'Milo could not write a recap for this interview. Your scorecard does not need it.';
+  return null;
+}
+
+/** Milo's evidence for one competency, and whether anything was said about it. */
+export function evidenceFor(r: Pick<RecapBody, 'competencies'>, competencyId: string): RecapClaim[] {
+  return r.competencies.find((c) => c.id === competencyId)?.evidence ?? [];
+}
+
+export type OpenRecapOutcome = { ok: true; recap: RecapBody } | { ok: false; error: string };
+
+export async function openRecap(interviewId: string, body: ReturnType<typeof openBodyOf>): Promise<OpenRecapOutcome> {
+  const r = await writeJson<{ recap?: RecapBody }>(`${recapUrl(interviewId)}/open`, 'POST', body);
+  if (r.ok && r.data?.recap) return { ok: true, recap: r.data.recap };
+  return { ok: false, error: r.error ?? 'Milo\'s recap could not be opened. Try again.' };
 }
