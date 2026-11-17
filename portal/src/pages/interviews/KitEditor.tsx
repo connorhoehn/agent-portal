@@ -89,7 +89,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         {badCompetencies.has(i) && <NeedsFixing />}
       </Inline>
     ) },
-    { key: 'lookFor', header: 'What good looks like', render: (c) => <T size="sm" tone={c.lookFor ? 'secondary' : 'tertiary'} className="block max-w-[28rem] truncate">{c.lookFor || 'Not written yet'}</T> },
+    { key: 'lookFor', header: 'What good looks like', render: (c) => <T size="sm" tone={c.lookFor ? 'secondary' : 'tertiary'} wrap>{c.lookFor || 'Not written yet'}</T> },
     { key: 'questions', header: 'Questions', numeric: true, width: '96px', render: (c) => <T size="sm">{probes(c.id)}</T> },
   ];
   const addCompetency = () => {
@@ -103,7 +103,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
   const questionColumns: DataTableColumn<KitQuestion>[] = [
     { key: 'prompt', header: 'Question', render: (q, i) => (
       <Inline gap="xs" wrap={false}>
-        <T size="sm" tone={q.prompt ? 'primary' : 'tertiary'} className="block max-w-[26rem] truncate" data-testid="interviews-kit-question-prompt">{q.prompt || 'Not written yet'}</T>
+        <T size="sm" tone={q.prompt ? 'primary' : 'tertiary'} wrap data-testid="interviews-kit-question-prompt">{q.prompt || 'Not written yet'}</T>
         {badQuestions.has(i) && <NeedsFixing />}
       </Inline>
     ) },
@@ -143,7 +143,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
       <DetailSection title="Competencies" as="h2" hint={String(kit.competencies.length)}
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-competency" onClick={addCompetency}>Add competency</Button>}>
         <Stack gap="sm">
-          <DataTable narrow aria-label="Competencies" data={kit.competencies} columns={competencyColumns} keyField={(c) => c.id}
+          <DataTable narrow rowHeight="content" aria-label="Competencies" data={kit.competencies} columns={competencyColumns} keyField={(c) => c.id}
             data-testid="interviews-kit-competencies" emptyMessage="No competencies yet. Add what the rounds should judge."
             selectedKey={openCompetency >= 0 ? kit.competencies[openCompetency]!.id : null}
             onRowClick={(c) => toggle('competencies', c.id)}
@@ -167,7 +167,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-question" disabled={!kit.rounds.length || !kit.competencies.length}
           title={!kit.rounds.length || !kit.competencies.length ? 'Add a round and a competency first.' : undefined} onClick={addQuestion}>Add question</Button>}>
         <Stack gap="sm">
-          <DataTable narrow aria-label="Questions" data={kit.questions} columns={questionColumns} keyField={(q) => q.id}
+          <DataTable narrow rowHeight="content" aria-label="Questions" data={kit.questions} columns={questionColumns} keyField={(q) => q.id}
             data-testid="interviews-kit-questions" emptyMessage="No questions yet. Add the ones interviewers choose from."
             selectedKey={openQuestion >= 0 ? kit.questions[openQuestion]!.id : null}
             onRowClick={(q) => toggle('questions', q.id)}

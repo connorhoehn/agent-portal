@@ -164,11 +164,11 @@ function KitView({ o }: { o: OpeningRecord }) {
   ];
   const competencyColumns: DataTableColumn<KitCompetency>[] = [
     { key: 'name', header: 'Competency', render: (c) => <T size="sm" weight="medium" className="block max-w-[14rem] truncate">{c.name}</T> },
-    { key: 'lookFor', header: 'What good looks like', render: (c) => <T size="sm" tone="secondary" title={c.lookFor} className="block max-w-[36rem] truncate">{c.lookFor}</T> },
+    { key: 'lookFor', header: 'What good looks like', render: (c) => <T size="sm" tone="secondary" title={c.lookFor} wrap>{c.lookFor}</T> },
     { key: 'questions', header: 'Questions', numeric: true, render: (c) => <T size="sm">{probes(c.id)}</T> },
   ];
   const questionColumns: DataTableColumn<KitQuestion>[] = [
-    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} className="block max-w-[30rem] truncate" data-testid="interviews-question-prompt">{q.prompt}</T> },
+    { key: 'prompt', header: 'Question', render: (q) => <T size="sm" title={q.prompt} wrap data-testid="interviews-question-prompt">{q.prompt}</T> },
     { key: 'competency', header: 'Competency', render: (q) => <T size="sm" className="block max-w-[12rem] truncate">{names.get(q.competencyId) ?? '—'}</T> },
     { key: 'followUps', header: 'Follow-ups', numeric: true, render: (q) => <T size="sm">{q.followUps.length}</T> },
     { key: 'starter', header: 'Starter code', render: (q) => (starterLine(q) ? <T size="sm">{starterLine(q)}</T> : <Dash />) },
@@ -184,7 +184,7 @@ function KitView({ o }: { o: OpeningRecord }) {
         <DataTable narrow aria-label="Rounds" data={o.rounds} columns={roundColumns} keyField={(r) => r.id} data-testid="interviews-kit-rounds" />
       </DetailSection>
       <DetailSection title="Competencies" as="h2" hint={String(o.competencies.length)}>
-        <DataTable narrow aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" />
+        <DataTable narrow rowHeight="content" aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" />
       </DetailSection>
       {kinds.map((t) => {
         const qs = byType(t);
@@ -192,7 +192,7 @@ function KitView({ o }: { o: OpeningRecord }) {
         return (
           <DetailSection key={t} title={`${ROUND_TYPE_LABELS[t]} questions`} as="h2" hint={String(qs.length)}>
             <Stack gap="sm">
-              <DataTable narrow aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
+              <DataTable narrow rowHeight="content" aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
                 data-testid={`interviews-kit-${t}-questions`} selectedKey={open?.id ?? null}
                 onRowClick={(q) => setOpenQuestion(openQuestion === q.id ? null : q.id)}
                 emptyMessage={`No ${t} questions yet.`} />
