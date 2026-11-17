@@ -161,7 +161,13 @@ export async function liveRoom(ctx, { interviewId, leadId, answers, admitGuest =
   const opened = [];
   const lead = await ctx.signIn(leadId); opened.push(lead); await stubCallMedia(lead, 'lead');
   const recruiter = await ctx.signIn(ctx.SEED.cast.recruiter); opened.push(recruiter);
-  const close = async () => { for (const c of opened) await c.close().catch(() => undefined); };
+  let callIdSeen = null;
+  // Milo is dismissed before the contexts close: the mock reset keeps Milo's call records, and a record left listening in this
+  // interview's lobby would be read as a later room's transcript.
+  const close = async () => {
+    if (callIdSeen) await ctx.api(lead, 'POST', `/api/calls/${encodeURIComponent(callIdSeen)}/assistant/dismiss`, {}).catch(() => undefined);
+    for (const c of opened) await c.close().catch(() => undefined);
+  };
   try {
     const iv = await ctx.readInterview(lead, interviewId);
     if (!iv) throw new Error(`the lead cannot read ${interviewId}`);
@@ -191,6 +197,7 @@ export async function liveRoom(ctx, { interviewId, leadId, answers, admitGuest =
       }
     }
     const { page: leadPage, callId } = await joinRoomCall(ctx, lead, interviewId);
+    callIdSeen = callId;
     if (guest && admitGuest && guestJoins) await guestJoinCall(guest);
     for (const who of extra) { const c = await ctx.signIn(who.userId); opened.push(c); await stubCallMedia(c, who.label); who.context = c; who.page = (await joinRoomCall(ctx, c, interviewId)).page; }
     if (invite) await inviteMilo(leadPage);

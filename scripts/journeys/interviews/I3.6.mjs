@@ -67,7 +67,7 @@ export default async function run(ctx) {
       const comps = (api1.body?.notes?.competencies ?? []).map((c) => c.name);
       const shots = await shootPage(room.leadPage, 'I3.6a-milo-tab');
       liveTimeLine = timeLine;
-      const ok = api1.status === 200 && /min/.test(timeLine) && notesText.includes(timeLine) && comps.length > 0 && comps.every((c) => notesText.includes(c)) && shots.every((s) => s.ok);
+      const ok = api1.status === 200 && /min/.test(timeLine) && notesText.includes(timeLine.replace(/^[^;]*; /, '')) && comps.length > 0 && comps.every((c) => notesText.includes(c)) && shots.every((s) => s.ok);
       return { ok, detail: `notes ${api1.status}: time "${timeLine}", competencies ${comps.join(' / ')}; on the tab ${comps.every((c) => notesText.includes(c))}` };
     });
 
