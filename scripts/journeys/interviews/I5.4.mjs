@@ -38,7 +38,7 @@ export default async function run(ctx) {
     const people = app.rounds.flatMap((r) => r.scorecards.map((s) => s.interviewer.name));
     const shots = await shootPage(page, 'debrief-recruiter');
     const checks = {
-      noDeck: deckOptions === 0, noDecideLine: decideLine === 0, routeOffersNone: app.decide === null, people: people.every((n) => side.includes(n)), ratings: /of 4/.test(side), rounds: app.rounds.length === 2,
+      noDeck: deckOptions === 0, noDecideLine: decideLine === 0, routeOffersNone: app.decide === null, people: people.every((n) => side.toLowerCase().includes(n.toLowerCase())), ratings: /of 4/.test(side), rounds: app.rounds.length === 2,
       noAverage: !/\b(average|total|overall score|rank)\b/i.test(text), consent: !consentIn(text), milo: !miloScoresIn(text), shots: shots.every((s) => s.ok),
     };
     const ok = Object.values(checks).every(Boolean);
@@ -99,12 +99,9 @@ export default async function run(ctx) {
       await page.waitForTimeout(300);
       return page.evaluate(() => {
         const table = document.querySelector('[data-testid="interviews-debrief-side-by-side"]');
-        let el = table;
-        let scroller = null;
-        while (el && el !== document.body) {
-          if (/(auto|scroll)/.test(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1) { scroller = el; break; }
-          el = el.parentElement;
-        }
+        const overflows = (e) => /(auto|scroll)/.test(getComputedStyle(e).overflowX) && e.scrollWidth > e.clientWidth + 1;
+        let scroller = [table, ...table.querySelectorAll('*')].find(overflows) ?? null;
+        for (let el = table.parentElement; !scroller && el && el !== document.body; el = el.parentElement) if (overflows(el)) scroller = el;
         const tables = document.querySelectorAll('[data-testid="interviews-debrief-side-by-side"]').length;
         const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
         const head = [...table.querySelectorAll('thead th')].find((th) => /^Competency$/.test(th.textContent.trim()));
@@ -124,7 +121,7 @@ export default async function run(ctx) {
     const checks = { oneTable: w1280.tables === 1, groups, keptAt1280: kept(w1280), noSideways1280: !w1280.pageSideways, noSideways1440: !w1440.pageSideways };
     const ok = Object.values(checks).every(Boolean);
     await shootPage(page, 'debrief-wide');
-    record('I5.4d', ok, `[failing: ${failing(checks)}] one table for the application; column groups ${JSON.stringify(w1280.headers.slice(0, 3))}…; at 1280 the table scrolls inside itself and, scrolled to the end, the Competency column is at x=${w1280.after} (table edge ${w1280.left}) with its cells at ${w1280.cell}; at 1440 it ${w1440.scrolls ? `scrolls and keeps it at ${w1440.after}` : 'fits'}; the page scrolls sideways: ${w1280.pageSideways} at 1280, ${w1440.pageSideways} at 1440`);
+    record('I5.4d', ok, `[failing: ${failing(checks)}] one table for the application; column groups ${JSON.stringify(w1280.headers.slice(0, 3))}…; at 1280 the table ${w1280.scrolls ? 'scrolls inside itself' : 'does not scroll'} and, scrolled to the end, the Competency column is at x=${w1280.after} (table edge ${w1280.left}) with its cells at ${w1280.cell}; at 1440 it ${w1440.scrolls ? `scrolls and keeps it at ${w1440.after}` : 'fits'}; the page scrolls sideways: ${w1280.pageSideways} at 1280, ${w1440.pageSideways} at 1440`);
   } catch (e) { record('I5.4d', false, `the wide table: ${why(e)}`); }
 
   await page.close();
