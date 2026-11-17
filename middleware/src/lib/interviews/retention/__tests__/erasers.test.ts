@@ -31,13 +31,14 @@ describe('the recording eraser (D5)', () => {
 });
 
 describe('the registry (D6)', () => {
-  afterEach(() => unregisterEraser('suggestions'));
+  afterEach(() => unregisterEraser('other-module'));
   it('holds this module\'s own erasers, takes another module\'s, and refuses a malformed one', () => {
     expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes']);
-    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards']);
-    registerEraser({ kind: 'suggestions', class: 'record', erase: async () => 0 });
+    // The coach's suggestion log is registered with the module's own (round 4 combine).
     expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions']);
     expect(eraserFor('suggestions')?.class).toBe('record');
+    registerEraser({ kind: 'other-module', class: 'record', erase: async () => 0 });
+    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'other-module']);
     expect(() => registerEraser({ kind: '', class: 'media', erase: async () => 0 })).toThrow(TypeError);
     expect(() => registerEraser({ kind: 'x', class: 'other' as 'media', erase: async () => 0 })).toThrow(TypeError);
   });

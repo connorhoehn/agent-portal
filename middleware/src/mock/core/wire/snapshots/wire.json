@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T03:47:08.352Z",
-  "serverHandlerSha": "2b01383a0d41a88bc524bc2a63a266f6beab1bff1b5b215ea7bbad4ef2e3c36c",
+  "capturedAt": "2026-11-17T04:38:07.927Z",
+  "serverHandlerSha": "2c47b8b255f89b59b46f9cb5db503cf8fa8b7fe43de2291f62d7e975aa5a0b2d",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5029,6 +5029,9 @@
     "GET /api/interview-invite/realtime-token": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
+    "GET /api/interview-invite/room": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
     "GET /api/interviews/candidates": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5182,6 +5185,9 @@
         ]
       }
     },
+    "GET /api/interviews/candidates/:id/deletions": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/candidates (anonymous)"
+    },
     "GET /api/interviews/candidates/:id/resume": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5203,6 +5209,20 @@
     },
     "GET /api/interviews/candidates/:id/resume/file": {
       "skipped": "non-JSON (application/pdf) (orgiq/admin); non-JSON (application/pdf) (assessment/admin); no value found for :id under /api/interviews/candidates (anonymous)"
+    },
+    "GET /api/interviews/consent-effects": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].answered": "boolean",
+        "items[].interviewId": "string",
+        "items[].off": "array",
+        "items[].off[]": "string"
+      },
+      "values": {}
     },
     "GET /api/interviews/hiring-managers": {
       "persona": "orgiq/admin",
@@ -5358,6 +5378,8 @@
         "interview.scorecards": "array",
         "interview.scorecardsIn": "number",
         "interview.scorecards[]": "object",
+        "interview.scorecards[].correctionReason": "null",
+        "interview.scorecards[].earlier": "array",
         "interview.scorecards[].id": "string",
         "interview.scorecards[].interviewer": "object",
         "interview.scorecards[].interviewer.id": "string",
@@ -5416,6 +5438,80 @@
       }
     },
     "GET /api/interviews/interviews/:id/room": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/scorecard": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "scorecard": "object",
+        "scorecard.canSubmit": "boolean",
+        "scorecard.competencies": "array",
+        "scorecard.competencies[]": "object",
+        "scorecard.competencies[].anchors": "object",
+        "scorecard.competencies[].anchors.1": "string",
+        "scorecard.competencies[].anchors.2": "string",
+        "scorecard.competencies[].anchors.3": "string",
+        "scorecard.competencies[].anchors.4": "string",
+        "scorecard.competencies[].id": "string",
+        "scorecard.competencies[].lookFor": "string",
+        "scorecard.competencies[].name": "string",
+        "scorecard.interview": "object",
+        "scorecard.interview.candidate": "object",
+        "scorecard.interview.candidate.id": "string",
+        "scorecard.interview.candidate.name": "string",
+        "scorecard.interview.endedAt": "string",
+        "scorecard.interview.id": "string",
+        "scorecard.interview.opening": "object",
+        "scorecard.interview.opening.id": "string",
+        "scorecard.interview.opening.title": "string",
+        "scorecard.interview.revision": "number",
+        "scorecard.interview.round": "object",
+        "scorecard.interview.round.id": "string",
+        "scorecard.interview.round.minutes": "number",
+        "scorecard.interview.round.name": "string",
+        "scorecard.interview.round.type": "string",
+        "scorecard.interview.seat": "null",
+        "scorecard.interview.state": "string",
+        "scorecard.limits": "object",
+        "scorecard.limits.noteChars": "number",
+        "scorecard.limits.reasonChars": "number",
+        "scorecard.limits.summaryChars": "number",
+        "scorecard.mine": "null",
+        "scorecard.others": "array",
+        "scorecard.othersHidden": "boolean",
+        "scorecard.others[]": "object",
+        "scorecard.others[].correctionReason": "null",
+        "scorecard.others[].earlier": "array",
+        "scorecard.others[].id": "string",
+        "scorecard.others[].interviewId": "string",
+        "scorecard.others[].interviewer": "object",
+        "scorecard.others[].interviewer.id": "string",
+        "scorecard.others[].interviewer.name": "string",
+        "scorecard.others[].ratings": "array",
+        "scorecard.others[].ratings[]": "object",
+        "scorecard.others[].ratings[].competency": "string",
+        "scorecard.others[].ratings[].competencyId": "string",
+        "scorecard.others[].ratings[].note": "string",
+        "scorecard.others[].ratings[].rating": "number",
+        "scorecard.others[].recommendation": "string",
+        "scorecard.others[].round": "string",
+        "scorecard.others[].submittedAt": "string",
+        "scorecard.others[].summary": "string",
+        "scorecard.others[].version": "number",
+        "scorecard.refusal": "string"
+      },
+      "values": {
+        "scorecard.interview.round.type": [
+          "technical"
+        ],
+        "scorecard.interview.state": [
+          "reviewed"
+        ]
+      }
+    },
+    "GET /api/interviews/interviews/:id/suggestion": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/waiting": {

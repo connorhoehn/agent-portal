@@ -11,20 +11,20 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-17T03:47:19.956Z",
-  "serverHandlerSha": "2b01383a0d41a88bc524bc2a63a266f6beab1bff1b5b215ea7bbad4ef2e3c36c"
+  "capturedAt": "2026-11-17T04:38:19.329Z",
+  "serverHandlerSha": "2c47b8b255f89b59b46f9cb5db503cf8fa8b7fe43de2291f62d7e975aa5a0b2d"
  },
  "summary": {
-  "routes": 918,
-  "routesInSnapshot": 908,
+  "routes": 928,
+  "routesInSnapshot": 918,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
   "pages": 113,
   "byKind": {
    "dev": 13,
-   "write": 397,
-   "read": 472,
-   "internal": 36,
+   "write": 400,
+   "read": 477,
+   "internal": 38,
    "navigate": 113
   },
   "byFamily": {
@@ -188,17 +188,17 @@
     }
    },
    "social.calls": {
-    "total": 59,
+    "total": 61,
     "read": 24,
     "write": 27,
     "navigate": 0,
-    "internal": 8,
+    "internal": 10,
     "dev": 0,
     "covered": 13,
     "v2": {
      "not-yet": 7,
      "never": 31,
-     "n/a": 8,
+     "n/a": 10,
      "read": 12,
      "confirm": 1
     }
@@ -277,17 +277,17 @@
     }
    },
    "other": {
-    "total": 40,
-    "read": 21,
-    "write": 19,
+    "total": 48,
+    "read": 26,
+    "write": 22,
     "navigate": 0,
     "internal": 0,
     "dev": 0,
     "covered": 0,
     "v2": {
      "n/a": 4,
-     "not-yet": 26,
-     "never": 10
+     "not-yet": 31,
+     "never": 13
     }
    },
    "approvals": {
@@ -376,18 +376,18 @@
    }
   },
   "byTenant": {
-   "any": 183,
+   "any": 184,
    "access": 27,
    "orgiq": 422,
    "assessment": 112,
-   "interviews": 30,
+   "interviews": 37,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 869,
-  "peopleReads": 472,
-  "peopleWrites": 397,
+  "peopleRoutes": 877,
+  "peopleReads": 477,
+  "peopleWrites": 400,
   "coveredRoutes": 236,
   "coveredReads": 161,
   "coveredWrites": 75,
@@ -396,9 +396,9 @@
   "v1Tools": 16,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 204,
+   "not-yet": 209,
    "read": 161,
-   "never": 396,
+   "never": 399,
    "confirm": 74,
    "n/a": 33,
    "open": 1
@@ -420,10 +420,10 @@
   },
   "v2Backlog": {
    "create": 11,
-   "list": 78,
+   "list": 80,
    "queue_work": 6,
    "decide": 14,
-   "get": 49,
+   "get": 52,
    "search": 4,
    "budget": 16,
    "update": 17,
@@ -433,6 +433,16 @@
   "contradictions": [],
   "staleSnapshotLines": 0,
   "unresolvedDeclarations": [
+   {
+    "method": "POST",
+    "path": "/api/interviews/candidates/:id/deletion",
+    "source": "src/routes/interviews/retention.ts:58"
+   },
+   {
+    "method": "GET",
+    "path": "/api/interviews/candidates/:id/deletions",
+    "source": "src/routes/interviews/retention.ts:69"
+   },
    {
     "method": "DELETE",
     "path": "/api/interviews/candidates/:id/resume",
@@ -452,6 +462,11 @@
     "method": "GET",
     "path": "/api/interviews/candidates/:id/resume/file",
     "source": "src/routes/interviews/resume.ts:88"
+   },
+   {
+    "method": "GET",
+    "path": "/api/interviews/consent-effects",
+    "source": "src/routes/interviews/consent-effects.ts:23"
    },
    {
     "method": "GET",
@@ -519,9 +534,29 @@
     "source": "src/routes/interviews/room.ts:45"
    },
    {
+    "method": "GET",
+    "path": "/api/interviews/interviews/:id/scorecard",
+    "source": "src/routes/interviews/scorecards.ts:111"
+   },
+   {
+    "method": "POST",
+    "path": "/api/interviews/interviews/:id/scorecard",
+    "source": "src/routes/interviews/scorecards.ts:130"
+   },
+   {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/start",
     "source": "src/routes/interviews/room.ts:75"
+   },
+   {
+    "method": "GET",
+    "path": "/api/interviews/interviews/:id/suggestion",
+    "source": "src/routes/interviews/coach.ts:38"
+   },
+   {
+    "method": "POST",
+    "path": "/api/interviews/interviews/:id/suggestion/:suggestionId/answer",
+    "source": "src/routes/interviews/coach.ts:47"
    },
    {
     "method": "PUT",
@@ -557,14 +592,14 @@
   "missingFromSnapshot": [
    "GET /api/social/plane/search (src/routes/tenant-search.ts:127)",
    "GET /api/social/plane/search/answer (src/routes/tenant-search.ts:127)",
-   "GET /api/assessment/search (src/index.ts:349)",
-   "GET /api/assessment/search/answer (src/index.ts:349)",
-   "GET /api/social/search (src/index.ts:362)",
-   "GET /api/social/search/answer (src/index.ts:362)",
-   "GET /api/pipelines/search (src/index.ts:404)",
-   "GET /api/pipelines/search/answer (src/index.ts:404)",
-   "GET /api/access/search (src/index.ts:408)",
-   "GET /api/access/search/answer (src/index.ts:408)"
+   "GET /api/assessment/search (src/index.ts:352)",
+   "GET /api/assessment/search/answer (src/index.ts:352)",
+   "GET /api/social/search (src/index.ts:365)",
+   "GET /api/social/search/answer (src/index.ts:365)",
+   "GET /api/pipelines/search (src/index.ts:408)",
+   "GET /api/pipelines/search/answer (src/index.ts:408)",
+   "GET /api/access/search (src/index.ts:412)",
+   "GET /api/access/search/answer (src/index.ts:412)"
   ],
   "unresolvedGateNames": [
    "requireAgentTenant",
@@ -591,7 +626,7 @@
    "refused:control-plane": 3,
    "refused:destructive": 47,
    "allowed": 125,
-   "refused:unclassified": 112,
+   "refused:unclassified": 117,
    "refused:spends": 25,
    "refused:fires": 26,
    "skipped": 31,
@@ -4109,6 +4144,24 @@
    "note": "letting the candidate in, starting and ending the interview are the lead's acts in the room"
   },
   {
+   "pattern": "^POST \\/api\\/interviews\\/candidates\\/:[^/]+\\/deletion$",
+   "decision": "never",
+   "tool": null,
+   "note": "deleting a candidate's data is confirmed on the profile, never by voice"
+  },
+  {
+   "pattern": "^POST \\/api\\/interviews\\/interviews\\/:[^/]+\\/scorecard$",
+   "decision": "never",
+   "tool": null,
+   "note": "a scorecard is the interviewer's own judgement; Milo never scores (decision 6)"
+  },
+  {
+   "pattern": "^POST \\/api\\/interviews\\/interviews\\/:[^/]+\\/suggestion\\/:[^/]+\\/answer$",
+   "decision": "never",
+   "tool": null,
+   "note": "answering Milo's suggestion is the lead's act in the room"
+  },
+  {
    "pattern": "^PUT \\/api\\/interviews\\/interviews\\/:[^/]+\\/questions$",
    "decision": "not-yet",
    "tool": "update",
@@ -4632,7 +4685,7 @@
   {"method":"PUT","path":"/api/graph/work-items/:id/documents/:documentId","source":"src/routes/work-documents.ts:144","declaredAt":"src/routes/work-documents.ts:144","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions, document links and runbook pins are edited on the item"}},
   {"method":"GET","path":"/api/graph/work-items/:id/documents/candidates","source":"src/routes/work-documents.ts:135","declaredAt":"src/routes/work-documents.ts:135","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"documents","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/graph/work-items/:id/runbook-pins","source":"src/routes/work-items.ts:929","declaredAt":"src/routes/work-items.ts:929","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions, document links and runbook pins are edited on the item"}},
-  {"method":"GET","path":"/api/health","source":"src/index.ts:255","declaredAt":"src/index.ts:255","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/api/health","source":"src/index.ts:258","declaredAt":"src/index.ts:258","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/api/identity/policies","source":"src/routes/identity.ts:355","declaredAt":"src/routes/identity.ts:355","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin"],"holders":["orgiq/hr-admin"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
   {"method":"POST","path":"/api/identity/policies","source":"src/routes/identity.ts:373","declaredAt":"src/routes/identity.ts:373","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin","EditPolicy"],"holders":["orgiq/hr-admin"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
   {"method":"DELETE","path":"/api/identity/policies/:id","source":"src/routes/identity.ts:415","declaredAt":"src/routes/identity.ts:415","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin","EditPolicy"],"holders":["orgiq/hr-admin"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
@@ -4689,24 +4742,28 @@
   {"method":"POST","path":"/api/initiative-decks/projects/:projectId","source":"src/routes/initiative-decks.ts:60","declaredAt":"src/routes/initiative-decks.ts:60","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":["queue_work","create"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/initiatives/:id/run-reports","source":"src/routes/session-briefs.ts:196","declaredAt":"src/routes/session-briefs.ts:196","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":"ViewSessionBrief","actions":["ViewSessionBrief"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/internal/meeting-assistant/pcm/:sinkToken","source":"src/routes/meeting-assistant-sink.ts:37","declaredAt":"src/routes/meeting-assistant-sink.ts:37","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["admit"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the meeting assistant's PCM sink: called by the media server's taps, authenticated by an unguessable per-call token in the path, never by a person"}},
-  {"method":"GET","path":"/api/interview-invite/admission","source":"src/routes/interview-invite.ts:161","declaredAt":"src/routes/interview-invite.ts:161","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:57","declaredAt":"src/routes/interview-invite-consents.ts:57","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"PUT","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:63","declaredAt":"src/routes/interview-invite-consents.ts:63","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"POST","path":"/api/interview-invite/exchange","source":"src/routes/interview-invite.ts:101","declaredAt":"src/routes/interview-invite.ts:101","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"GET","path":"/api/interview-invite/interview","source":"src/routes/interview-invite.ts:131","declaredAt":"src/routes/interview-invite.ts:131","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"POST","path":"/api/interview-invite/knock","source":"src/routes/interview-invite.ts:152","declaredAt":"src/routes/interview-invite.ts:152","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"GET","path":"/api/interview-invite/realtime-token","source":"src/routes/interview-invite.ts:144","declaredAt":"src/routes/interview-invite.ts:144","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/interviews/candidates","source":"src/routes/interviews.ts:62","declaredAt":"src/routes/interviews.ts:62","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/interviews/candidates/:id","source":"src/routes/interviews.ts:69","declaredAt":"src/routes/interviews.ts:69","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interview-invite/admission","source":"src/routes/interview-invite.ts:173","declaredAt":"src/routes/interview-invite.ts:173","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:58","declaredAt":"src/routes/interview-invite-consents.ts:58","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"PUT","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:64","declaredAt":"src/routes/interview-invite-consents.ts:64","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
+  {"method":"POST","path":"/api/interview-invite/exchange","source":"src/routes/interview-invite.ts:103","declaredAt":"src/routes/interview-invite.ts:103","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
+  {"method":"GET","path":"/api/interview-invite/interview","source":"src/routes/interview-invite.ts:133","declaredAt":"src/routes/interview-invite.ts:133","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"POST","path":"/api/interview-invite/knock","source":"src/routes/interview-invite.ts:164","declaredAt":"src/routes/interview-invite.ts:164","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
+  {"method":"GET","path":"/api/interview-invite/realtime-token","source":"src/routes/interview-invite.ts:146","declaredAt":"src/routes/interview-invite.ts:146","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/room","source":"src/routes/interview-invite.ts:184","declaredAt":"src/routes/interview-invite.ts:184","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interviews/candidates","source":"src/routes/interviews.ts:67","declaredAt":"src/routes/interviews.ts:67","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interviews/candidates/:id","source":"src/routes/interviews.ts:75","declaredAt":"src/routes/interviews.ts:75","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/candidates/:id/deletion","source":"src/routes/interviews/retention.ts:58","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"deleting a candidate's data is confirmed on the profile, never by voice"}},
+  {"method":"GET","path":"/api/interviews/candidates/:id/deletions","source":"src/routes/interviews/retention.ts:69","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"DELETE","path":"/api/interviews/candidates/:id/resume","source":"src/routes/interviews/resume.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a résumé file is uploaded or removed on the candidate page"}},
   {"method":"GET","path":"/api/interviews/candidates/:id/resume","source":"src/routes/interviews/resume.ts:81","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/interviews/candidates/:id/resume","source":"src/routes/interviews/resume.ts:67","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a résumé file is uploaded or removed on the candidate page"}},
   {"method":"GET","path":"/api/interviews/candidates/:id/resume/file","source":"src/routes/interviews/resume.ts:88","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/consent-effects","source":"src/routes/interviews/consent-effects.ts:23","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/interviews/hiring-managers","source":"src/routes/interviews/openings.ts:77","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/interviews/interviewers","source":"src/routes/interviews/assignments.ts:88","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/interviews/interviews","source":"src/routes/interviews.ts:79","declaredAt":"src/routes/interviews.ts:79","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interviews/interviews","source":"src/routes/interviews.ts:86","declaredAt":"src/routes/interviews.ts:86","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interviews/interviews","source":"src/routes/interviews/assignments.ts:94","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id","source":"src/routes/interviews.ts:87","declaredAt":"src/routes/interviews.ts:87","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id","source":"src/routes/interviews.ts:95","declaredAt":"src/routes/interviews.ts:95","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/admit","source":"src/routes/interviews/admission.ts:55","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/answer","source":"src/routes/interviews/assignments.ts:110","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"accept or decline a seat on a round (ConductInterview)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/consents","source":"src/routes/interviews/consents.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -4717,12 +4774,16 @@
   {"method":"PUT","path":"/api/interviews/interviews/:id/panel","source":"src/routes/interviews/assignments.ts:136","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/questions","source":"src/routes/interviews/prepare.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"choose a round's questions (Prepare)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/room","source":"src/routes/interviews/room.ts:45","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:111","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:130","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a scorecard is the interviewer's own judgement; Milo never scores (decision 6)"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/start","source":"src/routes/interviews/room.ts:75","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/suggestion","source":"src/routes/interviews/coach.ts:38","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/suggestion/:suggestionId/answer","source":"src/routes/interviews/coach.ts:47","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"answering Milo's suggestion is the lead's act in the room"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/time","source":"src/routes/interviews/assignments.ts:154","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/waiting","source":"src/routes/interviews/admission.ts:49","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/interviews/openings","source":"src/routes/interviews.ts:44","declaredAt":"src/routes/interviews.ts:44","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interviews/openings","source":"src/routes/interviews.ts:48","declaredAt":"src/routes/interviews.ts:48","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interviews/openings","source":"src/routes/interviews/openings.ts:83","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page"}},
-  {"method":"GET","path":"/api/interviews/openings/:id","source":"src/routes/interviews.ts:52","declaredAt":"src/routes/interviews.ts:52","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/openings/:id","source":"src/routes/interviews.ts:56","declaredAt":"src/routes/interviews.ts:56","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/interviews/openings/:id/details","source":"src/routes/interviews/openings.ts:109","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page"}},
   {"method":"PUT","path":"/api/interviews/openings/:id/kit","source":"src/routes/interviews/openings.ts:121","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page"}},
   {"method":"GET","path":"/api/interviews/openings/:id/spend","source":"src/routes/interviews/openings.ts:100","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -4917,6 +4978,8 @@
   {"method":"GET","path":"/api/pipelines/work-graph/workspace/graph","source":"src/routes/pipelines-work-graph.ts:39","declaredAt":"src/routes/pipelines-work-graph.ts:39","stale":false,"snapshot":true,"tenants":["pipelines"],"kind":"read","family":"pipelines","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/realtime/call-seat","source":"src/routes/realtime-lobby-access.ts:42","declaredAt":"src/routes/realtime-lobby-access.ts:42","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"POST","path":"/api/realtime/lobby-access","source":"src/routes/realtime-lobby-access.ts:68","declaredAt":"src/routes/realtime-lobby-access.ts:68","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/realtime/recording-access","source":"src/routes/realtime-lobby-access.ts:146","declaredAt":"src/routes/realtime-lobby-access.ts:146","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/realtime/recording-decision","source":"src/routes/realtime-lobby-access.ts:138","declaredAt":"src/routes/realtime-lobby-access.ts:138","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/api/roster","source":"src/routes/roster.ts:51","declaredAt":"src/routes/roster.ts:51","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":null,"actions":[],"floor":["Roster"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"GET","path":"/api/roster/users","source":"src/routes/roster.ts:77","declaredAt":"src/routes/roster.ts:77","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":null,"actions":[],"floor":["Roster"],"writePolicy":null,"pageId":null,"coveredBy":["message"],"v2":{"decision":"read","tool":"message","note":"mapsTo"}},
   {"method":"GET","path":"/api/run-reports","source":"src/routes/run-reports.ts:100","declaredAt":"src/routes/run-reports.ts:100","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
@@ -5114,7 +5177,7 @@
   {"method":"GET","path":"/api/work/sweeps/jobs/:id","source":"src/routes/work.ts:461","declaredAt":"src/routes/work.ts:461","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"queue_work","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/sweeps/run","source":"src/routes/work.ts:429","declaredAt":"src/routes/work.ts:429","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":null,"actions":[],"floor":["RunSweeps","ViewWork"],"unresolvedGates":["forBackground"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/work/sweeps/runs","source":"src/routes/work.ts:486","declaredAt":"src/routes/work.ts:486","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
-  {"method":"GET","path":"/health","source":"src/index.ts:254","declaredAt":"src/index.ts:254","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/health","source":"src/index.ts:257","declaredAt":"src/index.ts:257","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"DELETE","path":"/internal/devbox/:sessionId","source":"src/routes/internal-devbox.ts:381","declaredAt":"src/routes/internal-devbox.ts:381","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/internal/devbox/:sessionId/files","source":"src/routes/internal-devbox.ts:330","declaredAt":"src/routes/internal-devbox.ts:330","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/internal/devbox/:sessionId/files/:fileId","source":"src/routes/internal-devbox.ts:352","declaredAt":"src/routes/internal-devbox.ts:352","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
@@ -5131,17 +5194,17 @@
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/open","source":"src/routes/internal-work-graph-compute.ts:114","declaredAt":"src/routes/internal-work-graph-compute.ts:114","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/revalidate","source":"src/routes/internal-work-graph-compute.ts:165","declaredAt":"src/routes/internal-work-graph-compute.ts:165","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/use","source":"src/routes/internal-work-graph-compute.ts:173","declaredAt":"src/routes/internal-work-graph-compute.ts:173","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
-  {"method":"GET","path":"/livez","source":"src/index.ts:256","declaredAt":"src/index.ts:256","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/livez","source":"src/index.ts:259","declaredAt":"src/index.ts:259","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/api/social/plane/search","source":"src/routes/tenant-search.ts:127","declaredAt":"src/routes/tenant-search.ts:127","stale":false,"snapshot":false,"tenants":["orgiq","assessment","pipelines"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["activity","call"],"v2":{"decision":"read","tool":"activity","note":"mapsTo"}},
   {"method":"GET","path":"/api/social/plane/search/answer","source":"src/routes/tenant-search.ts:127","declaredAt":"src/routes/tenant-search.ts:127","stale":false,"snapshot":false,"tenants":["orgiq","assessment","pipelines"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"search","note":"the tenant index"}},
-  {"method":"GET","path":"/api/assessment/search","source":"src/index.ts:349","declaredAt":"src/index.ts:349","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/assessment/search/answer","source":"src/index.ts:349","declaredAt":"src/index.ts:349","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/social/search","source":"src/index.ts:362","declaredAt":"src/index.ts:362","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search","activity","call"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/social/search/answer","source":"src/index.ts:362","declaredAt":"src/index.ts:362","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/pipelines/search","source":"src/index.ts:404","declaredAt":"src/index.ts:404","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/pipelines/search/answer","source":"src/index.ts:404","declaredAt":"src/index.ts:404","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/access/search","source":"src/index.ts:408","declaredAt":"src/index.ts:408","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/access/search/answer","source":"src/index.ts:408","declaredAt":"src/index.ts:408","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/assessment/search","source":"src/index.ts:352","declaredAt":"src/index.ts:352","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/assessment/search/answer","source":"src/index.ts:352","declaredAt":"src/index.ts:352","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/social/search","source":"src/index.ts:365","declaredAt":"src/index.ts:365","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search","activity","call"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/social/search/answer","source":"src/index.ts:365","declaredAt":"src/index.ts:365","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/pipelines/search","source":"src/index.ts:408","declaredAt":"src/index.ts:408","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/pipelines/search/answer","source":"src/index.ts:408","declaredAt":"src/index.ts:408","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/access/search","source":"src/index.ts:412","declaredAt":"src/index.ts:412","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/access/search/answer","source":"src/index.ts:412","declaredAt":"src/index.ts:412","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
   {"method":"PAGE","path":"/iq/work","source":"portal/src/components/shell/portalCommands.ts:112","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Automate","group":"Build","roles":null,"pageId":"automate","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/iq/work/changes","source":"portal/src/components/shell/portalCommands.ts:115","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Graph updates","group":"Build","roles":null,"pageId":"graph-updates","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/iq/work/queue","source":"portal/src/components/shell/portalCommands.ts:117","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Work Queue","group":"Build","roles":null,"pageId":"work-queue","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
