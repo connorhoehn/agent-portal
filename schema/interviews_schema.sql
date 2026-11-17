@@ -361,3 +361,36 @@ CREATE TABLE IF NOT EXISTS interview_pad_events (
   CHECK ((kind = 'snapshot') = (text IS NOT NULL))
 );
 CREATE INDEX IF NOT EXISTS interview_pad_events_snapshot_idx ON interview_pad_events (interview_id, seq) WHERE kind = 'snapshot';
+-- ── runs (decision 13, "The run interface"; row I4.4) ───────────────────────
+-- One row per run of a technical interview, keyed by the interview and the
+-- caller's run id (a repeat of the id returns this row and starts nothing).
+-- The request's language, entrypoint, each file's path and size, and the
+-- submitted source itself (the code log's companion for playback); who started
+-- it and their side; the status and its times; the events, each with the run's
+-- `seq` and the interview-wide order `n` a reconnecting reader resumes from;
+-- and the result, written once. `hold_id` / `spend_source_id` are the run's
+-- money (decision 18), so a run a restart left in flight can give it back.
+-- Media for retention (decision 17): removed with the code log.
+CREATE TABLE IF NOT EXISTS interview_runs (
+  interview_id     TEXT NOT NULL REFERENCES interviews(id),
+  run_id           TEXT NOT NULL,
+  language         TEXT NOT NULL CHECK (language IN ('python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp')),
+  entrypoint       TEXT NOT NULL,
+  files            JSONB NOT NULL DEFAULT '[]'::jsonb,
+  source           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  stdin            TEXT,
+  started_by_id    TEXT NOT NULL,
+  started_by_name  TEXT NOT NULL,
+  started_by_side  TEXT NOT NULL CHECK (started_by_side IN ('panel', 'candidate')),
+  status           TEXT NOT NULL CHECK (status IN ('queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'memory_exceeded', 'cancelled', 'internal_error')),
+  queued_at        TIMESTAMPTZ NOT NULL,
+  started_at       TIMESTAMPTZ,
+  ended_at         TIMESTAMPTZ,
+  result           JSONB,
+  events           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  hold_id          TEXT,
+  spend_source_id  TEXT,
+  PRIMARY KEY (interview_id, run_id),
+  CHECK ((result IS NULL) = (ended_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS interview_runs_unfinished_idx ON interview_runs (queued_at) WHERE result IS NULL;

@@ -9,12 +9,12 @@ import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { eraseSuggestionRows } from './service.js';
 
-export { COACH_PROMPT_VERSION, COACH_SYSTEM_PROMPT, buildCoachRequest, coachUserText, type CoachInput, type CoachLine } from './prompt.js';
+export { COACH_CODE_RULES, COACH_PROMPT_VERSION, COACH_SYSTEM_PROMPT, buildCoachRequest, coachCode, coachUserText, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
 export { guardSuggestion, parseCoachAnswer, JUDGES, PERSONAL, type CoachSuggestion, type DropCode } from './parse.js';
 export { BedrockCoachModel, ScriptedCoachModel, coachModelId, makeCoachModel, setCoachModelFactory, DEFAULT_COACH_MODEL_ID, COACH_TIMEOUT_MS, type CoachModel } from './model.js';
 export { decideCoach, MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS, type CoachDecision, type CoachFacts } from './rules.js';
 export { suggestionStore, setSuggestionStore, SUGGESTION_ANSWERS, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
-export { answerSuggestion, setCoachDeps, suggestionFor, suggestionView, type CoachRef, type SuggestionBody, type SuggestionView } from './service.js';
+export { answerSuggestion, setCoachCodeSource, setCoachDeps, suggestionFor, suggestionView, type CoachCodeSource, type CoachRef, type SuggestionBody, type SuggestionView } from './service.js';
 
 /** D6: remove these interviews' rows from the suggestion log; how many went. Runs in the interviews tenant's db context. */
 export async function eraseSuggestions(interviewIds: readonly string[]): Promise<number> {

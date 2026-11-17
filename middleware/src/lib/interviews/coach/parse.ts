@@ -4,7 +4,8 @@
 // A well-formed answer is still dropped when:
 //   off-kit        its competency is not one of the kit's;
 //   too-long       its text is longer than a spoken question should be (MAX_SUGGESTION_CHARS), or its quote is too long;
-//   unsourced      it quotes something that is not in the transcript it was given (decision 6: a source for every claim);
+//   unsourced      it quotes something that is not in the transcript it was given, nor (in a technical round, row I4.5)
+//                  in one line of the pad or of the last run's output it was shown (decision 6: a source for every claim);
 //   judges         it rates, scores, ranks, compares or recommends, or calls an answer good or bad;
 //   personal       it speaks of the candidate's face, looks, voice, tone, accent, age, health, family, origin, beliefs or
 //                  another personal trait rather than of what was said.
@@ -73,8 +74,17 @@ export function quotedFrom(quote: string, lines: readonly CoachLine[]): boolean 
   return q.length > 0 && lines.some((l) => norm(l.text).includes(q));
 }
 
-/** The model's text read as one suggestion, checked against the kit's competencies and the transcript it was given. */
-export function parseCoachAnswer(raw: string | null, ctx: { competencyIds: readonly string[]; lines: readonly CoachLine[] }): ParseResult {
+/** Is `quote` a piece of one line of the code the coach was shown (the pad's or the output's)? */
+export function quotedFromCode(quote: string, codeLines: readonly string[]): boolean {
+  const q = norm(quote);
+  return q.length > 0 && codeLines.some((l) => norm(l).includes(q));
+}
+
+/**
+ * The model's text read as one suggestion, checked against the kit's competencies and the transcript it was given, and
+ * in a technical round the lines of code it was shown (`codeLines`, prompt.ts `codeLinesOf`).
+ */
+export function parseCoachAnswer(raw: string | null, ctx: { competencyIds: readonly string[]; lines: readonly CoachLine[]; codeLines?: readonly string[] }): ParseResult {
   const json = raw === null ? null : extractJson(raw);
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { ok: false, code: 'malformed' };
   const o = json as Record<string, unknown>;
@@ -88,7 +98,7 @@ export function parseCoachAnswer(raw: string | null, ctx: { competencyIds: reado
   if (t.length > MAX_SUGGESTION_CHARS) return { ok: false, code: 'too-long' };
   const quote = basedOn === null ? null : squash(basedOn);
   if (quote !== null && quote.length > MAX_BASED_ON_CHARS) return { ok: false, code: 'too-long' };
-  if (quote && !quotedFrom(quote, ctx.lines)) return { ok: false, code: 'unsourced' };
+  if (quote && !quotedFrom(quote, ctx.lines) && !quotedFromCode(quote, ctx.codeLines ?? [])) return { ok: false, code: 'unsourced' };
   const guard = guardSuggestion(t);
   if (guard) return { ok: false, code: guard };
   return { ok: true, suggestion: { text: t, competencyId, basedOn: quote || null } };

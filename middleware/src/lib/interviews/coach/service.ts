@@ -19,7 +19,8 @@ import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, typ
 import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
 import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, type CoachModel, type CoachModelResult } from './model.js';
 import { parseCoachAnswer, type ParseResult } from './parse.js';
-import { COACH_PROMPT_VERSION, MAX_PREVIOUS, type CoachInput, type CoachLine } from './prompt.js';
+import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
+import type { RunView } from '../runs/service.js';
 import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type TranscriptSource } from './transcript.js';
@@ -79,12 +80,33 @@ let overrides: Partial<CoachDeps> = {};
 export function setCoachDeps(next: Partial<CoachDeps> | null): void { overrides = next ?? {}; }
 const deps = (): CoachDeps => ({ ...DEFAULTS, ...overrides });
 
+/** I4.5: what the coach reads of an interview's code: the pad's current text and the last run. */
+export type CoachCodeSource = (interviewId: string) => Promise<{ pad: { text: string; language: string | null } | null; lastRun: RunView | null }>;
+let codeSource: CoachCodeSource | null = null;
+/**
+ * U4: where the coach reads the code. Default: no code. lib/interviews/runs/index.ts registers one (its `lastRun`, no pad)
+ * when it loads; the integrator points `pad` at the pad log's `latestPadSnapshot` (hook H2). Not reset by setCoachDeps.
+ */
+export function setCoachCodeSource(read: CoachCodeSource | null): void { codeSource = read; }
+
+/** The code part of the request for a technical round, or null (no source, nothing there, or the source failed). */
+export async function coachCodeFor(interview: Pick<Interview, 'id' | 'type'>): Promise<CoachCode | null> {
+  if (interview.type !== 'technical' || !codeSource) return null;
+  try {
+    const got = await codeSource(interview.id);
+    return coachCode(got.pad, got.lastRun ? { language: got.lastRun.language, status: got.lastRun.status, result: got.lastRun.result } : null);
+  } catch (e) {
+    console.warn('[interviews] coach code not read', (e as Error)?.name ?? 'error');
+    return null;
+  }
+}
+
 const inFlight = new Set<string>();
 
 /** The interview and the opening that holds its kit, found in the viewer's scope by the route. */
 export interface CoachRef { interview: Interview; opening: Opening }
 
-export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: readonly SuggestionRecord[]): CoachInput {
+export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: readonly SuggestionRecord[], code: CoachCode | null = null): CoachInput {
   const kit = ref.opening.kit;
   return {
     roundType: ref.interview.type,
@@ -95,6 +117,7 @@ export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: read
     lines: [...lines],
     previous: log.filter((r) => r.dropped === null && r.competencyId !== null).slice(-MAX_PREVIOUS)
       .map((r) => ({ text: r.text, competencyId: r.competencyId!, answer: r.answer })),
+    ...(code ? { code } : {}),
   };
 }
 
@@ -163,7 +186,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
   try {
     const model = d.model();
     const lines = transcript!.lines;
-    const input = coachInput(ref, lines, log);
+    const input = coachInput(ref, lines, log, await coachCodeFor(interview));
     const id = d.newId();
     const held = await d.reserve({
       interviewId: interview.id, part: 'coach', key: id, estimateUsd: coachEstimateUsd(model, input), expiresInMs: COACH_TIMEOUT_MS * 2 + 30_000,
@@ -173,7 +196,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     try { result = await model.suggest(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
     await book(d, model, input, held, result, viewer.userId);
     const parsed: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
-      ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines })
+      ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
       : { ok: false, code: result.code };
     const madeAt = iso(d.now());
     const row: SuggestionRecord = {

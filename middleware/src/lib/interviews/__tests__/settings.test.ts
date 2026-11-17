@@ -12,7 +12,7 @@ describe('interviewsSettings', () => {
     const all = interviewsSettings({});
     expect(all.map((s) => s.name)).toEqual([
       'INTERVIEWS_ENABLED', 'INTERVIEWS_MEDIA_RETENTION_DAYS', 'INTERVIEWS_RECORD_RETENTION_YEARS', 'INTERVIEWS_DELETION_WITHIN_DAYS',
-      'INTERVIEWS_SOON_MINUTES', 'INTERVIEWS_REQUIRED_CONSENTS', 'INTERVIEWS_INTERVIEW_CAP_USD', 'INTERVIEWS_GUEST_REALTIME',
+      'INTERVIEWS_SOON_MINUTES', 'INTERVIEWS_REQUIRED_CONSENTS', 'INTERVIEWS_INTERVIEW_CAP_USD', 'INTERVIEWS_RUN_PRICE_USD', 'INTERVIEWS_GUEST_REALTIME',
     ]);
     for (const s of all) expect([s.name, s.value]).toEqual([s.name, s.default]);
     expect(byName({})['INTERVIEWS_SOON_MINUTES']!.default).toBe(15);
@@ -25,13 +25,15 @@ describe('interviewsSettings', () => {
     try {
       const s = byName({
         INTERVIEWS_ENABLED: 'false', INTERVIEWS_MEDIA_RETENTION_DAYS: '30', INTERVIEWS_SOON_MINUTES: '45', INTERVIEWS_REQUIRED_CONSENTS: 'milo',
-        INTERVIEWS_INTERVIEW_CAP_USD: '4.5', INTERVIEWS_GUEST_REALTIME: '0', INTERVIEWS_RECORD_RETENTION_YEARS: 'forever',
+        INTERVIEWS_INTERVIEW_CAP_USD: '4.5', INTERVIEWS_RUN_PRICE_USD: '0.01', INTERVIEWS_GUEST_REALTIME: '0', INTERVIEWS_RECORD_RETENTION_YEARS: 'forever',
       });
       expect(s['INTERVIEWS_ENABLED']!.value).toBe(false);
       expect(s['INTERVIEWS_MEDIA_RETENTION_DAYS']!.value).toBe(30);
       expect(s['INTERVIEWS_SOON_MINUTES']!.value).toBe(45);
       expect(s['INTERVIEWS_REQUIRED_CONSENTS']!.value).toEqual(['transcription', 'milo']);
       expect(s['INTERVIEWS_INTERVIEW_CAP_USD']!.value).toBe(4.5);
+      expect(s['INTERVIEWS_RUN_PRICE_USD']!.value).toBe(0.01);
+      expect(byName({ INTERVIEWS_RUN_PRICE_USD: '-1' })['INTERVIEWS_RUN_PRICE_USD']!.value).toBe(0.0017);
       expect(s['INTERVIEWS_GUEST_REALTIME']!.value).toBe(false);
       expect(s['INTERVIEWS_RECORD_RETENTION_YEARS']!.value).toBe(4);
     } finally {

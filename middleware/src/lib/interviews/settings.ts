@@ -12,6 +12,7 @@ import { DEFAULT_PERIODS, DELETION_DAYS_SETTING, MEDIA_DAYS_SETTING, RECORD_YEAR
 import { SOON_MINUTES, SOON_MINUTES_SETTING, soonMinutes } from './soon.js';
 import { REQUIRED_CONSENTS_SETTING, requiredConsents } from './consent/required.js';
 import { DEFAULT_INTERVIEW_CAP_USD, defaultInterviewCapUsd } from './spend.js';
+import { DEFAULT_RUN_PRICE_USD, RUN_PRICE_SETTING, runPriceUsd } from './runs/service.js';
 
 export type SettingValue = boolean | number | string[];
 
@@ -36,6 +37,7 @@ export function interviewsSettings(env: NodeJS.ProcessEnv = process.env): Interv
     { name: SOON_MINUTES_SETTING, value: soonMinutes(env), default: SOON_MINUTES, about: 'Minutes before the start the starting-soon bell rings.' },
     { name: REQUIRED_CONSENTS_SETTING, value: requiredConsents(env), default: requiredConsents({}, NO_WARN), about: 'Consents the call cannot start without (declining is still stored).' },
     { name: 'INTERVIEWS_INTERVIEW_CAP_USD', value: defaultInterviewCapUsd(env), default: DEFAULT_INTERVIEW_CAP_USD, about: 'Dollars an interview may spend when its opening sets no cap.' },
+    { name: RUN_PRICE_SETTING, value: runPriceUsd(env), default: DEFAULT_RUN_PRICE_USD, about: 'Dollars held and booked for each run of the code pad (the mock executor\'s price).' },
     { name: 'INTERVIEWS_GUEST_REALTIME', value: guestRealtimeEnabled(env), default: guestRealtimeEnabled({}), about: 'A candidate may hold a realtime token for the call.' },
   ];
 }
