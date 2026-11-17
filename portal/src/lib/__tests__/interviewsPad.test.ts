@@ -150,3 +150,46 @@ test('three people in one pad (lead, panel member, candidate) have three named c
   // The candidate's caret never carries their name, whatever the panel is called.
   assert.equal(caretName('candidate', 'Hugo Marchetti'), 'Candidate');
 });
+
+// OWED O-235 (lane H8): a socket that drops mid-edit. The pad's state goes `down` (InterviewPad shows "The connection dropped.
+// The code stays here and catches up when it is back.", and the editor is read-only: only `synced` edits); the text on screen
+// stays; what the other person typed meanwhile arrives on reconnect, and a resend of the same updates (a replay after the
+// reconnect) neither loses nor doubles anything.
+test('a socket that drops mid-edit: down, the code stays, read-only until in sync, nothing lost or doubled', () => {
+  const base = { configured: true, synced: true, refused: false };
+  assert.equal(padConnection({ ...base, connectionState: 'connected' }), 'synced');
+  assert.equal(padConnection({ ...base, connectionState: 'reconnecting' }), 'down', 'the warning shows while it reconnects');
+  assert.equal(padConnection({ ...base, connectionState: 'disconnected' }), 'down');
+  assert.notEqual(padConnection({ ...base, connectionState: 'reconnecting' }), 'synced', 'not synced: the editor is read-only');
+  assert.equal(padConnection({ ...base, synced: false, connectionState: 'connected' }), 'connecting', 'back, but not in sync yet: still read-only');
+
+  // The lead's socket drops after the first line; the candidate keeps typing.
+  const lead = new Y.Doc(), candidate = new Y.Doc();
+  let online = true;
+  const missed: Uint8Array[] = [];
+  lead.on('update', (u: Uint8Array, origin: unknown) => { if (origin !== 'relay' && online) Y.applyUpdate(candidate, u, 'relay'); });
+  candidate.on('update', (u: Uint8Array, origin: unknown) => {
+    if (origin === 'relay') return;
+    if (online) Y.applyUpdate(lead, u, 'relay'); else missed.push(u);
+  });
+  candidate.getText(PAD_TEXT_NAME).insert(0, 'def solve(items):\n');
+  assert.equal(lead.getText(PAD_TEXT_NAME).toString(), 'def solve(items):\n');
+  online = false;
+  const t = candidate.getText(PAD_TEXT_NAME);
+  t.insert(t.length, '    items.sort()\n');
+  t.insert(t.length, '    return items\n');
+  assert.equal(lead.getText(PAD_TEXT_NAME).toString(), 'def solve(items):\n', 'the code on the lead\'s screen stays as it was');
+  assert.equal(missed.length, 2);
+
+  // Back: the catch-up (the other side's state the lead lacks), then the same updates resent.
+  online = true;
+  Y.applyUpdate(lead, Y.encodeStateAsUpdate(candidate, Y.encodeStateVector(lead)), 'relay');
+  for (const u of missed) Y.applyUpdate(lead, u, 'relay');
+  Y.applyUpdate(lead, Y.encodeStateAsUpdate(candidate), 'relay');
+  const want = 'def solve(items):\n    items.sort()\n    return items\n';
+  assert.equal(lead.getText(PAD_TEXT_NAME).toString(), want, 'nothing lost, nothing doubled');
+  assert.equal(candidate.getText(PAD_TEXT_NAME).toString(), want);
+  // And the lead types again once in sync: both sides read it once.
+  lead.getText(PAD_TEXT_NAME).insert(0, '# lead\n');
+  assert.equal(candidate.getText(PAD_TEXT_NAME).toString(), `# lead\n${want}`);
+});
