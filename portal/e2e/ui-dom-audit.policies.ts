@@ -163,6 +163,7 @@ const INTERVIEWS_COLLECTIONS = new RegExp(`^/interviews/(?:${INTERVIEWS_COLLECTI
  */
 const INTERVIEWS_REVIEWED: Array<{ match: RegExp; reason: string }> = [
   { match: /^\/interviews\/candidates\/[^/]+\/assign$/, reason: 'Assign a round is one form (which round, when, who leads, the panel) with a Submit action; it commands no collection.' },
+  { match: /^\/interviews\/candidates\/[^/]+$/, reason: 'A candidate\'s profile read by a role that does not manage candidates (an interviewer or a hiring manager): the rounds and history are read in place, and the composer docks only for the recruiter.' },
   { match: /^\/interviews\/openings\/[^/]+$/, reason: 'An opening\'s read view: its kit and rounds beside the Openings rail. Changes are made in the editor (/edit), where the composer docks.' },
   { match: /^\/interviews\/rounds\/[^/]+\/prepare$/, reason: 'Prepare is one reading view of a round (its plan, the questions and the candidate\'s résumé); nothing on it is a collection to command.' },
   { match: /^\/interviews\/rounds\/[^/]+\/scorecard$/, reason: 'The scorecard is a form (ratings, notes, a summary); its decisions are asked in the page\'s own prompt deck and saved with its own button.' },
