@@ -15,13 +15,18 @@ import { WrappedChatPanel } from '@connorhoehn/ui-components/integrations/realti
 const newDeliveryId = (): string => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
 export function GuestRoomChat({ callId, self, onClose }: { callId: string; self: { userId: string; displayName: string }; onClose(): void }) {
+  return <ChatSidePanelFrame title="Messages" subtitle="Everyone in the call reads these" onClose={onClose} closeLabel="Hide messages"
+    className="w-80 shrink-0 border-l border-border bg-surface" data-testid="join-room-chat">
+    <GuestRoomChatBody callId={callId} self={self} />
+  </ChatSidePanelFrame>;
+}
+
+/** The chat alone, for a pane that has its own frame (a technical round's Chat tab, beside the pad). */
+export function GuestRoomChatBody({ callId, self }: { callId: string; self: { userId: string; displayName: string } }) {
   const chat = useChat(`orgiq:huddle:${callId}`);
   const sendable = useMemo(() => ({
     ...chat,
     sendMessage: (text: string, metadata?: Record<string, unknown>) => chat.sendMessage(text, { ...metadata, clientDeliveryId: newDeliveryId() }),
   }), [chat]);
-  return <ChatSidePanelFrame title="Messages" subtitle="Everyone in the call reads these" onClose={onClose} closeLabel="Hide messages"
-    className="w-80 shrink-0 border-l border-border bg-surface" data-testid="join-room-chat">
-    <WrappedChatPanel chat={sendable} currentUserId={self.userId} displayName={self.displayName} fill showHeader={false} />
-  </ChatSidePanelFrame>;
+  return <WrappedChatPanel chat={sendable} currentUserId={self.userId} displayName={self.displayName} fill showHeader={false} />;
 }

@@ -6,7 +6,7 @@
 // bound to the lobby as the panel's page binds it), the call chat is the one right pane, and the call's controls sit
 // at the bottom in the library's `HuddleBar` (microphone, camera, Leave) with the time left beside them. No shell,
 // no rails, no bell, no tenant chrome, no sharing, rooms, reactions, Milo, transcript, plan or questions. In a
-// technical round the pad would be the pane; it is not installed, so nothing stands in its place.
+// technical round the pane is the code pad with its runs, and the chat is the pane's second tab (GuestPadPane).
 //
 // The room is read every few seconds (bounded, stopped on unmount). `ended`, or a not-found (turned away mid-call,
 // the link taken back), leaves the call and opens the ended page. Leave returns to a line offering to rejoin.
@@ -19,6 +19,7 @@ import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { roomStartMs, timeLeftLabel, timeLeftTone } from '../../lib/interviewsRoom';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
+import { GuestPadPane } from './GuestPadPane';
 import { GuestRoomChat } from './GuestRoomChat';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
@@ -145,7 +146,9 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
     onEnded();
   }, [over, call.here, leave, onEnded]);
 
-  const [chatOpen, setChatOpen] = useState(true);
+  // A technical round's pane is the pad, with the chat its second tab: Message switches to that tab and back.
+  const technical = room.round.type === 'technical';
+  const [chatOpen, setChatOpen] = useState(!technical);
   const callId = host?.call.call?.callId ?? null;
   const view = roomView({ token: 'ready', joined, left });
 
@@ -160,7 +163,8 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
               : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
             testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />
         </Stack>}
-      {joined && chatOpen && callId && <GuestRoomChat callId={callId} self={room.self} onClose={() => setChatOpen(false)} />}
+      {joined && callId && technical && <GuestPadPane room={room} callId={callId} tab={chatOpen ? 'chat' : 'pad'} onTab={(t) => setChatOpen(t === 'chat')} />}
+      {joined && chatOpen && callId && !technical && <GuestRoomChat callId={callId} self={room.self} onClose={() => setChatOpen(false)} />}
     </Inline>
     <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
       <CallMediaOutlet />
