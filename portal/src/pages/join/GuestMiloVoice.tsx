@@ -5,7 +5,8 @@
 //                      frames on the call chat's channel `orgiq:huddle:<callId>`, through the same player the Work footer uses
 //                      (lib/assistantVoice.ts). The server relays only approved words in an interview, so every frame that comes is
 //                      meant for the candidate's ears. One line: the question Milo last asked, read from the same channel's chat
-//                      frames (only messages with the server's approved mark, lib/interviewsRoom.ts `lastAskedOf`).
+//                      frames (a guest receives only Milo's approved lines; the answers to its requests are left out by their
+//                      fixed words, lib/interviewsRoom.ts `lastAskedOf`).
 //   GuestMiloRequests  "Repeat the question" and "How much time is left?": POST /api/interview-invite/milo/request, and the
 //                      server's sentence beside them. Milo also says it aloud when it is listening with its voice on.
 //

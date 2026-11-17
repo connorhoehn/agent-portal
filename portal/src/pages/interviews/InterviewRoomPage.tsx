@@ -243,7 +243,7 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
         {tab === 'pad' && <PadTab room={room} />}
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
-          onAsked={type === 'technical' ? (q) => { queuePadQuestion(room.id, q); setTab('pad'); } : undefined} />}
+          onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}
         {tab === 'milo' && <MiloForYou room={room} {...milo} />}
       </Stack>}
@@ -253,10 +253,11 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
 /**
  * The chosen questions with their follow-ups: a technical round's Questions tab, a behavioural round's plan. For the lead while the
  * interview is live (`asks`), each has "Have Milo ask" (row I3.5, decision 11): the server reads the question from the kit, posts it
- * in the call chat and Milo says it aloud; in a technical round `onAsked` also puts it in the pad. The result is one plain line.
+ * in the call chat and Milo says it aloud; in a technical round `onAsked` also puts it in the pad (the Pad tab opens on it when Milo
+ * said it aloud; otherwise the lead stays here to read why, and the pad takes it when it is next open). The result is one plain line.
  */
 function Questions({ questions, title = 'Questions', interviewId, asks = false, onAsked }: {
-  questions: RoomQuestion[]; title?: string; interviewId?: string; asks?: boolean; onAsked?: (q: RoomQuestion) => void;
+  questions: RoomQuestion[]; title?: string; interviewId?: string; asks?: boolean; onAsked?: (q: RoomQuestion, said: MiloSaid) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<{ id: string; line: string; said: MiloSaid | null } | null>(null);
@@ -267,7 +268,7 @@ function Questions({ questions, title = 'Questions', interviewId, asks = false, 
     setBusy(null);
     if (!out.ok) { setResult({ id: q.id, line: out.error, said: null }); return; }
     setResult({ id: q.id, line: out.line, said: out.said });
-    onAsked?.(q);
+    onAsked?.(q, out.said);
   };
   if (!questions.length) return <PageSection size="sm" title={title} empty="No questions were chosen for this round." />;
   return <PageSection size="sm" title={title} count={questions.length}>

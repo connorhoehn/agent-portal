@@ -433,9 +433,26 @@ export function takePadQuestion(interviewId: string): PendingQuestion | null { c
 export function onPadQuestion(fn: () => void): () => void { padListeners.add(fn); return () => { padListeners.delete(fn); }; }
 
 /**
+ * Milo's answers to the candidate's two requests and its fixed sentence (middleware lib/interviews/speak/index.ts writes these
+ * exact forms; keep the two in step). A guest reads Milo's lines with none of the assistant's keys (contract E9), so the candidate's
+ * page tells an answer from a question by its words.
+ */
+const MILO_ANSWER_LINES = [
+  /^About \d+ minutes? (?:are|is) left in this round\.$/,
+  /^This round is \d+ minutes long\.$/,
+  /^This round is at the end of its time\.$/,
+  /^Milo has not asked a question yet\.$/,
+  /^I can repeat the question or tell you how much time is left\./,
+];
+export const isMiloAnswerLine = (text: string): boolean => MILO_ANSWER_LINES.some((re) => re.test(text.trim()));
+
+/** Milo's fixed chat identity (middleware lib/meeting-assistant/chat-types.ts ASSISTANT_USER_ID). */
+export const MILO_USER_ID = 'agent:meeting-assistant';
+
+/**
  * The candidate's room (contract U9): the question Milo last asked, read from the call chat's frames on the socket the page already
- * holds. Only Milo's messages with the server's approved mark count, and of those only questions (not the `approvedAnswer` ones,
- * which answer the candidate's two requests). Returns the newer question, or `current` when the frame holds none.
+ * holds. The server lets a guest read only Milo's approved lines (lib/call-chat.ts `guestMaySee`), as plain lines under Milo's
+ * name; of those, the answers to the candidate's requests are left out. Returns the newer question, or `current` when none.
  */
 export function lastAskedOf(frame: unknown, channel: string, current: string | null): string | null {
   const f = frame && typeof frame === 'object' ? frame as Record<string, unknown> : null;
@@ -444,10 +461,11 @@ export function lastAskedOf(frame: unknown, channel: string, current: string | n
   let found = current;
   for (const m of list) {
     const msg = m && typeof m === 'object' ? m as Record<string, unknown> : null;
-    const meta = msg?.['metadata'] && typeof msg['metadata'] === 'object' ? msg['metadata'] as Record<string, unknown> : null;
-    if (!meta || meta['assistant'] !== true || meta['approvedQuestion'] !== true || meta['approvedAnswer'] === true || meta['deleted'] === true) continue;
-    const text = typeof msg!['message'] === 'string' ? msg!['message'].trim() : '';
-    if (text) found = text.slice(0, 500);
+    if (!msg || msg['userId'] !== MILO_USER_ID) continue;
+    const meta = msg['metadata'] && typeof msg['metadata'] === 'object' ? msg['metadata'] as Record<string, unknown> : {};
+    if (meta['deleted'] === true || meta['approvedAnswer'] === true) continue;
+    const text = typeof msg['message'] === 'string' ? msg['message'].trim() : '';
+    if (text && !isMiloAnswerLine(text)) found = text.slice(0, 500);
   }
   return found;
 }

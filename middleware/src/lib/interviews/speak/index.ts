@@ -69,6 +69,8 @@ export interface SpeakDeps {
   say: (callId: string, text: string, by: string) => Promise<'spoken' | 'posted' | 'no-call'>;
   /** When Milo joined this call (epoch ms), or null when it is not in it. */
   miloJoinedAt: (callId: string) => Promise<number | null>;
+  /** The call Milo is in for this interview: its `callId` when Milo has a record there, else Milo's newest open record in the lobby. */
+  callOf: (interview: { id: string; callId: string | null }) => Promise<string | null>;
   now: () => number;
   newId: () => string;
 }
@@ -85,6 +87,15 @@ const defaultDeps = (): SpeakDeps => ({
     const { assistantStore } = await import('../../meeting-assistant/store-select.js');
     const record = await assistantStore().get(callId).catch(() => null);
     return record && record.state !== 'left' ? record.invitedAt : null;
+  },
+  // As the coach finds it (coach/transcript.ts): an interview's call id is often unset while it runs (the shell's call is the lobby's).
+  callOf: async (interview) => {
+    const { assistantStore } = await import('../../meeting-assistant/store-select.js');
+    const store = assistantStore();
+    if (interview.callId && await store.get(interview.callId).catch(() => null)) return interview.callId;
+    const lobby = `interviews:interview:${interview.id}`;
+    const open = (await store.listByState(['listening', 'paused'], 500).catch(() => [])).filter((r) => r.lobby === lobby);
+    return open.at(-1)?.callId ?? interview.callId;
   },
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
@@ -128,11 +139,12 @@ export async function sayLogged(interviewId: string, row: SaidRecord, callId: st
 /** Log, post, then say: the one path for approved words in an interview call. Never throws for the voice; a log failure throws. */
 export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, input: SayInput): Promise<{ said: Said; row: SaidRecord }> {
   const d = deps();
-  const row = await logSaid(interview, input);
-  if (!interview.callId) return { said: 'none', row };
-  const posted = await d.post(interview.callId, input.text, input.kind).catch(() => false);
+  const callId = await d.callOf(interview).catch(() => interview.callId);
+  const row = await logSaid({ id: interview.id, callId }, input);
+  if (!callId) return { said: 'none', row };
+  const posted = await d.post(callId, input.text, input.kind).catch(() => false);
   if (!posted) return { said: 'none', row };
-  const out = await d.say(interview.callId, input.text, input.askedBy).catch(() => 'posted' as const);
+  const out = await d.say(callId, input.text, input.askedBy).catch(() => 'posted' as const);
   if (out !== 'spoken') return { said: 'chat', row };
   const marked = await d.store().markSpoken(interview.id, row.id).catch(() => null);
   return { said: 'spoken', row: marked ?? { ...row, spoken: true } };
@@ -146,7 +158,8 @@ export async function candidateLine(interview: Pick<Interview, 'id' | 'callId' |
     return { text: q ?? NO_QUESTION_YET, source: 'repeat' };
   }
   if (request === 'time') {
-    const joined = interview.callId ? await d.miloJoinedAt(interview.callId).catch(() => null) : null;
+    const callId = await d.callOf(interview).catch(() => interview.callId);
+    const joined = callId ? await d.miloJoinedAt(callId).catch(() => null) : null;
     return { text: timeLeftLine(interview.minutes, roundStartMs(interview.scheduledAt, joined, d.now()), d.now()), source: 'time' };
   }
   return { text: MILO_CAN_DO, source: 'refusal' };
