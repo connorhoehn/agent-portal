@@ -98,6 +98,9 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   'round:scorecard': 'Scorecard',
   'round:record': 'Record',
   'round:debrief': 'Debrief',
+  // A candidate's pages: /interviews/candidates/:id/<page>.
+  'candidate:assign': 'Assign a round',
+  'candidate:debrief': 'Debrief',
   // slot 5: a lane adds its entries just below this line
   prepare: 'Prepare',
   scorecard: 'Scorecard',
@@ -126,6 +129,13 @@ export function interviewsRoundHome(role: string | null | undefined): Crumb[] {
   if (role === 'interviewer') return [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }];
   if (role === 'hiring-manager') return [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }];
   return [{ label: 'Hire' }, { label: 'Upcoming', path: '/interviews/upcoming' }];
+}
+
+/** The home of `candidates/:id…` by role: recruiter and admin read Hire › Candidates, a hiring manager Hire › My openings, an interviewer Interview › My interviews. */
+export function interviewsCandidateHome(role: string | null | undefined): Crumb[] {
+  if (role === 'interviewer') return [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }];
+  if (role === 'hiring-manager') return [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }];
+  return [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }];
 }
 
 /** `<group> › <home> › <candidate, round> › <page>`; the third crumb's label is what the round's page registers under its id. */
@@ -338,6 +348,12 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
     const page = a ?? 'candidates';
     const trail: Crumb[] = [{ label: INTERVIEWS_GROUPS[page] ?? 'Candidates' }];
     // A candidate's profile (Hire › Candidates › name); the page registers the name as the crumb's label.
+    // By role: a hiring manager's home is My openings, an interviewer's My interviews. `…/assign` and `…/debrief` end the trail.
+    if (page === 'candidates' && b && b !== 'new') {
+      const home = interviewsCandidateHome(role);
+      const name: Crumb = { label: shortId(b), id: b, ...(c && INTERVIEWS_LABELS[`candidate:${c}`] ? { path: `/interviews/candidates/${encodeURIComponent(b)}` } : {}) };
+      return [...home, name, ...(c && INTERVIEWS_LABELS[`candidate:${c}`] ? [{ label: INTERVIEWS_LABELS[`candidate:${c}`]! }] : [])];
+    }
     if (page === 'candidates' && b) return [...trail, { label: INTERVIEWS_LABELS[page] ?? page, path: '/interviews/candidates' }, { label: shortId(b), id: b }];
     // An opening beside the Openings rail (Hire › Openings › title, then Edit on the editor); the page registers the title.
     if (page === 'openings' && b && b !== 'new') {

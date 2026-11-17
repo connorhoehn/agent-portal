@@ -49,8 +49,8 @@ export default function ProfileConsents({ candidateId }: { candidateId: string }
   ];
 
   return (
-    <Stack gap="md" className="px-[var(--ui-page-gutter)]" data-testid="interviews-profile-consents-section">
-      <DetailSection variant="heading" title="Consents" hint={items ? plural(items.length, 'round') : undefined}>
+    <Stack gap="md" data-testid="interviews-profile-consents-section">
+      <DetailSection variant="heading" as="h2" title="Consents" hint={items ? plural(items.length, 'round') : undefined}>
         {items === null
           ? <LoadingState label="Loading consents…" />
           : (

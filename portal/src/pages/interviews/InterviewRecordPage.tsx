@@ -28,7 +28,7 @@ import {
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
-import { framesOf, markersOf, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
+import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
 
@@ -97,11 +97,13 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const padLog = usePadLog(interview.id, technical);
   const runs: RunView[] = record.runs ?? [];
   const frames = useMemo(() => framesOf(padLog.events ?? [], interview.startedAt), [padLog.events, interview.startedAt]);
-  const playbackMarkers: PlaybackMarker[] = useMemo(() => markersOf({
+  // The length comes from the unmerged moments; the markers drawn merge the ones that would sit on each other.
+  const momentList = useMemo(() => markersOf({
     events: padLog.events ?? [], startedAt: interview.startedAt, recordMarkers: markers, runs, questions: record.questions ?? [],
   }), [padLog.events, interview.startedAt, markers, runs, record.questions]);
-  const durationMs = useMemo(() => playbackDurationMs(record, Math.max(0, ...frames.map((f) => f.atMs), ...playbackMarkers.map((m) => m.atMs), ...transcript.lines.map((l) => l.atMs))),
-    [record, frames, playbackMarkers, transcript.lines]);
+  const durationMs = useMemo(() => playbackDurationMs(record, Math.max(0, ...frames.map((f) => f.atMs), ...momentList.map((m) => m.atMs), ...transcript.lines.map((l) => l.atMs))),
+    [record, frames, momentList, transcript.lines]);
+  const playbackMarkers: PlaybackMarker[] = useMemo(() => mergeCloseMarkers(momentList, durationMs), [momentList, durationMs]);
   const run = runAtTime(runs, interview.startedAt, timeMs);
   const runModel = useMemo(() => (run ? runOutputModel({ runId: run.runId, view: run, events: {}, seen: 0 }) : null), [run]);
 
@@ -138,14 +140,14 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   );
 
   const words = transcriptNote ? (
-    <DetailSection variant="heading" first title="Transcript"><T size="sm" tone="secondary" wrap data-testid="interviews-record-transcript-line">{transcriptNote}</T></DetailSection>
+    <DetailSection variant="heading" as="h2" first title="Transcript"><T size="sm" tone="secondary" wrap data-testid="interviews-record-transcript-line">{transcriptNote}</T></DetailSection>
   ) : (
     <TranscriptPanel status="ready" segments={segments} currentTimeMs={timeMs} onSeek={moveTo}
       emptyMessage="Nothing was transcribed in this interview." data-testid="interviews-record-transcript-panel" />
   );
 
   const moments = (
-    <DetailSection variant="heading" title="Moments" hint="When a question was asked. Choosing one moves the transcript there." data-testid="interviews-record-markers">
+    <DetailSection variant="heading" as="h2" title="Moments" hint="When a question was asked. Choosing one moves the transcript there." data-testid="interviews-record-markers">
       {markers.length ? (
         <Stack gap="xs">
           {markers.map((m) => (
@@ -165,7 +167,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
 
   const left = (
     <Stack gap="md" className="h-full min-h-0 min-w-0 pr-3" data-testid="interviews-record-body">
-      <DetailSection variant="heading" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>
+      <DetailSection variant="heading" as="h2" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>
       {technical
         ? <Stack gap="xs" className="min-h-0 flex-1" data-testid="interviews-record-code-section">
             <T size="sm" weight="medium">Code</T>

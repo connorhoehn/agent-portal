@@ -2,7 +2,7 @@
 // to, the whole log read through its pages, and the run a moment belongs to.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { framesOf, markersOf, padLogUrl, pasteLabel, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PadLogPage } from '../interviewsPlayback.ts';
+import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, pasteLabel, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PadLogPage } from '../interviewsPlayback.ts';
 import type { RunView } from '../interviewsPad.ts';
 
 const START = '2026-11-10T14:00:00.000Z';
@@ -84,4 +84,35 @@ test('the timeline is the recording\'s length, else the interview\'s, else the l
   assert.equal(playbackDurationMs({ interview: { startedAt: START, endedAt: at(3600) }, recording: { durationSeconds: null } } as never, 0), 3_600_000);
   assert.equal(playbackDurationMs({ interview: { startedAt: null, endedAt: null }, recording: { durationSeconds: null } } as never, 5_000), 60_000);
   assert.equal(padLogUrl('iv 1', 4), '/api/interviews/interviews/iv%201/pad/log?after=4');
+});
+
+test('markers of one kind closer than 2% of the length become one, naming them all, at the first one’s time', () => {
+  const runs = [
+    { runId: 'a', queuedAt: '2026-01-01T10:09:50.000Z', status: 'failed', startedBy: { name: 'Mateo' } },
+    { runId: 'b', queuedAt: '2026-01-01T10:09:58.000Z', status: 'succeeded', startedBy: { name: 'Mateo' } },
+    { runId: 'c', queuedAt: '2026-01-01T10:30:00.000Z', status: 'succeeded', startedBy: { name: 'Mateo' } },
+  ] as unknown as Parameters<typeof markersOf>[0]['runs'];
+  const base = { events: [], startedAt: '2026-01-01T10:00:00.000Z', recordMarkers: [], runs, questions: [] };
+  // 60 minutes: 2% is 72 s, so runs 1 and 2 (8 s apart) join and run 3 stands alone.
+  const m = markersOf({ ...base, durationMs: 3_600_000 });
+  assert.deepEqual(m.map((x) => [x.atMs, x.label]), [[590_000, 'Runs 1 and 2 at 9:50'], [1_800_000, 'Run 3']]);
+  assert.equal(m[0]!.runId, 'a');
+  assert.equal(m[0]!.detail, 'Run 1 failed, by Mateo; Run 2 passed, by Mateo');
+  // Without a length nothing merges; a short playback keeps them apart.
+  assert.equal(markersOf(base).length, 3);
+  assert.equal(markersOf({ ...base, durationMs: 300_000 }).length, 3);
+  // Three runs read "Runs 1, 2 and 3"; the run shown at any time is still chosen by time, so all stay reachable.
+  const three = markersOf({ ...base, runs: [...runs.slice(0, 2), { ...runs[2]!, queuedAt: '2026-01-01T10:10:05.000Z' }], durationMs: 3_600_000 });
+  assert.deepEqual(three.map((x) => x.label), ['Runs 1, 2 and 3 at 9:50']);
+  assert.equal(runAtTime(runs, base.startedAt, 599_000)!.runId, 'b');
+});
+
+test('different kinds never merge, and pastes and questions name each other', () => {
+  const near = [
+    { atMs: 100_000, kind: 'paste', label: 'Paste, 3 lines', detail: 'x' },
+    { atMs: 101_000, kind: 'run', label: 'Run 1', detail: 'y' },
+    { atMs: 102_000, kind: 'paste', label: 'Paste, 9 lines', detail: 'z' },
+  ] as const;
+  const out = mergeCloseMarkers(near as unknown as Parameters<typeof mergeCloseMarkers>[0], 3_600_000);
+  assert.deepEqual(out.map((x) => x.label), ['2 pastes at 1:40: Paste, 3 lines, Paste, 9 lines', 'Run 1']);
 });

@@ -73,8 +73,10 @@ const RUN_ENDING: Partial<Record<RunView['status'], string>> = {
 export function markersOf(input: {
   events: readonly PadLogEvent[]; startedAt: string | null; recordMarkers: readonly RecordMarker[];
   runs: readonly RunView[]; questions: readonly { id: string; prompt: string }[];
+  /** The playback's length: with it, markers of one kind closer than 2% of it become one (see `mergeCloseMarkers`). */
+  durationMs?: number;
 }): PlaybackMarker[] {
-  const out: PlaybackMarker[] = [];
+  const out: Array<PlaybackMarker & { runNo?: number }> = [];
   const marked = new Set(input.recordMarkers.map((m) => m.label.trim()));
   for (const m of input.recordMarkers) out.push({ atMs: m.atMs, kind: 'question', label: clip(m.label), detail: m.kind === 'milo-asked' ? `Milo asked: ${m.label}` : `Question asked: ${m.label}` });
   for (const e of input.events) {
@@ -88,9 +90,45 @@ export function markersOf(input: {
   }
   input.runs.forEach((r, i) => {
     const ending = RUN_ENDING[r.status];
-    out.push({ atMs: msFrom(input.startedAt, r.queuedAt), kind: 'run', label: `Run ${i + 1}`, detail: `Run ${i + 1} ${ending ?? 'was started'}, by ${r.startedBy.name}`, runId: r.runId });
+    out.push({ atMs: msFrom(input.startedAt, r.queuedAt), kind: 'run', label: `Run ${i + 1}`, detail: `Run ${i + 1} ${ending ?? 'was started'}, by ${r.startedBy.name}`, runId: r.runId, runNo: i + 1 });
   });
-  return out.sort((a, b) => a.atMs - b.atMs);
+  const sorted = out.sort((a, b) => a.atMs - b.atMs);
+  return input.durationMs && input.durationMs > 0 ? mergeCloseMarkers(sorted, input.durationMs) : sorted.map(({ runNo: _n, ...m }) => m);
+}
+
+/** Markers of one kind this close (a share of the playback's length) draw on top of each other on the slider. */
+export const MARKER_MERGE_SHARE = 0.02;
+
+const clock = (ms: number): string => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`;
+const listed = (parts: string[]): string => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`);
+
+/**
+ * Markers of the same kind closer together than 2% of `durationMs` (each to the one before it in its kind) become one
+ * marker: at the first one's time, its label naming them all ("Runs 1 and 2 at 11:50"). Markers of different kinds are
+ * left alone. The run the page shows is chosen by time, so every run stays reachable with the slider.
+ */
+export function mergeCloseMarkers(markers: ReadonlyArray<PlaybackMarker & { runNo?: number }>, durationMs: number): PlaybackMarker[] {
+  const gap = durationMs * MARKER_MERGE_SHARE;
+  const clusters: Array<Array<PlaybackMarker & { runNo?: number }>> = [];
+  const open = new Map<string, Array<PlaybackMarker & { runNo?: number }>>();
+  for (const m of [...markers].sort((a, b) => a.atMs - b.atMs)) {
+    const cur = open.get(m.kind);
+    if (cur && m.atMs - cur.at(-1)!.atMs < gap) { cur.push(m); continue; }
+    const next = [m];
+    open.set(m.kind, next);
+    clusters.push(next);
+  }
+  return clusters.map((group) => {
+    const [first, ...rest] = group;
+    if (!rest.length) { const { runNo: _n, ...single } = first!; return single; }
+    const { runNo: _n, ...head } = first!;
+    const at = clock(head.atMs);
+    const label = head.kind === 'run'
+      ? `Runs ${listed(group.map((g) => String(g.runNo ?? g.label.replace(/\D+/g, ''))))} at ${at}`
+      : head.kind === 'paste' ? `${group.length} pastes at ${at}: ${group.map((g) => g.label).join(', ')}`
+      : `${group.length} questions at ${at}: ${group.map((g) => g.label).join(' · ')}`;
+    return { ...head, label, detail: group.map((g) => g.detail ?? g.label).join('; ') };
+  }).sort((a, b) => a.atMs - b.atMs);
 }
 
 /** The interview's length on the clock: the recording's, else from start to end, else the last thing that happened (at least a minute). */

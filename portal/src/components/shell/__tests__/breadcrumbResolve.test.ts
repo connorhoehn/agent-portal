@@ -156,3 +156,22 @@ test('an opening beside the Openings rail has Hire, Openings and its own crumb, 
   assert.deepEqual(resolveBreadcrumbs('/interviews/openings/op-backend/edit', 'recruiter'),
     [{ label: 'Hire' }, open, { label: 'op-backend', path: '/interviews/openings/op-backend', id: 'op-backend' }, { label: 'Edit' }]);
 });
+
+test('a candidate page reads its home by the viewer’s role, and assign / debrief end the trail', () => {
+  const id = 'cand-ingrid';
+  const name = { label: id, id };
+  const linked = { ...name, path: `/interviews/candidates/${id}` };
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'recruiter'),
+    [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }, name]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'admin').map((c) => c.label), ['Hire', 'Candidates', id]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'hiring-manager'),
+    [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }, name]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'interviewer'),
+    [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }, name]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}/assign`, 'recruiter'),
+    [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }, linked, { label: 'Assign a round' }]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}/debrief`, 'hiring-manager'),
+    [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }, linked, { label: 'Debrief' }]);
+  // No role keeps the recruiter's home; the add-a-candidate form is not a candidate.
+  assert.equal(resolveBreadcrumbs(`/interviews/candidates/${id}`).at(-2)!.label, 'Candidates');
+});
