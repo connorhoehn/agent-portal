@@ -16,12 +16,15 @@ export default async function run({ portal, out, path, record, signIn }) {
     const header = await page.getByTestId('interviews-profile-header').innerText();
     const tracker = await page.getByTestId('interviews-profile-tracker').innerText();
     const rounds = await page.getByTestId('interviews-profile-rounds').innerText();
+    const roundCount = await page.getByTestId('interviews-profile-rounds').getByTestId('interviews-profile-round').count();
     // Stage history sits on the profile's Activity tab (UI round 3).
     await page.getByTestId('interviews-profile-tab-activity').click();
     const history = await page.getByTestId('interviews-profile-history').innerText({ timeout: 30_000 });
     const crumbs = await page.locator('nav[aria-label*="readcrumb" i]').first().innerText().catch(() => '');
     const body = await page.getByTestId('interviews-candidate-profile').innerText();
-    const roundCount = await page.getByTestId('interviews-profile-rounds').getByTestId('interviews-profile-round').count();
+    // Back to the Rounds tab (the profile's default) for the screenshots: the rounds table must sit in view.
+    await page.getByTestId('interviews-profile-tab-rounds').click();
+    await page.getByTestId('interviews-profile-rounds').getByTestId('interviews-profile-round').first().waitFor({ timeout: 30_000 });
     const ok = /^\/interviews\/candidates\/cand-ingrid$/.test(url)
       && /Senior Backend Engineer/.test(header) && /Applied/.test(header) && /Came from/.test(header)
       && /Interviewing/.test(tracker) && /Debrief/.test(tracker) && /Hired/.test(tracker)
