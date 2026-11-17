@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCORECARD_STEPS, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
-  previousStep, recapStateLine, recapUrl, saveDraft, scaleOf, scorecardPath,
+  previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
 
@@ -123,4 +123,13 @@ test('Milo\'s recap: one sentence when there is nothing to show, and the evidenc
   assert.equal(evidenceFor(recap, 'ownership').length, 1);
   assert.deepEqual(evidenceFor(recap, 'clarity'), []);
   assert.equal(recapUrl('iv 1'), '/api/interviews/interviews/iv%201/recap');
+});
+
+test('the recap ask: its path, and what each answer of the server reads as', () => {
+  assert.equal(recapAskPath('iv 1'), `${recapUrl('iv 1')}/ask`);
+  const body = { answer: null, refused: 'too-soon', line: 'Milo needs a few seconds between questions. Ask again in a moment.', paused: null, retryAfterMs: 20000 };
+  assert.deepEqual(recapAskOutcome({ ok: true, status: 200, data: body }), { ok: true, body });
+  assert.deepEqual(recapAskOutcome({ ok: false, status: 409, data: body }), { ok: true, body });
+  assert.deepEqual(recapAskOutcome({ ok: false, status: 404, data: null, error: 'There is no recap here that you can open.' }), { ok: false, error: 'There is no recap here that you can open.' });
+  assert.deepEqual(recapAskOutcome({ ok: false, status: 500, data: null }), { ok: false, error: 'That did not go through. Try again.' });
 });

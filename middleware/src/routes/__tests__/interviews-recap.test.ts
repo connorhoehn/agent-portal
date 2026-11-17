@@ -46,6 +46,9 @@ import { interviewRecapOpensFixture, interviewRecapsFixture } from '../../mock/i
 import { setCoachModelFactory, ScriptedCoachModel } from '../../lib/interviews/coach/index.js';
 import { setRecapDeps } from '../../lib/interviews/recap/index.js';
 import type { Session } from '../../lib/session.js';
+import { interviewCoachLogFixture } from '../../mock/interviews-coach-log.js';
+import { BedrockMiloModel, FIXED_ANSWER, ScriptedMiloModel, setCoachLogStore, setMiloDeps } from '../../lib/interviews/milo-notes/index.js';
+import type { TranscriptLineView } from '../../lib/interviews/milo-notes/transcript.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -209,5 +212,103 @@ describe('reading the recap', () => {
     const cards = interviewScorecardsFixture.rows();
     cards.splice(cards.findIndex((c) => c.interviewId === INGRID_TOGETHER && c.interviewerId === 'u-wen'), 1);
     expect((await readAs(WEN, INGRID_CODING)).status).toBe(404);
+  });
+});
+
+
+// ── The question after the call (contract F1) ───────────────────────────────────────────────────────────────────────
+describe('asking Milo from the recap (F1)', () => {
+  const FINISHED: TranscriptLineView[] = [
+    { seq: 1, at: '2026-11-16T09:01:00.000Z', side: 'panel', speaker: 'Wen Zhao', text: 'Tell me about someone on your team who was struggling. What did you do, and what happened?' },
+    { seq: 2, at: '2026-11-16T09:02:00.000Z', side: 'candidate', speaker: 'Nadia Petrova', text: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.' },
+  ];
+  let nowMs = Date.parse('2026-11-16T12:00:00.000Z');
+  const reserve = jest.fn(async (i: { interviewId: string; key: string }) => ({ ok: true as const, holdId: null, sourceId: `iv:op-em:${i.interviewId}:coach:${i.key}`, amountUsd: 0 }));
+  const askAs = (as: Who, question: unknown = 'Where did they talk about the missed reviews?', id = NADIA) => as.post(`/interviews/${id}/recap/ask`, { question });
+  const log = () => interviewCoachLogFixture.rows().filter((r) => r.interviewId === NADIA);
+
+  beforeEach(() => {
+    setCoachLogStore(null);
+    reserve.mockClear();
+    nowMs = Date.parse('2026-11-16T12:00:00.000Z');
+    useDeps({});
+  });
+  const useDeps = (over: Parameters<typeof setMiloDeps>[0]) => setMiloDeps({
+    model: () => new ScriptedMiloModel(), consents: async () => ({ transcription: true, milo: true }), finished: async () => FINISHED,
+    reserve, settle: async () => undefined, release: async () => undefined, now: () => nowMs, ...over,
+  });
+  afterAll(() => setMiloDeps(null));
+
+  it('a seat that opened the recap gets an answer with its quoted lines; the row names the asker and is after the end', async () => {
+    await openAs(HUGO);
+    const res = await askAs(HUGO);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ refused: null, line: null, paused: null });
+    expect(res.body.answer.sources[0]).toEqual({ seq: 2, quote: FINISHED[1]!.text, speaker: 'Nadia Petrova', at: FINISHED[1]!.at });
+    expect(log()).toEqual([expect.objectContaining({ kind: 'answer', askedBy: 'u-hugo', code: null, modelId: 'scripted-milo' })]);
+    expect(log()[0]!.askedAt >= '2026-11-16T10:00:00.000Z').toBe(true);
+    expect(reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('is counted per person: a second seat asks while the first waits', async () => {
+    await openAs(HUGO); await openAs(WEN);
+    expect((await askAs(HUGO)).body.answer).not.toBeNull();
+    expect((await askAs(HUGO)).body).toMatchObject({ answer: null, refused: 'too-soon' });
+    expect((await askAs(WEN)).body.answer).not.toBeNull();
+    expect(log().map((r) => r.askedBy)).toEqual(['u-hugo', 'u-wen']);
+  });
+
+  it.each([['a seat that has not opened the recap', HUGO], ['the recruiter', GRETA], ['the hiring manager', AMARA], ['the admin', OPERATOR]])('%s: not found, nothing made', async (_l, as) => {
+    expect((await askAs(as)).status).toBe(404);
+    expect(log()).toHaveLength(0);
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it('another round\'s interviewer and a guest are not found', async () => {
+    await openAs(HUGO);
+    expect((await askAs(OTHER_HM)).status).toBe(404);
+    expect([403, 404]).toContain((await askAs(who('guest:inv-nadia'))).status);
+    expect((await askAs(who('u-third'))).status).toBe(404);
+  });
+
+  it('409 before the interview has ended; 400 for a missing or long question; 404 once reviewed', async () => {
+    await openAs(HUGO);
+    expect((await askAs(HUGO, '')).status).toBe(400);
+    expect((await askAs(HUGO, 'x'.repeat(301))).status).toBe(400);
+    for (const i of interviewsFixture.rows()) if (i.id === NADIA) i.state = 'live';
+    const live = await askAs(HUGO);
+    expect(live.status).toBe(409);
+    expect(typeof live.body.error).toBe('string');
+    for (const i of interviewsFixture.rows()) if (i.id === NADIA) i.state = 'reviewed';
+    expect((await askAs(HUGO)).status).toBe(404);
+  });
+
+  it('a judgement gets the fixed sentence with no model call and no hold', async () => {
+    await openAs(HUGO);
+    const model = jest.fn();
+    useDeps({ model: () => ({ kind: 'bedrock', modelId: 'x', ask: model }) as never });
+    const res = await askAs(HUGO, 'Should we hire her?');
+    expect(res.body).toEqual({ answer: null, refused: 'judgement', line: FIXED_ANSWER, paused: null, retryAfterMs: null });
+    expect(model).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(log()).toEqual([expect.objectContaining({ code: 'refused-judgement', modelId: 'none', askedBy: 'u-hugo' })]);
+  });
+
+  it('an unsourced answer is dropped by code and never stored as text', async () => {
+    await openAs(HUGO);
+    const send = jest.fn(async () => ({ output: { message: { role: 'assistant', content: [{ text: JSON.stringify({ answer: 'She set up a weekly one-to-one.', sources: [{ seq: 2, quote: 'a daily stand-up with the whole team' }] }) }] } }, usage: { inputTokens: 900, outputTokens: 30 } }));
+    useDeps({ model: () => new BedrockMiloModel({ send: send as never, modelId: 'amazon.nova-pro-v1:0' }) });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const res = await askAs(HUGO);
+    warn.mockRestore();
+    expect(res.body).toMatchObject({ answer: null, refused: 'dropped' });
+    expect(log()).toEqual([expect.objectContaining({ answer: '', sources: [], code: 'unsourced' })]);
+  });
+
+  it('a paused budget makes no call and no row', async () => {
+    await openAs(HUGO);
+    useDeps({ reserve: async () => ({ ok: false, reason: 'cap' }) as never });
+    expect((await askAs(HUGO)).body).toEqual({ answer: null, refused: null, line: null, paused: 'budget', retryAfterMs: null });
+    expect(log()).toHaveLength(0);
   });
 });

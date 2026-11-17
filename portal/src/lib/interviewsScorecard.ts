@@ -8,6 +8,7 @@
 
 import { INTERVIEWS_API, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
 import type { KitCompetency } from './interviewsKit.ts';
+import type { MiloAskBody } from './interviewsRoom.ts';
 import { writeJson } from './writeJson.ts';
 
 export type Rating = 1 | 2 | 3 | 4;
@@ -205,4 +206,19 @@ export async function openRecap(interviewId: string, body: ReturnType<typeof ope
   const r = await writeJson<{ recap?: RecapBody }>(`${recapUrl(interviewId)}/open`, 'POST', body);
   if (r.ok && r.data?.recap) return { ok: true, recap: r.data.recap };
   return { ok: false, error: r.error ?? 'Milo\'s recap could not be opened. Try again.' };
+}
+
+// ── Ask Milo where something was said, from the recap (contract F1) ─────────────────────────────────────────────────
+
+export const recapAskPath = (interviewId: string): string => `${recapUrl(interviewId)}/ask`;
+export const RECAP_ASK_FALLBACK = 'That did not go through. Try again.';
+
+/** The server's answer as the step shows it: an answer, a refusal or a pause is a body with a line; anything else is one error line. */
+export function recapAskOutcome(r: { ok: boolean; status: number; data?: MiloAskBody | null; error?: string | null }): { ok: true; body: MiloAskBody } | { ok: false; error: string } {
+  if (r.data && (r.ok || (r.status === 409 && typeof r.data.line === 'string'))) return { ok: true, body: r.data };
+  return { ok: false, error: r.error ?? RECAP_ASK_FALLBACK };
+}
+
+export async function askFromRecap(interviewId: string, question: string): Promise<ReturnType<typeof recapAskOutcome>> {
+  return recapAskOutcome(await writeJson<MiloAskBody>(recapAskPath(interviewId), 'POST', { question }));
 }

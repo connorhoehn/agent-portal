@@ -16,19 +16,20 @@
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea,
+  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea,
 } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
+import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
-  RECOMMENDATION_CHOICES, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
+  RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
   othersLine, previousStep, recapStateLine, recapUrl, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
@@ -181,6 +182,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
     <Stack gap="md" data-testid="interviews-scorecard-recap-step">
       {correctingLine}
       <RecapView interviewId={interview.id} competencies={competencies} initial={recap} ratings={draft.ratings} />
+      <AskFromRecap interviewId={interview.id} />
       <Inline gap="sm">
         <Button size="sm" variant="secondary" data-testid="interviews-scorecard-back-to-ratings" onClick={() => goTo(previousStep('recap'))}>Back to my ratings</Button>
         <Button size="sm" variant="primary" data-testid="interviews-scorecard-to-decide" onClick={() => goTo(nextStep('recap'))}>Continue</Button>
@@ -354,5 +356,62 @@ function RecapView({ interviewId, competencies, initial, ratings }: {
       hint="What the candidate said about each competency, each with the line of the transcript it comes from. Milo does not rate or recommend.">
       {body}
     </DetailSection>
+  );
+}
+
+
+/** Under the recap, for a seat that has opened it: ask Milo where something was said. Private to the asker; the exchanges last this visit. */
+function AskFromRecap({ interviewId }: { interviewId: string }) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [kept, setKept] = useState<MiloExchange[]>([]);
+  const asked = useRef(0);
+  const send = useCallback(async () => {
+    const question = value.replace(/\s+/g, ' ').trim();
+    if (!question || busy) return;
+    setBusy(true);
+    setError(null);
+    const out = await askFromRecap(interviewId, question.slice(0, MILO_QUESTION_MAX));
+    setBusy(false);
+    if (!out.ok) { setError(out.error); return; }
+    setValue('');
+    setKept((k) => keepExchange(k, question, out.body, `recap-ask-${++asked.current}`));
+  }, [value, busy, interviewId]);
+  const [latest, ...earlier] = kept;
+  return (
+    <DetailSection variant="heading" title="Ask Milo where something was said" data-testid="interviews-recap-ask"
+      hint="Only you see this. Milo finds what was said, and where; it does not judge the candidate.">
+      <Stack gap="sm">
+        <ChatComposer value={value} onChange={(v) => setValue(v.slice(0, MILO_QUESTION_MAX))} onSubmit={() => { void send(); }} disabled={busy}
+          placeholder="Where did they talk about testing?" submitLabel="Ask" aria-label="Your question for Milo" />
+        {busy && <T size="xs" tone="tertiary">Milo is looking…</T>}
+        {error && <T size="xs" tone="danger" role="alert" wrap>{error}</T>}
+        {latest && <RecapExchangeView exchange={latest} />}
+        {earlier.length > 0 && (
+          <Disclosure density="compact" summary={<T size="xs" tone="secondary">{`Earlier questions (${earlier.length})`}</T>}>
+            <Stack gap="md">{earlier.map((x) => <RecapExchangeView key={x.key} exchange={x} />)}</Stack>
+          </Disclosure>
+        )}
+      </Stack>
+    </DetailSection>
+  );
+}
+
+function RecapExchangeView({ exchange }: { exchange: MiloExchange }) {
+  return (
+    <Stack gap="xs" data-testid="interviews-recap-ask-answer">
+      <T size="xs" tone="tertiary" wrap>{exchange.question}</T>
+      {exchange.answer ? (
+        <>
+          <T size="sm" wrap>{exchange.answer.text}</T>
+          {exchange.answer.sources.length > 0 && (
+            <Stack as="ul" gap="xs">
+              {exchange.answer.sources.map((s) => <T as="li" key={s.seq} size="xs" tone="secondary" wrap>{`Line ${s.seq}${s.speaker ? `, ${s.speaker}` : ''}${s.at ? ` at ${new Date(s.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}: “${s.quote}”`}</T>)}
+            </Stack>
+          )}
+        </>
+      ) : <T size="sm" tone="secondary" wrap>{exchange.line ?? ''}</T>}
+    </Stack>
   );
 }

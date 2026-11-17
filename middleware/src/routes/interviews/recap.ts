@@ -14,6 +14,10 @@
 //                                                            only when the scorecards' rule lets them read the others'
 //                                                            scorecards there (scope.ts `othersRevealed`: their own is
 //                                                            in for every round of it they sit on), once it has ended.
+//   POST /interviews/:id/recap/ask    a seat with ConductInterview whose own open is stored, once the interview has ended and
+//                                     until it is reviewed: body `{ question }` → the room ask's answer body (contract F1).
+//                                     Everyone else, a seat that has not opened the recap, the recruiter, the hiring manager,
+//                                     the admin and a guest: 404. Not ended: 409. A missing or over-long question: 400.
 // Everyone else (another round's interviewer otherwise, another opening's hiring manager, a guest, another tenant) gets
 // the tenant's not-found: 404, never 403, as phase 0 does. A role without ConductInterview posting an open is refused at
 // the action (403), as the scorecard's submit is. An open before the interview has ended is 409; ratings that do not
@@ -21,9 +25,12 @@
 
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
-import { requireAction, resolveSession } from '../../lib/authz.js';
+import { isAllowed, requireAction, resolveSession } from '../../lib/authz.js';
 import { seatOf } from '../../lib/interviews/assign.js';
 import { checkOpenRatings, openRecap, ratingsAtRecap, readRecap, type RecapRef } from '../../lib/interviews/recap/index.js';
+import { isGuestId } from '../../lib/interviews/milo-policy.js';
+import { askMiloAfterCall, checkQuestion } from '../../lib/interviews/milo-notes/index.js';
+import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
@@ -35,6 +42,7 @@ const conduct = requireAction('ConductInterview');
 
 const NO_RECAP = 'There is no recap here that you can open.';
 const NOT_ENDED = 'Milo\'s recap opens once the interview has ended.';
+const BAD_QUESTION = `Type a question of at most ${MAX_QUESTION_CHARS} characters.`;
 const RATE_ALL = 'Rate every competency from 1 to 4 before you open Milo\'s recap.';
 
 const ENDED: ReadonlySet<Interview['state']> = new Set(['ended', 'scored', 'reviewed']);
@@ -88,4 +96,23 @@ recapRouter.post('/interviews/:id/recap/open', conduct, asyncHandler(async (req,
   const ratings = checkOpenRatings(req.body, ref.opening);
   if (!ratings) { res.status(400).json({ error: RATE_ALL, fields: [{ field: 'ratings', message: RATE_ALL }] }); return; }
   res.json({ recap: await openRecap(ref, { userId: session.sub }, ratings) });
+}));
+
+recapRouter.post('/interviews/:id/recap/ask', asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  if (isGuestId(session.sub) || !(await isAllowed(session, 'ConductInterview'))) throw new NotFoundError(NO_RECAP);
+  const ix = await indexFor(req);
+  const interview = ix.world.interviews.find((x) => x.id === param(req, 'id'));
+  if (!interview || !seatOf(interview, session.sub)) throw new NotFoundError(NO_RECAP);
+  const app = ix.applications.get(interview.applicationId);
+  const opening = app ? ix.openings.get(app.openingId) : undefined;
+  const candidate = app ? ix.candidates.get(app.candidateId) : undefined;
+  if (!opening || !candidate) throw new NotFoundError(NO_RECAP);
+  res.setHeader('Cache-Control', 'no-store');
+  const question = checkQuestion(req.body);
+  if (question === null) { res.status(400).json({ error: BAD_QUESTION }); return; }
+  const out = await askMiloAfterCall({ interview, opening, candidateName: candidate.name, nameOf: (id) => ix.people(id).name }, { userId: session.sub }, question);
+  if (out.kind === 'not-found') throw new NotFoundError(NO_RECAP);
+  if (out.kind === 'not-ended') { res.status(409).json({ error: out.body.line, ...out.body }); return; }
+  res.json(out.body);
 }));

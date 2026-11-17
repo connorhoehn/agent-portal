@@ -154,6 +154,8 @@ describe('a guest against every route the server mounts', () => {
       expect([key, statusOf.has(key)]).toEqual([key, true]);
       expect([key, (statusOf.get(key) ?? 0) >= 400]).toEqual([key, true]);
     }
+    // The after-call question (contract F1) is enumerated and refused to the guest like the room's ask.
+    expect([statusOf.has('POST /api/interviews/interviews/:id/recap/ask'), (statusOf.get('POST /api/interviews/interviews/:id/recap/ask') ?? 0) >= 400]).toEqual([true, true]);
     expect(refused).toBeGreaterThan(targets.length * 0.9);
     // What the public surface is, for the record (health, config, the sign-in page's lists): printed, not hidden.
     console.log(`guest sweep: ${targets.length} requests, ${refused} refused, ${publicRoutes.length} public:\n  ${publicRoutes.join('\n  ')}`);

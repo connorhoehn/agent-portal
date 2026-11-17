@@ -112,6 +112,78 @@ export function decideAsk(f: AskFacts): AskDecision {
   return { kind: 'think', n: calls.length + 1 };
 }
 
+// ── After the call (decision 14: "may ask the coach where something was said", from the recap) ─────────────────────────
+// Its own rule, beside the live one, which it does not touch. In order, the first that applies:
+//   not-found   the viewer holds no seat, or lacks ConductInterview, or has not opened the recap themselves (rate first,
+//               the server's fact), or the stage decision has closed corrections (`reviewed`);
+//   not-ended   the interview has not ended (the route answers 409);
+//   no-consent  the candidate did not accept the transcript and Milo;
+//   fixed       a judgement or personal question: FIXED_ANSWER, no model call (logged with its code);
+//   at-max      this person made AFTER_CALL_MAX_ASKS model calls since the call ended;
+//   too-soon    this person's last call was less than ASK_GAP_MS ago;
+//   in-flight   this person has a question being answered;
+//   no-lines    nothing attributed was said;
+//   think       otherwise.
+// Counted per person, from the log's `askedBy` and `askedAt` (a row from before `endedAt` is a live-room question).
+
+/** Model calls per person after the call. */
+export const AFTER_CALL_MAX_ASKS = 10;
+
+export interface AfterCallFacts {
+  viewerId: string;
+  interview: { state: string; endedAt: string | null };
+  /** The viewer holds a seat (lead or panel) AND ConductInterview. */
+  seated: boolean;
+  /** The viewer's own recap open is stored. */
+  opened: boolean;
+  consent: { transcription: boolean; milo: boolean } | null;
+  question: string;
+  /** This interview's `answer` rows, oldest first (any asker; filtered here). */
+  log: readonly CoachLogRecord[];
+  inFlight: boolean;
+  lineCount: number;
+  nowMs: number;
+}
+
+export type AfterCallRefusal = 'not-ended' | 'no-consent' | 'at-max' | 'too-soon' | 'in-flight' | 'no-lines';
+export type AfterCallDecision =
+  | { kind: 'not-found' }
+  | { kind: 'refuse'; reason: AfterCallRefusal; retryAfterMs: number | null }
+  | { kind: 'fixed'; code: PrecheckCode }
+  | { kind: 'think'; n: number };
+
+const FINISHED_STATES: ReadonlySet<string> = new Set(['ended', 'scored', 'reviewed']);
+
+/** This person's model calls made after the call ended, oldest first. */
+export const afterCallCalls = (log: readonly CoachLogRecord[], viewerId: string, endedAt: string | null): CoachLogRecord[] =>
+  log.filter((r) => r.askedBy === viewerId && askedModel(r) && (endedAt === null || r.askedAt >= endedAt));
+
+export function decideAfterCallAsk(f: AfterCallFacts): AfterCallDecision {
+  if (!f.seated) return { kind: 'not-found' };
+  if (!FINISHED_STATES.has(f.interview.state)) return { kind: 'refuse', reason: 'not-ended', retryAfterMs: null };
+  if (f.interview.state === 'reviewed' || !f.opened) return { kind: 'not-found' };
+  if (!(f.consent?.transcription && f.consent.milo)) return { kind: 'refuse', reason: 'no-consent', retryAfterMs: null };
+  const pre = precheckQuestion(f.question);
+  if (pre) return { kind: 'fixed', code: pre };
+  const calls = afterCallCalls(f.log, f.viewerId, f.interview.endedAt);
+  if (calls.length >= AFTER_CALL_MAX_ASKS) return { kind: 'refuse', reason: 'at-max', retryAfterMs: null };
+  const last = calls.at(-1);
+  const since = last ? f.nowMs - Date.parse(last.askedAt) : Infinity;
+  if (since < ASK_GAP_MS) return { kind: 'refuse', reason: 'too-soon', retryAfterMs: Math.max(1000, ASK_GAP_MS - since) };
+  if (f.inFlight) return { kind: 'refuse', reason: 'in-flight', retryAfterMs: 5_000 };
+  if (f.lineCount < 1) return { kind: 'refuse', reason: 'no-lines', retryAfterMs: null };
+  return { kind: 'think', n: calls.length + 1 };
+}
+
+export const AFTER_CALL_REFUSAL_LINES: Record<AfterCallRefusal, string> = {
+  'not-ended': 'The interview has not ended yet, so there is no recap to ask about.',
+  'no-consent': 'Milo is off for this interview, so it cannot answer questions about it.',
+  'at-max': 'Milo has answered as many of your questions as it can for this interview.',
+  'too-soon': 'Milo needs a few seconds between questions. Ask again in a moment.',
+  'in-flight': 'Milo is still answering your last question.',
+  'no-lines': 'Nothing was said in the transcript, so there is nothing to look through.',
+};
+
 /** The one plain line the lead reads for each refusal (third person for Milo, never blaming the person). */
 export const REFUSAL_LINES: Record<AskRefusal, string> = {
   'not-live': 'The interview is not running, so Milo cannot answer questions about it.',

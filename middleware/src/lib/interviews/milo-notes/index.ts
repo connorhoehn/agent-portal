@@ -16,8 +16,8 @@ export {
   coachLogStore, setCoachLogStore, COACH_LOG_CODES, COACH_LOG_KINDS,
   type CoachLogCode, type CoachLogKind, type CoachLogRecord, type CoachLogSource, type CoachLogStore,
 } from './store.js';
-export { askMilo, notesFor, setMiloDeps, transcriptFor, type AskBody, type AskOutcome, type MiloDeps, type MiloRef, type TranscriptBody } from './service.js';
-export { ASK_GAP_MS, MAX_ASKS_PER_INTERVIEW, FIXED_ANSWER, checkQuestion, precheckQuestion } from './rules.js';
+export { askMilo, askMiloAfterCall, AFTER_CALL_MAX_LINES, notesFor, setMiloDeps, transcriptFor, type AfterCallOutcome, type AskBody, type AskOutcome, type MiloDeps, type MiloRef, type TranscriptBody } from './service.js';
+export { AFTER_CALL_MAX_ASKS, ASK_GAP_MS, MAX_ASKS_PER_INTERVIEW, FIXED_ANSWER, checkQuestion, precheckQuestion } from './rules.js';
 export { competencyNotes, timeCheck, type MiloNotesView } from './notes.js';
 
 /** E7: remove these interviews' rows from the coach log; how many went. Runs in the interviews tenant's db context. */

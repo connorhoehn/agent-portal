@@ -11,6 +11,9 @@
 // Nothing of the transcript, the question or the answer is written anywhere but the log's own row; console lines carry
 // codes only.
 import { randomBytes } from 'node:crypto';
+import { seatOf } from '../assign.js';
+import { recordTranscript } from '../record/transcript.js';
+import { ratingsAtRecap } from '../recap/index.js';
 import { estimateUsageCost } from '../../pricing.js';
 import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID } from '../coach/model.js';
 import { MAX_TRANSCRIPT_LINES } from '../coach/prompt.js';
@@ -22,7 +25,7 @@ import { estimateAskTokens, makeMiloModel, type MiloModel, type MiloModelResult 
 import { competencyNotes, notesStartMs, timeCheck, type MiloNotesView } from './notes.js';
 import { parseAskAnswer, type AskParseResult } from './parse.js';
 import { ASK_PROMPT_VERSION, type AskInput } from './prompt.js';
-import { decideAsk, DROPPED_LINE, FAILED_LINE, FIXED_ANSWER, REFUSAL_LINES, type AskRefusal } from './rules.js';
+import { AFTER_CALL_REFUSAL_LINES, decideAfterCallAsk, decideAsk, DROPPED_LINE, FAILED_LINE, FIXED_ANSWER, REFUSAL_LINES, type AfterCallRefusal, type AskRefusal } from './rules.js';
 import { coachLogStore, type CoachLogCode, type CoachLogRecord, type CoachLogStore } from './store.js';
 import {
   assistantLiveTranscript, coachLinesOf, sideOf, TRANSCRIPT_NOT_INVITED, transcriptLineViews, transcriptOffForConsent,
@@ -41,6 +44,10 @@ export interface MiloDeps {
   release: (holdIds: readonly (string | null)[]) => Promise<void>;
   now: () => number;
   newId: () => string;
+  /** After the call: whether this person's own recap open is stored. */
+  opened: (interviewId: string, userId: string) => Promise<boolean>;
+  /** After the call: the finished interview's lines, the way the recap reads them (the record first, then Milo's call record). */
+  finished: (ref: MiloRef) => Promise<TranscriptLineView[] | null>;
 }
 
 const DEFAULTS: MiloDeps = {
@@ -54,6 +61,8 @@ const DEFAULTS: MiloDeps = {
   release: releaseInterviewSpend,
   now: Date.now,
   newId: () => `ml-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
+  opened: async (interviewId, userId) => (await ratingsAtRecap(interviewId, userId)) !== null,
+  finished: finishedTranscript,
 };
 
 let overrides: Partial<MiloDeps> = {};
@@ -120,7 +129,7 @@ export async function notesFor(ref: MiloRef): Promise<{ notes: MiloNotesView }> 
 
 export interface AskSourceView { seq: number; quote: string; speaker: string; at: string }
 export interface AskAnswerView { id: string; question: string; text: string; sources: AskSourceView[]; askedAt: string }
-export type AskRefusedCode = AskRefusal | 'judgement' | 'personal' | 'dropped' | 'failed';
+export type AskRefusedCode = AskRefusal | AfterCallRefusal | 'judgement' | 'personal' | 'dropped' | 'failed';
 /** E5's answer to the lead. */
 export interface AskBody { answer: AskAnswerView | null; refused: AskRefusedCode | null; line: string | null; paused: null | 'budget'; retryAfterMs: number | null }
 
@@ -229,5 +238,104 @@ export async function askMilo(ref: MiloRef, viewer: { userId: string }, question
     };
   } finally {
     inFlight.delete(interview.id);
+  }
+}
+
+// ── The private question after the call (decision 14; contract F1) ──────────────────────────────────────────────────
+
+/** Lines the model reads after the call: the whole finished call, bounded (the live ask reads the last 120). */
+export const AFTER_CALL_MAX_LINES = 400;
+
+/** The finished interview's words as the recap reads them: the record's reader first, then Milo's call record. */
+async function finishedTranscript(ref: MiloRef): Promise<TranscriptLineView[] | null> {
+  const r = await recordTranscript(ref.interview);
+  if (r) return r.lines.map(({ seq, at, side, speaker, text }) => ({ seq, at, side, speaker, text }));
+  const t = await wholeTranscript(deps(), ref.interview);
+  return t ? transcriptLineViews(t.lines, { candidate: ref.candidateName, nameOf: ref.nameOf }) : null;
+}
+
+export type AfterCallOutcome = { kind: 'not-found' } | { kind: 'not-ended'; body: AskBody } | { kind: 'ok'; body: AskBody };
+
+const inFlightAfter = new Set<string>();
+const safeKey = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, '_');
+
+/**
+ * A seat's question from the recap, after the call: the after-call rule, then the same guard, hold, model, log and
+ * answer as the room's ask. The question is private to the asker: `askedBy` names them and nothing lists it to anyone else.
+ */
+export async function askMiloAfterCall(ref: MiloRef, viewer: { userId: string }, question: string): Promise<AfterCallOutcome> {
+  const d = deps();
+  const { interview, opening } = ref;
+  const seated = !!seatOf(interview, viewer.userId);
+  const finishedState = ['ended', 'scored', 'reviewed'].includes(interview.state);
+  const opened = seated && finishedState ? await d.opened(interview.id, viewer.userId) : false;
+  const consent = seated && opened ? await d.consents(interview.id) : null;
+  const ready = seated && opened && !!(consent?.transcription && consent.milo);
+  const store = d.log();
+  const log = ready ? await store.list(interview.id, 'answer') : [];
+  const views = ready ? (await d.finished(ref)) ?? [] : [];
+  const flightKey = `${interview.id}:${viewer.userId}`;
+  const decision = decideAfterCallAsk({
+    viewerId: viewer.userId, interview, seated, opened, consent, question, log, inFlight: inFlightAfter.has(flightKey), lineCount: views.length, nowMs: d.now(),
+  });
+  if (decision.kind === 'not-found') return { kind: 'not-found' };
+  if (decision.kind === 'refuse') {
+    const body = refusedBody(decision.reason, AFTER_CALL_REFUSAL_LINES[decision.reason], decision.retryAfterMs);
+    return decision.reason === 'not-ended' ? { kind: 'not-ended', body } : { kind: 'ok', body };
+  }
+  const row = (over: Partial<CoachLogRecord>): CoachLogRecord => ({
+    id: d.newId(), interviewId: interview.id, kind: 'answer', askedBy: viewer.userId, question, answer: '', sources: [], code: null,
+    askedAt: iso(d.now()), modelId: 'none', promptVersion: ASK_PROMPT_VERSION, ...over,
+  });
+  if (decision.kind === 'fixed') {
+    await store.append(row({ code: decision.code }));
+    return { kind: 'ok', body: refusedBody(decision.code === 'refused-judgement' ? 'judgement' : 'personal', FIXED_ANSWER) };
+  }
+
+  inFlightAfter.add(flightKey);
+  try {
+    const model = d.model();
+    const recent = views.slice(-AFTER_CALL_MAX_LINES);
+    const lines = recent.map((l) => ({ seq: l.seq, side: l.side, text: l.text }));
+    const input: AskInput = {
+      roundType: interview.type,
+      competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
+      questions: chosenOf(ref),
+      lines,
+      question,
+    };
+    const held = await d.reserve({
+      interviewId: interview.id, part: 'coach', key: `recap-ask-${safeKey(viewer.userId)}-${decision.n}`, estimateUsd: askEstimateUsd(model, input),
+      expiresInMs: COACH_TIMEOUT_MS * 2 + 30_000,
+    });
+    if (!held.ok) return { kind: 'ok', body: { answer: null, refused: null, line: null, paused: 'budget', retryAfterMs: null } };
+    let result: MiloModelResult;
+    try { result = await model.ask(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
+    await book(d, model, input, held, result, viewer.userId);
+    const parsed: AskParseResult | { ok: false; code: 'timeout' | 'error' } = result.code === 'ok' ? parseAskAnswer(result.raw, lines) : { ok: false, code: result.code };
+    const written = await store.append(row({
+      modelId: model.modelId,
+      answer: parsed.ok ? parsed.value.answer : '',
+      sources: parsed.ok ? parsed.value.sources.map((s) => ({ seq: s.seq, quote: s.quote })) : [],
+      code: parsed.ok ? null : (parsed.code as CoachLogCode),
+    }));
+    if (!parsed.ok) {
+      console.warn('[interviews] milo recap answer dropped', parsed.code);
+      const failed = parsed.code === 'timeout' || parsed.code === 'error';
+      return { kind: 'ok', body: refusedBody(failed ? 'failed' : 'dropped', failed ? FAILED_LINE : DROPPED_LINE) };
+    }
+    const bySeq = new Map(recent.map((l) => [l.seq, l]));
+    return {
+      kind: 'ok',
+      body: {
+        answer: {
+          id: written.id, question, text: parsed.value.answer, askedAt: written.askedAt,
+          sources: parsed.value.sources.map((s) => ({ seq: s.seq, quote: s.quote, speaker: bySeq.get(s.seq)?.speaker ?? '', at: bySeq.get(s.seq)?.at ?? '' })),
+        },
+        refused: null, line: null, paused: null, retryAfterMs: null,
+      },
+    };
+  } finally {
+    inFlightAfter.delete(flightKey);
   }
 }

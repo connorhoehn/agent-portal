@@ -1,5 +1,5 @@
 // When Milo may answer the lead's private question (lib/interviews/milo-notes/rules.ts; row I3.6), every branch.
-import { ASK_GAP_MS, checkQuestion, decideAsk, MAX_ASKS_PER_INTERVIEW, precheckQuestion, type AskFacts } from '../rules.js';
+import { AFTER_CALL_MAX_ASKS, ASK_GAP_MS, checkQuestion, decideAfterCallAsk, decideAsk, type AfterCallFacts, MAX_ASKS_PER_INTERVIEW, precheckQuestion, type AskFacts } from '../rules.js';
 import type { CoachLogRecord } from '../store.js';
 
 const NOW = Date.UTC(2026, 10, 17, 10, 30);
@@ -61,5 +61,40 @@ describe('checkQuestion', () => {
     expect(checkQuestion({ question: 3 })).toBeNull();
     expect(checkQuestion(null)).toBeNull();
     expect(checkQuestion(['q'])).toBeNull();
+  });
+});
+
+describe('decideAfterCallAsk', () => {
+  const ENDED_AT = new Date(NOW - 3600_000).toISOString();
+  const after = (over: Partial<AfterCallFacts> = {}): AfterCallFacts => ({
+    viewerId: 'u-panel', interview: { state: 'ended', endedAt: ENDED_AT }, seated: true, opened: true, consent: { transcription: true, milo: true },
+    question: 'Where did they talk about testing?', log: [], inFlight: false, lineCount: 4, nowMs: NOW, ...over,
+  });
+  it('thinks for a seat that opened the recap, a panel member included, once it has ended or been scored', () => {
+    expect(decideAfterCallAsk(after())).toEqual({ kind: 'think', n: 1 });
+    expect(decideAfterCallAsk(after({ interview: { state: 'scored', endedAt: ENDED_AT } }))).toEqual({ kind: 'think', n: 1 });
+  });
+  it.each<[string, Partial<AfterCallFacts>, unknown]>([
+    ['no seat (the recruiter, the hiring manager)', { seated: false }, { kind: 'not-found' }],
+    ['a seat that has not opened the recap', { opened: false }, { kind: 'not-found' }],
+    ['after the stage decision (reviewed)', { interview: { state: 'reviewed', endedAt: ENDED_AT } }, { kind: 'not-found' }],
+    ['not ended', { interview: { state: 'live', endedAt: null } }, { kind: 'refuse', reason: 'not-ended', retryAfterMs: null }],
+    ['no answers', { consent: null }, { kind: 'refuse', reason: 'no-consent', retryAfterMs: null }],
+    ['Milo declined', { consent: { transcription: true, milo: false } }, { kind: 'refuse', reason: 'no-consent', retryAfterMs: null }],
+    ['a judgement', { question: 'Is she a strong candidate?' }, { kind: 'fixed', code: 'refused-judgement' }],
+    ['a personal trait', { question: 'Did he seem nervous?' }, { kind: 'fixed', code: 'refused-personal' }],
+    ['at the maximum', { log: Array.from({ length: AFTER_CALL_MAX_ASKS }, (_, i) => row(1000 + i, { askedBy: 'u-panel' })) }, { kind: 'refuse', reason: 'at-max', retryAfterMs: null }],
+    ['too soon', { log: [row(5, { askedBy: 'u-panel' })] }, { kind: 'refuse', reason: 'too-soon', retryAfterMs: ASK_GAP_MS - 5000 }],
+    ['one in flight', { inFlight: true }, { kind: 'refuse', reason: 'in-flight', retryAfterMs: 5000 }],
+    ['nothing said', { lineCount: 0 }, { kind: 'refuse', reason: 'no-lines', retryAfterMs: null }],
+  ])('%s', (_l, over, expected) => {
+    expect(decideAfterCallAsk(after(over))).toEqual(expected);
+  });
+  it('counts per person and only after the call: another seat\'s rows and live-room rows do not count', () => {
+    const others = Array.from({ length: AFTER_CALL_MAX_ASKS }, (_, i) => row(1000 + i, { askedBy: 'u-lead' }));
+    expect(decideAfterCallAsk(after({ log: others }))).toEqual({ kind: 'think', n: 1 });
+    const live = Array.from({ length: AFTER_CALL_MAX_ASKS }, (_, i) => row(7200 + i, { askedBy: 'u-panel' }));
+    expect(decideAfterCallAsk(after({ log: live }))).toEqual({ kind: 'think', n: 1 });
+    expect(decideAfterCallAsk(after({ log: [row(300, { askedBy: 'u-panel' }), row(100, { askedBy: 'u-panel', modelId: 'none', code: 'refused-judgement' })] }))).toEqual({ kind: 'think', n: 2 });
   });
 });
