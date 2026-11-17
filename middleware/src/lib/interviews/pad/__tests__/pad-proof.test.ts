@@ -26,7 +26,7 @@ import type { Interview } from '../../types.js';
 import { padChannel, padDocumentId, padInterviewId } from '../channel.js';
 import { padDocumentAuthz } from '../feature.js';
 import { MemoryInviteStore, setInviteStore } from '../../invite/store.js';
-import { applyAdmission } from '../../invite/admission.js';
+import { applyAdmission, forgetInterviewGuest } from '../../invite/admission.js';
 import { loadGuestSession } from '../../invite/guest.js';
 import { mintGuestRealtimeToken } from '../../invite/realtime.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
@@ -333,5 +333,116 @@ describe('the pad\'s names and its document hook', () => {
     for (const action of ['save', 'restore', 'metadata', 'create', 'delete', 'seed'] as const) expect(padDocumentAuthz('c', pad, null, action)).toBe(false);
     expect(padDocumentAuthz('c', 'doc:notes', null, 'read')).toBe(false);
     expect(padDocumentAuthz('c', '', null, 'create')).toBe(false);
+  });
+});
+
+// OWED O-236 and O-237 (lane H8): the candidate's seat ending mid-edit, the pad after the end, and the pad across a restart.
+describe('the pad when a seat ends, the interview ends, or the gateway restarts', () => {
+  const invites = new MemoryInviteStore();
+  beforeAll(() => setInviteStore(invites));
+  afterAll(() => { setInviteStore(null); fixtureRegistry.resetAll('default'); });
+  let k = 0;
+  async function admitted(interviewId: string): Promise<{ sub: string; inviteId: string }> {
+    k += 1;
+    const invite = await invites.issueInvite({ interviewId, tokenHash: String(k % 10).repeat(64), issuedBy: GRETA,
+      issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() });
+    await invites.recordOpening(invite.id, new Date().toISOString(), 'd'.repeat(64));
+    await applyAdmission(invite.id, { kind: 'knock' });
+    await applyAdmission(invite.id, { kind: 'decide', admit: true });
+    return { sub: `${GUEST}${invite.id}`, inviteId: invite.id };
+  }
+  const setState = async (state: Interview['state']) => {
+    const { interviewsFixture } = await import('../../../../mock/interviews.js');
+    interviewsFixture.rows().find((i) => i.id === SHARED)!.state = state;
+  };
+  beforeEach(() => setState('live'));
+  afterEach(() => setState('ready'));
+
+  /** The candidate and the lead on the pad, both lines across; returns both pads. */
+  async function together(sub: string): Promise<{ hugo: Pad; mine: Pad }> {
+    const hugo = await openPad(HUGO, SHARED);
+    const mine = await openPad(sub, SHARED, 'interviews');
+    await until(() => subscribed(hugo) && subscribed(mine), 'both subscriptions');
+    mine.text.insert(0, 'def answer():\n');
+    await until(() => hugo.text.toString().includes('def answer'), 'the candidate\'s line at the lead');
+    return { hugo, mine };
+  }
+  /** After the seat ends: nothing more reaches the candidate, and the candidate's writes are refused and reach nobody. */
+  async function cutOff(hugo: Pad, mine: Pad): Promise<void> {
+    // The gateway keeps a pad's text in memory across these tests: each marker is new, so nothing earlier can match it.
+    const lead = `# after the change ${++k}\n`;
+    const cand = `still typing ${++k}\n`;
+    hugo.text.insert(hugo.text.length, lead);
+    await until(() => hugo.provider.persistenceState === 'saved', 'the lead\'s edit to persist');
+    await settle();
+    expect(mine.text.toString()).not.toContain(lead);
+    mine.text.insert(0, cand);
+    await until(() => mine.provider.persistenceState === 'error', 'the candidate\'s write to be refused');
+    await settle();
+    expect(hugo.text.toString()).not.toContain(cand);
+  }
+
+  it('a candidate turned away mid-edit stops receiving and sending at once', async () => {
+    const { sub, inviteId } = await admitted(SHARED);
+    const { hugo, mine } = await together(sub);
+    await applyAdmission(inviteId, { kind: 'decide', admit: false });
+    await cutOff(hugo, mine);
+  });
+
+  it('a candidate whose link is revoked mid-edit stops receiving and sending at once', async () => {
+    const { sub, inviteId } = await admitted(SHARED);
+    const { hugo, mine } = await together(sub);
+    // As the revoke route does it (routes/interviews/invite.ts): the store, then the gateway's verdict cache forgets the guest.
+    await invites.revokeInvite(SHARED, new Date().toISOString(), GRETA);
+    await forgetInterviewGuest(SHARED, 'interview-invite-revoked', { id: inviteId });
+    await cutOff(hugo, mine);
+  });
+
+  it('after the interview ends the candidate edits nothing', async () => {
+    const { sub } = await admitted(SHARED);
+    const { hugo, mine } = await together(sub);
+    // As the end route does it (routes/interviews/room.ts): the state, then the gateway's verdict cache forgets the guest.
+    await setState('ended');
+    await forgetInterviewGuest(SHARED, 'interview-ended');
+    await cutOff(hugo, mine);
+  });
+
+  // Pinned today: the panel's seat on the pad (authority.ts `padSeatHolds`) reads the lead and the panel, not the state, so
+  // after the end the lead and the panel can still open and edit the pad. O-236 says "after the interview ends nobody edits".
+  it('pinned: after the interview ends the lead can still open the pad and edit it', async () => {
+    await setState('ended');
+    const hugo = await openPad(HUGO, SHARED);
+    await until(() => subscribed(hugo), 'the lead\'s subscription after the end');
+    hugo.text.insert(0, '# after the end\n');
+    await until(() => hugo.provider.persistenceState === 'saved', 'the lead\'s edit after the end to persist');
+  });
+  it.failing('after the interview ends nobody edits the pad, the lead included', async () => {
+    await setState('ended');
+    await refusedOn(await openPad(HUGO, SHARED));
+  });
+
+  // O-237: the pad's text is the gateway's memory (I0.7, feature.ts: "a pad lives as long as the process"). A restart (this
+  // gateway disposed and a new one attached, as a new process attaches it) opens every pad empty; the pad log's last snapshot is
+  // what remains of the code. (The walk's step I4.2h says what the mock world's reset does to it.)
+  it('after the gateway restarts the pad opens empty; the pad log\'s last snapshot is what remains', async () => {
+    const { appendPadEvents, latestPadSnapshot } = await import('../log/index.js');
+    const { MemoryPadLogStore, setPadLogStore } = await import('../log/store.js');
+    setPadLogStore(new MemoryPadLogStore());
+    try {
+      const marker = `def kept_in_memory_${++k}():\n    return 1\n`;
+      const hugo = await openPad(HUGO, SHARED);
+      await until(() => subscribed(hugo), 'the lead\'s subscription');
+      hugo.text.insert(0, marker);
+      await until(() => hugo.provider.persistenceState === 'saved', 'the edit to persist');
+      await appendPadEvents(SHARED, { id: HUGO, side: 'panel' }, [{ kind: 'snapshot', clientAt: new Date().toISOString(), text: marker }]);
+      for (const p of open.splice(0)) { p.provider.destroy(); p.ws.terminate(); }
+      await dispose();
+      dispose = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, authorityCache: true }).dispose;
+      const again = await openPad(HUGO, SHARED);
+      await until(() => subscribed(again), 'the subscription after the restart');
+      await settle();
+      expect(again.text.toString()).toBe('');
+      expect((await latestPadSnapshot(SHARED))!.text).toBe(marker);
+    } finally { setPadLogStore(null); }
   });
 });
