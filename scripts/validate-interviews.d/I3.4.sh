@@ -11,7 +11,7 @@ row_I3_4() {
   needF "the suggestion poll reads again on the server" portal/src/lib/__tests__/interviewsRoom.test.ts "the poll is bounded (O-114)"
   if [ "$QUICK" -eq 0 ]; then
     run_journey
-    for s in a b c d e f g h i; do journey_step "I3.4$s"; done
+    for s in a b c d e f g h i j; do journey_step "I3.4$s"; done
   fi
 }
 built_row I3.4 row_I3_4

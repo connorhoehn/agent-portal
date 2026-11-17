@@ -15,7 +15,7 @@ row_I3_2() {
   if [ "$QUICK" -eq 0 ]; then
     jest_ok "the H3 policy edges" src/lib/interviews/__tests__/milo-policy.H3.test.ts
     run_journey
-    for s in a b c d e f; do journey_step "I3.2$s"; done
+    for s in a b c d e f g; do journey_step "I3.2$s"; done
   fi
 }
 built_row I3.2 row_I3_2
