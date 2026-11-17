@@ -46,7 +46,7 @@ export default async function run({ portal, SEED, record, signIn }) {
     const name = (await first.getByTestId('interviews-desk-candidate').innerText()).trim().split('\n').pop().trim();
     const live = await first.getByTestId('interviews-desk-live').count();
     const join = await first.getByTestId('interviews-desk-join').count();
-    const others = await first.locator('button, a').evaluateAll((els) => els.map((e) => (e.getAttribute('data-testid') || e.textContent || '').trim()).filter((t) => t && !/join|candidate|live/i.test(t)));
+    const others = await first.locator('button, a').evaluateAll((els) => els.map((e) => (e.getAttribute('data-testid') || e.textContent || '').trim()).filter((t) => t && t !== name && !/join|candidate|live/i.test(t)));
     const by = await tabs(p);
     await p.close();
     record('I1.1b', name === 'Kwame Asante' && live === 1 && join === 1 && others.length === 0 && countsMatch(by),

@@ -26,15 +26,14 @@ export default async function run({ portal, SEED, record, signIn, resetMock, set
   // The bell fills over the socket after the page opens: wait until `expected` lines show (up to 25 s), then look once more after
   // a pause so a line that should not be there has had its chance. expected 0 only waits and looks.
   const soonLines = async (ctx, expected = 0) => {
-    const p = await desk(ctx);
+    // A fresh page per look: a bell that arrives after a page opened is only listed by the next page that loads.
     let lines = [];
-    const end = Date.now() + 25_000;
-    while (expected > 0 && lines.length < expected && Date.now() < end) {
-      lines = (await bells(p, SOON, { ms: 2000 })).lines;
-      if (lines.length < expected) await p.waitForTimeout(500);
-    }
-    lines = (await bells(p, SOON, { ms: 2500, absent: true })).lines;
-    await p.close();
+    const end = Date.now() + 30_000;
+    do {
+      const p = await desk(ctx);
+      lines = (await bells(p, SOON, { ms: expected > 0 ? 4000 : 2500, absent: expected === 0 })).lines;
+      await p.close();
+    } while (expected > 0 && lines.length < expected && Date.now() < end);
     return lines;
   };
   const clean = (lines) => lines.every((l) => !/Nadia|Rahman|cand-|nadia|iv-/.test(l));

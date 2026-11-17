@@ -12,10 +12,11 @@ export default async function run({ portal, SEED, record, signIn, api }) {
   const profile = async (ctx, id) => {
     const p = await ctx.newPage();
     await p.goto(`${portal}/interviews/candidates/${id}`, { waitUntil: 'domcontentloaded' });
-    await p.getByTestId('interviews-candidate-frame').waitFor({ timeout: 30_000 });
+    await p.getByTestId('interviews-candidate-profile').or(p.getByTestId('interviews-candidate-frame')).first().waitFor({ timeout: 30_000 });
     return p;
   };
-  const frameText = async (p) => (await p.getByTestId('interviews-candidate-frame').innerText()).replace(/\s+/g, ' ');
+  // An interviewer's page has no rail, so no frame: the profile's own text stands in.
+  const frameText = async (p) => (await (await p.getByTestId('interviews-candidate-frame').count() ? p.getByTestId('interviews-candidate-frame') : p.locator('body')).innerText()).replace(/\s+/g, ' ');
   const rows = (await api(greta, 'GET', '/api/interviews/candidates')).body?.items ?? [];
   const ios = rows.filter((r) => r.opening?.id === SEED.openings.ios).map((r) => r.candidate.name);
   const backend = rows.filter((r) => r.opening?.id === SEED.openings.backend).map((r) => r.candidate.name);
