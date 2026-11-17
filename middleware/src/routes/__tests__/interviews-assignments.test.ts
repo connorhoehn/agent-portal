@@ -129,7 +129,7 @@ describe('assigning a round', () => {
     expect(sent.map((s) => s.userId).sort()).toEqual(['u-hugo', 'u-wen']);
     expect(sent[0]!.item).toMatchObject({
       title: 'You have a new round: Coding for Senior Backend Engineer',
-      payload: { tenant: 'interviews', category: 'Interviews', audience: 'interviewer' },
+      payload: { tenant: 'interviews', category: 'Candidates', audience: 'interviewer' },
       action: { href: '/interviews/my-interviews' },
     });
     expect(bellText()).not.toMatch(/Luc[ií]a|Navarro|lucia|app-lucia|cand-/);
