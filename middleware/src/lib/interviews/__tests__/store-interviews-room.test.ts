@@ -17,7 +17,7 @@ const AT = '2026-11-16T10:00:00.000Z';
 const cells = (i: Interview): Record<string, unknown> => ({
   id: i.id, application_id: i.applicationId, round_id: i.roundId, type: i.type, lead_id: i.leadId, panel_ids: [...i.panelIds],
   scheduled_at: ts(i.scheduledAt), minutes: i.minutes, state: i.state, question_ids: [...i.questionIds], assigned_by: i.assignedBy,
-  assigned_at: ts(i.assignedAt), invite_token_hash: i.inviteTokenHash, call_id: i.callId, ended_at: ts(i.endedAt),
+  assigned_at: ts(i.assignedAt), call_id: i.callId, ended_at: ts(i.endedAt),
   acceptances: JSON.stringify(i.acceptances), declines: JSON.stringify(i.declines), revision: i.revision,
 });
 

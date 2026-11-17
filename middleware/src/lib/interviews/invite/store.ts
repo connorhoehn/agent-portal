@@ -5,8 +5,7 @@
 // (store-sql.ts, schema/interviews_schema.sql `interview_invites`) otherwise. __tests__/store.test.ts runs
 // one contract over both.
 //
-// The table is the truth about invites. `Interview.inviteTokenHash` predates it and is not read or written
-// here (round 3 should drop the column).
+// The table is the truth about invites.
 //
 // The store only writes. Who may issue or revoke, and whether an invite is alive, are decided above it
 // (the routes, rules.ts). Issuing revokes the interview's live invite in the same write, so there is never

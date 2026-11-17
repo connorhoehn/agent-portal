@@ -11,7 +11,7 @@ const NOW = Date.parse('2026-12-01T10:00:00.000Z');
 const at = (min: number) => new Date(NOW + min * 60_000).toISOString();
 const iv = (over: Partial<Interview> = {}): Interview => ({
   id: 'iv-1', applicationId: 'ap-1', roundId: 'r-1', type: 'technical', leadId: 'u-lead', panelIds: ['u-p1'], scheduledAt: at(10), minutes: 45,
-  state: 'accepted', questionIds: [], assignedBy: 'u-rec', assignedAt: at(-100), inviteTokenHash: null, callId: null, endedAt: null, acceptances: [], declines: [], revision: 1, ...over,
+  state: 'accepted', questionIds: [], assignedBy: 'u-rec', assignedAt: at(-100), callId: null, endedAt: null, acceptances: [], declines: [], revision: 1, ...over,
 });
 const users = (rings: ReturnType<typeof dueRings>) => rings.map((r) => r.userId).sort();
 

@@ -51,7 +51,7 @@ function dataApiExec(sorted: boolean): { exec: SqlExec; seen: string[] } {
     if (sql === LIST_INTERVIEWS_SQL) return order(interviewsFixture.rows(), ORDER.interviews).map((i) => ({
       id: i.id, application_id: i.applicationId, round_id: i.roundId, type: i.type, lead_id: i.leadId, panel_ids: [...i.panelIds],
       scheduled_at: ts(i.scheduledAt), minutes: i.minutes, state: i.state, question_ids: [...i.questionIds], assigned_by: i.assignedBy,
-      assigned_at: ts(i.assignedAt), invite_token_hash: i.inviteTokenHash, call_id: i.callId, ended_at: ts(i.endedAt),
+      assigned_at: ts(i.assignedAt), call_id: i.callId, ended_at: ts(i.endedAt),
       acceptances: JSON.stringify(i.acceptances), declines: JSON.stringify(i.declines), revision: i.revision,
     }));
     if (sql === LIST_SCORECARDS_SQL) return order(interviewScorecardsFixture.rows(), ORDER.scorecards).map((s) => ({

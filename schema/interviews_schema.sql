@@ -11,7 +11,7 @@
 -- interviews and scorecards. Consents, the suggestion log, the pad log, runs
 -- and the deletion log are later rows (I2.3, I3.3, I4.3, I4.4, I6.3) and add
 -- their own tables; the columns that will point at them are here already
--- (interviews.invite_token_hash, interviews.call_id, a scorecard's version
+-- (interviews.call_id, a scorecard's version
 -- and changed_after_recap).
 --
 -- Candidates are records, never users (decision 3): no app_users row, no
@@ -114,8 +114,7 @@ CREATE TABLE IF NOT EXISTS interviews (
   question_ids       TEXT[] NOT NULL DEFAULT '{}',
   assigned_by        TEXT NOT NULL REFERENCES app_users(id),
   assigned_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  -- The invite link's token hash (row I2.1) and the call (row I2.2).
-  invite_token_hash  TEXT,
+  -- The call (row I2.2).
   call_id            TEXT,
   ended_at           TIMESTAMPTZ,
   -- Row I1.4: each seat's answer. [{ userId, seat, at }] for the seats held now that accepted;
@@ -125,6 +124,7 @@ CREATE TABLE IF NOT EXISTS interviews (
   -- Bumped by every write; a write names the revision it was made against (compare-and-set).
   revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
+ALTER TABLE interviews DROP COLUMN IF EXISTS invite_token_hash;
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);
 
@@ -263,8 +263,7 @@ CREATE INDEX IF NOT EXISTS interview_coach_log_interview_idx ON interview_coach_
 -- partial unique index holds the table to it. `expires_at` is the ceiling (30
 -- days after issue); the live expiry also follows the interview's time
 -- (lib/interviews/invite/rules.ts). `session_hash` names the one live guest
--- session: a new opening of the link replaces it. This table, not
--- interviews.invite_token_hash, is the truth about invites.
+-- session: a new opening of the link replaces it. This table is the truth about invites.
 CREATE TABLE IF NOT EXISTS interview_invites (
   id               TEXT PRIMARY KEY,
   interview_id     TEXT NOT NULL REFERENCES interviews(id),

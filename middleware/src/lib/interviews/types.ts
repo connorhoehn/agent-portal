@@ -3,7 +3,7 @@
 // Phase 0 reads openings (with their kit), candidates, applications,
 // interviews and scorecards. Consents, the suggestion log, the pad log, runs
 // and the deletion log are later rows; the fields that will point at them
-// (`inviteTokenHash`, `callId`, a scorecard's `version` and
+// (`callId`, a scorecard's `version` and
 // `changedAfterRecap`) are here already so those rows add tables, not
 // reshapes. The table behind each record is schema/interviews_schema.sql.
 
@@ -175,7 +175,6 @@ export interface Interview {
   assignedBy: string;
   assignedAt: string;
   /** The invite link's token hash (row I2.1); null until one is issued. */
-  inviteTokenHash: string | null;
   /** The call this interview runs in (row I2.2); null until then. */
   callId: string | null;
   /** When the call ended; null before. */

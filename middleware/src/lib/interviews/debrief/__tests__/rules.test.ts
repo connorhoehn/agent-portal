@@ -4,7 +4,7 @@ import { DECISIONS, checkDecision, decisionMove, isDecisionChange, scorecardsMis
 
 const iv = (id: string, state: InterviewState, panel: string[] = []): Interview => ({
   id, applicationId: 'app', roundId: 'rd', type: 'technical', leadId: 'u-lead', panelIds: panel, scheduledAt: null, minutes: 60, state,
-  questionIds: [], assignedBy: 'u-r', assignedAt: '2026-11-01T00:00:00Z', inviteTokenHash: null, callId: null, endedAt: null,
+  questionIds: [], assignedBy: 'u-r', assignedAt: '2026-11-01T00:00:00Z', callId: null, endedAt: null,
   acceptances: [], declines: [], revision: 1,
 });
 const card = (interviewId: string, interviewerId = 'u-lead', version = 1): Scorecard => ({

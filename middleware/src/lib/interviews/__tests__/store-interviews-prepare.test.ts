@@ -9,7 +9,7 @@ function tableExec(): SqlExec {
   const table = interviewsFixture.rows().map((i) => ({
     id: i.id, application_id: i.applicationId, round_id: i.roundId, type: i.type, lead_id: i.leadId, panel_ids: [...i.panelIds],
     scheduled_at: i.scheduledAt, minutes: i.minutes, state: i.state, question_ids: [...i.questionIds], assigned_by: i.assignedBy,
-    assigned_at: i.assignedAt, invite_token_hash: null, call_id: null, ended_at: null, acceptances: JSON.stringify(i.acceptances),
+    assigned_at: i.assignedAt, call_id: null, ended_at: null, acceptances: JSON.stringify(i.acceptances),
     declines: JSON.stringify(i.declines), revision: i.revision,
   }) as Record<string, unknown>);
   return async (sql: string, params: SqlParameter[] = []) => {

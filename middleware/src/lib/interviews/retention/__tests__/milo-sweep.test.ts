@@ -42,7 +42,7 @@ const kept = async (s: MemoryAssistantStore, id: string) => ({
 
 const iv: Interview = {
   id: 'iv-gate', applicationId: 'app-x', roundId: 'rd', type: 'behavioural', leadId: 'u-lead', panelIds: [], scheduledAt: '2026-01-10T14:00:00.000Z', minutes: 60,
-  state: 'ended', questionIds: [], assignedBy: 'u-r', assignedAt: '2026-01-01T09:00:00.000Z', inviteTokenHash: null, callId: IV,
+  state: 'ended', questionIds: [], assignedBy: 'u-r', assignedAt: '2026-01-01T09:00:00.000Z', callId: IV,
   endedAt: new Date(END).toISOString(), acceptances: [], declines: [], revision: 1,
 } as unknown as Interview;
 const world = {

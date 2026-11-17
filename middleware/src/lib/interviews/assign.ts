@@ -131,7 +131,7 @@ export function newInterview(a: Assignment, opening: Opening, id: string, by: st
   return {
     id, applicationId: a.applicationId, roundId: a.roundId, type: round.type, leadId: a.leadId, panelIds: [...a.panelIds],
     scheduledAt: null, minutes: round.minutes, state: 'assigned', questionIds: [], assignedBy: by, assignedAt: at,
-    inviteTokenHash: null, callId: null, endedAt: null, acceptances: [], declines: [], revision: 1,
+    callId: null, endedAt: null, acceptances: [], declines: [], revision: 1,
   };
 }
 

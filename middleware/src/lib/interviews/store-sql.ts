@@ -27,7 +27,7 @@ export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, 
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
 const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
-  assigned_by, assigned_at, invite_token_hash, call_id, ended_at, acceptances, declines, revision`;
+  assigned_by, assigned_at, call_id, ended_at, acceptances, declines, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
 export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason
@@ -63,7 +63,7 @@ export const GET_INTERVIEW_SQL = `SELECT ${INTERVIEW_COLUMNS}
 export const INSERT_INTERVIEW_SQL = `INSERT INTO interviews (${INTERVIEW_COLUMNS})
   VALUES (:id, :application_id, :round_id, :type, :lead_id, ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))),
     CAST(:scheduled_at AS TIMESTAMPTZ), :minutes, :state, ARRAY(SELECT jsonb_array_elements_text(CAST(:question_ids AS JSONB))),
-    :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :invite_token_hash, :call_id, CAST(:ended_at AS TIMESTAMPTZ),
+    :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :call_id, CAST(:ended_at AS TIMESTAMPTZ),
     CAST(:acceptances AS JSONB), CAST(:declines AS JSONB), 1)
   ON CONFLICT (id) DO NOTHING
   RETURNING ${INTERVIEW_COLUMNS}`;
@@ -165,7 +165,7 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
     id: str(r['id']), applicationId: str(r['application_id']), roundId: str(r['round_id']), type: str(r['type']) as RoundType,
     leadId: str(r['lead_id']), panelIds: textArray(r['panel_ids']), scheduledAt: isoOrNull(r['scheduled_at']), minutes: num(r['minutes']),
     state: str(r['state']) as InterviewState, questionIds: textArray(r['question_ids']), assignedBy: str(r['assigned_by']),
-    assignedAt: isoOf(r['assigned_at']), inviteTokenHash: strOrNull(r['invite_token_hash']), callId: strOrNull(r['call_id']),
+    assignedAt: isoOf(r['assigned_at']), callId: strOrNull(r['call_id']),
     endedAt: isoOrNull(r['ended_at']), acceptances: json<SeatAcceptance[]>(r['acceptances'], []), declines: json<SeatDecline[]>(r['declines'], []),
     revision: num(r['revision']),
   };
@@ -234,7 +234,7 @@ export class SqlInterviewsStore implements InterviewsStore {
       textParam('id', input.id), textParam('application_id', input.applicationId), textParam('round_id', input.roundId), textParam('type', input.type),
       textParam('lead_id', input.leadId), textParam('panel_ids', JSON.stringify(input.panelIds)), textParam('scheduled_at', input.scheduledAt),
       intParam('minutes', input.minutes), textParam('state', input.state), textParam('question_ids', JSON.stringify(input.questionIds)),
-      textParam('assigned_by', input.assignedBy), textParam('assigned_at', input.assignedAt), textParam('invite_token_hash', input.inviteTokenHash),
+      textParam('assigned_by', input.assignedBy), textParam('assigned_at', input.assignedAt),
       textParam('call_id', input.callId), textParam('ended_at', input.endedAt),
       textParam('acceptances', JSON.stringify(input.acceptances)), textParam('declines', JSON.stringify(input.declines)),
     ]);

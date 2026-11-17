@@ -26,7 +26,7 @@ afterEach(() => { fixtureRegistry.resetAll('default'); setDeletionStore(null); s
 const END = Date.parse('2026-01-10T15:00:00.000Z');
 const ivAt = (id: string, over: Partial<Interview> = {}): Interview => ({
   id, applicationId: 'app-x', roundId: 'rd', type: 'technical', leadId: 'u-lead', panelIds: [], scheduledAt: '2026-01-10T14:00:00.000Z', minutes: 60,
-  state: 'ended', questionIds: [], assignedBy: 'u-r', assignedAt: '2026-01-01T09:00:00.000Z', inviteTokenHash: null, callId: null,
+  state: 'ended', questionIds: [], assignedBy: 'u-r', assignedAt: '2026-01-01T09:00:00.000Z', callId: null,
   endedAt: new Date(END).toISOString(), acceptances: [], declines: [], revision: 1, ...over,
 });
 const worldOf = (interviews: Interview[]): InterviewsWorld => ({

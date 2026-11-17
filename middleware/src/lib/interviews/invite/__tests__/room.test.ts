@@ -13,7 +13,7 @@ const at = (ms: number) => new Date(Date.parse(T0) + ms);
 
 const interview = (over: Partial<Interview> = {}): Interview => ({
   id: 'iv-1', applicationId: 'app-1', roundId: 'rd-1', type: 'technical', leadId: 'u-lead', panelIds: ['u-panel'], scheduledAt: at(HOUR).toISOString(),
-  minutes: 60, state: 'live', questionIds: ['q-1'], assignedBy: 'u-rec', assignedAt: T0, inviteTokenHash: null, callId: null, endedAt: null, acceptances: [], declines: [], revision: 1, ...over,
+  minutes: 60, state: 'live', questionIds: ['q-1'], assignedBy: 'u-rec', assignedAt: T0, callId: null, endedAt: null, acceptances: [], declines: [], revision: 1, ...over,
 });
 const invite = (over: Partial<Invite> = {}): Invite => ({
   id: 'inv-1', interviewId: 'iv-1', tokenHash: hashInviteToken(newInviteToken()), issuedBy: 'u-rec', issuedAt: T0, expiresAt: inviteCeiling(T0),
