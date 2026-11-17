@@ -18,6 +18,7 @@ import { requireAction } from '../lib/authz.js';
 import { indexFor, param } from '../lib/interviews/request.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { openingsRouter } from './interviews/openings.js';
+import { assignmentsRouter } from './interviews/assignments.js';
 
 /** With INTERVIEWS_ENABLED off every route is the ordinary not-found (lib/interviews/flag.ts). */
 export function interviewsFlagGate(_req: Request, res: Response, next: NextFunction): void {
@@ -33,6 +34,7 @@ interviewsRouter.use(requireAction('ViewInterviews'));
 // param) are in lib/interviews/request.ts.
 
 interviewsRouter.use(openingsRouter); // lane KIT (row I1.3): create an opening, edit its details, replace its kit
+interviewsRouter.use(assignmentsRouter); // lane ASSIGN (row I1.4): assign a round, answer a seat, reassign
 
 interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

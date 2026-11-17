@@ -670,6 +670,8 @@ export async function currentlyReadsTenantChannel(userId: string, bare: string, 
  */
 const admitting = new Map<string, Promise<boolean>>();
 export async function admitTenantNotification(userId: string, record: { channel?: string; payload?: Record<string, unknown> }): Promise<boolean> {
+  // An interviews bell is for one role (`payload.audience`): it reaches the user only while they still hold it.
+  if (record.payload?.['tenant'] === 'interviews') return admitInterviewsBell(userId, record.payload);
   const fromPayload = record.payload?.['chatUnread'] ?? record.payload?.['channel'];
   const channel = typeof record.channel === 'string' && record.channel ? record.channel : typeof fromPayload === 'string' ? fromPayload : '';
   if (!channel) return true;
@@ -711,6 +713,103 @@ export async function notifyTenantChannelMention(ev: { channel: string; sender: 
     });
   } catch (err) {
     console.warn(`[social-notify] tenant mention failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+// ── The interviews tenant (docs/interviews-tenant-plan.md row I1.4; I5.6 adds the rest) ──────────
+//
+// The notification store is shared by every tenant, so an interviews bell carries the opening's title and the
+// round's name and nothing about the candidate: no name, no reason, no time (row I5.6, "no content of the
+// interview in a bell"). Each names the role it is for (`audience`); admitTenantNotification delivers it, live or
+// on replay, only while the user still holds that role in the tenant, so someone who lost it is not shown it.
+
+const INTERVIEWS_AUDIENCES: ReadonlySet<string> = new Set(['recruiter', 'interviewer', 'hiring-manager']);
+
+/** Does `userId` hold `role` in the interviews tenant now? False on any doubt. */
+async function holdsInterviewsRole(userId: string, role: string): Promise<boolean> {
+  try {
+    const user = await getUser(userId, { authoritative: true });
+    return !!user && (user.grants['interviews'] ?? []).includes(role);
+  } catch {
+    return false;
+  }
+}
+
+/** An interviews bell reaches its audience's holders only; one without an audience reaches anyone still in the tenant. */
+export async function admitInterviewsBell(userId: string, payload: Record<string, unknown>): Promise<boolean> {
+  const audience = payload['audience'];
+  if (typeof audience === 'string' && INTERVIEWS_AUDIENCES.has(audience)) return holdsInterviewsRole(userId, audience);
+  return holdsGrant(userId, 'interviews');
+}
+
+/** A notification id that names the round without spelling out its id. */
+function roundKey(interviewId: string): string {
+  let h = 0x811c9dc5;
+  for (let k = 0; k < interviewId.length; k++) { h ^= interviewId.charCodeAt(k); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+
+export interface InterviewSeatedEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** Everyone newly in a seat; the actor is never told about their own write. */
+  userIds: readonly string[];
+  actorId: string;
+  /** True for a reassignment, so the item reads "now" rather than "new". */
+  reassigned: boolean;
+}
+
+/** A round was assigned or reassigned → each newly seated interviewer, a bell that opens My interviews. */
+export async function notifyInterviewSeated(ev: InterviewSeatedEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const to = ev.userIds.filter((u) => u !== ev.actorId);
+    if (!to.length) return [];
+    const by = await displayName(ev.actorId);
+    const sent: string[] = [];
+    for (const userId of new Set(to)) {
+      sent.push(...await notify([userId], {
+        id: `interview-seated:${roundKey(ev.interviewId)}:${userId}:${Date.now().toString(36)}`,
+        type: 'system',
+        title: `${ev.reassigned ? 'You are now on' : 'You have a new round'}: ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+        body: `Assigned by ${by}. Accept or decline it in My interviews.`,
+        payload: { tenant: 'interviews', kind: 'interview-assigned', audience: 'interviewer', actorId: ev.actorId },
+        action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-seated producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+export interface InterviewDeclinedEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  recruiterIds: readonly string[];
+  declinerId: string;
+  seat: 'lead' | 'panel';
+}
+
+/** Someone declined a seat → the recruiters, a bell that opens the round on the candidate's profile. The reason stays on the page. */
+export async function notifyInterviewDeclined(ev: InterviewDeclinedEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const who = await displayName(ev.declinerId);
+    return await notify(ev.recruiterIds.filter((u) => u !== ev.declinerId), {
+      id: `interview-declined:${roundKey(ev.interviewId)}:${ev.declinerId}:${Date.now().toString(36)}`,
+      type: 'system',
+      title: `${who} declined ${ev.seat === 'lead' ? 'to lead' : 'a panel seat on'} ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+      body: ev.seat === 'lead' ? 'The round needs a new lead. Open it to reassign.' : 'The round goes ahead without them. Open it to change the panel.',
+      payload: { tenant: 'interviews', kind: 'interview-declined', audience: 'recruiter', actorId: ev.declinerId },
+      action: { label: 'Open the round', href: `/interviews/rounds/${encodeURIComponent(ev.interviewId)}` },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] interview-declined producer failed: ${(err as Error).message}`);
     return [];
   }
 }

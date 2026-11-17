@@ -141,7 +141,9 @@ describe('the two stores agree after the same interview writes', () => {
       await s.answerSeat(created.id, out.change, 1);
       await s.reassign(created.id, { leadId: HUGO, panelIds: ['u-third'], state: 'assigned', acceptances: [] }, 2);
       await s.reassign(created.id, { leadId: HUGO, panelIds: [], state: 'assigned', acceptances: [] }, 2);
-      results.push(await s.listInterviews());
+      // The seed's instants are computed from the clock at each reset, so the written row is compared whole and the rest by id.
+      const listed = await s.listInterviews();
+      results.push([listed.find((i) => i.id === created.id)!, ...listed.map((i) => ({ id: i.id }) as Interview)]);
     }
     expect(results[1]).toEqual(results[0]);
   });

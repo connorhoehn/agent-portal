@@ -470,6 +470,17 @@ describe('capability boundaries that must not regress', () => {
     expect(role('interviews/hiring-manager').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ManageCandidates"[\s\S]*principal\.role == "hiring-manager"/);
   });
 
+  test('interviews assignments (row I1.4): assigning and reassigning are AssignInterviews, answering a seat is ConductInterview', () => {
+    // routes/interviews/assignments.ts gates assign and reassign on AssignInterviews (the recruiter's) and answering on
+    // ConductInterview (the interviewer's), then checks the seat is the session's own. So the recruiter cannot accept
+    // for anyone, the hiring manager writes nothing, and no other tenant's role holds either.
+    expect([has('interviews/recruiter', 'AssignInterviews'), has('interviews/recruiter', 'ConductInterview')]).toEqual([true, false]);
+    expect([has('interviews/interviewer', 'AssignInterviews'), has('interviews/interviewer', 'ConductInterview')]).toEqual([false, true]);
+    expect([has('interviews/hiring-manager', 'AssignInterviews'), has('interviews/hiring-manager', 'ConductInterview')]).toEqual([false, false]);
+    expect([has('access/access-admin', 'AssignInterviews'), has('access/access-admin', 'ConductInterview')]).toEqual([false, false]);
+    expect(role('interviews/recruiter').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ConductInterview"[\s\S]*principal\.role == "recruiter"/);
+  });
+
   test('an orgiq member cannot view the assessment tenant', () => {
     expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });
