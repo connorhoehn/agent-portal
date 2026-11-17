@@ -71,9 +71,9 @@ import { owedBy } from '../lib/meeting-assistant/proposal-notify.js';
 import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { ackedBefore, newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
-import { assistantLimits } from '../lib/meeting-assistant/limits.js';
+import { assistantLimits, type AssistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
-import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { familyOfLobby, hasFamilyPolicies, payerFields, policyCallOf, policyFamilies, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js'; import { INTERVIEW_FAMILY, registerInterviewsMiloPolicy } from '../lib/interviews/milo-policy.js'; import { interviewsEnabled } from '../lib/interviews/flag.js';
+import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { familyOfLobby, hasFamilyPolicies, payerFields, policyCallOf, policyFamilies, limitsOfCall, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js'; import { CANNOT_LISTEN_PAST_ROUND, INTERVIEW_FAMILY, registerInterviewsMiloPolicy } from '../lib/interviews/milo-policy.js'; import { interviewsEnabled } from '../lib/interviews/flag.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import {
@@ -173,8 +173,8 @@ async function turnsView(callId: string, viewer: string, now: number) {
 }
 
 /** What one extend adds to the ceiling now: the default minutes, up to the hard maximum (0 there), as the orchestrator's extend computes it. */
-export const extendSecondsOf = (record: AssistantRecord): number => {
-  const limits = assistantLimits(); const ceiling = recordSession(record, limits.maxSeconds).ceilingSeconds;
+export const extendSecondsOf = (record: AssistantRecord, limits: AssistantLimits = assistantLimits()): number => {
+  const ceiling = recordSession(record, limits.maxSeconds).ceilingSeconds;
   return Math.max(0, Math.min(limits.hardMaxSeconds, ceiling + limits.maxSeconds) - ceiling);
 };
 
@@ -199,7 +199,7 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     // is in the call), so the dismissal question promises an invitation back only when one would be allowed.
     ...(present ? { rejoinLater: rejoinStandingByTime(listeningSecondsOf(record, runtime.deps.clock()), assistantLimits().hardMaxSeconds) } : {}),
     // What "Extend time" would add now (0 at the hard maximum: it is then not offered).
-    ...(record.state === 'listening' || record.state === 'paused' ? { extendSeconds: extendSecondsOf(record) } : {}),
+    ...(record.state === 'listening' || record.state === 'paused' ? { extendSeconds: extendSecondsOf(record, await limitsOfCall(policyCallOf(record))) } : {}),
     // This person acknowledged in an earlier period of this call: their notice says they acknowledge once more.
     youAckedBefore: ackedBefore(record, session.sub),
     // Which period of Milo in this call this is (1 for the first); a notice closed in an earlier period shows again in a new one.
@@ -313,7 +313,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   // Money first (decision 10): the ceiling's minutes are held against the inviter. A refusal ends the invite here, in the shape
   // the voice mint gives, and Milo never joins.
   const initiativeId = initiativeOfLobby(lobby);
-  const ceilingSeconds = assistantLimits().maxSeconds;
+  const ceilingSeconds = (await limitsOfCall({ callId, lobby, tenant: session.tenant })).maxSeconds;
   const spend = assistantSpend(); const payer = payerFields({ callId, lobby, tenant: session.tenant, initiativeId, invitedBy: session.sub }); // the call's policy says whose
   const held = await spend.reserve({
     callId, tenant: session.tenant, ...payer, seconds: ceilingSeconds, part: 0,
@@ -402,7 +402,7 @@ async function rejoinStanding(record: AssistantRecord, now: number): Promise<Rej
  */
 async function rejoin(req: Request, res: Response, session: Session, read: AssistantRecord, startListening: () => void): Promise<void> {
   const store = assistantStore(); const callId = read.callId; const runtime = assistantRuntime();
-  const limits = assistantLimits();
+  const limits = await limitsOfCall({ callId, lobby: read.lobby, tenant: read.tenant });
   // The earlier period's run may still be stopping (a dismissal's notice, settlement and closing session take a moment): wait for it before
   // anything is settled or held, so its stop never closes or bills the new period. Nothing is held when it takes too long.
   if (!(await runtime.settled(callId, rejoinWaitMs, periodOf(read) + 1))) throw new AppError(409, REJOIN_STILL_LEAVING);
@@ -651,6 +651,8 @@ meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), 
   }
   if (out.why === 'no-assistant') throw new NotFoundError(NOT_HERE);
   if (out.why === 'left') throw new AppError(409, ALREADY_LEFT);
+  const atEnd = await assistantStore().get(callId);
+  if (atEnd && policyForLobby(atEnd.lobby).listeningLimitMinutes) throw new AppError(409, CANNOT_LISTEN_PAST_ROUND);
   throw new AppError(409, `${ASSISTANT_NAME} is already at its longest time for this call (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes), so it cannot be extended further.`);
 }));
 

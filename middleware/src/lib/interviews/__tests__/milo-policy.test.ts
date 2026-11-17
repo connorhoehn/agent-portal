@@ -13,12 +13,12 @@ import { interviewConsentsFixture } from '../../../mock/interviews-consents.js';
 import { spendHolds } from '../../../mock/spend-holds.js';
 import { spendEntries } from '../../../mock/spend-ledger.js';
 import { userSpendThisPeriod } from '../../../providers/user-budgets.js';
-import { DEFAULT_POLICY, payerFields, policyForLobby, policyFamilies, type PolicyCall } from '../../meeting-assistant/policy.js';
+import { DEFAULT_POLICY, limitsOfCall, payerFields, policyForLobby, policyFamilies, type PolicyCall } from '../../meeting-assistant/policy.js';
 import { realSpend, sourceIdFor } from '../../meeting-assistant/spend.js';
 import type { AssistantRecord, MinutesRecord } from '../../meeting-assistant/types.js';
 import { MemoryInviteStore, setInviteStore } from '../invite/store.js';
 import {
-  INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY as P, LEAD_ONLY, MILO_OFF_NOT_ANSWERED, MILO_OFF_NO_TRANSCRIPT, registerInterviewsMiloPolicy, setInterviewConsentSource, unregisterInterviewsMiloPolicy,
+  CANNOT_LISTEN_PAST_ROUND, INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY as P, LEAD_ONLY, MILO_OFF_NOT_ANSWERED, MILO_OFF_NO_TRANSCRIPT, registerInterviewsMiloPolicy, setInterviewConsentSource, unregisterInterviewsMiloPolicy,
 } from '../milo-policy.js';
 import { interviewSpendState } from '../spend.js';
 
@@ -252,5 +252,32 @@ describe('relaysLiveSpeech and fixed requests', () => {
   it('relays nothing the live model says (decision 9) and has no fixed requests yet (row I3.8)', () => {
     expect(P.relaysLiveSpeech(CALL)).toBe(false);
     expect(P.answerFromHeldText).toBeUndefined();
+  });
+});
+
+describe('listeningLimitMinutes: the round plus 15, no extension past it', () => {
+  beforeEach(() => { registerInterviewsMiloPolicy({ INTERVIEWS_ENABLED: 'true' }); });
+
+  it('is the interview\'s minutes plus 15, as both the first ceiling and the most', async () => {
+    const minutes = interviewsFixture.rows().find((i) => i.id === IV)!.minutes;
+    expect(await P.listeningLimitMinutes!(CALL)).toBe(minutes + 15);
+    const limits = await limitsOfCall(CALL);
+    expect(limits.maxSeconds).toBe((minutes + 15) * 60);
+    expect(limits.hardMaxSeconds).toBe((minutes + 15) * 60);
+  });
+
+  it('is 60 + 15 when the interview cannot be read', async () => {
+    expect(await P.listeningLimitMinutes!({ ...CALL, lobby: 'interviews:interview:iv-nope' })).toBe(75);
+    expect(await P.listeningLimitMinutes!({ ...CALL, lobby: null })).toBe(75);
+  });
+
+  it('leaves a Work call on the assistant\'s own limits', async () => {
+    const work = await limitsOfCall({ callId: 'c', lobby: 'orgiq:initiative:p-auth', tenant: 'orgiq' });
+    expect(work.hardMaxSeconds).toBe(180 * 60);
+    expect(work.maxSeconds).toBe(60 * 60);
+  });
+
+  it('refuses more time with one plain sentence', () => {
+    expect(CANNOT_LISTEN_PAST_ROUND).toBe("Milo can't listen past the end of this round.");
   });
 });

@@ -23,7 +23,7 @@ import {
   nameOf, noticeText, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { isPrivateRead, meetingInstructions } from './instructions.js';
-import { payerOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
+import { limitsOfCall, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
@@ -1767,7 +1767,8 @@ export class AssistantRuntime {
     const callId = run.ctx.callId;
     const record = await this.store.get(callId);
     if (!record || record.state !== 'listening') return;
-    const s = sessionOf(record, assistantLimits().maxSeconds);
+    const limits = await limitsOfCall(policyCallOf(record));
+    const s = sessionOf(record, limits.maxSeconds);
     const left = s.ceilingSeconds - listeningSecondsOf(record, this.now());
     if (left <= 0) {
       await this.snapshotAttendance(callId);
@@ -1779,7 +1780,7 @@ export class AssistantRuntime {
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
       await this.store.patchSession(callId, { warned: true });
       // Said according to whether more time can still be added, and naming the inviter for the people who cannot extend.
-      const canExtend = s.ceilingSeconds < assistantLimits().hardMaxSeconds;
+      const canExtend = s.ceilingSeconds < limits.hardMaxSeconds;
       await postNoticeQuietly(callId, canExtend
         ? `${ASSISTANT_NAME} leaves in 5 minutes. Anyone who can invite ${ASSISTANT_NAME} can extend its time; if you can't, ask ${await nameOf(record.invitedBy)}.`
         : `${ASSISTANT_NAME} leaves in 5 minutes; this call cannot be extended further.`);
@@ -1806,7 +1807,7 @@ export class AssistantRuntime {
     const record = await this.store.get(callId);
     if (!record) return { ok: false, why: 'no-assistant' };
     if (record.state === 'left') return { ok: false, why: 'left' };
-    const limits = assistantLimits();
+    const limits = await limitsOfCall(policyCallOf(record));
     const s = sessionOf(record, limits.maxSeconds);
     const next = Math.min(limits.hardMaxSeconds, s.ceilingSeconds + limits.maxSeconds);
     const added = next - s.ceilingSeconds;

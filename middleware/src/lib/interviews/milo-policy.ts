@@ -21,6 +21,7 @@
 //   rings, listsMeeting   the panel side only, never a guest (a guest has no bell and no Meetings list).
 //   relaysLiveSpeech      never (decision 9: nothing the live model says reaches an interview, by voice or in chat).
 //   answerFromHeldText    absent until row I3.8.
+//   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
 //   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
@@ -41,6 +42,15 @@ export const MILO_OFF_NO_TRANSCRIPT = 'Milo is off for this interview: the candi
 
 /** Refused to the lead while the candidate has not answered (nothing runs before consent). */
 export const MILO_OFF_NOT_ANSWERED = 'Milo is off for this interview until the candidate has answered the questions about the transcript and Milo.';
+
+/** Milo listens for the round's minutes plus this many, and cannot be extended past that (round 6 decision). */
+export const LISTEN_PAST_ROUND_MINUTES = 15;
+
+/** The round's length taken when the interview or its round cannot be read: the most restrictive (60 + 15 minutes). */
+export const UNREADABLE_ROUND_MINUTES = 60;
+
+/** Refused when more time is asked for in an interview call. */
+export const CANNOT_LISTEN_PAST_ROUND = "Milo can't listen past the end of this round.";
 
 const LOBBY = /^interviews:interview:([^:]+)$/;
 const GUEST = /^guest:(.+)$/;
@@ -148,6 +158,12 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   // Decision 17: an interview's transcript and minutes are media, kept 90 days by default or until a deletion request, and removed
   // by the interviews retention (retention/erasers.ts `transcript-and-minutes`), never by the meeting assistant's 30-day sweep.
   keepsOwnRetention: true,
+  listeningLimitMinutes: async (call) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
+    const minutes = interview?.minutes;
+    return (typeof minutes === 'number' && Number.isFinite(minutes) && minutes > 0 ? minutes : UNREADABLE_ROUND_MINUTES) + LISTEN_PAST_ROUND_MINUTES;
+  },
 });
 
 let unregister: (() => void) | null = null;

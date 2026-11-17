@@ -16,6 +16,7 @@
 import type { SpendSource } from '../../providers/spend-ledger.js';
 import type { ResponsesFunctionTool } from '../voice/catalogue.js';
 import { MEETING_EXCLUDED_TOOLS, meetingBackendInstructions, meetingFunctionTools, meetingTools } from './instructions.js';
+import { assistantLimits, type AssistantLimits } from './limits.js';
 import { assistantStore } from './store-select.js';
 import type { AssistantRecord, MinutesRecord } from './types.js';
 
@@ -98,6 +99,11 @@ export interface MeetingAssistantPolicy {
    * chat alone; the abandoned-call ending and the proposals' expiry still apply. Absent or false: the sweep removes them (Work).
    */
   readonly keepsOwnRetention?: boolean;
+  /**
+   * How many minutes Milo may listen to this call at most: the first ceiling and the most it can be extended to, in place of the
+   * meeting assistant's own (limits.ts). Absent: the defaults. A policy that cannot work it out answers its most restrictive figure.
+   */
+  listeningLimitMinutes?(call: PolicyCall): Promise<number>;
 }
 
 /** Today's behaviour, for every lobby Milo can be invited into. */
@@ -187,3 +193,17 @@ export function payerFields(record: Pick<AssistantRecord, 'callId' | 'lobby' | '
   const payer = payerOf(record, inviterId);
   return { inviterId: payer.actorId, initiativeId: payer.initiativeId, source: payer.source };
 }
+
+/** The limits that apply to this call: the meeting assistant's own, or, when the call's policy sets a listening limit, that limit as both the first ceiling and the most. */
+export async function limitsOfCall(call: PolicyCall): Promise<AssistantLimits> {
+  const base = assistantLimits();
+  const policy = policyForLobby(call.lobby);
+  if (!policy.listeningLimitMinutes) return base;
+  const minutes = await policy.listeningLimitMinutes(call).catch(() => null);
+  if (minutes === null || !Number.isFinite(minutes) || minutes <= 0) return base;
+  const seconds = Math.round(minutes * 60);
+  return { ...base, maxSeconds: seconds, hardMaxSeconds: seconds };
+}
+
+/** Does this call's policy fix its listening limit (so that the limit is the call's end, not a default)? */
+export const hasFixedListeningLimit = (lobby: string | null | undefined): boolean => policyForLobby(lobby).listeningLimitMinutes !== undefined;
