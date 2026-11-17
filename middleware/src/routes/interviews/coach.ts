@@ -10,6 +10,7 @@
 // Another tenant's role is refused at the tenant's mount before these routes run. The read marks the suggestion shown.
 // An answer is 409 when the suggestion was already answered or the interview is not live; 400 for an answer not in the list.
 
+import { NOT_SAID_ALOUD } from '../../lib/meeting-assistant/approved-speech.js';
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { isAllowed, resolveSession } from '../../lib/authz.js';
@@ -54,5 +55,6 @@ coachRouter.post('/interviews/:id/suggestion/:suggestionId/answer', asyncHandler
   if (out.kind === 'not-found') throw new NotFoundError(NO_SUGGESTION);
   if (out.kind === 'answered') { res.status(409).json({ error: ANSWERED }); return; }
   if (out.kind === 'not-live') { res.status(409).json({ error: NOT_LIVE }); return; }
-  res.json({ suggestion: null });
+  // Row I3.5: after "Have Milo ask", whether Milo said it aloud (absent when Milo is not in the call); the lead's one sentence when not.
+  res.json({ suggestion: null, ...(out.said ? { said: out.said, ...(out.said === 'chat' ? { line: NOT_SAID_ALOUD } : {}) } : {}) });
 }));

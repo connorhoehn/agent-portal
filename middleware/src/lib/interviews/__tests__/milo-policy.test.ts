@@ -249,9 +249,9 @@ describe('rings and listsMeeting: the panel side, never a guest', () => {
 });
 
 describe('relaysLiveSpeech and fixed requests', () => {
-  it('relays nothing the live model says (decision 9) and has no fixed requests yet (row I3.8)', () => {
+  it('relays nothing the live model says (decision 9); the fixed requests are answered from held text (row I3.8, speak.test.ts)', () => {
     expect(P.relaysLiveSpeech(CALL)).toBe(false);
-    expect(P.answerFromHeldText).toBeUndefined();
+    expect(typeof P.answerFromHeldText).toBe('function');
   });
 });
 

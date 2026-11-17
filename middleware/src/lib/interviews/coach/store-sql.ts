@@ -24,6 +24,9 @@ export const MARK_SHOWN_SQL = `UPDATE interview_suggestions SET shown_at = COALE
 export const ANSWER_SUGGESTION_SQL = `UPDATE interview_suggestions SET answer = :answer, answered_at = CAST(:at AS TIMESTAMPTZ)
   WHERE interview_id = :interview_id AND id = :id AND dropped IS NULL AND answer IS NULL
   RETURNING ${COLUMNS}`;
+export const MARK_SPOKEN_SQL = `UPDATE interview_suggestions SET spoken = TRUE
+  WHERE interview_id = :interview_id AND id = :id AND answer = 'milo-ask'
+  RETURNING ${COLUMNS}`;
 export const ERASE_SUGGESTIONS_SQL = `DELETE FROM interview_suggestions WHERE interview_id = ANY(string_to_array(:interview_ids, ',')) RETURNING id`;
 
 export const SUGGESTION_STATEMENTS = [LIST_SUGGESTIONS_SQL, GET_SUGGESTION_SQL, INSERT_SUGGESTION_SQL, MARK_SHOWN_SQL, ANSWER_SUGGESTION_SQL, ERASE_SUGGESTIONS_SQL] as const;
@@ -76,6 +79,10 @@ export class SqlSuggestionStore implements SuggestionStore {
     if (row) return { ok: true, row };
     const now = first(await this.exec(GET_SUGGESTION_SQL, [text('interview_id', interviewId), text('id', id)]));
     return now && now.dropped === null ? { ok: false, reason: 'stale', row: now } : { ok: false, reason: 'not-found' };
+  }
+
+  async markSpoken(interviewId: string, id: string): Promise<SuggestionRecord | null> {
+    return first(await this.exec(MARK_SPOKEN_SQL, [text('interview_id', interviewId), text('id', id)]));
   }
 
   async eraseSuggestions(interviewIds: readonly string[]): Promise<number> {

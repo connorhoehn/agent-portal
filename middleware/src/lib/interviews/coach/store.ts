@@ -53,6 +53,8 @@ export interface SuggestionStore {
   answerSuggestion(interviewId: string, id: string, answer: SuggestionAnswer, at: string): Promise<WriteResult<SuggestionRecord>>;
   /** Remove every row of these interviews; how many went. */
   eraseSuggestions(interviewIds: readonly string[]): Promise<number>;
+  /** Row I3.5: set `spoken` on an answered `milo-ask` row once Milo said it aloud; the row as it now is, or null. */
+  markSpoken?(interviewId: string, id: string): Promise<SuggestionRecord | null>;
 }
 
 const copy = <T>(row: T): T => structuredClone(row);
@@ -86,6 +88,13 @@ export class MemorySuggestionStore implements SuggestionStore {
     row.answer = answer;
     row.answeredAt = at;
     return { ok: true, row: copy(row) };
+  }
+
+  async markSpoken(interviewId: string, id: string): Promise<SuggestionRecord | null> {
+    const row = this.rows().find((r) => r.id === id && r.interviewId === interviewId && r.answer === 'milo-ask');
+    if (!row) return null;
+    row.spoken = true;
+    return copy(row);
   }
 
   async eraseSuggestions(interviewIds: readonly string[]): Promise<number> {

@@ -256,6 +256,25 @@ CREATE TABLE IF NOT EXISTS interview_coach_log (
 );
 CREATE INDEX IF NOT EXISTS interview_coach_log_interview_idx ON interview_coach_log (interview_id, asked_at);
 
+-- ── what Milo said in the call (rows I3.5, I3.8; decisions 9, 10) ───────────
+-- One row per time the server put approved words in the call (an approved
+-- question, or Milo's answer to the candidate's fixed requests), written before
+-- the words are posted or said; only `spoken` is ever set afterwards.
+CREATE TABLE IF NOT EXISTS interview_said_log (
+  id              TEXT PRIMARY KEY,
+  interview_id    TEXT NOT NULL REFERENCES interviews(id),
+  call_id         TEXT,
+  kind            TEXT NOT NULL CHECK (kind IN ('question', 'answer')),
+  source          TEXT NOT NULL CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal')),
+  question_id     TEXT,
+  suggestion_id   TEXT,
+  text            TEXT NOT NULL,
+  asked_by        TEXT NOT NULL,
+  said_at         TIMESTAMPTZ NOT NULL,
+  spoken          BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_log (interview_id, said_at);
+
 -- ── invites (row I2.1) ──────────────────────────────────────────────────────
 -- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,
 -- so a read of this table hands nobody a working link. One live invite per

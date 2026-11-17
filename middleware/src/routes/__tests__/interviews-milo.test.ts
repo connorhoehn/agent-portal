@@ -52,6 +52,8 @@ import { setSuggestionStore } from '../../lib/interviews/coach/index.js';
 import { BedrockMiloModel, ScriptedMiloModel } from '../../lib/interviews/milo-notes/model.js';
 import { FIXED_ANSWER, setCoachLogStore, setMiloDeps } from '../../lib/interviews/milo-notes/index.js';
 import type { LiveLine } from '../../lib/interviews/milo-notes/transcript.js';
+import { MemorySaidStore, setSpeakDeps } from '../../lib/interviews/speak/index.js';
+import { MILO_NOT_IN_CALL, SAID_ALOUD } from '../interviews/milo.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -311,5 +313,52 @@ describe('everyone else', () => {
     expect((await transcript(PRIYA)).status).toBe(403);
     expect((await notes(PRIYA)).status).toBe(403);
     expect((await ask(PRIYA, 'q')).status).toBe(403);
+  });
+});
+
+// Lane SPEAK (row I3.5, contract U10): the lead's "Have Milo ask" on a kit question. The words are the question's prompt from the
+// store; logged, posted, then said (lib/interviews/speak deps stand in for the chat and the call's voice here).
+describe('POST /interviews/:id/say (I3.5)', () => {
+  const said = new MemorySaidStore();
+  const steps: string[] = [];
+  let voice: 'spoken' | 'posted' | 'no-call' = 'spoken';
+  let inCall = true;
+  beforeEach(() => {
+    steps.length = 0; voice = 'spoken'; inCall = true;
+    setSpeakDeps({
+      store: () => said,
+      post: async (_c, text) => { steps.push(`post:${text.slice(0, 12)}`); return inCall; },
+      say: async () => { steps.push('say'); return voice; },
+      now: () => now,
+    });
+    interviewsFixture.rows().find((i) => i.id === IV)!.callId = 'call-1';
+  });
+  afterAll(() => setSpeakDeps(null));
+  const sayQ = (as: ReturnType<typeof who>, body: unknown, id = IV) => as.post(`/interviews/${id}/say`, body);
+
+  it('the lead: the prompt from the store is posted and said; the body never supplies the words', async () => {
+    const res = await sayQ(WEN, { questionId: 'q-em-struggling', text: 'Something else entirely' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ said: 'spoken', line: SAID_ALOUD });
+    const prompt = interviewOpeningsFixture.rows().flatMap((o) => o.kit.questions).find((q) => q.id === 'q-em-struggling')!.prompt;
+    expect(steps).toEqual([`post:${prompt.slice(0, 12)}`, 'say']);
+    expect((await said.list(IV)).at(-1)).toMatchObject({ kind: 'question', source: 'kit', questionId: 'q-em-struggling', text: prompt, askedBy: 'u-wen', spoken: true });
+  });
+
+  it('withheld or voice off: chat, with the one sentence; Milo not in the call: 409 with a sentence', async () => {
+    voice = 'posted';
+    expect((await sayQ(WEN, { questionId: 'q-em-slip' })).body).toEqual({ said: 'chat', line: 'Milo could not say it aloud. The question is in the call chat.' });
+    inCall = false;
+    const res = await sayQ(WEN, { questionId: 'q-em-slip' });
+    expect([res.status, res.body.error]).toEqual([409, MILO_NOT_IN_CALL]);
+  });
+
+  it('400 for no question id; 404 for a question outside the round, another seat, a guest, or an interview not live', async () => {
+    expect((await sayQ(WEN, {})).status).toBe(400);
+    expect((await sayQ(WEN, { questionId: 'q-not-in-this-round' })).status).toBe(404);
+    for (const as of [HUGO, GUEST]) expect((await sayQ(as, { questionId: 'q-em-slip' })).status).toBeGreaterThanOrEqual(400);
+    interviewsFixture.rows().find((i) => i.id === IV)!.state = 'accepted';
+    expect((await sayQ(WEN, { questionId: 'q-em-slip' })).status).toBe(404);
+    expect(steps).toEqual([]);
   });
 });

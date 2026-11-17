@@ -20,7 +20,11 @@
 //                         stored or heard.
 //   rings, listsMeeting   the panel side only, never a guest (a guest has no bell and no Meetings list).
 //   relaysLiveSpeech      never (decision 9: nothing the live model says reaches an interview, by voice or in chat).
-//   answerFromHeldText    absent until row I3.8.
+//   answerFromHeldText    row I3.8 (decision 10): a request from the CANDIDATE is answered only with text the server holds,
+//                         never by a model: "repeat the question" is the last approved question, "how much time is left"
+//                         a sentence from the round's minutes and its start, anything else one fixed sentence naming those
+//                         two (speak/index.ts). The line is logged here; the orchestrator posts it with the approved mark and
+//                         says it as approved words; `heldTextSaid` marks the log row spoken. A panel member's request: null.
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
 //   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
@@ -155,6 +159,21 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   rings: (_call, userId) => !isGuestId(userId),
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,
+  answerFromHeldText: async (call, request) => {
+    if (!isGuestId(request.askedBy)) return null;
+    const interviewId = interviewOfLobby(call.lobby);
+    const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
+    const { logCandidateLine, MILO_CAN_DO } = await import('./speak/index.js');
+    // A guest's request never reaches a model: with no live interview of its own behind the call, the fixed sentence (not logged).
+    if (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false))) return MILO_CAN_DO;
+    return logCandidateLine(interview, request.text, request.askedBy).catch(() => MILO_CAN_DO);
+  },
+  heldTextSaid: async (call, said) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId || !said.spoken) return;
+    const { noteHeldSpoken } = await import('./speak/index.js');
+    await noteHeldSpoken(interviewId, said.text, said.askedBy);
+  },
   // Decision 17: an interview's transcript and minutes are media, kept 90 days by default or until a deletion request, and removed
   // by the interviews retention (retention/erasers.ts `transcript-and-minutes`), never by the meeting assistant's 30-day sweep.
   keepsOwnRetention: true,

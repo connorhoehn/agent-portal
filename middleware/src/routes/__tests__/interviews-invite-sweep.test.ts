@@ -285,3 +285,38 @@ describe('lane DESK-B (Add a candidate): the route against a guest', () => {
     expect(JSON.stringify(await list.json())).not.toContain('guest.made@mail.example');
   });
 });
+
+// Lane SPEAK (rows I3.5, I3.8; contract U10): the lead's `/say` refuses a guest on its own interview and on another, and the
+// candidate's `/milo/request` refuses a guest the lead has not let in, a staff session and no cookie, with the one not-found.
+describe('lane SPEAK (rows I3.5, I3.8): Milo\'s approved words and a guest', () => {
+  let staff = '';
+  let guest = '';
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    const login = await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-greta' }) });
+    staff = cookieOf(login, 'orgiq.session');
+    const made = await fetch(`${base}/api/interviews/interviews/${OWN}/invite`, { method: 'POST', headers: { cookie: staff, 'content-type': 'application/json' }, body: '{}' });
+    const token = String(((await made.json()) as { linkPath: string }).linkPath).split('#')[1];
+    const opened = await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+    guest = cookieOf(opened, 'interviews.guest');
+  }, 60_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  it('refuses the guest the lead\'s say route, for its own interview and another', async () => {
+    for (const id of [OWN, OTHER]) {
+      const answer = await call('POST', `/api/interviews/interviews/${id}/say`, guest, { questionId: 'q-1' });
+      expect([id, answer.status >= 400]).toEqual([id, true]);
+    }
+  });
+
+  it('the guest\'s own request route refuses it until the lead lets it in, and refuses a staff session and no cookie', async () => {
+    const asGuest = await call('POST', '/api/interview-invite/milo/request', guest, { request: 'repeat' });
+    expect([asGuest.status, asGuest.body]).toEqual([404, JSON.stringify({ error: 'This link no longer works.' })]);
+    expect((await call('POST', '/api/interview-invite/milo/request', staff, { request: 'time' })).status).toBe(404);
+    expect((await call('POST', '/api/interview-invite/milo/request', null, { request: 'time' })).status).toBe(404);
+    expect((await call('GET', '/api/interview-invite/milo/request', guest)).status).toBeGreaterThanOrEqual(400);
+    expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
+  });
+});

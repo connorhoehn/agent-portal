@@ -5,9 +5,9 @@
 // money settled or released, the log, and the view. One call in flight per interview. A read is what makes the coach
 // think: it starts no timer and hooks nothing.
 //
-// `answerSuggestion` records the lead's answer once. `milo-ask` is logged as that answer with `spoken: false` (speech is
-// row I3.5) and, after it is logged, the approved words are posted in the call's chat as Milo's reply to the lead
-// (lib/meeting-assistant/chat.ts `postReply`), when Milo is in the call.
+// `answerSuggestion` records the lead's answer once. `milo-ask` is logged as that answer with `spoken: false`, written in the
+// said log (speak/index.ts), posted in the call's chat with the approved mark when Milo is in the call, and then said aloud on
+// the call's own live session as approved words (row I3.5, decision 9); `spoken` is set only when the words were relayed.
 //
 // Nothing of the transcript, the prompt, the answer or a dropped suggestion's text is logged anywhere but the log's own
 // row; console lines carry codes only.
@@ -25,6 +25,7 @@ import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type TranscriptSource } from './transcript.js';
 import { interviewsNowMs } from '../clock.js';
+import { logSaid, sayLogged } from '../speak/index.js';
 
 /** D7's view of a suggestion. */
 export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
@@ -41,6 +42,8 @@ export interface CoachDeps {
   release: (holdIds: readonly (string | null)[]) => Promise<void>;
   /** Put Milo's approved words in the call's chat; false when Milo is not in the call. */
   postApproved: (callId: string, text: string, lead: { userId: string }) => Promise<boolean>;
+  /** Row I3.5: log the words in the said log, then (after the post) say them aloud; absent in a test means the defaults. */
+  speak?: { log: typeof logSaid; say: typeof sayLogged };
   now: () => number;
   newId: () => string;
 }
@@ -217,7 +220,8 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
   }
 }
 
-export type AnswerOutcome = { kind: 'ok' } | { kind: 'not-found' } | { kind: 'not-live' } | { kind: 'answered' };
+/** `said` (Have Milo ask only, when Milo is in the call): aloud and in chat, or in chat only. */
+export type AnswerOutcome = { kind: 'ok'; said?: 'spoken' | 'chat' } | { kind: 'not-found' } | { kind: 'not-live' } | { kind: 'answered' };
 
 /** D7's answer, by the lead, while the interview is live; once. */
 export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }, suggestionId: string, answer: SuggestionAnswer): Promise<AnswerOutcome> {
@@ -227,16 +231,26 @@ export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }
   if (interview.state !== 'live') return { kind: 'not-live' };
   const written = await d.store().answerSuggestion(interview.id, suggestionId, answer, iso(d.now()));
   if (!written.ok) return written.reason === 'stale' ? { kind: 'answered' } : { kind: 'not-found' };
+  let said: 'spoken' | 'chat' | undefined;
   if (answer === 'milo-ask') {
-    // Logged first (above); then the approved words go to the call's chat when Milo is in the call.
+    // Logged first (above, and in the said log); then the approved words go to the call's chat when Milo is in the call, and
+    // then to its voice as approved words.
     try {
       const t = await d.transcript({ id: interview.id, callId: interview.callId });
-      if (t) await d.postApproved(t.callId, written.row.text, viewer);
+      if (t) {
+        const speak = d.speak ?? { log: logSaid, say: sayLogged };
+        const row = await speak.log({ id: interview.id, callId: t.callId }, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
+        if (await d.postApproved(t.callId, written.row.text, viewer)) {
+          const out = await speak.say(interview.id, row, t.callId);
+          if (out === 'spoken') { said = 'spoken'; await d.store().markSpoken?.(interview.id, written.row.id); }
+          else if (out === 'chat') said = 'chat';
+        }
+      }
     } catch (e) {
       console.warn('[interviews] approved question not posted', (e as Error)?.name ?? 'error');
     }
   }
-  return { kind: 'ok' };
+  return { kind: 'ok', ...(said ? { said } : {}) };
 }
 
 /** D6: remove these interviews' rows from the suggestion log (a record-class eraser). */

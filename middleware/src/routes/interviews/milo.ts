@@ -6,6 +6,13 @@
 //   GET  /interviews/:id/milo-notes               the seats of that interview while it is `live` → { notes }
 //   POST /interviews/:id/milo-ask                 the lead only, ConductInterview, body { question } → { answer, refused,
 //                                                  line, paused, retryAfterMs }
+//   POST /interviews/:id/say                      row I3.5, contract U10: the lead only, ConductInterview, while `live`, body
+//                                                  { questionId } → { said: 'spoken' | 'chat', line }. Milo asks one of the
+//                                                  round's kit questions in the call: the words are the question's prompt READ
+//                                                  FROM THE STORE (never from the body), logged, posted with the approved mark,
+//                                                  then said aloud as approved words (lib/interviews/speak). 400 for a missing
+//                                                  question id, 404 for a question not in this round, 409 with a sentence when
+//                                                  Milo is not in the call.
 //
 // Everyone outside gets the tenant's one not-found, whatever the reason: a guest (who also holds no ViewInterviews and is
 // refused at the router's gate first), another round's interviewer, the admin (no exception, as the record), and every
@@ -22,6 +29,8 @@ import { isGuestId } from '../../lib/interviews/milo-policy.js';
 import { askMilo, checkQuestion, notesFor, transcriptFor, type MiloRef } from '../../lib/interviews/milo-notes/index.js';
 import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
+import { sayApproved } from '../../lib/interviews/speak/index.js';
+import { NOT_SAID_ALOUD } from '../../lib/meeting-assistant/approved-speech.js';
 
 export const miloRouter = Router();
 
@@ -70,4 +79,26 @@ miloRouter.post('/interviews/:id/milo-ask', asyncHandler(async (req, res) => {
   if (out.kind === 'not-found') throw new NotFoundError(NOTHING_HERE);
   if (out.kind === 'not-live') { res.status(409).json({ error: out.body.line, ...out.body }); return; }
   res.json(out.body);
+}));
+
+/** The lead reads one of these after "Have Milo ask" on a kit question. */
+export const SAID_ALOUD = 'Milo asked it aloud. The question is in the call chat too.';
+export const MILO_NOT_IN_CALL = 'Milo is not in this call. Invite Milo from the call bar, then try again.';
+const BAD_QUESTION_ID = 'Choose a question from this round.';
+
+miloRouter.post('/interviews/:id/say', asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  if (!(await isAllowed(session, 'ConductInterview'))) throw new NotFoundError(NOTHING_HERE);
+  const p = await panelSide(req);
+  if (!p || p.ref.interview.leadId !== p.userId || p.ref.interview.state !== 'live') throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  const questionId = (req.body as Record<string, unknown> | undefined)?.['questionId'];
+  if (typeof questionId !== 'string' || !/^[\w.:-]{1,120}$/.test(questionId)) { res.status(400).json({ error: BAD_QUESTION_ID }); return; }
+  const { interview, opening } = p.ref;
+  const chosen = interview.questionIds.length === 0 || interview.questionIds.includes(questionId);
+  const question = chosen ? opening.kit.questions.find((q) => q.id === questionId) : undefined;
+  if (!question || !question.prompt.trim()) throw new NotFoundError(BAD_QUESTION_ID);
+  const { said } = await sayApproved(interview, { kind: 'question', source: 'kit', text: question.prompt.trim(), askedBy: p.userId, questionId: question.id });
+  if (said === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
+  res.json({ said, line: said === 'spoken' ? SAID_ALOUD : NOT_SAID_ALOUD });
 }));
