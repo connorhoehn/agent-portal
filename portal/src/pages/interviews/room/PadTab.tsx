@@ -1,26 +1,19 @@
-// The room pane's `pad` tab (contract U1). Round 1 (lane ROOM): the round's coding questions with their starter
-// code, read-only, to read aloud. Lane WIRE replaces this body with the shared pad (U2, `InterviewPad`) and its
-// run output; nobody but ROOM and WIRE edits this file.
-import type { JSX } from 'react';
-import { CodeBlock, Disclosure, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
-import { PAD_LANGUAGE_LABELS } from '../../../lib/interviewsKit';
-import { codeBlockLanguage, type RoomView } from '../../../lib/interviewsRoom';
+// The room pane's `pad` tab (contract U1; decision 21: in a technical round the pane is the code pad with the run
+// output under it). Lane WIRE: the shared pad (U2, `InterviewPad`) with Run, Cancel and the output, and the pad log
+// reports (pages/interviews/pad/RunnablePad.tsx, the same component the candidate's room mounts). The lead gets
+// "Insert a question" with the round's chosen questions; the read-only questions are the Questions tab's.
+// Nobody but ROOM and WIRE edits this file.
+import { useMemo, type JSX } from 'react';
+import { EmptyState } from '@connorhoehn/ui-components/shared';
+import { useOptionalSession } from '../../../lib/auth';
+import { staffPadBase } from '../../../lib/interviewsPad';
+import type { RoomView } from '../../../lib/interviewsRoom';
+import { RunnablePad } from '../pad/RunnablePad';
 
 export function PadTab({ room }: { room: RoomView }): JSX.Element {
-  const { questions } = room;
-  if (!questions.length) return <PageSection size="sm" title="Coding questions" empty="No questions were chosen for this round." />;
-  return <Stack gap="lg" data-testid="interview-room-coding">
-    {questions.map((q, n) => <PageSection key={q.id} size="sm" title={`Question ${n + 1}`} description={q.competency ?? undefined}>
-      <Stack gap="sm">
-        <T size="sm" wrap>{q.prompt}</T>
-        {q.starter.map((s) => <Stack key={s.language} gap="xs">
-          <T size="xs" weight="medium" tone="secondary">{`Starter code · ${PAD_LANGUAGE_LABELS[s.language]}`}</T>
-          <CodeBlock code={s.code} language={codeBlockLanguage(s.language)} copyButton ariaLabel={`Starter code in ${PAD_LANGUAGE_LABELS[s.language]}`} />
-        </Stack>)}
-        {q.followUps.length > 0 && <Disclosure summary={<T size="xs" tone="secondary">{`Follow-ups (${q.followUps.length})`}</T>} density="compact">
-          <Stack as="ul" gap="xs">{q.followUps.map((f) => <T as="li" key={f} size="sm" wrap>{f}</T>)}</Stack>
-        </Disclosure>}
-      </Stack>
-    </PageSection>)}
-  </Stack>;
+  const session = useOptionalSession();
+  const questions = useMemo(() => room.questions.map((q) => ({ id: q.id, prompt: q.prompt, starter: q.starter })), [room.questions]);
+  if (!session) return <EmptyState title="The code pad" body="The code pad opens once you are signed in." testId="interview-room-pad-idle" />;
+  return <RunnablePad interviewId={room.id} base={staffPadBase(room.id)} self={{ userId: session.sub, displayName: session.name }}
+    seat={room.seat} {...(room.seat === 'lead' ? { questions } : {})} />;
 }
