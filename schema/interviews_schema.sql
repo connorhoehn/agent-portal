@@ -234,6 +234,28 @@ CREATE INDEX IF NOT EXISTS interview_scorecards_interview_idx ON interview_score
 -- Row I5.3 (round 4): why a version corrects the one before it; NULL on a first version.
 ALTER TABLE interview_scorecards ADD COLUMN IF NOT EXISTS correction_reason TEXT;
 
+-- ── the coach log (row I3.6) ────────────────────────────────────────────────
+-- Everything Milo showed the panel privately (decision 8): the lead's private
+-- questions with Milo's answer and its quoted lines (`kind` 'answer'), and the
+-- question plan's drafts (`kind` 'plan', row I3.10). `answer` is empty with a
+-- `code` when nothing was shown (a dropped answer, or a question refused before
+-- any model). Rows are only appended, or removed by retention.
+CREATE TABLE IF NOT EXISTS interview_coach_log (
+  id              TEXT PRIMARY KEY,
+  interview_id    TEXT NOT NULL REFERENCES interviews(id),
+  kind            TEXT NOT NULL CHECK (kind IN ('answer', 'plan')),
+  asked_by        TEXT NOT NULL,
+  question        TEXT NOT NULL DEFAULT '',
+  answer          TEXT NOT NULL DEFAULT '',
+  sources         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  code            TEXT CHECK (code IN ('malformed', 'too-long', 'unsourced', 'judges', 'personal', 'off-kit', 'nothing', 'timeout', 'error', 'refused-judgement', 'refused-personal')),
+  asked_at        TIMESTAMPTZ NOT NULL,
+  model_id        TEXT NOT NULL,
+  prompt_version  TEXT NOT NULL,
+  CHECK (code IS NULL OR (answer = '' AND sources = '[]'::jsonb))
+);
+CREATE INDEX IF NOT EXISTS interview_coach_log_interview_idx ON interview_coach_log (interview_id, asked_at);
+
 -- ── invites (row I2.1) ──────────────────────────────────────────────────────
 -- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,
 -- so a read of this table hands nobody a working link. One live invite per

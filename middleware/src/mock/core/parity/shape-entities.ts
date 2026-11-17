@@ -497,6 +497,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (a: { id: string }) => a.id,
   },
   {
+    name: 'interview_coach_log',
+    fixture: 'interviews.coach-log',
+    describes: 'What Milo showed the lead privately: one answered question with its quoted line, one asking for a judgement refused before any model, and one dropped answer with its code only.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_coach_log',
+    mockRows: async () => (await import('../../interviews-coach-log.js')).interviewCoachLogFixture.rows('default'),
+    mockId: (r: { id: string }) => r.id,
+  },
+  {
     name: 'interview_consents',
     fixture: 'interviews.consents',
     describes: 'The candidate\'s three answers per interview: the five finished interviews said yes to all three under the current notice; the upcoming ones have none yet.',
