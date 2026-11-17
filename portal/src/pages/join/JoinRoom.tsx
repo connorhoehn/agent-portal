@@ -172,6 +172,8 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
   const callId = host?.call.call?.callId ?? null;
   // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
   useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
+  // The pad never depends on the call: a call that fails, or one not joined yet, keeps the pad (the chat waits for the call).
+  const paneShown = paneOpen && (technical || (joined && callId !== null));
   const view = roomView({ token: 'ready', joined, left });
   // Milo's sentence to the candidate's last request: asked from the bar, shown on the line above it.
   const [miloLine, setMiloLine] = useState<string | null>(null);
@@ -189,7 +191,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
                 : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
               testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
         </SidePaneSplit>
-        {joined && callId && paneOpen && <GuestRoomPane room={room} callId={callId} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
+        {paneShown && <GuestRoomPane room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
         <GuestMiloVoice room={room} line={miloLine} />
         <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
           <CallMediaOutlet />
