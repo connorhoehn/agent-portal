@@ -102,3 +102,54 @@ realtimeLobbyAccessRouter.post('/lobby-access', asyncHandler(async (req, res) =>
   }
   res.json({ allowed: true });
 }));
+
+// ── An interview's recording (docs/interviews-tenant-plan.md row I2.6; contracts D2 and D3) ─────────────────────────────
+//
+// platform-api asks these two for `interviews:interview:<id>` lobbies, authenticated exactly as /lobby-access is (the caller's
+// own realtime token, staff or guest; no service secret: each answers only about the bearer). The rules are
+// lib/interviews/recording-rules.ts. Nothing is cached, and nothing about the candidate's answers is logged.
+//
+//   POST /recording-decision  200 { record, transcribe, reason } for a bearer seated in that call now; 403 { record: false,
+//                             transcribe: false } for everyone else and every other lobby.
+//   POST /recording-access    200 { allowed: true } for the panel side of that interview, whatever its state; 403
+//                             { allowed: false } for everyone else, always for a guest.
+
+import { decideRecording, decideRecordingAccess } from '../lib/interviews/recording-rules.js';
+import type { Request, Response } from 'express';
+
+/** The bearer's verified gateway context, or the 400/401/503 already sent (null). Mirrors /lobby-access. */
+async function recordingBearer(req: Request, res: Response): Promise<{ auth: Record<string, unknown>; lobbyName: string } | null> {
+  res.set('Cache-Control', 'no-store');
+  const header = req.headers.authorization;
+  const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) { res.status(401).json({ error: 'realtime token required' }); return null; }
+  const secret = realtimeSigningSecret();
+  if (!secret) { res.status(503).json({ error: 'realtime token verification unavailable' }); return null; }
+  let auth: Record<string, unknown>;
+  try { auth = gatewayAuthFromClaims(await verifyRealtimeToken(token, secret)); }
+  catch { res.status(401).json({ error: 'invalid or expired realtime token' }); return null; }
+  const lobbyName = (req.body as { lobbyName?: unknown } | undefined)?.lobbyName;
+  if (typeof lobbyName !== 'string' || !lobbyName || lobbyName.length > MAX_LOBBY_NAME) {
+    res.status(400).json({ error: 'lobbyName is required' }); return null;
+  }
+  return { auth, lobbyName };
+}
+
+realtimeLobbyAccessRouter.post('/recording-decision', asyncHandler(async (req, res) => {
+  const bearer = await recordingBearer(req, res);
+  if (!bearer) return;
+  const { auth, lobbyName } = bearer;
+  const decision = await decideRecording(lobbyName, () => admitCall(auth, 'join', { lobbyName }, callGuards(noStoredCall)));
+  res.status(decision.status).json(decision.body);
+}));
+
+realtimeLobbyAccessRouter.post('/recording-access', asyncHandler(async (req, res) => {
+  const bearer = await recordingBearer(req, res);
+  if (!bearer) return;
+  const { auth, lobbyName } = bearer;
+  const allowed = await decideRecordingAccess(lobbyName, auth, async () => {
+    const { session } = await getLivePrincipal(auth);
+    return { sub: session.sub, tenant: session.tenant, role: session.role as string };
+  });
+  res.status(allowed ? 200 : 403).json({ allowed });
+}));
