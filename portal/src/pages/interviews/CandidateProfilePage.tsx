@@ -51,6 +51,8 @@ import {
 } from '../../lib/interviewsRetention';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
 import ResumeViewer from './ResumeViewer';
+import ProfileConsents from './ProfileConsents';
+import { readsConsents } from '../../lib/interviewsRecords';
 
 const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
   {
@@ -166,6 +168,7 @@ function CandidateProfile({ id }: { id: string }) {
           assigns={['recruiter', 'admin'].includes(String(session?.role))} />)}
         <ResumeSection key={`resume-${deletions.done}`} candidateId={candidate.id} name={candidate.name} manages={['recruiter', 'admin'].includes(String(session?.role))}
           extraPrompts={deletions.prompts} />
+        {readsConsents(role) && <ProfileConsents candidateId={candidate.id} />}
         {deletions.reads && <DeletionsSection rows={deletions.rows} asks={deletions.asks} onAsk={deletions.ask} />}
       </Stack>
     </Stack>
