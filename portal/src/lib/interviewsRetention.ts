@@ -18,6 +18,10 @@ export interface DeletionView {
   interviews: number;
   removed: { kind: string; count: number }[];
   left: DeletionLeft[];
+  /** Not finished, and the date it was due by has passed (the server decides, at the read). */
+  overdue: boolean;
+  /** Finished, but after the date it was due by. */
+  doneLate: boolean;
 }
 
 export const deletionsPath = (candidateId: string): string => `${INTERVIEWS_API}/candidates/${encodeURIComponent(candidateId)}/deletions`;
@@ -33,11 +37,12 @@ const KIND_LABELS: Record<string, (n: number) => string> = {
   suggestions: () => 'Milo\'s suggestion log',
   resume: () => 'the résumé',
   'contact-details': () => 'the contact details',
+  'stage-reasons': (n) => (n === 1 ? 'the reasons written on 1 application\'s stage changes' : `the reasons written on ${n} applications' stage changes`),
   invite: (n) => (n === 1 ? '1 interview link turned off' : `${n} interview links turned off`),
 };
 const NAMES: Record<string, string> = {
   recording: 'the recordings', 'transcript-and-minutes': 'the transcript and minutes', 'code-log': 'the code log', scorecards: 'the scorecards',
-  consents: 'the consent answers', suggestions: 'Milo\'s suggestion log', resume: 'the résumé', 'contact-details': 'the contact details', invite: 'the interview link',
+  consents: 'the consent answers', suggestions: 'Milo\'s suggestion log', resume: 'the résumé', 'contact-details': 'the contact details', 'stage-reasons': 'the reasons written on stage changes', invite: 'the interview link',
 };
 
 const capital = (s: string): string => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
@@ -66,14 +71,25 @@ export function askedByLine(row: Pick<DeletionView, 'reason' | 'requestedBy'>): 
   return row.reason === 'media-period' ? 'Automatic: the recording period ended' : 'Automatic: the record period ended';
 }
 
-export const deletionState = (row: Pick<DeletionView, 'doneAt'>): { label: string; tone: 'success' | 'warning' } =>
-  (row.doneAt ? { label: 'Done', tone: 'success' } : { label: 'In progress', tone: 'warning' });
+export const deletionState = (row: Pick<DeletionView, 'doneAt'> & Partial<Pick<DeletionView, 'overdue' | 'doneLate'>>): { label: string; tone: 'success' | 'warning' | 'danger' } => {
+  if (row.overdue) return { label: 'Late', tone: 'danger' };
+  if (row.doneAt) return row.doneLate ? { label: 'Done late', tone: 'warning' } : { label: 'Done', tone: 'success' };
+  return { label: 'In progress', tone: 'warning' };
+};
+
+/** The plain sentence a late row leads with, or null when it is not late. */
+export function lateLine(row: Pick<DeletionView, 'dueBy' | 'overdue' | 'doneLate'>): string | null {
+  const due = new Date(row.dueBy).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+  if (row.overdue) return `Late: this was due by ${due} and is not finished. Ask for the deletion again to retry it now.`;
+  if (row.doneLate) return `Finished late: it was due by ${due}.`;
+  return null;
+}
 
 const yearsLabel = (n: number): string => (n === 1 ? 'one year' : n === 4 ? 'four years' : `${n} years`);
 
 /** The prompt's two sentences: what goes, and what stays and for how long. */
 export function deletionQuestion(p: RetentionPeriods): string {
-  return 'This removes the recordings, transcripts and Milo\'s minutes of every interview with this candidate, their résumé and their contact details, and turns off their interview link. '
+  return 'This removes the recordings, transcripts and Milo\'s minutes of every interview with this candidate, their résumé, their contact details and the reasons written when their stage was changed, and turns off their interview link. '
     + `The scorecards and the record of their consent answers stay for ${yearsLabel(p.recordYears)} after each interview, without the contact details.`;
 }
 

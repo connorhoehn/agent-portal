@@ -10,7 +10,9 @@
 //       Idempotent: an open request is finished rather than doubled; a finished request that covers every interview
 //       the candidate has is returned as it is (`created: false`) and nothing runs again.
 //   sweep()
-//       First the open rows (a step that failed or met a running call), then media past its period, then records past
+//       First the open rows (a step that failed or met a running call), overdue ones first (overdue.ts: not done by their
+//       `dueBy`); each that is still open past its date afterwards rings the opening's recruiter once (`ringOverdue`).
+//       Then media past its period, then records past
 //       theirs (with the résumé and contact details once ALL of the candidate's interviews are past it), oldest first,
 //       at most MAX_ROWS_PER_RUN rows; one row per interview touched. Never throws; nothing while the flag is off.
 //
@@ -30,6 +32,7 @@ import { recordStatements, type RecordStatements } from './records.js';
 import { EraserBusy, EraserSkipped, erasersOf } from './registry.js';
 import { candidateRecordsDue, deletionDueByMs, dueAtMs, isDue, periodStartMs } from './rules.js';
 import { deletionStore, type DeletionReason, type DeletionRow, type DeletionStore, type LeftItem, type RemovedCount } from './store.js';
+import { overdueFirst, ringOverdue } from './overdue.js';
 
 registerOwnErasers();
 
@@ -48,6 +51,8 @@ export interface RetentionDeps {
   periods: () => RetentionPeriods;
   enabled: () => boolean;
   newId: () => string;
+  /** Ring the recruiters of the rows that are late (overdue.ts); returns how many bells went. */
+  ringOverdue: (rows: readonly DeletionRow[], world: InterviewsWorld, nowMs: number) => Promise<number>;
 }
 
 const defaults: RetentionDeps = {
@@ -65,6 +70,7 @@ const defaults: RetentionDeps = {
   periods: () => retentionPeriods(),
   enabled: interviewsEnabled,
   newId: () => `del-${randomUUID()}`,
+  ringOverdue: (rows, world, nowMs) => ringOverdue(rows, world, nowMs),
 };
 
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -172,11 +178,16 @@ export async function sweep(deps: Partial<RetentionDeps> = {}): Promise<SweepRes
     try {
       let budget = MAX_ROWS_PER_RUN;
       const world = await d.load();
-      for (const row of await d.store().open(budget)) {
+      const stillOpen: DeletionRow[] = [];
+      for (const row of overdueFirst(await d.store().open(budget), d.now())) {
         // A retry runs only what its row says is left, so the candidate's steps are offered and filtered by the row.
-        try { await runSteps(row, stepsLeft(row, stepsFor(row, d, row.requestedBy, true)), d); } catch { /* the next sweep */ }
+        let after = row;
+        try { after = await runSteps(row, stepsLeft(row, stepsFor(row, d, row.requestedBy, true)), d); } catch { /* the next sweep */ }
+        if (after.doneAt === null) stillOpen.push(after);
         out.retried += 1; budget -= 1;
       }
+      // A row still open past its date: its opening's recruiter is told once (overdue.ts says how "once" is kept).
+      try { await d.ringOverdue(stillOpen, world, d.now()); } catch { /* the next sweep */ }
       const nowMs = d.now();
       const p = d.periods();
       const [mediaDone, requested, recordsDone] = await Promise.all([

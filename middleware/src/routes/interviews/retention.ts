@@ -8,6 +8,7 @@
 //                                    a repeat answers the earlier row with `created: false`.
 //   GET  /candidates/:id/deletions   the recruiter and the hiring manager of the candidate's opening: `{ items, periods }`,
 //                                    newest first, with this deployment's periods (the profile's prompt states them). Everyone else, and a candidate outside scope: not-found.
+//                                    Each row says whether it is late: `overdue` (not done by `dueBy`, now) and `doneLate` (finished after it).
 // The admin is answered not-found on both: the log is the hiring side's record, as the consents are.
 //
 // The candidate cannot ask here: the notice tells them to ask the person who sent their link.
@@ -19,6 +20,7 @@ import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { deleteCandidateMedia, deletionsOf } from '../../lib/interviews/retention/service.js';
 import { retentionPeriods } from '../../lib/interviews/retention/periods.js';
 import type { DeletionRow } from '../../lib/interviews/retention/store.js';
+import { doneLate, isOverdue } from '../../lib/interviews/retention/overdue.js';
 
 export const retentionRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -36,13 +38,18 @@ export interface DeletionView {
   interviews: number;
   removed: DeletionRow['removed'];
   left: DeletionRow['left'];
+  /** Not done, and its `dueBy` has passed. */
+  overdue: boolean;
+  /** Done, but after its `dueBy`. */
+  doneLate: boolean;
 }
 
-async function viewOf(rows: DeletionRow[]): Promise<DeletionView[]> {
+async function viewOf(rows: DeletionRow[], nowMs: number = Date.now()): Promise<DeletionView[]> {
   const people = await peopleLookup();
   return rows.map((r) => ({
     id: r.id, reason: r.reason, requestedAt: r.requestedAt, requestedBy: r.requestedBy ? people(r.requestedBy) : null,
     dueBy: r.dueBy, doneAt: r.doneAt, interviews: r.interviewIds.length, removed: r.removed, left: r.left,
+    overdue: isOverdue(r, nowMs), doneLate: doneLate(r),
   }));
 }
 

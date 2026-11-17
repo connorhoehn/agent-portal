@@ -46,7 +46,7 @@ import { hasRecord, recordPath } from '../../lib/interviewsRecord';
 import { AppLink } from './interviewsCells';
 import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
 import {
-  REDACTED_NAME, askedByLine, deletionQuestion, deletionState, deletionsPath, leftLines, removedLine, requestDeletion,
+  REDACTED_NAME, askedByLine, deletionQuestion, deletionState, deletionsPath, lateLine, leftLines, removedLine, requestDeletion,
   type DeletionView, type RetentionPeriods,
 } from '../../lib/interviewsRetention';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
@@ -293,7 +293,9 @@ const DELETION_COLUMNS: DataTableColumn<DeletionView>[] = [
   {
     key: 'left', header: 'Not removed',
     render: (r) => {
-      const lines = leftLines(r);
+      const late = lateLine(r);
+      const lines = late ? [late, ...leftLines(r)] : leftLines(r);
+      if (late) return <T size="sm" tone={r.overdue ? 'danger' : 'secondary'} title={lines.join('\n')} className="block max-w-[22rem] truncate" data-testid="interviews-deletion-late">{late}</T>;
       return lines.length
         ? <T size="sm" tone="secondary" title={lines.join('\n')} className="block max-w-[22rem] truncate" data-testid="interviews-deletion-left">{lines[0]}</T>
         : <Dash />;

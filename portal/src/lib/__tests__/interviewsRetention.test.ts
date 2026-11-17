@@ -1,7 +1,7 @@
 // The deletion log's lines on a candidate's profile (lib/interviewsRetention.ts, row I6.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { askedByLine, deletionPath, deletionQuestion, deletionState, deletionsPath, leftLines, removedLine } from '../interviewsRetention.ts';
+import { askedByLine, deletionPath, deletionQuestion, deletionState, deletionsPath, lateLine, leftLines, removedLine } from '../interviewsRetention.ts';
 
 test('what was removed reads as one sentence', () => {
   assert.equal(removedLine({ removed: [{ kind: 'recording', count: 2 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }], doneAt: 'x', left: [] }),
@@ -31,6 +31,22 @@ test('who asked, and the state', () => {
   assert.equal(askedByLine({ reason: 'record-period', requestedBy: null }), 'Automatic: the record period ended');
   assert.deepEqual(deletionState({ doneAt: null }), { label: 'In progress', tone: 'warning' });
   assert.deepEqual(deletionState({ doneAt: 'x' }), { label: 'Done', tone: 'success' });
+  assert.deepEqual(deletionState({ doneAt: null, overdue: true, doneLate: false }), { label: 'Late', tone: 'danger' });
+  assert.deepEqual(deletionState({ doneAt: 'x', overdue: false, doneLate: true }), { label: 'Done late', tone: 'warning' });
+});
+
+test('a late deletion says so in plain words, and what to do', () => {
+  const dueBy = '2026-03-01T12:00:00.000Z';
+  const late = lateLine({ dueBy, overdue: true, doneLate: false });
+  assert.ok(late && late.startsWith('Late: this was due by '));
+  assert.match(late!, /is not finished\. Ask for the deletion again to retry it now\.$/);
+  assert.match(lateLine({ dueBy, overdue: false, doneLate: true })!, /^Finished late: it was due by /);
+  assert.equal(lateLine({ dueBy, overdue: false, doneLate: false }), null);
+});
+
+test('the reasons written on stage changes are named when they go', () => {
+  assert.equal(removedLine({ removed: [{ kind: 'contact-details', count: 1 }, { kind: 'stage-reasons', count: 2 }], doneAt: 'x', left: [] }),
+    'Removed the contact details and the reasons written on 2 applications\' stage changes.');
 });
 
 test('the prompt says what goes and what stays for how long, in two sentences', () => {

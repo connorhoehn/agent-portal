@@ -48,6 +48,8 @@ import { interviewCandidatesFixture } from '../../mock/interviews.js';
 import { interviewConsentsFixture } from '../../mock/interviews-consents.js';
 import { registerEraser } from '../../lib/interviews/retention/registry.js';
 import { recordingEraser } from '../../lib/interviews/retention/erasers.js';
+import { deletionStore } from '../../lib/interviews/retention/store.js';
+import { interviewApplicationsFixture } from '../../mock/interviews.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -105,7 +107,8 @@ describe('asking for a deletion', () => {
     expect(res.body.created).toBe(true);
     expect(res.body.deletion).toMatchObject({
       reason: 'request', requestedBy: { id: 'u-greta', name: 'Greta Lindqvist' }, interviews: 2,
-      removed: [{ kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }],
+      removed: [{ kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }, { kind: 'stage-reasons', count: 1 }],
+      overdue: false, doneLate: false,
       left: [{ kind: 'recording', why: 'no-service', retry: false }],
     });
     expect(res.body.deletion.doneAt).not.toBeNull();
@@ -145,6 +148,25 @@ describe('reading the deletion log', () => {
     expect((await ADMIN.log('cand-mateo')).status).toBe(404);
     expect((await GRETA.log('cand-nobody')).status).toBe(404);
     expect((await OUTSIDER.log('cand-mateo')).status).toBe(403);
+  });
+
+  it('says on each row whether it is late: open past its date, or finished after it', async () => {
+    const day = 86_400_000;
+    const at = (ms: number) => new Date(ms).toISOString();
+    const base = { candidateId: 'cand-mateo', interviewIds: ['iv-mateo-coding'], reason: 'request' as const, requestedBy: 'u-greta', removed: [], left: [], attempts: 1 };
+    await deletionStore().insert({ ...base, id: 'del-late', requestedAt: at(Date.now() - 40 * day), dueBy: at(Date.now() - 10 * day), doneAt: null,
+      left: [{ kind: 'recording', why: 'failed', retry: true }] });
+    await deletionStore().insert({ ...base, id: 'del-done-late', requestedAt: at(Date.now() - 50 * day), dueBy: at(Date.now() - 20 * day), doneAt: at(Date.now() - 15 * day) });
+    await deletionStore().insert({ ...base, id: 'del-open', requestedAt: at(Date.now() - day), dueBy: at(Date.now() + 29 * day), doneAt: null });
+    const items = (await GRETA.log('cand-mateo')).body.items as Array<{ id: string; overdue: boolean; doneLate: boolean }>;
+    expect(items.map((i) => [i.id, i.overdue, i.doneLate])).toEqual([['del-open', false, false], ['del-late', true, false], ['del-done-late', false, true]]);
+  });
+
+  it('a deletion leaves the stage, time and mover of each stage move and replaces its reason with the one phrase', async () => {
+    await GRETA.ask('cand-mateo');
+    const history = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
+    expect(history.map((h) => h.reason)).toEqual([null, null, 'Reason removed.']);
+    expect(history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing']);
   });
 
   it('a hiring manager of another opening finds nothing', async () => {
