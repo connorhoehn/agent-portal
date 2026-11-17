@@ -339,6 +339,13 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
     const trail: Crumb[] = [{ label: INTERVIEWS_GROUPS[page] ?? 'Candidates' }];
     // A candidate's profile (Hire › Candidates › name); the page registers the name as the crumb's label.
     if (page === 'candidates' && b) return [...trail, { label: INTERVIEWS_LABELS[page] ?? page, path: '/interviews/candidates' }, { label: shortId(b), id: b }];
+    // An opening beside the Openings rail (Hire › Openings › title, then Edit on the editor); the page registers the title.
+    if (page === 'openings' && b && b !== 'new') {
+      const opening = { label: INTERVIEWS_LABELS[page] ?? page, path: '/interviews/openings' };
+      return c === 'edit'
+        ? [...trail, opening, { label: shortId(b), path: `/interviews/openings/${encodeURIComponent(b)}`, id: b }, { label: 'Edit' }]
+        : [...trail, opening, { label: shortId(b), id: b }];
+    }
     // A round's page (U6): the viewer's group and home, the round (its page registers "candidate, round"), then the page.
     if (page === 'rounds' && b && c && INTERVIEWS_LABELS[`round:${c}`]) return interviewsRoundTrail(b, INTERVIEWS_LABELS[`round:${c}`]!, role);
     return [...trail, { label: INTERVIEWS_LABELS[page] ?? page }];

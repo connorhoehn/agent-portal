@@ -87,8 +87,8 @@ function useOpeningTrail(o: OpeningRecord | null, editing: boolean): BreadcrumbI
     const link = (label: string, href: string): BreadcrumbItem => ({
       label, href, onClick: (e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return; e.preventDefault(); void navigate(href); },
     });
-    const head = base.slice(0, -1);
-    const openings = link(base[base.length - 1]?.label ?? 'Openings', '/interviews/openings');
+    const head = base.slice(0, 1);
+    const openings = link('Openings', '/interviews/openings');
     return editing
       ? [...head, openings, link(o.title, `/interviews/openings/${encodeURIComponent(o.id)}`), { label: 'Edit' }]
       : [...head, openings, { label: o.title }];

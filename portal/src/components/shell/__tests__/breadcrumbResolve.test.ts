@@ -148,3 +148,11 @@ test('a round page reads <group> › <home> › <the round> › <page> by the vi
   // An unknown round page keeps the old trail rather than inventing a crumb.
   assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/elsewhere`, 'interviewer').map((c) => c.label), ['Hire', 'Round']);
 });
+
+test('an opening beside the Openings rail has Hire, Openings and its own crumb, and Edit after it on the editor', () => {
+  const open = { label: 'Openings', path: '/interviews/openings' };
+  assert.deepEqual(resolveBreadcrumbs('/interviews/openings/op-backend', 'recruiter'),
+    [{ label: 'Hire' }, open, { label: 'op-backend', id: 'op-backend' }]);
+  assert.deepEqual(resolveBreadcrumbs('/interviews/openings/op-backend/edit', 'recruiter'),
+    [{ label: 'Hire' }, open, { label: 'op-backend', path: '/interviews/openings/op-backend', id: 'op-backend' }, { label: 'Edit' }]);
+});
