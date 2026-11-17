@@ -226,7 +226,7 @@ describe('the attempt counter across a restart', () => {
     warn.mockRestore();
   });
 
-  it('PINNED: attempts that wrote no row are counted in memory only, so a restart after two failures allows three more calls', async () => {
+  it('at most 3 model calls per interview, ever: the count is the store\'s, so a restart after two failures allows one more', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const model = answering('not json');
     deps.model.mockReturnValue(model);
@@ -236,24 +236,36 @@ describe('the attempt counter across a restart', () => {
       .mockResolvedValueOnce({ ok: false, refusal: { status: 402, body: {} } });
     expect((await openRecap(refOf(), WEN, ratings())).state).toBe('paused');
     expect(model.write).toHaveBeenCalledTimes(2);
-    resetRecapAttempts();
-    await openRecap(refOf(), HUGO, ratings());
-    expect(model.write).toHaveBeenCalledTimes(5);
+    expect((await store.listAttempts(IV)).map((a) => [a.attempt, a.code])).toEqual([[1, 'malformed'], [2, 'malformed']]);
+    resetRecapAttempts(); // a restart: nothing this process held in memory is left
+    expect((await openRecap(refOf(), HUGO, ratings())).state).toBe('none');
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS);
+    const row = await store.getRecap(IV);
+    expect([row?.state, row?.attempts, row?.droppedCodes]).toEqual(['failed', 3, ['malformed', 'malformed', 'malformed']]);
+    expect(await store.listAttempts(IV)).toEqual([]); // the row holds them now
     warn.mockRestore();
   });
 
-  it.failing('should hold: "at most 3 model calls per interview, ever" survives a restart', async () => {
+  it('an attempt cut off by a restart (claimed, never given a code) still counts', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await store.putAttempt({ interviewId: IV, attempt: 1, code: null, madeAt: new Date(0).toISOString() });
     const model = answering('not json');
     deps.model.mockReturnValue(model);
-    deps.reserve.mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
-      .mockImplementationOnce(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `s-${i.key}`, amountUsd: i.estimateUsd }))
-      .mockResolvedValueOnce({ ok: false, refusal: { status: 402, body: {} } });
     await openRecap(refOf(), WEN, ratings());
-    resetRecapAttempts();
-    await openRecap(refOf(), HUGO, ratings());
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS - 1);
     warn.mockRestore();
-    expect((model.write as jest.Mock).mock.calls.length).toBeLessThanOrEqual(RECAP_MAX_ATTEMPTS);
+  });
+
+  it('an attempt another open claimed first is not made again: its hold is released and no call is sent for it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const claim = jest.spyOn(store, 'putAttempt').mockResolvedValueOnce(false);
+    const model = answering('not json');
+    deps.model.mockReturnValue(model);
+    await openRecap(refOf(), WEN, ratings());
+    expect(model.write).toHaveBeenCalledTimes(RECAP_MAX_ATTEMPTS - 1);
+    expect(deps.release).toHaveBeenCalledWith(['h-recap-1-abcd']);
+    claim.mockRestore();
+    warn.mockRestore();
   });
 });
 

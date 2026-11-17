@@ -4,7 +4,8 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { SqlExec } from '../../store-sql.js';
 import { MemoryRecapStore, setRecapStore, type RecapOpen, type RecapRecord, type RecapStore } from '../store.js';
 import {
-  ERASE_RECAP_OPENS_SQL, ERASE_RECAPS_SQL, GET_RECAP_OPEN_SQL, GET_RECAP_SQL, INSERT_RECAP_OPEN_SQL, INSERT_RECAP_SQL, LIST_RECAP_OPENS_SQL, SqlRecapStore,
+  CLEAR_RECAP_ATTEMPTS_SQL, ERASE_RECAP_ATTEMPTS_SQL, ERASE_RECAP_OPENS_SQL, ERASE_RECAPS_SQL, GET_RECAP_OPEN_SQL, GET_RECAP_SQL, INSERT_RECAP_ATTEMPT_SQL,
+  INSERT_RECAP_OPEN_SQL, INSERT_RECAP_SQL, LIST_RECAP_ATTEMPTS_SQL, LIST_RECAP_OPENS_SQL, SET_RECAP_ATTEMPT_CODE_SQL, SqlRecapStore,
 } from '../store-sql.js';
 import { eraseRecaps, exportRecap } from '../index.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
@@ -15,10 +16,11 @@ type P = { stringValue?: string; longValue?: number; isNull?: boolean };
 const param = (params: SqlParameter[] | undefined, name: string): P => (params?.find((x) => x.name === name)?.value ?? {}) as P;
 const ts = (iso: string) => iso.replace('T', ' ').replace('Z', '');
 
-/** The two tables as the Data API would keep and answer them (timestamps as text, JSONB as text, TEXT[] as `{a,b}`). */
+/** The three tables as the Data API would keep and answer them (timestamps as text, JSONB as text, TEXT[] as `{a,b}`). */
 function recapTablesExec(): SqlExec {
   const recaps: Record<string, unknown>[] = [];
   const opens: Record<string, unknown>[] = [];
+  const attempts: Record<string, unknown>[] = [];
   const out = (rows: Record<string, unknown>[]) => rows.map((r) => ({ ...r }));
   return async (sql, params) => {
     const s = (n: string) => param(params, n).stringValue ?? null;
@@ -44,8 +46,23 @@ function recapTablesExec(): SqlExec {
       opens.push(row);
       return out([row]);
     }
-    if (sql === ERASE_RECAPS_SQL || sql === ERASE_RECAP_OPENS_SQL) {
-      const table = sql === ERASE_RECAPS_SQL ? recaps : opens;
+    const n = (k: string) => param(params, k).longValue;
+    const attemptOf = (r: Record<string, unknown>) => r['interview_id'] === s('interview_id') && r['attempt'] === n('attempt');
+    if (sql === LIST_RECAP_ATTEMPTS_SQL) {
+      return out(attempts.filter((r) => r['interview_id'] === s('interview_id')).sort((a, b) => Number(a['attempt']) - Number(b['attempt'])));
+    }
+    if (sql === INSERT_RECAP_ATTEMPT_SQL) {
+      if (attempts.some(attemptOf)) return [];
+      attempts.push({ interview_id: s('interview_id'), attempt: n('attempt'), code: null, made_at: ts(s('made_at')!) });
+      return [{ interview_id: s('interview_id') }];
+    }
+    if (sql === SET_RECAP_ATTEMPT_CODE_SQL) { for (const r of attempts.filter(attemptOf)) r['code'] = s('code'); return []; }
+    if (sql === CLEAR_RECAP_ATTEMPTS_SQL) {
+      for (const r of attempts.filter((x) => x['interview_id'] === s('interview_id'))) attempts.splice(attempts.indexOf(r), 1);
+      return [];
+    }
+    if (sql === ERASE_RECAPS_SQL || sql === ERASE_RECAP_OPENS_SQL || sql === ERASE_RECAP_ATTEMPTS_SQL) {
+      const table = sql === ERASE_RECAPS_SQL ? recaps : sql === ERASE_RECAP_OPENS_SQL ? opens : attempts;
       const ids = String(s('interview_ids')).split(',');
       const gone = table.filter((r) => ids.includes(String(r['interview_id'])));
       for (const g of gone) table.splice(table.indexOf(g), 1);
@@ -94,6 +111,23 @@ describe.each([
     expect(await store.getOpen('iv-1', 'u-wen')).toEqual(open('iv-1', 'u-wen', 5, 3));
     expect(await store.getOpen('iv-1', 'u-amara')).toBeNull();
     expect((await store.listOpens('iv-1')).map((o) => o.interviewerId)).toEqual(['u-hugo', 'u-wen']);
+  });
+
+  it('claims each attempt once, keeps its code, and forgets them when the recap row is written or the interview erased', async () => {
+    const store = make();
+    expect(await store.listAttempts('iv-1')).toEqual([]);
+    expect(await store.putAttempt({ interviewId: 'iv-1', attempt: 1, code: null, madeAt: T(1) })).toBe(true);
+    expect(await store.putAttempt({ interviewId: 'iv-1', attempt: 1, code: null, madeAt: T(2) })).toBe(false);
+    expect(await store.putAttempt({ interviewId: 'iv-1', attempt: 2, code: null, madeAt: T(3) })).toBe(true);
+    expect(await store.putAttempt({ interviewId: 'iv-2', attempt: 1, code: null, madeAt: T(3) })).toBe(true);
+    await store.setAttemptCode('iv-1', 1, 'judges');
+    expect(await store.listAttempts('iv-1')).toEqual([
+      { interviewId: 'iv-1', attempt: 1, code: 'judges', madeAt: T(1) }, { interviewId: 'iv-1', attempt: 2, code: null, madeAt: T(3) },
+    ]);
+    await store.clearAttempts('iv-1');
+    expect(await store.listAttempts('iv-1')).toEqual([]);
+    expect(await store.eraseRecaps(['iv-2'])).toBe(1);
+    expect(await store.listAttempts('iv-2')).toEqual([]);
   });
 
   it('erases an interview\'s recap and opens, and nothing of another', async () => {

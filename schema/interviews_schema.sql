@@ -213,6 +213,19 @@ CREATE TABLE IF NOT EXISTS interview_recap_opens (
   PRIMARY KEY (interview_id, interviewer_id)
 );
 
+-- The model calls made toward a recap not yet written (hardening H4): one row
+-- per attempt, claimed before the call (the key stops two opens taking the same
+-- attempt), given its code when it is dropped (`code` NULL while in flight or
+-- if the process stopped mid-call: it still counts). They hold "at most three
+-- calls per interview" across a restart; writing the recap row clears them.
+CREATE TABLE IF NOT EXISTS interview_recap_attempts (
+  interview_id    TEXT NOT NULL REFERENCES interviews(id),
+  attempt         INTEGER NOT NULL CHECK (attempt BETWEEN 1 AND 3),
+  code            TEXT CHECK (code IN ('malformed', 'judges', 'personal', 'timeout', 'error')),
+  made_at         TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (interview_id, attempt)
+);
+
 -- ── scorecards ──────────────────────────────────────────────────────────────
 -- One interviewer's judgement of one interview. A submitted scorecard is never
 -- edited: a correction is a new version (decision 14). `ratings` is

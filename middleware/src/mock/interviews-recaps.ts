@@ -1,5 +1,5 @@
 // Milo's recaps and who opened them (docs/interviews-tenant-plan.md decision 14, row I5.2): the mock world's
-// interview_recaps and interview_recap_opens.
+// interview_recaps, interview_recap_opens and interview_recap_attempts.
 //
 // Two recaps on finished, scored interviews of mock/interviews.ts, so the debrief has something to show: Ingrid's
 // "Working together" round and Mateo's coding round. Each holds one statement in the scripted recap's own form, quoting
@@ -9,7 +9,7 @@
 // it), so mock/interviews.ts is untouched.
 // Times follow mock/interviews.ts's `at()`: days from today's UTC midnight, computed on read.
 import { clock, defineFixture } from './core/index.js';
-import type { RecapOpen, RecapRecord } from '../lib/interviews/recap/store.js';
+import type { RecapAttempt, RecapOpen, RecapRecord } from '../lib/interviews/recap/store.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PROMPT_VERSION = 'recap-2026-11-17.1';
@@ -62,4 +62,11 @@ export const interviewRecapOpensFixture = defineFixture<RecapOpen>({
     ],
     empty: () => [],
   },
+});
+
+// The model calls made toward a recap not yet written (hardening H4): none seeded, every seeded recap is written. Kept
+// as a fixture so the mock world's reset clears it and its rows outlive the service's memory.
+export const interviewRecapAttemptsFixture = defineFixture<RecapAttempt>({
+  key: 'interviews.recap-attempts',
+  scenarios: { default: () => [], empty: () => [] },
 });

@@ -10,9 +10,11 @@
 //   money     a hold with `reserveInterviewSpend` (part `coach`, key `recap-<attempt>-<suffix>`); refused: `paused`
 //             with `paused: 'budget'`, no call, nothing stored, the next open tries again.
 //   model     the recap model (model.ts), parsed by parse.ts; the hold settled (or released when nothing was sent).
-//   attempts  at most RECAP_MAX_ATTEMPTS per interview, one in flight. A dropped attempt (malformed, judging, personal,
-//             timed out, failed) is counted by its code and its text is never kept; the open tries again at once while
-//             attempts remain. The last attempt failing writes a `failed` row: readers see `none` from then on.
+//   attempts  at most RECAP_MAX_ATTEMPTS per interview, ever, one in flight. Each attempt is claimed in the store
+//             before its call (`putAttempt`), so the count survives a restart and two processes cannot both make the
+//             same attempt. A dropped attempt (malformed, judging, personal, timed out, failed) is given its code and its
+//             text is never kept; the open tries again at once while attempts remain. The last attempt failing writes a
+//             `failed` row: readers see `none` from then on. Writing either row clears the attempts.
 // `readRecap` never writes: it answers the stored recap, or `no-transcript` / `none`.
 //
 // Who may open and who may read is the route's (routes/interviews/recap.ts). Nothing of the transcript, the prompt, the
@@ -94,10 +96,8 @@ const deps = (): RecapDeps => ({ ...DEFAULTS, ...overrides });
 export interface RecapRef { interview: Interview; opening: Opening }
 
 const inFlight = new Map<string, Promise<RecapBody>>();
-/** Attempts made per interview that wrote no row yet (a row ends the count). Kept in memory: see the report on restarts. */
-const attemptsOf = new Map<string, { n: number; codes: RecapAttemptCode[] }>();
-/** Tests: forget the in-memory attempt counts. */
-export function resetRecapAttempts(): void { attemptsOf.clear(); inFlight.clear(); }
+/** Tests: forget what this process holds in memory (the call in flight), as a restart would. The attempts are the store's. */
+export function resetRecapAttempts(): void { inFlight.clear(); }
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 
@@ -168,8 +168,9 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   if (!input.lines.length) return emptyBody('no-transcript');
 
   const model = d.model();
-  const count = attemptsOf.get(interview.id) ?? { n: 0, codes: [] };
-  attemptsOf.set(interview.id, count);
+  // The attempts already made, by any process: an attempt whose call never came back still counts.
+  const made = await store.listAttempts(interview.id);
+  const count = { n: made.reduce((m, a) => Math.max(m, a.attempt), 0), codes: made.flatMap((a) => (a.code ? [a.code] : [])) };
   while (count.n < RECAP_MAX_ATTEMPTS) {
     const attempt = count.n + 1;
     const held = await d.reserve({
@@ -178,6 +179,11 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
     });
     if (!held.ok) return emptyBody('paused');
     count.n = attempt;
+    if (!await store.putAttempt({ interviewId: interview.id, attempt, code: null, madeAt: iso(d.now()) })) {
+      // Another open made this attempt first: it counts, and this one makes no call for it.
+      await book(d, model, input, held, { raw: null, code: 'error', sent: false, usage: null }, actor);
+      continue;
+    }
     let result: CoachModelResult;
     try { result = await model.write(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
     await book(d, model, input, held, result, actor);
@@ -190,10 +196,11 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
         promptVersion: RECAP_PROMPT_VERSION, attempts: attempt, droppedCodes: [...count.codes], droppedClaims: parsed.droppedClaims,
       };
       const kept = await store.putRecap(row);
-      attemptsOf.delete(interview.id);
+      await store.clearAttempts(interview.id);
       return recapBody(kept.row, opening);
     }
     count.codes.push(parsed.code);
+    await store.setAttemptCode(interview.id, attempt, parsed.code);
     console.warn('[interviews] recap attempt dropped', parsed.code);
   }
   const failed: RecapRecord = {
@@ -201,7 +208,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
     modelId: model.modelId, promptVersion: RECAP_PROMPT_VERSION, attempts: count.n, droppedCodes: [...count.codes], droppedClaims: 0,
   };
   const kept = await store.putRecap(failed);
-  attemptsOf.delete(interview.id);
+  await store.clearAttempts(interview.id);
   return recapBody(kept.row, opening);
 }
 
@@ -256,7 +263,6 @@ export async function ratingsAtRecap(interviewId: string, userId: string): Promi
 
 /** Remove these interviews' recaps and opens (a record-class eraser); how many rows went. */
 export async function eraseRecapRows(interviewIds: readonly string[]): Promise<number> {
-  for (const id of interviewIds) attemptsOf.delete(id);
   return deps().store().eraseRecaps(interviewIds);
 }
 
