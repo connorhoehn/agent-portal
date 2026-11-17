@@ -87,9 +87,14 @@ export async function decideRecording(lobbyName: string, seated: () => Promise<b
   const interviewId = interviewOfLobby(lobbyName);
   if (!interviewId || !interviewsEnabled()) return RECORDING_REFUSED;
   if (!await seated().catch(() => false)) return RECORDING_REFUSED;
-  const interview = await findInterview(interviewId);
-  const record = interview ? await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId)) : null;
-  return recordingDecision({ seated: true, state: interview?.state ?? null, answers: interview ? usableAnswers(record, interview.state) : null });
+  // A store that fails is the refusal (fail closed), never a 500: nothing records on a read that did not happen.
+  try {
+    const interview = await findInterview(interviewId);
+    const record = interview ? await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId)) : null;
+    return recordingDecision({ seated: true, state: interview?.state ?? null, answers: interview ? usableAnswers(record, interview.state) : null });
+  } catch {
+    return RECORDING_REFUSED;
+  }
 }
 
 /** D3 for a lobby and a verified token context; `session` loads the directory-checked session (never asked for a guest). */
