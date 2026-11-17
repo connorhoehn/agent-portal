@@ -506,6 +506,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (c: { interviewId: string }) => c.interviewId,
   },
   {
+    name: 'interview_suggestions',
+    fixture: 'interviews.suggestions',
+    describes: 'Milo\'s suggestion log: answered suggestions on three finished interviews (asked, put by Milo and not yet spoken, skipped) and one dropped attempt with its code only.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_suggestions',
+    mockRows: async () => (await import('../../interviews-suggestions.js')).interviewSuggestionsFixture.rows('default'),
+    mockId: (s: { id: string }) => s.id,
+  },
+  {
     name: 'interviews',
     fixture: 'interviews.interviews',
     describes: 'Six interviews coming up, four finished and scored, one finished whose scorecard is due.',

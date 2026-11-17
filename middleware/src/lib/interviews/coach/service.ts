@@ -1,0 +1,208 @@
+// The coach for the lead (docs/interviews-tenant-plan.md decisions 6, 7, 8, 18, 20; row I3.3; contract D7).
+//
+// `suggestionFor` is what the lead's room reads: the rules (rules.ts), then, only when they say think, a hold on the
+// interview's opening for the part `coach` (a refused hold makes no call and answers `paused: 'budget'`), the model, the
+// money settled or released, the log, and the view. One call in flight per interview. A read is what makes the coach
+// think: it starts no timer and hooks nothing.
+//
+// `answerSuggestion` records the lead's answer once. `milo-ask` is logged as that answer with `spoken: false` (speech is
+// row I3.5) and, after it is logged, the approved words are posted in the call's chat as Milo's reply to the lead
+// (lib/meeting-assistant/chat.ts `postReply`), when Milo is in the call.
+//
+// Nothing of the transcript, the prompt, the answer or a dropped suggestion's text is logged anywhere but the log's own
+// row; console lines carry codes only.
+import { randomBytes } from 'node:crypto';
+import { estimateUsageCost } from '../../pricing.js';
+import { consentsFor } from '../consent/index.js';
+import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
+import type { Interview, Opening } from '../types.js';
+import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, type CoachModel, type CoachModelResult } from './model.js';
+import { parseCoachAnswer, type ParseResult } from './parse.js';
+import { COACH_PROMPT_VERSION, MAX_PREVIOUS, type CoachInput, type CoachLine } from './prompt.js';
+import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
+import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
+import { assistantTranscript, type TranscriptSource } from './transcript.js';
+
+/** D7's view of a suggestion. */
+export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
+/** D7's answer to the read. */
+export interface SuggestionBody { suggestion: SuggestionView | null; paused: null | 'budget'; retryAfterMs: number }
+
+export interface CoachDeps {
+  store: () => SuggestionStore;
+  consents: (interviewId: string) => Promise<{ transcription: boolean; milo: boolean } | null>;
+  transcript: TranscriptSource;
+  model: () => CoachModel;
+  reserve: (i: InterviewReserveInput) => Promise<InterviewReserveOutcome>;
+  settle: (i: InterviewSettleInput) => Promise<void>;
+  release: (holdIds: readonly (string | null)[]) => Promise<void>;
+  /** Put Milo's approved words in the call's chat; false when Milo is not in the call. */
+  postApproved: (callId: string, text: string, lead: { userId: string }) => Promise<boolean>;
+  now: () => number;
+  newId: () => string;
+}
+
+const defaultPost: CoachDeps['postApproved'] = async (callId, text, lead) => {
+  const { nameOf, postReply } = await import('../../meeting-assistant/chat.js');
+  return (await postReply(callId, { text, askedBy: lead.userId, askedByName: await nameOf(lead.userId) })) !== null;
+};
+
+const DEFAULTS: CoachDeps = {
+  store: suggestionStore,
+  consents: consentsFor,
+  transcript: assistantTranscript,
+  model: makeCoachModel,
+  reserve: reserveInterviewSpend,
+  settle: settleInterviewSpend,
+  release: releaseInterviewSpend,
+  postApproved: defaultPost,
+  now: Date.now,
+  newId: () => `sg-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
+};
+
+let overrides: Partial<CoachDeps> = {};
+/** Tests: replace some of the coach's dependencies; `null` puts every default back. */
+export function setCoachDeps(next: Partial<CoachDeps> | null): void { overrides = next ?? {}; }
+const deps = (): CoachDeps => ({ ...DEFAULTS, ...overrides });
+
+const inFlight = new Set<string>();
+
+/** The interview and the opening that holds its kit, found in the viewer's scope by the route. */
+export interface CoachRef { interview: Interview; opening: Opening }
+
+export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: readonly SuggestionRecord[]): CoachInput {
+  const kit = ref.opening.kit;
+  return {
+    roundType: ref.interview.type,
+    competencies: kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
+    questions: kit.questions.filter((q) => q.roundType === ref.interview.type)
+      .map((q) => ({ id: q.id, prompt: q.prompt, followUps: q.followUps, competencyId: q.competencyId })),
+    chosenQuestionIds: [...ref.interview.questionIds],
+    lines: [...lines],
+    previous: log.filter((r) => r.dropped === null && r.competencyId !== null).slice(-MAX_PREVIOUS)
+      .map((r) => ({ text: r.text, competencyId: r.competencyId!, answer: r.answer })),
+  };
+}
+
+export function suggestionView(row: SuggestionRecord, opening: Opening): SuggestionView {
+  const c = opening.kit.competencies.find((x) => x.id === row.competencyId);
+  return {
+    id: row.id, text: row.text, competency: { id: row.competencyId ?? '', name: c?.name ?? 'Competency' },
+    basedOn: row.basedOn, shownAt: row.shownAt ?? new Date(0).toISOString(),
+  };
+}
+
+const iso = (ms: number): string => new Date(ms).toISOString();
+
+/** What one attempt may cost, in dollars: the request's estimated tokens at the model's price (Nova Pro's for the stand-in). */
+export function coachEstimateUsd(model: Pick<CoachModel, 'modelId'>, input: CoachInput): number {
+  const tokens = estimateCoachTokens(input);
+  return estimateUsageCost(model.modelId, tokens) ?? estimateUsageCost(DEFAULT_COACH_MODEL_ID, tokens) ?? 0.02;
+}
+
+async function book(d: CoachDeps, model: CoachModel, input: CoachInput, held: { holdId: string | null; sourceId: string }, result: CoachModelResult, lead: string): Promise<void> {
+  try {
+    if (!result.sent) { await d.release([held.holdId]); return; }
+    if (model.kind === 'scripted') {
+      await d.settle({ sourceId: held.sourceId, costUsd: 0, basis: 'estimated', model: model.modelId, actorId: lead, provider: 'local' });
+      return;
+    }
+    const usage = result.usage ?? estimateCoachTokens(input);
+    const cost = estimateUsageCost(model.modelId, usage);
+    await d.settle({
+      sourceId: held.sourceId, costUsd: cost, basis: cost === null ? 'unknown' : 'estimated', model: model.modelId, actorId: lead, provider: 'bedrock',
+      inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    });
+  } catch (e) {
+    console.warn('[interviews] coach spend not booked', (e as Error)?.name ?? 'error');
+  }
+}
+
+export type SuggestionOutcome = { kind: 'not-found' } | { kind: 'ok'; body: SuggestionBody };
+
+/** D7's read for the lead: the waiting suggestion, a new one when the rules allow, or none with when to ask again. */
+export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): Promise<SuggestionOutcome> {
+  const d = deps();
+  const { interview, opening } = ref;
+  if (viewer.userId !== interview.leadId) return { kind: 'not-found' };
+  const store = d.store();
+  // Consent first: with Milo declined nothing else is read (not even the transcript).
+  const consent = interview.state === 'live' ? await d.consents(interview.id) : null;
+  const ready = interview.state === 'live' && !!(consent?.transcription && consent.milo);
+  const log = ready ? await store.listSuggestions(interview.id) : [];
+  const transcript = ready ? await d.transcript({ id: interview.id, callId: interview.callId }) : null;
+  const nowMs = d.now();
+  const decision = decideCoach({
+    viewerId: viewer.userId, interview, consent, log,
+    transcript: transcript ? { callId: transcript.callId, lastSeq: transcript.lastSeq } : null,
+    inFlight: inFlight.has(interview.id), nowMs,
+  });
+  if (decision.kind === 'not-found') return { kind: 'not-found' };
+  if (decision.kind === 'none') return { kind: 'ok', body: { suggestion: null, paused: null, retryAfterMs: decision.retryAfterMs } };
+  if (decision.kind === 'show') {
+    const shown = (await store.markShown(interview.id, decision.suggestion.id, iso(nowMs))) ?? decision.suggestion;
+    return { kind: 'ok', body: { suggestion: suggestionView(shown, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
+  }
+
+  // think: one call in flight per interview (the check above and this add run without an await between them).
+  inFlight.add(interview.id);
+  try {
+    const model = d.model();
+    const lines = transcript!.lines;
+    const input = coachInput(ref, lines, log);
+    const id = d.newId();
+    const held = await d.reserve({
+      interviewId: interview.id, part: 'coach', key: id, estimateUsd: coachEstimateUsd(model, input), expiresInMs: COACH_TIMEOUT_MS * 2 + 30_000,
+    });
+    if (!held.ok) return { kind: 'ok', body: { suggestion: null, paused: 'budget', retryAfterMs: SUGGESTION_GAP_MS } };
+    let result: CoachModelResult;
+    try { result = await model.suggest(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
+    await book(d, model, input, held, result, viewer.userId);
+    const parsed: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
+      ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines })
+      : { ok: false, code: result.code };
+    const madeAt = iso(d.now());
+    const row: SuggestionRecord = {
+      id, interviewId: interview.id, callId: transcript!.callId, throughSeq: transcript!.lastSeq,
+      text: parsed.ok ? parsed.suggestion.text : '', competencyId: parsed.ok ? parsed.suggestion.competencyId : null,
+      basedOn: parsed.ok ? parsed.suggestion.basedOn : null,
+      madeAt, shownAt: parsed.ok ? madeAt : null, answer: null, answeredAt: null, spoken: false,
+      modelId: model.modelId, promptVersion: COACH_PROMPT_VERSION, dropped: parsed.ok ? null : parsed.code,
+    };
+    await store.appendSuggestion(row);
+    if (!parsed.ok) {
+      console.warn('[interviews] coach suggestion dropped', parsed.code);
+      return { kind: 'ok', body: { suggestion: null, paused: null, retryAfterMs: SUGGESTION_GAP_MS } };
+    }
+    return { kind: 'ok', body: { suggestion: suggestionView(row, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
+  } finally {
+    inFlight.delete(interview.id);
+  }
+}
+
+export type AnswerOutcome = { kind: 'ok' } | { kind: 'not-found' } | { kind: 'not-live' } | { kind: 'answered' };
+
+/** D7's answer, by the lead, while the interview is live; once. */
+export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }, suggestionId: string, answer: SuggestionAnswer): Promise<AnswerOutcome> {
+  const d = deps();
+  const { interview } = ref;
+  if (viewer.userId !== interview.leadId) return { kind: 'not-found' };
+  if (interview.state !== 'live') return { kind: 'not-live' };
+  const written = await d.store().answerSuggestion(interview.id, suggestionId, answer, iso(d.now()));
+  if (!written.ok) return written.reason === 'stale' ? { kind: 'answered' } : { kind: 'not-found' };
+  if (answer === 'milo-ask') {
+    // Logged first (above); then the approved words go to the call's chat when Milo is in the call.
+    try {
+      const t = await d.transcript({ id: interview.id, callId: interview.callId });
+      if (t) await d.postApproved(t.callId, written.row.text, viewer);
+    } catch (e) {
+      console.warn('[interviews] approved question not posted', (e as Error)?.name ?? 'error');
+    }
+  }
+  return { kind: 'ok' };
+}
+
+/** D6: remove these interviews' rows from the suggestion log (a record-class eraser). */
+export async function eraseSuggestionRows(interviewIds: readonly string[]): Promise<number> {
+  return deps().store().eraseSuggestions(interviewIds);
+}

@@ -152,6 +152,37 @@ CREATE TABLE IF NOT EXISTS interview_consents (
   CHECK (transcription OR NOT milo)
 );
 
+-- ── Milo's suggestions (row I3.3) ──────────────────────────────────────────
+-- The suggestion log (decision 8): append-only, one row per time the coach was
+-- asked to think in an interview. A suggestion carries its text, competency,
+-- the transcript words it builds on, when it was made and shown, the lead's
+-- answer and when, whether Milo spoke it (row I3.5), the model id and the
+-- prompt version. A dropped attempt keeps only its code in `dropped`: no text,
+-- competency or quote. `call_id` and `through_seq` say which transcript lines
+-- the attempt read. Rows are only appended, filled once (`shown_at`, `answer`),
+-- or removed by retention.
+CREATE TABLE IF NOT EXISTS interview_suggestions (
+  id              TEXT PRIMARY KEY,
+  interview_id    TEXT NOT NULL REFERENCES interviews(id),
+  call_id         TEXT,
+  through_seq     INTEGER NOT NULL DEFAULT 0 CHECK (through_seq >= 0),
+  text            TEXT NOT NULL DEFAULT '',
+  competency_id   TEXT,
+  based_on        TEXT,
+  made_at         TIMESTAMPTZ NOT NULL,
+  shown_at        TIMESTAMPTZ,
+  answer          TEXT CHECK (answer IN ('ask', 'milo-ask', 'skip')),
+  answered_at     TIMESTAMPTZ,
+  spoken          BOOLEAN NOT NULL DEFAULT FALSE,
+  model_id        TEXT NOT NULL,
+  prompt_version  TEXT NOT NULL,
+  dropped         TEXT CHECK (dropped IN ('malformed', 'off-kit', 'too-long', 'unsourced', 'judges', 'personal', 'timeout', 'error', 'nothing')),
+  CHECK ((dropped IS NULL) = (competency_id IS NOT NULL)),
+  CHECK (dropped IS NULL OR (text = '' AND based_on IS NULL AND answer IS NULL)),
+  CHECK ((answer IS NULL) = (answered_at IS NULL))
+);
+CREATE INDEX IF NOT EXISTS interview_suggestions_interview_idx ON interview_suggestions (interview_id, made_at);
+
 -- ── scorecards ──────────────────────────────────────────────────────────────
 -- One interviewer's judgement of one interview. A submitted scorecard is never
 -- edited: a correction is a new version (decision 14). `ratings` is
