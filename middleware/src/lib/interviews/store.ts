@@ -60,9 +60,22 @@ export interface InterviewWrites {
   setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>>;
   /** The lead's chosen questions in order and the state they leave (prepare.ts readyState), against `revision`. */
   setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>>;
+  /** The scorecard (row I5.3): `ended` → `scored` once every seated person's is in (scorecard.ts isScoredNow), against `revision`. */
+  markScored(id: string, revision: number): Promise<WriteResult<Interview>>;
 }
 
-export interface InterviewsStore extends OpeningWrites, InterviewWrites {
+/**
+ * The scorecard's one write (row I5.3; decision 14). A submitted scorecard is never edited: every submit inserts a
+ * new version. Who may submit and what the version is are decided first (the route, then scorecard.ts submitMove);
+ * this only writes. The compare-and-set is on the author's latest version: the row inserts only while the latest
+ * version of (interview, interviewer) is `row.version - 1` (none, for version 1). Otherwise it is `stale` with that
+ * latest version as it now is (`not-found` when there is none, which only a forged version number reaches).
+ */
+export interface ScorecardWrites {
+  addScorecardVersion(row: Scorecard): Promise<WriteResult<Scorecard>>;
+}
+
+export interface InterviewsStore extends OpeningWrites, InterviewWrites, ScorecardWrites {
   listOpenings(): Promise<Opening[]>;
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
@@ -137,6 +150,21 @@ export class MemoryInterviewsStore implements InterviewsStore {
 
   async setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>> {
     return casInterview(id, revision, (i) => { i.questionIds = [...questionIds]; i.state = state; });
+  }
+
+  async markScored(id: string, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { i.state = 'scored'; });
+  }
+
+  async addScorecardVersion(row: Scorecard): Promise<WriteResult<Scorecard>> {
+    const rows = interviewScorecardsFixture.rows();
+    const mine = rows.filter((s) => s.interviewId === row.interviewId && s.interviewerId === row.interviewerId);
+    const latest = mine.reduce<Scorecard | null>((l, s) => (!l || s.version > l.version ? s : l), null);
+    if ((latest?.version ?? 0) !== row.version - 1 || rows.some((s) => s.id === row.id)) {
+      return latest ? { ok: false, reason: 'stale', row: structuredClone(latest) } : { ok: false, reason: 'not-found' };
+    }
+    rows.push(structuredClone(row));
+    return { ok: true, row: structuredClone(row) };
   }
 }
 

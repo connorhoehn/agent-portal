@@ -206,6 +206,8 @@ export interface Scorecard {
   version: number;
   /** Whether a rating changed after the interviewer opened Milo's recap (decision 14). */
   changedAfterRecap: boolean;
+  /** Why this version corrects the one before it (row I5.3); null on a first version. */
+  correctionReason: string | null;
 }
 
 /** Everything the phase 0 reads look at, as one snapshot from the store. */

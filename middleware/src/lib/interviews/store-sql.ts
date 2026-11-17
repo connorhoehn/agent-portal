@@ -30,7 +30,7 @@ const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_id
   assigned_by, assigned_at, invite_token_hash, call_id, ended_at, acceptances, declines, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
-export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap
+export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason
   FROM interview_scorecards ORDER BY submitted_at, id`;
 
 export const INTERVIEWS_STATEMENTS = [LIST_OPENINGS_SQL, LIST_CANDIDATES_SQL, LIST_APPLICATIONS_SQL, LIST_INTERVIEWS_SQL, LIST_SCORECARDS_SQL] as const;
@@ -176,6 +176,7 @@ export function scorecardFromRow(r: Record<string, unknown>): Scorecard {
     id: str(r['id']), interviewId: str(r['interview_id']), interviewerId: str(r['interviewer_id']),
     ratings: json<CompetencyRating[]>(r['ratings'], []), recommendation: str(r['recommendation']) as Recommendation,
     summary: str(r['summary']), submittedAt: isoOf(r['submitted_at']), version: num(r['version']), changedAfterRecap: bool(r['changed_after_recap']),
+    correctionReason: strOrNull(r['correction_reason']),
   };
 }
 
@@ -262,6 +263,42 @@ export class SqlInterviewsStore implements InterviewsStore {
     return this.casInterview(id, await this.exec(SET_QUESTIONS_SQL, [
       textParam('id', id), intParam('revision', revision), textParam('question_ids', JSON.stringify(questionIds)), textParam('state', state),
     ]));
+  }
+
+  /** The scorecard's writes (row I5.3; store.ts ScorecardWrites), compare-and-set like the rest. */
+  static readonly MARK_SCORED_SQL = `UPDATE interviews
+  SET state = 'scored', revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+  static readonly SCORECARD_COLUMNS = 'id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason';
+  /**
+   * Inserts only while the author's latest version is `:version - 1`; two submits racing on the same version meet
+   * the table's UNIQUE (interview_id, interviewer_id, version) and the loser inserts nothing.
+   */
+  static readonly INSERT_SCORECARD_VERSION_SQL = `INSERT INTO interview_scorecards (${SqlInterviewsStore.SCORECARD_COLUMNS})
+  SELECT :id, :interview_id, :interviewer_id, CAST(:ratings AS JSONB), :recommendation, :summary, CAST(:submitted_at AS TIMESTAMPTZ), :version,
+    :changed_after_recap, :correction_reason
+  WHERE (SELECT COALESCE(MAX(version), 0) FROM interview_scorecards WHERE interview_id = :interview_id AND interviewer_id = :interviewer_id) = :version - 1
+  ON CONFLICT DO NOTHING
+  RETURNING ${SqlInterviewsStore.SCORECARD_COLUMNS}`;
+  static readonly LATEST_SCORECARD_SQL = `SELECT ${SqlInterviewsStore.SCORECARD_COLUMNS}
+  FROM interview_scorecards WHERE interview_id = :interview_id AND interviewer_id = :interviewer_id
+  ORDER BY version DESC LIMIT 1`;
+
+  async markScored(id: string, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.MARK_SCORED_SQL, [textParam('id', id), intParam('revision', revision)]));
+  }
+
+  async addScorecardVersion(row: Scorecard): Promise<WriteResult<Scorecard>> {
+    const written = await this.exec(SqlInterviewsStore.INSERT_SCORECARD_VERSION_SQL, [
+      textParam('id', row.id), textParam('interview_id', row.interviewId), textParam('interviewer_id', row.interviewerId),
+      textParam('ratings', JSON.stringify(row.ratings)), textParam('recommendation', row.recommendation), textParam('summary', row.summary),
+      textParam('submitted_at', row.submittedAt), intParam('version', row.version), { name: 'changed_after_recap', value: { booleanValue: row.changedAfterRecap } },
+      textParam('correction_reason', row.correctionReason),
+    ]);
+    if (written[0]) return { ok: true, row: scorecardFromRow(written[0]) };
+    const latest = (await this.exec(SqlInterviewsStore.LATEST_SCORECARD_SQL, [textParam('interview_id', row.interviewId), textParam('interviewer_id', row.interviewerId)]))[0];
+    return latest ? { ok: false, reason: 'stale', row: scorecardFromRow(latest) } : { ok: false, reason: 'not-found' };
   }
 
   /** cas() for an interview. */

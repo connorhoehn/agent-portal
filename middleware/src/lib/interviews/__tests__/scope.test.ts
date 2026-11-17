@@ -46,9 +46,11 @@ describe('an interviewer', () => {
     expect(ids(as('u-wen', 'interviewer').openings)).toEqual(['op-backend', 'op-em', 'op-ios']);
   });
 
-  it('reads only their own scorecards, never a colleague\'s on the same candidate', () => {
-    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ingrid-coding', 'sc-mateo-coding']);
-    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-ingrid-together', 'sc-ravi-coding']);
+  it('reads a colleague\'s scorecards on a candidate only once their own for every round they sit on there is in (row I5.3)', () => {
+    // Ingrid: Hugo's coding and Wen's working-together are both in, so each reads the other's.
+    // Mateo: Hugo's coding is in but he also leads the design round, still to run: nobody else's (there are none yet either).
+    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-mateo-coding']);
+    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-ravi-coding']);
   });
 });
 
@@ -150,7 +152,7 @@ describe('the wire shapes', () => {
     const rec = ix.candidateRecord(ix.candidates.get('cand-ingrid')!);
     expect(rec.applications).toHaveLength(1);
     expect(rec.applications[0]!.interviews.map((i) => i.id)).toEqual(['iv-ingrid-together']);
-    // An interviewer reads no other panel member's scorecard on the profile.
-    expect(rec.applications[0]!.interviews.every((i) => i.results.every((r) => r.interviewer.id === 'u-wen'))).toBe(true);
+    // Wen's own is in, so the profile's rows carry the scorecards of the rounds she can read (her own round only here).
+    expect(rec.applications[0]!.interviews[0]!.results.map((r) => r.interviewer.id)).toEqual(['u-wen']);
   });
 });

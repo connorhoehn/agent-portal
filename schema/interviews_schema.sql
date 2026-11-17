@@ -197,9 +197,12 @@ CREATE TABLE IF NOT EXISTS interview_scorecards (
   submitted_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   version              INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   changed_after_recap  BOOLEAN NOT NULL DEFAULT FALSE,
+  correction_reason    TEXT,
   UNIQUE (interview_id, interviewer_id, version)
 );
 CREATE INDEX IF NOT EXISTS interview_scorecards_interview_idx ON interview_scorecards (interview_id);
+-- Row I5.3 (round 4): why a version corrects the one before it; NULL on a first version.
+ALTER TABLE interview_scorecards ADD COLUMN IF NOT EXISTS correction_reason TEXT;
 
 -- ── invites (row I2.1) ──────────────────────────────────────────────────────
 -- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,

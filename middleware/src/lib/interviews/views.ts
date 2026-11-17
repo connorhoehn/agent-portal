@@ -10,6 +10,7 @@ import { mayReadOpeningMoney, reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { Seat } from './types.js';
+import { latestByAuthor } from './scorecard.js';
 
 export interface PersonRef { id: string; name: string }
 export type People = (id: string) => PersonRef;
@@ -101,14 +102,22 @@ export interface InterviewRow {
   revision: number;
 }
 
-export interface ScorecardView {
+/** One version of a scorecard as it reads. */
+export interface ScorecardVersionView {
   id: string;
   interviewer: PersonRef;
   recommendation: Recommendation;
   summary: string;
   submittedAt: string;
   version: number;
+  /** Why this version corrects the one before it; null on a first version (row I5.3). */
+  correctionReason: string | null;
   ratings: Array<CompetencyRating & { competency: string }>;
+}
+
+/** An author's latest scorecard on an interview, with the versions before it, oldest first (decision 14). */
+export interface ScorecardView extends ScorecardVersionView {
+  earlier: ScorecardVersionView[];
 }
 
 export interface InterviewRecord extends InterviewRow {
@@ -137,7 +146,7 @@ export interface CandidateRecord {
     stage: ApplicationStage;
     /** Each move with who made it by name (null: the candidate's own application). */
     history: Array<StageChange & { byName: string | null }>;
-    /** Each round with the scorecards the viewer may read (the world is already scoped; an interviewer reads only their own). */
+    /** Each round with the latest scorecards the viewer may read (the world is already scoped: an interviewer reads the others' only once their own is in, scope.ts othersRevealed). */
     interviews: Array<InterviewRow & { results: Array<{ interviewer: PersonRef; recommendation: Recommendation }> }>;
   }>;
 }
@@ -160,9 +169,11 @@ export function bucketFor(interview: Interview, viewer: Viewer, scorecards: read
   // The lead has accepted and the round is not ready yet: a time and questions to come (rows I1.5, I1.7).
   if (interview.state === 'accepted' && seat === 'lead') return 'to-prepare';
   if (OPEN_STATES.has(interview.state)) return 'upcoming';
-  if (interview.state === 'ended') return 'scorecard-due';
   const seated = interview.leadId === viewer.id || interview.panelIds.includes(viewer.id);
-  if (seated && !scorecards.some((s) => s.interviewId === interview.id && s.interviewerId === viewer.id)) return 'scorecard-due';
+  const mineIn = scorecards.some((s) => s.interviewId === interview.id && s.interviewerId === viewer.id);
+  // Ended: due until every seat's is in; the viewer whose own is in is done with it (row I5.3).
+  if (interview.state === 'ended') return seated && mineIn ? 'done' : 'scorecard-due';
+  if (seated && !mineIn) return 'scorecard-due';
   return 'done';
 }
 
@@ -181,8 +192,23 @@ export class WorldIndex {
     return this.world.interviews.filter((i) => i.applicationId === applicationId);
   }
 
+  /** The latest version of each author's scorecard on the interview (the earlier ones are `scorecardViews`). */
   scorecardsOf(interviewId: string): Scorecard[] {
-    return this.world.scorecards.filter((s) => s.interviewId === interviewId);
+    return latestByAuthor(this.world.scorecards.filter((s) => s.interviewId === interviewId));
+  }
+
+  /** The scorecards the viewer may read on an interview, each author's latest with its earlier versions (row I5.3). */
+  scorecardViews(interviewId: string, competencyNames: ReadonlyMap<string, string>): ScorecardView[] {
+    const all = this.world.scorecards.filter((s) => s.interviewId === interviewId);
+    const view = (s: Scorecard): ScorecardVersionView => ({
+      id: s.id, interviewer: this.people(s.interviewerId), recommendation: s.recommendation, summary: s.summary,
+      submittedAt: s.submittedAt, version: s.version, correctionReason: s.correctionReason,
+      ratings: s.ratings.map((r) => ({ ...r, competency: competencyNames.get(r.competencyId) ?? r.competencyId })),
+    });
+    return latestByAuthor(all).map((s) => ({
+      ...view(s),
+      earlier: all.filter((e) => e.interviewerId === s.interviewerId && e.version < s.version).sort((a, b) => a.version - b.version).map(view),
+    }));
   }
 
   private openingOfInterview(i: Interview): Opening | undefined {
@@ -205,7 +231,7 @@ export class WorldIndex {
   /** The latest scorecard the viewer may read on an application. */
   lastResult(applicationId: string): ResultBrief | null {
     const ids = new Map(this.interviewsOf(applicationId).map((i) => [i.id, i]));
-    const latest = this.world.scorecards.filter((s) => ids.has(s.interviewId)).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0];
+    const latest = latestByAuthor(this.world.scorecards.filter((s) => ids.has(s.interviewId))).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0];
     if (!latest) return null;
     const i = ids.get(latest.interviewId)!;
     return { recommendation: latest.recommendation, roundName: roundOf(this.openingOfInterview(i), i.roundId)?.name ?? UNKNOWN_ROUND, interviewer: this.people(latest.interviewerId), submittedAt: latest.submittedAt };
@@ -252,7 +278,7 @@ export class WorldIndex {
       candidates: apps.length,
       byStage,
       upcoming: interviews.filter((i) => OPEN_STATES.has(i.state)).length,
-      scorecardsIn: this.world.scorecards.filter((s) => interviewIds.has(s.interviewId)).length,
+      scorecardsIn: latestByAuthor(this.world.scorecards.filter((s) => interviewIds.has(s.interviewId))).length,
       pipeline: apps.flatMap((a): PipelineEntry[] => {
         const c = this.candidates.get(a.candidateId);
         if (!c) return [];
@@ -327,11 +353,7 @@ export class WorldIndex {
       maxQuestions: MAX_QUESTIONS,
       questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q),
       competencies: o.kit.competencies,
-      scorecards: this.scorecardsOf(i.id).map((s) => ({
-        id: s.id, interviewer: this.people(s.interviewerId), recommendation: s.recommendation, summary: s.summary,
-        submittedAt: s.submittedAt, version: s.version,
-        ratings: s.ratings.map((r) => ({ ...r, competency: names.get(r.competencyId) ?? r.competencyId })),
-      })),
+      scorecards: this.scorecardViews(i.id, names),
     };
   }
 

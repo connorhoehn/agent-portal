@@ -282,28 +282,28 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
   key: 'interviews.scorecards',
   scenarios: {
     default: () => [
-      { id: 'sc-ingrid-coding', interviewId: 'iv-ingrid-coding', interviewerId: HUGO, recommendation: 'strong-yes', version: 1, changedAfterRecap: false,
+      { id: 'sc-ingrid-coding', interviewId: 'iv-ingrid-coding', interviewerId: HUGO, recommendation: 'strong-yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-9, 16, 20),
         summary: 'The strongest coding round on this opening so far. Finished the limiter and the per-merchant follow-up with time to spare.',
         ratings: [
           rate('problem-solving', 4, 'Finished the token bucket in twenty minutes, then extended it to per-merchant limits without a hint.'),
           rate('code-quality', 4, 'Wrote the tests first and kept the clock out of the limiter so it could be tested.'),
         ] },
-      { id: 'sc-ingrid-together', interviewId: 'iv-ingrid-together', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false,
+      { id: 'sc-ingrid-together', interviewId: 'iv-ingrid-together', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-6, 15, 5),
         summary: 'Clear, honest examples. She owns her mistakes and follows up on disagreements with data rather than pressure.',
         ratings: [
           rate('communication', 3, 'Walked through a settlement outage in order and named what she would do differently.'),
           rate('collaboration', 3, 'Disagreed in a design review, accepted the call, and came back a month later with numbers.'),
         ] },
-      { id: 'sc-mateo-coding', interviewId: 'iv-mateo-coding', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false,
+      { id: 'sc-mateo-coding', interviewId: 'iv-mateo-coding', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-3, 16, 10),
         summary: 'A solid round. Correct and careful, a little slow to think about concurrency. Worth the system design round.',
         ratings: [
           rate('problem-solving', 3, 'Reached a working limiter in about thirty minutes; handled the burst case once asked.'),
           rate('code-quality', 3, 'Small functions and clear names. Reused the idempotency key correctly on retry.'),
         ] },
-      { id: 'sc-ravi-coding', interviewId: 'iv-ravi-coding', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false,
+      { id: 'sc-ravi-coding', interviewId: 'iv-ravi-coding', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-2, 17, 40),
         summary: 'Comfortable with modern Swift. The offline cache was sketched rather than built; worth asking about in the next round.',
         ratings: [

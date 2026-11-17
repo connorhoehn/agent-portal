@@ -558,7 +558,7 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
   {
     name: 'interview_scorecards',
     fixture: 'interviews.scorecards',
-    describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary.',
+    describes: 'The four submitted scorecards: a rating and a note per competency, a go or no-go, a summary; each a first version, so no correction reason.',
     sqlFile: 'interviews_schema.sql',
     table: 'interview_scorecards',
     mockRows: async () => (await import('../../interviews.js')).interviewScorecardsFixture.rows('default'),
