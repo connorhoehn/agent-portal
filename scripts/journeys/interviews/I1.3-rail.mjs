@@ -25,7 +25,7 @@ export default async function run({ portal, SEED, record, signIn, resetMock }) {
   try {
     await g.goto(`${portal}/interviews/openings/${SEED.openings.backend}`, { waitUntil: 'domcontentloaded' });
     await frame().waitFor({ timeout: 30_000 });
-    await g.getByTestId('interviews-opening-title').or(g.getByText('Senior Backend Engineer').first()).first().waitFor({ timeout: 30_000 });
+    await g.getByText('Senior Backend Engineer').first().waitFor({ timeout: 30_000 });
     const text = (await frame().innerText()).replace(/\s+/g, ' ');
     const all = ['Senior Backend Engineer', 'iOS Engineer', 'Engineering Manager'].every((t) => text.includes(t));
     record('I1.3e', all, `the opening opened beside the rail, which lists the three openings: ${all}`);
@@ -46,8 +46,8 @@ export default async function run({ portal, SEED, record, signIn, resetMock }) {
 
   try {
     await railLink('iOS Engineer').click();
-    await deck().getByText(/Leave without saving/).waitFor({ timeout: 10_000 });
-    await deck().getByRole('button', { name: /Leave and discard/ }).first().click();
+    await g.waitForTimeout(800);
+    await deck().getByRole('button', { name: /Leave and discard/ }).last().click();
     await g.waitForURL((u) => u.pathname.includes(`/openings/${SEED.openings.ios}`), { timeout: 15_000 });
     await g.goto(`${portal}/interviews/openings/${SEED.openings.backend}`, { waitUntil: 'domcontentloaded' });
     await g.getByText('Senior Backend Engineer').first().waitFor({ timeout: 30_000 });

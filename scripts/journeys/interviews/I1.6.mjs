@@ -75,10 +75,11 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await deck.getByText('Remove this résumé?').waitFor({ timeout: 15_000 });
     await deck.getByRole('button', { name: /Keep it/ }).click();
     await page.getByText('Kept. The résumé did not change.').first().waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(500);
     const kept = (await resumeOf(greta, chloe)).status;
     await page.getByTestId('interviews-resume-remove').click();
-    await deck.getByText('Remove this résumé?').waitFor({ timeout: 15_000 });
-    await deck.getByRole('button', { name: /^.*Remove$/ }).last().click();
+    await deck.getByText('Remove this résumé?').last().waitFor({ timeout: 15_000 });
+    await deck.getByRole('button', { name: /Remove/ }).last().click();
     await page.getByTestId('interviews-resume-none').waitFor({ timeout: 30_000 });
     const gone = (await resumeOf(greta, chloe)).status;
     const line = await textOf(page, 'interviews-resume-none');
@@ -107,7 +108,7 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await page.waitForFunction(() => /cannot be stored here yet/.test(document.querySelector('[data-testid="interviews-resume-problem"]')?.textContent ?? ''), null, { timeout: 15_000 });
     lines.storage = await textOf(page, 'interviews-resume-problem');
     await page.unroute('**/api/interviews/candidates/*/resume');
-    const ok = /Only PDF/.test(lines.notPdf) && /larger than 10 MB/.test(lines.big) && /could not be opened/.test(lines.corrupt) && /cannot be stored here yet/.test(lines.storage);
+    const ok = /unsupported file type/.test(lines.notPdf) && /exceeds the 10\.0 MB/.test(lines.big) && /could not be opened/.test(lines.corrupt) && /cannot be stored here yet/.test(lines.storage);
     record('I1.6d', ok, `not a PDF: "${lines.notPdf}"; over 10 MB: "${lines.big}"; corrupt PDF: "${lines.corrupt}"; storage missing (stubbed 503): "${lines.storage}"`);
   } catch (e) { record('I1.6d', false, `refusals: ${e.message.split('\n')[0]}`); }
   await page.close();

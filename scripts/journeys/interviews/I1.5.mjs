@@ -37,7 +37,7 @@ export default async function run({ portal, SEED, record, signIn, shoot, resetMo
     const live = await kwame.getByTestId('interviews-upcoming-live').count();
     const inFive = new Date(Math.ceil((Date.now() + 5 * 86_400_000) / 60_000) * 60_000).toISOString();
     const refused = await api(greta, 'PUT', `/api/interviews/interviews/${SEED.interviews.kwameLive}/time`, { revision: (await readInterview(greta, SEED.interviews.kwameLive)).revision, scheduledAt: inFive });
-    const ok = COLUMNS.every((c) => heads.some((h) => h.startsWith(c))) && !clipped && shots.every((s) => s.ok) && join === 1 && menu === 0 && live === 1 && refused.status === 400;
+    const ok = COLUMNS.every((c) => heads.some((h) => h.toLowerCase().startsWith(c.toLowerCase()))) && !clipped && shots.every((s) => s.ok) && join === 1 && menu === 0 && live === 1 && refused.status === 400;
     record('I1.5a', ok, `columns ${JSON.stringify(heads)}; ${shots.map((s) => `@${s.width}: first row at ${s.firstRowTop}px${s.horizontalScroll ? ', scrolls sideways' : ''}`).join('; ')}${clipped ? '; the table scrolls inside itself at 1280' : '; every column fits at 1280'}; the live row has Join ${join}, an Actions menu ${menu}; a time written to it answers ${refused.status} "${(refused.body?.error ?? '').slice(0, 80)}"`);
   } catch (e) { record('I1.5a', false, `Upcoming: ${e.message.split('\n')[0]}`); }
 

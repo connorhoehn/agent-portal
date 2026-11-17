@@ -29,6 +29,7 @@ export default async function run({ portal, SEED, record, signIn, resetMock, api
 
   try {
     await g.goto(`${url}/edit`, { waitUntil: 'domcontentloaded' });
+    await g.getByTestId('interviews-opening-tab-details').click();
     const cap = g.getByTestId('interviews-opening-budget-cap');
     await cap.waitFor({ timeout: 30_000 });
     await cap.fill('240');

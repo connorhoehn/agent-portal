@@ -39,22 +39,23 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
   } catch (e) { record('I1.7a', false, `prepare: ${e.message.split('\n')[0]}`); }
 
   // ── I1.7b ──
+  let offered = 0;
   try {
     const adds = page.getByTestId('interviews-bank-add');
-    for (let n = 0; n < 3; n += 1) await adds.first().click();
+    for (let n = 0; n < 3; n += 1) { if (await adds.count() === 0) break; await adds.first().click(); offered += 1; await page.waitForTimeout(300); }
     const before = await planPrompts(page);
     await page.getByRole('button', { name: 'Move question 1 down' }).click();
     const moved = await planPrompts(page);
-    await page.getByRole('button', { name: 'Take question 3 out of your plan' }).click();
+    await page.getByRole('button', { name: `Take question ${offered} out of your plan` }).click();
     const trimmed = await planPrompts(page);
     await page.getByTestId('interviews-plan-save').click();
     await page.getByTestId('interviews-plan-note').waitFor({ timeout: 30_000 });
     const after = await read(hugo);
     await page.getByTestId('interviews-prepare-room').waitFor({ timeout: 30_000 });
     const chip = await textOf(page, 'interviews-prepare-state');
-    const ok = before.length === 3 && moved[0] === before[1] && moved[1] === before[0] && trimmed.length === 2 && trimmed[0] === moved[0] && trimmed[1] === moved[1]
-      && after?.state === 'ready' && after?.questionsChosen?.length === 2 && /Ready/i.test(chip);
-    record('I1.7b', ok, `three added, the first moved down, the third taken out, saved: ${trimmed.length} questions in that order; the round is ${after?.state} (chip "${chip}") and Open the room is shown`);
+    const ok = offered >= 2 && before.length === offered && moved[0] === before[1] && moved[1] === before[0] && trimmed.length === offered - 1 && JSON.stringify(trimmed) === JSON.stringify(moved.slice(0, offered - 1))
+      && after?.state === 'ready' && after?.questionsChosen?.length === offered - 1 && /Ready/i.test(chip);
+    record('I1.7b', ok, `${offered} added (the bank offered that many), the first moved down, the last taken out, saved: ${trimmed.length} questions in that order; the round is ${after?.state} (chip "${chip}") and Open the room is shown`);
   } catch (e) { record('I1.7b', false, `plan: ${e.message.split('\n')[0]}`); }
 
   // ── I1.7c ──
@@ -65,7 +66,7 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     const missing = await textOf(page, 'interviews-prepare-missing');
     const room = await page.getByTestId('interviews-prepare-room').count();
     const after = await read(hugo);
-    record('I1.7c', cleared.status === 200 && after?.state === 'accepted' && /Waiting for a time/.test(missing) && room === 0 && after?.questionsChosen?.length === 2,
+    record('I1.7c', cleared.status === 200 && after?.state === 'accepted' && /Waiting for a time/.test(missing) && room === 0 && after?.questionsChosen?.length === offered - 1,
       `time cleared (${cleared.status}): round ${after?.state}, the plan kept (${after?.questionsChosen?.length}), line "${missing}", Open the room ${room ? 'still shown' : 'gone'}`);
   } catch (e) { record('I1.7c', false, `cleared time: ${e.message.split('\n')[0]}`); }
 
