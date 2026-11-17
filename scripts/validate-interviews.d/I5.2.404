@@ -1,0 +1,25 @@
+# Row I5.2: Milo's recap, its first open and its ask (decisions 4, 6, 14, 15). Reads come first, then the writes with a body
+# the route refuses (an empty body is a 400 for a seat, so no table line writes anything).
+# GET recap: a seat only after its own open or scorecard is in; the recruiter and the opening's hiring manager once the round has
+# ended; another round's interviewer of the SAME application once their own scorecards are in for every round of it they sit on.
+# Everyone else 404; a round not ended is 404 to all.
+GET /api/interviews/interviews/{interviews.jonahLeadership}/recap | interviewer2 interviewer workOnly=403 anon=403 guest=403 | recruiter hiringManager
+GET /api/interviews/interviews/{interviews.mateoCoding}/recap | interviewer2 workOnly=403 anon=403 guest=403 | recruiter interviewer hiringManager
+GET /api/interviews/interviews/{interviews.raviCoding}/recap | interviewer hiringManager workOnly=403 anon=403 guest=403 | recruiter interviewer2
+# Ingrid's two rounds: each interviewer's own scorecard is in for the round they sit on, so each reads the other round's recap.
+GET /api/interviews/interviews/{interviews.ingridTogether}/recap | workOnly=403 anon=403 guest=403 | recruiter hiringManager interviewer interviewer2
+GET /api/interviews/interviews/{interviews.ingridCoding}/recap | workOnly=403 anon=403 guest=403 | recruiter hiringManager interviewer interviewer2
+GET /api/interviews/interviews/{interviews.mateoDesign}/recap | recruiter interviewer hiringManager interviewer2
+GET /api/interviews/interviews/{interviews.kwameLive}/recap | recruiter interviewer hiringManager interviewer2
+#
+# POST open: ConductInterview (a recruiter and a hiring manager are refused at the action, 403) plus a seat on the interview.
+# An empty body is a 400 for a seat: the table asks the question of who is refused, not what the write does.
+POST /api/interviews/interviews/{interviews.jonahLeadership}/recap/open | recruiter=403 hiringManager=403 interviewer workOnly=403 anon=403 guest=403 | interviewer2 | {}
+POST /api/interviews/interviews/{interviews.mateoCoding}/recap/open | recruiter=403 hiringManager=403 interviewer2 workOnly=403 anon=403 guest=403 | interviewer | {}
+# A round not ended: a seat is told so (409), nobody else learns it exists.
+POST /api/interviews/interviews/{interviews.mateoDesign}/recap/open | interviewer2 workOnly=403 anon=403 guest=403 | interviewer | {}
+#
+# POST ask: a seat that has opened the recap, once the round has ended. A seat that has not opened it, the recruiter, the
+# hiring manager and a guest get 404 (not 403), never a hint that the round exists. (The asking seat is walked in I5.2.)
+POST /api/interviews/interviews/{interviews.jonahLeadership}/recap/ask | recruiter hiringManager interviewer interviewer2 workOnly=403 anon=403 guest=403 | | {"question":"Where did they talk about testing?"}
+POST /api/interviews/interviews/{interviews.mateoCoding}/recap/ask | recruiter hiringManager interviewer2 interviewer workOnly=403 anon=403 guest=403 | | {"question":"Where did they talk about testing?"}
