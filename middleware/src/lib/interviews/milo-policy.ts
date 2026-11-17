@@ -3,7 +3,12 @@
 // Registered for the lobby family `interviews:interview` and nothing else, so every other call keeps the default (Work's)
 // policy. An interview call's lobby is `interviews:interview:<interviewId>`; every rule below finds its interview from it.
 //
-//   inviteRefusal         only the interview's LEAD may invite Milo, turn its voice on or add time (decision 20).
+//   inviteRefusal         only the interview's LEAD may invite Milo, turn its voice on or add time (decision 20), and only when
+//                         the candidate's answers allow Milo in the call at all (row I2.5, consent/effects.ts
+//                         `miloMayBeInvited`): Milo's live session is the listener that makes the transcript and it hears
+//                         every microphone, so with the transcript declined, or nothing answered, the lead is refused with
+//                         one plain sentence. With the transcript accepted and Milo declined the listener may run; the
+//                         coach stays off (COACH's own check).
 //   reads                 the record, the transcript and the minutes are the panel side's (decision 4): the lead, the panel,
 //                         the recruiter and the opening's hiring manager, by the tenant's one scope rule (scope.ts). A seat in
 //                         the call gives nothing by itself; a guest reads nothing; the admin gets no exception (as by default).
@@ -23,11 +28,18 @@ import { interviewsPayer } from './spend.js';
 import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT, type Interview } from './types.js';
+import { interviewRunsWith } from './consent/effects.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
 /** Refused to everyone but the interview's lead who tries to invite Milo, turn its voice on or add time. */
 export const LEAD_ONLY = 'Only the lead interviewer of this interview can invite Milo, turn its voice on or add time.';
+
+/** Refused to the lead when the candidate declined the transcript (row I2.5). */
+export const MILO_OFF_NO_TRANSCRIPT = 'Milo is off for this interview: the candidate chose to go without a transcript.';
+
+/** Refused to the lead while the candidate has not answered (nothing runs before consent). */
+export const MILO_OFF_NOT_ANSWERED = 'Milo is off for this interview until the candidate has answered the questions about the transcript and Milo.';
 
 const LOBBY = /^interviews:interview:([^:]+)$/;
 const GUEST = /^guest:(.+)$/;
@@ -41,7 +53,7 @@ export const isGuestId = (userId: string): boolean => GUEST.test(userId);
 // ── The candidate's acknowledgement from elsewhere (contract C8) ────────────────────────────────────────────────────────
 
 /** What the candidate accepted in the portal's consent (row I2.3); null when they have not answered. */
-export type InterviewConsentSource = (interviewId: string) => Promise<{ transcription: boolean; milo: boolean } | null>;
+export type InterviewConsentSource = (interviewId: string) => Promise<{ recording?: boolean; transcription: boolean; milo: boolean } | null>;
 
 let consentSource: InterviewConsentSource | null = null;
 
@@ -73,6 +85,18 @@ export async function onPanelSide(person: { userId: string; tenant: string; role
   return world.interviews.some((i) => i.id === interviewId);
 }
 
+/**
+ * The lead's refusal from the candidate's answers (row I2.5), or null when Milo may be invited. No source, a failing source and
+ * no answers all read as "nothing answered": nothing runs before consent.
+ */
+export async function miloRefusalForConsent(interviewId: string): Promise<string | null> {
+  const source = consentSource;
+  const answer = source ? await source(interviewId).catch(() => null) : null;
+  const runs = interviewRunsWith(answer && { recording: answer.recording === true, transcription: answer.transcription, milo: answer.milo });
+  if (runs.miloMayBeInvited) return null;
+  return answer ? MILO_OFF_NO_TRANSCRIPT : MILO_OFF_NOT_ANSWERED;
+}
+
 const NONE: ReadAccess = Object.freeze({ record: false, transcript: false, minutes: false });
 
 export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<MeetingAssistantPolicy>({
@@ -81,7 +105,8 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     const interviewId = interviewOfLobby(call.lobby);
     if (!interviewId || person.tenant !== INTERVIEWS_TENANT || isGuestId(person.userId)) return LEAD_ONLY;
     const interview = await interviewById(interviewId).catch(() => null);
-    return interview && interview.leadId === person.userId ? null : LEAD_ONLY;
+    if (!interview || interview.leadId !== person.userId) return LEAD_ONLY;
+    return miloRefusalForConsent(interview.id);
   },
   reads: async (viewer, record) => {
     const interviewId = interviewOfLobby(record.lobby);

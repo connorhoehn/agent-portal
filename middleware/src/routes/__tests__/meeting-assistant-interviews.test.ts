@@ -34,7 +34,7 @@ import { policyFamilies } from '../../lib/meeting-assistant/policy.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { setAssistantSpend, type ReserveInput } from '../../lib/meeting-assistant/spend.js';
-import { INTERVIEW_FAMILY, LEAD_ONLY } from '../../lib/interviews/milo-policy.js';
+import { INTERVIEW_FAMILY, LEAD_ONLY, MILO_OFF_NO_TRANSCRIPT, setInterviewConsentSource } from '../../lib/interviews/milo-policy.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewOpeningsFixture } from '../../mock/interviews.js';
 import { getUser } from '../../providers/identity.js';
@@ -98,6 +98,8 @@ beforeEach(async () => {
   jest.mocked(getUser).mockImplementation(async (id: string) => ({ id, displayName: id, email: null, personId: null, epoch: 0, grants: mk(id).grants }) as never);
   calls = new InMemoryCallStateStore(); reserved = [];
   setNotificationSink({ notifyUser: async () => undefined });
+  // The candidate accepted all three (row I2.5: without the transcript the lead cannot invite Milo at all).
+  setInterviewConsentSource(async () => ({ recording: true, transcription: true, milo: true }));
   setAssistantSpend({ reserve: async (i) => { reserved.push(i); return { ok: true, holdId: `h${reserved.length}` }; }, release: async () => undefined, settle: async () => undefined });
   const router = { sendToClient: jest.fn(), sendToChannel: jest.fn(), isClientLive: (id: string) => contexts.has(id), getClientData: (id: string) => ({ userContext: contexts.get(id) }), unsubscribeFromChannel: jest.fn() } as unknown as RealtimeRouter;
   rt = new SeatStandIn({ calls, state: new MemoryCallChatStateStore(), messages: new InMemoryChatStore(), router, maintenanceIntervalMs: 0, now: () => clock, lobbyAllowed: () => true });
@@ -115,6 +117,7 @@ beforeEach(async () => {
   setAssistantRuntime(new AssistantRuntime({ store: assistantStore, intake: assistantIntake, clock: () => clock, makeSession: () => new ScriptedSession(() => clock), rolesOf: defaultRolesOf }, { tickMs: 0 }));
 });
 afterEach(() => {
+  setInterviewConsentSource(null);
   setAssistantRuntime(null); setSessionFactory(null); setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); setNotificationSink(null); setAssistantSpend(null);
   rt.dispose(); setCallChatRuntime(null);
   delete process.env['INTERVIEWS_ENABLED'];
@@ -173,6 +176,15 @@ describe('in the interview\'s call', () => {
     expect((await send('post', IV_CALL, 'voice', 'u-hugo', { on: true })).body.error).toBe(LEAD_ONLY);
     expect((await send('post', IV_CALL, 'extend', 'u-hugo')).body.error).toBe(LEAD_ONLY);
     expect((await send('post', IV_CALL, 'voice', 'u-wen', { on: true })).status).toBe(200);
+  });
+
+  it('with the transcript declined the lead is refused with one sentence and nothing is reserved; Milo declined alone lets the listener in (row I2.5)', async () => {
+    setInterviewConsentSource(async () => ({ recording: true, transcription: false, milo: false }));
+    const lead = await send('post', IV_CALL, 'invite', 'u-wen');
+    expect([lead.status, lead.body.error]).toEqual([403, MILO_OFF_NO_TRANSCRIPT]);
+    expect(reserved).toEqual([]);
+    setInterviewConsentSource(async () => ({ recording: false, transcription: true, milo: false }));
+    expect((await send('post', IV_CALL, 'invite', 'u-wen')).status).toBe(201);
   });
 
   it('the panel side reads the words without a seat; another opening\'s hiring manager does not', async () => {

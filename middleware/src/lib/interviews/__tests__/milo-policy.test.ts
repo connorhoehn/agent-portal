@@ -17,7 +17,7 @@ import { realSpend, sourceIdFor } from '../../meeting-assistant/spend.js';
 import type { AssistantRecord, MinutesRecord } from '../../meeting-assistant/types.js';
 import { MemoryInviteStore, setInviteStore } from '../invite/store.js';
 import {
-  INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY as P, LEAD_ONLY, registerInterviewsMiloPolicy, setInterviewConsentSource, unregisterInterviewsMiloPolicy,
+  INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY as P, LEAD_ONLY, MILO_OFF_NOT_ANSWERED, MILO_OFF_NO_TRANSCRIPT, registerInterviewsMiloPolicy, setInterviewConsentSource, unregisterInterviewsMiloPolicy,
 } from '../milo-policy.js';
 import { interviewSpendState } from '../spend.js';
 
@@ -72,7 +72,9 @@ describe('registration', () => {
 });
 
 describe('inviteRefusal: the lead only (decision 20)', () => {
+  const ALL_YES = { recording: true, transcription: true, milo: true };
   it('lets the lead in and refuses everyone else with one plain sentence', async () => {
+    setInterviewConsentSource(async () => ALL_YES);
     expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBeNull();
     for (const who of ['panel', 'recruiter', 'hiringManager', 'otherHiringManager', 'work', 'guest'] as const) {
       expect([who, await P.inviteRefusal(PEOPLE[who], CALL)]).toEqual([who, LEAD_ONLY]);
@@ -85,6 +87,36 @@ describe('inviteRefusal: the lead only (decision 20)', () => {
     expect(await P.inviteRefusal({ ...PEOPLE.lead, tenant: 'orgiq' }, CALL)).toBe(LEAD_ONLY);
     expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: 'interviews:interview:iv-nope' })).toBe(LEAD_ONLY);
     expect(await P.inviteRefusal(PEOPLE.lead, { ...CALL, lobby: null })).toBe(LEAD_ONLY);
+  });
+});
+
+describe('inviteRefusal: the candidate\'s answers (row I2.5)', () => {
+  const yn = [true, false] as const;
+  const combos = yn.flatMap((recording) => yn.flatMap((transcription) => yn.map((milo) => ({ recording, transcription, milo }))));
+
+  it.each(combos)('the lead with %j: invited exactly when the transcript was accepted', async (a) => {
+    const asked: string[] = [];
+    setInterviewConsentSource(async (iv) => { asked.push(iv); return a; });
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(a.transcription ? null : MILO_OFF_NO_TRANSCRIPT);
+    expect(asked).toEqual([IV]);
+  });
+
+  it('with nothing answered, no source or a failing source, the lead is refused: nothing runs before consent', async () => {
+    setInterviewConsentSource(async () => null);
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
+    setInterviewConsentSource(null);
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
+    setInterviewConsentSource(async () => { throw new Error('down'); });
+    expect(await P.inviteRefusal(PEOPLE.lead, CALL)).toBe(MILO_OFF_NOT_ANSWERED);
+  });
+
+  it('someone who is not the lead still gets the lead sentence, never the candidate\'s answer', async () => {
+    setInterviewConsentSource(async () => ({ recording: true, transcription: false, milo: false }));
+    for (const who of ['panel', 'recruiter', 'hiringManager', 'guest'] as const) expect(await P.inviteRefusal(PEOPLE[who], CALL)).toBe(LEAD_ONLY);
+  });
+
+  it('the sentences are plain: no ids, no setting names', () => {
+    for (const s of [MILO_OFF_NO_TRANSCRIPT, MILO_OFF_NOT_ANSWERED]) expect(s).not.toMatch(/iv-|u-|interviews:|consent|policy|transcription/);
   });
 });
 
