@@ -18,7 +18,7 @@ import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
-const OPENING_COLUMNS = 'id, title, level, team, location, hiring_manager_id, recruiter_id, state, opened_at, kit, budget_cap_usd, revision';
+const OPENING_COLUMNS = 'id, title, level, team, location, hiring_manager_id, recruiter_id, state, opened_at, kit, budget_cap_usd, revision, interview_cap_usd';
 
 export const LIST_OPENINGS_SQL = `SELECT ${OPENING_COLUMNS}
   FROM interview_openings ORDER BY opened_at DESC, id`;
@@ -41,12 +41,12 @@ export const GET_OPENING_SQL = `SELECT ${OPENING_COLUMNS}
 /** A taken id inserts nothing and returns no row. */
 export const INSERT_OPENING_SQL = `INSERT INTO interview_openings (${OPENING_COLUMNS})
   VALUES (:id, :title, :level, :team, :location, :hiring_manager_id, :recruiter_id, :state, CAST(:opened_at AS TIMESTAMPTZ), CAST(:kit AS JSONB),
-    CAST(:budget_cap_usd AS NUMERIC), 1)
+    CAST(:budget_cap_usd AS NUMERIC), 1, CAST(:interview_cap_usd AS NUMERIC))
   ON CONFLICT (id) DO NOTHING
   RETURNING ${OPENING_COLUMNS}`;
 export const UPDATE_OPENING_DETAILS_SQL = `UPDATE interview_openings
   SET title = :title, level = :level, team = :team, location = :location, hiring_manager_id = :hiring_manager_id, state = :state,
-    budget_cap_usd = CAST(:budget_cap_usd AS NUMERIC), revision = revision + 1
+    budget_cap_usd = CAST(:budget_cap_usd AS NUMERIC), interview_cap_usd = CAST(:interview_cap_usd AS NUMERIC), revision = revision + 1
   WHERE id = :id AND revision = :revision
   RETURNING ${OPENING_COLUMNS}`;
 export const REPLACE_OPENING_KIT_SQL = `UPDATE interview_openings
@@ -83,12 +83,12 @@ export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_S
 const textParam = (name: string, value: string | null): SqlParameter =>
   (value === null ? { name, value: { isNull: true } } : { name, value: { stringValue: value } });
 const intParam = (name: string, value: number): SqlParameter => ({ name, value: { longValue: value } });
-const capParam = (value: number | null): SqlParameter => textParam('budget_cap_usd', value === null ? null : value.toFixed(2));
+const capParam = (value: number | null, name = 'budget_cap_usd'): SqlParameter => textParam(name, value === null ? null : value.toFixed(2));
 
 function detailParams(d: OpeningDetails): SqlParameter[] {
   return [
     textParam('title', d.title), textParam('level', d.level), textParam('team', d.team), textParam('location', d.location),
-    textParam('hiring_manager_id', d.hiringManagerId), textParam('state', d.state), capParam(d.budgetCapUsd),
+    textParam('hiring_manager_id', d.hiringManagerId), textParam('state', d.state), capParam(d.budgetCapUsd), capParam(d.interviewCapUsd ?? null, 'interview_cap_usd'),
   ];
 }
 
@@ -132,7 +132,7 @@ export function openingFromRow(r: Record<string, unknown>): Opening {
     id: str(r['id']), title: str(r['title']), level: str(r['level']), team: str(r['team']), location: str(r['location']),
     hiringManagerId: strOrNull(r['hiring_manager_id']), recruiterId: str(r['recruiter_id']), state: str(r['state']) as OpeningState,
     openedAt: isoOf(r['opened_at']), kit: json<OpeningKit>(r['kit'], { rounds: [], competencies: [], questions: [] }),
-    budgetCapUsd: numOrNull(r['budget_cap_usd']), revision: num(r['revision']),
+    budgetCapUsd: numOrNull(r['budget_cap_usd']), interviewCapUsd: numOrNull(r['interview_cap_usd']), revision: num(r['revision']),
   };
 }
 

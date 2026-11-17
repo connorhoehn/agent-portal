@@ -29,9 +29,10 @@
 import { Router } from 'express';
 import { AppError, asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { resolveSession } from '../lib/authz.js';
+import { ADMIN_ROLE } from '../lib/grant-rule.js';
 import { budgetAccessLocked, canReadBudgets } from '../lib/budget-read-tier.js';
 import { GROUP_BYS, REPORT_PERIODS, withhold, type ReportPeriod, type SpendGroupBy } from '../lib/spend-report-model.js';
-import { getSpendReport, listSpendEntries, type SpendEntriesPage, type SpendGroup, type SpendReport } from '../providers/spend-report.js';
+import { getSpendReport, listSpendEntries, type ReportSources, type SpendEntriesPage, type SpendGroup, type SpendReport } from '../providers/spend-report.js';
 import { getUser } from '../providers/identity.js';
 
 export const spendReportRouter: Router = Router();
@@ -76,6 +77,9 @@ export async function shapeBelowTier(report: SpendReport, sub: string): Promise<
   return out;
 }
 
+/** Work's report leaves out the interviews tenant's spend; only the cross-tenant admin reads every source (providers/spend-report.ts). */
+const sourcesFor = (session: { role: string }): ReportSources => (session.role === ADMIN_ROLE ? 'all' : 'work');
+
 spendReportRouter.get('/report', asyncHandler(async (req, res) => {
   const session = resolveSession(req);
   if (!session) throw new AppError(401, 'Unauthenticated');
@@ -90,7 +94,7 @@ spendReportRouter.get('/report', asyncHandler(async (req, res) => {
   const botId = rawBot == null || rawBot === '' ? null : String(rawBot).trim();
   if (botId != null && !ID_RE.test(botId)) throw new ValidationError('botId is not a valid id');
 
-  const report = await getSpendReport({ groupBy, period, initiativeId, botId });
+  const report = await getSpendReport({ groupBy, period, initiativeId, botId, sources: sourcesFor(session) });
   res.set('Cache-Control', 'no-store');
   if (await canReadBudgets(session)) { res.json(report); return; }
   res.json(await shapeBelowTier(report, session.sub));
@@ -136,7 +140,7 @@ spendReportRouter.get('/entries', asyncHandler(async (req, res) => {
   const limit = intParam(req.query['limit'], 'limit', 1);
   const offset = intParam(req.query['offset'], 'offset', 0);
 
-  const page = await listSpendEntries({ groupBy, key, period, initiativeId, botId, limit, offset });
+  const page = await listSpendEntries({ groupBy, key, period, initiativeId, botId, limit, offset, sources: sourcesFor(session) });
   res.set('Cache-Control', 'no-store');
   if (await canReadBudgets(session)) { res.json(page); return; }
   res.json(shapeEntriesBelowTier(page, session.sub));

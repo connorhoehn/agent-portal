@@ -91,14 +91,19 @@ export interface Opening {
   state: OpeningState;
   openedAt: string;
   kit: OpeningKit;
-  /** Spend cap per interview in US dollars; how it is held is row I0.6. */
+  /**
+   * The opening's spending cap in US dollars, across all its interviews (row I0.6; lib/interviews/spend.ts). Null: no cap
+   * is set, and nothing that costs money starts in its interviews until the recruiter sets one.
+   */
   budgetCapUsd: number | null;
+  /** The cap per interview in US dollars; null takes the deployment's default (`INTERVIEWS_INTERVIEW_CAP_USD`). */
+  interviewCapUsd: number | null;
   /** Bumped by every write; a write names the revision it was made against, so two editors never overwrite each other unseen. */
   revision: number;
 }
 
 /** What "edit its details" changes on an opening (row I1.3); the kit is replaced on its own. */
-export type OpeningDetails = Pick<Opening, 'title' | 'level' | 'team' | 'location' | 'hiringManagerId' | 'state' | 'budgetCapUsd'>;
+export type OpeningDetails = Pick<Opening, 'title' | 'level' | 'team' | 'location' | 'hiringManagerId' | 'state' | 'budgetCapUsd' | 'interviewCapUsd'>;
 
 /** A candidate is a record, never a user (decision 3). */
 export interface Candidate {

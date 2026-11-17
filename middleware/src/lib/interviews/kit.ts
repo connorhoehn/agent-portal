@@ -42,7 +42,8 @@ export const KIT_LIMITS = {
   minutesMax: 180,
 } as const;
 
-export const DETAIL_LIMITS = { title: 120, level: 40, team: 60, location: 80, budgetCapUsd: 1000 } as const;
+/** `budgetCapUsd` is the opening's cap across all its interviews; `interviewCapUsd` the cap per interview (row I0.6). */
+export const DETAIL_LIMITS = { title: 120, level: 40, team: 60, location: 80, budgetCapUsd: 5000, interviewCapUsd: 200 } as const;
 
 export const PAD_LANGUAGE_LABELS: Readonly<Record<PadLanguage, string>> = {
   python: 'Python', swift: 'Swift', javascript: 'JavaScript', typescript: 'TypeScript', java: 'Java', go: 'Go', cpp: 'C++',
@@ -264,13 +265,19 @@ export function checkOpeningDetails(input: unknown, hiringManagers: ReadonlySet<
   if (hiringManagerId !== null && !hiringManagers.has(hiringManagerId)) p.add('hiringManagerId', 'Choose a hiring manager from the list, or leave it unnamed for now.');
   const state = (input['state'] ?? 'open') as OpeningState;
   if (!OPENING_STATES.includes(state)) p.add('state', 'The opening must be open, paused or closed.');
-  const cap = input['budgetCapUsd'];
-  const budgetCapUsd = cap === null || cap === undefined || cap === '' ? null : Number(cap);
-  if (budgetCapUsd !== null && (!Number.isFinite(budgetCapUsd) || budgetCapUsd < 0 || budgetCapUsd > L.budgetCapUsd)) {
-    p.add('budgetCapUsd', `The cap per interview must be between $0 and $${plain(L.budgetCapUsd)}.`);
+  const dollarsOf = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
+  const cents = (v: number | null): number | null => (v === null ? null : Math.round(v * 100) / 100);
+  const budgetCapUsd = dollarsOf(input['budgetCapUsd']);
+  const budgetOk = budgetCapUsd === null || (Number.isFinite(budgetCapUsd) && budgetCapUsd >= 0 && budgetCapUsd <= L.budgetCapUsd);
+  if (!budgetOk) p.add('budgetCapUsd', `The opening's spending cap must be between $0 and $${plain(L.budgetCapUsd)}.`);
+  const interviewCapUsd = dollarsOf(input['interviewCapUsd']);
+  if (interviewCapUsd !== null && (!Number.isFinite(interviewCapUsd) || interviewCapUsd < 0 || interviewCapUsd > L.interviewCapUsd)) {
+    p.add('interviewCapUsd', `The cap per interview must be between $0 and $${plain(L.interviewCapUsd)}.`);
+  } else if (interviewCapUsd !== null && budgetOk && budgetCapUsd !== null && interviewCapUsd > budgetCapUsd) {
+    p.add('interviewCapUsd', "The cap per interview cannot be more than the opening's spending cap.");
   }
   if (p.list.length) return { ok: false, problems: p.list };
-  return { ok: true, value: { title, level, team, location, hiringManagerId, state, budgetCapUsd: budgetCapUsd === null ? null : Math.round(budgetCapUsd * 100) / 100 } };
+  return { ok: true, value: { title, level, team, location, hiringManagerId, state, budgetCapUsd: cents(budgetCapUsd), interviewCapUsd: cents(interviewCapUsd) } };
 }
 
 /** A new opening's id from its title: `op-<words>`, with a number added while it is taken. */

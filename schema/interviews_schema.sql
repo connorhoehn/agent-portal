@@ -41,11 +41,14 @@ CREATE TABLE IF NOT EXISTS interview_openings (
   state              TEXT NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'paused', 'closed')),
   opened_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   kit                JSONB NOT NULL DEFAULT '{"rounds": [], "competencies": [], "questions": []}'::jsonb,
-  -- The spend cap per interview, in US dollars; how it is held is row I0.6.
+  -- The opening's spending cap across all its interviews, in US dollars (row I0.6). NULL: none set, nothing spends.
   budget_cap_usd     NUMERIC(10, 2),
-  revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
+  revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  -- The cap per interview, in US dollars (row I0.6). NULL: the deployment's default.
+  interview_cap_usd  NUMERIC(10, 2)
 );
 CREATE INDEX IF NOT EXISTS interview_openings_hiring_manager_idx ON interview_openings (hiring_manager_id);
+ALTER TABLE interview_openings ADD COLUMN IF NOT EXISTS interview_cap_usd NUMERIC(10, 2);
 
 -- ── candidates ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS interview_candidates (

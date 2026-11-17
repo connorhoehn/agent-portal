@@ -15,6 +15,11 @@
 //                       409 with the revision now saved when someone else saved first
 //   6. the answer       the record as the read route shapes it, from a fresh read
 //
+// The opening's money (row I0.6): GET /openings/:id/spend answers its caps and what is held, spent and left
+// (lib/interviews/spend.ts) to the recruiter, the opening's hiring manager and the admin. Every other reader of the
+// opening, an interviewer included, gets the not-found: the money is not theirs to see, and the answer confirms nothing.
+// The caps are edited with the details (PUT /openings/:id/details: `budgetCapUsd` and `interviewCapUsd`).
+//
 // The opening's authority is ManageCandidates rather than an action of its own: the registration
 // (lib/authz.ts CAPABILITY_ACTIONS) already names openings under it, and decision 2 gives openings and
 // candidates to the same one role.
@@ -25,6 +30,7 @@ import { requireAction, resolveSession } from '../../lib/authz.js';
 import { INTERVIEWS_TENANT } from '../../lib/interviews/types.js';
 import { EMPTY_KIT, checkKit, checkOpeningDetails, kitInUse, openingIdFor, problemsLine, type FieldProblem } from '../../lib/interviews/kit.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
+import { openingMoney } from '../../lib/interviews/spend.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Opening } from '../../lib/interviews/types.js';
@@ -89,7 +95,19 @@ openingsRouter.post('/openings', manage, asyncHandler(async (req, res) => {
   res.status(201).json({ opening: ix.openingRecord(o) });
 }));
 
-/** Replace an opening's details (everything but the kit). Body: `{ revision, title, level, team, location, hiringManagerId, state, budgetCapUsd }`. */
+/** Who reads an opening's money: its recruiters, its hiring manager (scope already narrows them to their own openings) and the admin. */
+const MONEY_READERS = new Set(['recruiter', 'hiring-manager', 'admin']);
+
+/** The opening's caps and what is held, spent and left. Not found for anyone who may not read its money. */
+openingsRouter.get('/openings/:id/spend', asyncHandler(async (req, res) => {
+  const ix = await indexFor(req);
+  const o = ix.openings.get(param(req, 'id'));
+  if (!o || !MONEY_READERS.has(resolveSession(req)!.role)) throw new NotFoundError(NO_OPENING);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ spend: await openingMoney(o) });
+}));
+
+/** Replace an opening's details (everything but the kit). Body: `{ revision, title, level, team, location, hiringManagerId, state, budgetCapUsd, interviewCapUsd }`. */
 openingsRouter.put('/openings/:id/details', manage, asyncHandler(async (req, res) => {
   const ix = await indexFor(req);
   const o = ix.openings.get(param(req, 'id'));

@@ -159,11 +159,11 @@ export const interviewOpeningsFixture = defineFixture<Opening>({
   scenarios: {
     default: () => [
       { id: 'op-backend', title: 'Senior Backend Engineer', level: 'Senior', team: 'Payments', location: 'Lisbon or remote in Europe',
-        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(41), kit: BACKEND_KIT, budgetCapUsd: null, revision: 1 },
+        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(41), kit: BACKEND_KIT, budgetCapUsd: 150, interviewCapUsd: null, revision: 1 },
       { id: 'op-ios', title: 'iOS Engineer', level: 'Mid-level', team: 'Mobile Checkout', location: 'Berlin or remote in Europe',
-        hiringManagerId: null, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(26), kit: IOS_KIT, budgetCapUsd: null, revision: 1 },
+        hiringManagerId: null, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(26), kit: IOS_KIT, budgetCapUsd: 100, interviewCapUsd: 8, revision: 1 },
       { id: 'op-em', title: 'Engineering Manager', level: 'Manager', team: 'Platform', location: 'Lisbon',
-        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(19), kit: EM_KIT, budgetCapUsd: null, revision: 1 },
+        hiringManagerId: AMARA, recruiterId: GRETA, state: 'open', openedAt: clock.daysAgo(19), kit: EM_KIT, budgetCapUsd: 60, interviewCapUsd: null, revision: 1 },
     ],
     empty: () => [],
   },

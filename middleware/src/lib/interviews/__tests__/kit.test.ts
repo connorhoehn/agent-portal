@@ -210,7 +210,8 @@ describe('an opening\'s details', () => {
 
   it('cleans a good one', () => {
     const r = checkOpeningDetails(good, HMS);
-    expect(r.ok && r.value).toEqual({ ...good, title: 'Data Engineer', budgetCapUsd: 12.35 });
+    expect(r.ok && r.value).toEqual({ ...good, title: 'Data Engineer', budgetCapUsd: 12.35, interviewCapUsd: null });
+    expect(checkOpeningDetails({ ...good, interviewCapUsd: 4.004 }, HMS)).toMatchObject({ ok: true, value: { interviewCapUsd: 4 } });
     expect(checkOpeningDetails({ ...good, hiringManagerId: '', budgetCapUsd: '' }, HMS)).toMatchObject({ ok: true, value: { hiringManagerId: null, budgetCapUsd: null } });
   });
 
@@ -223,8 +224,18 @@ describe('an opening\'s details', () => {
       { path: 'location', message: 'The location is longer than 80 characters.' },
       { path: 'hiringManagerId', message: 'Choose a hiring manager from the list, or leave it unnamed for now.' },
       { path: 'state', message: 'The opening must be open, paused or closed.' },
-      { path: 'budgetCapUsd', message: 'The cap per interview must be between $0 and $1,000.' },
+      { path: 'budgetCapUsd', message: "The opening's spending cap must be between $0 and $5,000." },
     ]);
+  });
+
+  it('the cap per interview has its own bounds and cannot be more than the opening\'s cap (row I0.6)', () => {
+    const problems = (patch: Record<string, unknown>) => { const r = checkOpeningDetails({ ...good, ...patch }, HMS); return r.ok ? [] : r.problems; };
+    expect(problems({ interviewCapUsd: 201 })).toEqual([{ path: 'interviewCapUsd', message: 'The cap per interview must be between $0 and $200.' }]);
+    expect(problems({ interviewCapUsd: 'ten' })).toEqual([{ path: 'interviewCapUsd', message: 'The cap per interview must be between $0 and $200.' }]);
+    expect(problems({ budgetCapUsd: 20, interviewCapUsd: 25 })).toEqual([{ path: 'interviewCapUsd', message: "The cap per interview cannot be more than the opening's spending cap." }]);
+    expect(problems({ budgetCapUsd: 20, interviewCapUsd: 20 })).toEqual([]);
+    expect(problems({ budgetCapUsd: null, interviewCapUsd: 25 })).toEqual([]);
+    expect(problems({ budgetCapUsd: 5001 })).toEqual([{ path: 'budgetCapUsd', message: "The opening's spending cap must be between $0 and $5,000." }]);
   });
 
   it('the line above the sentences, and a new opening\'s id', () => {

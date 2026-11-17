@@ -160,6 +160,7 @@ export const SOURCE_LABELS: Readonly<Record<string, string>> = {
   agent_project_run: 'Direct agent runs',
   bff_call: 'Platform model calls',
   meeting_assistant: 'Meeting assistant',
+  interviews: 'Interviews',
 };
 
 // ─── The meeting assistant's rows (lib/meeting-assistant/spend.ts names their source ids) ──────────────

@@ -28,7 +28,10 @@ import { checkBudgetThresholdsLater } from '../lib/budget-thresholds.js';
 // 'voice_session': one voice navigator session, keyed by its `vs_…` id (routes/voice.ts).
 // 'meeting_assistant': one call's Milo listening, keyed `ma:<callId>` (lib/meeting-assistant/spend.ts).
 // 'learning': one server-side distillation of a finished run, keyed `learning:<runRef>` (lib/learning-budget.ts).
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session' | 'meeting_assistant' | 'learning';
+// 'interviews': Milo's listening, the coach, speech and code runs in one interview, paid by the interview's opening and
+//   keyed `iv:<opening>:<interview>:<part>:<key>` (lib/interviews/spend.ts), or the meeting assistant's `ma:<callId>…` ids
+//   when an interview call's policy names this source. It counts against no person's budget and no initiative.
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session' | 'meeting_assistant' | 'learning' | 'interviews';
 /** Who served the spend: a model provider (lib/run-cost.ts), or OpenAI for a voice session. */
 export type LedgerProvider = ModelProvider | 'openai';
 export type { CostBasis };
@@ -325,10 +328,10 @@ async function writeAndSettle(source: SpendSource, sourceId: string, write: (run
  * Budget thresholds after money settles (lib/budget-thresholds.ts): the held
  * figure became a spent one, possibly larger, so a budget may have crossed.
  * In the background and never able to fail the write. A $0 or unknown-cost
- * entry moves nothing, and the learning line has no threshold.
+ * entry moves nothing, and the learning line and an opening's interviews have no threshold.
  */
 function thresholdsAfterSettle(e: Pick<SpendEntry, 'source' | 'costUsd' | 'initiativeId' | 'actorId' | 'trigger'>): void {
-  if (e.source === 'learning' || e.costUsd == null || !(e.costUsd > 0)) return;
+  if (e.source === 'learning' || e.source === 'interviews' || e.costUsd == null || !(e.costUsd > 0)) return;
   try {
     checkBudgetThresholdsLater({ initiativeId: e.initiativeId, actorId: e.actorId, essential: e.trigger === 'cron' });
   } catch { /* a threshold check must never fail the ledger write */ }
@@ -606,7 +609,8 @@ export async function getActorSpend(actorId: string, period: SpendPeriod): Promi
   if (config.mock.aurora) {
     const from = Date.parse(since);
     let stored: SpendEntry[] = [];
-    try { stored = spendEntries.rows().filter((e) => e.actorId === actorId && Date.parse(e.occurredAt) >= from); } catch { stored = []; }
+    // An interview's spend is its opening's, never the person's (lib/interviews/spend.ts).
+    try { stored = spendEntries.rows().filter((e) => e.actorId === actorId && e.source !== 'interviews' && Date.parse(e.occurredAt) >= from); } catch { stored = []; }
     // bot_run entries offline are derived from the fixture, attributed by the
     // same arms the Aurora writer resolves (work item, then bot target).
     const { allMockRuns } = await import('../mock/bots.js');
@@ -623,7 +627,7 @@ export async function getActorSpend(actorId: string, period: SpendPeriod): Promi
               COUNT(*) FILTER (WHERE cost_usd IS NULL)::int AS unknown,
               COUNT(*)::int AS n
          FROM spend_entries
-        WHERE actor_id = :actor AND occurred_at >= :since::timestamptz
+        WHERE actor_id = :actor AND occurred_at >= :since::timestamptz AND source <> 'interviews'
         GROUP BY initiative_id, source`,
       [s('actor', actorId), s('since', since)],
     );
@@ -648,4 +652,21 @@ export async function getActorSpend(actorId: string, period: SpendPeriod): Promi
 /** Offline the fixtures ARE the ledger, so readers that switch on SPEND_LEDGER read it regardless. */
 export function ledgerIsFixture(): boolean {
   return config.mock.aurora === true;
+}
+
+/**
+ * Every ledger row of one source with its key and known cost: the interviews gate and the opening's money row sum them
+ * per opening and interview (lib/interviews/spend.ts). An unknown cost is null; its hold stays open until it expires.
+ */
+export async function ledgerRowsForSource(source: SpendSource): Promise<Array<{ sourceId: string; costUsd: number | null }>> {
+  if (config.mock.aurora) {
+    try { return spendEntries.rows().filter((e) => e.source === source).map((e) => ({ sourceId: e.sourceId, costUsd: e.costUsd })); } catch { return []; }
+  }
+  try {
+    const rows = await exec(`SELECT source_id, cost_usd::float8 AS cost_usd FROM spend_entries WHERE source = :source`, [s('source', source)]);
+    return rows.map((r) => ({ sourceId: String(r['source_id'] ?? ''), costUsd: r['cost_usd'] == null ? null : Number(r['cost_usd']) }));
+  } catch (err) {
+    if (/does not exist|relation/i.test((err as Error)?.message ?? '')) return [];
+    throw err;
+  }
 }

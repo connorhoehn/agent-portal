@@ -309,6 +309,16 @@ export async function listOpenHolds(initiativeId: string): Promise<SpendHold[]> 
   return rows.map(rowToHold);
 }
 
+/** Every open hold of one source with its key and amount: the interviews gate sums them per opening and interview. */
+export async function openHoldsForSource(source: HoldSource): Promise<Array<{ sourceId: string | null; amountUsd: number }>> {
+  if (config.mock.aurora) return openMockHolds((h) => h.source === source).map((h) => ({ sourceId: h.sourceId, amountUsd: h.amountUsd }));
+  const rows = await exec(
+    `SELECT source_id, amount_usd::float8 AS amount_usd FROM spend_holds WHERE source = :source AND status = 'held'`,
+    [s('source', source)],
+  );
+  return rows.map((r) => ({ sourceId: r['source_id'] != null ? toStr(r['source_id']) : null, amountUsd: toNum(r['amount_usd']) }));
+}
+
 /** One hold by id (the run meter reads its parent's amount and binding, DE-35). */
 export async function getHold(holdId: string): Promise<SpendHold | null> {
   if (config.mock.aurora) {

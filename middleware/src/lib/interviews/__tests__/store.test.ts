@@ -31,6 +31,7 @@ const openingCells = (o: Opening): Record<string, unknown> => ({
   id: o.id, title: o.title, level: o.level, team: o.team, location: o.location, hiring_manager_id: o.hiringManagerId,
   recruiter_id: o.recruiterId, state: o.state, opened_at: ts(o.openedAt), kit: JSON.stringify(o.kit),
   budget_cap_usd: o.budgetCapUsd === null ? null : o.budgetCapUsd.toFixed(2), revision: o.revision,
+  interview_cap_usd: o.interviewCapUsd === null ? null : o.interviewCapUsd.toFixed(2),
 });
 
 /** The Data API's answer to each statement, from the same fixtures the memory store reads. */
@@ -146,6 +147,7 @@ function openingsTableExec(): { exec: SqlExec; seen: string[] } {
       const row = {
         id: b.get('id'), title: b.get('title'), level: b.get('level'), team: b.get('team'), location: b.get('location'), hiring_manager_id: b.get('hiring_manager_id'),
         recruiter_id: b.get('recruiter_id'), state: b.get('state'), opened_at: ts(String(b.get('opened_at'))), kit: b.get('kit'), budget_cap_usd: b.get('budget_cap_usd'), revision: 1,
+        interview_cap_usd: b.get('interview_cap_usd'),
       };
       table.push(row);
       return [row];
@@ -153,7 +155,7 @@ function openingsTableExec(): { exec: SqlExec; seen: string[] } {
     if (sql === UPDATE_OPENING_DETAILS_SQL || sql === REPLACE_OPENING_KIT_SQL) {
       const row = find();
       if (!row || row['revision'] !== b.get('revision')) return [];
-      const cols = sql === REPLACE_OPENING_KIT_SQL ? ['kit'] : ['title', 'level', 'team', 'location', 'hiring_manager_id', 'state', 'budget_cap_usd'];
+      const cols = sql === REPLACE_OPENING_KIT_SQL ? ['kit'] : ['title', 'level', 'team', 'location', 'hiring_manager_id', 'state', 'budget_cap_usd', 'interview_cap_usd'];
       for (const c of cols) row[c] = b.get(c);
       row['revision'] = Number(row['revision']) + 1;
       return [row];
@@ -163,7 +165,7 @@ function openingsTableExec(): { exec: SqlExec; seen: string[] } {
   return { exec, seen };
 }
 
-const DETAILS: OpeningDetails = { title: 'Data Engineer', level: 'Senior', team: 'Analytics', location: 'Lisbon', hiringManagerId: null, state: 'open', budgetCapUsd: 7.5 };
+const DETAILS: OpeningDetails = { title: 'Data Engineer', level: 'Senior', team: 'Analytics', location: 'Lisbon', hiringManagerId: null, state: 'open', budgetCapUsd: 7.5, interviewCapUsd: null };
 const KIT: OpeningKit = {
   rounds: [{ id: 'rd-talk', name: 'Conversation', type: 'behavioural', minutes: 45 }],
   competencies: [{ id: 'ownership', name: 'Ownership', lookFor: 'Finishes what they start.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } }],

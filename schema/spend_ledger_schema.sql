@@ -60,7 +60,9 @@ ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS estimated_cost_usd NUMER
 -- microVM runner attempt, docs/microvm-runner-design.md §6; voice_session: one
 -- voice navigator session, docs/voice-navigator-spec.md §7; meeting_assistant: one
 -- call's Milo listening, docs/meeting-assistant-design.md decision 10; learning: one
--- server-side distillation of a finished run, docs/learning-loop-design.md).
+-- server-side distillation of a finished run, docs/learning-loop-design.md; interviews:
+-- one interview's Milo listening, coach, speech or code run, paid by its opening,
+-- docs/interviews-tenant-plan.md decision 18 and row I0.6).
 ALTER TABLE spend_entries DROP CONSTRAINT IF EXISTS spend_entries_source_check;
 ALTER TABLE spend_entries ADD CONSTRAINT spend_entries_source_check
-  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'bff_call', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant', 'learning'));
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'bff_call', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant', 'learning', 'interviews'));

@@ -9,8 +9,11 @@
 // Since the learning loop it also judges a local compute claim
 // (routes/local-compute.ts localRunGate, `zeroBilled`: run limits and kill
 // switches only, a $0 hold) and the learning line (lib/learning-budget.ts,
-// source `learning`: the organisation's monthly learning cap only), and after
-// every hold it checks the budget thresholds (lib/budget-thresholds.ts).
+// source `learning`: the organisation's monthly learning cap only), an
+// interview's spend (lib/interviews/spend.ts, source `interviews`: the
+// interview's cap and its opening's, the kill switches and the run limits,
+// never an initiative, an envelope or anyone's user budget), and after every
+// other hold it checks the budget thresholds (lib/budget-thresholds.ts).
 // It takes the initiative lock, then the grant lock, reads the allocation, the
 // ledger spend, the unknown-cost count and the money already held, judges the
 // forecast with the existing pure decisions, and writes the hold — one
@@ -168,8 +171,9 @@ export interface UserBudgetGateBody {
   unknownCostCount: number;
 }
 
-/** `learning-cap`: the organisation's monthly cap for server-side distillation (lib/learning-budget.ts). */
-export type CapGate = 'allocation-cap' | 'envelope-cap' | 'user-cap' | 'maintenance-reserve' | 'learning-cap';
+/** `learning-cap`: the organisation's monthly cap for server-side distillation (lib/learning-budget.ts).
+ *  `interview-cap` / `opening-cap`: an interview's own cap and its opening's (lib/interviews/spend.ts). */
+export type CapGate = 'allocation-cap' | 'envelope-cap' | 'user-cap' | 'maintenance-reserve' | 'learning-cap' | 'interview-cap' | 'opening-cap';
 
 export type ReserveSpendResult =
   /** The money is held (or holds are off / the spend is unattributed and unbudgeted: holdId null). */
@@ -291,6 +295,38 @@ function missingTable(err: unknown): boolean {
 }
 
 /**
+ * DE-37's run limits, judged under the caller's money lock: the scopes this
+ * spend falls in, a slot lock per scope with a concurrency limit (narrowest
+ * first), then the decision. The slot keys come back for the hold to lease.
+ */
+async function judgeRunLimits(
+  tx: SpendLockTx | null, input: Pick<ReserveSpendInput, 'basis' | 'source'>, pid: string | null, tenant: string, judge: boolean, amountUsd: number,
+): Promise<{ slotted: string[] } | { refusal: ReserveSpendResult }> {
+  const slotted: string[] = [];
+  if (!judge || input.basis === 'topup' || !runLimitsEnabled()) return { slotted };
+  const plan = scopesFor({
+    initiativeId: pid, tenant,
+    boxTask: input.source === 'box_task' || input.source === 'agent_loop',
+  });
+  const limits = await readRunLimits(plan.map((p) => p.scope));
+  if (limits.length === 0) return { slotted };
+  const states: ScopeState[] = [];
+  for (const p of plan) {
+    const limit = limits.find((l) => l.scopeKind === p.scope.kind && l.scopeId === p.scope.id);
+    if (!limit) continue;
+    const key = scopeKey(p.scope);
+    const holdsSlot = p.takesSlot && limit.maxConcurrent != null;
+    if (holdsSlot && tx) { await tx.lock(slotLockKey(key)); slotted.push(key); }
+    states.push({ scope: p.scope, limit, usage: await scopeUsage(p.scope), takesSlot: holdsSlot });
+  }
+  const v = decideRunLimits(states, amountUsd);
+  if (v.kind === 'refuse') {
+    return { refusal: { kind: 'limited', reason: v.reason, scope: v.scope, limitKind: v.limitKind, limit: v.limit, current: v.current, retryAfterS: v.retryAfterS } };
+  }
+  return { slotted };
+}
+
+/**
  * Judge and hold. See the module header for where it is called and why the
  * reads happen after the lock: each sees every hold committed by the dispatch
  * it waited on, which is the whole point.
@@ -305,7 +341,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
   // Budget thresholds (lib/budget-thresholds.ts): spent + held just went up, so
   // a budget this spend touches may have crossed 50/80/100 %. After the lock is
   // released, and never able to refuse or fail the reservation it follows.
-  if (result.kind === 'held' && result.amountUsd > 0 && input.source !== 'learning') {
+  if (result.kind === 'held' && result.amountUsd > 0 && input.source !== 'learning' && input.source !== 'interviews') {
     try {
       const { checkBudgetThresholds } = await import('./budget-thresholds.js');
       await checkBudgetThresholds({ initiativeId: input.initiativeId, actorId: input.actorId, essential: input.essential === true });
@@ -347,6 +383,8 @@ async function judgeAndHold(input: ReserveSpendInput): Promise<ReserveSpendResul
 
   // The learning line: its own monthly organisation cap, nothing else (lib/learning-budget.ts).
   if (input.source === 'learning') return reserveLearning(input, amountUsd, failClosed);
+  // An interview's spend: its opening's caps, and the run limits, nothing else (lib/interviews/spend.ts).
+  if (input.source === 'interviews') return reserveInterviews(input, amountUsd, failClosed);
 
   if (!pid) {
     // A $0 run charged to no initiative answers to no money rule and, like any
@@ -430,29 +468,9 @@ async function judgeAndHold(input: ReserveSpendInput): Promise<ReserveSpendResul
     // ── 3b. Run limits (DE-37): hard, before every money gate ──────────────
     // Slot locks come after the money locks, narrowest scope first, so the
     // order is total: initiative → grant → user → slots.
-    const slotted: string[] = [];
-    if (judge && input.basis !== 'topup' && runLimitsEnabled()) {
-      const plan = scopesFor({
-        initiativeId: pid, tenant: input.tenant ?? 'orgiq',
-        boxTask: input.source === 'box_task' || input.source === 'agent_loop',
-      });
-      const limits = await readRunLimits(plan.map((p) => p.scope));
-      if (limits.length > 0) {
-        const states: ScopeState[] = [];
-        for (const p of plan) {
-          const limit = limits.find((l) => l.scopeKind === p.scope.kind && l.scopeId === p.scope.id);
-          if (!limit) continue;
-          const key = scopeKey(p.scope);
-          const holdsSlot = p.takesSlot && limit.maxConcurrent != null;
-          if (holdsSlot && tx) { await tx.lock(slotLockKey(key)); slotted.push(key); }
-          states.push({ scope: p.scope, limit, usage: await scopeUsage(p.scope), takesSlot: holdsSlot });
-        }
-        const v = decideRunLimits(states, amountUsd);
-        if (v.kind === 'refuse') {
-          return { kind: 'limited', reason: v.reason, scope: v.scope, limitKind: v.limitKind, limit: v.limit, current: v.current, retryAfterS: v.retryAfterS };
-        }
-      }
-    }
+    const limited = await judgeRunLimits(tx, input, pid, input.tenant ?? 'orgiq', judge, amountUsd);
+    if ('refusal' in limited) return limited.refusal;
+    const slotted = limited.slotted;
 
     let basis: HoldBasis = input.basis === 'topup' ? 'topup' : 'p75';
     let spill = false;
@@ -622,6 +640,80 @@ async function reserveLearning(input: ReserveSpendInput, amountUsd: number, fail
   } catch (err) {
     if (missingHoldsTable(err)) {
       if (spendHoldsFailClosed()) {
+        return { kind: 'unavailable', gate: 'spend-hold', reason: 'Spend holds could not be recorded, so nothing was started. Apply schema/spend_holds_schema.sql or set SPEND_HOLDS=off.' };
+      }
+      return body(null);
+    }
+    throw err;
+  }
+}
+
+/**
+ * An interview's spend (docs/interviews-tenant-plan.md decision 18, row I0.6; lib/interviews/spend.ts): Milo's
+ * listening, the coach, speech and code runs, paid by the interview's opening. Judged against the interview's own
+ * cap and the opening's, by what both have already held and spent; never against an initiative, an envelope or the
+ * acting person's user budget (the opening pays, not the interviewer). The kill switch was checked before this was
+ * reached; the run limits apply under the `interviews` tenant. One lock key per opening, so two holds racing at
+ * either cap cannot both pass. An opening with no cap spends nothing. The hold names nobody (`actor_id` null): it
+ * counts against no person.
+ *
+ * Which interview: the hold's source id, `iv:<opening>:<interview>:<part>:<key>` from the door, or the meeting
+ * assistant's `ma:<callId>…` when an interview call's policy names this source. Unreadable state refuses (503):
+ * the opening's cap is the only limit on this money, so it is never spent unjudged.
+ */
+async function reserveInterviews(input: ReserveSpendInput, amountUsd: number, failClosed: boolean): Promise<ReserveSpendResult> {
+  const iv = await import('./interviews/spend.js');
+  const { interviewSpendRefusal } = await import('./spend-refusal.js');
+  const judge = input.judge !== false;
+  let ref: Awaited<ReturnType<typeof iv.interviewOfSpend>>;
+  try {
+    ref = await iv.interviewOfSpend(input.sourceId ?? null);
+  } catch (err) {
+    console.warn(`[spend-holds] the interview behind ${input.sourceId ?? 'a hold'} could not be read: ${(err as Error).message}`);
+    return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
+  }
+  if (!ref) return { kind: 'refused', reason: interviewSpendRefusal({ kind: 'no-interview' }) };
+  const found = ref;
+  const body = async (tx: SpendLockTx | null): Promise<ReserveSpendResult> => {
+    const limited = await judgeRunLimits(tx, input, null, input.tenant ?? 'interviews', judge, amountUsd);
+    if ('refusal' in limited) return limited.refusal;
+    if (judge) {
+      let state: Awaited<ReturnType<typeof iv.interviewSpendState>>;
+      try {
+        state = await iv.interviewSpendState(found, { held: tx != null });
+      } catch (err) {
+        console.warn(`[spend-holds] the spend of an interview could not be read: ${(err as Error).message}`);
+        return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
+      }
+      const d = iv.decideInterviewHold(state, amountUsd);
+      if (d.kind === 'no-cap') return { kind: 'refused', reason: interviewSpendRefusal({ kind: 'no-cap' }) };
+      if (d.kind === 'capped') {
+        return {
+          kind: 'capped', gate: d.gate, capUsd: d.capUsd, spentUsd: d.spentUsd, heldUsd: d.heldUsd, amountUsd,
+          reason: interviewSpendRefusal({ kind: d.gate, capUsd: d.capUsd, spentUsd: d.spentUsd, heldUsd: d.heldUsd, amountUsd }),
+        };
+      }
+    }
+    if (!tx) return { kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd };
+    const expiresAt = new Date(clock.now().getTime() + input.expiresInMs).toISOString();
+    const hold = await tx.insertHold({
+      initiativeId: null, grantId: null, actorId: null, source: 'interviews', sourceId: input.sourceId ?? null,
+      amountUsd, basis: input.basis === 'topup' ? 'topup' : 'p75', essential: false, expiresAt,
+    });
+    for (const key of limited.slotted) {
+      if (!await tx.insertSlot(key, hold.id, expiresAt)) throw new SlotTakenError(key);
+    }
+    return { kind: 'held', holdId: hold.id, initiativeId: null, grantId: null, amountUsd };
+  };
+  if (!spendHoldsEnabled()) return body(null);
+  try {
+    return await withSpendLock([`interviews:opening:${found.openingId}`], body);
+  } catch (err) {
+    if (err instanceof SlotTakenError) {
+      return { kind: 'limited', reason: `a concurrent run took the last slot at ${err.key}; try again`, scope: parseScopeKey(err.key), limitKind: 'concurrency', limit: 0, current: 0, retryAfterS: 30 };
+    }
+    if (missingHoldsTable(err)) {
+      if (spendHoldsFailClosed() || failClosed) {
         return { kind: 'unavailable', gate: 'spend-hold', reason: 'Spend holds could not be recorded, so nothing was started. Apply schema/spend_holds_schema.sql or set SPEND_HOLDS=off.' };
       }
       return body(null);

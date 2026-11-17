@@ -40,10 +40,11 @@ CREATE TABLE IF NOT EXISTS spend_holds (
 -- microvm: one microVM runner attempt, docs/microvm-runner-design.md §6;
 -- voice_session: one voice navigator session, docs/voice-navigator-spec.md §7;
 -- meeting_assistant: one call's Milo listening, docs/meeting-assistant-design.md decision 10;
--- learning: one server-side distillation, docs/learning-loop-design.md).
+-- learning: one server-side distillation, docs/learning-loop-design.md;
+-- interviews: one interview's spend, paid by its opening, docs/interviews-tenant-plan.md row I0.6).
 ALTER TABLE spend_holds DROP CONSTRAINT IF EXISTS spend_holds_source_check;
 ALTER TABLE spend_holds ADD CONSTRAINT spend_holds_source_check
-  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant', 'learning'));
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant', 'learning', 'interviews'));
 
 CREATE INDEX IF NOT EXISTS spend_holds_open_idx ON spend_holds (initiative_id) WHERE status = 'held';
 CREATE INDEX IF NOT EXISTS spend_holds_grant_open_idx ON spend_holds (grant_id) WHERE status = 'held';

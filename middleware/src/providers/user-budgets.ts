@@ -137,7 +137,8 @@ export async function getUserBudget(userId: string): Promise<UserBudgetRow | nul
 export async function userSpendThisPeriod(userId: string): Promise<UserSpend> {
   if (config.mock.aurora) {
     const from = userPeriodStart().getTime();
-    const stored = spendEntries.rows().filter((e) => e.actorId === userId && e.trigger !== 'cron' && Date.parse(e.occurredAt) >= from);
+    // An interview's spend is paid by its opening, never by a person's budget (lib/interviews/spend.ts).
+    const stored = spendEntries.rows().filter((e) => e.actorId === userId && e.trigger !== 'cron' && e.source !== 'interviews' && Date.parse(e.occurredAt) >= from);
     // bot_run entries are derived offline (providers/spend-ledger.ts getActorSpend does the same).
     const { allMockRuns } = await import('../mock/bots.js');
     const runs = allMockRuns().filter((r) => r.dispatchedBy === userId && r.trigger !== 'cron'
@@ -151,7 +152,7 @@ export async function userSpendThisPeriod(userId: string): Promise<UserSpend> {
   const rows = await exec(
     `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS spent, COUNT(*) FILTER (WHERE cost_usd IS NULL)::int AS unknown
        FROM spend_entries
-      WHERE actor_id = :u AND occurred_at >= ${PERIOD_START_SQL} AND trigger IS DISTINCT FROM 'cron'`,
+      WHERE actor_id = :u AND occurred_at >= ${PERIOD_START_SQL} AND trigger IS DISTINCT FROM 'cron' AND source <> 'interviews'`,
     [s('u', userId)],
   );
   return { spentUsd: round4(toNum(rows[0]?.['spent'])), unknownCount: toNum(rows[0]?.['unknown']) };
