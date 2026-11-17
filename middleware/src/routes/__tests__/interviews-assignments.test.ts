@@ -45,6 +45,7 @@ import { admitTenantNotification, setNotificationSink, type NotificationInputLik
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewPanelNoticesFixture } from '../../mock/interviews-panel-notices.js';
+import { interviewsFixture } from '../../mock/interviews.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import type { Session } from '../../lib/session.js';
 
@@ -392,5 +393,38 @@ describe('the panel\'s notice at Accept (decision 5)', () => {
     // Hugo accepted iv-nadia-design and sits on iv-nadia-leadership's panel under the earlier notice.
     expect((await rowOf(HUGO, 'iv-nadia-design')).myAnswer).toBe('accepted');
     expect((await rowOf(HUGO, 'iv-nadia-leadership')).myAnswer).toBe('accepted');
+  });
+});
+
+describe('the panel\'s notice asked again after it changes (row I6.4; F2)', () => {
+  const read = (as: ReturnType<typeof who>) => as.get('/interviews/panel-notice');
+
+  it('a seat accepted under an earlier version reads stale, with its pending rounds; acknowledging clears it and changes no seat', async () => {
+    const res = await read(HUGO);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body).toEqual({
+      notice: { version: CONSENT_NOTICE.version, title: CONSENT_NOTICE.title, text: CONSENT_NOTICE.paragraphs.join('\n\n'), panelLine: expect.stringMatching(/applies to you too/) },
+      acknowledged: false, pendingRounds: 3, roundId: 'iv-mateo-design',
+    });
+    expect((await HUGO.post(`/interviews/${res.body.roundId}/panel-notice`, { version: CONSENT_NOTICE.version })).status).toBe(201);
+    expect((await read(HUGO)).body).toMatchObject({ acknowledged: true, pendingRounds: 3 });
+    expect((await rowOf(HUGO, 'iv-nadia-design')).myAnswer).toBe('accepted');
+    expect((await rowOf(HUGO, 'iv-mateo-design')).state).toBe('ready');
+  });
+
+  it('acknowledged: reads so, with the rounds still counted', async () => {
+    expect((await read(WEN)).body).toMatchObject({ acknowledged: true, pendingRounds: 2, roundId: 'iv-aiko-coding' });
+  });
+
+  it('no pending rounds: zero and no round, whatever was acknowledged', async () => {
+    for (const r of interviewsFixture.rows()) if (['ready', 'accepted', 'assigned', 'live'].includes(r.state) && (r.leadId === 'u-hugo' || r.panelIds.includes('u-hugo'))) r.state = 'ended';
+    expect((await read(HUGO)).body).toMatchObject({ acknowledged: false, pendingRounds: 0, roundId: null });
+  });
+
+  it('is never read as an interview id, and only an interviewer may ask', async () => {
+    // The `/interviews/:id` read would answer 404 "no interview here" for the id `panel-notice`.
+    expect((await read(HUGO)).body.notice).toBeDefined();
+    for (const as of [GRETA, AMARA]) expect((await read(as)).status).toBe(403);
   });
 });

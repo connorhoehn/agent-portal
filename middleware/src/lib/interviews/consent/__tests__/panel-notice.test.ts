@@ -7,7 +7,7 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { MemoryPanelNoticeStore, setPanelNoticeStore, type PanelNoticeRow, type PanelNoticeStore } from '../panel-notice-store.js';
 import { GET_PANEL_NOTICE_SQL, INSERT_PANEL_NOTICE_SQL, LIST_PANEL_NOTICES_SQL, PANEL_NOTICE_STATEMENTS, SqlPanelNoticeStore } from '../panel-notice-store-sql.js';
 import type { SqlExec } from '../../store-sql.js';
-import { acknowledgedCurrent, checkAcknowledgement, exportPanelNotices, hasAcknowledged, panelNoticeOf, seatNotices } from '../panel-notice.js';
+import { acknowledgedCurrent, checkAcknowledgement, exportPanelNotices, hasAcknowledged, panelNoticeOf, seatNotices, pendingRoundsOf } from '../panel-notice.js';
 import { CONSENT_NOTICE } from '../notice.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
 import { EARLIER_NOTICE_VERSION, interviewPanelNoticesFixture } from '../../../../mock/interviews-panel-notices.js';
@@ -150,5 +150,23 @@ describe('every panel notice statement matches schema/interviews_schema.sql', ()
         .filter((w) => !['interview_panel_notices', 'jsonb_array_elements_text'].includes(w));
       for (const col of named) expect([col, columns.has(col)]).toEqual([col, true]);
     }
+  });
+});
+
+describe('pendingRoundsOf (row I6.4)', () => {
+  const round = (id: string, over: Record<string, unknown>) => ({ id, leadId: 'u-a', panelIds: ['u-b'], acceptances: [], state: 'accepted', scheduledAt: null, ...over }) as Parameters<typeof pendingRoundsOf>[0][number];
+  it('counts accepted seats still held on rounds not finished, soonest first', () => {
+    const acc = (userId: string, seat: 'lead' | 'panel') => [{ userId, seat, at: '2026-11-01T00:00:00.000Z' }];
+    const rounds = [
+      round('r-late', { acceptances: acc('u-b', 'panel'), scheduledAt: '2026-12-09T10:00:00.000Z' }),
+      round('r-soon', { acceptances: acc('u-b', 'panel'), state: 'live', scheduledAt: '2026-12-01T10:00:00.000Z' }),
+      round('r-unscheduled', { acceptances: acc('u-b', 'panel') }),
+      round('r-ended', { acceptances: acc('u-b', 'panel'), state: 'ended' }),
+      round('r-not-accepted', {}),
+      round('r-moved-off', { acceptances: acc('u-b', 'panel'), panelIds: [] }),
+      round('r-lead', { leadId: 'u-b', panelIds: [], acceptances: acc('u-b', 'lead') }),
+    ];
+    expect(pendingRoundsOf(rounds, 'u-b')).toEqual(['r-soon', 'r-late', 'r-lead', 'r-unscheduled']);
+    expect(pendingRoundsOf(rounds, 'u-z')).toEqual([]);
   });
 });

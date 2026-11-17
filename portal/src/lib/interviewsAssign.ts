@@ -76,6 +76,34 @@ export async function answerPanelNotice(
   return { receipt: 'Accepted. You have read the notice, and you are on this round.', accepted: true };
 }
 
+// ── The notice asked again after it changes (row I6.4; F2) ─────────────────────────────────────────────────────────
+// A person who accepted under an earlier version keeps their seats. My interviews reads GET /interviews/panel-notice and,
+// while they hold a pending round and have not acknowledged the current version, offers the notice once per visit with
+// the same two answers. It blocks nothing.
+
+export const PANEL_NOTICE_PATH = `${INTERVIEWS_API}/interviews/panel-notice`;
+
+/** F2's answer, with the round the acknowledgement is posted against (the first pending one, or null). */
+export interface PanelNoticeStatus { notice: PanelNotice; acknowledged: boolean; pendingRounds: number; roundId?: string | null }
+
+/** Ask again only when the current version is not acknowledged and there is a pending round to post it against. */
+export const shouldReaskNotice = (status: PanelNoticeStatus | null | undefined): boolean =>
+  !!status && !status.acknowledged && status.pendingRounds > 0 && !!status.roundId;
+
+/**
+ * The re-ask's two answers: "I have read it" acknowledges the version shown (no Accept: the seats already are); "Not
+ * now" changes nothing and it is offered again on the next visit. A changed notice comes back as `renotice`.
+ */
+export async function answerChangedNotice(
+  optionId: string, notice: PanelNotice,
+  acknowledge: (version: string) => Promise<{ ok: true } | { ok: false; error: string; needsNotice?: PanelNotice }>,
+): Promise<{ receipt: string; acknowledged: boolean } | { error: string; renotice?: PanelNotice }> {
+  if (optionId !== NOTICE_READ) return { receipt: 'Not now. Your rounds stay as they are, and the notice is offered again next time.', acknowledged: false };
+  const ack = await acknowledge(notice.version);
+  if (!ack.ok) return { error: ack.error, ...(ack.needsNotice ? { renotice: ack.needsNotice } : {}) };
+  return { receipt: 'Thank you. You have read the current notice.', acknowledged: true };
+}
+
 export const declineSeat = (id: string, revision: number, reason: string): Promise<WriteOutcome> =>
   send(`/interviews/${encodeURIComponent(id)}/answer`, 'POST', { revision, answer: 'decline', reason }, 'Your answer could not be saved. Try again.');
 

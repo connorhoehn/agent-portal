@@ -9,7 +9,10 @@
 //     refused until the person has acknowledged the CURRENT version. An interviewer who will not be recorded
 //     declines the assignment; declining never needs the notice.
 //   - Once: one row per person and version (panel-notice-store.ts). A new version asks again at the next Accept.
-//     Rounds accepted under an earlier version stay accepted; nothing here re-asks them.
+//     Rounds accepted under an earlier version stay accepted. Since row I6.4 the person is asked again on My
+//     interviews (GET /interviews/panel-notice, `pendingRoundsOf`): while they hold an accepted round that is not
+//     finished and have not acknowledged the current version, the page offers the notice once per visit. It blocks
+//     nothing: the seat stays accepted and the room still opens.
 //
 // The rules are pure; the two reads at the end go through the store inside the tenant's db context.
 
@@ -73,6 +76,21 @@ export function seatNotices(i: Pick<Interview, 'leadId' | 'panelIds' | 'acceptan
       current: last?.noticeVersion === current,
     };
   });
+}
+
+/** The states in which an accepted round is not finished yet: the person will still sit in its call. */
+const PENDING_STATES: ReadonlySet<string> = new Set(['assigned', 'accepted', 'ready', 'live']);
+
+/**
+ * The rounds `userId` has accepted a seat on and that are not finished, soonest first (unscheduled last). Pure. A seat
+ * they no longer hold does not count, nor does an acceptance of another seat.
+ */
+export function pendingRoundsOf(interviews: readonly Pick<Interview, 'id' | 'leadId' | 'panelIds' | 'acceptances' | 'state' | 'scheduledAt'>[], userId: string): string[] {
+  return interviews
+    .filter((i) => PENDING_STATES.has(i.state))
+    .filter((i) => i.acceptances.some((a) => a.userId === userId && (a.seat === 'lead' ? i.leadId === userId : i.panelIds.includes(userId))))
+    .sort((a, b) => (a.scheduledAt ?? '\uffff').localeCompare(b.scheduledAt ?? '\uffff') || a.id.localeCompare(b.id))
+    .map((i) => i.id);
 }
 
 /** Has `userId` acknowledged the current notice? Read through the store in the tenant's db context. */

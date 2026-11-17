@@ -13,6 +13,9 @@
 // text and version, read from that answer) and one line that it applies to the
 // panel too. "I have read it — accept" acknowledges, then accepts; "Not now"
 // changes nothing. Not a consent: someone who will not be recorded declines.
+// Row I6.4: a person whose accepted rounds are still to come and who has not read
+// the current version is offered it once per visit ("I have read it" / "Not now");
+// it blocks nothing, the seats stay accepted and the room still opens.
 //
 // Row I5.3: a "Scorecard due" row opens the scorecard; a round whose scorecard is in opens it read-only.
 // Row I1.7: rows in "To prepare" and "Upcoming" open the Prepare page; a ready or live round the viewer sits on also
@@ -35,7 +38,8 @@ import {
 import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
 import { hasScorecard, scorecardPath } from '../../lib/interviewsScorecard';
 import {
-  NOTICE_LATER, NOTICE_READ, REASON_MAX, acceptSeat, acknowledgePanelNotice, answerPanelNotice, declineSeat, noticeParagraphs, reasonProblem, type PanelNotice,
+  NOTICE_LATER, NOTICE_READ, PANEL_NOTICE_PATH, REASON_MAX, acceptSeat, acknowledgePanelNotice, answerChangedNotice, answerPanelNotice, declineSeat, noticeParagraphs, reasonProblem,
+  shouldReaskNotice, type PanelNotice, type PanelNoticeStatus,
 } from '../../lib/interviewsAssign';
 import { PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
@@ -81,6 +85,10 @@ function MyInterviewsWorkspace() {
   const [asked, setAsked] = useState(0);
   /** The Accept waiting for the panel's notice, with the notice the server sent. */
   const [noticeFor, setNoticeFor] = useState<{ row: InterviewRow; notice: PanelNotice; n: number } | null>(null);
+  /** Row I6.4: the notice changed since this person accepted; offered once per visit, blocking nothing. */
+  const reask = useFetch<PanelNoticeStatus>(PANEL_NOTICE_PATH);
+  const [reaskDone, setReaskDone] = useState(false);
+  const [reaskNotice, setReaskNotice] = useState<{ notice: PanelNotice; n: number } | null>(null);
   const note = (id: string, text: string) => setAnswered((m) => new Map(m).set(id, text));
   const acceptedNote = (r: InterviewRow) => (r.seat === 'lead' ? 'Accepted. Choose its questions next.' : 'Accepted. You are on the panel.');
 
@@ -153,7 +161,41 @@ function MyInterviewsWorkspace() {
       },
     }];
   }, [noticeFor, refresh]);
-  const deck = useMemo(() => [...noticePrompts, ...prompts], [noticePrompts, prompts]);
+  const reaskPrompts = useMemo<ComposerPrompt[]>(() => {
+    const status = reask.data;
+    if (reaskDone || noticeFor || !status || !shouldReaskNotice(status)) return [];
+    const roundId = status.roundId!;
+    const { notice, n } = reaskNotice ?? { notice: status.notice, n: 0 };
+    return [{
+      id: `interviews-panel-notice-changed:${notice.version}:${n}`, scope: 'interviews-my-interviews', kind: 'choice',
+      eyebrow: 'The notice has changed since you accepted',
+      title: notice.title,
+      question: notice.panelLine,
+      fields: [
+        { label: 'Your rounds', value: status.pendingRounds === 1 ? 'One round you accepted is still to come.' : `${status.pendingRounds} rounds you accepted are still to come.` },
+        {
+          label: 'The notice the candidate reads',
+          value: (
+            <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-changed-text">
+              {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
+            </Stack>
+          ),
+        },
+      ],
+      options: [{ id: NOTICE_READ, label: 'I have read it', emphasis: 'primary' }, { id: NOTICE_LATER, label: 'Not now' }],
+      onAnswer: async (a) => {
+        const optionId = a.kind === 'choice' ? a.optionId : NOTICE_LATER;
+        const out = await answerChangedNotice(optionId, notice, (version) => acknowledgePanelNotice(roundId, version));
+        if ('error' in out) {
+          if (out.renotice) setReaskNotice({ notice: out.renotice, n: n + 1 });
+          return { error: out.error };
+        }
+        setReaskDone(true);
+        return { receipt: out.receipt };
+      },
+    }];
+  }, [reask.data, reaskDone, reaskNotice, noticeFor]);
+  const deck = useMemo(() => [...noticePrompts, ...reaskPrompts, ...prompts], [noticePrompts, reaskPrompts, prompts]);
 
   const answerCell = (r: InterviewRow) => {
     const done = answered.get(r.id);

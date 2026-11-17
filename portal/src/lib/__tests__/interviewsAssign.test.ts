@@ -71,3 +71,29 @@ test('a changed notice comes back to be shown, and nothing is accepted; a refuse
 test('the notice\'s paragraphs split on the blank line the server puts between them', () => {
   assert.deepEqual(noticeParagraphs(NOTICE.text), ['First paragraph.', 'Second paragraph.']);
 });
+
+// ── Row I6.4: the notice asked again after it changes ─────────────────────────────────────────────────────────
+import { answerChangedNotice, shouldReaskNotice, type PanelNoticeStatus } from '../interviewsAssign.ts';
+
+const NOTICE_V2 = { version: 'v2', title: 'How your interview is recorded', text: 'One.\n\nTwo.', panelLine: 'This applies to you too.' };
+
+test('shouldReaskNotice: only when not acknowledged and a pending round exists', () => {
+  const status = (over: Partial<PanelNoticeStatus>): PanelNoticeStatus => ({ notice: NOTICE_V2, acknowledged: false, pendingRounds: 2, roundId: 'iv-1', ...over });
+  assert.equal(shouldReaskNotice(status({})), true);
+  assert.equal(shouldReaskNotice(status({ acknowledged: true })), false);
+  assert.equal(shouldReaskNotice(status({ pendingRounds: 0, roundId: null })), false);
+  assert.equal(shouldReaskNotice(status({ roundId: null })), false);
+  assert.equal(shouldReaskNotice(null), false);
+});
+
+test('answerChangedNotice: read acknowledges the version shown; not now changes nothing; a changed notice comes back', async () => {
+  const versions: string[] = [];
+  const ok = async (v: string) => { versions.push(v); return { ok: true as const }; };
+  assert.deepEqual(await answerChangedNotice(NOTICE_READ, NOTICE_V2, ok), { receipt: 'Thank you. You have read the current notice.', acknowledged: true });
+  assert.deepEqual(versions, ['v2']);
+  const later = await answerChangedNotice(NOTICE_LATER, NOTICE_V2, ok);
+  assert.equal('receipt' in later && later.acknowledged, false);
+  assert.deepEqual(versions, ['v2']);
+  const v3 = { ...NOTICE_V2, version: 'v3' };
+  assert.deepEqual(await answerChangedNotice(NOTICE_READ, NOTICE_V2, async () => ({ ok: false, error: 'changed', needsNotice: v3 })), { error: 'changed', renotice: v3 });
+});

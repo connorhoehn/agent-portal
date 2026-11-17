@@ -24,7 +24,8 @@
 // The panel's notice (decision 5, its last sentence; lib/interviews/consent/panel-notice.ts): accepting a seat, lead or
 // panel, is refused with 409 `{ needsNotice }` and changes nothing until the session's own person has acknowledged the
 // CURRENT version of the candidate's notice; POST /interviews/:id/panel-notice keeps that acknowledgement, once per
-// person and version. Declining never needs it. Rounds accepted under an earlier version stay accepted.
+// person and version. Declining never needs it. Rounds accepted under an earlier version stay accepted; GET
+// /interviews/panel-notice (F2, row I6.4) lets My interviews ask such a person again, blocking nothing.
 
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
@@ -33,7 +34,7 @@ import {
   answerSeat, applyReassignment, assignProblemsLine, checkAnswer, checkAssignment, checkReassignment, checkTime, interviewIdFor, newInterview, newlySeated, timeProblemsLine,
 } from '../../lib/interviews/assign.js';
 import type { FieldProblem } from '../../lib/interviews/kit.js';
-import { acknowledgedCurrent, checkAcknowledgement, panelNoticeOf } from '../../lib/interviews/consent/panel-notice.js';
+import { acknowledgedCurrent, checkAcknowledgement, panelNoticeOf, pendingRoundsOf } from '../../lib/interviews/consent/panel-notice.js';
 import { panelNoticeStore } from '../../lib/interviews/consent/panel-notice-store.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
@@ -144,6 +145,21 @@ assignmentsRouter.post('/interviews/:id/answer', conduct, asyncHandler(async (re
   if (written.ok && checked.value.answer === 'decline') {
     void recruiters().then((ids) => notifyInterviewDeclined({ interviewId: i.id, ...words, recruiterIds: ids, declinerId: session.sub, seat: out.seat }));
   }
+}));
+
+/**
+ * F2: the panel's notice for the signed-in person, so My interviews can ask again after the notice changes (row I6.4).
+ * `{ notice, acknowledged, pendingRounds, roundId }`: whether they acknowledged the CURRENT version, how many accepted,
+ * not yet finished rounds they hold, and the first of them (the round the existing POST acknowledges against; null
+ * when there is none). Declared here, above the `/interviews/:id` read in routes/interviews.ts, so the path is never
+ * read as an id. It blocks nothing: the seats stay accepted.
+ */
+assignmentsRouter.get('/interviews/panel-notice', conduct, asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  const ix = await indexFor(req);
+  const pending = pendingRoundsOf(ix.world.interviews, session.sub);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ notice: panelNoticeOf(), acknowledged: await acknowledgedCurrent(session.sub), pendingRounds: pending.length, roundId: pending[0] ?? null });
 }));
 
 /**
