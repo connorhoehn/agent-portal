@@ -22,6 +22,7 @@
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { inviteStore, type Invite } from './store.js';
+import { interviewsNow } from '../clock.js';
 
 export const ADMISSION_STATES = ['not-knocked', 'waiting', 'admitted', 'turned-away'] as const;
 export type AdmissionState = typeof ADMISSION_STATES[number];
@@ -87,7 +88,7 @@ export type AdmissionWrite =
   | { ok: false; reason: 'precondition'; why: KnockRefusal };
 
 /** Apply `event` to the invite's current session, against the row as it is now. */
-export async function applyAdmission(inviteId: string, event: AdmissionEvent, now = new Date()): Promise<AdmissionWrite> {
+export async function applyAdmission(inviteId: string, event: AdmissionEvent, now = interviewsNow()): Promise<AdmissionWrite> {
   return runWithDbTenant(INTERVIEWS_TENANT, async () => {
     const store = inviteStore();
     const invite = await store.getInvite(inviteId);

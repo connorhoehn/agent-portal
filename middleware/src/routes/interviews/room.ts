@@ -19,6 +19,7 @@ import { endMove, roomView, startMove, type RoomMove } from '../../lib/interview
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Interview } from '../../lib/interviews/types.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const roomRouter = Router();
 const conduct = requireAction('ConductInterview');
@@ -75,7 +76,7 @@ function roomWrite(move: (i: Interview, userId: string) => RoomMove, write: (i: 
 
 roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision)));
 roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, revision) => {
-  const r = await interviewsStore().endInterview(i.id, new Date().toISOString(), revision);
+  const r = await interviewsStore().endInterview(i.id, interviewsNow().toISOString(), revision);
   if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
   return r;
 }));

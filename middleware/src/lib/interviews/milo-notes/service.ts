@@ -31,6 +31,7 @@ import {
   assistantLiveTranscript, coachLinesOf, sideOf, TRANSCRIPT_NOT_INVITED, transcriptLineViews, transcriptOffForConsent,
   type LiveTranscript, type LiveTranscriptSource, type TranscriptLineView,
 } from './transcript.js';
+import { interviewsNowMs } from '../clock.js';
 
 export interface MiloDeps {
   log: () => CoachLogStore;
@@ -59,7 +60,7 @@ const DEFAULTS: MiloDeps = {
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,
-  now: Date.now,
+  now: interviewsNowMs,
   newId: () => `ml-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
   opened: async (interviewId, userId) => (await ratingsAtRecap(interviewId, userId)) !== null,
   finished: finishedTranscript,

@@ -793,6 +793,12 @@
         "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.) `POST /api/__mock/scope` sets a scope cookie on the caller, which would move every later request of the sweep into that scope; `POST /api/__mock/identity/clone` mints a user the sweep would then have to sign in as to learn anything. Both shapes are pinned by routes/__tests__/mock-scope.test.ts instead."
       }
     },
+    "POST /api/__mock/interviews/clock": {
+      "refused": {
+        "rule": "interviews-clock",
+        "reason": "The capture's own tool, like `POST /api/__mock/scenario`: it moves the clock the interviews tenant reads (lib/interviews/clock.ts), so every later shape of the sweep would be captured at another time, and its `sweep` runs the retention pass, which erases rows. Its shape is pinned by routes/__tests__/interviews-mock-clock.test.ts instead."
+      }
+    },
     "POST /api/__mock/reset": {
       "persona": "orgiq/admin",
       "status": 200,

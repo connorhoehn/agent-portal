@@ -24,6 +24,7 @@ import { consentStore, type ConsentRecord } from '../lib/interviews/consent/stor
 import type { Interview } from '../lib/interviews/types.js';
 import { interviewsFlagGate } from './interviews.js';
 import { consentsSaved } from '../lib/interviews/consent-bell.js';
+import { interviewsNow } from '../lib/interviews/clock.js';
 
 export const consentGuestRouter: Router = Router();
 
@@ -77,7 +78,7 @@ consentGuestRouter.put('/consents', interviewsFlagGate, requireGuest(), asyncHan
     res.status(409).json({ error: checked.reason === 'closed' ? CLOSED : STALE_NOTICE, ...guestConsentsView(before) });
     return;
   }
-  const at = new Date().toISOString();
+  const at = interviewsNow().toISOString();
   // Answers under an older notice were given to another text: every answer is stamped afresh.
   const sameNotice = before && before.noticeVersion === checked.noticeVersion ? before : null;
   const stamped = stampAnswers(checked.answers, sameNotice && {

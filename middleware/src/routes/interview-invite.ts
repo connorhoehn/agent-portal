@@ -35,6 +35,7 @@ import { GUEST_DISPLAY_NAME, guestRealtimeEnabled, guestSubject, mintGuestRealti
 import { admissionOf, applyAdmission } from '../lib/interviews/invite/admission.js';
 import { guestRoomState, guestRoomView } from '../lib/interviews/invite/room.js';
 import { config } from '../config.js';
+import { interviewsNow } from '../lib/interviews/clock.js';
 
 export const interviewInviteRouter: Router = Router();
 
@@ -109,7 +110,7 @@ interviewInviteRouter.post('/exchange', interviewsFlagGate, rateLimit, asyncHand
     const invites = inviteStore();
     const invite = await invites.findInviteByHash(hash);
     const interview = invite ? (await interviewsStore().listInterviews()).find((i) => i.id === invite.interviewId) ?? null : null;
-    const now = new Date();
+    const now = interviewsNow();
     if (!invite || !interview || inviteDeadReason(invite, interview, now) !== null) return null;
     const view = await guestView(interview);
     if (!view) return null;
@@ -194,7 +195,7 @@ interviewInviteRouter.get('/room', interviewsFlagGate, requireGuest({ endedAfter
     inviteStore().getInvite(guest.inviteId), interviewsStore().listInterviews(), interviewsStore().listApplications(), interviewsStore().listOpenings(),
   ]);
   const interview = interviews.find((i) => i.id === guest.interviewId) ?? null;
-  const state = invite && interview ? guestRoomState(invite, interview, admissionOf(invite), new Date()) : null;
+  const state = invite && interview ? guestRoomState(invite, interview, admissionOf(invite), interviewsNow()) : null;
   if (!state || !interview) { res.status(404).json(GUEST_REFUSAL); return; }
   const application = applications.find((a) => a.id === interview.applicationId);
   const opening = application ? openings.find((o) => o.id === application.openingId) ?? null : null;

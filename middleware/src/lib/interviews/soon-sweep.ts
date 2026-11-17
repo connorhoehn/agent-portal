@@ -9,6 +9,7 @@ import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { dueRings, soonMinutes } from './soon.js';
 import { notifyInterviewStartingSoon } from '../social-notify.js';
+import { interviewsNowMs } from './clock.js';
 
 export const SOON_TICK_MS = 60_000;
 /** Most rings sent in one tick; the rest wait for the next. */
@@ -25,7 +26,7 @@ export interface SoonDeps {
   minutes: () => number;
 }
 
-const defaults: SoonDeps = { now: Date.now, load: () => loadWorld(interviewsStore()), ring: notifyInterviewStartingSoon, enabled: interviewsEnabled, minutes: () => soonMinutes() };
+const defaults: SoonDeps = { now: interviewsNowMs, load: () => loadWorld(interviewsStore()), ring: notifyInterviewStartingSoon, enabled: interviewsEnabled, minutes: () => soonMinutes() };
 
 /** One pass; returns how many rings it sent. Never throws. */
 export async function runSoonTick(deps: Partial<SoonDeps> = {}, rungKeys: Set<string> = rung): Promise<number> {

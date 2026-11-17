@@ -23,6 +23,7 @@ import { COACH_PROMPT_VERSION, MAX_PREVIOUS, type CoachInput, type CoachLine } f
 import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type TranscriptSource } from './transcript.js';
+import { interviewsNowMs } from '../clock.js';
 
 /** D7's view of a suggestion. */
 export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
@@ -69,7 +70,7 @@ const DEFAULTS: CoachDeps = {
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,
   postApproved: defaultPost,
-  now: Date.now,
+  now: interviewsNowMs,
   newId: () => `sg-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
 };
 

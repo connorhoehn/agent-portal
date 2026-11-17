@@ -38,6 +38,7 @@ import { estimateRecapTokens, makeRecapModel, RECAP_TIMEOUT_MS, type RecapModel 
 import { parseRecapAnswer, type RecapContent } from './parse.js';
 import { RECAP_MAX_LINES, RECAP_PROMPT_VERSION, type RecapInput, type RecapQuestion } from './prompt.js';
 import { recapStore, type OpenRating, type RecapAttemptCode, type RecapOpen, type RecapRecord, type RecapStore } from './store.js';
+import { interviewsNowMs } from '../clock.js';
 
 /** At most this many model calls per interview, ever (one recap, kept). */
 export const RECAP_MAX_ATTEMPTS = 3;
@@ -80,7 +81,7 @@ const DEFAULTS: RecapDeps = {
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,
-  now: Date.now,
+  now: interviewsNowMs,
   suffix: () => randomBytes(4).toString('hex'),
 };
 

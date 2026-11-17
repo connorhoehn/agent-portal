@@ -11,6 +11,7 @@ import { createResumeBytes, type ResumeBytesStore } from './bytes-store.js';
 import { createResumeRows, type ResumeRowStore } from './row-store.js';
 import { checkResumeBytes, cleanFileName, resumeStorageKey, sha256Hex, type UploadCheck } from './rules.js';
 import { RESUME_CONTENT_TYPE, type ResumeRecord } from './types.js';
+import { interviewsNow } from '../clock.js';
 
 let rows: ResumeRowStore | null = null;
 let bytes: ResumeBytesStore | null = null;
@@ -29,7 +30,7 @@ export async function storeResume(input: ResumeUpload): Promise<{ ok: true; resu
   const id = `rf-${randomUUID()}`;
   const row: ResumeRecord = {
     id, candidateId: input.candidateId, fileName: cleanFileName(input.rawName), sizeBytes: input.bytes.length, contentType: RESUME_CONTENT_TYPE,
-    sha256: sha256Hex(input.bytes), uploadedBy: input.uploadedBy, uploadedAt: new Date().toISOString(),
+    sha256: sha256Hex(input.bytes), uploadedBy: input.uploadedBy, uploadedAt: interviewsNow().toISOString(),
     storageKey: resumeStorageKey(input.candidateId, id),
   };
   await resumeBytes().put(row.storageKey, input.bytes);

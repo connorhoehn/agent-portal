@@ -69,6 +69,9 @@ import { rehydrateMockCrawlTargets } from '../lib/crawl-targets.js';
 import { rehydrateMockCrawls } from '../lib/crawler.js';
 import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 import { rehydrateMockNotifications } from '../lib/notification-store.js';
+import { interviewsClockOffsetMs, interviewsNow, resetInterviewsClock, setInterviewsClockOffset } from '../lib/interviews/clock.js';
+import { runSoonTick } from '../lib/interviews/soon-sweep.js';
+import { sweep as runInterviewsRetentionSweep } from '../lib/interviews/retention/service.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
 import { getRunbooksDemoState, resetRunbooksDemo, startRunbooksDemo, stopRunbooksDemo } from '../mock/runbooks-demo.js';
@@ -530,6 +533,8 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   // Every request scope goes too, and `resetAll` empties the identity-clones
   // fixture, so every clone (and every session minted for one) is gone.
   clearMockScopes();
+  // The interviews clock a walk may have moved (lib/interviews/clock.ts) goes back to the wall clock.
+  resetInterviewsClock();
   registry.resetAll(DEFAULT_SCENARIO);
   identityClonesFixture.reset();
   // Same reason as the line above: the microVM fleet lives in an in-memory Map
@@ -540,6 +545,33 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   persistInitiativeDecks();
   globalScenario = DEFAULT_SCENARIO;
   res.json({ reset: { fixture: null, scenario: DEFAULT_SCENARIO }, ...readState(registry) });
+});
+
+/**
+ * POST /api/__mock/interviews/clock { offsetMs?, sweep? } — the interviews tenant's clock, for a walk
+ * (lib/interviews/clock.ts says what reads it and what does not).
+ *
+ * `offsetMs`: how far ahead of the wall clock the interviews code now reads the time (0 puts it back; a full
+ * reset does too). `sweep`: run one pass now, at that time: 'soon' (the starting-soon bells) or 'retention' (the
+ * periods and the open deletion requests), instead of waiting for the minute's or the hour's tick. With neither,
+ * it reads the clock. Answers { offsetMs, now, sweep? }.
+ */
+mockControlRouter.post('/api/__mock/interviews/clock', ...gate, async (req, res) => {
+  const body = (req.body ?? {}) as { offsetMs?: unknown; sweep?: unknown };
+  if (body.offsetMs !== undefined && (typeof body.offsetMs !== 'number' || !setInterviewsClockOffset(body.offsetMs, true))) {
+    res.status(400).json({ error: 'offsetMs must be a number of milliseconds within ten years either way.' });
+    return;
+  }
+  if (body.sweep !== undefined && body.sweep !== 'soon' && body.sweep !== 'retention') {
+    res.status(400).json({ error: "sweep must be 'soon' or 'retention'." });
+    return;
+  }
+  try {
+    const swept = body.sweep === 'soon' ? { rang: await runSoonTick() } : body.sweep === 'retention' ? await runInterviewsRetentionSweep() : undefined;
+    res.json({ offsetMs: interviewsClockOffsetMs(), now: interviewsNow().toISOString(), ...(swept ? { sweep: swept } : {}) });
+  } catch (err) {
+    res.status(500).json({ error: `the ${String(body.sweep)} sweep failed: ${(err as Error).message}` });
+  }
 });
 
 /**

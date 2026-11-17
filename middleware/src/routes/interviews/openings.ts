@@ -36,6 +36,7 @@ import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Opening } from '../../lib/interviews/types.js';
 import { mayReadOpeningMoney } from '../../lib/interviews/scope.js';
 import { listUsers } from '../../providers/identity.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const openingsRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -87,7 +88,7 @@ openingsRouter.post('/openings', manage, asyncHandler(async (req, res) => {
   const store = interviewsStore();
   const taken = new Set((await store.listOpenings()).map((o) => o.id));
   const id = openingIdFor(checked.value.title, taken);
-  const created = await store.createOpening({ ...checked.value, id, recruiterId: session.sub, openedAt: new Date().toISOString(), kit: EMPTY_KIT });
+  const created = await store.createOpening({ ...checked.value, id, recruiterId: session.sub, openedAt: interviewsNow().toISOString(), kit: EMPTY_KIT });
   if (!created) { res.status(409).json({ error: 'Another opening with this title was created at the same moment. Try again.' }); return; }
   const ix = await indexFor(req);
   const o = ix.openings.get(created.id);

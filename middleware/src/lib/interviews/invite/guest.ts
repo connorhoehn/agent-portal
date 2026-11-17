@@ -29,6 +29,7 @@ import { admissionOf } from './admission.js';
 import { guestRoomState } from './room.js';
 import { inviteStore, type Invite } from './store.js';
 import { sameHash } from './token.js';
+import { interviewsNow, interviewsNowMs } from '../clock.js';
 
 export { GUEST_COOKIE_NAME };
 /** The guest routes' prefix, and the only path the browser sends the guest cookie to. */
@@ -72,7 +73,7 @@ export function newGuestSession(): { sid: string; sessionHash: string } {
   return { sid, sessionHash: hashGuestSession(sid) };
 }
 
-export async function setGuestCookie(res: Response, inviteId: string, sid: string, expiresAt: string, now = Date.now()): Promise<void> {
+export async function setGuestCookie(res: Response, inviteId: string, sid: string, expiresAt: string, now = interviewsNowMs()): Promise<void> {
   const value: GuestCookie = { k: KIND, inv: inviteId, sid, iat: Math.floor(now / 1000) };
   const maxAge = Math.max(0, Math.min(GUEST_SESSION_MAX_AGE_S * 1000, Date.parse(expiresAt) - now));
   res.cookie(GUEST_COOKIE_NAME, await signValue(value), {
@@ -98,7 +99,7 @@ export function guestCookieOf(req: Request): string | undefined {
  */
 export interface GuestLoadOptions { endedAfterAdmission?: boolean }
 
-export async function loadGuest(raw: string | undefined, now = new Date(), opts: GuestLoadOptions = {}):
+export async function loadGuest(raw: string | undefined, now = interviewsNow(), opts: GuestLoadOptions = {}):
   Promise<{ principal: GuestPrincipal; invite: Invite; interview: Interview } | null> {
   if (!raw) return null;
   const c = await verifyValue<Partial<GuestCookie>>(raw);
@@ -113,7 +114,7 @@ export async function loadGuest(raw: string | undefined, now = new Date(), opts:
  * The guest an invite's CURRENT session stands for, read now: the invite live (rules.ts), its interview open, and
  * `sameSession` true of the stored row. Shared by the cookie (above) and the realtime token (lib/interviews/lobby.ts).
  */
-export async function loadGuestSession(inviteId: string, sameSession: (invite: Invite) => boolean, since: string, now = new Date(), opts: GuestLoadOptions = {}):
+export async function loadGuestSession(inviteId: string, sameSession: (invite: Invite) => boolean, since: string, now = interviewsNow(), opts: GuestLoadOptions = {}):
   Promise<{ principal: GuestPrincipal; invite: Invite; interview: Interview } | null> {
   return runWithDbTenant(INTERVIEWS_TENANT, async () => {
     const invite = await inviteStore().getInvite(inviteId);
@@ -141,7 +142,7 @@ export function requireGuest(opts: GuestLoadOptions = {}) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const raw = guestCookieOf(req);
-      const loaded = await loadGuest(raw, new Date(), opts);
+      const loaded = await loadGuest(raw, interviewsNow(), opts);
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Referrer-Policy', 'no-referrer');
       if (!loaded) {

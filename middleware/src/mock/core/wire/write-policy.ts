@@ -822,6 +822,15 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
       || route === 'POST /api/__mock/scope' || route === 'POST /api/__mock/identity/clone',
   },
   {
+    id: 'interviews-clock',
+    because:
+      "The capture's own tool, like `POST /api/__mock/scenario`: it moves the clock the interviews tenant reads " +
+      '(lib/interviews/clock.ts), so every later shape of the sweep would be captured at another time, and its ' +
+      '`sweep` runs the retention pass, which erases rows. Its shape is pinned by ' +
+      'routes/__tests__/interviews-mock-clock.test.ts instead.',
+    applies: (route) => route === 'POST /api/__mock/interviews/clock',
+  },
+  {
     id: 'spends',
     because:
       'Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, ' +

@@ -20,6 +20,7 @@ import type { Interview, Opening } from '../types.js';
 import { makePlanModel, type PlanModel } from './model.js';
 import { parsePlan, type PlanQuestion } from './parse.js';
 import { estimatePlanTokens, PLAN_PROMPT_VERSION, planCap, type PlanInput } from './prompt.js';
+import { interviewsNowMs } from '../clock.js';
 
 export const MAX_PLAN_DRAFTS = 3;
 
@@ -46,7 +47,7 @@ const DEFAULTS: PlanDeps = {
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,
-  now: Date.now,
+  now: interviewsNowMs,
   newId: () => `pl-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
 };
 

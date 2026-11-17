@@ -33,6 +33,7 @@ import { EraserBusy, EraserSkipped, erasersOf } from './registry.js';
 import { candidateRecordsDue, deletionDueByMs, dueAtMs, isDue, periodStartMs } from './rules.js';
 import { deletionStore, type DeletionReason, type DeletionRow, type DeletionStore, type LeftItem, type RemovedCount } from './store.js';
 import { overdueFirst, ringOverdue } from './overdue.js';
+import { interviewsNowMs } from '../clock.js';
 
 registerOwnErasers();
 
@@ -56,7 +57,7 @@ export interface RetentionDeps {
 }
 
 const defaults: RetentionDeps = {
-  now: Date.now,
+  now: interviewsNowMs,
   store: deletionStore,
   load: () => loadWorld(interviewsStore()),
   records: recordStatements,

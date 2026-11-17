@@ -21,6 +21,7 @@ import { admissionOf, applyAdmission, NOT_KNOCKED, type Admission } from '../../
 import { inviteDeadReason } from '../../lib/interviews/invite/rules.js';
 import { inviteStore } from '../../lib/interviews/invite/store.js';
 import type { Interview } from '../../lib/interviews/types.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const admissionRouter = Router();
 const conduct = requireAction('ConductInterview');
@@ -42,7 +43,7 @@ async function seatedInterview(req: Request, leadOnly: boolean): Promise<Intervi
 /** The candidate's current admission: the interview's latest link while it is alive, else not knocked. */
 async function currentAdmission(interview: Interview): Promise<{ admission: Admission; inviteId: string | null }> {
   const invite = await inviteStore().latestInvite(interview.id);
-  if (!invite || inviteDeadReason(invite, interview, new Date()) !== null) return { admission: { ...NOT_KNOCKED }, inviteId: null };
+  if (!invite || inviteDeadReason(invite, interview, interviewsNow()) !== null) return { admission: { ...NOT_KNOCKED }, inviteId: null };
   return { admission: admissionOf(invite), inviteId: invite.id };
 }
 

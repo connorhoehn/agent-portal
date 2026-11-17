@@ -21,6 +21,7 @@ import { deleteCandidateMedia, deletionsOf } from '../../lib/interviews/retentio
 import { retentionPeriods } from '../../lib/interviews/retention/periods.js';
 import type { DeletionRow } from '../../lib/interviews/retention/store.js';
 import { doneLate, isOverdue } from '../../lib/interviews/retention/overdue.js';
+import { interviewsNowMs } from '../../lib/interviews/clock.js';
 
 export const retentionRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -44,7 +45,7 @@ export interface DeletionView {
   doneLate: boolean;
 }
 
-async function viewOf(rows: DeletionRow[], nowMs: number = Date.now()): Promise<DeletionView[]> {
+async function viewOf(rows: DeletionRow[], nowMs: number = interviewsNowMs()): Promise<DeletionView[]> {
   const people = await peopleLookup();
   return rows.map((r) => ({
     id: r.id, reason: r.reason, requestedAt: r.requestedAt, requestedBy: r.requestedBy ? people(r.requestedBy) : null,

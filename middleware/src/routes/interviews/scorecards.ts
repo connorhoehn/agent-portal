@@ -33,6 +33,7 @@ import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
 import type { Interview, KitCompetency, RoundType, Seat } from '../../lib/interviews/types.js';
 import type { ScorecardView, WorldIndex } from '../../lib/interviews/views.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const scorecardsRouter = Router();
 const conduct = requireAction('ConductInterview');
@@ -155,7 +156,7 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
 
   const row = newScorecardVersion({
     id: `sc-${randomUUID()}`, interviewId: i.id, authorId: session.sub, version: move.version, input, reason,
-    at: new Date().toISOString(),
+    at: interviewsNow().toISOString(),
     // RECAP STEP (row I5.2): the ratings as they stood when this person first opened the recap (E3), never the request's.
     ratingsAtRecap: await ratingsAtRecap(i.id, session.sub),
   });

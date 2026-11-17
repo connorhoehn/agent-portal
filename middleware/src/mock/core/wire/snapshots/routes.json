@@ -17,6 +17,11 @@
     },
     {
       "method": "POST",
+      "path": "/api/__mock/interviews/clock",
+      "source": "src/routes/mock-control.ts:559"
+    },
+    {
+      "method": "POST",
       "path": "/api/__mock/reset",
       "source": "src/routes/mock-control.ts:500"
     },

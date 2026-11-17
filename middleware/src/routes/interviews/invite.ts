@@ -21,6 +21,7 @@ import { inviteCeiling, inviteStatus, issuable, type InviteStatus } from '../../
 import { inviteStore, type Invite } from '../../lib/interviews/invite/store.js';
 import { hashInviteToken, newInviteToken } from '../../lib/interviews/invite/token.js';
 import type { Interview } from '../../lib/interviews/types.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const inviteRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -42,7 +43,7 @@ async function interviewInScope(req: Request): Promise<Interview> {
 export interface InviteStatusView extends Omit<InviteStatus, 'issuedBy'> { issuedBy: { id: string; name: string } | null }
 
 async function statusView(invite: Invite | null, interview: Interview): Promise<InviteStatusView> {
-  const s = inviteStatus(invite, interview, new Date());
+  const s = inviteStatus(invite, interview, interviewsNow());
   const people = await peopleLookup();
   return { ...s, issuedBy: s.issuedBy ? people(s.issuedBy) : null };
 }
@@ -56,7 +57,7 @@ function portalOrigin(req: Request): string {
 
 inviteRouter.post('/interviews/:id/invite', manage, asyncHandler(async (req, res) => {
   const interview = await interviewInScope(req);
-  const now = new Date();
+  const now = interviewsNow();
   const verdict = issuable(interview, now);
   if (verdict !== 'ok') { res.status(409).json({ error: verdict === 'closed' ? CLOSED : PAST }); return; }
   const token = newInviteToken();
@@ -77,7 +78,7 @@ inviteRouter.get('/interviews/:id/invite', manage, asyncHandler(async (req, res)
 
 inviteRouter.delete('/interviews/:id/invite', manage, asyncHandler(async (req, res) => {
   const interview = await interviewInScope(req);
-  const latest = await inviteStore().revokeInvite(interview.id, new Date().toISOString(), resolveSession(req)!.sub);
+  const latest = await inviteStore().revokeInvite(interview.id, interviewsNow().toISOString(), resolveSession(req)!.sub);
   res.setHeader('Cache-Control', 'no-store');
   res.json({ invite: await statusView(latest, interview) });
 }));

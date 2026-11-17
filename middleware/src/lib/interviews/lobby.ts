@@ -34,6 +34,7 @@ import { INTERVIEWS_TENANT, type Interview, type InterviewState } from './types.
 import { admissionOf, type AdmissionState } from './invite/admission.js';
 import { GUEST_ROLE, guestSessionTag, loadGuestSession } from './invite/guest.js';
 import { guestRealtimeEnabled, guestSubject } from './invite/realtime.js';
+import { interviewsNow } from './clock.js';
 
 export const INTERVIEW_LOBBY_PREFIX = 'interviews:interview:';
 /** The pad's id rule (lib/interviews/pad/channel.ts): one id names the lobby and the pad alike. */
@@ -134,7 +135,7 @@ async function guestFacts(guest: ContextGuest, now: Date): Promise<{ interview: 
 }
 
 /** Is this guest context alive now (invite live, its session current), admitted or not? The socket's principal check. */
-export async function guestContextCurrent(ctx: Context, now = new Date()): Promise<boolean> {
+export async function guestContextCurrent(ctx: Context, now = interviewsNow()): Promise<boolean> {
   const guest = guestOfContext(ctx);
   try { return !!guest && !!await guestFacts(guest, now); } catch { return false; }
 }
@@ -143,7 +144,7 @@ export async function guestContextCurrent(ctx: Context, now = new Date()): Promi
  * Does this guest context hold a seat in `interviewId`'s call (or its pad) NOW? Read twice: the second read
  * follows every other read, so a revoke or a turn-away in between refuses.
  */
-export async function guestHoldsInterviewSeat(ctx: Context, interviewId: string, opts: { pad?: boolean } = {}, now = new Date()): Promise<boolean> {
+export async function guestHoldsInterviewSeat(ctx: Context, interviewId: string, opts: { pad?: boolean } = {}, now = interviewsNow()): Promise<boolean> {
   const guest = guestOfContext(ctx);
   if (!guest) return false;
   try {
@@ -179,7 +180,7 @@ export function guestOfSession(session: Session): ContextGuest | null {
  * guest's claims (subject alone) holds nothing: a link opened again elsewhere, and admitted again there, must not
  * hand the older session's socket back its seat (round 3's session-tag gap).
  */
-export async function guestSessionHoldsSeat(session: Session, interviewId: string, opts: { pad?: boolean } = {}, now = new Date()): Promise<boolean> {
+export async function guestSessionHoldsSeat(session: Session, interviewId: string, opts: { pad?: boolean } = {}, now = interviewsNow()): Promise<boolean> {
   const guest = guestOfSession(session);
   if (!guest || guest.interviewId !== interviewId) return false;
   try {

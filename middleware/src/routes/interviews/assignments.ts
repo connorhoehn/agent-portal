@@ -43,6 +43,7 @@ import { INTERVIEWS_TENANT, type Interview } from '../../lib/interviews/types.js
 import { UNKNOWN_ROUND, type WorldIndex } from '../../lib/interviews/views.js';
 import { notifyInterviewDeclined, notifyInterviewSeated, notifyInterviewTimed } from '../../lib/social-notify.js';
 import { listUsers } from '../../providers/identity.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const assignmentsRouter = Router();
 const assign = requireAction('AssignInterviews');
@@ -109,7 +110,7 @@ assignmentsRouter.post('/interviews', assign, asyncHandler(async (req, res) => {
   const app = ix.applications.get(checked.value.applicationId)!;
   const opening = ix.openings.get(app.openingId)!;
   const id = interviewIdFor(new Set((await store.listInterviews()).map((i) => i.id)));
-  const created = await store.createInterview(newInterview(checked.value, opening, id, session.sub, new Date().toISOString()));
+  const created = await store.createInterview(newInterview(checked.value, opening, id, session.sub, interviewsNow().toISOString()));
   if (!created) { res.status(409).json({ error: 'Another round was assigned at the same moment. Try again.' }); return; }
   const after = await answerWrite(req, res, { ok: true, row: created }, 201);
   if (after) void notifyInterviewSeated({ interviewId: created.id, ...bellWords(after, created), userIds: [created.leadId, ...created.panelIds], actorId: session.sub, reassigned: false });
@@ -127,7 +128,7 @@ assignmentsRouter.post('/interviews/:id/answer', conduct, asyncHandler(async (re
   if (!checked.ok) { refuse(res, 'answer', checked.problems); return; }
   // Answered against the row as the page saw it: a page older than the row is told so before anything else.
   if (i.revision !== revision) { await answerWrite(req, res, { ok: false, reason: 'stale', row: i }); return; }
-  const out = answerSeat(i, session.sub, checked.value, new Date().toISOString());
+  const out = answerSeat(i, session.sub, checked.value, interviewsNow().toISOString());
   if (!out.ok) {
     res.setHeader('Cache-Control', 'no-store');
     res.status(out.reason === 'no-seat' ? 403 : 409).json({ error: out.message, interview: ix.interviewRow(i) });
@@ -185,7 +186,7 @@ assignmentsRouter.post('/interviews/:id/panel-notice', conduct, asyncHandler(asy
     res.status(409).json({ error: checked.message, needsNotice: panelNoticeOf() });
     return;
   }
-  const kept = await panelNoticeStore().acknowledge({ userId: session.sub, noticeVersion: checked.version, acknowledgedAt: new Date().toISOString(), interviewId: i.id });
+  const kept = await panelNoticeStore().acknowledge({ userId: session.sub, noticeVersion: checked.version, acknowledgedAt: interviewsNow().toISOString(), interviewId: i.id });
   res.status(kept.created ? 201 : 200).json({ acknowledgement: { version: kept.row.noticeVersion, at: kept.row.acknowledgedAt } });
 }));
 

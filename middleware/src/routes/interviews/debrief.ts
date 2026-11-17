@@ -27,6 +27,7 @@ import { stageDecided } from '../../lib/interviews/result-bells.js';
 import { reachOf } from '../../lib/interviews/scope.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
+import { interviewsNow } from '../../lib/interviews/clock.js';
 
 export const debriefRouter = Router();
 
@@ -94,7 +95,7 @@ debriefRouter.post('/applications/:id/stage', readersDoNotDecide, requireAction(
   const move = decisionMove(app.stage, decision, interviews, cards);
   if (!move.ok) { res.status(409).json({ error: move.message, debrief: await debriefOf(req, app.candidateId) }); return; }
 
-  const change = decisionChange({ to: move.to, decision, reason, by: session.sub, at: new Date().toISOString(), missing: scorecardsMissing(interviews, cards) });
+  const change = decisionChange({ to: move.to, decision, reason, by: session.sub, at: interviewsNow().toISOString(), missing: scorecardsMissing(interviews, cards) });
   const out = await interviewsStore().decideStage(app.id, change, basedOn);
   if (!out.ok) {
     if (out.reason === 'not-found') throw new NotFoundError(NO_APPLICATION_HERE);

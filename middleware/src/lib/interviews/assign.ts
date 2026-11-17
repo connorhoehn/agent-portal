@@ -24,6 +24,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Checked, FieldProblem } from './kit.js';
 import type { Application, Interview, InterviewState, InterviewsWorld, Opening, Seat, SeatAcceptance, SeatDecline } from './types.js';
+import { interviewsNow } from './clock.js';
 
 export const ASSIGN_LIMITS = {
   /** Panel members besides the lead (decision 20). */
@@ -251,7 +252,7 @@ export const isTimeable = (state: InterviewState): boolean => TIMEABLE.has(state
  * A time as sent: `{ scheduledAt: '<ISO instant>' }` sets, `{ scheduledAt: null }` clears. A set time is a whole
  * minute in the future and is stored in UTC; the round must not have started or closed. `now` is injectable for tests.
  */
-export function checkTime(input: unknown, i: Pick<Interview, 'state'>, now: Date = new Date()): Checked<{ scheduledAt: string | null }> {
+export function checkTime(input: unknown, i: Pick<Interview, 'state'>, now: Date = interviewsNow()): Checked<{ scheduledAt: string | null }> {
   if (!TIMEABLE.has(i.state)) {
     return { ok: false, problems: [{ path: 'state', message: i.state === 'declined' || i.state === 'cancelled'
       ? 'This round is no longer going ahead, so it cannot be given a time.'

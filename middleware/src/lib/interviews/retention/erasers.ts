@@ -25,6 +25,7 @@ import type { AssistantStore } from '../../meeting-assistant/store.js';
 import { EraserBusy, EraserSkipped, registerEraser, type Eraser } from './registry.js';
 import { recordStatements, type RecordStatements } from './records.js';
 import { interviewLobby } from './rules.js';
+import { interviewsNowMs } from '../clock.js';
 
 export const RECORDING_ERASE_PATH = '/internal/recordings/erase';
 const RECORDING_TIMEOUT_MS = 8_000;
@@ -79,7 +80,7 @@ export interface CallWordsDeps {
 const defaultCallWords: CallWordsDeps = {
   store: () => { throw new Error('not loaded'); },
   eraseCall: async (store, callId, by, at) => (await import('../../meeting-assistant/erase.js')).eraseCall(store, callId, by, at),
-  now: Date.now,
+  now: interviewsNowMs,
 };
 
 /** How many calls of one lobby are looked at per interview; an interview has one call, so this is generous. */

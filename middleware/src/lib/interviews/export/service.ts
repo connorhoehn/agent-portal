@@ -5,6 +5,7 @@
 import type { Interview } from '../types.js';
 import { exportSections } from './registry.js';
 import './sections.js';
+import { interviewsNow } from '../clock.js';
 
 export interface MiloExport {
   exportedAt: string;
@@ -23,7 +24,7 @@ export interface ExportContext {
   roundName: string;
 }
 
-export async function buildMiloExport(ctx: ExportContext, now: Date = new Date()): Promise<MiloExport> {
+export async function buildMiloExport(ctx: ExportContext, now: Date = interviewsNow()): Promise<MiloExport> {
   const i = ctx.interview;
   const sections: Record<string, unknown> = {};
   for (const s of exportSections()) {
