@@ -70,13 +70,28 @@ export interface MicrovmNetworkStackProps extends cdk.StackProps {
  *
  *   runtime subnets ──0.0.0.0/0──▶ firewall endpoint ──▶ NAT (public) ──▶ IGW
  *   public subnets  ──runtime CIDRs──▶ firewall endpoint (return path)
- *   bedrock-runtime  interface endpoint in the runtime subnets (never leaves the VPC)
+ *   bedrock-runtime, ecr.api, ecr.dkr, logs  interface endpoints in the runtime subnets
+ *   s3  gateway endpoint, the ECR layer bucket only (neither leaves the VPC)
  *
  * Network Firewall (strict order) drops port 80 first, then 443 to any address
  * outside GitHub's published ranges (GITHUB_EGRESS_CIDRS), then passes TLS whose
  * SNI is one of MICROVM_EGRESS_DOMAINS and drops everything else; DNS Firewall
  * answers NXDOMAIN for every name not on the same list.
  */
+/** The region's ECR image-layer bucket objects (the AgentCore VPC guide's S3 gateway policy). */
+export const ecrLayerBucketArn = (region: string): string => `arn:aws:s3:::prod-${region}-starport-layer-bucket/*`;
+
+/** The names a VPC-mode runtime resolves to start: ECR, its layer bucket and CloudWatch Logs. */
+export function microvmStartupNames(region: string, account: string): string[] {
+  return [
+    `api.ecr.${region}.amazonaws.com`,
+    `${account}.dkr.ecr.${region}.amazonaws.com`,
+    `prod-${region}-starport-layer-bucket.s3.${region}.amazonaws.com`,
+    `prod-${region}-starport-layer-bucket.s3.amazonaws.com`,
+    `logs.${region}.amazonaws.com`,
+  ];
+}
+
 export class MicrovmNetworkStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
   public readonly runtimeSubnets: ec2.ISubnet[];
@@ -277,17 +292,54 @@ export class MicrovmNetworkStack extends cdk.Stack {
       conditions: { StringEquals: { 'aws:PrincipalAccount': this.account } },
     }));
 
+    // ── What the runtime needs to start ─────────────────────────────────────
+    // A VPC-mode runtime created after AgentCore's 2026-05-05 rollout has no
+    // service-managed S3 gateway: the image pull at session start goes through
+    // this VPC (VpcConfig.requireServiceS3Endpoint, and the AgentCore VPC guide's
+    // required endpoints). Without these the first deploy's session failed its
+    // health check and wrote no log. ECR and Logs are interface endpoints with
+    // AWS's default policy: the execution role already limits the pull to the
+    // devbox repository and the writes to this runtime's log groups. S3 is a
+    // gateway endpoint limited to the region's ECR layer bucket, so the box
+    // reaches no other bucket through it. None of them crosses Network Firewall.
+    for (const [id, service] of [
+      ['EcrApiEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR],
+      ['EcrDockerEndpoint', ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER],
+      ['LogsEndpoint', ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS],
+    ] as const) {
+      new ec2.InterfaceVpcEndpoint(this, id, {
+        vpc: this.vpc,
+        service,
+        privateDnsEnabled: true,
+        subnets: { subnets: this.runtimeSubnets },
+        securityGroups: [this.endpointSecurityGroup],
+        open: false,
+      });
+    }
+    const s3Endpoint = new ec2.GatewayVpcEndpoint(this, 'S3GatewayEndpoint', {
+      vpc: this.vpc,
+      service: ec2.GatewayVpcEndpointAwsService.S3,
+      subnets: [{ subnets: this.runtimeSubnets }],
+    });
+    s3Endpoint.addToPolicy(new iam.PolicyStatement({
+      sid: 'EcrImageLayers',
+      principals: [new iam.AnyPrincipal()],
+      actions: ['s3:GetObject'],
+      resources: [ecrLayerBucketArn(this.region)],
+    }));
+
     // ── DNS Firewall: allow the list, NXDOMAIN for everything else ──────────
     const githubNames = new route53resolver.CfnFirewallDomainList(this, 'DnsAllowGithub', {
       name: `${prefix}-microvm-github`,
       domains: [...MICROVM_EGRESS_DOMAINS],
     });
     // Names that resolve inside the VPC and never cross Network Firewall: the
-    // endpoint's private DNS and the BFF's private zone. Blocking them would
-    // take Bedrock and the lab loop down with everything else.
+    // endpoints' private DNS, the ECR layer bucket (gateway endpoint) and the
+    // BFF's private zone. Blocking them would take the runtime's start, Bedrock
+    // and the lab loop down with everything else.
     const inVpcNames = new route53resolver.CfnFirewallDomainList(this, 'DnsAllowInVpc', {
       name: `${prefix}-microvm-in-vpc`,
-      domains: [`bedrock-runtime.${this.region}.amazonaws.com`, microvmLabZoneName(prefix)],
+      domains: [`bedrock-runtime.${this.region}.amazonaws.com`, microvmLabZoneName(prefix), ...microvmStartupNames(this.region, this.account)],
     });
     const everything = new route53resolver.CfnFirewallDomainList(this, 'DnsEverything', {
       name: `${prefix}-microvm-everything`,

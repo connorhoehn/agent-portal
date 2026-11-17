@@ -188,15 +188,17 @@ export class MicrovmRuntimeStack extends cdk.Stack {
       },
     });
 
-    // The workload identity AgentCore creates for this runtime. A separate
-    // policy, not inline: the runtime needs the role first, the ARN needs the runtime.
-    const workloadIdentityArn = cdk.Fn.getAtt(runtime.logicalId, 'WorkloadIdentityDetails.WorkloadIdentityArn').toString();
+    // The workload identity AgentCore creates for this runtime, named after its
+    // id (`<runtimeName>-<suffix>`), and the directory it sits in. By pattern:
+    // CloudFormation does not expose WorkloadIdentityDetails.WorkloadIdentityArn
+    // to Fn::GetAtt, so the first real deploy failed on it.
+    const directory = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:workload-identity-directory/default`;
     new iam.Policy(this, 'MicrovmWorkloadAccess', {
       roles: [this.executionRole],
       statements: [new iam.PolicyStatement({
         sid: 'Workload',
         actions: ['bedrock-agentcore:GetWorkloadAccessToken'],
-        resources: [workloadIdentityArn],
+        resources: [directory, `${directory}/workload-identity/${runtimeName}-*`],
       })],
     });
 

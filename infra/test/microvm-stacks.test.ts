@@ -12,7 +12,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import { synthApp } from './helpers/app-assembly';
 import { middlewareServiceStack, newApp, withoutEcrLookup, PREFIX } from './helpers/stacks';
 import { actionsOf, statementsForRole, type Statement } from './helpers/cfn';
-import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS, GITHUB_NETS_VARIABLE } from '../lib/microvm-network-stack';
+import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS, GITHUB_NETS_VARIABLE, microvmStartupNames } from '../lib/microvm-network-stack';
 import { GITHUB_EGRESS_CIDRS, GITHUB_IP_RANGES_FETCHED, GITHUB_META_KEYS } from '../lib/github-ip-ranges';
 import {
   MicrovmRuntimeStack, MICROVM_ROLE_SIDS, microvmMaxLifetime, type MicrovmRuntimeStackProps,
@@ -90,7 +90,11 @@ describe('execution role (design §12)', () => {
     assert.match(logs, /log-group:\/aws\/bedrock-agentcore\/runtimes\/orgiq_microvm\*/);
     const workload = roleStatements.find((s) => s.Sid === 'Workload')!;
     assert.deepEqual(actionsOf(workload), ['bedrock-agentcore:GetWorkloadAccessToken']);
-    assert.deepEqual(workload.Resource, { 'Fn::GetAtt': ['MicrovmRuntime', 'WorkloadIdentityDetails.WorkloadIdentityArn'] });
+    // Not Fn::GetAtt WorkloadIdentityDetails.WorkloadIdentityArn: CloudFormation refuses that attribute.
+    const resources = JSON.stringify(workload.Resource);
+    assert.ok(!resources.includes('WorkloadIdentityDetails'), resources);
+    assert.match(resources, /workload-identity-directory\/default"/);
+    assert.match(resources, /workload-identity-directory\/default\/workload-identity\/orgiq_microvm-\*"/);
   });
 
   test('the trust policy carries aws:SourceAccount and aws:SourceArn', () => {
@@ -261,6 +265,28 @@ describe('network (design §5)', () => {
     assert.deepEqual(types, ['ALERT', 'FLOW']);
   });
 
+  test('the runtime can start: ECR, Logs and the ECR layer bucket inside the VPC, and their names resolve', () => {
+    // A runtime created after AgentCore's 2026-05-05 rollout pulls its image through this VPC; without these the
+    // first real session failed its health check.
+    const eps = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint'));
+    const service = (e: any) => JSON.stringify(e.Properties.ServiceName);
+    for (const name of ['ecr.api', 'ecr.dkr', 'logs']) {
+      const ep = eps.find((e) => service(e).includes(`.${name}"`));
+      assert.ok(ep, `no ${name} endpoint`);
+      assert.equal(ep.Properties.VpcEndpointType, 'Interface');
+      assert.equal(ep.Properties.PrivateDnsEnabled, true);
+    }
+    const s3 = eps.find((e) => service(e).includes('.s3"'));
+    assert.equal(s3.Properties.VpcEndpointType, 'Gateway');
+    const [st, ...rest] = s3.Properties.PolicyDocument.Statement;
+    assert.equal(rest.length, 0);
+    assert.deepEqual([st.Effect, st.Action], ['Allow', 's3:GetObject']);
+    assert.match(JSON.stringify(st.Resource), /prod-.*-starport-layer-bucket\/\*/);
+    const inVpc = network.findResources('AWS::Route53Resolver::FirewallDomainList')['DnsAllowInVpc'].Properties.Domains;
+    assert.equal(microvmStartupNames('us-east-1', '647757222309').length, 5);
+    assert.ok(JSON.stringify(inVpc).includes('starport-layer-bucket') && JSON.stringify(inVpc).includes('api.ecr.'));
+  });
+
   test('DNS Firewall allows the GitHub names (and the two in-VPC names) and blocks everything else', () => {
     const lists = network.findResources('AWS::Route53Resolver::FirewallDomainList');
     const domainsOf = (id: string) => lists[id].Properties.Domains;
@@ -292,7 +318,7 @@ describe('network (design §5)', () => {
   });
 
   test('the bedrock-runtime endpoint has private DNS and a policy naming exactly the role\'s model ARNs', () => {
-    const [ep] = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint'));
+    const [ep] = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint')).filter((e) => /bedrock-runtime/.test(JSON.stringify(e.Properties.ServiceName)));
     assert.equal(ep.Properties.PrivateDnsEnabled, true);
     assert.match(JSON.stringify(ep.Properties.ServiceName), /bedrock-runtime/);
     const [st] = ep.Properties.PolicyDocument.Statement;
