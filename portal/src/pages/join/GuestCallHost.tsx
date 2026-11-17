@@ -44,7 +44,7 @@ function GuestHost({ token, tokens, self, children }: GuestCallHostProps) {
   return <CallHostProvider scopeKey={JSON.stringify(['interviews', who.userId])} self={who} tenant="interviews"
     platformApiUrl={platformApiUrl} getIdToken={getIdToken} videoUrl={videoUrl}
     gateway={frames.gateway} gatewayConfigured={frames.configured} connectionState={frames.connectionState}
-    preJoinStorageKey={GUEST_PRE_JOIN_KEY} meeting={false}>
+    preJoinStorageKey={GUEST_PRE_JOIN_KEY} meeting={false} callNoun="call">
     {children}
   </CallHostProvider>;
 }

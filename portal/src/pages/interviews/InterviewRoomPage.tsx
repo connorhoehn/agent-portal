@@ -174,7 +174,7 @@ function InterviewRoom({ id }: { id: string }) {
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {drawn
-      ? <CallBlock placement="pane" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
+      ? <CallBlock placement="pane" fit="contain" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
       : <RoomIdle room={room} live={call.live} admission={admission} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
     <RoomPane room={room} here={call.here} />
   </Stack>;

@@ -166,7 +166,7 @@ export function ShellCallHost({ children, onDialogueChange }: { children: ReactN
     if (href && href !== here.current) navigate(href);
   }, [navigate]);
   const self = session ? { userId: session.sub, displayName: session.name || session.sub, ...(selfAvatar ? { avatarUrl: selfAvatar } : {}) } : null;
-  return <CallHostProvider scopeKey={callScopeKey(session)} self={self} tenant={session?.tenant ?? null}
+  return <CallHostProvider scopeKey={callScopeKey(session)} self={self} tenant={session?.tenant ?? null} callNoun={session?.tenant === 'interviews' ? 'call' : 'huddle'}
     platformApiUrl={platformApiUrl} getIdToken={getToken} videoUrl={videoUrl}
     gateway={frames.gateway} gatewayConfigured={frames.configured} connectionState={frames.connectionState}
     onAccept={onAccept} onCallEvent={onCallEvent} nameFor={nameFor} preJoinStorageKey={PRE_JOIN_KEY}

@@ -27,6 +27,7 @@ import { callTimeLabel, timeLeftTone } from '../../lib/interviewsRoom';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
+import { GuestMiloRequests, GuestMiloVoice } from './GuestMiloVoice';
 import { GuestRoomPane, type GuestPaneTab } from './GuestRoomPane';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
@@ -174,7 +175,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
       <Stack gap="none" className="h-full min-h-0 w-full bg-surface" data-testid="join-room">
         <SidePaneSplit paneTestId="join-room-pane-frame" dividerLabel="Resize the call and the pane" className="min-h-0 flex-1" data-testid="join-room-stage">
           {drawn
-            ? <CallBlock placement="pane" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
+            ? <CallBlock placement="pane" fit="contain" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
             : <EmptyState
               title={view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
               body={view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
@@ -182,7 +183,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
               testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
         </SidePaneSplit>
         {joined && callId && paneOpen && <GuestRoomPane room={room} callId={callId} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
-        {/* r2:SPEAK voice */}
+        <GuestMiloVoice room={room} />
         <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
           <CallMediaOutlet />
           <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
@@ -236,7 +237,7 @@ function GuestCallBar({ room, chatOpen, onToggleChat }: { room: GuestRoom; chatO
     extras={<>
       {left && <T size="xs" weight="medium" tone={timeLeftTone(left)} className="whitespace-nowrap" data-testid="join-room-time-left">{left}</T>}
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="join-room-rejoin">Rejoin</Button>}
-      {/* r2:SPEAK requests */}
+      <GuestMiloRequests room={room} />
     </>}
     onLeave={() => { void call.leave(); }}
     leaveLabel={over ? 'Dismiss' : 'Leave'}

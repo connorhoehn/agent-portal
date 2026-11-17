@@ -36,10 +36,10 @@ describe('the registry (D6)', () => {
     expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes', 'pad-log', 'runs']);
     expect(eraserFor('runs')?.class).toBe('media');
     // The coach's suggestion log is registered with the module's own (round 4 combine).
-    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log']);
+    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log', 'said-log']);
     expect(eraserFor('suggestions')?.class).toBe('record');
     registerEraser({ kind: 'other-module', class: 'record', erase: async () => 0 });
-    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log', 'other-module']);
+    expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log', 'said-log', 'other-module']);
     expect(() => registerEraser({ kind: '', class: 'media', erase: async () => 0 })).toThrow(TypeError);
     expect(() => registerEraser({ kind: 'x', class: 'other' as 'media', erase: async () => 0 })).toThrow(TypeError);
   });
