@@ -18,11 +18,26 @@
 // The quote is taken out before the guard because it is the candidate's own words, already proved to be in their line:
 // a candidate saying "I recommended we roll back" must not reject the recap. Milo's words around it are what is guarded.
 //
-// What the guard catches: the listed words and phrases, in English, as whole words, case-insensitive. What it cannot
-// catch, said plainly: a judgement in other words ("the candidate covered every case the kit lists"), a slant carried by
-// WHICH statements were chosen or left out, emphasis by repetition, a paraphrase that drifts from its quote while still
-// citing it, and any other language. The quote check proves the source exists, not that the statement is a fair reading
-// of it: that is why every statement is shown beside its quote, and why the person rates before they read it.
+// Five more limits, closed in hardening H4 (each erring on dropping):
+//   a judgement in other words   RECAP_JUDGES also holds completeness and kit-reference verdicts ("covered every case",
+//                              "the kit", "fully", "missed"): one rejects the whole recap, as any verdict does.
+//   another language           Milo's words must be English, the one language the lists read: a statement with two or
+//                              more common function words of another language, a verdict word of one (FOREIGN_JUDGES),
+//                              or letters outside the Latin script rejects the whole recap (`judges`). The candidate's
+//                              own quote, taken out first, may be in any language.
+//   repetition                 the same statement on the same line twice in one competency shows once; the repeats
+//                              are dropped and counted.
+//   drift                      every content word of Milo's statement (the quote taken out, reporting words such as
+//                              "the candidate said" aside) must be on the line it cites, compared by stem; a statement
+//                              that says more than its line is dropped and counted.
+//   selection                  a candidate's answer is the run of their lines between two panel lines. When a claim
+//                              cites one line of an answer, the answer's other lines that nothing in the recap cites
+//                              are added to that competency, in order, as the candidate's own words beside a fixed
+//                              statement, so a recap cannot show the line that sounds best and leave out the rest of
+//                              the same answer. They fill up to the cap of four per competency; lines touching a
+//                              personal trait stay out. What remains: which ANSWERS a competency cites is still the
+//                              writer's choice, and the cap can cut a long answer short. That is why every statement is
+//                              shown beside its quote, and why the person rates before they read it.
 import { extractJson } from '../../meeting-assistant/decision-prompt.js';
 import { guardSuggestion, PERSONAL, quotedFrom } from '../coach/parse.js';
 import type { CoachLine } from '../coach/prompt.js';
@@ -59,16 +74,71 @@ export const RECAP_JUDGES: readonly RegExp[] = [
   /\b(?:better|worse|worst)\b|\bbest\b(?!\s+practices?\b)|\bcompared (?:to|with)\b|\bthan (?:other|most|the average|average|expected)\b|\btop (?:candidate|performer)\b/i,
   // doubt and speculation
   /\b(?:seemed|seems|appeared|appears|apparently|doubt\w*|questionable|unclear whether|may have|might have|probably|likely|presumably)\b/i,
+  // completeness and the kit: whether the answer was enough is the panel's judgement, not Milo's
+  /\b(?:every|each|all(?:\s+the)?|any|no|none of the)\s+(?:cases?|points?|areas?|aspects?|requirements?|items?|parts?|questions?|criteria|criterion|expectations?|scenarios?|things?|topics?|bases)\b/i,
+  /\b(?:the kit|the rubric|the scorecard|the competency|look[- ]fors?|what was asked for|what the role needs)\b|\b(?:covered|addressed|answered|handled)\s+(?:everything|it all|all|fully|completely|well)\b/i,
+  /\b(?:fully|completely|comprehensive(?:ly)?|exhaustive(?:ly)?|incomplete|incompletely|partially|sufficient(?:ly)?|insufficient(?:ly)?|missed|overlooked|neglected|forgot|omitted)\b/i,
   // the person rather than the words
   /\b(?:he|she|him|her|his|hers|himself|herself)\b/i,
   /\b(?:smart|intelligent|bright|talented|gifted|passionate|confident|confidence|arrogant|humble|friendly|likeable|likable|charismatic|articulate|eloquent|experienced|inexperienced|senior-level|junior-level)\b/i,
 ];
 
+/** Verdict words of other languages the panel may work in (Spanish, French, German, Portuguese, Italian). */
+export const FOREIGN_JUDGES = /(?<![\p{L}])(?:excelente|excelentes|excellente?s?|convincente|convaincante?|bueno|buena|buenos|malo|mala|fuerte|d[ée]bil|perfect[oa]|brillante|incre[íi]ble|s[óo]lid[oa]|impresionante|bon|bonne|mauvaise?|faible|fort|forte|parfaite?|gut|schlecht|stark|schwach|ausgezeichnet|hervorragend|[óo]tim[oa]|fraco|fraca|[óo]ttim[oa]|buon[oa]|debole|eccellente)(?![\p{L}])/iu;
+/** Common function words of those languages; two of them mark a statement Milo wrote in another language. */
+const FOREIGN_WORDS = new Set(['el', 'la', 'los', 'las', 'una', 'unos', 'unas', 'y', 'muy', 'del', 'es', 'que', 'con', 'por', 'para', 'pero', 'su', 'sus',
+  'le', 'les', 'des', 'et', 'très', 'est', 'une', 'du', 'avec', 'sur', 'dans', 'pas', 'der', 'die', 'das', 'und', 'sehr', 'ist', 'ein', 'eine', 'nicht', 'mit',
+  'uma', 'muito', 'não', 'com', 'il', 'gli', 'molto', 'è', 'della', 'di', 'hat', 'hizo', 'dio', 'fue', 'era']);
+const wordsOf = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Milo's words in a language the lists cannot read: another script, a verdict word, or two function words of another language. */
+export function notEnglish(text: string): boolean {
+  if (/(?=\p{L})\P{Script=Latin}/u.test(text)) return true;
+  if (FOREIGN_JUDGES.test(text)) return true;
+  return new Set(wordsOf(text).filter((w) => FOREIGN_WORDS.has(w))).size >= 2;
+}
+
 /** The first rule a recap statement breaks, or null. */
 export function guardRecapText(text: string): 'judges' | 'personal' | null {
   const coach = guardSuggestion(text);
   if (coach) return coach;
+  if (notEnglish(text)) return 'judges';
   return RECAP_JUDGES.some((r) => r.test(text)) ? 'judges' : null;
+}
+
+// ---- drift: Milo's words must be on the line they cite ---------------------------------------------------------------
+/** Words that report rather than claim: how a statement frames the candidate's words, not what it says they did. */
+const REPORTING = new Set([
+  'a', 'an', 'the', 'and', 'or', 'of', 'to', 'in', 'on', 'at', 'for', 'with', 'by', 'from', 'as', 'about', 'that', 'this', 'these', 'those', 'it', 'its',
+  'they', 'them', 'their', 'then', 'when', 'while', 'after', 'before', 'during', 'into', 'was', 'were', 'is', 'are', 'be', 'been', 'has', 'have', 'had',
+  'do', 'did', 'does', 'also', 'which', 'who', 'what', 'how', 'why', 'where', 'so', 'but', 'if', 'there', 'i', 'we', 'our', 'my', 'me', 'us', 'own', 'one',
+  'candidate', 'candidates', 'said', 'says', 'say', 'saying', 'described', 'describes', 'describe', 'describing', 'explained', 'explains', 'explain',
+  'mentioned', 'mentions', 'mention', 'named', 'names', 'name', 'talked', 'talks', 'talk', 'spoke', 'told', 'recounted', 'noted', 'stated', 'gave',
+  'answered', 'answer', 'replied', 'recalled', 'referred', 'example', 'account', 'words', 'quote', 'quoted', 'line', 'question', 'asked',
+  'in', 'same', 'other', 'went', 'on',
+]);
+const stem = (w: string): string => {
+  let s = w.replace(/[’']s$/u, '');
+  for (const suf of ['ing', 'ed', 'es', 's']) if (s.length > suf.length + 2 && s.endsWith(suf)) { s = s.slice(0, -suf.length); break; }
+  return s.length > 3 && s.endsWith('e') ? s.slice(0, -1) : s;
+};
+const sameStem = (a: string, b: string): boolean => a === b || (Math.min(a.length, b.length) >= 5 && (a.startsWith(b) || b.startsWith(a)));
+
+/** True when every content word of `words` (Milo's statement with its quote out) is on `line`, compared by stem. */
+export function grounded(words: string, line: string): boolean {
+  const have = wordsOf(line).map(stem);
+  return wordsOf(words).filter((w) => !REPORTING.has(w)).every((w) => { const s = stem(w); return have.some((h) => sameStem(s, h)); });
+}
+
+/** The fixed statement beside a line the guard adds from the rest of a cited answer. */
+export const SAME_ANSWER_TEXT = 'The candidate also said this in the same answer.';
+
+function quoteOfLine(text: string): string {
+  const t = squash(text);
+  if (t.length <= MAX_QUOTE_CHARS) return t;
+  const cut = t.slice(0, MAX_QUOTE_CHARS);
+  const space = cut.lastIndexOf(' ');
+  return space > 40 ? cut.slice(0, space) : cut;
 }
 
 const squash = (s: string): string => s.replace(/\s+/g, ' ').trim();
@@ -124,11 +194,33 @@ export function parseRecapAnswer(raw: string | null, ctx: { competencyIds: reado
       const quote = squash(e.quote);
       const line = bySeq.get(e.seq);
       const keep = text.length > 0 && text.length <= MAX_CLAIM_CHARS && quote.length > 0 && quote.length <= MAX_QUOTE_CHARS
-        && !!line && line.side === 'candidate' && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote));
+        && !!line && line.side === 'candidate' && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote))
+        && grounded(withoutQuote(text, quote), line.text);
       const list = found.get(c.id) ?? [];
-      if (!keep || list.length >= MAX_CLAIMS_PER_COMPETENCY) { droppedClaims += 1; continue; }
+      const repeat = list.some((x) => x.seq === e.seq && x.text.toLowerCase() === text.toLowerCase());
+      if (!keep || repeat || list.length >= MAX_CLAIMS_PER_COMPETENCY) { droppedClaims += 1; continue; }
       list.push({ text, seq: e.seq, quote });
       found.set(c.id, list);
+    }
+  }
+
+  // Selection: the rest of each cited answer that nothing in the recap cites, as the candidate's own words.
+  const answerOf = new Map<number, number[]>();
+  let run: number[] = [];
+  for (const l of ctx.lines) {
+    if (l.side === 'candidate') { run.push(l.seq); answerOf.set(l.seq, run); } else run = [];
+  }
+  const cited = new Set([...found.values()].flatMap((list) => list.map((x) => x.seq)));
+  for (const id of ctx.competencyIds) {
+    const list = found.get(id);
+    if (!list?.length) continue;
+    for (const seq of [...new Set(list.flatMap((x) => answerOf.get(x.seq) ?? []))].sort((a, b) => a - b)) {
+      if (list.length >= MAX_CLAIMS_PER_COMPETENCY) break;
+      const line = bySeq.get(seq)!;
+      const quote = quoteOfLine(line.text);
+      if (cited.has(seq) || !quote || PERSONAL.some((r) => r.test(quote))) continue;
+      list.push({ text: SAME_ANSWER_TEXT, seq, quote });
+      cited.add(seq);
     }
   }
 

@@ -1,6 +1,6 @@
 // The recap's bar (lib/interviews/recap/parse.ts; row I5.2): every claim has a source, and a rating or a recommendation in
 // the output is rejected.
-import { guardRecapText, parseRecapAnswer, withoutQuote } from '../parse.js';
+import { guardRecapText, parseRecapAnswer, SAME_ANSWER_TEXT, withoutQuote } from '../parse.js';
 import { FIXED_INPUT } from './fixed-input.js';
 
 const ctx = { competencyIds: ['communication', 'collaboration'], lines: FIXED_INPUT.lines };
@@ -37,7 +37,10 @@ describe('every claim has a source', () => {
   });
 
   it('keeps at most four claims per competency and puts the kit\'s order back', () => {
-    const many = Array.from({ length: 6 }, () => GOOD);
+    // Six different statements, each resting on line 2 (a repeat would be collapsed, not capped).
+    const many = ['The candidate described paging the on-call lead.', 'The candidate said the payments queue backed up.', 'The candidate described the queue backing up.',
+      'The candidate said they split the work.', 'The candidate named the on-call lead.', 'The candidate described splitting the work with the lead.']
+      .map((t) => claim(t, 2, 'I paged the on-call lead'));
     const out = parseRecapAnswer(answer([
       { id: 'collaboration', evidence: [claim('The candidate named the database owner.', 4, 'The database owner')] },
       { id: 'communication', evidence: many },
@@ -102,11 +105,10 @@ describe('strict JSON', () => {
   });
 });
 
-// Hardening H4 (O-147): what the guard cannot catch, pinned as the guard behaves TODAY on a fixed transcript, so a change
-// to it shows in review. Each limit has two tests: a plain one that pins what gets through (the recap is kept whole), and
-// an `it.failing` that states what decision 6 (Milo never scores, never slants) would want. When a limit is closed the
-// failing test starts passing, jest reports it, and the pair is replaced by one plain test. The guard itself is not changed.
-describe('the guard\'s limits (what it cannot catch, said plainly in parse.ts)', () => {
+// Hardening H4 (O-147): the five limits the guard once could not catch, each now closed (parse.ts's header says how). Each
+// was a pair, a plain test pinning what got through and an `it.failing` stating what decision 6 wants; the fix replaced
+// each pair with the one plain test below.
+describe('the guard\'s limits, closed', () => {
   const LINES = [
     { seq: 1, side: 'panel' as const, text: 'Tell me about an incident you led.' },
     { seq: 2, side: 'candidate' as const, text: 'I paged the on-call lead and we split the work.' },
@@ -116,64 +118,41 @@ describe('the guard\'s limits (what it cannot catch, said plainly in parse.ts)',
   const lctx = { competencyIds: ['communication', 'collaboration'], lines: LINES };
   const PAGING = claim('The candidate described paging the on-call lead.', 2, 'I paged the on-call lead');
   const run = (competencies: unknown[]) => parseRecapAnswer(answer(competencies), lctx);
-  const kept = (out: ReturnType<typeof parseRecapAnswer>) => out.ok && out.droppedClaims === 0 && out.recap.competencies.length > 0;
 
-  describe('a judgement in other words', () => {
+  it('a judgement in other words is rejected: "covered every case the kit lists" is a completeness verdict', () => {
     const PARAPHRASE = claim('The candidate covered every case the kit lists for incidents.', 2, 'I paged the on-call lead');
-    it('gets through: a verdict that uses none of the listed words is kept, beside its quote', () => {
-      expect(guardRecapText(PARAPHRASE.text)).toBeNull();
-      expect(kept(run([{ id: 'communication', evidence: [PARAPHRASE] }]))).toBe(true);
-    });
-    it.failing('should be rejected: "covered every case the kit lists" is a completeness verdict', () => {
-      expect(run([{ id: 'communication', evidence: [PARAPHRASE] }])).toEqual({ ok: false, code: 'judges' });
-    });
+    expect(guardRecapText(PARAPHRASE.text)).toBe('judges');
+    expect(run([{ id: 'communication', evidence: [PARAPHRASE] }])).toEqual({ ok: false, code: 'judges' });
   });
 
-  describe('a slant carried by which statements were chosen', () => {
-    it('gets through: only the line that sounds best is cited, and the line that sounds worst is simply not there', () => {
-      const out = run([{ id: 'communication', evidence: [PAGING] }]);
-      expect(out).toEqual({ ok: true, droppedClaims: 0, recap: { competencies: [{ id: 'communication', evidence: [PAGING] }], notCovered: ['collaboration'] } });
-      // Line 3 is on the transcript and bears on the competency; nothing in the output says it was left out.
-      expect(JSON.stringify(out)).not.toMatch(/did not write a test/);
-    });
-    it.failing('should be caught: a recap that skips a candidate line the kit asks about is not a fair reading', () => {
-      const out = run([{ id: 'communication', evidence: [PAGING] }]);
-      expect(out.ok && out.recap.competencies[0]!.evidence.some((e) => e.seq === 3)).toBe(true);
-    });
+  it('a slant carried by which statements were chosen is caught: the rest of a cited answer is shown beside it, in the candidate\'s own words', () => {
+    const out = run([{ id: 'communication', evidence: [PAGING] }]);
+    expect(out.ok && out.recap.competencies[0]!.evidence.some((e) => e.seq === 3)).toBe(true);
+    expect(out).toEqual({ ok: true, droppedClaims: 0, recap: { competencies: [{ id: 'communication', evidence: [
+      PAGING,
+      { text: SAME_ANSWER_TEXT, seq: 3, quote: 'I did not write a test for the fix before we shipped it.' },
+      { text: SAME_ANSWER_TEXT, seq: 4, quote: 'Yo hablé con el equipo de pagos.' },
+    ] }], notCovered: ['collaboration'] } });
   });
 
-  describe('emphasis by repetition', () => {
-    it('gets through: the same statement said four times is four statements (the cap of four per competency is the only limit)', () => {
-      const out = run([{ id: 'communication', evidence: [PAGING, PAGING, PAGING, PAGING, PAGING] }]);
-      expect(out.ok && out.recap.competencies[0]!.evidence).toHaveLength(4);
-      expect(out.ok && out.droppedClaims).toBe(1);
-    });
-    it.failing('should be collapsed: one line cited with one statement shows once', () => {
-      const out = run([{ id: 'communication', evidence: [PAGING, PAGING, PAGING] }]);
-      expect(out.ok && out.recap.competencies[0]!.evidence).toHaveLength(1);
-    });
+  it('emphasis by repetition is collapsed: one line cited with one statement shows once, and the repeats are counted as dropped', () => {
+    const out = run([{ id: 'communication', evidence: [PAGING, PAGING, PAGING] }]);
+    expect(out.ok && out.recap.competencies[0]!.evidence.filter((e) => e.seq === 2)).toHaveLength(1);
+    expect(out.ok && out.droppedClaims).toBe(2);
   });
 
-  describe('a paraphrase that drifts from its quote while still citing it', () => {
+  it('a paraphrase that drifts from its quote is dropped: the statement claims more than the line it cites says', () => {
     const DRIFT = claim('The candidate took ownership of the whole incident and led the response.', 2, 'I paged the on-call lead');
-    it('gets through: the quote is in the line it names, so the source check passes however far the statement goes', () => {
-      expect(kept(run([{ id: 'communication', evidence: [DRIFT] }]))).toBe(true);
-    });
-    it.failing('should be dropped: the statement claims more than the line it cites says', () => {
-      const out = run([{ id: 'communication', evidence: [DRIFT] }]);
-      expect(out.ok && out.droppedClaims).toBe(1);
-    });
+    const out = run([{ id: 'communication', evidence: [DRIFT] }]);
+    expect(out.ok && out.droppedClaims).toBe(1);
+    expect(out.ok && out.recap.competencies).toEqual([]);
   });
 
-  describe('not English', () => {
+  it('a verdict in another language is rejected: "excelente y muy convincente"; the candidate\'s own quote may still be in any language', () => {
     const SPANISH = claim('El candidato dio una respuesta excelente y muy convincente.', 4, 'Yo hablé con el equipo de pagos');
-    it('gets through: the listed words are English, so a verdict in another language is kept; the candidate\'s own quote may be in any language', () => {
-      expect(guardRecapText(SPANISH.text)).toBeNull();
-      expect(kept(run([{ id: 'collaboration', evidence: [SPANISH] }]))).toBe(true);
-    });
-    it.failing('should be rejected: "excelente y muy convincente" is a verdict', () => {
-      expect(run([{ id: 'collaboration', evidence: [SPANISH] }])).toEqual({ ok: false, code: 'judges' });
-    });
+    expect(run([{ id: 'collaboration', evidence: [SPANISH] }])).toEqual({ ok: false, code: 'judges' });
+    const quoted = claim('The candidate said: “Yo hablé con el equipo de pagos”', 4, 'Yo hablé con el equipo de pagos');
+    expect(run([{ id: 'collaboration', evidence: [quoted] }])).toMatchObject({ ok: true, droppedClaims: 0 });
   });
 
   it('what the guard DOES still stop on the same transcript: a listed verdict word, a pronoun, and a panel line as a source', () => {
