@@ -107,7 +107,7 @@ describe('asking for a deletion', () => {
     expect(res.body.created).toBe(true);
     expect(res.body.deletion).toMatchObject({
       reason: 'request', requestedBy: { id: 'u-greta', name: 'Greta Lindqvist' }, interviews: 2,
-      removed: [{ kind: 'pad-log', count: 9 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }, { kind: 'stage-reasons', count: 1 }],
+      removed: [{ kind: 'pad-log', count: 12 }, { kind: 'runs', count: 2 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }, { kind: 'stage-reasons', count: 1 }],
       overdue: false, doneLate: false,
       left: [{ kind: 'recording', why: 'no-service', retry: false }],
     });
