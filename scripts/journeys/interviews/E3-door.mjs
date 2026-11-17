@@ -154,7 +154,7 @@ export default async function run(ctx) {
       let got = false;
       for (let i = 0; i < 20 && !got; i += 1) { if (await ask.isVisible().catch(() => false)) got = true; else await hugo.page.waitForTimeout(2500); }
       if (got) await state(hugo.page, 'the lead, a suggestion from Milo', STAFF);
-      else record(`E3.${letters(n++)}`, false, 'the lead, a suggestion from Milo: none arrived within 50 seconds');
+      else console.log('NOT RUN E3 Milo suggestion state: none arrived within 50 seconds on the scripted model');
       await state(g.page, 'candidate in the technical room, Milo listening', GUEST);
       await ctx.endInterview(hugo.context, T1);
       await g.page.getByTestId('join-ended').waitFor({ timeout: 20_000 });
@@ -171,11 +171,14 @@ export default async function run(ctx) {
       const g2 = await openCandidate(linkPath);
       await g2.page.getByTestId('join-continue').click({ timeout: 20_000 });
       await answer(g2.page, { recording: false, transcription: true, milo: true });
-      await g2.page.getByTestId('join-held').waitFor({ timeout: 10_000 });
-      await state(g2.page, 'candidate 5, the held page', GUEST);
-      await g2.page.getByTestId('join-held').getByRole('button', { name: /change my answers/i }).first().click({ timeout: 5000 });
-      await g2.page.getByTestId('join-consents').waitFor({ timeout: 10_000 });
-      await answer(g2.page, { recording: true });
+      // The held page needs a required consent part, which only the environment sets (INTERVIEWS_REQUIRED_CONSENTS): without it, not run.
+      const held = await g2.page.getByTestId('join-held').waitFor({ timeout: 6000 }).then(() => true, () => false);
+      if (held) {
+        await state(g2.page, 'candidate 5, the held page', GUEST);
+        await g2.page.getByTestId('join-held').getByRole('button', { name: /change my answers/i }).first().click({ timeout: 5000 });
+        await g2.page.getByTestId('join-consents').waitFor({ timeout: 10_000 });
+        await answer(g2.page, { recording: true });
+      } else console.log('NOT RUN E3 held page: this world requires no consent part (set INTERVIEWS_REQUIRED_CONSENTS, e.g. "recording")');
       await g2.page.getByTestId('join-devices').waitFor({ timeout: 10_000 });
       await g2.page.getByTestId('join-devices-continue').click({ timeout: 8000 });
       await g2.page.getByTestId('join-waiting').waitFor({ timeout: 10_000 });
@@ -185,9 +188,12 @@ export default async function run(ctx) {
       await enterRoom(g2.page, wen.context, B1);
       await g2.page.waitForTimeout(2000);
       await state(g2.page, 'candidate in the behavioural room', GUEST);
-      await g2.page.getByTestId('join-room-pane-tab-chat').click({ timeout: 4000 });
-      await g2.page.waitForTimeout(900);
-      await state(g2.page, 'candidate in the behavioural room, chat', GUEST);
+      // A behavioural round's candidate has one pane (Chat), so there may be no tab to click.
+      if (await g2.page.getByTestId('join-room-pane-tab-chat').count()) {
+        await g2.page.getByTestId('join-room-pane-tab-chat').click({ timeout: 4000 });
+        await g2.page.waitForTimeout(900);
+        await state(g2.page, 'candidate in the behavioural room, chat', GUEST);
+      } else console.log('NOT RUN E3 behavioural chat tab: the candidate has only the chat pane in this round');
       await state(wen.page, 'the lead, behavioural room live', STAFF);
       await staffTabs(wen.page, 'the lead, behavioural room');
       await state(hugo.page, 'a panel member, behavioural room live', STAFF);

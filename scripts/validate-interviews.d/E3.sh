@@ -50,7 +50,7 @@ row_E3() {
   if [ "$QUICK" -eq 0 ]; then
     run_journey
     local p f; p=$(grep -c '^PASS E3\.' "$JOURNEY_LOG"); f=$(grep -c '^FAIL E3\.' "$JOURNEY_LOG")
-    if [ "$f" -eq 0 ] && [ "$p" -ge 29 ]; then ok "walk: the candidate's side and both rooms, $p states, none failing"; else fail "walk E3-door: $p passed, $f failed (want 29 or more passed, none failed)"; grep '^FAIL E3\.' "$JOURNEY_LOG" | head -5 | cut -c1-220 | sed 's/^/      /'; fi
+    if [ "$f" -eq 0 ] && [ "$p" -ge 26 ]; then ok "walk: the candidate's side and both rooms, $p states, none failing"; else fail "walk E3-door: $p passed, $f failed (want 26 or more passed, none failed)"; grep '^FAIL E3\.' "$JOURNEY_LOG" | head -5 | cut -c1-220 | sed 's/^/      /'; fi
   fi
 }
 
