@@ -24,6 +24,7 @@ import { scorecardsRouter } from './interviews/scorecards.js';
 import { recapRouter } from './interviews/recap.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { roomRouter } from './interviews/room.js';
+import { recordRouter } from './interviews/record.js';
 import { consentEffectsRouter } from './interviews/consent-effects.js';
 import { openingsRouter } from './interviews/openings.js';
 import { consentsRouter } from './interviews/consents.js';
@@ -93,6 +94,7 @@ interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {
 }));
 
 interviewsRouter.use(prepareRouter); // lane PREPARE (row I1.7): the lead chooses a round's questions
+interviewsRouter.use(recordRouter); // lane RECORD-PAGE (row I5.1): the interview record, panel side of a finished interview only
 
 interviewsRouter.use(scorecardsRouter); // lane SCORE (row I5.3): the scorecard, D8
 interviewsRouter.use(recapRouter); // lane RECAP (row I5.2): Milo's recap, opened between the ratings and the recommendation, E3
