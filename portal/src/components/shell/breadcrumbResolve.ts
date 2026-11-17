@@ -64,6 +64,7 @@ const ACCESS_LABELS: Record<string, string> = {
 // One entry per line; a lane adds its own below one of the slot comments.
 const INTERVIEWS_GROUPS: Record<string, string> = {
   candidates: 'Hire',
+  debrief: 'Hire',
   'my-openings': 'Hire',
   'my-interviews': 'Interview',
   // slot 1: a lane adds its entries just below this line
@@ -79,6 +80,7 @@ const INTERVIEWS_GROUPS: Record<string, string> = {
 };
 const INTERVIEWS_LABELS: Record<string, string> = {
   candidates: 'Candidates',
+  debrief: 'Debrief',
   'my-openings': 'My openings',
   'my-interviews': 'My interviews',
   // slot 1: a lane adds its entries just below this line

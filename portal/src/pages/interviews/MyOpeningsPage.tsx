@@ -1,8 +1,8 @@
 // /interviews/my-openings — the hiring manager's home (docs/interviews-tenant-plan.md
 // "Pages"): the candidates on their own openings, by stage, with each
 // opening's count by stage above the table (GET /api/interviews/openings,
-// already only theirs). Reads only: deciding a stage and the debrief are
-// later rows.
+// already only theirs). A candidate whose rounds are all scored leads to the
+// debrief, where the decision is made (row I5.5).
 
 import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
@@ -17,7 +17,8 @@ import {
   INTERVIEWS_API, STAGE_LABELS, candidateHref, byStageLine, lastResultLine, matches, nextInterviewLine, whenLabel,
   type ApplicationStage, type ItemsResponse, type OpeningRow, type PipelineEntry,
 } from '../../lib/interviews';
-import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
+import { Dash, DebriefResultCell, PersonCell, StageChip } from './interviewsCells';
+import { debriefHref } from '../../lib/interviewsDebrief';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
 /** A hiring manager reads the pipeline from the decision end: debrief first, then who is interviewing. */
@@ -28,7 +29,7 @@ interface Row extends PipelineEntry { opening: { id: string; title: string; team
 const COLUMNS: DataTableColumn<Row>[] = [
   {
     key: 'candidate', header: 'Candidate', sortable: true, compare: (a, b) => a.candidate.name.localeCompare(b.candidate.name),
-    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-pipeline-candidate" to={candidateHref(r.candidate.id)} />,
+    render: (r) => <PersonCell name={r.candidate.name} title={`${r.candidate.name}, ${r.candidate.headline}`} testId="interviews-pipeline-candidate" to={r.debriefReady ? debriefHref(r.candidate.id) : candidateHref(r.candidate.id)} />,
   },
   { key: 'opening', header: 'Opening', sortable: true, compare: (a, b) => a.opening.title.localeCompare(b.opening.title),
     render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[14rem] truncate">{r.opening.title}</T> },
@@ -40,7 +41,7 @@ const COLUMNS: DataTableColumn<Row>[] = [
       ? <T size="sm" title={`${r.nextInterview.roundName} with ${r.nextInterview.lead.name}, ${whenLabel(r.nextInterview.scheduledAt)}`} className="block max-w-[16rem] truncate">{nextInterviewLine(r.nextInterview)}</T>
       : <Dash />),
   },
-  { key: 'result', header: 'Last result', width: '176px', render: (r) => <ResultChip result={r.lastResult} due={r.scorecardDue} /> },
+  { key: 'result', header: 'Last result', width: '176px', render: (r) => <DebriefResultCell candidateId={r.candidate.id} result={r.lastResult} due={r.scorecardDue} ready={r.debriefReady} /> },
   {
     key: 'since', header: 'In stage since', numeric: true, sortable: true, compare: (a, b) => a.stageChangedAt.localeCompare(b.stageChangedAt),
     render: (r) => <T size="sm" title={new Date(r.stageChangedAt).toLocaleString()}>{relativeTime(r.stageChangedAt)}</T>,

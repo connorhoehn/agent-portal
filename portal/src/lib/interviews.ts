@@ -38,6 +38,8 @@ export interface PipelineEntry {
   nextInterview: InterviewBrief | null;
   lastResult: ResultBrief | null;
   scorecardDue: boolean;
+  /** Every round that went ahead is scored and a decision waits: the row leads to the debrief (row I5.5). */
+  debriefReady?: boolean;
 }
 
 export interface OpeningRow {

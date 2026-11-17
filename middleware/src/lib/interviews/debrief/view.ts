@@ -11,7 +11,7 @@
 
 import { latestByAuthor, seatedOf } from '../scorecard.js';
 import { reachOf } from '../scope.js';
-import type { ApplicationStage, Interview, InterviewState, Recommendation, RoundType, StageChange } from '../types.js';
+import type { ApplicationStage, Interview, InterviewState, KitCompetency, Recommendation, RoundType, StageChange } from '../types.js';
 import type { PersonRef, WorldIndex } from '../views.js';
 import { DECISIONS, DECISION_LIMITS, DECISION_TARGET, decisionMove, isDecisionChange, scorecardsMissing, type Decision } from './rules.js';
 
@@ -74,8 +74,8 @@ export interface DebriefApplication {
   history: DebriefMove[];
   /** The length of the history as read: a decision names it, so a stale page never decides. */
   basedOn: number;
-  /** The kit's competencies in order: the rows of the side-by-side table. */
-  competencies: Array<{ id: string; name: string }>;
+  /** The kit's competencies in order, with what each point of the scale means: the rows of the side-by-side table. */
+  competencies: Array<{ id: string; name: string; anchors: KitCompetency['anchors'] }>;
   rounds: DebriefRound[];
   /** Only for the opening's hiring manager; null for everyone else (they read and do not decide). */
   decide: DebriefDecide | null;
@@ -137,7 +137,7 @@ export function debriefView(ix: WorldIndex, candidateId: string): DebriefView | 
         decision: isDecisionChange(h) ? h.decision : null, scorecardsMissing: isDecisionChange(h) ? h.scorecardsMissing : null,
       })),
       basedOn: a.history.length,
-      competencies: o.kit.competencies.map((k) => ({ id: k.id, name: k.name })),
+      competencies: o.kit.competencies.map((k) => ({ id: k.id, name: k.name, anchors: { ...k.anchors } })),
       rounds,
       decide: decides ? {
         options: DECISIONS.map((d) => {

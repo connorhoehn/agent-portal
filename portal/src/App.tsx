@@ -93,6 +93,8 @@ const InterviewsMyInterviewsPage = lazy(() => import('./pages/interviews/MyInter
 const InterviewsMyOpeningsPage = lazy(() => import('./pages/interviews/MyOpeningsPage'));
 // slot 1: a lane adds its entries just below this line
 const InterviewsCandidateProfilePage = lazy(() => import('./pages/interviews/CandidateProfilePage'));
+const InterviewsDebriefPage = lazy(() => import('./pages/interviews/DebriefPage'));
+const InterviewsDebriefFromRound = lazy(() => import('./pages/interviews/DebriefPage').then((m) => ({ default: m.DebriefFromRound })));
 // slot 2: a lane adds its entries just below this line
 const InterviewsOpeningsPage = lazy(() => import('./pages/interviews/OpeningsPage'));
 const InterviewsOpeningPage = lazy(() => import('./pages/interviews/OpeningPage'));
@@ -582,6 +584,8 @@ export function App() {
                 <Page element={<InterviewsCandidateProfilePage />} />
               </Gate>
             } />
+            <Route path="candidates/:id/debrief" element={<Gate roles={['recruiter', 'hiring-manager', 'admin']}><Page element={<InterviewsDebriefPage />} /></Gate>} />
+            <Route path="rounds/:id/debrief" element={<Gate roles={['recruiter', 'hiring-manager', 'admin']}><Page element={<InterviewsDebriefFromRound />} /></Gate>} />
             {/* slot 2: a lane adds its routes just below this line */}
             <Route path="openings" element={<Gate roles={['recruiter', 'hiring-manager', 'admin']}><Page element={<InterviewsOpeningsPage />} /></Gate>} />
             <Route path="openings/new" element={<Gate roles={['recruiter', 'admin']}><Page element={<InterviewsNewOpeningPage />} /></Gate>} />

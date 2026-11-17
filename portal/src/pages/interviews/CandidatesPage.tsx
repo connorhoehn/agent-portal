@@ -2,7 +2,7 @@
 // "Pages"): every application in the tenant as one row — the candidate, the
 // opening, the stage, the next interview and the last result
 // (GET /api/interviews/candidates). Reads only: moving a candidate, assigning
-// a round and the candidate profile are later rows.
+// a round and the candidate profile are later rows. The last result opens the debrief (row I5.4).
 
 import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
@@ -17,7 +17,7 @@ import {
   INTERVIEWS_API, STAGE_LABELS, candidateHref, STAGE_ORDER, lastResultLine, matches, nextInterviewLine, whenLabel,
   type CandidateRow, type ItemsResponse,
 } from '../../lib/interviews';
-import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
+import { Dash, DebriefResultCell, PersonCell, StageChip } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
 const COLUMNS: DataTableColumn<CandidateRow>[] = [
@@ -36,7 +36,7 @@ const COLUMNS: DataTableColumn<CandidateRow>[] = [
       ? <T size="sm" title={`${r.nextInterview.roundName} with ${r.nextInterview.lead.name}, ${whenLabel(r.nextInterview.scheduledAt)}`} className="block max-w-[16rem] truncate">{nextInterviewLine(r.nextInterview)}</T>
       : <Dash />),
   },
-  { key: 'result', header: 'Last result', width: '176px', render: (r) => <ResultChip result={r.lastResult} due={r.scorecardDue} /> },
+  { key: 'result', header: 'Last result', width: '176px', render: (r) => <DebriefResultCell candidateId={r.candidate.id} result={r.lastResult} due={r.scorecardDue} /> },
   {
     key: 'applied', header: 'Applied', numeric: true, sortable: true, compare: (a, b) => a.appliedAt.localeCompare(b.appliedAt),
     render: (r) => <T size="sm" title={new Date(r.appliedAt).toLocaleString()}>{relativeTime(r.appliedAt)}</T>,

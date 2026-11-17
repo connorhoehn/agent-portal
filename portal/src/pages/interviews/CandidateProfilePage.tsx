@@ -34,6 +34,7 @@ import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../compon
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCrumbLabel } from '../../lib/crumbLabels';
+import { DebriefLink } from './interviewsCells';
 import { plural } from '../../lib/plural';
 import { relativeTime } from '../../lib/relativeTime';
 import {
@@ -173,7 +174,7 @@ function ApplicationSection({ app, several, candidateId, assigns }: { app: Profi
   const rounds = [...app.interviews].sort((a, b) => (a.scheduledAt ?? '9999').localeCompare(b.scheduledAt ?? '9999'));
   return (
     <Stack gap="md" className="px-[var(--ui-page-gutter)]" data-testid="interviews-profile-application">
-      <DetailSection variant="heading" first title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage">
+      <DetailSection variant="heading" first title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={<DebriefLink candidateId={candidateId} />}>
         <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
       </DetailSection>
       <DetailSection variant="heading" title={several ? `Rounds, ${app.opening.title}` : 'Rounds'} hint={plural(rounds.length, 'round')} data-testid="interviews-profile-rounds-section"

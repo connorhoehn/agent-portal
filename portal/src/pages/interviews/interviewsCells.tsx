@@ -3,10 +3,12 @@
 // their portrait where the cast has one (lib/demoPortraits.json), else the
 // library's initials; candidates are records and carry no portrait.
 
-import { Avatar, AvatarGroup, Chip, Inline, Link, T } from '@connorhoehn/ui-components/shared';
+import { Avatar, AvatarGroup, Button, Chip, Inline, Link, T } from '@connorhoehn/ui-components/shared';
 import { useNavigate } from 'react-router';
 import type { ReactNode } from 'react';
 import demoPortraits from '../../lib/demoPortraits.json';
+import { useSession } from '../../lib/auth';
+import { debriefHref, readsDebrief } from '../../lib/interviewsDebrief';
 import {
   RECOMMENDATION_LABELS, STAGE_LABELS, lastResultLine, recommendationTone, stageTone,
   type ApplicationStage, type ResultBrief,
@@ -67,3 +69,22 @@ export function ResultChip({ result, due = false }: { result: ResultBrief | null
 }
 
 export const Dash = () => <T size="xs" tone="tertiary">—</T>;
+
+/** The way into a candidate's debrief (rows I5.4, I5.5) for the people who read one; nothing for an interviewer. */
+export function DebriefLink({ candidateId }: { candidateId: string }) {
+  const { session } = useSession();
+  const navigate = useNavigate();
+  if (!readsDebrief(session?.role)) return null;
+  return <Button size="sm" variant="secondary" data-testid="interviews-profile-debrief" onClick={() => navigate(debriefHref(candidateId))}>Open the debrief</Button>;
+}
+
+/**
+ * The last result, leading to the debrief where every submission is read side by side as it arrives (row I5.4). `ready`
+ * says a decision waits (every round that went ahead is scored, row I5.5). An interviewer sees the plain chip.
+ */
+export function DebriefResultCell({ candidateId, result, due = false, ready = false }: { candidateId: string; result: ResultBrief | null; due?: boolean; ready?: boolean }) {
+  const { session } = useSession();
+  const chip = ready ? <Chip tone="accent" size="xs" title="Every round that went ahead is scored">Ready to decide</Chip> : <ResultChip result={result} due={due} />;
+  if (!readsDebrief(session?.role) || !(result || due || ready)) return chip;
+  return <AppLink to={debriefHref(candidateId)} data-testid="interviews-result-debrief">{chip}</AppLink>;
+}
