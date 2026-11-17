@@ -23,10 +23,15 @@ export default async function run({ portal, out, path, record, signIn, shoot, re
     const kits = (await table.getByTestId('interviews-opening-kit').allInnerTexts()).map((s) => s.trim());
     const text = await table.innerText();
     const shots = await shoot(page, 'recruiter-openings', 'interviews-openings-table');
-    const ok = titles.length === 3 && ['Engineering Manager', 'iOS Engineer', 'Senior Backend Engineer'].every((t) => titles.includes(t))
+    // shoot() leaves the page at 1280: every column fits, so the table does not scroll inside itself either.
+    const clipped = await page.evaluate(() => {
+      const t = document.querySelector('[data-testid="interviews-openings-table"]');
+      return [t, ...t.querySelectorAll('*')].some((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowX) && e.scrollWidth > e.clientWidth + 1);
+    });
+    const ok = !clipped && titles.length === 3 && ['Engineering Manager', 'iOS Engineer', 'Senior Backend Engineer'].every((t) => titles.includes(t))
       && kits.includes('3 rounds · 6 questions') && /Not named yet/.test(text) && /Interviewing \d/.test(text)
       && !/\b(op|rd|q)-[a-z]/.test(text) && shots.every((s) => s.ok);
-    record('I1.3a', ok, `recruiter's Openings: ${JSON.stringify(titles)}; kits ${JSON.stringify(kits)}; ${shotLine(shots)}`);
+    record('I1.3a', ok, `recruiter's Openings: ${JSON.stringify(titles)}; kits ${JSON.stringify(kits)}; ${shotLine(shots)}${clipped ? '; the table scrolls sideways at 1280' : '; every column fits at 1280'}`);
   } catch (e) {
     record('I1.3a', false, `Openings did not load: ${e.message.split('\n')[0]}`);
   }

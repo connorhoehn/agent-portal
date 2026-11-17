@@ -13,7 +13,6 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { ofTotal } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import { INTERVIEWS_API, byStageLine, matches, type ItemsResponse } from '../../lib/interviews';
 import { OPENING_STATE_LABELS, kitLine, kitTitle, type OpeningListRow, type OpeningState } from '../../lib/interviewsKit';
 import { Dash, PersonCell } from './interviewsCells';
@@ -34,14 +33,10 @@ const COLUMNS: DataTableColumn<OpeningListRow>[] = [
   },
   {
     key: 'candidates', header: 'Candidates by stage', sortable: true, compare: (a, b) => a.candidates - b.candidates,
-    render: (r) => (r.candidates ? <T size="sm" title={byStageLine(r.byStage)} className="block max-w-[18rem] truncate">{byStageLine(r.byStage)}</T> : <Dash />),
+    render: (r) => (r.candidates ? <T size="sm" title={byStageLine(r.byStage)} className="block max-w-[16rem] truncate">{byStageLine(r.byStage)}</T> : <Dash />),
   },
   {
     key: 'kit', header: 'Kit', render: (r) => <T size="sm" title={kitTitle(r)} className="block max-w-[14rem] truncate" data-testid="interviews-opening-kit">{kitLine(r)}</T>,
-  },
-  {
-    key: 'opened', header: 'Opened', numeric: true, sortable: true, compare: (a, b) => a.openedAt.localeCompare(b.openedAt),
-    render: (r) => <T size="sm" title={new Date(r.openedAt).toLocaleString()}>{relativeTime(r.openedAt)}</T>,
   },
 ];
 
