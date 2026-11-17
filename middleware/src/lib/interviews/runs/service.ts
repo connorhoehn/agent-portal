@@ -251,7 +251,7 @@ export function ensureRecovered(): Promise<void> {
       stored(r.interviewId, [e]);
       await d.release([r.holdId]).catch(() => undefined);
     }
-    console.warn('[interviews] runs left in flight by a restart', left.length);
+    if (left.length) console.warn('[interviews] runs left in flight by a restart', left.length);
   })().catch((e) => { recovered = null; throw e; }));
 }
 
@@ -377,8 +377,8 @@ function begin(row: RunRecord): void {
   // The wall-time safeguard.
   const wall = setTimeout(() => {
     if (slot.finished) return;
-    try { slot.handle?.cancel(); } catch { /* it is being stopped anyway */ }
     finish(serviceResult('timed_out', executor, row.language, { timeMs: d.now() - startedMs }));
+    try { slot.handle?.cancel(); } catch { /* it is written timed_out already */ }
   }, limits.wallMs + COMPILE_ALLOWANCE_MS + WALL_GRACE_MS);
   wall.unref?.();
   slot.timers.push(wall);
