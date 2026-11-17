@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Button, Inline, InlineAlert, Stack, T } from '@connorhoehn/ui-components/shared';
 import { WrappedAudioVideoSettingsForm } from '@connorhoehn/ui-components/integrations/realtime-modules';
+import { CallNounProvider } from '@connorhoehn/ui-components/video';
 import { useAudioVideoSettings, useMediaDevices } from '@connorhoehn/realtime-modules/client/video';
 
 export function DeviceCheckStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
@@ -26,7 +27,9 @@ export function DeviceCheckStep({ onContinue, onBack }: { onContinue: () => void
         Check that your camera and microphone work. What you see and hear here stays on this device: nothing is sent or kept.
       </T>
       {on ? (
-        <WrappedAudioVideoSettingsForm devices={devices} settings={settings} cameraOn layout="prejoin" data-testid="join-devices-form" />
+        <CallNounProvider noun="call">
+          <WrappedAudioVideoSettingsForm devices={devices} settings={settings} cameraOn layout="prejoin" data-testid="join-devices-form" />
+        </CallNounProvider>
       ) : (
         <Inline gap="sm" align="center">
           <Button variant="secondary" onClick={() => { void start(); }} data-testid="join-devices-start">Turn on camera and microphone</Button>

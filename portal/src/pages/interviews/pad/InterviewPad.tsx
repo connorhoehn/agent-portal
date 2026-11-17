@@ -124,8 +124,8 @@ function SharedPad({ interviewId, self, seat, questions, toolbarEnd, below, onPa
       triggerTestId="interview-pad-insert" sections={[{ scroll: true, items: questions!.map((q, n) => ({
         id: q.id, label: `Question ${n + 1}`, description: questionLabel(q), onSelect: () => insertQuestion(q),
       })) }]} />}
-    {connection === 'connecting' && <Chip size="xs" tone="neutral" data-testid="interview-pad-status">Connecting…</Chip>}
-    {connection === 'synced' && <Chip size="xs" tone="success" data-testid="interview-pad-status">In sync</Chip>}
+    {connection === 'connecting' && <Chip size="sm" tone="neutral" data-testid="interview-pad-status">Connecting…</Chip>}
+    {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-pad-status">In sync</Chip>}
   </Toolbar>;
 
   return <PadFrame connection={connection} toolbar={toolbar} below={below}
