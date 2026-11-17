@@ -4,6 +4,7 @@
 //          panel member, under the speaker (the candidate shown as the candidate's name)
 //   I3.7b  a technical round (Mateo's design round): the transcript is in the Milo tab, open (since UI round 2 it has the tab
 //          to itself; the ledger's "folded" was the pane before decision 21), and the recruiter reads it by the API while live
+//   I3.7d  a room page open before Milo was invited shows the new lines (today it keeps the earlier record's: a finding)
 //   I3.7c  /join shows none of it: the lines are on no page and in no read of the candidate's, nor in the chat they read
 import { liveRoom, inject, sleep, guestReads, guestChatText } from './h3-call.mjs';
 
@@ -25,15 +26,21 @@ export default async function run(ctx) {
   const CAND_LINE = 'The billing rewrite: I would have shipped it behind a flag in smaller steps.';
 
   await resetMock();
-  let candidateSide = null;
+  let candidateSide = null; let staleView = null;
   const panelSeat = { userId: HUGO, label: 'panel' };
   await step('I3.7a', async () => {
     const r = await liveRoom(ctx, { interviewId: SEED.panelInterview, leadId: WEN, extra: [panelSeat] });
     try {
       await inject(ctx, r.callId, [{ userId: WEN, text: PANEL_LINE }, { userId: r.guest.guestId, text: CAND_LINE }]);
-      const lead = await transcriptOn(r.leadPage, CAND_LINE);
+      // The room page that was open before Milo was invited (I3.7d), then a page opened now (what this step judges).
+      const before = await transcriptOn(r.leadPage, CAND_LINE, 15_000);
+      staleView = { has: before.text.includes(CAND_LINE), text: before.text.slice(0, 120) };
+      const fresh = await r.lead.newPage();
+      await fresh.goto(`${ctx.portal}/interviews/rounds/${SEED.panelInterview}/room`, { waitUntil: 'domcontentloaded' });
+      await fresh.getByTestId('interview-room-pane').waitFor({ timeout: 30_000 });
+      const lead = await transcriptOn(fresh, CAND_LINE);
       const panel = await transcriptOn(panelSeat.page, CAND_LINE);
-      const shots = await shootPage(r.leadPage, 'I3.7a-transcript');
+      const shots = await shootPage(fresh, 'I3.7a-transcript');
       // The candidate's own page and reads, while the lines are on the panel's side.
       const page = await r.guest.page.innerText('body').catch(() => '');
       const reads = await guestReads(ctx, r.guest.context);
@@ -42,9 +49,15 @@ export default async function run(ctx) {
       candidateSide = { leaks: [PANEL_LINE, CAND_LINE].filter((l) => page.includes(l) || reads.includes(l) || chat.includes(l)), read: tr.status };
       const ok = lead.text.includes(PANEL_LINE) && lead.text.includes(CAND_LINE) && /Wen Zhao/.test(lead.text) && /Nadia/.test(lead.text)
         && panel.text.includes(CAND_LINE) && shots.every((s) => s.ok);
-      return { ok, detail: `lead's transcript "${lead.text.slice(0, 140)}"; the panel member's has the candidate's line ${panel.text.includes(CAND_LINE)}` };
+      const st = await api(r.lead, 'GET', `/api/calls/${encodeURIComponent(r.callId)}/assistant/state`);
+      const tr2 = (await api(r.lead, "GET", `/api/interviews/interviews/${SEED.panelInterview}/transcript`)).body?.transcript;
+      return { ok, detail: `lead's transcript "${lead.text.slice(0, 140)}"; the panel member's has the candidate's line ${panel.text.includes(CAND_LINE)}; call ${r.callId} Milo ${st.body?.state} lines stored ${st.body?.counters?.linesStored}; the read's last lines ${JSON.stringify((tr2?.lines ?? []).slice(-2).map((l) => l.text.slice(0, 20)))}` };
     } finally { await r.close(); }
   });
+
+  // A room page whose transcript poll began on an earlier record of Milo's in this interview's lobby (left by the I3.6 rooms in
+  // the same running call) keeps its read cursor when the record changes, so the new call's first lines never show there.
+  await step('I3.7d', async () => ({ ok: staleView?.has === true, detail: `the lead's room page opened before Milo was invited shows the new lines ${staleView?.has} ("${staleView?.text ?? ''}") (FINDING when false: the poll's cursor is not reset when Milo's record for the call changes)` }));
 
   await step('I3.7c', async () => {
     if (!candidateSide) return { ok: false, detail: 'no room' };
@@ -58,7 +71,13 @@ export default async function run(ctx) {
     try {
       await inject(ctx, r.callId, [{ userId: HUGO, text: PANEL_LINE }, { userId: r.guest.guestId, text: CAND_LINE }]);
       const tabs = (await r.leadPage.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
-      const lead = await transcriptOn(r.leadPage, CAND_LINE);
+      // The room page that was open before Milo was invited (I3.7d), then a page opened now (what this step judges).
+      const before = await transcriptOn(r.leadPage, CAND_LINE, 15_000);
+      staleView = { has: before.text.includes(CAND_LINE), text: before.text.slice(0, 120) };
+      const fresh = await r.lead.newPage();
+      await fresh.goto(`${ctx.portal}/interviews/rounds/${SEED.panelInterview}/room`, { waitUntil: 'domcontentloaded' });
+      await fresh.getByTestId('interview-room-pane').waitFor({ timeout: 30_000 });
+      const lead = await transcriptOn(fresh, CAND_LINE);
       const rec = await api(r.recruiter, 'GET', `/api/interviews/interviews/${iv}/transcript`);
       const recHas = JSON.stringify(rec.body ?? '').includes(CAND_LINE);
       const ok = JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat"]' && lead.visible && lead.text.includes(CAND_LINE) && rec.status === 200 && recHas;

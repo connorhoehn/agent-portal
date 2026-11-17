@@ -76,10 +76,12 @@ export async function joinRoomCall(ctx, context, interviewId) {
 
 /** The lead invites Milo from the call bar; resolves once Invite has gone (Milo is in the call). */
 export async function inviteMilo(page) {
-  const invite = page.getByTestId('assistant-invite');
+  // "Invite Milo again" when an earlier room of the same interview left Milo dismissed in a call that is still running (the
+  // mock reset keeps the gateway's calls and Milo's records, so a later piece can join the same call).
+  const invite = page.getByTestId('assistant-invite').or(page.getByTestId('assistant-invite-again')).first();
   await invite.waitFor({ timeout: 30_000 });
   await invite.click();
-  await invite.waitFor({ state: 'detached', timeout: 30_000 });
+  await page.getByTestId('assistant-status-mark').first().waitFor({ timeout: 30_000 });
 }
 
 /** Hand transcript lines to whoever listens to the call (the mock injector). lines: [{ userId, text }]. → { status, listeners }. */

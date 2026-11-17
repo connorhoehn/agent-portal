@@ -7,7 +7,7 @@ row_I3_7() {
   refuses_404 I3.7
   if [ "$QUICK" -eq 0 ]; then
     run_journey
-    for s in a b c; do journey_step "I3.7$s"; done
+    for s in a b c d; do journey_step "I3.7$s"; done
   fi
 }
 built_row I3.7 row_I3_7
