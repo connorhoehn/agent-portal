@@ -142,10 +142,10 @@ function KitView({ o }: { o: OpeningRecord }) {
   return (
     <Stack gap="lg" className="pb-6" data-testid="interviews-kit-view">
       <DetailSection title="Rounds" as="h2" hint={String(o.rounds.length)} first>
-        <DataTable narrow size="sm" aria-label="Rounds" data={o.rounds} columns={roundColumns} keyField={(r) => r.id} data-testid="interviews-kit-rounds" />
+        <DataTable narrow aria-label="Rounds" data={o.rounds} columns={roundColumns} keyField={(r) => r.id} data-testid="interviews-kit-rounds" />
       </DetailSection>
       <DetailSection title="Competencies" as="h2" hint={String(o.competencies.length)}>
-        <DataTable narrow size="sm" aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" />
+        <DataTable narrow aria-label="Competencies" data={o.competencies} columns={competencyColumns} keyField={(c) => c.id} data-testid="interviews-kit-competencies" />
       </DetailSection>
       {kinds.map((t) => {
         const qs = byType(t);
@@ -153,7 +153,7 @@ function KitView({ o }: { o: OpeningRecord }) {
         return (
           <DetailSection key={t} title={`${ROUND_TYPE_LABELS[t]} questions`} as="h2" hint={String(qs.length)}>
             <Stack gap="sm">
-              <DataTable narrow size="sm" aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
+              <DataTable narrow aria-label={`${ROUND_TYPE_LABELS[t]} questions`} data={qs} columns={questionColumns} keyField={(q) => q.id}
                 data-testid={`interviews-kit-${t}-questions`} selectedKey={open?.id ?? null}
                 onRowClick={(q) => setOpenQuestion(openQuestion === q.id ? null : q.id)}
                 emptyMessage={`No ${t} questions yet.`} />
@@ -199,7 +199,7 @@ function Pipeline({ o }: { o: OpeningRecord }) {
   return (
     <Stack gap="sm" className="pb-6">
       {o.candidates > 0 && <T size="xs" tone="secondary">{byStageLine(o.byStage)}</T>}
-      <DataTable narrow size="sm" aria-label="Candidates" data={o.pipeline} columns={columns} keyField={(r) => r.applicationId}
+      <DataTable narrow aria-label="Candidates" data={o.pipeline} columns={columns} keyField={(r) => r.applicationId}
         data-testid="interviews-opening-pipeline" emptyMessage="No candidates on this opening yet." />
     </Stack>
   );

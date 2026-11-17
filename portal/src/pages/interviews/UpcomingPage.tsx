@@ -152,10 +152,7 @@ function UpcomingWorkspace() {
     {
       key: 'round', header: 'Opening and round',
       render: (r) => (
-        <Stack gap="none">
-          <T size="sm" title={`${r.opening.title}, ${r.opening.team}`} className="block max-w-[16rem] truncate">{r.opening.title}</T>
-          <T size="xs" tone="secondary" title={`${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{r.round.name}</T>
-        </Stack>
+        <T size="sm" title={`${r.opening.title}, ${r.opening.team}; ${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`} className="block max-w-[22rem] truncate">{`${r.opening.title} · ${r.round.name}`}</T>
       ),
     },
     { key: 'people', header: 'Lead and panel', render: (r) => <PanelCell lead={r.lead} panel={r.panel} /> },

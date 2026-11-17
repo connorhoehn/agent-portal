@@ -129,7 +129,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-round"
           onClick={() => set({ rounds: [...kit.rounds, blankRound(newId('rd', allIds(kit)), kinds.includes('technical') ? 'behavioural' : 'technical')] })}>Add round</Button>}>
         <Stack gap="xs">
-          <DataTable narrow size="sm" aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id}
+          <DataTable narrow aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id}
             emptyMessage="No rounds yet. Add the first one."
             rowActions={(r) => {
               const i = kit.rounds.indexOf(r);
@@ -143,7 +143,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
       <DetailSection title="Competencies" as="h2" hint={String(kit.competencies.length)}
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-competency" onClick={addCompetency}>Add competency</Button>}>
         <Stack gap="sm">
-          <DataTable narrow size="sm" aria-label="Competencies" data={kit.competencies} columns={competencyColumns} keyField={(c) => c.id}
+          <DataTable narrow aria-label="Competencies" data={kit.competencies} columns={competencyColumns} keyField={(c) => c.id}
             data-testid="interviews-kit-competencies" emptyMessage="No competencies yet. Add what the rounds should judge."
             selectedKey={openCompetency >= 0 ? kit.competencies[openCompetency]!.id : null}
             onRowClick={(c) => toggle('competencies', c.id)}
@@ -167,7 +167,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-question" disabled={!kit.rounds.length || !kit.competencies.length}
           title={!kit.rounds.length || !kit.competencies.length ? 'Add a round and a competency first.' : undefined} onClick={addQuestion}>Add question</Button>}>
         <Stack gap="sm">
-          <DataTable narrow size="sm" aria-label="Questions" data={kit.questions} columns={questionColumns} keyField={(q) => q.id}
+          <DataTable narrow aria-label="Questions" data={kit.questions} columns={questionColumns} keyField={(q) => q.id}
             data-testid="interviews-kit-questions" emptyMessage="No questions yet. Add the ones interviewers choose from."
             selectedKey={openQuestion >= 0 ? kit.questions[openQuestion]!.id : null}
             onRowClick={(q) => toggle('questions', q.id)}

@@ -260,7 +260,7 @@ function LayoutFrame() {
             >
               <Stack gap="sm" className="p-4">
                 <Inline gap="sm" align="center"><Callout n={5} label="Trail and title band (above)" /><Callout n={6} label="Content (table first)" /></Inline>
-                <DataTable data={[...INITIATIVES]} columns={FRAME_COLUMNS} keyField={(row) => row.id} size="sm" />
+                <DataTable data={[...INITIATIVES]} columns={FRAME_COLUMNS} keyField={(row) => row.id} />
               </Stack>
             </SectionLayout>
           </Stack>
@@ -488,7 +488,7 @@ export default function ReferenceSheet() {
               <Textarea value="Out this afternoon, back tomorrow 9:00." onChange={noop} rows={2} aria-label="Status message" />
             </Tile>
             <Tile id="C-7" component="SegmentedControl + Switch + Checkbox" subpath="/shared" state="neutral, accent; on, off" width="quarter">
-              <SegmentedControl size="sm" options={[{ label: 'Table', value: 'table' }, { label: 'Cards', value: 'cards' }, { label: 'Graph', value: 'graph' }]} value={segment} onChange={setSegment} aria-label="View" />
+              <SegmentedControl options={[{ label: 'Table', value: 'table' }, { label: 'Cards', value: 'cards' }, { label: 'Graph', value: 'graph' }]} value={segment} onChange={setSegment} aria-label="View" />
               <SegmentedControl size="md" tone="accent" options={[{ label: 'Agent', value: 'agent' }, { label: 'Chat', value: 'chat' }]} value="agent" onChange={noop} aria-label="Mode" />
               <Inline gap="md" align="center">
                 <Switch checked onChange={noop} aria-label="On" /><Switch checked={false} onChange={noop} aria-label="Off" />
@@ -586,7 +586,7 @@ export default function ReferenceSheet() {
               ))}
             </Tile>
             <Tile id="D-8" component="EmptyState" subpath="/shared" state="block, with action" width="quarter">
-              <EmptyState title="No computers yet" description="Start one from an initiative you own or contribute to." actionLabel="Open the Computer Lab" onAction={noop} size="sm" />
+              <EmptyState title="No computers yet" description="Start one from an initiative you own or contribute to." actionLabel="Open the Computer Lab" onAction={noop} />
             </Tile>
             <Tile id="D-9" component="EmptyState" subpath="/shared" state="line" width="quarter">
               <EmptyState layout="line" title="Nothing matches “kubernetes” in decisions" />

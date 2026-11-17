@@ -2,7 +2,7 @@
 // the notice given, when it was answered and, for the recruiter and the admin, the three answers; for the opening's hiring
 // manager only that a notice was given. The recruiter can export what Milo showed for each finished round. The server decides
 // what each role reads; the table follows what comes back.
-import { Button, DataTable, DetailSection, LoadingState, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { DataTable, DetailSection, DownloadIcon, IconButton, LoadingState, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useFetch } from '../../hooks/useFetch';
 import { plural } from '../../lib/plural';
@@ -40,9 +40,10 @@ export default function ProfileConsents({ candidateId }: { candidateId: string }
       { key: 'milo', header: 'Milo', width: '72px', render: answerCell((r) => r.answers?.milo) },
     ] : []),
     ...(exports ? [{
-      key: 'export', header: '', width: '200px',
+      key: 'export', header: '', width: '56px',
       render: (r: ConsentRecordItem) => (r.exportable
-        ? <Button size="sm" variant="ghost" disabled={busy === r.interviewId} data-testid="interviews-milo-export" onClick={() => void exportRound(r.interviewId)}>Export what Milo showed</Button>
+        ? <IconButton size="sm" variant="ghost" aria-label={`Export what Milo showed for ${r.roundName}`} title="Export what Milo showed" icon={<DownloadIcon size={14} />}
+            disabled={busy === r.interviewId} data-testid="interviews-milo-export" onClick={() => void exportRound(r.interviewId)} />
         : null),
     }] : []),
   ];
