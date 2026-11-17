@@ -8,6 +8,12 @@
 // click, confirmed in place on the row; Decline asks for the reason in the
 // composer's prompt deck (never a dialog), and the recruiter is told.
 //
+// The panel's notice (decision 5, its last sentence): an Accept the server answers
+// with `needsNotice` opens the prompt deck with the candidate's own notice (same
+// text and version, read from that answer) and one line that it applies to the
+// panel too. "I have read it — accept" acknowledges, then accepts; "Not now"
+// changes nothing. Not a consent: someone who will not be recorded declines.
+//
 // Row I5.3: a "Scorecard due" row opens the scorecard; a round whose scorecard is in opens it read-only.
 // Row I1.7: rows in "To prepare" and "Upcoming" open the Prepare page; a ready or live round the viewer sits on also
 // has "Open the room". Scoring (I5.3) is a later row.
@@ -28,7 +34,9 @@ import {
 } from '../../lib/interviews';
 import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
 import { hasScorecard, scorecardPath } from '../../lib/interviewsScorecard';
-import { REASON_MAX, acceptSeat, declineSeat, reasonProblem } from '../../lib/interviewsAssign';
+import {
+  NOTICE_LATER, NOTICE_READ, REASON_MAX, acceptSeat, acknowledgePanelNotice, answerPanelNotice, declineSeat, noticeParagraphs, reasonProblem, type PanelNotice,
+} from '../../lib/interviewsAssign';
 import { PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -71,14 +79,18 @@ function MyInterviewsWorkspace() {
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
   const [declining, setDeclining] = useState<InterviewRow | null>(null);
   const [asked, setAsked] = useState(0);
+  /** The Accept waiting for the panel's notice, with the notice the server sent. */
+  const [noticeFor, setNoticeFor] = useState<{ row: InterviewRow; notice: PanelNotice; n: number } | null>(null);
   const note = (id: string, text: string) => setAnswered((m) => new Map(m).set(id, text));
+  const acceptedNote = (r: InterviewRow) => (r.seat === 'lead' ? 'Accepted. Choose its questions next.' : 'Accepted. You are on the panel.');
 
   const accept = async (r: InterviewRow) => {
     setBusy(r.id); setRowError(null);
     const out = await acceptSeat(r.id, r.revision);
     setBusy(null);
+    if (!out.ok && out.needsNotice) { const notice = out.needsNotice; setNoticeFor((p) => ({ row: r, notice, n: (p?.n ?? 0) + 1 })); return; }
     if (!out.ok) { setRowError({ id: r.id, text: out.error }); refresh(); return; }
-    note(r.id, r.seat === 'lead' ? 'Accepted. Choose its questions next.' : 'Accepted. You are on the panel.');
+    note(r.id, acceptedNote(r));
     refresh();
   };
 
@@ -104,6 +116,45 @@ function MyInterviewsWorkspace() {
     },
   }] : []), [declining, asked, refresh]);
 
+  const noticePrompts = useMemo<ComposerPrompt[]>(() => {
+    if (!noticeFor) return [];
+    const { row, notice, n } = noticeFor;
+    return [{
+      id: `interviews-panel-notice:${row.id}:${notice.version}:${n}`, scope: 'interviews-my-interviews', kind: 'choice',
+      eyebrow: row.seat === 'lead' ? 'Before you accept to lead' : 'Before you accept the panel seat',
+      title: notice.title,
+      question: notice.panelLine,
+      fields: [
+        { label: 'Round', value: `${row.round.name} with ${row.candidate.name}` },
+        {
+          label: 'The notice the candidate reads',
+          value: (
+            <Stack gap="xs" className="max-h-64 overflow-y-auto" data-testid="interviews-panel-notice-text">
+              {noticeParagraphs(notice.text).map((p) => <T key={p} size="sm" as="p">{p}</T>)}
+            </Stack>
+          ),
+        },
+      ],
+      options: [{ id: NOTICE_READ, label: 'I have read it — accept', emphasis: 'primary' }, { id: NOTICE_LATER, label: 'Not now' }],
+      onAnswer: async (a) => {
+        const optionId = a.kind === 'choice' ? a.optionId : NOTICE_LATER;
+        const out = await answerPanelNotice(optionId, notice, {
+          acknowledge: (version) => acknowledgePanelNotice(row.id, version),
+          accept: () => acceptSeat(row.id, row.revision),
+        });
+        if ('error' in out) {
+          if (out.renotice) setNoticeFor({ row, notice: out.renotice, n: n + 1 });
+          refresh();
+          return { error: out.error };
+        }
+        setNoticeFor(null);
+        if (out.accepted) { note(row.id, acceptedNote(row)); refresh(); }
+        return { receipt: out.receipt };
+      },
+    }];
+  }, [noticeFor, refresh]);
+  const deck = useMemo(() => [...noticePrompts, ...prompts], [noticePrompts, prompts]);
+
   const answerCell = (r: InterviewRow) => {
     const done = answered.get(r.id);
     if (done) return <T size="xs" tone="secondary" data-testid="interviews-desk-answered">{done}</T>;
@@ -126,7 +177,7 @@ function MyInterviewsWorkspace() {
         <Inline gap="xs" wrap={false}>
           <Button size="sm" variant="primary" disabled={busy !== null} data-testid="interviews-desk-accept" onClick={() => { void accept(r); }}>Accept</Button>
           <Button size="sm" variant="ghost" disabled={busy !== null} data-testid="interviews-desk-decline"
-            onClick={() => { setRowError(null); setAsked((n) => n + 1); setDeclining(r); }}>Decline…</Button>
+            onClick={() => { setRowError(null); setNoticeFor(null); setAsked((n) => n + 1); setDeclining(r); }}>Decline…</Button>
         </Inline>
         {rowError?.id === r.id && <T size="xs" tone="danger">{rowError.text}</T>}
       </Stack>
@@ -176,7 +227,7 @@ function MyInterviewsWorkspace() {
             />
           )}
         </Stack>
-        <CollectionCommandHost adapter={adapter} prompts={prompts} />
+        <CollectionCommandHost adapter={adapter} prompts={deck} />
       </Stack>
     </CollectionCommandPage>
   );

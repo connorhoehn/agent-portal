@@ -1,7 +1,10 @@
 // Assigning a round and answering a seat, the portal's pure helpers (lib/interviewsAssign.ts, row I1.4).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assignHref, canReassign, declineLines, panelChoices, reasonProblem, seatingOf, seatsOfRow } from '../interviewsAssign.ts';
+import {
+  NOTICE_LATER, NOTICE_READ, answerPanelNotice, assignHref, canReassign, declineLines, noticeParagraphs, panelChoices, reasonProblem, seatingOf, seatsOfRow,
+  type PanelNotice, type WriteOutcome,
+} from '../interviewsAssign.ts';
 
 test('a decline needs a reason between the floor and the ceiling, as the server says', () => {
   assert.match(reasonProblem('busy') ?? '', /at least 10 characters/);
@@ -28,4 +31,43 @@ test('who declined and why, the latest first; who sits may change until the call
   assert.deepEqual(['assigned', 'accepted', 'ready', 'declined', 'live', 'ended', 'cancelled'].map((s) => canReassign(s as 'live')), [true, true, true, true, false, false, false]);
   assert.equal(assignHref('cand-x', { application: 'app-x' }), '/interviews/candidates/cand-x/assign?application=app-x');
   assert.equal(assignHref('cand-x', { round: 'iv-1' }), '/interviews/candidates/cand-x/assign?round=iv-1');
+});
+
+// The panel's notice at Accept (decision 5, its last sentence): the prompt's two answers.
+
+const NOTICE: PanelNotice = { version: 'v2', title: 'Before your interview', text: 'First paragraph.\n\nSecond paragraph.', panelLine: 'This applies to you too.' };
+const recorder = (ack: Awaited<ReturnType<Parameters<typeof answerPanelNotice>[2]['acknowledge']>> = { ok: true }, accepted: WriteOutcome = { ok: true, interview: null }) => {
+  const calls: string[] = [];
+  return { calls, writes: {
+    acknowledge: async (v: string) => { calls.push(`ack:${v}`); return ack; },
+    accept: async () => { calls.push('accept'); return accepted; },
+  } };
+};
+
+test('"I have read it — accept" acknowledges the version shown, then accepts, with one receipt', async () => {
+  const r = recorder();
+  const out = await answerPanelNotice(NOTICE_READ, NOTICE, r.writes);
+  assert.deepEqual(r.calls, ['ack:v2', 'accept']);
+  assert.equal('receipt' in out && out.accepted, true);
+  assert.match('receipt' in out ? out.receipt : '', /^Accepted\./);
+});
+
+test('"Not now" writes nothing', async () => {
+  const r = recorder();
+  const out = await answerPanelNotice(NOTICE_LATER, NOTICE, r.writes);
+  assert.deepEqual(r.calls, []);
+  assert.equal('receipt' in out && out.accepted, false);
+});
+
+test('a changed notice comes back to be shown, and nothing is accepted; a refused accept shows its error', async () => {
+  const changed = recorder({ ok: false, error: 'The notice has changed.', needsNotice: { ...NOTICE, version: 'v3' } });
+  const out = await answerPanelNotice(NOTICE_READ, NOTICE, changed.writes);
+  assert.deepEqual(changed.calls, ['ack:v2']);
+  assert.equal('error' in out && out.renotice?.version, 'v3');
+  const refused = recorder({ ok: true }, { ok: false, error: 'Someone else changed this round.', fields: [], stale: true, interview: null });
+  assert.deepEqual(await answerPanelNotice(NOTICE_READ, NOTICE, refused.writes), { error: 'Someone else changed this round.' });
+});
+
+test('the notice\'s paragraphs split on the blank line the server puts between them', () => {
+  assert.deepEqual(noticeParagraphs(NOTICE.text), ['First paragraph.', 'Second paragraph.']);
 });

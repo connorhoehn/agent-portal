@@ -21,14 +21,22 @@ export const PANEL_SEATS = 2;
 const REASSIGNABLE: ReadonlySet<InterviewState> = new Set(['assigned', 'accepted', 'ready', 'declined']);
 export const canReassign = (state: InterviewState): boolean => REASSIGNABLE.has(state);
 
+/**
+ * The notice an Accept waits for (decision 5, its last sentence): the candidate's own notice, its version and title,
+ * its paragraphs separated by a blank line, and the one sentence that it applies to the panel too.
+ */
+export interface PanelNotice { version: string; title: string; text: string; panelLine: string }
+
 export type WriteOutcome =
   | { ok: true; interview: InterviewRow | null }
-  | { ok: false; error: string; fields: FieldProblem[]; stale: boolean; interview: InterviewRow | null };
+  | { ok: false; error: string; fields: FieldProblem[]; stale: boolean; interview: InterviewRow | null; needsNotice?: PanelNotice };
 
 async function send(path: string, method: 'POST' | 'PUT', body: unknown, fallback: string): Promise<WriteOutcome> {
-  const r = await writeJson<{ interview?: InterviewRow | null; fields?: FieldProblem[] }>(`${INTERVIEWS_API}${path}`, method, body);
+  const r = await writeJson<{ interview?: InterviewRow | null; fields?: FieldProblem[]; needsNotice?: PanelNotice }>(`${INTERVIEWS_API}${path}`, method, body);
   if (r.ok) return { ok: true, interview: r.data?.interview ?? null };
-  return { ok: false, error: r.error ?? fallback, fields: r.data?.fields ?? [], stale: r.status === 409, interview: r.data?.interview ?? null };
+  const needsNotice = r.data?.needsNotice;
+  // A 409 that asks for the notice is not a stale page: nothing changed, the person reads and accepts.
+  return { ok: false, error: r.error ?? fallback, fields: r.data?.fields ?? [], stale: r.status === 409 && !needsNotice, interview: r.data?.interview ?? null, ...(needsNotice ? { needsNotice } : {}) };
 }
 
 export const assignRound = (req: AssignRequest): Promise<WriteOutcome> =>
@@ -36,6 +44,37 @@ export const assignRound = (req: AssignRequest): Promise<WriteOutcome> =>
 
 export const acceptSeat = (id: string, revision: number): Promise<WriteOutcome> =>
   send(`/interviews/${encodeURIComponent(id)}/answer`, 'POST', { revision, answer: 'accept' }, 'Your answer could not be saved. Try again.');
+
+/** Acknowledge the panel's notice (the version the page showed) for the signed-in person, on the way to accepting `id`. */
+export async function acknowledgePanelNotice(id: string, version: string): Promise<{ ok: true } | { ok: false; error: string; needsNotice?: PanelNotice }> {
+  const r = await writeJson<{ needsNotice?: PanelNotice }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/panel-notice`, 'POST', { version });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: r.error ?? 'Your answer could not be saved. Try again.', ...(r.data?.needsNotice ? { needsNotice: r.data.needsNotice } : {}) };
+}
+
+/** The notice's paragraphs, as the server separates them. */
+export const noticeParagraphs = (text: string): string[] => text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+
+/** The panel notice prompt's two answers. */
+export const NOTICE_READ = 'read-accept';
+export const NOTICE_LATER = 'not-now';
+
+/**
+ * What the panel notice prompt does with an answer: "I have read it — accept" acknowledges the version shown, then
+ * accepts, with one receipt; "Not now" changes nothing. A changed notice comes back as `renotice` so the page shows the
+ * new one. Pure over the two writes, so the page and its test share it.
+ */
+export async function answerPanelNotice(
+  optionId: string, notice: PanelNotice,
+  writes: { acknowledge: (version: string) => Promise<{ ok: true } | { ok: false; error: string; needsNotice?: PanelNotice }>; accept: () => Promise<WriteOutcome> },
+): Promise<{ receipt: string; accepted: boolean } | { error: string; renotice?: PanelNotice }> {
+  if (optionId !== NOTICE_READ) return { receipt: 'Not accepted yet. The round stays waiting for your answer.', accepted: false };
+  const ack = await writes.acknowledge(notice.version);
+  if (!ack.ok) return { error: ack.error, ...(ack.needsNotice ? { renotice: ack.needsNotice } : {}) };
+  const out = await writes.accept();
+  if (!out.ok) return { error: out.error };
+  return { receipt: 'Accepted. You have read the notice, and you are on this round.', accepted: true };
+}
 
 export const declineSeat = (id: string, revision: number, reason: string): Promise<WriteOutcome> =>
   send(`/interviews/${encodeURIComponent(id)}/answer`, 'POST', { revision, answer: 'decline', reason }, 'Your answer could not be saved. Try again.');
