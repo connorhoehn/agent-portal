@@ -2328,17 +2328,17 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:173"
+      "source": "src/routes/interview-invite.ts:179"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/consents",
-      "source": "src/routes/interview-invite-consents.ts:58"
+      "source": "src/routes/interview-invite-consents.ts:63"
     },
     {
       "method": "PUT",
       "path": "/api/interview-invite/consents",
-      "source": "src/routes/interview-invite-consents.ts:64"
+      "source": "src/routes/interview-invite-consents.ts:69"
     },
     {
       "method": "POST",
@@ -2353,17 +2353,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:164"
+      "source": "src/routes/interview-invite.ts:165"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:146"
+      "source": "src/routes/interview-invite.ts:147"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:184"
+      "source": "src/routes/interview-invite.ts:190"
     },
     {
       "method": "POST",
@@ -2423,7 +2423,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/consent-effects",
-      "source": "src/routes/interviews/consent-effects.ts:23"
+      "source": "src/routes/interviews/consent-effects.ts:25"
     },
     {
       "method": "GET",
@@ -2433,7 +2433,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviewers",
-      "source": "src/routes/interviews/assignments.ts:96"
+      "source": "src/routes/interviews/assignments.ts:97"
     },
     {
       "method": "GET",
@@ -2443,7 +2443,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews/assignments.ts:102"
+      "source": "src/routes/interviews/assignments.ts:103"
     },
     {
       "method": "GET",
@@ -2458,7 +2458,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/answer",
-      "source": "src/routes/interviews/assignments.ts:118"
+      "source": "src/routes/interviews/assignments.ts:119"
     },
     {
       "method": "GET",
@@ -2503,12 +2503,12 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/panel",
-      "source": "src/routes/interviews/assignments.ts:177"
+      "source": "src/routes/interviews/assignments.ts:193"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/panel-notice",
-      "source": "src/routes/interviews/assignments.ts:156"
+      "source": "src/routes/interviews/assignments.ts:172"
     },
     {
       "method": "POST",
@@ -2523,12 +2523,17 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/recap",
-      "source": "src/routes/interviews/recap.ts:74"
+      "source": "src/routes/interviews/recap.ts:82"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/recap/ask",
+      "source": "src/routes/interviews/recap.ts:101"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/recap/open",
-      "source": "src/routes/interviews/recap.ts:81"
+      "source": "src/routes/interviews/recap.ts:89"
     },
     {
       "method": "GET",
@@ -2568,7 +2573,7 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/time",
-      "source": "src/routes/interviews/assignments.ts:195"
+      "source": "src/routes/interviews/assignments.ts:211"
     },
     {
       "method": "GET",
@@ -2579,6 +2584,11 @@
       "method": "GET",
       "path": "/api/interviews/interviews/:id/waiting",
       "source": "src/routes/interviews/admission.ts:49"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/panel-notice",
+      "source": "src/routes/interviews/assignments.ts:157"
     },
     {
       "method": "GET",

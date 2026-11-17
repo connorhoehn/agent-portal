@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T05:28:57.885Z",
-  "serverHandlerSha": "a14eb6f083c93bc38da3f8acc59b992130007542e4edfe479b1d63a3687ff1ba",
+  "capturedAt": "2026-11-17T06:05:10.944Z",
+  "serverHandlerSha": "08c1d61f0fb55a93055bf6b91ca17a4dcd43fa4af5568cf59b53aa497f1fbd68",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5342,6 +5342,7 @@
         "items": "array",
         "items[]": "object",
         "items[].answered": "boolean",
+        "items[].blocked": "boolean",
         "items[].interviewId": "string",
         "items[].off": "array",
         "items[].off[]": "string"
@@ -5669,6 +5670,22 @@
     },
     "GET /api/interviews/interviews/:id/waiting": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/panel-notice": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "acknowledged": "boolean",
+        "notice": "object",
+        "notice.panelLine": "string",
+        "notice.text": "string",
+        "notice.title": "string",
+        "notice.version": "string",
+        "pendingRounds": "number",
+        "roundId": "null"
+      },
+      "values": {}
     },
     "GET /api/interviews/openings": {
       "persona": "orgiq/admin",
@@ -6979,7 +6996,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
