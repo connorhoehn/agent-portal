@@ -52,6 +52,8 @@ export interface InterviewWrites {
   answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>>;
   /** New seats: the lead, the panel, the state and the acceptances that still hold, against `revision`. */
   reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>>;
+  /** Set (an ISO instant, UTC) or clear (`null`) the time, against `revision`. The state is not touched. */
+  setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>>;
 }
 
 export interface InterviewsStore extends OpeningWrites, InterviewWrites {
@@ -113,6 +115,10 @@ export class MemoryInterviewsStore implements InterviewsStore {
 
   async reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>> {
     return casInterview(id, revision, (i) => Object.assign(i, structuredClone(change)));
+  }
+
+  async setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { i.scheduledAt = scheduledAt; });
   }
 }
 

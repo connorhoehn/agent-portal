@@ -25,7 +25,7 @@ import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
 import {
-  answerSeat, applyReassignment, assignProblemsLine, checkAnswer, checkAssignment, checkReassignment, interviewIdFor, newInterview, newlySeated,
+  answerSeat, applyReassignment, assignProblemsLine, checkAnswer, checkAssignment, checkReassignment, checkTime, interviewIdFor, newInterview, newlySeated, timeProblemsLine,
 } from '../../lib/interviews/assign.js';
 import type { FieldProblem } from '../../lib/interviews/kit.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
@@ -33,7 +33,7 @@ import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { WriteResult } from '../../lib/interviews/store.js';
 import { INTERVIEWS_TENANT, type Interview } from '../../lib/interviews/types.js';
 import { UNKNOWN_ROUND, type WorldIndex } from '../../lib/interviews/views.js';
-import { notifyInterviewDeclined, notifyInterviewSeated } from '../../lib/social-notify.js';
+import { notifyInterviewDeclined, notifyInterviewSeated, notifyInterviewTimed } from '../../lib/social-notify.js';
 import { listUsers } from '../../providers/identity.js';
 
 export const assignmentsRouter = Router();
@@ -147,5 +147,23 @@ assignmentsRouter.put('/interviews/:id/panel', assign, asyncHandler(async (req, 
   const after = await answerWrite(req, res, written);
   if (after && written.ok) {
     void notifyInterviewSeated({ interviewId: i.id, ...bellWords(after, i), userIds: newlySeated(i, checked.value), actorId: session.sub, reassigned: true });
+  }
+}));
+
+/** Set, change or clear a round's time (row I1.5). Body: `{ revision, scheduledAt: ISO instant | null }`. Does not move the state. */
+assignmentsRouter.put('/interviews/:id/time', assign, asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  const ix = await indexFor(req);
+  const i = ix.world.interviews.find((x) => x.id === param(req, 'id'));
+  if (!i) throw new NotFoundError(NO_INTERVIEW);
+  const revision = revisionOf(req);
+  if (revision === null) { res.status(400).json({ error: OUT_OF_DATE, fields: [] }); return; }
+  if (i.revision !== revision) { await answerWrite(req, res, { ok: false, reason: 'stale', row: i }); return; }
+  const checked = checkTime(req.body, i);
+  if (!checked.ok) { res.status(400).json({ error: timeProblemsLine(checked.problems.length), fields: checked.problems }); return; }
+  const written = await interviewsStore().setTime(i.id, checked.value.scheduledAt, revision);
+  const after = await answerWrite(req, res, written);
+  if (after && written.ok && checked.value.scheduledAt !== null && checked.value.scheduledAt !== i.scheduledAt) {
+    void notifyInterviewTimed({ interviewId: i.id, ...bellWords(after, i), userIds: [i.leadId, ...i.panelIds], actorId: session.sub, changed: i.scheduledAt !== null });
   }
 }));

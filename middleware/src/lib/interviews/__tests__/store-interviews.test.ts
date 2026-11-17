@@ -10,7 +10,7 @@ import { fixtureRegistry } from '../../../mock/core/index.js';
 import { HUGO, WEN, interviewOpeningsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { MemoryInterviewsStore, type InterviewsStore } from '../store.js';
 import {
-  ANSWER_SEAT_SQL, GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, INTERVIEW_WRITE_STATEMENTS, LIST_INTERVIEWS_SQL, REASSIGN_SQL, SqlInterviewsStore, type SqlExec,
+  ANSWER_SEAT_SQL, GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, INTERVIEW_WRITE_STATEMENTS, LIST_INTERVIEWS_SQL, REASSIGN_SQL, SET_TIME_SQL, SqlInterviewsStore, type SqlExec,
 } from '../store-sql.js';
 import { answerSeat, applyReassignment, newInterview } from '../assign.js';
 import type { Interview } from '../types.js';
@@ -60,6 +60,13 @@ function interviewsTableExec(): { exec: SqlExec; seen: string[] } {
       row['acceptances'] = b.get('acceptances');
       if (sql === ANSWER_SEAT_SQL) row['declines'] = b.get('declines');
       else row['lead_id'] = b.get('lead_id');
+      row['revision'] = Number(row['revision']) + 1;
+      return [row];
+    }
+    if (sql === SET_TIME_SQL) {
+      const row = find();
+      if (!row || row['revision'] !== b.get('revision')) return [];
+      row['scheduled_at'] = b.get('scheduled_at') === null ? null : ts(String(b.get('scheduled_at')));
       row['revision'] = Number(row['revision']) + 1;
       return [row];
     }
@@ -124,6 +131,23 @@ describe.each([
     expect((await read(before.id)).leadId).toBe(WEN);
     expect(await store.answerSeat('iv-nowhere', accept.change, 1)).toEqual({ ok: false, reason: 'not-found' });
     expect(await store.reassign('iv-nowhere', applyReassignment(before, { leadId: HUGO, panelIds: [] }), 1)).toEqual({ ok: false, reason: 'not-found' });
+  });
+});
+
+describe.each([
+  ['memory', () => new MemoryInterviewsStore() as InterviewsStore],
+  ['sql', () => new SqlInterviewsStore(interviewsTableExec().exec) as InterviewsStore],
+])('the %s store\'s time write', (_name, make) => {
+  it('sets, changes and clears the time against the revision, leaving the state alone', async () => {
+    const store = make();
+    const read = async () => (await store.listInterviews()).find((i) => i.id === 'iv-ravi-together')!;
+    const before = await read();
+    const set = await store.setTime(before.id, '2031-03-04T15:30:00.000Z', before.revision);
+    expect(set).toMatchObject({ ok: true, row: { scheduledAt: '2031-03-04T15:30:00.000Z', state: before.state, revision: before.revision + 1 } });
+    expect((await read()).scheduledAt).toBe('2031-03-04T15:30:00.000Z');
+    expect(await store.setTime(before.id, null, before.revision + 1)).toMatchObject({ ok: true, row: { scheduledAt: null } });
+    expect(await store.setTime(before.id, null, before.revision)).toMatchObject({ ok: false, reason: 'stale' });
+    expect(await store.setTime('iv-nowhere', null, 1)).toEqual({ ok: false, reason: 'not-found' });
   });
 });
 

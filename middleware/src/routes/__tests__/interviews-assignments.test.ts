@@ -258,6 +258,44 @@ describe('reassigning', () => {
   });
 });
 
+describe('PUT /interviews/:id/time (row I1.5)', () => {
+  const FUTURE = '2031-03-04T15:30:00.000Z';
+
+  it('sets, changes and clears the time without moving the state; the panel hears of a set or a change, never about the candidate', async () => {
+    const id = (await assign()).body.interview.id;
+    await flush(); sent.length = 0;
+    const set = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: FUTURE });
+    expect(set.status).toBe(200);
+    expect(set.body.interview).toMatchObject({ scheduledAt: FUTURE, state: 'assigned', revision: 2 });
+    await flush();
+    expect(sent.map((s) => s.userId).sort()).toEqual(['u-hugo', 'u-wen']);
+    expect(sent[0]!.item.title).toContain('has a time');
+    expect(bellText()).not.toMatch(/Lucia/);
+    sent.length = 0;
+    await GRETA.put(`/interviews/${id}/time`, { revision: 2, scheduledAt: '2031-03-05T15:30:00.000Z' });
+    await flush();
+    expect(sent[0]!.item.title).toContain('has a new time');
+    sent.length = 0;
+    expect((await GRETA.put(`/interviews/${id}/time`, { revision: 3, scheduledAt: null })).body.interview.scheduledAt).toBeNull();
+    await flush();
+    expect(sent).toEqual([]);
+  });
+
+  it('refuses a past time, an off-minute time and a started round in words; a stale revision is 409; only the recruiter writes', async () => {
+    const id = (await assign()).body.interview.id;
+    const past = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: '2020-01-01T10:00:00.000Z' });
+    expect(past.status).toBe(400);
+    expect(past.body.fields[0]).toMatchObject({ path: 'scheduledAt' });
+    expect(past.body.fields[0].message).toMatch(/future/);
+    expect((await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: '2031-03-04T15:30:20.000Z' })).body.fields[0].message).toMatch(/whole minute/);
+    expect((await GRETA.put(`/interviews/${id}/time`, { revision: 9, scheduledAt: FUTURE })).status).toBe(409);
+    expect((await GRETA.put('/interviews/iv-jonah-leadership/time', { revision: 1, scheduledAt: FUTURE })).body.fields[0].path).toBe('state');
+    expect((await HUGO.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: FUTURE })).status).toBe(403);
+    expect((await AMARA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: FUTURE })).status).toBe(403);
+    expect((await GRETA.put('/interviews/iv-nowhere/time', { revision: 1, scheduledAt: FUTURE })).status).toBe(404);
+  });
+});
+
 describe('the bell is shown only while the role is held', () => {
   it('an interviews bell reaches its audience\'s holders, and nobody who lost the role', async () => {
     const bell = { payload: { tenant: 'interviews', audience: 'interviewer' } };

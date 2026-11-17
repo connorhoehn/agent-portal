@@ -786,6 +786,42 @@ export async function notifyInterviewSeated(ev: InterviewSeatedEvent): Promise<s
   }
 }
 
+export interface InterviewTimedEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The lead and the panel; the actor is never told about their own write. */
+  userIds: readonly string[];
+  actorId: string;
+  /** True when the round already had a time, so the item reads "a new time". */
+  changed: boolean;
+}
+
+/** A round was given or moved to a time → its lead and panel, a bell that opens My interviews. The time itself is on the page, in the viewer's zone. */
+export async function notifyInterviewTimed(ev: InterviewTimedEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const to = [...new Set(ev.userIds.filter((u) => u !== ev.actorId))];
+    if (!to.length) return [];
+    const by = await displayName(ev.actorId);
+    const sent: string[] = [];
+    for (const userId of to) {
+      sent.push(...await notify([userId], {
+        id: `interview-timed:${roundKey(ev.interviewId)}:${userId}:${Date.now().toString(36)}`,
+        type: 'system',
+        title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} ${ev.changed ? 'has a new time' : 'has a time'}`,
+        body: `Set by ${by}. See the time in My interviews.`,
+        payload: { tenant: 'interviews', kind: 'interview-timed', audience: 'interviewer', actorId: ev.actorId },
+        action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-timed producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 export interface InterviewDeclinedEvent {
   interviewId: string;
   openingTitle: string;

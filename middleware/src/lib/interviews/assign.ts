@@ -242,3 +242,32 @@ export function assignProblemsLine(what: 'assign' | 'reassign' | 'answer', count
   const noun = what === 'assign' ? 'The round was not assigned' : what === 'reassign' ? 'Nobody was reassigned' : 'Your answer was not saved';
   return `${noun}: ${count === 1 ? 'one thing needs' : `${count} things need`} fixing.`;
 }
+
+/** The time may be set, changed or cleared while the call has not started (row I1.5). `ready` is reached by nothing yet. */
+const TIMEABLE: ReadonlySet<InterviewState> = new Set(['assigned', 'accepted', 'ready']);
+export const isTimeable = (state: InterviewState): boolean => TIMEABLE.has(state);
+
+/**
+ * A time as sent: `{ scheduledAt: '<ISO instant>' }` sets, `{ scheduledAt: null }` clears. A set time is a whole
+ * minute in the future and is stored in UTC; the round must not have started or closed. `now` is injectable for tests.
+ */
+export function checkTime(input: unknown, i: Pick<Interview, 'state'>, now: Date = new Date()): Checked<{ scheduledAt: string | null }> {
+  if (!TIMEABLE.has(i.state)) {
+    return { ok: false, problems: [{ path: 'state', message: i.state === 'declined' || i.state === 'cancelled'
+      ? 'This round is no longer going ahead, so it cannot be given a time.'
+      : 'This round has already started, so its time can no longer change.' }] };
+  }
+  const raw = record(input)['scheduledAt'];
+  if (raw === null) return { ok: true, value: { scheduledAt: null } };
+  const bad = (message: string): Checked<{ scheduledAt: string | null }> => ({ ok: false, problems: [{ path: 'scheduledAt', message }] });
+  if (typeof raw !== 'string' || !raw.trim()) return bad('Choose a date and time for this round.');
+  const at = new Date(raw);
+  if (Number.isNaN(at.getTime())) return bad('Choose a date and time for this round.');
+  if (at.getTime() % 60000 !== 0) return bad('Choose a time on a whole minute.');
+  if (at.getTime() <= now.getTime()) return bad('Choose a time in the future: that time has already passed.');
+  return { ok: true, value: { scheduledAt: at.toISOString() } };
+}
+
+export function timeProblemsLine(count: number): string {
+  return `The time was not saved: ${count === 1 ? 'one thing needs' : `${count} things need`} fixing.`;
+}

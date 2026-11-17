@@ -78,7 +78,12 @@ export const REASSIGN_SQL = `UPDATE interviews
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
 
-export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, ANSWER_SEAT_SQL, REASSIGN_SQL] as const;
+export const SET_TIME_SQL = `UPDATE interviews
+  SET scheduled_at = CAST(:scheduled_at AS TIMESTAMPTZ), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+
+export const INTERVIEW_WRITE_STATEMENTS = [GET_INTERVIEW_SQL, INSERT_INTERVIEW_SQL, ANSWER_SEAT_SQL, REASSIGN_SQL, SET_TIME_SQL] as const;
 
 const textParam = (name: string, value: string | null): SqlParameter =>
   (value === null ? { name, value: { isNull: true } } : { name, value: { stringValue: value } });
@@ -224,6 +229,10 @@ export class SqlInterviewsStore implements InterviewsStore {
       textParam('id', id), intParam('revision', revision), textParam('lead_id', change.leadId), textParam('panel_ids', JSON.stringify(change.panelIds)),
       textParam('state', change.state), textParam('acceptances', JSON.stringify(change.acceptances)),
     ]));
+  }
+
+  async setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SET_TIME_SQL, [textParam('id', id), intParam('revision', revision), textParam('scheduled_at', scheduledAt)]));
   }
 
   /** cas() for an interview. */
