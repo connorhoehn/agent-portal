@@ -5,9 +5,10 @@
 //   eraseRuns                                                  D6: a media-class eraser (lib/interviews/retention/erasers.ts)
 //
 // Loading this module registers the coach's code source (I4.5): the coach reads `lastRun` and, this round, no pad
-// (`pad: null`); the integrator points `pad` at the pad log's `latestPadSnapshot` after the picks (hook H2).
+// with `pad` read from the pad log's `latestPadSnapshot` (UI round 1 combine).
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { setCoachCodeSource } from '../coach/service.js';
+import { latestPadSnapshot } from '../pad/log/index.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { eraseRunRows, lastRunRecord, runView, type RunView } from './service.js';
 
@@ -34,6 +35,6 @@ export async function eraseRuns(interviewIds: readonly string[]): Promise<number
 
 /** I4.5: the coach's code source as this module can give it: the last run, and no pad until hook H2. */
 export function registerRunsCodeSource(): void {
-  setCoachCodeSource(async (interviewId) => ({ pad: null, lastRun: await lastRun(interviewId) }));
+  setCoachCodeSource(async (interviewId) => ({ pad: await latestPadSnapshot(interviewId), lastRun: await lastRun(interviewId) }));
 }
 registerRunsCodeSource();
