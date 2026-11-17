@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-17T03:16:02.487Z",
-  "serverHandlerSha": "358901f37b803e738ea7242147127836757e4194cd331415df67c653a3b863f7",
+  "capturedAt": "2026-11-17T03:47:08.352Z",
+  "serverHandlerSha": "2b01383a0d41a88bc524bc2a63a266f6beab1bff1b5b215ea7bbad4ef2e3c36c",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5017,7 +5017,16 @@
     "GET /api/initiatives/:id/run-reports": {
       "skipped": "no value found for :id under /api/initiatives (orgiq/admin); no value found for :id under /api/initiatives (assessment/admin); no value found for :id under /api/initiatives (anonymous)"
     },
+    "GET /api/interview-invite/admission": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/interview-invite/consents": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
     "GET /api/interview-invite/interview": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/interview-invite/realtime-token": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
     "GET /api/interviews/candidates": {
@@ -5288,7 +5297,15 @@
         "$": "object",
         "interview": "object",
         "interview.applicationId": "string",
+        "interview.bank": "array",
+        "interview.bank[]": "object",
+        "interview.bank[].competency": "string",
+        "interview.bank[].competencyId": "string",
+        "interview.bank[].hasStarter": "boolean",
+        "interview.bank[].id": "string",
+        "interview.bank[].prompt": "string",
         "interview.bucket": "string",
+        "interview.canPrepare": "boolean",
         "interview.candidate": "object",
         "interview.candidate.headline": "string",
         "interview.candidate.id": "string",
@@ -5308,6 +5325,8 @@
         "interview.lead": "object",
         "interview.lead.id": "string",
         "interview.lead.name": "string",
+        "interview.maxQuestions": "number",
+        "interview.missing": "null",
         "interview.myAnswer": "null",
         "interview.myScorecard": "null",
         "interview.opening": "object",
@@ -5372,6 +5391,9 @@
         ]
       }
     },
+    "GET /api/interviews/interviews/:id/consents": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
     "GET /api/interviews/interviews/:id/invite": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -5392,6 +5414,12 @@
           "none"
         ]
       }
+    },
+    "GET /api/interviews/interviews/:id/room": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/waiting": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/openings": {
       "persona": "orgiq/admin",

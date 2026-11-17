@@ -28,3 +28,10 @@ export async function consentsFor(interviewId: string): Promise<{ recording: boo
   // Milo needs the transcript: held here too, whatever a row says.
   return { recording: record.recording, transcription: record.transcription, milo: record.transcription && record.milo };
 }
+
+// The two hooks other modules leave open for consent (round 3, C8): a guest may knock only once the current notice
+// is answered, and Milo hears a guest only when the transcript and Milo were both accepted.
+import { setKnockPrecondition } from '../invite/admission.js';
+import { setInterviewConsentSource } from '../milo-policy.js';
+setKnockPrecondition(consentsAnswered);
+setInterviewConsentSource(consentsFor);

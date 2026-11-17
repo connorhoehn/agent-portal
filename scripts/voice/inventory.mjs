@@ -595,7 +595,9 @@ export const V2_RULES = [
   [/^POST \/api\/assessment\/canvas$/, 'never', null, 'canvas render'],
   // Interviews
   [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
-  [/^POST \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
+  [/^(POST|PUT) \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],
+  [/^PUT \/api\/interviews\/interviews\/:[^/]+\/questions$/, 'not-yet', 'update', 'choose a round\'s questions (Prepare)'],
   [/^(PUT|DELETE) \/api\/interviews\/candidates\/:[^/]+\/resume$/, 'never', null, 'a résumé file is uploaded or removed on the candidate page'],
   [/^(POST|DELETE) \/api\/interviews\/interviews\/:[^/]+\/invite$/, 'never', null, 'an invite link is a secret shown once on the page; never read aloud'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/answer$/, 'not-yet', 'decide', 'accept or decline a seat on a round (ConductInterview)'],

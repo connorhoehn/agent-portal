@@ -2043,7 +2043,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:254"
+      "source": "src/index.ts:255"
     },
     {
       "method": "GET",
@@ -2326,24 +2326,49 @@
       "source": "src/routes/meeting-assistant-sink.ts:37"
     },
     {
+      "method": "GET",
+      "path": "/api/interview-invite/admission",
+      "source": "src/routes/interview-invite.ts:161"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/consents",
+      "source": "src/routes/interview-invite-consents.ts:57"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/interview-invite/consents",
+      "source": "src/routes/interview-invite-consents.ts:63"
+    },
+    {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:94"
+      "source": "src/routes/interview-invite.ts:101"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:123"
+      "source": "src/routes/interview-invite.ts:131"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/knock",
+      "source": "src/routes/interview-invite.ts:152"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/realtime-token",
+      "source": "src/routes/interview-invite.ts:144"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:55"
+      "source": "src/routes/interviews.ts:62"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:61"
+      "source": "src/routes/interviews.ts:69"
     },
     {
       "method": "DELETE",
@@ -2368,7 +2393,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/hiring-managers",
-      "source": "src/routes/interviews/openings.ts:76"
+      "source": "src/routes/interviews/openings.ts:77"
     },
     {
       "method": "GET",
@@ -2378,7 +2403,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:71"
+      "source": "src/routes/interviews.ts:79"
     },
     {
       "method": "POST",
@@ -2388,12 +2413,27 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:77"
+      "source": "src/routes/interviews.ts:87"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/admit",
+      "source": "src/routes/interviews/admission.ts:55"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/answer",
       "source": "src/routes/interviews/assignments.ts:110"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/consents",
+      "source": "src/routes/interviews/consents.ts:29"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/end",
+      "source": "src/routes/interviews/room.ts:76"
     },
     {
       "method": "DELETE",
@@ -2417,38 +2457,58 @@
     },
     {
       "method": "PUT",
+      "path": "/api/interviews/interviews/:id/questions",
+      "source": "src/routes/interviews/prepare.ts:29"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/room",
+      "source": "src/routes/interviews/room.ts:45"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/start",
+      "source": "src/routes/interviews/room.ts:75"
+    },
+    {
+      "method": "PUT",
       "path": "/api/interviews/interviews/:id/time",
       "source": "src/routes/interviews/assignments.ts:154"
     },
     {
       "method": "GET",
+      "path": "/api/interviews/interviews/:id/waiting",
+      "source": "src/routes/interviews/admission.ts:49"
+    },
+    {
+      "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:39"
+      "source": "src/routes/interviews.ts:44"
     },
     {
       "method": "POST",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews/openings.ts:82"
+      "source": "src/routes/interviews/openings.ts:83"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:45"
+      "source": "src/routes/interviews.ts:52"
     },
     {
       "method": "PUT",
       "path": "/api/interviews/openings/:id/details",
-      "source": "src/routes/interviews/openings.ts:111"
+      "source": "src/routes/interviews/openings.ts:109"
     },
     {
       "method": "PUT",
       "path": "/api/interviews/openings/:id/kit",
-      "source": "src/routes/interviews/openings.ts:123"
+      "source": "src/routes/interviews/openings.ts:121"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id/spend",
-      "source": "src/routes/interviews/openings.ts:102"
+      "source": "src/routes/interviews/openings.ts:100"
     },
     {
       "method": "POST",
@@ -4393,7 +4453,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:253"
+      "source": "src/index.ts:254"
     },
     {
       "method": "DELETE",
@@ -4478,7 +4538,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:255"
+      "source": "src/index.ts:256"
     }
   ],
   "unresolved": []
