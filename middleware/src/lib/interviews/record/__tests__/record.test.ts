@@ -15,7 +15,7 @@ import { interviewRecordLinesFixture, interviewRecordingsFixture } from '../../.
 import { MemoryAssistantStore } from '../../../meeting-assistant/store.js';
 import { setAssistantStore } from '../../../meeting-assistant/store-select.js';
 import type { AssistantRecord } from '../../../meeting-assistant/types.js';
-import { linesFrom } from '../index.js';
+import { codeRemovedBy, linesFrom } from '../index.js';
 import { recordMarkers } from '../markers.js';
 import { partState, recordingPart, removedKinds } from '../recording.js';
 import { recordTranscript } from '../transcript.js';
@@ -45,6 +45,22 @@ describe('partState', () => {
     ];
     expect([...removedKinds(rows, 'iv-b')]).toEqual(['recording']);
     expect(removedKinds(rows, 'iv-z').size).toBe(0);
+  });
+
+  // Hardening H5, finding 2: the record page says the code was removed, and why, instead of "no code was written".
+  it('codeRemovedBy names why this interview\'s pad log or runs went: the oldest such row, a request or a period', () => {
+    const row = (reason: 'request' | 'media-period' | 'record-period', requestedAt: string, removed: { kind: string; count: number }[], interviewIds = ['iv-a']) =>
+      ({ interviewIds, reason, requestedAt, removed });
+    expect(codeRemovedBy([row('media-period', '2026-11-02T00:00:00Z', [{ kind: 'pad-log', count: 4 }, { kind: 'runs', count: 2 }])], 'iv-a')).toBe('period');
+    expect(codeRemovedBy([row('request', '2026-11-01T00:00:00Z', [{ kind: 'runs', count: 1 }])], 'iv-a')).toBe('request');
+    expect(codeRemovedBy([
+      row('media-period', '2026-11-03T00:00:00Z', [{ kind: 'pad-log', count: 4 }]),
+      row('request', '2026-11-01T00:00:00Z', [{ kind: 'pad-log', count: 4 }]),
+    ], 'iv-a')).toBe('request');
+    // Another interview's row, a row that removed other kinds, or a zero count is not a removal of this code.
+    expect(codeRemovedBy([row('request', '2026-11-01T00:00:00Z', [{ kind: 'pad-log', count: 4 }], ['iv-b'])], 'iv-a')).toBeNull();
+    expect(codeRemovedBy([row('request', '2026-11-01T00:00:00Z', [{ kind: 'resume', count: 1 }, { kind: 'runs', count: 0 }])], 'iv-a')).toBeNull();
+    expect(codeRemovedBy([], 'iv-a')).toBeNull();
   });
 });
 

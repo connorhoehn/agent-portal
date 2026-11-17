@@ -9,7 +9,7 @@
 //          an open round and the live round are untouched
 //   I6.3e  the media period on a finished technical round (Kwame's live round, ended here): the pad log and the runs stay
 //          a day before the period ends and are gone a day after, in one log row
-//   I6.3f  the record page of that round then says in plain lines that its code and runs were removed
+//   I6.3f  the record page of that round then says in one plain line that its code (the pad log and runs) was removed
 //   I6.3g  the seeded record whose period has passed no longer shows its transcript
 //   I6.3h  the deletion's receipt and log row name the code log and the runs in words
 // The seed's dates are stamped from the wall clock at reset and the offset moves only the interviews clock: every "N days
@@ -190,10 +190,12 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
       const code = short(await page.getByTestId('interviews-record-code-section').innerText().catch(() => ''));
       const body = await page.getByTestId('interviews-record-body').innerText();
       const shots = await shootPage(page, 'record-after-media-period');
-      const saysCode = /code[^.]*(removed|deleted)|(removed|deleted)[^.]*code/i.test(body);
-      const saysRuns = /runs?[^.]*(removed|deleted)|(removed|deleted)[^.]*runs?/i.test(body);
-      record('I6.3f', saysCode && saysRuns && shots.every((s) => s.ok),
-        `record page after the period: the code section reads "${code}"; a line that the code was removed: ${saysCode ? 'yes' : 'NO'}; that the runs were removed: ${saysRuns ? 'yes' : 'NO'} (finding for the lead when NO: the page reads as if no code was written)`);
+      // The owner's line (H5 fix): one plain sentence covers the pad log and its runs; the runs' output pane is gone with them.
+      const saysCode = body.includes('The code from this interview was removed at the end of its keeping period.');
+      const noWritten = !/No code was written/i.test(body);
+      const runsGone = (await page.getByTestId('interviews-record-run-output').count()) === 0;
+      record('I6.3f', saysCode && noWritten && runsGone && shots.every((s) => s.ok),
+        `record page after the period: the code section reads "${code}"; the line that the code was removed at the end of its keeping period: ${saysCode ? 'yes' : 'NO'}; "No code was written" absent: ${noWritten ? 'yes' : 'NO'}; no runs shown: ${runsGone ? 'yes' : 'NO'}`);
       await page.close();
     } catch (e) { record('I6.3f', false, `stopped: ${String(e?.message ?? e).split('\n')[0]}`); }
 

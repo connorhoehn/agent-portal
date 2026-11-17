@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  clockOf, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, transcriptLine,
+  clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, transcriptLine,
   type RecordLine,
 } from '../interviewsRecord.ts';
 
@@ -111,4 +111,11 @@ test('a recording still processing shows none: no player, the plain no-recording
     assert.deepEqual(m, { state: 'none', url: null, startedAt: '2026-11-10T14:00:00.000Z' }, JSON.stringify(playback));
     assert.match(recordingLine({ state: 'available', playbackUrl: null, durationSeconds: 3500 }, m.state)!, /no recording of this interview/);
   }
+});
+
+test('the code\'s empty line says why the code was removed, or that none was written (hardening H5)', () => {
+  assert.equal(codeEmptyLine({ codeRemoved: 'period' }), 'The code from this interview was removed at the end of its keeping period.');
+  assert.equal(codeEmptyLine({ codeRemoved: 'request' }), 'The code from this interview was removed when the candidate asked for their data to be deleted.');
+  assert.equal(codeEmptyLine({ codeRemoved: null }), 'No code was written in this interview.');
+  assert.equal(codeEmptyLine({}), 'No code was written in this interview.');
 });

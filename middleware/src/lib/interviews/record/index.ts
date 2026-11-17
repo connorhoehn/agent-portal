@@ -3,7 +3,7 @@
 // may read; nothing here logs any of it.
 import { consentStore } from '../consent/store.js';
 import { suggestionStore } from '../coach/store.js';
-import { deletionStore } from '../retention/store.js';
+import { deletionStore, type DeletionRow } from '../retention/store.js';
 import { runView, listRuns, type RunView } from '../runs/index.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
@@ -34,6 +34,23 @@ export interface InterviewRecordView {
   runs: RunView[];
   /** The questions chosen for a technical round, in the order chosen: what the pad's "insert a question" put in is named by these words. */
   questions: { id: string; prompt: string }[];
+  /**
+   * Why a technical round's code (its pad log and runs) is gone, when the deletion log removed it for this interview: at the
+   * end of its keeping period, or because the candidate asked for their data to be deleted; null when nothing removed it
+   * (and for a behavioural round). The page says so in place of "no code was written".
+   */
+  codeRemoved: CodeRemoval | null;
+}
+
+export type CodeRemoval = 'period' | 'request';
+const CODE_KINDS: ReadonlySet<string> = new Set(['pad-log', 'runs']);
+
+/** The first deletion (oldest first) that removed this interview's pad log or runs, and why; null when none did. */
+export function codeRemovedBy(rows: readonly Pick<DeletionRow, 'interviewIds' | 'removed' | 'reason' | 'requestedAt'>[], interviewId: string): CodeRemoval | null {
+  const first = rows
+    .filter((r) => r.interviewIds.includes(interviewId) && r.removed.some((x) => CODE_KINDS.has(x.kind) && x.count > 0))
+    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))[0];
+  return first ? (first.reason === 'request' ? 'request' : 'period') : null;
 }
 
 /** Lines as ms from `startedAt` (never negative); a line with no usable time sits at the start. */
@@ -85,6 +102,7 @@ export async function readRecord(s: RecordSubject): Promise<InterviewRecordView>
     transcript: { state: transcriptState, lines: transcriptState === 'available' && transcript ? linesFrom(transcript, startedAt) : [] },
     markers: recordMarkers(log, startedAt),
     runs,
+    codeRemoved: i.type === 'technical' ? codeRemovedBy(deletions, i.id) : null,
     questions: i.type === 'technical' ? i.questionIds.flatMap((id) => { const q = s.opening.kit.questions.find((x) => x.id === id); return q ? [{ id, prompt: q.prompt }] : []; }) : [],
   };
 }

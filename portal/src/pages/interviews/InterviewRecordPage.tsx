@@ -24,7 +24,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { ROUND_TYPE_LABELS, roundStatus, whenLabel } from '../../lib/interviews';
 import {
-  MARKER_LABELS, clockOf, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
+  MARKER_LABELS, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
@@ -132,7 +132,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   ) : null;
   const playback = (
     <CodePlayback frames={frames} markers={playbackMarkers} durationMs={durationMs} timeMs={Math.min(timeMs, durationMs)} onTimeChange={moveTo}
-      emptyMessage="No code was written in this interview." className="h-full min-h-0 min-w-0" data-testid="interviews-record-code-playback" />
+      emptyMessage={codeEmptyLine(record)} className="h-full min-h-0 min-w-0" data-testid="interviews-record-code-playback" />
   );
   const code = !technical ? null : !padLog.done ? <LoadingState label="Opening the code…" /> : (
     <SplitPane orientation="vertical" className="h-full min-h-0" defaultRatio={0.62} minPrimaryPx={200} minSecondaryPx={120} dividerLabel="Resize the code and the run's output"

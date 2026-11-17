@@ -32,6 +32,8 @@ export interface InterviewRecordView {
   runs?: RunView[];
   /** The questions chosen for a technical round: what the pad's inserted question is called. */
   questions?: { id: string; prompt: string }[];
+  /** Why a technical round's code (its pad log and runs) is gone: its keeping period ended, or the candidate asked; null or absent when nothing removed it. */
+  codeRemoved?: 'period' | 'request' | null;
 }
 
 export const recordPath = (interviewId: string): string => `/interviews/rounds/${encodeURIComponent(interviewId)}/record`;
@@ -57,6 +59,13 @@ export function lengthOf(seconds: number): string {
   const h = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return `${h === 1 ? '1 hour' : `${h} hours`}${rest ? ` ${rest === 1 ? '1 minute' : `${rest} minutes`}` : ''}`;
+}
+
+/** The line the code shows when it has none: why it was removed, or that none was written. */
+export function codeEmptyLine(r: Pick<InterviewRecordView, 'codeRemoved'>): string {
+  if (r.codeRemoved === 'request') return 'The code from this interview was removed when the candidate asked for their data to be deleted.';
+  if (r.codeRemoved === 'period') return 'The code from this interview was removed at the end of its keeping period.';
+  return 'No code was written in this interview.';
 }
 
 /** The one plain line the recording shows when there is no player. Null when a player shows. */
