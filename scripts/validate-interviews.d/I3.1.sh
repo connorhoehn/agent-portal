@@ -17,3 +17,5 @@ row_I3_1() {
   done
   [ "$QUICK" -eq 1 ] || jest_ok "the meeting assistant's suites" src/lib/meeting-assistant src/routes/__tests__/meeting-assistant
 }
+
+built_row I3.1 row_I3_1
