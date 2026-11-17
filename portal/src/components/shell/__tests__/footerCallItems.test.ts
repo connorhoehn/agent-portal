@@ -21,3 +21,9 @@ test('every other lobby keeps the work huddle\'s footer unchanged', () => {
     assert.equal(items.name('Payments huddle'), 'Payments huddle');
   }
 });
+
+test('an interview call drops the Today strip beside the bar; every other call keeps it', () => {
+  assert.equal(footerCallItems('interviews:interview:iv-k1p5w8ra').todayStrip, false);
+  assert.equal(footerCallItems('huddle:p-observability').todayStrip, true);
+  assert.equal(footerCallItems(null).todayStrip, true);
+});

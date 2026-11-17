@@ -262,7 +262,7 @@ export function SocialFooter() {
     {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
     <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">
       {(!drawn || footerCallItems(host?.lobby?.lobbyName).socialEntry) && <EmbeddedSocialEntry />}
-      <TodayStripSlot placement="footer" activeCall={drawn} />
+      {(!drawn || footerCallItems(host?.lobby?.lobbyName).todayStrip) && <TodayStripSlot placement="footer" activeCall={drawn} />}
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
       <VoiceFooterSlot />
       {/* Milo's mark and controls sit beside the call bar, not inside it: the bar's own extras slot has no room at 1280 and a wrapped second line would make the bar taller. */}

@@ -123,6 +123,8 @@ export interface FooterCallItems {
   reactions: boolean;
   mediaToggle: boolean;
   socialEntry: boolean;
+  /** The Today strip beside the bar (an interview's call drops it so the bar keeps one line at 1280). */
+  todayStrip: boolean;
   /** The bar's name for the call. */
   name: (title: string) => string;
   /** The idle bar's start control. */
@@ -135,7 +137,7 @@ const huddleName = (title: string): string => (/huddle$/i.test(title) ? title : 
 
 export function footerCallItems(lobbyName: string | null | undefined): FooterCallItems {
   if (isInterviewLobby(lobbyName)) {
-    return { share: false, meeting: false, reactions: false, mediaToggle: false, socialEntry: false, name: (title) => title, startLabel: 'Join the call', idleMessage: false };
+    return { share: false, meeting: false, reactions: false, mediaToggle: false, socialEntry: false, todayStrip: false, name: (title) => title, startLabel: 'Join the call', idleMessage: false };
   }
-  return { share: true, meeting: true, reactions: true, mediaToggle: true, socialEntry: true, name: huddleName, startLabel: 'Huddle', idleMessage: true };
+  return { share: true, meeting: true, reactions: true, mediaToggle: true, socialEntry: true, todayStrip: true, name: huddleName, startLabel: 'Huddle', idleMessage: true };
 }
