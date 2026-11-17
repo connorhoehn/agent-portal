@@ -13,7 +13,7 @@ row_I6.2() {
     ok "the export's log line holds who, which and when, nothing of the document"
   else fail "the export's log line carries more than who, which and when"; fi
   if grep -rn "console\." $MW/lib/interviews/export/*.ts >/dev/null 2>&1; then fail "the export module writes a log line"; else ok "the export module writes no log line"; fi
-  for key in suggestions notices recap milo-for-you panel-notices; do
+  for key in suggestions notices recap milo-for-you panel-notices said-aloud; do
     needF "key: '$key'" $MW/lib/interviews/export/sections.ts "the export's section '$key'"
   done
   needF "interviews-milo-export" portal/src/pages/interviews/ProfileConsents.tsx "the export button on the Consents table"

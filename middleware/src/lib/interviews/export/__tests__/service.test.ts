@@ -37,7 +37,7 @@ describe('the export of a seeded interview (row I6.2)', () => {
   beforeEach(async () => {
     const { fixtureRegistry } = await import('../../../../mock/core/index.js');
     fixtureRegistry.resetAll('default');
-    const { exportNotices, exportSuggestions } = await import('../sections.js');
+    const { exportNotices, exportSaidLog, exportSuggestions } = await import('../sections.js');
     const { exportRecap } = await import('../../recap/index.js');
     const { exportCoachLog } = await import('../../milo-notes/index.js');
     const { exportPanelNotices } = await import('../../consent/panel-notice.js');
@@ -47,6 +47,7 @@ describe('the export of a seeded interview (row I6.2)', () => {
     registerExportSection({ key: 'recap', read: exportRecap });
     registerExportSection({ key: 'milo-for-you', read: exportCoachLog });
     registerExportSection({ key: 'panel-notices', read: exportPanelNotices });
+    registerExportSection({ key: 'said-aloud', read: exportSaidLog });
     const { interviewsStore } = await import('../../store-select.js');
     doc = async (id) => {
       const iv = (await interviewsStore().listInterviews()).find((i) => i.id === id)!;
@@ -68,8 +69,9 @@ describe('the export of a seeded interview (row I6.2)', () => {
     const { erasersOf } = await import('../../retention/registry.js');
     for (const e of [...erasersOf('record'), ...erasersOf('media').filter((m) => m.kind === 'pad-log' || m.kind === 'runs')]) await e.erase([MATEO_CODING]);
     const after = await doc(MATEO_CODING);
-    expect(Object.keys(after.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
+    expect(Object.keys(after.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'said-aloud', 'suggestions']);
     expect(after.sections['suggestions']).toEqual({ suggestions: [], dropped: {} });
+    expect(after.sections['said-aloud']).toEqual({ lines: [] });
     expect(after.sections['notices']).toEqual({ notice: null, answers: null });
     expect(after.sections['recap']).toEqual({ recap: null, opens: [] });
     expect(after.sections['milo-for-you']).toEqual({ rows: [] });
@@ -88,17 +90,23 @@ describe('the export of a seeded interview (row I6.2)', () => {
     expect(notices.answers).not.toBeNull();
   });
 
-  it('pins today\'s shape: what Milo said aloud (the said log) is in no section of the export (O-270, a finding for the lead)', async () => {
+  it('what Milo said aloud (the said log) is its own section: each line with its time and kind, the candidate never by guest id (O-270)', async () => {
     const { MemorySaidStore, setSaidStore, saidStore } = await import('../../speak/index.js');
     setSaidStore(new MemorySaidStore());
     await saidStore().append({
       id: 'said-x', interviewId: MATEO_CODING, callId: null, kind: 'question', source: 'kit', questionId: 'q-limiter', suggestionId: null,
       text: SAID_TEXT, askedBy: 'u-hugo', saidAt: '2026-11-14T14:12:00.000Z', spoken: true,
     });
-    expect(await saidStore().list(MATEO_CODING)).toHaveLength(1);
+    await saidStore().append({
+      id: 'said-y', interviewId: MATEO_CODING, callId: null, kind: 'answer', source: 'time', questionId: null, suggestionId: null,
+      text: 'About 20 minutes are left.', askedBy: 'guest:inv-abc123', saidAt: '2026-11-14T14:20:00.000Z', spoken: false,
+    });
     const out = await doc(MATEO_CODING);
-    expect(Object.keys(out.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions']);
-    expect(JSON.stringify(out)).not.toContain(SAID_TEXT);
-    expect(JSON.stringify(out)).not.toContain('said-x');
+    expect(Object.keys(out.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'said-aloud', 'suggestions']);
+    expect(out.sections['said-aloud']).toEqual({ lines: [
+      { id: 'said-x', saidAt: '2026-11-14T14:12:00.000Z', kind: 'question', source: 'kit', text: SAID_TEXT, spoken: true, questionId: 'q-limiter', suggestionId: null, askedBy: { side: 'panel', id: 'u-hugo' } },
+      { id: 'said-y', saidAt: '2026-11-14T14:20:00.000Z', kind: 'answer', source: 'time', text: 'About 20 minutes are left.', spoken: false, questionId: null, suggestionId: null, askedBy: { side: 'candidate' } },
+    ] });
+    expect(JSON.stringify(out)).not.toContain('guest:');
   });
 });

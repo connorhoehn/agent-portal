@@ -7,7 +7,7 @@
 export default async function run({ portal, record, signIn, api, SEED, fs }) {
   const ingrid = SEED.candidates.ingrid;
   const round = SEED.interviews.ingridCoding;
-  const SECTIONS = ['milo-for-you', 'notices', 'panel-notices', 'recap', 'suggestions'];
+  const SECTIONS = ['milo-for-you', 'notices', 'panel-notices', 'recap', 'said-aloud', 'suggestions'];
   const openActivity = async (page) => {
     await page.goto(`${portal}/interviews/candidates/${ingrid}`, { waitUntil: 'domcontentloaded' });
     await page.getByTestId('interviews-candidate-profile').waitFor({ timeout: 30_000 });

@@ -1,10 +1,14 @@
-// The export's own two sections (row I6.2): the suggestion log as stored, and the notice with the candidate's answers.
+// The export's own sections (row I6.2): the suggestion log as stored, the notice with the candidate's answers, and what Milo
+// said aloud (the said log, added by the H5 fix).
 import { exportRecap } from '../recap/index.js';
 import { exportCoachLog } from '../milo-notes/index.js';
 import { exportPanelNotices } from '../consent/panel-notice.js';
 import { CONSENT_NOTICE } from '../consent/notice.js';
 import { consentStore } from '../consent/store.js';
 import { suggestionStore, type SuggestionRecord } from '../coach/store.js';
+import { saidStore } from '../speak/store.js';
+import { runWithDbTenant } from '../../../providers/db-tenant.js';
+import { INTERVIEWS_TENANT } from '../types.js';
 import { registerExportSection } from './registry.js';
 
 /** Every row of the log as stored, newest last; the attempts that left no suggestion are counted by code. */
@@ -37,9 +41,26 @@ export async function exportNotices(interviewId: string): Promise<unknown> {
   };
 }
 
+/**
+ * What Milo said aloud in the call (the said log), oldest first: each line with its time, its kind (a question or an answer),
+ * where its words came from and whether it was relayed aloud. Who asked is the side and, for staff, their id: the candidate's
+ * guest id is never shown to the panel, as in the record.
+ */
+export async function exportSaidLog(interviewId: string): Promise<unknown> {
+  const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interviewId));
+  return {
+    lines: rows.map((r) => ({
+      id: r.id, saidAt: r.saidAt, kind: r.kind, source: r.source, text: r.text, spoken: r.spoken,
+      questionId: r.questionId, suggestionId: r.suggestionId,
+      askedBy: /^guest:/.test(r.askedBy) ? { side: 'candidate' as const } : { side: 'panel' as const, id: r.askedBy },
+    })),
+  };
+}
+
 registerExportSection({ key: 'suggestions', read: exportSuggestions });
 registerExportSection({ key: 'notices', read: exportNotices });
 // Round 5 combine (E8): the recap, the lead's private answers and the panel's notice acknowledgements.
 registerExportSection({ key: 'recap', read: exportRecap });
 registerExportSection({ key: 'milo-for-you', read: exportCoachLog });
 registerExportSection({ key: 'panel-notices', read: exportPanelNotices });
+registerExportSection({ key: 'said-aloud', read: exportSaidLog });
