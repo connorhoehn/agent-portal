@@ -1,0 +1,224 @@
+// The coach for the lead (lib/interviews/coach/service.ts; row I3.3, contract D7): fixed transcripts through the scripted
+// model and the rules, the money, the log, and the lead's answer.
+jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
+import { fixtureRegistry } from '../../../../mock/core/index.js';
+import { interviewApplicationsFixture, interviewOpeningsFixture, interviewsFixture } from '../../../../mock/interviews.js';
+import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggestions.js';
+import { ScriptedCoachModel, type CoachModel } from '../model.js';
+import type { CoachLine } from '../prompt.js';
+import { MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS } from '../rules.js';
+import { answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
+import { MemorySuggestionStore } from '../store.js';
+import type { CoachTranscript } from '../transcript.js';
+
+const IV = 'iv-nadia-leadership';
+const WEN = { userId: 'u-wen' };
+const HUGO = { userId: 'u-hugo' };
+
+function refOf(state = 'live'): CoachRef {
+  const interview = { ...interviewsFixture.rows().find((i) => i.id === IV)!, state: state as never };
+  const app = interviewApplicationsFixture.rows().find((a) => a.id === interview.applicationId)!;
+  return { interview, opening: interviewOpeningsFixture.rows().find((o) => o.id === app.openingId)! };
+}
+
+let now = Date.UTC(2026, 11, 1, 15, 0);
+let n = 0;
+let transcript: CoachTranscript | null;
+let consent: { transcription: boolean; milo: boolean } | null;
+let deps: { [K in keyof CoachDeps]: jest.Mock };
+const store = new MemorySuggestionStore();
+
+const lines = (...said: [CoachLine['side'], string][]): CoachLine[] => said.map(([side, text], i) => ({ seq: i + 1, side, text }));
+const say = (side: CoachLine['side'], text: string) => {
+  const seq = (transcript?.lastSeq ?? 0) + 1;
+  transcript = { callId: 'call-1', lastSeq: seq, lines: [...(transcript?.lines ?? []), { seq, side, text }] };
+};
+
+beforeEach(() => {
+  fixtureRegistry.resetAll('default');
+  interviewSuggestionsFixture.rows().splice(0);
+  now = Date.UTC(2026, 11, 1, 15, 0);
+  n = 0;
+  consent = { transcription: true, milo: true };
+  transcript = { callId: 'call-1', lastSeq: 2, lines: lines(
+    ['panel', 'Tell me about someone on your team who was struggling. What did you do, and what happened?'],
+    ['candidate', 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.']) };
+  deps = {
+    store: jest.fn(() => store),
+    consents: jest.fn(async () => consent),
+    transcript: jest.fn(async () => transcript),
+    model: jest.fn(() => new ScriptedCoachModel()),
+    reserve: jest.fn(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `iv:op-em:${IV}:coach:${i.key}`, amountUsd: i.estimateUsd })),
+    settle: jest.fn(async () => undefined),
+    release: jest.fn(async () => undefined),
+    postApproved: jest.fn(async () => true),
+    now: jest.fn(() => now),
+    newId: jest.fn(() => `sg-${++n}`),
+  };
+  setCoachDeps(deps as unknown as CoachDeps);
+});
+afterAll(() => setCoachDeps(null));
+
+const read = async (viewer = WEN, ref = refOf()) => {
+  const out = await suggestionFor(ref, viewer);
+  if (out.kind !== 'ok') throw new Error(out.kind);
+  return out.body;
+};
+
+describe('a fixed transcript through the scripted model', () => {
+  it('suggests the next competency\'s question, quoting the candidate, logs it shown, and books the hold', async () => {
+    const body = await read();
+    expect(body).toEqual({
+      suggestion: {
+        id: 'sg-1', text: 'Your team\'s roadmap slips by a quarter. Walk me through how you tell your stakeholders and what you change.',
+        competency: { id: 'delivery', name: 'Delivery' },
+        basedOn: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.', shownAt: new Date(now).toISOString(),
+      },
+      paused: null, retryAfterMs: 15_000,
+    });
+    expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'sg-1' }));
+    expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ sourceId: `iv:op-em:${IV}:coach:sg-1`, costUsd: 0, model: 'scripted-coach' }));
+    const [row] = await store.listSuggestions(IV);
+    expect(row).toMatchObject({ callId: 'call-1', throughSeq: 2, answer: null, spoken: false, modelId: 'scripted-coach', promptVersion: 'coach-2026-11-16.1', dropped: null });
+  });
+
+  it('reading again returns the same waiting suggestion, makes no call and keeps the first shown time', async () => {
+    const first = await read();
+    now += 5 * 60_000;
+    say('candidate', 'And then we reviewed the plan after a month.');
+    const again = await read();
+    expect(again.suggestion).toEqual(first.suggestion);
+    expect(deps.reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('after an answer: nothing for 90 seconds, nothing without new lines, then the next one', async () => {
+    const first = await read();
+    expect(await answerSuggestion(refOf(), WEN, first.suggestion!.id, 'ask')).toEqual({ kind: 'ok' });
+    now += 30_000;
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: SUGGESTION_GAP_MS - 30_000 });
+    now += SUGGESTION_GAP_MS;
+    expect(await read()).toMatchObject({ suggestion: null, retryAfterMs: 15_000 });
+    say('candidate', 'I told them early and moved two items to the next quarter.');
+    const next = await read();
+    expect(next.suggestion).toMatchObject({ id: 'sg-2', competency: { id: 'influence' }, basedOn: 'I told them early and moved two items to the next quarter.' });
+    expect(deps.reserve).toHaveBeenCalledTimes(2);
+  });
+
+  it(`stops after ${MAX_ATTEMPTS_PER_INTERVIEW} attempts`, async () => {
+    for (let i = 0; i < MAX_ATTEMPTS_PER_INTERVIEW; i += 1) {
+      await store.appendSuggestion({ id: `old-${i}`, interviewId: IV, callId: 'call-1', throughSeq: 0, text: '', competencyId: null, basedOn: null,
+        madeAt: new Date(now - 3_600_000 + i).toISOString(), shownAt: null, answer: null, answeredAt: null, spoken: false, modelId: 'm', promptVersion: 'v', dropped: 'error' });
+    }
+    expect(await read()).toMatchObject({ suggestion: null, retryAfterMs: 600_000 });
+    expect(deps.reserve).not.toHaveBeenCalled();
+  });
+});
+
+describe('who and when', () => {
+  it('not-found for a panel member, and nothing is read for them', async () => {
+    expect(await suggestionFor(refOf(), HUGO)).toEqual({ kind: 'not-found' });
+    expect(deps.consents).not.toHaveBeenCalled();
+    expect(deps.transcript).not.toHaveBeenCalled();
+  });
+
+  it('nothing while the interview is not live, and the transcript is not read', async () => {
+    expect(await read(WEN, refOf('ready'))).toEqual({ suggestion: null, paused: null, retryAfterMs: 30_000 });
+    expect(deps.transcript).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['nothing answered', null],
+    ['Milo declined', { transcription: true, milo: false }],
+  ])('consent off (%s): no suggestion, the transcript is not read and no money is held', async (_l, c) => {
+    consent = c;
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: 120_000 });
+    expect(deps.transcript).not.toHaveBeenCalled();
+    expect(deps.reserve).not.toHaveBeenCalled();
+  });
+
+  it('a refused hold makes no call and answers paused: budget', async () => {
+    const model = { kind: 'scripted', modelId: 'x', suggest: jest.fn() } as unknown as CoachModel;
+    deps.model.mockReturnValue(model);
+    deps.reserve.mockResolvedValue({ ok: false, refusal: { status: 402, body: {} } });
+    expect(await read()).toEqual({ suggestion: null, paused: 'budget', retryAfterMs: SUGGESTION_GAP_MS });
+    expect(model.suggest).not.toHaveBeenCalled();
+    expect(await store.listSuggestions(IV)).toEqual([]);
+  });
+
+  it('one call in flight per interview: a second read while the first thinks gets nothing', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((r) => { finish = r; });
+    const slow = new ScriptedCoachModel();
+    deps.model.mockReturnValue({ kind: 'scripted', modelId: slow.modelId, suggest: async (i: never) => { await gate; return slow.suggest(i); } });
+    const first = read();
+    await new Promise((r) => setImmediate(r));
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: 5_000 });
+    finish();
+    expect((await first).suggestion).not.toBeNull();
+    expect(deps.reserve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a dropped answer', () => {
+  it.each([
+    ['malformed', 'Ask about the plan.'],
+    ['judges', JSON.stringify({ text: 'That was a strong answer, ask for more?', competencyId: 'delivery', basedOn: null })],
+    ['personal', JSON.stringify({ text: 'They sound nervous, slow down?', competencyId: 'delivery', basedOn: null })],
+    ['off-kit', JSON.stringify({ text: 'What is a monad?', competencyId: 'functional', basedOn: null })],
+  ])('%s: logged as its code with no text, never shown, nothing of it logged to the console', async (code, raw) => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    deps.model.mockReturnValue({ kind: 'bedrock', modelId: 'amazon.nova-pro-v1:0', suggest: async () => ({ raw, code: 'ok', sent: true, usage: { inputTokens: 1000, outputTokens: 40 } }) });
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: SUGGESTION_GAP_MS });
+    expect(await store.listSuggestions(IV)).toEqual([expect.objectContaining({ text: '', competencyId: null, basedOn: null, shownAt: null, dropped: code, modelId: 'amazon.nova-pro-v1:0' })]);
+    expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ provider: 'bedrock', inputTokens: 1000, outputTokens: 40 }));
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/nervous|strong answer|monad|Ask about/);
+    warn.mockRestore();
+  });
+
+  it('a call that never left releases its hold', async () => {
+    deps.model.mockReturnValue({ kind: 'bedrock', modelId: 'amazon.nova-pro-v1:0', suggest: async () => { throw new Error('no client'); } });
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await read();
+    expect(deps.release).toHaveBeenCalledWith(['h-sg-1']);
+    expect(deps.settle).not.toHaveBeenCalled();
+  });
+});
+
+describe('the lead\'s answer', () => {
+  it('is written once; a second is answered; Have Milo ask is logged unspoken and then posted to the call chat', async () => {
+    const { suggestion } = await read();
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok' });
+    const [row] = await store.listSuggestions(IV);
+    expect(row).toMatchObject({ answer: 'milo-ask', spoken: false, answeredAt: new Date(now).toISOString() });
+    expect(deps.postApproved).toHaveBeenCalledWith('call-1', suggestion!.text, WEN);
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'skip')).toEqual({ kind: 'answered' });
+  });
+
+  it('I will ask it and Skip post nothing', async () => {
+    const { suggestion } = await read();
+    await answerSuggestion(refOf(), WEN, suggestion!.id, 'skip');
+    expect(deps.postApproved).not.toHaveBeenCalled();
+  });
+
+  it('only the lead, only while live, only a suggestion of this interview', async () => {
+    const { suggestion } = await read();
+    expect(await answerSuggestion(refOf(), HUGO, suggestion!.id, 'ask')).toEqual({ kind: 'not-found' });
+    expect(await answerSuggestion(refOf('ended'), WEN, suggestion!.id, 'ask')).toEqual({ kind: 'not-live' });
+    expect(await answerSuggestion(refOf(), WEN, 'sg-unknown', 'ask')).toEqual({ kind: 'not-found' });
+  });
+});
+
+describe('the consent read (D4)', () => {
+  it('agrees with consentsFor: Milo only with the transcript, null when nothing was answered', async () => {
+    const { coachConsents } = await import('../service.js');
+    const { consentsFor } = await import('../../consent/index.js');
+    const { interviewConsentsFixture } = await import('../../../../mock/interviews-consents.js');
+    const row = interviewConsentsFixture.rows()[0]!;
+    for (const [transcription, milo] of [[true, true], [true, false], [false, true], [false, false]] as const) {
+      Object.assign(row, { transcription, milo });
+      expect(await coachConsents(row.interviewId)).toEqual({ transcription: (await consentsFor(row.interviewId))!.transcription, milo: (await consentsFor(row.interviewId))!.milo });
+    }
+    expect(await coachConsents('iv-nobody')).toBeNull();
+    expect(await consentsFor('iv-nobody')).toBeNull();
+  });
+});

@@ -13,9 +13,10 @@
 // row; console lines carry codes only.
 import { randomBytes } from 'node:crypto';
 import { estimateUsageCost } from '../../pricing.js';
-import { consentsFor } from '../consent/index.js';
+import { runWithDbTenant } from '../../../providers/db-tenant.js';
+import { consentStore } from '../consent/store.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
-import type { Interview, Opening } from '../types.js';
+import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
 import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, type CoachModel, type CoachModelResult } from './model.js';
 import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, type CoachInput, type CoachLine } from './prompt.js';
@@ -47,9 +48,20 @@ const defaultPost: CoachDeps['postApproved'] = async (callId, text, lead) => {
   return (await postReply(callId, { text, askedBy: lead.userId, askedByName: await nameOf(lead.userId) })) !== null;
 };
 
+/**
+ * D4: the coach runs only when the candidate accepted the transcript and Milo. The same read and rule as
+ * lib/interviews/consent/index.ts `consentsFor` (Milo held to the transcript whatever a row says), made here from the
+ * consent store because importing that index registers the knock precondition and Milo's consent source as a side
+ * effect, which is the integrator's wiring, not this module's. __tests__/service.test.ts checks the two agree.
+ */
+export async function coachConsents(interviewId: string): Promise<{ transcription: boolean; milo: boolean } | null> {
+  const record = await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId));
+  return record ? { transcription: record.transcription, milo: record.transcription && record.milo } : null;
+}
+
 const DEFAULTS: CoachDeps = {
   store: suggestionStore,
-  consents: consentsFor,
+  consents: coachConsents,
   transcript: assistantTranscript,
   model: makeCoachModel,
   reserve: reserveInterviewSpend,
