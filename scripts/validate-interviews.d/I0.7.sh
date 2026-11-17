@@ -15,3 +15,5 @@ row_I0_7() {
   needF 'admitPadChannel(args, args.base)' "$MW/lib/gateway/authority.ts" "the authority facade sends doc: names to the pad's rule"
   [ "$QUICK" -eq 1 ] || jest_ok "the pad proof: two people converge, everyone else refused" src/lib/interviews/pad
 }
+
+built_row I0.7 row_I0_7
