@@ -120,3 +120,36 @@ test('the held page says the answer is saved, why the call cannot start, that th
   assert.equal(heldLines([])[1], 'This interview cannot start as it is set up now.');
   for (const line of [...heldLines(['recording', 'milo']), REQUIRED_LINE]) assert.doesNotMatch(line, /must|minutes|seconds|deadline|refus|fail|you declined|INTERVIEWS_/i);
 });
+
+// ── UI round 2 (lane GUEST): the strip, who the candidate meets, where the bar counts from ─────────────────────
+import { WALKED_STEPS, guestCallStartMs, meetingLine, walkedSteps } from '../steps.ts';
+
+test('the strip names the four walked steps and marks the one the candidate is on', () => {
+  assert.deepEqual(walkedSteps('landing').map((s) => s.label), [...WALKED_STEPS]);
+  const marks = (step: Parameters<typeof walkedSteps>[0]) => walkedSteps(step).map((s) => (s.active ? 'a' : s.done ? 'd' : 't')).join('');
+  assert.equal(marks('landing'), 'attt');
+  assert.equal(marks('consents'), 'datt');
+  assert.equal(marks('held'), 'datt');
+  assert.equal(marks('devices'), 'ddat');
+  assert.equal(marks('waiting'), 'ddda');
+  assert.equal(marks('ended'), 'dddd');
+  assert.deepEqual(walkedSteps('waiting').map((s) => s.step), [1, 2, 3, 4]);
+});
+
+test('the waiting page says who the candidate is meeting, by name and count only', () => {
+  assert.equal(meetingLine({ lead: 'Hugo Marchetti', others: 0 }), 'You are meeting Hugo Marchetti.');
+  assert.equal(meetingLine({ lead: 'Hugo Marchetti', others: 1 }), 'You are meeting Hugo Marchetti and one other interviewer.');
+  assert.equal(meetingLine({ lead: 'Wen Zhao', others: 2 }), 'You are meeting Wen Zhao and 2 other interviewers.');
+  assert.equal(meetingLine({ lead: null, others: 1 }), 'You are meeting your interviewer and one other interviewer.');
+  assert.equal(meetingLine({ lead: '  ', others: -1 }), 'You are meeting your interviewer.');
+  assert.equal(meetingLine(undefined), null);
+});
+
+test('the bar counts from the interview\'s start or the join, never from the set time', () => {
+  const start = '2026-11-17T10:00:00.000Z';
+  assert.equal(guestCallStartMs(start, 5), Date.parse(start));
+  assert.equal(guestCallStartMs(null, 1234), 1234);
+  assert.equal(guestCallStartMs('not a time', 1234), 1234);
+  assert.equal(guestCallStartMs(null, null), null);
+  assert.equal(guestCallStartMs(undefined, Number.NaN), null);
+});

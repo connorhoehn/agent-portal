@@ -6,29 +6,38 @@
 // bound to the lobby as the panel's page binds it), the call chat is the one right pane, and the call's controls sit
 // at the bottom in the library's `HuddleBar` (microphone, camera, Leave) with the time left beside them. No shell,
 // no rails, no bell, no tenant chrome, no sharing, rooms, reactions, Milo, transcript, plan or questions. In a
-// technical round the pane is the code pad with its runs, and the chat is the pane's second tab (GuestPadPane).
+// technical round the pane is the code pad with its runs, and the chat is the pane's second tab (GuestRoomPane).
+//
+// UI round 2 (lane GUEST): the panel's stage. The library's shell with the tenant's name (GuestFrame), the tiles
+// (`CallBlock placement="pane"`) taking the window in a `SidePaneSplit`, and ONE far-right `SidePane` (GuestRoomPane:
+// Pad then Chat in a technical round, Chat alone in a behavioural one, at U1's widths). The bar follows the panel's
+// footer model on one line: the round's name, time left (counted from the start, never the set time), microphone,
+// camera, the chat toggle (it opens the Chat tab), Leave. Two marked places are left for lane SPEAK (contract U9).
 //
 // The room is read every few seconds (bounded, stopped on unmount). `ended`, or a not-found (turned away mid-call,
 // the link taken back), leaves the call and opens the ended page. Leave returns to a line offering to rejoin.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
-import { Button, EmptyState, Inline, LoadingState, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
+import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
+import { Button, EmptyState, Inline, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
-import { roomStartMs, timeLeftLabel, timeLeftTone } from '../../lib/interviewsRoom';
+import { callTimeLabel, timeLeftTone } from '../../lib/interviewsRoom';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
-import { GuestPadPane } from './GuestPadPane';
-import { GuestRoomChat } from './GuestRoomChat';
+import { GuestShell, GuestStepFrame } from './GuestFrame';
+import { GuestRoomPane, type GuestPaneTab } from './GuestRoomPane';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
-import { ROOM_POLL_MS, roomMaxPolls, roomStepAfterRead, roomView, type GuestRoom } from './steps.ts';
+import { ROOM_POLL_MS, guestCallStartMs, roomMaxPolls, roomStepAfterRead, roomView, type GuestPanel, type GuestRoom } from './steps.ts';
 
 export interface GuestInterview {
   opening: { title: string };
   round: { name: string; minutes: number };
   scheduledAt: string | null;
+  /** Who the candidate meets: the lead's name and how many others (the read only; the exchange leaves it out). */
+  panel?: GuestPanel;
 }
 
 type TokenState = { kind: 'loading' } | { kind: 'ready'; token: RealtimeToken } | { kind: 'off' } | { kind: 'failed' };
@@ -92,11 +101,11 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
   </GuestCallHost>;
 }
 
-/** The steps' quiet frame, while the call cannot draw yet. */
+/** The steps' frame, while the call cannot draw yet. */
 function RoomFrame({ interview, children }: { interview: GuestInterview; children: ReactNode }) {
-  return <PageFrame title="Your interview" description={interview.opening.title} data-testid="join-page">
+  return <GuestStepFrame title="Your interview" description={`${interview.opening.title} · ${interview.round.name}`} step="admitted">
     <Stack gap="md" className="max-w-xl" data-testid="join-room">{children}</Stack>
-  </PageFrame>;
+  </GuestStepFrame>;
 }
 
 const BAR_PHASE: Record<string, HuddleBarPhase> = {
@@ -146,33 +155,43 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
     onEnded();
   }, [over, call.here, leave, onEnded]);
 
-  // A technical round's pane is the pad, with the chat its second tab: Message switches to that tab and back.
+  // The one pane: open by default; a technical round opens on the pad, a behavioural one is the chat alone. The
+  // bar's chat toggle opens the pane on Chat, or (already there) closes it in a behavioural round and returns to
+  // the pad in a technical one. × closes it.
   const technical = room.round.type === 'technical';
-  const [chatOpen, setChatOpen] = useState(!technical);
+  const [paneOpen, setPaneOpen] = useState(true);
+  const [tab, setTab] = useState<GuestPaneTab>(technical ? 'pad' : 'chat');
+  const chatOpen = paneOpen && (!technical || tab === 'chat');
+  const toggleChat = useCallback(() => {
+    if (!chatOpen) { setPaneOpen(true); setTab('chat'); return; }
+    if (technical) setTab('pad'); else setPaneOpen(false);
+  }, [chatOpen, technical]);
   const callId = host?.call.call?.callId ?? null;
   const view = roomView({ token: 'ready', joined, left });
 
-  return <Stack gap="none" className="h-screen min-h-0 w-full bg-surface" data-testid="join-room">
-    <Inline gap="none" align="stretch" className="min-h-0 min-w-0 flex-1">
-      {drawn
-        ? <CallBlock placement="pane" className="h-full min-h-0 min-w-0 flex-1" />
-        : <Stack gap="none" align="center" justify="center" className="min-h-0 min-w-0 flex-1">
-          <EmptyState
-            title={view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
-            body={view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
-              : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
-            testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />
-        </Stack>}
-      {joined && callId && technical && <GuestPadPane room={room} callId={callId} tab={chatOpen ? 'chat' : 'pad'} onTab={(t) => setChatOpen(t === 'chat')} />}
-      {joined && chatOpen && callId && !technical && <GuestRoomChat callId={callId} self={room.self} onClose={() => setChatOpen(false)} />}
-    </Inline>
-    <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
-      <CallMediaOutlet />
-      <Inline gap="sm" align="center" justify="end" className="min-h-11 min-w-0 px-4 py-1">
-        <GuestCallBar room={room} chatOpen={chatOpen} onToggleChat={() => setChatOpen((o) => !o)} />
-      </Inline>
-    </Stack>
-  </Stack>;
+  return <GuestShell bleed>
+    <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 360, fitPrimaryPx: 480 }}>
+      <Stack gap="none" className="h-full min-h-0 w-full bg-surface" data-testid="join-room">
+        <SidePaneSplit paneTestId="join-room-pane-frame" dividerLabel="Resize the call and the pane" className="min-h-0 flex-1" data-testid="join-room-stage">
+          {drawn
+            ? <CallBlock placement="pane" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
+            : <EmptyState
+              title={view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
+              body={view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
+                : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
+              testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
+        </SidePaneSplit>
+        {joined && callId && paneOpen && <GuestRoomPane room={room} callId={callId} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
+        {/* r2:SPEAK voice */}
+        <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
+          <CallMediaOutlet />
+          <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
+            <GuestCallBar room={room} chatOpen={chatOpen} onToggleChat={toggleChat} />
+          </Inline>
+        </Stack>
+      </Stack>
+    </SidePaneProvider>
+  </GuestShell>;
 }
 
 /** The library's HuddleBar on the work-call model: Join before the call; microphone, camera, Message, Leave and the time left in it. */
@@ -203,7 +222,8 @@ function GuestCallBar({ room, chatOpen, onToggleChat }: { room: GuestRoom; chatO
   const startedAt = joined ? call.call?.startedAt ?? observedJoin.current?.at ?? null : null;
   const over = call.phase === 'ended' || call.phase === 'failed';
   const controls = conversationCallDockProps(call, { title, onOpenPeople: noop, onOpenSettings: noop, tile: () => undefined });
-  const left = timeLeftLabel(roomStartMs(room.scheduledAt, room.startedAt ?? startedAt), room.round.minutes, now);
+  // Counted from the interview's start (the lead's join), else this page's join; never the set time.
+  const left = joined ? callTimeLabel(guestCallStartMs(room.startedAt, typeof startedAt === 'number' ? startedAt : startedAt ? Date.parse(startedAt) : null), room.round.minutes, now) : null;
   const counts = callCounts(call.call);
   return <HuddleBar
     name={title}
@@ -216,6 +236,7 @@ function GuestCallBar({ room, chatOpen, onToggleChat }: { room: GuestRoom; chatO
     extras={<>
       {left && <T size="xs" weight="medium" tone={timeLeftTone(left)} className="whitespace-nowrap" data-testid="join-room-time-left">{left}</T>}
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="join-room-rejoin">Rejoin</Button>}
+      {/* r2:SPEAK requests */}
     </>}
     onLeave={() => { void call.leave(); }}
     leaveLabel={over ? 'Dismiss' : 'Leave'}

@@ -158,3 +158,46 @@ export function roomView(f: { token: 'loading' | 'ready' | 'off'; joined: boolea
   if (f.joined) return 'call';
   return f.left ? 'rejoin' : 'join';
 }
+
+// ── The frame around the steps (UI round 2, lane GUEST) ────────────────────────────────────────────────────────
+
+/** The four steps a candidate walks, as the strip over every step page names them. */
+export const WALKED_STEPS = ['Invitation', 'Your answers', 'Camera and microphone', 'Waiting'] as const;
+
+/** One mark of the strip: the library's `WorkflowStep` shape, without the import (this file stays pure). */
+export interface WalkedStep { step: number; label: string; done: boolean; active: boolean }
+
+/**
+ * The strip for a step. The held page sits on "Your answers" (an answer has to change before the call can start);
+ * the room and the ended page have walked all four. Each step before the active one is done.
+ */
+export function walkedSteps(step: JoinStep): WalkedStep[] {
+  const at: Record<JoinStep, number> = { landing: 0, consents: 1, held: 1, devices: 2, waiting: 3, admitted: 4, ended: 4 };
+  const current = at[step];
+  return WALKED_STEPS.map((label, i) => ({ step: i + 1, label, done: i < current, active: i === current }));
+}
+
+/** Who sits on the candidate's panel, as `GET /api/interview-invite/interview` answers it: a name and a count, nothing else. */
+export interface GuestPanel { lead: string | null; others: number }
+
+/**
+ * "You are meeting Hugo Marchetti." / "… and one other interviewer." / "… and 2 other interviewers." A lead the
+ * server does not name reads as "your interviewer". Missing (an older server): null, and the page says nothing.
+ */
+export function meetingLine(panel: GuestPanel | null | undefined): string | null {
+  if (!panel) return null;
+  const who = panel.lead?.trim() || 'your interviewer';
+  const others = Number.isFinite(panel.others) && panel.others > 0 ? Math.floor(panel.others) : 0;
+  if (others === 0) return `You are meeting ${who}.`;
+  return `You are meeting ${who} and ${others === 1 ? 'one other interviewer' : `${others} other interviewers`}.`;
+}
+
+/**
+ * Where the candidate's bar counts the time left from while the call is on: the interview's start (the lead's
+ * join), else the join this page saw. Never the set time, so a call held before it never reads "Starts in 1442 min".
+ */
+export function guestCallStartMs(interviewStartedAt: string | null | undefined, observedJoinMs: number | null | undefined): number | null {
+  const started = interviewStartedAt ? Date.parse(interviewStartedAt) : NaN;
+  if (Number.isFinite(started)) return started;
+  return typeof observedJoinMs === 'number' && Number.isFinite(observedJoinMs) ? observedJoinMs : null;
+}

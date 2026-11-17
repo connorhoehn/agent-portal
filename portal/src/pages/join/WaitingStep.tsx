@@ -1,13 +1,19 @@
 // The waiting page (docs/interviews-tenant-plan.md row I2.3; contract C2). Knocks once on arrival, then asks
 // for the admission every few seconds, for at most half an hour, and stops when the page leaves this step. A
 // missing route or answer is still waiting, never an error. Turned away: one plain line and a way to knock
-// again. While waiting the candidate may go back and change an answer.
+// again. While waiting the candidate may go back and change an answer. It says who the candidate is meeting and
+// when (UI round 2): the lead's name and how many others, the set time and the length; nothing else of the panel's.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Card, Inline, InlineAlert, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, Card, Inline, InlineAlert, KeyValue, Stack, T } from '@connorhoehn/ui-components/shared';
 import { knock, readAdmission } from './guestApi.ts';
 import { ADMISSION_MAX_POLLS, ADMISSION_POLL_MS, waitingView } from './steps.ts';
 
-export function WaitingStep({ onAdmitted, onChangeAnswers, onAnswersNeeded, onHeld }: {
+export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswers, onAnswersNeeded, onHeld }: {
+  /** "You are meeting Hugo Marchetti and one other interviewer."; null says nothing. */
+  meeting: string | null;
+  /** The set time, in words. */
+  when: string;
+  minutes: number;
   onAdmitted: () => void;
   onChangeAnswers: () => void;
   /** The server would not take the knock: the answers no longer stand (the notice changed). */
@@ -61,9 +67,16 @@ export function WaitingStep({ onAdmitted, onChangeAnswers, onAnswersNeeded, onHe
         {view === 'turned-away' ? (
           <T size="sm" as="p" data-testid="join-turned-away">Your interviewer could not let you in just now.</T>
         ) : (
-          <Stack gap="sm">
-            <T size="base" weight="semibold" as="p">The interviewer has been told you are here.</T>
-            <T size="sm" tone="secondary" as="p">Keep this page open. It moves on by itself when you are let in.</T>
+          <Stack gap="md">
+            <Stack gap="sm">
+              <T size="base" weight="semibold" as="p">The interviewer has been told you are here.</T>
+              <T size="sm" tone="secondary" as="p">Keep this page open. It moves on by itself when you are let in.</T>
+            </Stack>
+            <KeyValue aria-label="Your interview" data-testid="join-waiting-meeting" items={[
+              ...(meeting ? [{ label: 'Meeting', value: meeting }] : []),
+              { label: 'When', value: when },
+              { label: 'Length', value: `${minutes} minutes` },
+            ]} />
           </Stack>
         )}
       </Card>

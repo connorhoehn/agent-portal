@@ -18,16 +18,21 @@
 // Row I2.4 (the candidate's side): once let in, the room fills the window (JoinRoom, no page frame); when the
 // interview ends, or the candidate is turned away mid-call, the ended page says thank you and how to ask for
 // deletion in the notice's own words. Nothing about a result.
+//
+// UI round 2 (lane GUEST): every page but the room shares one centred frame (join/GuestFrame.tsx: the library's
+// shell with the tenant's name, a centred PageFrame and the strip of the four walked steps). The waiting page says
+// who the candidate is meeting and when.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, EmptyState, Inline, KeyValue, LoadingState, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, Card, EmptyState, Inline, KeyValue, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
+import { GuestStepFrame } from './join/GuestFrame';
 import { ConsentStep } from './join/ConsentStep';
 import { DeviceCheckStep } from './join/DeviceCheckStep';
 import JoinRoom, { type GuestInterview } from './join/JoinRoom';
 import { WaitingStep } from './join/WaitingStep';
 import { HeldStep } from './join/HeldStep';
 import { LinkDead, readAdmission, readConsents, readRoom } from './join/guestApi.ts';
-import { declinedRequired, landingStep, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
+import { declinedRequired, landingStep, meetingLine, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
 
 type View =
   | { kind: 'loading' }
@@ -68,7 +73,13 @@ async function load(token: string | null): Promise<View> {
     ? await fetch(`${API}/exchange`, { ...init, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) })
     : await fetch(`${API}/interview`, init);
   if (res.ok) {
-    const interview = ((await res.json()) as { interview: GuestInterview }).interview;
+    let interview = ((await res.json()) as { interview: GuestInterview }).interview;
+    // The exchange answers what the link opens; who the candidate meets comes with the read (best effort).
+    if (token && !interview.panel) {
+      const read = await fetch(`${API}/interview`, init).catch(() => null);
+      const panel = read?.ok ? ((await read.json().catch(() => null)) as { interview?: GuestInterview } | null)?.interview?.panel : undefined;
+      if (panel) interview = { ...interview, panel };
+    }
     try {
       const [consents, admission] = await Promise.all([readConsents(), readAdmission().catch(() => null)]);
       return { kind: 'ready', interview, consents, step: landingStep(consents.answers, admission, consents.required) };
@@ -114,27 +125,27 @@ export default function JoinPage() {
     return () => { live = false; };
   }, []);
 
-  if (view.kind === 'loading') return <PageFrame title="Your interview" data-testid="join-page"><LoadingState label="Opening your invitation" /></PageFrame>;
+  if (view.kind === 'loading') return <GuestStepFrame title="Your interview"><LoadingState label="Opening your invitation" /></GuestStepFrame>;
 
   if (view.kind === 'dead') {
     return (
-      <PageFrame title="Your interview" data-testid="join-page">
+      <GuestStepFrame title="Your interview">
         <EmptyState title="This link no longer works" body="Ask the person who sent it to you for a new one." testId="join-dead" />
-      </PageFrame>
+      </GuestStepFrame>
     );
   }
 
-  if (view.kind === 'ended') return <PageFrame title={STEP_TITLES.ended} data-testid="join-page"><InterviewEnded /></PageFrame>;
+  if (view.kind === 'ended') return <GuestStepFrame title={STEP_TITLES.ended} step="ended"><InterviewEnded /></GuestStepFrame>;
 
   if (view.kind === 'busy' || view.kind === 'failed') {
     return (
-      <PageFrame title="Your interview" data-testid="join-page">
+      <GuestStepFrame title="Your interview">
         <EmptyState
           title="This page could not open your invitation just now"
           body={view.kind === 'busy' ? 'Wait a minute, then open your link again.' : 'Check your connection, then open your link again.'}
           testId="join-retry"
         />
-      </PageFrame>
+      </GuestStepFrame>
     );
   }
 
@@ -142,7 +153,7 @@ export default function JoinPage() {
   // The room fills the window (row I2.4, decision 21): no page frame around the call.
   if (step === 'admitted') return <JoinRoom interview={interview} onEnded={onEnded} />;
   return (
-    <PageFrame title={STEP_TITLES[step]} description={interview.opening.title} data-testid="join-page">
+    <GuestStepFrame title={STEP_TITLES[step]} description={`${interview.opening.title} · ${interview.round.name}`} step={step} fill={step === 'consents'}>
       {step === 'landing' && (
         <Stack gap="md" className="max-w-xl">
           <Card padding="lg" data-testid="join-interview">
@@ -174,11 +185,12 @@ export default function JoinPage() {
         <DeviceCheckStep onBack={() => go('consents')} onContinue={() => { setDevicesChecked(true); go('waiting'); }} />
       )}
       {step === 'waiting' && (
-        <WaitingStep onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onHeld={onHeld} onChangeAnswers={() => go('consents')} />
+        <WaitingStep meeting={meetingLine(interview.panel)} when={when(interview.scheduledAt)} minutes={interview.round.minutes}
+          onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onHeld={onHeld} onChangeAnswers={() => go('consents')} />
       )}
       {step === 'held' && <HeldStep declined={declinedRequired(consents.answers, consents.required)} onChangeAnswers={() => go('consents')} />}
       {step === 'ended' && <InterviewEnded />}
-    </PageFrame>
+    </GuestStepFrame>
   );
 }
 

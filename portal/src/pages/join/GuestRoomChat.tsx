@@ -5,23 +5,15 @@
 //
 // The shell's huddle chat (components/shell/HuddleChat.tsx) cannot mount here: it needs the router, the staff
 // session and the staff roster route. So this is the library's chat panel straight on `useChat(channel)`, in the
-// library's side-panel frame: no pins, no uploads, no page references, no reactions. A huddle send must carry a
+// room's one pane (GuestRoomPane): no pins, no uploads, no page references, no reactions. A huddle send must carry a
 // delivery id (middleware lib/call-chat-send.ts), so each send gets a fresh one.
 import { useMemo } from 'react';
 import { useChat } from '@connorhoehn/realtime-modules/client';
-import { ChatSidePanelFrame } from '@connorhoehn/ui-components';
 import { WrappedChatPanel } from '@connorhoehn/ui-components/integrations/realtime';
 
 const newDeliveryId = (): string => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
-export function GuestRoomChat({ callId, self, onClose }: { callId: string; self: { userId: string; displayName: string }; onClose(): void }) {
-  return <ChatSidePanelFrame title="Messages" subtitle="Everyone in the call reads these" onClose={onClose} closeLabel="Hide messages"
-    className="w-80 shrink-0 border-l border-border bg-surface" data-testid="join-room-chat">
-    <GuestRoomChatBody callId={callId} self={self} />
-  </ChatSidePanelFrame>;
-}
-
-/** The chat alone, for a pane that has its own frame (a technical round's Chat tab, beside the pad). */
+/** The chat alone, for the room's pane (its Chat tab, or the whole pane in a behavioural round). */
 export function GuestRoomChatBody({ callId, self }: { callId: string; self: { userId: string; displayName: string } }) {
   const chat = useChat(`orgiq:huddle:${callId}`);
   const sendable = useMemo(() => ({
