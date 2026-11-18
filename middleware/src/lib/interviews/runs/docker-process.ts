@@ -78,6 +78,9 @@ export function dockerRunArgs(spec: ContainerSpec): string[] {
   return [
     'run', '--rm', '--interactive', '--pull', 'never',
     '--name', spec.name, '--label', 'interviews.run=1', '--hostname', 'sandbox',
+    // A tiny init as PID 1 (Docker's own): it reaps a fork bomb's children, and the program is an ordinary process,
+    // so a heap the JVM cannot grow ends with SIGKILL (exit 137) as the kernel's memory limit does.
+    '--init',
     '--network', 'none',
     '--read-only',
     '--tmpfs', '/work:rw,exec,nosuid,nodev,size=128m,mode=1777',

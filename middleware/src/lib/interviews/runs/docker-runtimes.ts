@@ -77,8 +77,9 @@ export const DOCKER_RUNTIMES: Readonly<Record<RunLanguage, DockerRuntime>> = {
   },
   java: {
     image: 'eclipse-temurin:21.0.5_11-jdk-alpine', version: 'OpenJDK 21.0.5 (Temurin)', compiled: true,
-    // The class to run is the entrypoint's name without `.java` (the pad's file is Main.java).
-    script: `${UNPACK}; ${compile('javac -J-XX:-UsePerfData -d /work/.bin ./*.java')}; ${MARK}; c="\${2##*/}"; exec java -XX:-UsePerfData -cp /work/.bin "\${c%.java}" < /work/.stdin`,
+    // The class to run is the entrypoint's name without `.java` (the pad's file is Main.java). A full heap is the
+    // memory limit: the JVM kills itself (exit 137, `memory_exceeded`) rather than print an OutOfMemoryError.
+    script: `${UNPACK}; ${compile('javac -J-XX:-UsePerfData -d /work/.bin ./*.java')}; ${MARK}; c="\${2##*/}"; exec java -XX:-UsePerfData -XX:MaxRAMPercentage=75 '-XX:OnOutOfMemoryError=kill -9 %p' -cp /work/.bin "\${c%.java}" < /work/.stdin`,
     env: {}, minMemoryMb: 512, cpus: 2, pidsLimit: 128, prepareMs: 20_000,
   },
   swift: {

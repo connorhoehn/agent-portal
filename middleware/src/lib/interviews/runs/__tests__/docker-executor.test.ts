@@ -89,6 +89,7 @@ describe('the Docker runner: the command it starts', () => {
     expect(args).toEqual([
       'run', '--rm', '--interactive', '--pull', 'never',
       '--name', name, '--label', 'interviews.run=1', '--hostname', 'sandbox',
+      '--init',
       '--network', 'none',
       '--read-only',
       '--tmpfs', '/work:rw,exec,nosuid,nodev,size=128m,mode=1777',
