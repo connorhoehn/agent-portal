@@ -85,14 +85,16 @@ export default async function run(ctx) {
     page = await open(hugo, MATEO);
     await technical(page);
     const text = squash(await page.getByTestId('interviews-record').innerText());
-    const recording = squash(await page.getByTestId('interviews-record-recording-line').innerText());
+    // A stand-in recording is one meta line in the header (E4 lane B), not its own section: read the line there when the section is absent.
+    const recordingLine = page.getByTestId('interviews-record-recording-line');
+    const recording = (await recordingLine.count()) ? squash(await recordingLine.innerText()) : text;
     const transcript = squash(await page.getByTestId('interviews-record-transcript-panel').innerText());
     const forbidden = await page.getByRole('button', { name: /download|share|copy|export/i }).count() + await page.getByRole('link', { name: /download|share|copy|export/i }).count();
     const markers = await page.locator(MARKER).evaluateAll((els) => els.map((e) => ({ kind: e.getAttribute('data-kind'), label: e.getAttribute('aria-label') })));
     const names = [raw.transcript.lines.find((l) => l.side === 'panel').speaker, raw.transcript.lines.find((l) => l.side === 'candidate').speaker];
     const shots = await shootPage(page, 'record-technical');
     const kinds = [...new Set(markers.map((m) => m.kind))].sort().join(',');
-    const ok = res.status === 200 && res.headers['cache-control'] === 'no-store' && leaks(res.body).length === 0 && /runs 58 minutes/.test(recording) && /nothing to play here/.test(recording)
+    const ok = res.status === 200 && res.headers['cache-control'] === 'no-store' && leaks(res.body).length === 0 && /Recording: 58 minutes/.test(recording) && /not kept in this demo/.test(recording)
       && names.every((n) => transcript.includes(n)) && kinds === 'paste,question,run' && forbidden === 0 && !consentIn(text) && !miloScoresIn(text) && shots.every((s) => s.ok);
     record('I5.1a', ok, `${raw.interview.candidate.name}'s round: "${recording.slice(0, 70)}…"; transcript names ${names.join(' and ')}; markers ${kinds} (${markers.length}); download/share controls ${forbidden}; Cache-Control ${res.headers['cache-control']}, leaks ${JSON.stringify(leaks(res.body))}; ${widths(shots)}`);
   } catch (e) { record('I5.1a', false, `the technical record: ${why(e)}`); }
