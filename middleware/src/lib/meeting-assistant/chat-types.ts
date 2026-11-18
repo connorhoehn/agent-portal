@@ -23,6 +23,8 @@ export const isAssistantUserId = (userId: string | null | undefined): boolean =>
 export const DELETED_RECORD_LINE = `This record was deleted by the person who invited ${ASSISTANT_NAME}.`;
 /** The same line as messages erased before the rename read it; an erase treats such a message as already erased. */
 export const LEGACY_DELETED_RECORD_LINES: readonly string[] = ['This record was deleted by the person who invited Nova.'];
+/** Said when no audio reaches Milo: by the tap armer when the tap cannot be made (media.ts), and by the deaf watchdog (orchestrator.ts). */
+export const CANNOT_HEAR_NOTICE = `${ASSISTANT_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
 export const ASSISTANT_KIND_PREFIX = 'assistant-';
 
 export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action' | 'assistant-proposal';

@@ -35,7 +35,7 @@ import { voiceTool } from '../../voice/catalogue.js';
 import { meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { ASKER_WINDOW_MS, AssistantRuntime, startTurnSweep, TYPED_PAUSED_REPLY, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
+import { ASKER_WINDOW_MS, AssistantRuntime, DEAF_AFTER_MS, DEAF_VOICED_MS, MAX_REPLACEMENTS, startTurnSweep, TYPED_PAUSED_REPLY, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { VOICE_OPEN_TURN_GAP_MS, VOICE_PROMPT_WINDOW_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -43,6 +43,7 @@ import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.j
 import { setAssistantStore } from '../store-select.js';
 import { createProposal } from '../proposals.js';
 import type { AudioSink } from '../audio-intake.js';
+import { CANNOT_HEAR_NOTICE } from '../chat-types.js';
 
 const CALL = 'call-1';
 const ALICE = 'u-alice', BOB = 'u-bob', CAROL = 'u-carol';
@@ -1977,5 +1978,134 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     now = base + 4_000; s.sayAt('Happy to help again.', 3_000, 3_800); await flush();
     expect(mockPosts.replies).toEqual([]);
     expect(mockPosts.notices).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// The deaf watchdog: a listening Milo that hears nothing recovers through the tap or a replacement, says so once, or leaves.
+
+describe('a Milo that hears nothing (deaf watchdog)', () => {
+  let tap: { hearing: 'ok' | 'connecting' | 'no-audio'; rearms: string[] };
+  let seats: Array<{ userId: string; active: boolean }>;
+  const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+  const cannotHear = () => mockPosts.notices.filter((n) => n === CANNOT_HEAR_NOTICE);
+  /** Provider sessions this describe's runtime opened (the outer setup's scripted one is not counted). */
+  const opened = () => sessions.filter((x) => x.kind === 'openai').length;
+  const lost = () => mockPosts.notices.filter((n) => /lost its connection/.test(n));
+  /** `ms` of the clock in one-second ticks, as the runtime's own timer would run them. */
+  const run = async (ms: number) => { for (let t = 0; t < ms; t += 1000) { now += 1000; await runtime.tick(); await flush(); } };
+  /** Bob speaks for `ms` (placed on the session's timeline as the mixer would), with the clock moving along. */
+  const speak = async (ms: number) => {
+    for (let t = 0; t < ms; t += 1000) { audioTap.sink!.placed(BOB, loud(1000), now - sessionStart); now += 1000; await runtime.tick(); await flush(); }
+  };
+  /** An open microphone in a quiet room: silent audio keeps arriving. */
+  const quiet = async (ms: number) => {
+    for (let t = 0; t < ms; t += 1000) { audioTap.sink!.placed(BOB, Buffer.alloc(24_000 * 2), now - sessionStart); now += 1000; await runtime.tick(); await flush(); }
+  };
+  let sessionStart = 0;
+
+  beforeEach(async () => {
+    await runtime.stop(CALL);
+    tap = { hearing: 'ok', rearms: [] };
+    seats = [{ userId: BOB, active: true }];
+    factory = () => { const s = new FakeSession(); sessions.push(s); sessionStart = now; return s; };
+    runtime = new AssistantRuntime({
+      store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], audio: audioTap,
+      onFinished: async (e) => { finished.push(e); }, wait: async () => undefined, seats: async () => seats,
+      taps: async () => ({ hearing: () => tap.hearing, rearm: async (callId: string) => { tap.rearms.push(callId); return true; } }),
+    }, { tickMs: 0 });
+    await runtime.start(ctx);
+  });
+
+  it('a minute with no audio while the tap is up arms it again once and says so once; audio coming back ends the stall', async () => {
+    await run(DEAF_AFTER_MS - 1000);
+    expect(tap.rearms).toEqual([]);
+    await run(1000);
+    expect(tap.rearms).toEqual([CALL]);
+    expect(cannotHear()).toHaveLength(1);
+    // the tap is up again and the room is silent: Milo neither re-arms every tick nor leaves
+    await run(2 * DEAF_AFTER_MS);
+    expect(tap.rearms).toHaveLength(1);
+    expect(cannotHear()).toHaveLength(1);
+    expect((await store.get(CALL))!.state).toBe('listening');
+    // audio arrives, then stops again: a new stall gets its own recovery and its own notice
+    audioTap.sink!.placed(BOB, loud(200), now - sessionStart);
+    await run(DEAF_AFTER_MS);
+    expect(tap.rearms).toHaveLength(2);
+    expect(cannotHear()).toHaveLength(2);
+  });
+
+  it('a tap that still cannot be made a minute after it was armed again leaves through giveUp', async () => {
+    await run(DEAF_AFTER_MS);
+    expect(tap.rearms).toHaveLength(1);
+    tap.hearing = 'no-audio';
+    await run(DEAF_AFTER_MS);
+    expect((await store.get(CALL))!.state).toBe('left');
+    expect(lost()).toHaveLength(1);
+    expect(runtime.isRunning(CALL)).toBe(false);
+  });
+
+  it('leaves a tap the armer is still making to the armer, and watches from the moment it is up', async () => {
+    tap.hearing = 'connecting';
+    await run(2 * DEAF_AFTER_MS);
+    expect(tap.rearms).toEqual([]);
+    expect(cannotHear()).toEqual([]);
+    tap.hearing = 'ok';
+    await run(DEAF_AFTER_MS - 1000);
+    expect(tap.rearms).toEqual([]);
+    await run(1000);
+    expect(tap.rearms).toEqual([CALL]);
+  });
+
+  it('voice with no transcript for a minute replaces the session (counted), says so once, and a session that stays deaf ends in giveUp', async () => {
+    await speak(DEAF_VOICED_MS + 2000);
+    await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000));
+    expect(opened()).toBe(2);
+    expect(cannotHear()).toHaveLength(1);
+    expect(sessionOf((await store.get(CALL))!).replacements).toBe(1);
+    expect(tap.rearms).toEqual([]); // audio flowed: the tap is not the problem
+    for (let i = 1; i < MAX_REPLACEMENTS; i += 1) { await speak(DEAF_VOICED_MS + 2000); await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000)); }
+    expect(opened()).toBe(1 + MAX_REPLACEMENTS);
+    expect(cannotHear()).toHaveLength(1);
+    await speak(DEAF_VOICED_MS + 2000); await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000));
+    expect((await store.get(CALL))!.state).toBe('left');
+    expect(lost()).toHaveLength(1);
+  });
+
+  it('a transcript of what is heard keeps the watch quiet, and a cough is not a stall', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      // a conversation the session hears: a transcript at each pause, every few seconds
+      for (let k = 0; k < 10; k += 1) { await speak(5000); fake().hear('The rollout is on for Monday.', now - sessionStart - 2000, now - sessionStart); await flush(); }
+      await quiet(DEAF_AFTER_MS);
+    }
+    await speak(1000); // one short noise, then a long quiet stretch with audio still flowing
+    await quiet(2 * DEAF_AFTER_MS);
+    expect(opened()).toBe(1);
+    expect(tap.rearms).toEqual([]);
+    expect(cannotHear()).toEqual([]);
+  });
+
+  it('does not fire while paused, while nobody who may be heard is seated, or while Milo is speaking', async () => {
+    // nobody active, then only a person who never acknowledged (and is not the inviter)
+    seats = [{ userId: BOB, active: false }];
+    await run(2 * DEAF_AFTER_MS);
+    seats = [{ userId: 'u-dave', active: true }];
+    await run(2 * DEAF_AFTER_MS);
+    expect(tap.rearms).toEqual([]);
+    // paused: no session, nothing watched; resumed, the new session is given its own minute
+    seats = [{ userId: BOB, active: true }];
+    await runtime.pause(CALL);
+    await run(2 * DEAF_AFTER_MS);
+    expect(tap.rearms).toEqual([]);
+    await runtime.resume(CALL);
+    // Milo speaking for a minute: the watch starts again after its voice
+    const speech = (runtime as unknown as { runs: Map<string, { speech: { noteFrame(at: number): void } }> }).runs.get(CALL)!.speech;
+    for (let t = 0; t < DEAF_AFTER_MS; t += 1000) { speech.noteFrame(now); now += 100; await runtime.tick(); now += 900; }
+    expect(tap.rearms).toEqual([]);
+    await run(DEAF_AFTER_MS - 2000);
+    expect(tap.rearms).toEqual([]);
+    expect(cannotHear()).toEqual([]);
+    await run(2000);
+    expect(tap.rearms).toEqual([CALL]);
   });
 });

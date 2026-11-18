@@ -193,6 +193,28 @@ describe('deleting and reusing', () => {
   });
 });
 
+describe('arming again (the deaf watchdog)', () => {
+  it('arms the call\'s channel again with a fresh token and tap, the old tap deleted; the call already told, no second notice', async () => {
+    await armer.arm(CALL, ARN); await settle();
+    expect(armer.hearing(CALL)).toBe('ok');
+    const first = sinkOf(tapPosts()[0]!);
+    behaviour.create = Array.from({ length: 4 }, () => ({ status: 409, body: { error: 'no audio producer in channel' } }));
+    expect(await armer.rearm(CALL)).toBe(true);
+    expect(armer.hearing(CALL)).toBe('no-audio'); // the state view says it at once, as the watchdog told the call
+    await settle();
+    expect(sinkOf(tapPosts().at(-1)!)).not.toBe(first);
+    expect(seen.filter((s) => s.method === 'DELETE')).toHaveLength(1);
+    expect(sleeps.filter((m) => m === 30_000)).toHaveLength(4); // past the give-up already: the slow pace
+    expect(notices).toEqual([]);
+    expect(armer.hearing(CALL)).toBe('ok');
+  });
+
+  it('a call this process never armed against a media server is not armed again', async () => {
+    expect(await armer.rearm(CALL)).toBe(false);
+    expect(tapPosts()).toEqual([]);
+  });
+});
+
 describe('before anything starts (preflight)', () => {
   const session = { sub: 'u-ana', name: 'Ana', tenant: 'orgiq', role: 'member', epoch: 0, grants: {}, iat: 0 } as unknown as Session;
 

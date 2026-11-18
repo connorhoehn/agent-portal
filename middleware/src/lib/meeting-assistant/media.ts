@@ -19,7 +19,7 @@ import { AppError } from '../async-handler.js';
 import type { Session } from '../session.js';
 import { platformBearer, socialPlatformUrl } from '../../providers/social-platform.js';
 import { postNoticeQuietly } from './chat.js';
-import { ASSISTANT_NAME } from './chat-types.js';
+import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE } from './chat-types.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { SINK_SECRET_SETTING, sinkSecretUsable } from './sink-secret.js';
 import type { AudioIntake } from './audio-intake.js';
@@ -37,7 +37,7 @@ const MAX_PENDING_DELETES_PER_CALL = 20;
 export const NOT_SET_UP = `${ASSISTANT_NAME} isn't set up here. Ask an admin.`;
 /** The call has no audio to listen to yet: trying again once someone's microphone is on helps. */
 export const NO_AUDIO_YET = `${ASSISTANT_NAME} can join once someone in the call has their microphone on.`;
-export const CANNOT_HEAR_NOTICE = `${ASSISTANT_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
+export { CANNOT_HEAR_NOTICE };
 
 export interface MediaConfig { url: string; adminToken: string; sinkBaseUrl: string }
 
@@ -249,7 +249,7 @@ export class TapArmer {
    * A fresh token for the call's channel, and the tap that carries audio to it, created in the background (the invite does not
    * wait for the media server). The audio side is armed first, so the moment the tap exists its chunks are accepted.
    */
-  async arm(callId: string, channelArn: string): Promise<void> {
+  async arm(callId: string, channelArn: string, opts: { told?: boolean } = {}): Promise<void> {
     const cfg = this.cfg();
     // A tap that posts audio to an unsecured sink must never be created (audit B4): no secret, no tap, outside dev mode.
     if (cfg && !sinkSecretUsable()) throw new AppError(503, `Live listening is not configured for this deployment (missing ${SINK_SECRET_SETTING})`);
@@ -264,10 +264,23 @@ export class TapArmer {
     const token = await this.audio().arm(callId, channelArn);
     // A call armed against a real media server never has its token kept for the dev route: only the simulator-only path above does.
     const sinkUrl = `${cfg.sinkBaseUrl}${SINK_PATH}${token}`;
-    const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl, noticed: false };
+    const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl, noticed: opts.told === true };
     this.calls.set(callId, state);
     const job = this.createWithRetry(callId, state).catch((e: unknown) => console.warn('[meeting-assistant] tap arming failed', (e as Error).message)).finally(() => { this.inFlight.delete(job); });
     this.inFlight.add(job);
+  }
+
+  /**
+   * The orchestrator's deaf watchdog heard no audio for a minute while people are seated: arm the call's channel again (a fresh token
+   * and tap, through `arm`). The call was told by the watchdog, so this arming starts as one past its one-minute give-up: no second
+   * notice, the state view says `no-audio` until the tap exists, and arming goes on slowly. False when this process has not armed the
+   * call against a media server (nothing to arm again).
+   */
+  async rearm(callId: string): Promise<boolean> {
+    const state = this.calls.get(callId);
+    if (!state) return false;
+    await this.arm(callId, state.channelArn, { told: true });
+    return true;
   }
 
   /**

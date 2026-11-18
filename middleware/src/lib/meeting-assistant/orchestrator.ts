@@ -15,10 +15,13 @@
 //     stalls the session). The `finally` of `onToolCall` answers anything still open that no turn holds.
 //   * PAUSE. While paused the session is closed (it does not bill) and nothing is sent anywhere; resume opens a new session
 //     carrying the last minutes of the transcript. An unexpected close is replaced the same way, at most 3 times per call.
+//   * DEAF. A session can stay open and hear nothing: the tap stops posting, or audio flows and no transcript ever comes back. While
+//     people who may be heard hold seats, a minute of either is one stall: the tap is armed again or the session replaced (through
+//     the paths above), the call is told once, and a stall the recovery does not end leaves through giveUp (`checkHearing`).
 import { randomBytes } from 'node:crypto';
 import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
-import { ASSISTANT_NAME } from './chat-types.js';
+import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
@@ -29,6 +32,7 @@ import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import { ASKER_WINDOW_MS, VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
+import type { TapArmer } from './media.js';
 import { assistantAudio } from './audio-select.js';
 import { findAddress, NAME_ALTERNATION, nameLock, parseCommand, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
@@ -72,6 +76,21 @@ export const MAX_REPLACEMENTS = 3;
 export const SESSION_EXPIRY_MARGIN_MS = 5 * 60_000;
 /** A failed replacement is retried after each of these delays; when they are spent Milo leaves (audit B9). */
 export const REPLACEMENT_RETRY_MS: readonly number[] = [1000, 3000, 9000];
+/**
+ * How long Milo may go without hearing anyone, while people who may be heard hold seats, before it counts as deaf (`checkHearing`).
+ * The tap armer's own give-up (media.ts TAP_GIVE_UP_MS): the same minute after which a call is told Milo cannot hear it. Also how long
+ * a recovery has to end the stall before Milo leaves.
+ */
+export const DEAF_AFTER_MS = 60_000;
+/**
+ * Audio flowing but no transcript for that minute: deaf only when the minute also held this much VOICED audio (attribution.ts
+ * VoicedTimeline). Half of it: a session that hears gives a transcript at each pause in speech, so half a minute of voice with none
+ * is a conversation going unheard, not a cough, a keyboard or one long sentence.
+ */
+export const DEAF_VOICED_MS = DEAF_AFTER_MS / 2;
+/** Voiced milliseconds, anyone's, on a session's timeline after `fromMs` (session milliseconds). */
+const voicedSince = (timeline: VoicedTimeline, fromMs: number): number =>
+  timeline.intervals().reduce((sum, i) => sum + Math.max(0, i.endMs - Math.max(i.startMs, fromMs)), 0);
 /** The most a tool call's arguments may weigh, as JSON, and the most a browser's result may weigh. */
 export const MAX_ARGS_BYTES = 4096;
 export const MAX_RESULT_BYTES = 16 * 1024;
@@ -142,6 +161,10 @@ export interface RuntimeDeps {
   watcher?: Pick<DecisionWatcher, 'start' | 'pause' | 'stop' | 'onLine' | 'dispose'>;
   /** The org directory, for a person a write names who never held a seat in the call. Default: providers/identity.ts listUsers. */
   directory?: () => Promise<RosterEntry[]>;
+  /** The tap armer (media.ts), when a media server is configured: the deaf watchdog arms a silent call again. Absent or null: no audio watch. */
+  taps?: () => Promise<Pick<TapArmer, 'rearm' | 'hearing'> | null>;
+  /** Who holds or held a seat in the call (lib/call-chat.ts `seatedUsers`). Default: the call chat runtime's. */
+  seats?: (callId: string) => Promise<Array<{ userId: string; active: boolean }>>;
 }
 
 export interface FinishedEvent {
@@ -304,6 +327,15 @@ interface CallRun {
   /** When the heartbeat (session.lastAliveAt, and the figures to settle) was last written. */
   heartbeatAt: number;
   intentionalClose: boolean;
+  /**
+   * The deaf watchdog (`checkHearing`): when people's audio last reached the session, when the session last gave a transcript, when
+   * the current watch began (it starts again whenever the watch does not apply: no session, Milo speaking, nobody to hear), and the
+   * stall already acted on (cleared by the next audio or transcript), so one stall gets one recovery and one notice.
+   */
+  heardAt: number;
+  transcribedAt: number;
+  watchFrom: number;
+  deaf: { kind: 'audio' | 'transcripts'; at: number } | null;
   /** Final usage of the session that just closed; added into the totals once. */
   usageSeconds: number;
   tokens: { input: number; output: number; cached: number };
@@ -654,7 +686,7 @@ export class AssistantRuntime {
     const run: CallRun = {
       ctx, call, policy: policyForLobby(call.lobby), period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
-      intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
+      intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
@@ -841,10 +873,15 @@ export class AssistantRuntime {
     run.session = session;
     run.sessionStartedAt = this.now();
     run.heartbeatAt = -Infinity; // the first tick writes one at once
+    run.watchFrom = run.sessionStartedAt; // a new session is given its own minute
     // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
     this.deps.audio?.attach(run.ctx.callId, {
       append: (pcm) => { try { run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
-      placed: (userId, pcm, atMs) => run.timeline.feed(userId, pcm, OUT_RATE, atMs),
+      placed: (userId, pcm, atMs) => {
+        run.heardAt = this.now();
+        if (run.deaf?.kind === 'audio') run.deaf = null;
+        run.timeline.feed(userId, pcm, OUT_RATE, atMs);
+      },
     });
   }
 
@@ -853,6 +890,7 @@ export class AssistantRuntime {
     // Paused or left: the audio token dies with the session, before anything else. Also with no session open (a replacement
     // under way when the ceiling is reached), so a tap never outlives the call's stop.
     this.deps.audio?.detach(run.ctx.callId);
+    run.deaf = null; // a resume arms a new tap and opens a new session: any stall is watched afresh
     const session = run.session;
     if (!session) return;
     run.intentionalClose = true;
@@ -981,10 +1019,11 @@ export class AssistantRuntime {
   }
 
   /**
-   * The provider's session is about to expire: close it on purpose and open a fresh one with the same context, through the
-   * replacement path an unexpected close takes, but not counted against the cap. Waiting reads expire, as for a pause.
+   * Close the open session on purpose and open a fresh one with the same context, through the replacement path an unexpected close
+   * takes. Waiting reads expire, as for a pause. Before the provider's expiry it is planned and not counted against the cap; a deaf
+   * session (`checkHearing`) is a fault and is counted, so a session that keeps coming back deaf ends in giveUp.
    */
-  private async replaceBeforeExpiry(run: CallRun): Promise<void> {
+  private async replaceSession(run: CallRun, reason: string, counted: boolean): Promise<void> {
     let closed = false;
     await this.serial(run, async () => {
       const session = run.session;
@@ -998,7 +1037,7 @@ export class AssistantRuntime {
       for (const off of run.unsubscribers.splice(0)) off();
       await this.expireOpenTurns(run, true, 'replaced');
     });
-    if (closed && !run.finished) await this.reopen(run, 'planned replacement before the provider expiry', false);
+    if (closed && !run.finished) await this.reopen(run, reason, counted);
   }
 
   /** Milo has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
@@ -1260,6 +1299,7 @@ export class AssistantRuntime {
 
   /** Queue a line write behind the earlier ones of this run (never rejects). */
   private onInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
+    run.transcribedAt = this.now(); run.deaf = null; // Milo hears: whatever stall there was is over
     // The voice gate reads the heard text at once, before the line is attributed or stored.
     if (findAddress(e.text) !== null) {
       const endAt = run.sessionStartedAt + e.endMs;
@@ -1897,10 +1937,68 @@ export class AssistantRuntime {
     if (now - run.heartbeatAt >= HEARTBEAT_EVERY_MS) await this.heartbeat(run);
     await this.checkCeiling(run);
     if (run.finished) return;
-    if (run.session && run.expiresAt !== null && now >= run.expiresAt - SESSION_EXPIRY_MARGIN_MS) await this.replaceBeforeExpiry(run);
+    if (run.session && run.expiresAt !== null && now >= run.expiresAt - SESSION_EXPIRY_MARGIN_MS) await this.replaceSession(run, 'planned replacement before the provider expiry', false);
+    if (run.finished) return;
+    await this.checkHearing(run, now);
     if (run.finished) return;
     const due = (await this.store.listTurns(run.ctx.callId, { statuses: ['pending', 'running'] })).filter((t) => t.expiresAt <= now);
     for (const t of due) await this.expireTurn(run, t);
+  }
+
+  /**
+   * The deaf watchdog. Milo can sit in a call `listening` and hear nothing, silent and invisible: the tap stopped posting (its token
+   * died, the media server dropped it), or audio flows and the session never gives a transcript of it. The watch applies only while a
+   * session is open on real audio, Milo is not speaking, and someone who may be heard (the inviter, or a person who acknowledged)
+   * holds an active seat; otherwise its minute starts again. A minute with no audio while the armer says the tap is up arms it again
+   * (media.ts `rearm`; a tap still being made is the armer's own to report, after its own minute); a minute with no transcript that
+   * held DEAF_VOICED_MS of voice replaces the session, counted, so a session that keeps coming back deaf ends in
+   * giveUp through `reopen`. The call is told once per stall. A tap that still cannot be made a minute after it was armed again leaves
+   * through giveUp; a tap that exists and carries nothing is a quiet room (every microphone off), and Milo stays.
+   */
+  private async checkHearing(run: CallRun, now: number): Promise<void> {
+    const callId = run.ctx.callId;
+    if (!run.session || run.session.kind === 'scripted' || !this.deps.audio || run.speech.speakingAt(now)) { run.watchFrom = now; return; }
+    const audioDue = now - Math.max(run.heardAt, run.watchFrom) >= DEAF_AFTER_MS;
+    const transcriptsDue = now - Math.max(run.transcribedAt, run.watchFrom) >= DEAF_AFTER_MS
+      && voicedSince(run.timeline, now - DEAF_AFTER_MS - run.sessionStartedAt) >= DEAF_VOICED_MS;
+    if (!audioDue && !transcriptsDue) return;
+    const taps = audioDue ? await (this.deps.taps?.() ?? Promise.resolve(null)).catch(() => null) : null;
+    if (audioDue && run.deaf?.kind === 'audio') {
+      // Armed again a while ago and still nothing: leave once the tap could not be made for a whole minute and people wait to be heard.
+      if (now - run.deaf.at >= DEAF_AFTER_MS && taps && taps.hearing(callId) !== 'ok' && await this.anyoneToHear(callId)) await this.giveUp(run);
+      return;
+    }
+    // A tap the armer is still making (or has already said it cannot make) is the armer's to report: the watch starts once it says the tap is up.
+    if (audioDue && taps && taps.hearing(callId) !== 'ok') { run.watchFrom = now; return; }
+    const kind = audioDue && taps ? 'audio' : transcriptsDue ? 'transcripts' : null;
+    if (kind === null) return;
+    if (!(await this.anyoneToHear(callId))) { run.watchFrom = now; return; }
+    if (run.finished || !run.session) return;
+    run.watchFrom = now; // one recovery per stall: a tick that runs alongside this one does not act on it again
+    const told = run.deaf !== null;
+    if (kind === 'audio') {
+      if (!(await taps!.rearm(callId))) return; // not armed against a media server here: nothing to arm again, nothing to watch
+      console.warn(`[meeting-assistant] no audio has reached ${callId} for a minute; arming its tap again`);
+      run.deaf = { kind, at: now };
+      if (!told) await postNoticeQuietly(callId, CANNOT_HEAR_NOTICE);
+      return;
+    }
+    run.deaf = { kind, at: now };
+    if (!told) await postNoticeQuietly(callId, CANNOT_HEAR_NOTICE);
+    await this.replaceSession(run, 'no transcript of the voices it hears', true);
+  }
+
+  /** Does someone Milo may hear (the inviter, or a person who acknowledged) hold an active seat? False when the record is not listening or the roster cannot be read. */
+  private async anyoneToHear(callId: string): Promise<boolean> {
+    const record = await this.store.get(callId);
+    if (!record || record.state !== 'listening') return false;
+    try {
+      return (await this.seatsOf(callId)).some((u) => u.active && (u.userId === record.invitedBy || record.acked.includes(u.userId)));
+    } catch { return false; }
+  }
+
+  private seatsOf(callId: string): Promise<Array<{ userId: string; active: boolean }>> {
+    return this.deps.seats ? this.deps.seats(callId) : callChatRuntime().seatedUsers(callId);
   }
 
   /**
@@ -1925,7 +2023,7 @@ export class AssistantRuntime {
 
   /** Everyone who holds an ACTIVE seat right now was present while Milo was (audit M1); departed rows are never counted. */
   private async snapshotAttendance(callId: string): Promise<void> {
-    try { for (const u of await callChatRuntime().seatedUsers(callId)) if (u.active) await this.store.attend(callId, u.userId); } catch { /* the seat roster is best effort here */ }
+    try { for (const u of await this.seatsOf(callId)) if (u.active) await this.store.attend(callId, u.userId); } catch { /* the seat roster is best effort here */ }
   }
 
   /** Five minutes before the ceiling, say so once; at the ceiling, leave with a notice (the listening time counts, a pause does not). */
@@ -2097,6 +2195,8 @@ export function assistantRuntime(): AssistantRuntime {
   return (runtime = new AssistantRuntime({
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
     audio: assistantAudio(), watcher,
+    // As the restart reconcile does: only a process with the media settings has taps of its own to arm again.
+    taps: async () => { const media = await import('./media.js'); return media.mediaConfig() ? media.tapArmer() : null; },
   }));
 }
 /**
