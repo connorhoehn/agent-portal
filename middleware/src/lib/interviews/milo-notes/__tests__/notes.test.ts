@@ -46,6 +46,14 @@ describe('competencyNotes', () => {
     expect(notes.every((c) => c.asked.length === 0)).toBe(true);
     expect(JSON.stringify(notes)).not.toMatch(/covered|well|strong|weak|score|percent|%/i);
   });
+
+  it('never lists a taken suggestion that judges, even one stored before the guard caught it (decision 6)', () => {
+    const notes = competencyNotes({ ...INPUT, panelLines: [], suggestions: [
+      { text: 'That account was thin. Who did you bring in first?', competencyId: 'communication', answer: 'ask', dropped: null },
+      { text: 'Who did you bring in first, and when?', competencyId: 'communication', answer: 'ask', dropped: null },
+    ] });
+    expect(notes[0]!.asked).toEqual([{ text: 'Who did you bring in first, and when?', questionId: null, by: 'panel' }]);
+  });
 });
 
 describe('notesStartMs: a round started before its set time (I3.6h)', () => {

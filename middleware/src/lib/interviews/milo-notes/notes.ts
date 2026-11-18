@@ -5,10 +5,11 @@
 //   * a panel line contains its opening words (its first six, as the scripted coach judges "asked"), or
 //   * the lead answered a suggestion of it "I'll ask it" or "Have Milo ask".
 // A suggestion the lead took that is not one of the chosen questions (a follow-up, the model's own words) is listed under
-// its competency as asked too. A skipped or dropped suggestion is not.
+// its competency as asked too. A skipped or dropped suggestion is not, nor one the coach's guard now catches.
 //
 // The time check: minutes since the start, the round's length, minutes left. The start is the set time when there is one,
 // else when Milo joined the call (the interview record keeps no start instant; the footer counts the same way).
+import { guardSuggestion } from '../coach/parse.js';
 import type { SuggestionRecord } from '../coach/store.js';
 import type { KitCompetency, KitQuestion } from '../types.js';
 
@@ -34,7 +35,8 @@ const said = (prompt: string, line: string): boolean => { const o = openingWords
 const sameText = (a: string, b: string): boolean => words(a) === words(b);
 
 export function competencyNotes(input: NotesInput): CompetencyNotes[] {
-  const taken = input.suggestions.filter((s) => s.dropped === null && (s.answer === 'ask' || s.answer === 'milo-ask') && s.text.trim());
+  // A taken suggestion stored before the guard grew (decision 6) is checked again here: one that judges is never listed.
+  const taken = input.suggestions.filter((s) => s.dropped === null && (s.answer === 'ask' || s.answer === 'milo-ask') && s.text.trim() && !guardSuggestion(s.text));
   return input.competencies.map((c) => {
     const asked: AskedItem[] = [];
     const toAsk: CompetencyNotes['toAsk'] = [];
