@@ -556,7 +556,10 @@ try {
       await hp.waitForTimeout(1200);
       const n0 = milo.utterances;
       await hp.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i }).click();
-      testing.receipt = !!(await until(async () => /Milo asked it aloud/.test(await hp.locator('body').innerText()) ? true : null, 20_000, 500));
+      // The receipt is the product's (interviewsRoom.ts miloAskReceipt): "Milo asked it aloud" when spoken, otherwise its reason.
+      const RECEIPT = /Milo asked it aloud|Milo posted the question in the chat \([^)]*\)|Not sent: [^.]*\.|Milo did not say whether it was sent/;
+      testing.receiptText = (await until(async () => RECEIPT.exec(await hp.locator('body').innerText())?.[0] ?? null, 20_000, 500)) ?? '';
+      testing.receipt = testing.receiptText === 'Milo asked it aloud';
       testing.candQ = squash(await until(async () => (await cp.getByTestId('guest-milo-question').first().innerText().catch(() => '')).trim() || null, 20_000) ?? '');
       testing.spoken = await miloSays(n0, 30_000);
       const p1 = (await miloPosts()).length;
@@ -566,7 +569,7 @@ try {
       repeatLine = (await miloPosts()).slice(p1).find((t) => /test this function/i.test(t)) ?? '';
     }
     step('7 coach follow-up keyed to the answers', !!deck, `complexity suggestion ${s2 ? `"${s2.slice(0, 60)}" (I'll ask it)` : 'not shown'}; testing suggestion "${squash(deck).slice(0, 120)}"`);
-    step('8 Have Milo ask, read aloud', testing.receipt && testing.spoken && !!testing.candQ, `receipt=${testing.receipt}; Milo spoke=${testing.spoken}; candidate's Milo line "${testing.candQ.slice(0, 100)}"`);
+    step('8 Have Milo ask, read aloud', testing.receipt && testing.spoken && !!testing.candQ, `receipt "${testing.receiptText || 'none shown'}"; Milo spoke=${testing.spoken}; candidate's Milo line "${testing.candQ.slice(0, 100)}"`);
     step('9 repeat the question, spoken', repeated && !!repeatLine, `Milo spoke=${repeated}; Milo's post "${repeatLine.slice(0, 120)}"`);
   }
   await say(cand, 'c13', 1300);
