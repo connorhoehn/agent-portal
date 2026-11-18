@@ -78,6 +78,24 @@ describe('pushRecordingDecision', () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it('retries a thrown fetch and any 5xx the same way', async () => {
+    decide.mockResolvedValue(consented);
+    const steps: Array<number | Error> = [new Error('timed out'), 502, 200];
+    const fetchMock = jest.fn(async () => { const s = steps.shift()!; if (s instanceof Error) throw s; return { ok: s === 200, status: s } as Response; }) as unknown as typeof fetch;
+    expect(await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn: jest.fn(), sleep: noSleep })).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops retrying at the total budget with one warning', async () => {
+    decide.mockResolvedValue(consented);
+    const warn = jest.fn();
+    let t = 0;
+    const fetchMock = jest.fn(async () => { t += 12_000; throw new Error('timed out'); }) as unknown as typeof fetch;
+    expect(await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn, sleep: noSleep, now: () => t })).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry other refusals', async () => {
     decide.mockResolvedValue(consented);
     const fetchMock = jest.fn(async () => ({ ok: false, status: 400 }) as Response) as unknown as typeof fetch;
