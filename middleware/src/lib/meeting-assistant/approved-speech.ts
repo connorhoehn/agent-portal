@@ -114,8 +114,11 @@ export const SAY_MAX_BOUND_MS = 45_000;
 /** Allowed per character on top of the minimum (speech runs at about 15 characters a second; this is half that speed). */
 export const SAY_MS_PER_CHAR = 70;
 
-/** How long an approved line may wait, unsent, for the session to finish what it is saying (its own reply) before the bound starts. */
-export const SAY_QUIET_WAIT_MS = 15_000;
+/**
+ * How long an approved line may wait, unsent, for quiet (nobody speaking, nothing of Milo's running) before it stays in the chat
+ * only: a repeat or a time answer said much later would interrupt what came after it. The bound (`sayBoundMs`) starts once it is sent.
+ */
+export const SAY_QUIET_WAIT_MS = 5_000;
 
 /** How long the orchestrator waits for the utterance of `text` before it withholds it whole. */
 export function sayBoundMs(text: string): number {
@@ -126,7 +129,7 @@ export function sayBoundMs(text: string): number {
 export type SayOutcome = 'spoken' | 'posted' | 'no-call';
 
 /** Why an approved utterance was not relayed: codes only, for the trace. */
-export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'busy' | 'refused' | 'timeout' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
+export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'busy' | 'refused' | 'timeout' | 'not-quiet' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
 
 /** The one plain sentence the lead reads when the words could not be said aloud. */
 export const NOT_SAID_ALOUD = 'Milo could not say it aloud. The question is in the call chat.';

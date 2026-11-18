@@ -833,7 +833,9 @@ export class AssistantRuntime {
     this.wire(run, session);
     run.sessionKind = session.kind;
     await session.start({
-      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent }),
+      // A call whose policy relays nothing the model says on its own (an interview) tells the model so: it never answers anyone,
+      // it only reads the lines the system hands it. Otherwise its own reply to a request runs over the line handed it to read.
+      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent, readAloudOnly: !run.policy.relaysLiveSpeech(run.call) }),
       ...run.policy.sessionTools(run.call),
     });
     run.session = session;
@@ -1165,21 +1167,20 @@ export class AssistantRuntime {
         },
       };
       run.approved = hold;
-      // The bound counts from when the line actually goes to the model (`sent`); before that it may wait, unsent, for the session to
-      // finish its own reply (SAY_QUIET_WAIT_MS).
-      const bound = (ms: number) => {
+      // Before the line goes to the model it may wait SAY_QUIET_WAIT_MS for quiet; once it is sent (`sent`), the bound counts.
+      const bound = (ms: number, why: SayWithheldWhy) => {
         if (hold.releasing || run.approved !== hold) return;
         if (hold.timer) clearTimeout(hold.timer);
-        hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', 'timeout'); }, ms);
+        hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', why); }, ms);
         (hold.timer as { unref?: () => void }).unref?.();
       };
-      bound(sayBoundMs(words) + SAY_QUIET_WAIT_MS);
+      bound(SAY_QUIET_WAIT_MS, 'not-quiet');
       let asked = false;
       // Sent with numbers spelled out, so the session reads them as written; the check compares against the approved text itself.
       try {
         asked = session.sayVerbatim!(id, speakableText(words),
           (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); },
-          () => bound(sayBoundMs(words)));
+          () => bound(sayBoundMs(words), 'timeout'));
       } catch { asked = false; }
       if (!asked) hold.finish('posted', 'refused');
     });

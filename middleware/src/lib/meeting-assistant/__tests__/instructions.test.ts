@@ -1,4 +1,4 @@
-import { transcriptContext, PRIVATE_READ_RULES, PRIVATE_TOOLS, isPrivateRead, meetingTools, cleanName, meetingInstructions, rosterList, NAME_MAX_CHARS, ROSTER_MAX_NAMES, READ_ALOUD_RULE } from '../instructions.js';
+import { transcriptContext, PRIVATE_READ_RULES, PRIVATE_TOOLS, isPrivateRead, meetingTools, cleanName, meetingInstructions, rosterList, NAME_MAX_CHARS, ROSTER_MAX_NAMES, READ_ALOUD_RULE, READ_ALOUD_ONLY_RULE } from '../instructions.js';
 import { READ_ALOUD_MARK } from '../approved-speech.js';
 
 describe('names in the session instructions', () => {
@@ -104,5 +104,20 @@ describe('lines the system hands the voice to read aloud', () => {
     expect(text).toContain(READ_ALOUD_RULE);
     expect(READ_ALOUD_RULE).toContain(READ_ALOUD_MARK);
     expect(READ_ALOUD_RULE).toMatch(/do not answer it/);
+  });
+});
+
+describe('the turn rule follows the call\'s policy', () => {
+  const base = { tenant: 'orgiq', roster: ['Alice'], recordName: null };
+  it('a call that relays the live model: answer when addressed, never unprompted', () => {
+    const text = meetingInstructions(base);
+    expect(text).toContain('When you are addressed, answer');
+    expect(text).not.toContain(READ_ALOUD_ONLY_RULE);
+  });
+  it('a call that relays nothing the model says on its own: never answer anyone, only read the lines handed it', () => {
+    const text = meetingInstructions({ ...base, readAloudOnly: true });
+    expect(text).toContain(READ_ALOUD_ONLY_RULE);
+    expect(text).not.toContain('When you are addressed, answer');
+    expect(text).toContain(READ_ALOUD_RULE);
   });
 });

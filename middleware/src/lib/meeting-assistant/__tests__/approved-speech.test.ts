@@ -25,6 +25,7 @@ import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, type StartContext } from '../orchestrator.js';
 import { ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
+import { READ_ALOUD_ONLY_RULE } from '../instructions.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
@@ -46,7 +47,8 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   readonly cancelled: string[] = [];
   /** Busy (its own reply running): the line waits, unsent, until the test calls `sent` (as the live session does at quiet). */
   busy = false;
-  async start(_i: SessionStartInput) { /* nothing */ }
+  startedWith: SessionStartInput | null = null;
+  async start(i: SessionStartInput) { this.startedWith = i; }
   pendingInputText() { return ''; }
   appendAudio() { /* nothing */ }
   sendText(): void { throw new SessionTextUnsupported(); }
@@ -222,21 +224,20 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
     } finally { jest.useRealTimers(); }
   });
 
-  it('3b. the line waits, unsent, while the model finishes its own reply: the bound counts from when it is sent, and it is spoken', async () => {
+  it('3b. the line waits, unsent, until the session is quiet: the bound counts from when it is sent, and it is spoken', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
     try {
       factory = () => new FakeSession();
       await startCall('orgiq:saytest:r5b');
       const s = fake();
-      s.busy = true; // the live model is mid-way through its own answer to "can you repeat the question?" (policy drops it)
+      s.busy = true; // someone is still speaking, or Milo's own words are still running
       const pending = runtime.sayHeldText(CALL, QUESTION, ALICE);
       await flush();
       const req = s.asked[0]!;
-      // Its reply runs on longer than the bound alone would allow; the line is still waiting, not withheld.
-      jest.advanceTimersByTime(sayBoundMs(QUESTION) - 500);
+      jest.advanceTimersByTime(SAY_QUIET_WAIT_MS - 500);
       await flush();
       req.sent!(); // quiet: the session sends the line now
-      jest.advanceTimersByTime(sayBoundMs(QUESTION) - 500);
+      jest.advanceTimersByTime(sayBoundMs(QUESTION) - 500); // longer than the wait: the bound counts from the send
       s.frames(12, req.id);
       req.ended(QUESTION);
       await jest.advanceTimersByTimeAsync(5000);
@@ -246,7 +247,7 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
     } finally { jest.useRealTimers(); }
   });
 
-  it('3b. a line never sent (the session never fell quiet) is withheld after the wait plus the bound, and the session forgets it', async () => {
+  it('3b. a line never sent (no quiet within SAY_QUIET_WAIT_MS) stays in the chat only, and the session forgets it', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
     try {
       factory = () => new FakeSession();
@@ -255,9 +256,10 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
       s.busy = true;
       const pending = runtime.sayHeldText(CALL, QUESTION, ALICE);
       await flush();
-      jest.advanceTimersByTime(sayBoundMs(QUESTION) + SAY_QUIET_WAIT_MS + 1);
+      jest.advanceTimersByTime(SAY_QUIET_WAIT_MS + 1);
       expect(await pending).toBe('posted');
       expect(s.cancelled).toEqual([s.asked[0]!.id]);
+      expect(voiceTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ ev: 'voice.approved', decision: 'withheld', why: 'not-quiet' })]));
       expect(sent).toEqual([]);
     } finally { jest.useRealTimers(); }
   });
@@ -290,6 +292,21 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
     expect(await runtime.sayHeldText(CALL, QUESTION, ALICE)).toBe('posted');
     expect(s.asked).toHaveLength(1);
     expect(await runtime.sayHeldText('no-such-call', QUESTION, ALICE)).toBe('no-call');
+  });
+});
+
+describe('the policy shapes the live model\'s instructions', () => {
+  it('a call that relays nothing of the live model tells it to answer nobody and only read the lines it is handed', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:r9');
+    expect(fake().startedWith?.instructions).toContain(READ_ALOUD_ONLY_RULE);
+    expect(fake().startedWith?.instructions).not.toContain('When you are addressed, answer');
+  });
+  it('a call on the default policy (Work) keeps the answer-when-addressed rule', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:initiative:r9');
+    expect(fake().startedWith?.instructions).toContain('When you are addressed, answer');
+    expect(fake().startedWith?.instructions).not.toContain(READ_ALOUD_ONLY_RULE);
   });
 });
 

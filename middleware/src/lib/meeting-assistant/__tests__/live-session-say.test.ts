@@ -158,6 +158,74 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a line waits while a person is speaking, and goes out once their turn is over', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'So I was thinking that' });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(20);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append')).toEqual([]);
+    await tick(60); // the person's turn ends (idle flush)
+    expect(received.filter((e) => e['type'] === 'session.commentary.append').length).toBe(1);
+    await s.close();
+  });
+
+  it('one line at a time: the second goes out only after the first one\'s utterance is over', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
+    s.sayVerbatim('say_2', 'About 58 minutes are left.', (t) => ended.push(t));
+    await tick(20);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append').map((e) => e['content'])).toEqual([readAloudContent(Q)]);
+    audio(3000); words(Q, 0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    expect(ended).toEqual([Q]);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append').map((e) => e['content'])).toEqual([readAloudContent(Q), readAloudContent('About 58 minutes are left.')]);
+    await s.close();
+  });
+
+  it('a line the provider takes in part way through an utterance already running was absorbed: it ends at once with no words', async () => {
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
+    await tick(20);
+    const sent = received.find((e) => e['type'] === 'session.commentary.append')!;
+    // The model begins something of its own at once; the line is taken in two seconds into it.
+    audio(3000); words('Sure, the question was about', 1000);
+    await tick(10);
+    frame({ type: 'session.commentary.appended', client_event_id: sent['event_id'], start_ms: 3000, end_ms: 3000 });
+    await tick(10);
+    expect(ended).toEqual([null]);
+    audio(3000); words(' sharding a table.', 3200);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    // Frames after the absorption are nobody's; nothing ends twice.
+    expect(seen.outputAudio.slice(-4).every((f) => f.say === undefined)).toBe(true);
+    expect(ended).toEqual([null]);
+    await s.close();
+  });
+
+  it('a line taken in as its utterance begins is spoken as usual (the acknowledgement does not end it)', async () => {
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
+    await tick(20);
+    const sent = received.find((e) => e['type'] === 'session.commentary.append')!;
+    audio(3000); words('How would you', 5000);
+    frame({ type: 'session.commentary.appended', client_event_id: sent['event_id'], start_ms: 5000, end_ms: 5000 });
+    audio(3000); words(' shard this table?', 5200);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    expect(ended).toEqual([Q]);
+    expect(seen.outputAudio.filter((f) => f.say === 'say_1').length).toBe(5);
+    await s.close();
+  });
+
   it('cancelSay forgets a request the caller withheld: the next utterance is nobody\'s (it used to claim it)', async () => {
     const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);

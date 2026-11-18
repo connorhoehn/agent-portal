@@ -28,11 +28,16 @@
 // ends once its words equal the words asked for and both sides have been quiet `saySettleMs`, or after `sayGapMs` of quiet on both
 // sides whatever it says. Words that arrive after its transcript closed but before its audio ended join it (a run-on fails the check).
 // The words are sent framed as a line to read aloud (`readAloudContent`), and the session's instructions say what such a line is.
-// The line is sent only from QUIET (no output utterance open, no voice running, no claimed utterance): the provider does not speak a
-// commentary that lands while its own response is running (measured 18 November, the spoken repeat: the model had begun its own
-// answer to "can you repeat the question?", which policy drops, and the line sent meanwhile was never said). A request made while
-// the session is busy waits, unsent, for the next quiet. `cancelSay` forgets a request the caller gave up on, so it never claims a
-// later, unrelated utterance (it used to: a withheld line's request stayed queued and took the next answer's frames).
+// The line is sent only from QUIET (nobody speaking: no person's turn being heard, no output utterance open, no voice running, no
+// claimed utterance, no line sent and not yet claimed), one line at a time: the provider does not speak a commentary that lands
+// while its own response is running (measured 18 November, the spoken repeat: the model had begun its own answer to "can you
+// repeat the question?", which policy drops, and the line sent meanwhile was never said). A request made while the session is
+// busy waits, unsent, for the next quiet. The provider acknowledges a commentary (`session.commentary.appended`, with the
+// provider-timeline `start_ms` it was taken in at): a line that is spoken is taken in as its utterance begins; one taken in
+// part way through an utterance already running was ABSORBED into it and will not be said, so the request ends there with no
+// words (the caller posts it in the chat only) instead of waiting out its bound. `cancelSay` forgets a request the caller gave
+// up on, so it never claims a later, unrelated utterance (it used to: a withheld line's request stayed queued and took the next
+// answer's frames).
 //
 // Transcripts arrive only as DELTAS (no "done" event is documented). Input is cut into pieces: at a sentence end, at a gap of
 // more than `gapMs`, at a delegation, at close, and after `idleFlushMs` of quiet. Output is cut into UTTERANCES: one runs from its
@@ -91,11 +96,18 @@ const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
-interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number }
+interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number; eventId?: string; acked?: boolean }
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
-interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number; /** The `say` request this utterance belongs to. */ say?: string }
+interface Utterance {
+  text: string; startedAt: number; endedAt: number; inputsBefore: number;
+  /** The provider-timeline `start_ms` of its first words. */
+  firstMs: number;
+  /** The `say` request this utterance belongs to. */ say?: string;
+}
+/** A commentary taken in this long (provider timeline) after the running utterance's first words was absorbed into it. */
+export const SAY_ABSORBED_AFTER_MS = 400;
 
 /**
  * What a socket `error` event carries, as one short line: the event's or its error's message (the `ws` package words a refused
@@ -145,7 +157,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private sayWaiting: SayRequest[] = [];
 
   /** The `say` request whose utterance is being emitted now. */
-  private saying: { id: string; text: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null } | null = null;
+  private saying: { id: string; text: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null; eventId?: string; acked?: boolean } | null = null;
   private closing: Promise<void> | null = null;
   private onClosed: (() => void) | null = null;
   private fail: ((e: Error) => void) | null = null;
@@ -223,21 +235,48 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.sayQueue = this.sayQueue.filter((r) => r.id !== id);
     this.sayWaiting = this.sayWaiting.filter((r) => r.id !== id);
     if (this.sayQueue.length + this.sayWaiting.length !== before) trace('say.cancelled', { t: this.sinceStart() });
+    this.pumpSay();
   }
 
-  /** Something the provider is saying now: an utterance open, its voice still running, or a claimed one not yet over. */
-  private busy(): boolean { return this.output !== null || this.tailLeft > 0 || this.saying !== null; }
+  /**
+   * Not quiet: a person's turn is being heard, the provider is saying something (an utterance open, its voice still running, a
+   * claimed one not yet over), or a line already sent has not been claimed yet.
+   */
+  private busy(): boolean {
+    return this.input !== null || this.output !== null || this.tailLeft > 0 || this.saying !== null || this.sayQueue.length > 0;
+  }
 
-  /** At quiet: send the waiting `say` lines, oldest first. */
+  /** At quiet: send the oldest waiting `say` line (the next goes at the next quiet, after this one is over). */
   private pumpSay(): void {
     if (this.ended || this.closing !== null || !this.opened || this.busy() || this.sayWaiting.length === 0) return;
-    const ready = this.sayWaiting; this.sayWaiting = [];
-    for (const r of ready) {
-      this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: readAloudContent(r.text.slice(0, 1800)) });
-      this.sayQueue.push(r);
-      trace('say.sent', { t: this.sinceStart(), waitedMs: this.sinceStart() - r.askedAt });
-      try { r.sent?.(); } catch { /* the caller's bound stands */ }
-    }
+    const r = this.sayWaiting.shift()!;
+    r.eventId = this.eventId();
+    this.send({ type: 'session.commentary.append', event_id: r.eventId, delegation_id: null, content: readAloudContent(r.text.slice(0, 1800)) });
+    this.sayQueue.push(r);
+    trace('say.sent', { t: this.sinceStart(), waitedMs: this.sinceStart() - r.askedAt, waiting: this.sayWaiting.length });
+    try { r.sent?.(); } catch { /* the caller's bound stands */ }
+  }
+
+  /**
+   * The provider took a commentary in. Its request is the one whose event id it names, else the oldest sent and not yet
+   * acknowledged. Taken in part way through an utterance already running (claimed for it or not), it was absorbed there: the
+   * request ends with no words, and the utterance's remaining frames are nobody's.
+   */
+  private onCommentaryAppended(ev: Record<string, unknown>): void {
+    const id = typeof ev['client_event_id'] === 'string' ? ev['client_event_id'] : null;
+    const all = [...this.sayQueue, ...(this.saying ? [this.saying] : [])];
+    const r = (id ? all.find((x) => x.eventId === id) : undefined) ?? all.find((x) => x.eventId !== undefined && !x.acked);
+    if (!r) return;
+    r.acked = true;
+    const o = this.output;
+    const at = num(ev['start_ms']);
+    if (!o || typeof ev['start_ms'] !== 'number' || at - o.firstMs <= SAY_ABSORBED_AFTER_MS) return;
+    if (o.say !== undefined && o.say !== r.id) return; // another line's utterance: this one is still to come
+    trace('say.absorbed', { t: this.sinceStart(), intoMs: at - o.firstMs });
+    if (this.saying?.id === r.id) this.saying = null;
+    this.sayQueue = this.sayQueue.filter((x) => x.id !== r.id);
+    if (o.say === r.id) { const { say: _drop, ...rest } = o; this.output = rest; }
+    try { r.ended(null); } catch (e) { console.warn('[meeting-assistant] say listener threw', (e as Error).message); }
   }
 
   close(): Promise<void> {
@@ -341,6 +380,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         return;
       }
       case 'response.event': this.onResponseEvent(ev['event']); return;
+      case 'session.commentary.appended': this.onCommentaryAppended(ev); return;
       case 'session.usage.updated': this.onUsage(ev); return;
       case 'session.output_audio.delta': this.onAudio(ev['delta']); return;
       case 'session.closed': {
@@ -408,7 +448,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private claimSay(): void {
     if (this.saying || this.sayQueue.length === 0) return;
     const next = this.sayQueue.shift()!;
-    this.saying = { id: next.id, text: next.text, ended: next.ended, textDone: false, audioDone: true, transcript: null };
+    this.saying = { id: next.id, text: next.text, ended: next.ended, textDone: false, audioDone: true, transcript: null, ...(next.eventId ? { eventId: next.eventId } : {}), ...(next.acked ? { acked: true } : {}) };
     trace('say.claimed', { t: this.sinceStart() });
   }
 
@@ -460,7 +500,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         if (this.tailLeft === 0) this.claimSay();
       }
       const say = this.output ? this.output.say : this.saying && !this.saying.textDone ? this.saying.id : undefined;
-      this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, inputsBefore: this.inputCount, ...(say ? { say } : {}) };
+      this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, firstMs: startMs, inputsBefore: this.inputCount, ...(say ? { say } : {}) };
       this.emit('outputTranscript', { text: this.output.text.trim(), final: false, ...(say ? { say } : {}) });
       this.armOutput();
     }
@@ -510,6 +550,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.inputCount += 1;
       this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}) });
     }
+    // The person's turn is over. Not when Milo's own output or a delegation is what ended it: the provider is answering then.
+    if (why !== 'output' && why !== 'delegation') this.pumpSay();
   }
 
   private flushOutput(): void {
