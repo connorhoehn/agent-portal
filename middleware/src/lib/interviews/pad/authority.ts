@@ -26,6 +26,8 @@ import { padInterviewId } from './channel.js';
 import { claimsGuest, guestHoldsInterviewSeat } from '../lobby.js';
 
 const TENANT = 'interviews';
+/** The states after the call (or with no call): the live pad seats nobody. */
+const PAD_CLOSED: ReadonlySet<string> = new Set(['ended', 'scored', 'reviewed', 'declined', 'cancelled']);
 
 /** Does this session hold a seat on `interviewId`'s pad now? */
 export async function padSeatHolds(session: Session, interviewId: string): Promise<boolean> {
@@ -33,6 +35,8 @@ export async function padSeatHolds(session: Session, interviewId: string): Promi
   if (!await isAllowed({ sub: session.sub, tenant: session.tenant, role: session.role }, 'ViewInterviews')) return false;
   const interview = await interviewsStore().getInterview(interviewId);
   if (!interview || interview.type !== 'technical') return false;
+  // Nobody edits after the end (O-236, H8 finding 4): once the round is over the live pad has no seats; its code is the record's.
+  if (PAD_CLOSED.has(interview.state)) return false;
   return interview.leadId === session.sub || interview.panelIds.includes(session.sub);
 }
 

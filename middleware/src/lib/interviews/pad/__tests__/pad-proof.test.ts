@@ -404,21 +404,21 @@ describe('the pad when a seat ends, the interview ends, or the gateway restarts'
     // As the end route does it (routes/interviews/room.ts): the state, then the gateway's verdict cache forgets the guest.
     await setState('ended');
     await forgetInterviewGuest(SHARED, 'interview-ended');
-    await cutOff(hugo, mine);
+    // Nobody edits after the end (the lead included, the next case): both writes are refused and neither reaches the other.
+    const lead = `# after the end ${++k}\n`; const cand = `still typing ${++k}\n`;
+    hugo.text.insert(hugo.text.length, lead);
+    mine.text.insert(0, cand);
+    await until(() => hugo.provider.persistenceState === 'error', 'the lead\'s write to be refused');
+    await until(() => mine.provider.persistenceState === 'error', 'the candidate\'s write to be refused');
+    await settle();
+    expect(mine.text.toString()).not.toContain(lead);
+    expect(hugo.text.toString()).not.toContain(cand);
   });
 
-  // Pinned today: the panel's seat on the pad (authority.ts `padSeatHolds`) reads the lead and the panel, not the state, so
-  // after the end the lead and the panel can still open and edit the pad. O-236 says "after the interview ends nobody edits".
-  it('pinned: after the interview ends the lead can still open the pad and edit it', async () => {
-    await setState('ended');
-    const hugo = await openPad(HUGO, SHARED);
-    await until(() => subscribed(hugo), 'the lead\'s subscription after the end');
-    hugo.text.insert(0, '# after the end\n');
-    await until(() => hugo.provider.persistenceState === 'saved', 'the lead\'s edit after the end to persist');
-  });
-  it.failing('after the interview ends nobody edits the pad, the lead included', async () => {
+  it('after the interview ends nobody edits the pad, the lead included', async () => {
     await setState('ended');
     await refusedOn(await openPad(HUGO, SHARED));
+    await refusedOn(await openPad(WEN, SHARED));
   });
 
   // O-237: the pad's text is the gateway's memory (I0.7, feature.ts: "a pad lives as long as the process"). A restart (this
