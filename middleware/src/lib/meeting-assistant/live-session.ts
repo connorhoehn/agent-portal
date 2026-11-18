@@ -40,8 +40,10 @@
 // in the 18 November interview film two delegations got no response.event at all, and only input deltas and usage followed),
 // and after a continuation is asked for with response.create (recorded: its response.created 123 to 427 ms later). The wait
 // ends early at the evidence (a response.created, the voice's first words or voice) or at the next input delta (a new turn). The
-// evidence itself keeps it busy for as long as it lasts: a response created and not yet completed, failed or cancelled, an output
-// utterance, a function call awaiting its output. The provider acknowledges a commentary (`session.commentary.appended`, with the
+// evidence itself keeps it busy for as long as it lasts: a response created and not yet ended, an output utterance, a function
+// call awaiting its output. A response ends at any terminal event the Responses stream can carry (completed, the only one recorded;
+// failed, incomplete, cancelled; an error in its envelope, which without a response id ends every running one), at the close, and
+// at the latest `responseStuckMs` after it was created, so a lost terminal event never holds a line for the rest of a session. The provider acknowledges a commentary (`session.commentary.appended`, with the
 // provider-timeline `start_ms` it was taken in at): a line that is spoken is taken in as its utterance begins; one taken in
 // part way through an utterance already running was ABSORBED into it and will not be said, so the request ends there with no
 // words (the caller posts it in the chat only) instead of waiting out its bound. `cancelSay` forgets a request the caller gave
@@ -82,6 +84,8 @@ export interface OpenAiLiveSessionOptions {
    * asked for, before it counts as quiet (default 1000 ms).
    */
   answerWaitMs?: number;
+  /** The most a response of the second model counts as running without a terminal event (default 30 s). */
+  responseStuckMs?: number;
   /** Timer functions, injectable so a test can move time by hand. */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void };
   clock?: () => number;
@@ -108,6 +112,7 @@ export function pcm16Rms(pcm: Buffer): number {
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 /** A provider code, type or parameter name only when it looks like one: never free text. */
 const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
+const responseIdOf = (raw: unknown): string | null => { const id = (raw as { id?: unknown } | undefined)?.id; return typeof id === 'string' && id ? id : null; };
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
 interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number; eventId?: string; acked?: boolean }
@@ -159,8 +164,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private outputTimer: unknown = null;
   /** A delegation began and its work has not produced its first message or function call yet. */
   private awaitingItem = false;
-  /** The second model's responses running (by id, from their response.created): the voice speaks what they produce. */
-  private readonly responses = new Set<string>();
+  /** The second model's responses running (by id, from their response.created), each with its safety expiry: the voice speaks what they produce. */
+  private readonly responses = new Map<string, ReturnType<typeof setTimeout>>();
   /** The provider may be about to answer (a turn, a delegation, a continuation) and no event has said it is yet. */
   private answerWait: ReturnType<typeof setTimeout> | null = null;
   /** Input transcripts emitted so far. */
@@ -370,7 +375,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (this.idle) { clearTimeout(this.idle); this.idle = null; }
     this.clearOutputTimer();
     this.endAnswerWait();
-    this.input = null; this.output = null; this.open.clear(); this.responses.clear(); this.awaitingItem = false;
+    this.responseOver(null);
+    this.input = null; this.output = null; this.open.clear(); this.awaitingItem = false;
     this.sayQueue = []; this.sayWaiting = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
@@ -610,12 +616,21 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const e = raw as Record<string, unknown>;
     if (e['type'] === 'response.created') {
       const id = (e['response'] as { id?: unknown } | undefined)?.id;
-      if (typeof id === 'string' && id) this.responses.add(id);
+      if (typeof id === 'string' && id && !this.responses.has(id)) {
+        const expiry = setTimeout(() => { trace('response.expired', { t: this.sinceStart() }); this.responseOver(id); }, this.opts.responseStuckMs ?? 30_000);
+        expiry.unref?.();
+        this.responses.set(id, expiry);
+      }
       this.endAnswerWait();
       return;
     }
-    if (e['type'] === 'response.failed' || e['type'] === 'response.cancelled') {
-      this.responseOver(e['response']);
+    if (e['type'] === 'response.failed' || e['type'] === 'response.incomplete' || e['type'] === 'response.cancelled') {
+      this.responseOver(responseIdOf(e['response']));
+      return;
+    }
+    if (e['type'] === 'error') {
+      const id = typeof e['response_id'] === 'string' ? e['response_id'] : responseIdOf(e['response']);
+      this.responseOver(id);
       return;
     }
     if (e['type'] === 'response.output_item.added') {
@@ -636,7 +651,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.open.add(callId);
       this.emit('toolCall', { callId, name, args, atMs: this.sinceStart() });
     } else if (e['type'] === 'response.completed') {
-      this.responseOver(e['response']);
+      this.responseOver(responseIdOf(e['response']));
       const response = e['response'] as { id?: unknown; usage?: Record<string, unknown> } | undefined;
       const id = typeof response?.id === 'string' ? response.id : null;
       const usage = response?.usage;
@@ -651,10 +666,13 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     }
   }
 
-  /** A response of the second model ended (completed, failed or cancelled): its work no longer keeps the session busy. */
-  private responseOver(raw: unknown): void {
-    const id = (raw as { id?: unknown } | undefined)?.id;
-    if (typeof id === 'string') this.responses.delete(id);
+  /** A response of the second model ended (by id; null: every running one): its work no longer keeps the session busy. */
+  private responseOver(id: string | null): void {
+    for (const [rid, expiry] of this.responses) {
+      if (id !== null && rid !== id) continue;
+      clearTimeout(expiry);
+      this.responses.delete(rid);
+    }
     this.pumpSay();
   }
 

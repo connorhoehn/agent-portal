@@ -252,6 +252,50 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a response that ends incomplete, or with an error, or never ends, does not keep a line waiting for the rest of the session', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    const env = (event: Record<string, unknown>) => frame({ type: 'response.event', delegation_id: 'item_1', event });
+    // Ended as incomplete (a Responses terminal event the provider may send): over at once.
+    env({ type: 'response.created', response: { id: 'resp_1' } });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(40);
+    expect(commentaries()).toBe(0);
+    env({ type: 'response.incomplete', response: { id: 'resp_1' } });
+    await tick(20);
+    expect(commentaries()).toBe(1);
+    await s.close();
+
+    // An error inside the response's envelope: over at once.
+    received = [];
+    const b = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
+    await b.s.start(START);
+    env({ type: 'response.created', response: { id: 'resp_2' } });
+    await tick(10);
+    b.s.sayVerbatim('say_2', Q, () => undefined);
+    await tick(40);
+    expect(commentaries()).toBe(0);
+    env({ type: 'error', response_id: 'resp_2', error: { code: 'server_error' } });
+    await tick(20);
+    expect(commentaries()).toBe(1);
+    await b.s.close();
+
+    // Never ended: the safety expiry lets the line go.
+    received = [];
+    const c = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
+    await c.s.start(START);
+    env({ type: 'response.created', response: { id: 'resp_3' } });
+    await tick(10);
+    c.s.sayVerbatim('say_3', Q, () => undefined);
+    await tick(60);
+    expect(commentaries()).toBe(0);
+    await tick(150);
+    expect(commentaries()).toBe(1);
+    await c.s.close();
+  });
+
   it('one line at a time: the second goes out only after the first one\'s utterance is over', async () => {
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);
