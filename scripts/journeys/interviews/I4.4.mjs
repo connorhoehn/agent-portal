@@ -55,6 +55,8 @@ export default async function run(ctx) {
 
   await step('I4.4a', async () => {
     await typeInPad(L.page, 'console.log("hello from the lead")');
+    // Run reads the pad as the gateway holds it: wait until the candidate's pad shows the typed line, then press Run.
+    await until(async () => /hello from the lead/.test(await padText(G.page)), 10_000);
     await L.page.waitForTimeout(800);
     await L.page.getByTestId('interview-pad-run').click();
     const lo = await until(async () => { const t = await outputText(L.page); return /hello from the lead/.test(t) && /Finished/.test(t) ? t : null; }, 20_000);

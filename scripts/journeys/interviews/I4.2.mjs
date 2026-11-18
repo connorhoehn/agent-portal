@@ -98,6 +98,8 @@ export default async function run(ctx) {
     });
     await step('I4.2e', async () => {
       const inserts = { lead: await H.page.getByTestId('interview-pad-insert').count(), panel: await W.page.getByTestId('interview-pad-insert').count(), candidate: await C.page.getByTestId('interview-pad-insert').count() };
+      // I4.2d's typing from the three may still be arriving: start from a pad all three agree on.
+      await until(async () => { const [h, w, c] = [await padText(H.page), await padText(W.page), await padText(C.page)]; return h === w && w === c ? true : null; }, 12_000);
       const before = await padText(H.page);
       await H.page.getByTestId('interview-pad-insert').first().click({ timeout: 5000 });
       await H.page.getByRole('menuitem').first().click({ timeout: 5000 });
