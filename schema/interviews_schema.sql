@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS interview_openings (
   interview_cap_usd  NUMERIC(10, 2)
 );
 CREATE INDEX IF NOT EXISTS interview_openings_hiring_manager_idx ON interview_openings (hiring_manager_id);
+-- A table created by the first copy of this file has no revision: added here so a re-apply brings it level with a fresh load.
+ALTER TABLE interview_openings ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1);
 ALTER TABLE interview_openings ADD COLUMN IF NOT EXISTS interview_cap_usd NUMERIC(10, 2);
 
 -- ── candidates ──────────────────────────────────────────────────────────────
@@ -135,6 +137,11 @@ CREATE TABLE IF NOT EXISTS interviews (
 ALTER TABLE interviews DROP COLUMN IF EXISTS invite_token_hash;
 -- When the lead started it (the record's clock and header show when it ran, not when it was set for); for tables made before it.
 ALTER TABLE interviews ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+-- Columns a table created by an early copy of this file lacks (the panel's answers and the compare-and-set revision):
+-- added here so a re-apply on an existing cluster brings it level with a fresh load.
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS acceptances JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS declines JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1);
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);
 
