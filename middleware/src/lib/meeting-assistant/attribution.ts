@@ -17,7 +17,8 @@ export interface TranscriptSpan { startMs: number; endMs: number }
 export interface Attribution {
   /**
    * The primary speaker: the one participant who covers at least `PRIMARY_SHARE` of the voiced time inside the line's own span.
-   * Null when nobody was voiced, and also when nobody dominates (two people starting together): such a line names nobody.
+   * Null when nobody was voiced, when nobody dominates (two people starting together), and when anyone else was voiced for
+   * `SECONDARY_MAX_MS` or more inside the span (the words cannot be told apart): such a line names nobody.
    */
   userId: string | null;
   /** Everyone voiced for at least `min(30% of the span, 400 ms)` and with at least a quarter of the loudest's normalised energy in the span, the one with most voiced time first. Empty when unattributed. */
@@ -39,6 +40,13 @@ export const ENERGY_SHARE_MIN = 0.25;
  * together leave each with about a half. 0.6 sits between the two, with room for frame jitter on either side.
  */
 export const PRIMARY_SHARE = 0.6;
+/**
+ * Nobody is the primary speaker of a line in which anyone else was voiced for this long: a mixed transcript cannot say whose words
+ * are whose, and a whole sentence of one person's must never be credited to another (a live interview, 17 November: the lead's
+ * question, spoken over the candidate, was stored as the candidate's). A short interjection under a long line ("Right.") or the tail
+ * of a sentence a request was spoken over stays under it.
+ */
+export const SECONDARY_MAX_MS = 2_000;
 /** A noise-normalised level (level over the participant's own floor) counts for at most this much, so one very loud microphone cannot outweigh a person. */
 const NORMALISED_LEVEL_CAP = 10;
 export const TIMELINE_RETAIN_MS = 10 * 60_000;
@@ -110,7 +118,8 @@ export function attribute(intervals: readonly VoicedInterval[], piece: Transcrip
   if (!kept.length) return { userId: null, speakers: [] };
   kept.sort((a, b) => b.voiced - a.voiced || a.first - b.first || a.userId.localeCompare(b.userId));
   const total = kept.reduce((n, s) => n + s.voiced, 0);
-  const primary = kept[0]!.voiced >= total * PRIMARY_SHARE ? kept[0]!.userId : null;
+  const others = kept.slice(1).reduce((n, s) => Math.max(n, s.voiced), 0);
+  const primary = kept[0]!.voiced >= total * PRIMARY_SHARE && others < SECONDARY_MAX_MS ? kept[0]!.userId : null;
   return { userId: primary, speakers: kept.map((s) => s.userId) };
 }
 
@@ -158,33 +167,47 @@ export interface TranscriptPart { text: string; startMs: number; endMs: number }
 /**
  * Split one heard turn where the voice changes. The provider groups everything said without a long pause into one turn, so a
  * request spoken right after someone else's sentence arrives joined to it, and the whole turn then has no single speaker. Each
- * part is attributed on its own; a part one person alone voiced that is not the current group's person starts a new group, and a
- * part nobody (or several people) voiced stays with the group it follows. Text is joined as the provider sent it.
+ * part is attributed on its own; a part one person alone voiced that is not the current group's person starts a new group, a part
+ * several people voiced at once belongs to a group of its own (overlapped speech: credited to nobody when it is stored, never folded
+ * into one speaker's line), and a part nobody voiced stays with the group it follows. Text is joined as the provider sent it.
  */
 export const SPLIT_MIN_MS = 1_200;
-export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: readonly TranscriptPart[]): TranscriptPart[] {
+/** A stretch several people voiced at once that is at least this long is a line of its own, credited to nobody. */
+export const MIXED_MIN_MS = 600;
+/** The owner of a group of parts several people voiced at once. */
+const MIXED = '\u0000mixed';
+/** A piece of a split turn; `mixed` when several people were voiced through it (stored naming nobody). */
+export interface SplitPiece extends TranscriptPart { mixed?: true }
+export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: readonly TranscriptPart[]): SplitPiece[] {
   const groups: Array<{ owner: string | null; parts: TranscriptPart[] }> = [];
   for (const p of parts) {
     const a = attribute(intervals, p);
-    const single = a.userId !== null && a.speakers.length === 1 ? a.userId : null;
+    const owner = a.speakers.length > 1 ? MIXED : a.userId !== null && a.speakers.length === 1 ? a.userId : null;
     const g = groups[groups.length - 1];
-    if (!g || (single !== null && g.owner !== null && single !== g.owner)) { groups.push({ owner: single, parts: [p] }); continue; }
+    if (!g || (owner !== null && g.owner !== null && owner !== g.owner)) { groups.push({ owner, parts: [p] }); continue; }
     g.parts.push(p);
-    if (g.owner === null) g.owner = single;
+    if (g.owner === null) g.owner = owner;
   }
   // A sentence mark the provider put at the head of the next piece belongs to the line before; it is dropped from the new one.
   // A group shorter than SPLIT_MIN_MS is a word or two at the edge of someone's turn that the noisy word times put on the neighbouring
   // voice (paid run: "Milo, what is" went to the person who had just stopped); it stays with the group before it (or after, first).
   for (let i = 0; i < groups.length && groups.length > 1;) {
     const g = groups[i]!;
-    if (g.parts[g.parts.length - 1]!.endMs - g.parts[0]!.startMs >= SPLIT_MIN_MS) { i += 1; continue; }
-    const into = i > 0 ? groups[i - 1]! : groups[i + 1]!;
-    if (i > 0) into.parts.push(...g.parts); else into.parts.unshift(...g.parts);
+    // Overlapped speech is kept apart from MIXED_MIN_MS on. Shorter is a word or two where one voice takes over from another: it goes
+    // with the voice that carries on after it (someone starting over the end of a sentence: "Milo," said as Vera finishes is Mia's),
+    // and the line it joins names nobody when the other voice in it reaches SECONDARY_MAX_MS.
+    if (g.parts[g.parts.length - 1]!.endMs - g.parts[0]!.startMs >= (g.owner === MIXED ? MIXED_MIN_MS : SPLIT_MIN_MS)) { i += 1; continue; }
+    const forward = i === 0 || (g.owner === MIXED && i + 1 < groups.length);
+    const into = forward ? groups[i + 1]! : groups[i - 1]!;
+    if (forward) into.parts.unshift(...g.parts); else into.parts.push(...g.parts);
     groups.splice(i, 1);
-    if (i > 0) i -= 1;
+    if (!forward) i -= 1;
   }
   for (let i = 1; i < groups.length;) { if (groups[i]!.owner === groups[i - 1]!.owner) { groups[i - 1]!.parts.push(...groups[i]!.parts); groups.splice(i, 1); } else i += 1; }
-  return groups.map((g, i) => ({ text: g.parts.map((p) => p.text).join('').replace(/\s+/g, ' ').trim().replace(i > 0 ? /^[.!?…]+\s*/ : /^$/, ''), startMs: g.parts[0]!.startMs, endMs: g.parts[g.parts.length - 1]!.endMs })).filter((g) => g.text);
+  return groups.map((g, i): SplitPiece => ({
+    text: g.parts.map((p) => p.text).join('').replace(/\s+/g, ' ').trim().replace(i > 0 ? /^[.!?…]+\s*/ : /^$/, ''), startMs: g.parts[0]!.startMs, endMs: g.parts[g.parts.length - 1]!.endMs,
+    ...(g.owner === MIXED ? { mixed: true as const } : {}),
+  })).filter((g) => g.text);
 }
 
 export interface TimelineOptions {

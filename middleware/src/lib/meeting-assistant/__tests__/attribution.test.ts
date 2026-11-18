@@ -10,8 +10,13 @@ describe('attribute', () => {
   });
 
   it('overlap lists both, the one voiced longer first; the third who barely spoke is left out', () => {
-    const a = [iv('alice', 1000, 6000), iv('bob', 3000, 6000), iv('carol', 1000, 1100)];
+    const a = [iv('alice', 1000, 6000), iv('bob', 4500, 6000), iv('carol', 1000, 1100)];
     expect(attribute(a, { startMs: 1000, endMs: 6000 })).toEqual({ userId: 'alice', speakers: ['alice', 'bob'] });
+  });
+
+  it('a line in which someone else spoke a sentence over the primary (2 s or more) names nobody: its words cannot be told apart', () => {
+    const a = [iv('alice', 1000, 6000), iv('bob', 3000, 6000)];
+    expect(attribute(a, { startMs: 1000, endMs: 6000 })).toEqual({ userId: null, speakers: ['alice', 'bob'] });
   });
 
   it('the threshold is the smaller of 30% of the span and 400 ms', () => {
@@ -220,5 +225,40 @@ describe('the provider\'s transcript lag', () => {
     const intervals = [iv('vera', 21_584, 24_664), iv('nora', 25_065, 27_585)];
     const parts = [{ text: ' Milo, create', startMs: 21_600, endMs: 23_000 }, { text: ' a work item', startMs: 23_000, endMs: 24_600 }, { text: '. Milo, how is', startMs: 25_200, endMs: 26_400 }, { text: ' the weather', startMs: 26_400, endMs: 27_500 }];
     expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Milo, create a work item', startMs: 21_600, endMs: 24_600 }, { text: 'Milo, how is the weather', startMs: 25_200, endMs: 27_500 }]);
+  });
+});
+
+describe('overlapped speech in one heard turn (live interview, 17 November)', () => {
+  // The voiced intervals of the paid walk's first turn (13.2 to 23.6 s): the candidate alone, then the lead's question spoken over
+  // the candidate's next sentence. Before, the whole turn was stored as the candidate's with the lead's words in it.
+  const G = 'guest:inv-1', L = 'u-lead';
+  const intervals = [iv(G, 12_445, 15_525), iv(G, 15_905, 19_265), iv(L, 16_727, 17_607), iv(L, 17_947, 19_287), iv(G, 19_585, 20_745), iv(L, 19_667, 21_967), iv(G, 21_065, 22_905)];
+  const parts = Array.from({ length: 26 }, (_, i) => ({ text: ` w${i}`, startMs: 13_200 + i * 400, endMs: 13_600 + i * 400 }));
+
+  it('the candidate\'s clean stretch is the candidate\'s line; the overlapped stretch is a line of its own that names nobody', () => {
+    const pieces = splitBySpeaker(intervals, parts);
+    expect(pieces.length).toBeGreaterThan(1);
+    const first = attribute(intervals, pieces[0]!);
+    expect(first.userId).toBe(G);
+    expect(pieces[0]!.endMs).toBeLessThanOrEqual(16_800);
+    // No stored line credits the lead's speech to the candidate: every piece that covers the lead's voice names nobody (or the lead).
+    for (const p of pieces.slice(1)) {
+      const a = attribute(intervals, p);
+      if (a.speakers.includes(L)) expect(a.userId === null || a.userId === L).toBe(true);
+    }
+  });
+
+  it('the whole turn, attributed as one line, names nobody', () => {
+    expect(attribute(intervals, { startMs: 13_200, endMs: 23_600 })).toEqual({ userId: null, speakers: [G, L] });
+  });
+
+  it('a request spoken over the tail of someone\'s sentence still names the one who asked', () => {
+    const a = [iv('vera', 0, 6000), iv('mia', 5200, 7300)];
+    const req = Array.from({ length: 6 }, (_, i) => ({ text: ` r${i}`, startMs: 5200 + i * 350, endMs: 5550 + i * 350 }));
+    const before = Array.from({ length: 12 }, (_, i) => ({ text: ` v${i}`, startMs: i * 430, endMs: (i + 1) * 430 }));
+    const pieces = splitBySpeaker(a, [...before, ...req]);
+    const last = pieces[pieces.length - 1]!;
+    expect(last.text).toContain('r5');
+    expect(attribute(a, last).userId).toBe('mia');
   });
 });

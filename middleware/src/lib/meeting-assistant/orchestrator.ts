@@ -1259,11 +1259,13 @@ export class AssistantRuntime {
     for (const p of pieces) await this.storePiece(run, p, inputNo, pieces.length === 1);
   }
 
-  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number }, inputNo = 0, whole = true): Promise<void> {
+  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number; mixed?: true }, inputNo = 0, whole = true): Promise<void> {
     const intervals = run.timeline.intervals();
     for (const i of intervals) if (i.endMs >= e.startMs - 2500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
     const lag = transcriptLag(run.lagSamples);
-    const who = attribute(intervals, { startMs: e.startMs - lag, endMs: e.endMs - lag });
+    const found = attribute(intervals, { startMs: e.startMs - lag, endMs: e.endMs - lag });
+    // Speech several people voiced at once names nobody: whose words are whose cannot be told from one mixed transcript.
+    const who = e.mixed && found.speakers.length > 1 ? { userId: null, speakers: found.speakers } : found;
     // A whole turn one person clearly spoke measures the lag: how far its reported start lies after that person's voice began.
     if (whole && who.userId !== null && who.speakers.length === 1) {
       const sample = lagSample(intervals, who.userId, e, lag);
