@@ -2,7 +2,7 @@
  "voices": {
   "hugo": {
    "speaker": "ryan",
-   "instruct": "A warm, upbeat interviewer in his forties, friendly and conversational, smiling as he speaks, relaxed and natural, with lively intonation."
+   "instruct": "A warm, upbeat interviewer in his forties, friendly and conversational, smiling as he speaks, relaxed and natural, with lively intonation and a steady, natural speaking pitch."
   },
   "cand": {
    "speaker": "aiden",
@@ -10,7 +10,35 @@
   }
  },
  "lines": {
+  "h00": [
+   "hugo",
+   "Alright, let's get this call started."
+  ],
+  "p01": [
+   "cand",
+   "Okay, before I join, let me read this first."
+  ],
+  "p02": [
+   "cand",
+   "Recording the call? Sure, that's fine."
+  ],
+  "p03": [
+   "cand",
+   "A transcript, yep, that makes sense."
+  ],
+  "p04": [
+   "cand",
+   "And Milo helping them out? Yeah, why not."
+  ],
+  "p05": [
+   "cand",
+   "Camera's on, and the mic is working. Good to go."
+  ],
   "h01": [
+   "hugo",
+   "Oh, there's Mateo in the waiting room. Let me bring him in."
+  ],
+  "h02": [
    "hugo",
    "Hey, good morning, Mateo!"
   ],
@@ -18,105 +46,193 @@
    "cand",
    "Morning! Thanks for having me."
   ],
-  "h02": [
+  "h03": [
    "hugo",
-   "Of course! I'm Hugo, I'll be running today's session, and Milo's here taking notes for us. How's your week going?"
+   "Of course! I'm Hugo, and I'll be running today's session. I've also brought in Milo, our AI support for the interview. Milo, would you introduce yourself?"
   ],
   "c02": [
    "cand",
-   "Pretty good, honestly! A little busy, but good."
-  ],
-  "h03": [
-   "hugo",
-   "Great, let's get started. So, what's your experience with data structures and algorithms?"
-  ],
-  "c03": [
-   "cand",
-   "Yeah, so... I use them every day, really. Mostly hash maps and queues in our payment services. And lately I've been tuning a cache, so I think about lookups a lot."
+   "Nice to meet you, Milo!"
   ],
   "h04": [
    "hugo",
-   "Nice, that's useful here. Okay, a coding problem. Given an array of integers and a target, return the indices of the two numbers that add up to the target."
+   "So, how's your week going so far?"
+  ],
+  "c03": [
+   "cand",
+   "Pretty good, honestly! A little busy, but good."
   ],
   "h05": [
    "hugo",
-   "We usually use Java here, but pick whatever you like. What language would you like to use?"
+   "Great, let's get started. So, what's your experience with data structures and algorithms?"
   ],
   "c04": [
    "cand",
-   "Python, please."
+   "Honestly, I use Claude Code a lot now, and I love the new frontier models. But I still keep my data structures and algorithms sharp, because you need to know when the code it writes is right."
   ],
   "h06": [
    "hugo",
-   "Python it is. I'm dropping the problem into the pad now."
-  ],
-  "c05": [
-   "cand",
-   "Quick question... can I use the same number twice? And is there always exactly one answer?"
+   "Same here! That's exactly why we still do this round. Okay, let's get into a coding problem."
   ],
   "h07": [
    "hugo",
-   "Good question. There's always exactly one answer, and you can't use the same element twice."
-  ],
-  "c06": [
-   "cand",
-   "Okay. So the brute force is to check every pair, that's O of n squared. But I think I can do better with a hash map."
-  ],
-  "c07": [
-   "cand",
-   "I'll use a dictionary to store what I've seen... and for each number, I check whether its complement is already in there."
-  ],
-  "c4": [
-   "cand",
-   "Milo, how much time is left?"
-  ],
-  "c09": [
-   "cand",
-   "Okay, let me run it on a couple of cases."
-  ],
-  "c10": [
-   "cand",
-   "Hmm, the three, three case gives zero, zero. Oh, I'm storing the number before I check it. Let me swap those two lines."
-  ],
-  "c11": [
-   "cand",
-   "Okay. Zero, one... and zero, one. That looks right."
+   "Given an array of integers and a target, return the indices of the two numbers that add up to the target."
   ],
   "h08": [
    "hugo",
-   "Nice. What's the runtime complexity?"
+   "We usually use Java here, but pick whatever you're comfortable with. What would you like to use?"
   ],
-  "c12": [
+  "c05": [
    "cand",
-   "It's oh of en time, since we only pass through the list once... and oh of en space, for the map."
-  ],
-  "c3": [
-   "cand",
-   "Milo, can you repeat the question?"
-  ],
-  "c13": [
-   "cand",
-   "Sure! I'd test the example from the problem, a case with no valid pair, duplicates like three and three, and negative numbers. Maybe an empty list too."
+   "Python, please!"
   ],
   "h09": [
    "hugo",
-   "Great, thanks. That's most of our time. Do you have any questions for me?"
+   "Python it is. I'm dropping the problem into the pad now."
   ],
-  "c14": [
+  "c06": [
    "cand",
-   "Yeah, actually. What does a typical week look like for the team?"
+   "Quick question. Can I use the same number twice? And is there always exactly one answer?"
   ],
   "h10": [
    "hugo",
-   "Lots of pairing, a design review on Tuesdays, and we ship most days. As for next steps, our recruiter will be in touch in a few days."
+   "Good question. There's always exactly one answer, and you can't use the same element twice."
   ],
-  "c15": [
+  "c07": [
    "cand",
-   "Awesome. Thanks so much, Hugo, this was really fun!"
+   "Okay. So the brute force is to check every pair, and that's n squared. But I think I can do better with a hash map."
+  ],
+  "c08": [
+   "cand",
+   "I'll use a dictionary to store what I've seen, and for each number, I check whether its complement is already in there."
+  ],
+  "c09": [
+   "cand",
+   "Milo, how much time is left?"
+  ],
+  "c10": [
+   "cand",
+   "Okay, perfect, plenty of time. Let me add the tricky case, three and three, with a target of six."
+  ],
+  "c11": [
+   "cand",
+   "Alright, let's run it and see."
   ],
   "h11": [
    "hugo",
-   "Thanks, Mateo! Take care."
+   "Let's see what it says."
+  ],
+  "c12": [
+   "cand",
+   "Hmm, it's returning the same index twice for the three-three case. Oh, I see it! I'm storing the number before I check for its complement. Let me swap those two lines."
+  ],
+  "c13": [
+   "cand",
+   "Okay, running it again."
+  ],
+  "h12": [
+   "hugo",
+   "Fingers crossed!"
+  ],
+  "c14": [
+   "cand",
+   "There we go! Both pairs come back right now."
+  ],
+  "c15": [
+   "cand",
+   "Hey Milo, can you generate another dozen test cases for me?"
+  ],
+  "c16": [
+   "cand",
+   "Oh, nice, that's a lot of edge cases. Let me run those too."
+  ],
+  "h13": [
+   "hugo",
+   "That's a handy trick."
+  ],
+  "c17": [
+   "cand",
+   "And they all pass. Nice!"
+  ],
+  "h14": [
+   "hugo",
+   "Nice work. So, what's the runtime complexity?"
+  ],
+  "c18": [
+   "cand",
+   "It's linear time, since we only pass through the list once, and linear space for the hash map."
+  ],
+  "h15": [
+   "hugo",
+   "Exactly right. And what if the array were already sorted? Would you do anything differently?"
+  ],
+  "c19": [
+   "cand",
+   "Oh, then I'd use two pointers, one at each end, and walk them toward each other. That gets the space down to constant."
+  ],
+  "h16": [
+   "hugo",
+   "Nice. Do you run into that pattern much in your day job?"
+  ],
+  "c20": [
+   "cand",
+   "All the time, actually, especially when we reconcile payment batches against each other."
+  ],
+  "h17": [
+   "hugo",
+   "That makes sense. Give me a second, I'm just jotting down a couple of notes."
+  ],
+  "c21": [
+   "cand",
+   "Sure, no rush."
+  ],
+  "h18": [
+   "hugo",
+   "Ooh, that's a good follow-up. I'll let our assistant ask it."
+  ],
+  "c22": [
+   "cand",
+   "Milo, can you repeat the question?"
+  ],
+  "c23": [
+   "cand",
+   "Sure! I'd test the example from the problem, a case with no valid pair, duplicates like three and three, and negative numbers. Maybe an empty list too."
+  ],
+  "h19": [
+   "hugo",
+   "Great answer. Let me check one thing in my notes before we wrap up."
+  ],
+  "h20": [
+   "hugo",
+   "Okay, thanks. That's most of our time. Do you have any questions for me?"
+  ],
+  "c24": [
+   "cand",
+   "Yeah, actually. What does a typical week look like for the team?"
+  ],
+  "h21": [
+   "hugo",
+   "Lots of pairing, a design review on Tuesdays, and we ship most days. As for next steps, our recruiter will be in touch in a few days."
+  ],
+  "c25": [
+   "cand",
+   "Awesome. Thanks so much, Hugo, this was really fun!"
+  ],
+  "h22": [
+   "hugo",
+   "Thanks so much, Mateo. Take care, and have a great rest of your day."
+  ],
+  "c26": [
+   "cand",
+   "And I might want an LRU cache for a helper later on."
+  ],
+  "h23": [
+   "hugo",
+   "Hey Milo, Mateo wants to use an LRU cache. Can you add the import at the top for him to save time?"
+  ],
+  "c27": [
+   "cand",
+   "Oh, thanks, Milo!"
   ]
  }
 }

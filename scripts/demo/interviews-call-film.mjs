@@ -45,7 +45,7 @@
 // realtime/lobby-access, and the media server (live-video-streaming, `node src/server.js`) with its own PORT, WEB_PORT, REDIS_URL,
 // MEDIASOUP_RTC_PORT/MEDIASOUP_RTC_TCP_PORT and LIVE_CAPTIONS_ORIGIN=http://127.0.0.1:<mw port>. A second media server must not
 // share another one's redis (they would join one cluster) or ports.
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -84,7 +84,15 @@ const TIME_LINE = /(minutes? (are|is) left|minutes long|end of its time)/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film: set ${k} (see the header)`); process.exit(2); } return v; };
 
-// ── Voices: the kept take of every line, trimmed of leading and trailing silence, 48 kHz mono PCM16 ──
+// ── Voices: the kept take of every line, trimmed of leading and trailing silence, levelled to LINE_LUFS, 48 kHz mono PCM16 ──
+// Every line at one loudness: the takes came out between -16 and -27 LUFS (Hugo's quieter), and the edit used to even that out
+// with one dynamic loudness filter over the whole mix, which rode the gain up through the film's first minute.
+const LINE_LUFS = -16;
+const loudness = (file) => {
+  const r = spawnSync('ffmpeg', ['-nostats', '-hide_banner', '-i', file, '-af', 'ebur128', '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = /I:\s+(-?[\d.]+) LUFS\s*\n\s*Threshold/.exec(r.stderr ?? '') ?? /I:\s+(-?[\d.]+) LUFS/.exec((r.stderr ?? '').split('Summary:').pop() ?? '');
+  return m ? Number(m[1]) : null;
+};
 const VOICES = flag('--voices');
 if (!VOICES && !args.includes('--rehearse')) { console.error('film: --voices <dir> (interviews-film-voices.py output) is required to record'); process.exit(2); }
 const takes = VOICES ? JSON.parse(fs.readFileSync(path.join(VOICES, 'takes.json'), 'utf8')) : {};
@@ -94,9 +102,14 @@ fs.mkdirSync(AUDIO, { recursive: true });
 const CLIPS = {};
 for (const [id, t] of Object.entries(takes)) {
   const file = path.join(AUDIO, `${id}.wav`);
+  const trimmed = path.join(AUDIO, `${id}.trim.wav`);
   execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', t.kept.file, '-af',
     'silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse',
-    '-ar', '48000', '-ac', '1', '-c:a', 'pcm_s16le', file]);
+    '-ar', '48000', '-ac', '1', '-c:a', 'pcm_s16le', trimmed]);
+  const lufs = loudness(trimmed);
+  const gain = lufs === null ? 0 : Math.max(-12, Math.min(14, LINE_LUFS - lufs));
+  execFileSync('ffmpeg', ['-y', '-v', 'error', '-i', trimmed, '-af', `volume=${gain.toFixed(2)}dB,alimiter=limit=0.89:level=disabled`, '-ar', '48000', '-ac', '1', '-c:a', 'pcm_s16le', file]);
+  fs.rmSync(trimmed, { force: true });
   const secs = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file]).toString().trim());
   CLIPS[id] = { who: t.who, text: t.text, file, durMs: Math.round(secs * 1000) };
 }
@@ -191,7 +204,7 @@ const { rateAllUI, openRecapStep } = await import('../journeys/interviews/h4-kit
 
 // ── The record: timeline (for the edit) and report (for the verdict) ──
 const VIEW = { width: 1280, height: 800 };
-const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
+const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
 const report = { startedAt: new Date().toISOString(), interview: IV, steps: [], spend: null, notes: [] };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
@@ -217,6 +230,15 @@ const MIC = () => {
     const track = ensure().stream.getAudioTracks()[0].clone();
     return new MediaStream([...(video ? video.getVideoTracks() : []), track]);
   };
+  // A second of silence through the stream before the first line (the first line no longer wakes the context and the encoder).
+  window.__filmWarm = async () => {
+    const d = ensure();
+    await ac.resume();
+    const src = ac.createBufferSource();
+    src.buffer = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    src.connect(d);
+    await new Promise((resolve) => { src.onended = resolve; src.start(); });
+  };
   window.__filmSay = async (url) => {
     const d = ensure();
     await ac.resume();
@@ -235,6 +257,7 @@ async function person(key, userId) {
   if (userId) { const r = await context.request.post(`${PORTAL}/api/session/login`, { data: { userId } }); if (r.status() !== 200) throw new Error(`login ${userId}: ${r.status()}`); }
   for (const k of ['orgiq.call-prejoin.v1', 'interviews.guest-prejoin.v1']) await context.addInitScript(([kk]) => { try { localStorage.setItem(kk, JSON.stringify({ micOn: true, cameraOn: true, remember: true })); } catch { /* none */ } }, [k]);
   await context.addInitScript(MIC);
+  await context.addInitScript(CURSOR);
   await context.route(`${PORTAL}/__film-audio/**`, (route) => route.fulfill({ path: path.join(AUDIO, path.basename(new URL(route.request().url()).pathname)), contentType: 'audio/wav' }));
   const page = await context.newPage();
   timeline.videos[key] = { startMs: Date.now(), file: null };
@@ -259,7 +282,7 @@ async function say(p, id, gapMs = 1800) {
 }
 // Milo's voice, as the candidate's browser receives it (frames with arrival times; the edit places them). busy.until covers it.
 const voiceLog = fs.createWriteStream(path.join(OUT, 'assistant-voice.jsonl'));
-const milo = { frames: 0, utterances: 0, cur: null };
+const milo = { frames: 0, utterances: 0, cur: null, lastStartMs: 0 };
 function keepMiloVoice(page) {
   page.on('websocket', (ws) => ws.on('framereceived', ({ payload }) => {
     if (typeof payload !== 'string' || !payload.includes('assistant-audio')) return;
@@ -269,7 +292,7 @@ function keepMiloVoice(page) {
     milo.frames += 1;
     // One utterance runs while the frames follow each other (same run, next seq) until one says it is the last.
     const c = milo.cur;
-    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; }
+    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; }
     const u = milo.cur;
     u.seq = f.data.seq;
     u.done = f.data.last === true;
@@ -298,6 +321,8 @@ const BUGGY_BODY = [
   '    return []',
 ];
 const SECOND_CASE = 'print(two_sum([3, 3], 6))';
+/** The line Milo adds at the top of the pad when Hugo asks for it (the Milo-features lane's pad tool). */
+const LRU_IMPORT = 'from functools import lru_cache';
 const MOVED_LINE = '        seen[n] = i';
 const padOf = (page) => page.getByTestId('interview-pad').first();
 const padLanguage = (page) => padOf(page).getByTestId('interview-pad-language').first()
@@ -357,10 +382,12 @@ async function moveSeenAfterReturn(page) {
 /** Run from the candidate's side; both output panes read, and the product's own run containers counted (docker events, bounded). */
 async function runAndRead(cp, hp, want) {
   const since = Math.floor(Date.now() / 1000) - 1;
-  await cp.getByTestId('interview-pad-run').click();
-  const candOut = await until(async () => { const t = await outputText(cp); return want.test(t) && /Finished/i.test(t) ? t : null; }, 60_000);
-  const leadOut = await until(async () => { const t = await outputText(hp); return want.test(t) ? t : null; }, 20_000);
-  await sleep(2500);
+  const [was, wasLead] = [await outputText(cp), await outputText(hp)];
+  await press(cp, cp.getByTestId('interview-pad-run'));
+  // This run's output only: the pane still shows the last run's until the new one lands.
+  const candOut = await until(async () => { const t = await outputText(cp); return t !== was && want.test(t) && /Finished/i.test(t) ? t : null; }, 60_000);
+  const leadOut = await until(async () => { const t = await outputText(hp); return t !== wasLead && want.test(t) ? t : null; }, 20_000);
+  await sleep(600);
   let containers = 0;
   try {
     containers = execFileSync('docker', ['events', '--since', String(since), '--until', String(Math.floor(Date.now() / 1000)), '--filter', 'label=interviews.run=1', '--filter', 'event=start', '--format', '{{.Actor.Attributes.name}}'], { timeout: 15_000 })
@@ -377,8 +404,7 @@ const OPTION = { ask: /^I.ll ask it$/i, 'milo-ask': /have milo ask/i, skip: /^Sk
 async function answerSuggestion(page, re, option, ms) {
   const text = await until(async () => { const t = await deckShown(page); return t && re.test(t) ? t : null; }, ms, 700);
   if (!text) return null;
-  await page.waitForTimeout(900);
-  await deckOf(page).getByRole('button', { name: OPTION[option] }).first().click().catch((e) => note(`suggestion ${option}: ${String(e).slice(0, 80)}`));
+  await press(page, deckOf(page).getByRole('button', { name: OPTION[option] }).first(), { pause: 600 }).catch((e) => note(`suggestion ${option}: ${String(e).slice(0, 80)}`));
   return text;
 }
 /** Waits for a suggestion matching `re`; any other one shown meanwhile is skipped, as a lead would. → its text, or null. */
@@ -400,6 +426,86 @@ const miloPosts = async () => {
     .filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => squash(m.message ?? m.text ?? ''));
 };
 
+// ── What the viewer sees each person do: a soft cursor that travels to a control, rests on it, then presses it ──
+// A film overlay injected into these two browsers only (it follows the mouse and ignores it); the product's pages are not changed.
+const CURSOR = () => {
+  const put = () => {
+    if (document.getElementById('__film-cursor')) return;
+    const c = document.createElement('div');
+    c.id = '__film-cursor';
+    c.setAttribute('aria-hidden', 'true');
+    Object.assign(c.style, {
+      position: 'fixed', left: '-40px', top: '-40px', width: '24px', height: '24px', marginLeft: '-12px', marginTop: '-12px', borderRadius: '50%',
+      background: 'rgba(245, 158, 11, 0.30)', border: '2px solid rgba(245, 158, 11, 0.95)', boxShadow: '0 0 16px 7px rgba(245, 158, 11, 0.45)',
+      pointerEvents: 'none', zIndex: '2147483647', transition: 'transform 140ms ease-out',
+    });
+    document.documentElement.appendChild(c);
+    addEventListener('mousemove', (e) => { c.style.left = `${e.clientX}px`; c.style.top = `${e.clientY}px`; }, true);
+    addEventListener('mousedown', () => { c.style.transform = 'scale(0.65)'; }, true);
+    addEventListener('mouseup', () => { c.style.transform = 'scale(1)'; }, true);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', put); else put();
+};
+const cursorAt = new Map();
+/** Moves the cursor to (x, y) at a hand's pace (eased, about `ms`), from where it last was. */
+async function moveTo(page, x, y, ms = 700) {
+  const [x0, y0] = cursorAt.get(page) ?? [VIEW.width * 0.55, VIEW.height * 0.85];
+  const n = Math.max(10, Math.round(ms / 16));
+  for (let i = 1; i <= n; i += 1) {
+    const t = i / n; const e = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+    await page.mouse.move(x0 + (x - x0) * e, y0 + (y - y0) * e);
+    await sleep(16);
+  }
+  cursorAt.set(page, [x, y]);
+}
+/** The cursor to the middle of `locator`, then a rest of `pause` ms (reading it). False when it has no box. */
+async function glide(page, locator, { pause = 450, ms = 700 } = {}) {
+  await locator.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => undefined);
+  const box = await locator.boundingBox({ timeout: 10_000 }).catch(() => null);
+  if (!box) return false;
+  await moveTo(page, box.x + box.width / 2, box.y + Math.min(box.height / 2, 28), ms);
+  await page.waitForTimeout(pause);
+  return true;
+}
+/** The cursor travels to the control and rests on it, then it is pressed. */
+async function press(page, locator, { pause = 450, timeout = 30_000 } = {}) {
+  await locator.waitFor({ timeout });
+  await glide(page, locator, { pause });
+  await locator.click({ timeout });
+  const box = await locator.boundingBox().catch(() => null);
+  if (box) cursorAt.set(page, [box.x + box.width / 2, box.y + box.height / 2]);
+}
+/** Reads a scrolling block: the cursor rests on it and the wheel takes it down to its end over about `ms`. */
+async function scrollThrough(page, locator, ms = 4000) {
+  if (!(await glide(page, locator, { pause: 500 }))) return;
+  const left = await locator.evaluate((el) => Math.max(0, el.scrollHeight - el.clientHeight)).catch(() => 0);
+  const steps = Math.max(1, Math.round(ms / 120));
+  for (let i = 0; i < steps; i += 1) { await page.mouse.wheel(0, Math.ceil(left / steps)); await sleep(120); }
+  await page.waitForTimeout(500);
+}
+/** Hugo starts (or joins) the room's call from the footer, as h8-room.mjs `joinCall` does, with the cursor. */
+async function startCall(page) {
+  const start = page.getByTestId('shell-footer-context-start').or(page.getByTestId('shell-footer-context-join')).first();
+  await start.waitFor({ timeout: 30_000 });
+  await until(async () => !(await start.isDisabled()), 20_000);
+  await press(page, start);
+  const confirm = page.getByRole('dialog').getByRole('button', { name: /join|start|continue/i }).last();
+  if (await confirm.waitFor({ timeout: 3000 }).then(() => true, () => false)) await press(page, confirm);
+  await page.getByTestId('shell-call-dock').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+}
+/** The page's microphone stream runs a second of silence before its first line, so that line is not the one that wakes it. */
+async function warmMic(p) { await p.evaluate(() => window.__filmWarm?.()).catch((e) => note(`mic warm-up: ${String(e).slice(0, 80)}`)); }
+/**
+ * A stretch where nothing happens on screen (a page loading, the call connecting, the coach's 90-second pace, the recap being
+ * written): the edit cuts it and shows "Skipping ahead". Call the result when the wait is over. Never used around anything Milo
+ * says or is asked (interviews-film-compose.py also keeps every cut clear of speech and of Milo's voice): Milo's latency is shown
+ * as it was.
+ */
+function skipFrom(caption) {
+  const fromMs = Date.now();
+  return () => { const toMs = Date.now(); if (toMs - fromMs > 2500) timeline.cuts.push({ fromMs: fromMs + 700, toMs: toMs - 700, caption }); };
+}
+
 let lead; let cand; let greta; let callId = null;
 const REHEARSE = args.includes('--rehearse');
 try {
@@ -416,47 +522,80 @@ try {
   const chosen = ((await prep.json().catch(() => ({}))).interview?.questionsChosen ?? []).map((q) => q.id);
   step('0 Two Sum chosen in Prepare', prep.status() === 200 && chosen.join() === QUESTION_ID, `PUT questions ${prep.status()}; chosen ${JSON.stringify(chosen)}`);
 
-  // 1. Hugo opens the room and starts the call.
-  await hp.goto(`${PORTAL}/interviews/rounds/${IV}/room`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // 1. Hugo's Prepare (the Coding round, Two Sum chosen), then the room; he starts the call.
+  await hp.goto(`${PORTAL}/interviews/rounds/${IV}/prepare`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  await hp.getByTestId('interviews-prepare').first().waitFor({ timeout: 60_000 });
+  await hp.waitForTimeout(1500);
+  timeline.film.fromMs = Date.now() - 800;
+  scene(1, 'Hugo prepares and starts the call', 'Hugo checks the Coding round in Prepare (Two Sum is the chosen question), opens the room and starts the call. The recruiter makes the candidate\'s invite link.');
+  const prepText = squash(await hp.getByTestId('interviews-prepare').first().innerText().catch(() => ''));
+  step('1p Prepare shows the Coding round with Two Sum', /Coding/.test(prepText) && /array of integers/i.test(prepText), `Prepare reads "${prepText.slice(0, 160)}"`);
+  await glide(hp, hp.getByTestId('interviews-prepare').getByText(/array of integers/i).first(), { pause: 1400 });
+  await press(hp, hp.getByTestId('interviews-prepare-room').first());
   await hp.getByTestId('interview-room').first().waitFor({ timeout: 60_000 });
-  await hp.waitForTimeout(2500);
-  timeline.film.fromMs = Date.now() - 1500;
-  scene(1, 'The lead starts the call', 'Hugo Marchetti opens the round\'s room and starts the call. The recruiter makes the candidate\'s invite link.');
-  await joinCall(hp);
+  const roomHead = squash(await hp.getByTestId('interview-room').first().innerText().catch(() => '')).slice(0, 400);
+  const h00 = say(lead, 'h00', 0);
+  await startCall(hp);
+  await h00;
   const live1 = await until(async () => ((await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}`)).json()).interview?.state === 'live' ? true : null), 20_000, 1000);
+  // Nothing happens on screen while the recruiter sends the link and the candidate's browser opens it: cut, and say so.
+  const cutLink = skipFrom('Skipping ahead: the recruiter sends the link and the candidate opens it');
   const inv = await greta.api.post(`${PORTAL}/api/interviews/interviews/${IV}/invite`, { data: {} });
   const link = (await inv.json().catch(() => ({}))).linkPath;
-  step('1 lead starts the call', !!live1 && !!link, `interview live=${!!live1}; invite ${inv.status()} link=${!!link}`);
+  step('1 lead starts the call', !!live1 && !!link && /Coding/.test(roomHead), `interview live=${!!live1}; invite ${inv.status()} link=${!!link}; the room says Coding=${/Coding/.test(roomHead)}`);
   if (!link) throw new Error('no invite link');
 
-  // 2. The candidate's door: answers, device check, waiting room; Hugo admits; the candidate joins.
+  // 2. The candidate's door at a person's pace: the notice read, each question answered by the candidate (nothing is pre-selected),
+  // the device check, the waiting room; Hugo admits; the candidate joins.
   cand = await person('cand', null);
   keepMiloVoice(cand.page);
   const cp = cand.page;
-  scene(2, 'The candidate joins', 'The candidate opens the link (no account), answers yes to recording, transcript and Milo, checks devices and waits. Hugo admits them.');
   await cp.goto(`${PORTAL}${link}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await cp.getByTestId('join-continue').click({ timeout: 30_000 }).catch(() => undefined);
+  const firstStep = await Promise.any(['join-interview', 'join-consents'].map((id) => cp.getByTestId(id).first().waitFor({ timeout: 30_000 }).then(() => id))).catch(() => null);
+  await cp.waitForTimeout(600);
+  cutLink();
+  scene(2, 'Before you begin', 'The candidate opens the link (no account). Nothing is chosen for them: they read the notice, answer each question themselves, check camera and microphone, and wait. Hugo admits them.');
+  if (firstStep === 'join-interview') {
+    await glide(cp, cp.getByTestId('join-interview').first(), { pause: 1600 });
+    await press(cp, cp.getByTestId('join-continue').first());
+  }
   await cp.getByTestId('join-consents').waitFor({ timeout: 30_000 });
-  for (const part of ['recording', 'transcription', 'milo']) { await cp.getByTestId(`join-consent-${part}-choice`).locator('label').filter({ hasText: /^Yes$/ }).click(); await cp.waitForTimeout(400); }
-  await cp.getByTestId('join-consents-continue').click();
+  const radiosChecked = () => cp.evaluate(() => [...document.querySelectorAll('[data-testid="join-questions"] input[type="radio"]')].filter((r) => r.checked).length).catch(() => -1);
+  const fresh = await radiosChecked();
+  const reading = say(cand, 'p01', 300);
+  await scrollThrough(cp, cp.getByTestId('join-notice').first(), 5000);
+  await reading;
+  // The three questions as they first show, with no answer chosen, held a moment before the first one is read.
+  await glide(cp, cp.getByTestId('join-questions').first(), { pause: 1800 });
+  for (const [part, line] of [['recording', 'p02'], ['transcription', 'p03'], ['milo', 'p04']]) {
+    await glide(cp, cp.getByTestId(`join-consent-${part}`).locator('p').first(), { pause: 700 });
+    await say(cand, line, 200);
+    await press(cp, cp.getByTestId(`join-consent-${part}-choice`).locator('label').filter({ hasText: /^Yes$/ }).first(), { pause: 350 });
+    await cp.waitForTimeout(600);
+  }
+  step('2a nothing pre-selected', fresh === 0 && (await radiosChecked()) === 3, `radios checked when the questions first showed: ${fresh}; after the candidate's three answers: ${await radiosChecked()}`);
+  await press(cp, cp.getByTestId('join-consents-continue'));
   await cp.getByTestId('join-devices').waitFor({ timeout: 30_000 });
-  await cp.waitForTimeout(2500);
-  await cp.getByTestId('join-devices-continue').click();
+  await glide(cp, cp.getByTestId('join-devices').first(), { pause: 900 });
+  await say(cand, 'p05', 200);
+  await press(cp, cp.getByTestId('join-devices-continue'));
   await cp.getByTestId('join-waiting').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
   const admit = hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first();
   await admit.waitFor({ timeout: 30_000 });
-  await hp.waitForTimeout(800);
-  await admit.click();
+  await say(lead, 'h01', 500);
+  await press(hp, admit);
   await cp.getByTestId('join-room').first().waitFor({ timeout: 30_000 });
   const join = cp.getByTestId('join-room-bar-start').or(cp.getByTestId('join-room-bar-join')).first();
   await join.waitFor({ timeout: 30_000 });
   for (let i = 0; i < 40 && await join.isDisabled(); i++) await sleep(250);
-  await join.click();
+  await press(cp, join);
   const now = cp.getByRole('button', { name: 'Join now', exact: true });
-  if (await now.first().waitFor({ timeout: 10_000 }).then(() => true, () => false)) await now.first().click();
+  if (await now.first().waitFor({ timeout: 10_000 }).then(() => true, () => false)) await press(cp, now.first());
+  const cutJoin = skipFrom('Skipping ahead: the call connects');
   await cp.getByTestId('join-room-time-left').first().waitFor({ timeout: 30_000 });
   const cams = async (pg) => pg.evaluate(() => [...document.querySelectorAll('video')].filter((v) => v.videoWidth > 0 && v.readyState >= 2).length).catch(() => 0);
   const tiles = await until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 1000);
+  cutJoin();
   step('2 both in the call with cameras', !!tiles, `live camera tiles: lead ${await cams(hp)}, candidate ${await cams(cp)}`);
   // From here until the lead ends the interview, the call must hold: the room's own lost-call notice on either side is a failure the
   // report names with its time (the product says a call dropped in interview-room-call-lost and join-room-call-lost).
@@ -467,8 +606,8 @@ try {
     }
   }, 2000);
 
-  // 3. Milo in, voice on (not in a rehearsal: nothing is spent); small talk; the warm-up question.
-  scene(3, 'Small talk', 'Hugo invites Milo and turns its voice on, says good morning and asks about data structures and algorithms.');
+  // 3. Milo in, voice on (not in a rehearsal: nothing is spent) while they say good morning; Milo introduces itself; small talk.
+  scene(3, 'Good morning, and Milo says hello', 'Hugo invites Milo, the interview\'s AI support, and turns its voice on. Milo introduces itself aloud; then small talk and data structures and algorithms.');
   let A = null;
   // Milo's state as the product reports it; every read keeps the listening time the product booked (the spend report's only source).
   const booked = { listeningSeconds: null, readStatus: null };
@@ -479,132 +618,209 @@ try {
     if (typeof body.listeningSeconds === 'number') booked.listeningSeconds = body.listeningSeconds;
     return body;
   };
+  for (const pg of [hp, cp]) { await warmMic(pg); await letSound(pg); }
   if (!REHEARSE) {
-    await hp.getByTestId('assistant-invite').first().click({ timeout: 15_000 });
-    await hp.getByTestId('assistant-budget-ask').getByRole('button', { name: /go ahead/i }).click({ timeout: 4000 }).catch(() => undefined);
+    await press(hp, hp.getByTestId('assistant-invite').first(), { timeout: 15_000 });
+    const goAhead = hp.getByTestId('assistant-budget-ask').getByRole('button', { name: /go ahead/i });
+    if (await goAhead.waitFor({ timeout: 4000 }).then(() => true, () => false)) await press(hp, goAhead);
+  }
+  // The greeting runs while Milo connects (nothing here needs Milo).
+  const greeting = (async () => { await say(lead, 'h02', 300); await say(cand, 'c01', 700); })();
+  if (!REHEARSE) {
     await until(async () => callId, 10_000);
     A = (rest) => `${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/${rest}`;
     const listening = await until(async () => ((await miloState()).state === 'listening' ? true : null), 30_000, 1000);
-    await hp.getByTestId('assistant-status-mark').first().click({ timeout: 10_000 }).catch(() => undefined);
-    await hp.getByRole('menuitem', { name: /Turn Milo's voice on/ }).click({ timeout: 10_000 }).catch(() => undefined);
+    await press(hp, hp.getByTestId('assistant-status-mark').first(), { timeout: 10_000 }).catch(() => undefined);
+    await press(hp, hp.getByRole('menuitem', { name: /Turn Milo's voice on/ }), { timeout: 10_000 }).catch(() => undefined);
     const voiceOn = await until(async () => ((await miloState()).voice === true ? true : null), 10_000, 500);
     if (!voiceOn) { const r = await lead.api.post(A('voice'), { data: { on: true } }); note(`voice on from the footer did not take; by the API ${r.status()}`); }
     step('3 Milo listening, voice on', !!listening, `Milo listening=${!!listening}; voice on from the footer=${!!voiceOn}; call ${callId}`);
   }
-  for (const pg of [hp, cp]) await letSound(pg);
-  await hp.waitForTimeout(2500);
-  await say(lead, 'h01', 0); await say(cand, 'c01', 1300);
-  await say(lead, 'h02', 1300); await say(cand, 'c02', 1300);
+  await greeting;
+  // Milo's introduction, asked aloud by Hugo (h03 ends "Milo, would you introduce yourself?").
+  // PLACEHOLDER until the Milo-features lane (iv-milo-features) reports its trigger: wired here as Hugo's spoken request.
+  const nIntro = milo.utterances;
+  await say(lead, 'h03', 700);
+  const introAt = Date.now();
+  const intro = A ? await miloSays(nIntro, 25_000) : false;
+  if (A) step('3i Milo introduces itself aloud', intro, `Milo spoke=${intro} ${intro ? `${((milo.lastStartMs - introAt) / 1000).toFixed(1)} s after Hugo finished` : ''}`);
+  await say(cand, 'c02', 700);
+  await say(lead, 'h04', 700); await say(cand, 'c03', 700);
   if (A) {
     const heard = await until(async () => { const l = (await (await lead.api.get(A('transcript?limit=50'))).json()).lines ?? []; return l.length ? l : null; }, 15_000, 1500);
     if (!heard) { note('Milo heard nothing; dismissed to stop the spend'); await lead.api.post(A('dismiss'), { data: {} }); await miloState().catch(() => undefined); A = null; }
   }
-  await say(lead, 'h03', 1300); await say(cand, 'c03', 1300);
+  await say(lead, 'h05', 700); await say(cand, 'c04', 700);
 
-  // 4. The coding question, the language, the pad. The coach's first suggestion is the chosen question: Hugo will ask it himself.
+  // 4. The coding question, the language, the pad. The coach's first suggestion is the chosen question: Hugo asks it himself.
+  // Hugo's reaction (h06) bridges the answer into the problem; the pad and the language are set while he speaks.
+  const s1p = answerSuggestion(hp, /array of integers/i, 'ask', 2500);
+  const bridge = say(lead, 'h06', 600);
+  await sleep(1200);
   scene(4, 'Two Sum, in Python', 'Hugo sets the coding problem. The pad is on Java; the candidate picks Python, so the starter code arrives in Python on both screens.');
-  const s1 = await answerSuggestion(hp, /array of integers/i, 'ask', 4000);
-  await say(lead, 'h04', 1300);
-  await padTab(hp); await padTab(cp);
-  const sync = !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500));
-  await chooseLanguage(hp, 'Java').catch((e) => note(`language Java: ${String(e).slice(0, 100)}`));
-  await say(lead, 'h05', 1300);
-  await say(cand, 'c04', 1300);
-  await chooseLanguage(cp, 'Python').catch((e) => note(`language Python: ${String(e).slice(0, 100)}`));
+  await bridge;
+  const s1 = await s1p;
+  const padReady = (async () => {
+    await padTab(hp); await padTab(cp);
+    const ok = !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500));
+    await chooseLanguage(hp, 'Java').catch((e) => note(`language Java: ${String(e).slice(0, 100)}`));
+    return ok;
+  })();
+  await say(lead, 'h07', 500);
+  const sync = await padReady;
+  await say(lead, 'h08', 600);
+  await say(cand, 'c05', 600);
+  const python = chooseLanguage(cp, 'Python').catch((e) => note(`language Python: ${String(e).slice(0, 100)}`));
+  await say(lead, 'h09', 500);
+  await python;
   const langBoth = !!(await until(async () => ((await padLanguage(hp)) === 'python' && (await padLanguage(cp)) === 'python') || null, 10_000, 400));
-  await say(lead, 'h06', 1300);
-  await hp.getByTestId('interview-pad-insert').click({ timeout: 8000 });
-  await hp.getByRole('menuitem').first().click({ timeout: 5000 });
+  await press(hp, hp.getByTestId('interview-pad-insert'), { timeout: 8000 });
+  await press(hp, hp.getByRole('menuitem').first(), { timeout: 5000 });
   const starter = !!(await until(async () => ((await padText(cp)) ?? '').includes('def two_sum(') || null, 10_000, 400));
   step('4 language switch and the question in the pad', sync && langBoth && starter,
     `both synced=${sync}; both read Python=${langBoth} (lead ${await padLanguage(hp)}, candidate ${await padLanguage(cp)}); Python starter in the candidate's pad=${starter}; the coach's first suggestion ${s1 ? `"${s1.slice(0, 80)}" answered I'll ask it` : 'not shown yet'}`);
 
-  // 5. Clarifying question, brute force, then the hash map typed with narration; the time asked mid-coding.
-  scene(5, 'Thinking out loud', 'The candidate asks a clarifying question, names the brute force, then types a hash-map solution while explaining it.');
-  await say(cand, 'c05', 1500); await say(lead, 'h07', 1300); await say(cand, 'c06', 1300);
-  const narr = say(cand, 'c07', 1300);
+  // 5. Clarifying question, brute force, the hash map typed with narration; Milo adds an import; the time asked mid-coding.
+  scene(5, 'Thinking out loud', 'The candidate asks a clarifying question, names the brute force and types a hash-map solution while explaining it. Hugo asks Milo to add an import; the candidate asks Milo how much time is left.');
+  await say(cand, 'c06', 900); await say(lead, 'h10', 600); await say(cand, 'c07', 600);
+  const narration = say(cand, 'c08', 600);
   await replaceStarterBody(cp, BUGGY_BODY);
-  await narr;
-  let nT = milo.utterances;
+  await narration;
+  // PLACEHOLDER until the Milo-features lane reports its pad tool (pad_add_import / pad_insert): wired as Hugo's spoken request.
+  await say(cand, 'c26', 600);
+  const nImport = milo.utterances;
+  await say(lead, 'h23', 600);
+  const imported = A ? !!(await until(async () => ((await padText(cp)) ?? '').includes(LRU_IMPORT) || null, 30_000, 500)) : false;
+  const importSaid = A ? await miloSays(nImport, 15_000) : false;
+  if (A) step('5i Milo adds the import at the top', imported && ((await padLines(cp))[0] ?? '').includes(LRU_IMPORT), `"${LRU_IMPORT}" in the pad=${imported}, first line "${(await padLines(cp))[0] ?? ''}"; Milo said so=${importSaid}`);
+  await say(cand, 'c27', 500);
+  const nT = milo.utterances;
   const posts0 = A ? (await miloPosts()).length : 0;
-  await say(cand, 'c4', 1500);
+  await say(cand, 'c09', 900);
   const timeSpoken = A ? await miloSays(nT, 30_000) : false;
   const timeLine = A ? (await until(async () => (await miloPosts()).slice(posts0).find((t) => TIME_LINE.test(t)) ?? null, 8000, 800) ?? '') : '';
   if (A) step('5 how much time is left (mid-coding)', timeSpoken && !!timeLine, `Milo spoke=${timeSpoken}; Milo's post "${timeLine.slice(0, 100)}"`);
-  await typeAtEnd(cp, SECOND_CASE);
+  const secondCase = (async () => { await sleep(2600); await typeAtEnd(cp, SECOND_CASE); })();
+  await say(cand, 'c10', 600);
+  await secondCase;
 
-  // 6. Run: the duplicate case fails; the fix; run again: it passes. Both sides see each run, executed in a real container.
-  scene(6, 'Run, fail, fix, pass', 'The first run really executes (a throwaway container, no network): the duplicate case prints [0, 0]. The candidate swaps two lines and runs again: [0, 1].');
-  await say(cand, 'c09', 1300);
-  const run1 = await runAndRead(cp, hp, /\[0, 0\]/);
-  await say(cand, 'c10', 1500);
-  await moveSeenAfterReturn(cp);
-  const run2 = await runAndRead(cp, hp, /\[0, 1\]\s*\[0, 1\]/);
-  await say(cand, 'c11', 1300);
+  // 6. Run: the duplicate case fails; the fix; run again: it passes. Both sides see each run, executed in a real container. The
+  // candidate and Hugo talk while each run executes.
+  scene(6, 'Run, fail, fix, pass', 'The first run really executes (a throwaway container, no network): the duplicate case returns the same index twice. The candidate swaps two lines and runs again: both pairs are right.');
+  const r1 = runAndRead(cp, hp, /\[0, 0\]/);
+  await say(cand, 'c11', 500);
+  await say(lead, 'h11', 400);
+  const run1 = await r1;
+  const fix = (async () => { await sleep(4200); await moveSeenAfterReturn(cp); })();
+  await say(cand, 'c12', 600);
+  await fix;
+  const r2 = runAndRead(cp, hp, /\[0, 1\]\s*\[0, 1\]/);
+  await say(cand, 'c13', 400);
+  await say(lead, 'h12', 300);
+  const run2 = await r2;
+  await say(cand, 'c14', 500);
   step('6 first run fails the duplicate case', !!run1.cand && !!run1.lead, `candidate "${squash(run1.cand ?? run1.lastCand).slice(0, 120)}"; lead sees it=${!!run1.lead}`);
   step('6b fixed run passes', !!run2.cand && !!run2.lead, `candidate "${squash(run2.cand ?? run2.lastCand).slice(0, 120)}"; lead sees it=${!!run2.lead}`);
   step('R code executed for real', run1.containers > 0 && run2.containers > 0 && !!run1.cand && !!run2.cand,
     `run containers seen: ${run1.containers} and ${run2.containers} (label interviews.run=1); outputs computed by the code ([0, 0] then [0, 1]), which the mock runner (literal prints only) cannot produce`);
 
-  // 7. Complexity (the coach's next suggestion, if shown, is the same question: Hugo takes it as his own).
-  scene(7, 'Complexity', 'Hugo asks for the runtime complexity; the candidate answers.');
-  const s2 = await answerSuggestion(hp, /complexity/i, 'ask', 15_000);
-  await say(lead, 'h08', 1300); await say(cand, 'c12', 1300);
+  // 7. Another dozen test cases from Milo, run.
+  // PLACEHOLDER until the Milo-features lane reports its test-case tool: wired as the candidate's spoken request, the pad watched.
+  scene(7, 'Milo writes test cases', 'The candidate asks Milo for another dozen test cases. Milo fills the pad with them, and the candidate runs them all.');
+  const linesBefore = (await padLines(cp)).length;
+  const nCases = milo.utterances;
+  await say(cand, 'c15', 900);
+  const askedAt = Date.now();
+  const filled = A ? await until(async () => ((await padLines(cp)).length >= linesBefore + 8 ? Date.now() : null), 45_000, 400) : null;
+  const casesSaid = A ? await miloSays(nCases, 10_000) : false;
+  if (A) step('7t Milo fills the pad with test cases', !!filled, `${(await padLines(cp)).length - linesBefore} lines added${filled ? ` ${((filled - askedAt) / 1000).toFixed(1)} s after the request` : ''}; Milo spoke=${casesSaid}`);
+  if (filled) {
+    const r3 = runAndRead(cp, hp, /Exit code 0/);
+    await say(cand, 'c16', 600);
+    await say(lead, 'h13', 400);
+    const run3 = await r3;
+    await say(cand, 'c17', 500);
+    step('7r the generated cases run', !!run3.cand, `candidate "${squash(run3.cand ?? run3.lastCand).slice(0, 120)}"`);
+  }
 
-  // 8. Milo's suggestion keyed to the answer so far: how would you test it. Have Milo ask; the candidate asks for the repeat; answers.
+  // 8. Complexity (the coach's suggestion of it, if shown, is taken as Hugo's own), then the conversation goes on until Milo's next
+  // suggestion arrives (the coach suggests at most one question every 90 s): the sorted-array follow-up and the candidate's work.
+  scene(8, 'Complexity', 'Hugo asks for the runtime complexity; the candidate answers, and they talk it through.');
+  const s2p = answerSuggestion(hp, /complexity/i, 'ask', 2500);
+  await say(lead, 'h14', 700);
+  const s2 = await s2p;
+  await say(cand, 'c18', 600);
+  const testingShown = async () => /test this function/i.test((await deckShown(hp)) ?? '');
+  for (const [p, id] of [[lead, 'h15'], [cand, 'c19'], [lead, 'h16'], [cand, 'c20'], [lead, 'h17'], [cand, 'c21']]) {
+    if (A && await testingShown()) break;
+    await say(p, id, 600);
+  }
+
+  // 9. Milo's suggestion keyed to the answers: how would you test it. Hugo reads it, says so and presses Have Milo ask; Milo says it;
+  // the candidate asks for the repeat, then answers.
   let testing = { deck: '', spoken: false, receipt: false, candQ: '' }; let repeated = false; let repeatLine = '';
   if (A) {
-    scene(8, 'Milo chimes in', 'A suggestion arrives in Hugo\'s footer (only he sees it): ask how they would test the function. He presses "Have Milo ask"; Milo says it aloud. The candidate asks Milo to repeat it, then answers.');
+    const cutCoach = skipFrom('Skipping ahead: Milo suggests at most one question every 90 seconds');
     const deck = await waitSuggestion(hp, /test this function/i, 150_000);
+    cutCoach();
+    scene(9, 'Milo chimes in', 'A suggestion arrives in Hugo\'s footer (only he sees it): ask how they would test the function. He reads it, presses "Have Milo ask" and Milo says it aloud. The candidate asks Milo to repeat it, then answers.');
     testing.deck = deck ?? '';
     if (deck) {
-      await hp.waitForTimeout(1200);
+      await glide(hp, deckOf(hp).first(), { pause: 1000 });
+      await say(lead, 'h18', 200);
       const n0 = milo.utterances;
-      await hp.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i }).click();
+      await press(hp, deckOf(hp).getByRole('button', { name: /have milo ask/i }).first());
+      const pressedAt = Date.now();
       // The receipt is the product's (interviewsRoom.ts miloAskReceipt): "Milo asked it aloud" when spoken, otherwise its reason.
       const RECEIPT = /Milo asked it aloud|Milo posted the question in the chat \([^)]*\)|Not sent: [^.]*\.|Milo did not say whether it was sent/;
-      testing.receiptText = (await until(async () => RECEIPT.exec(await hp.locator('body').innerText())?.[0] ?? null, 20_000, 500)) ?? '';
+      const receiptP = until(async () => RECEIPT.exec(await hp.locator('body').innerText())?.[0] ?? null, 20_000, 500);
+      testing.spoken = await miloSays(n0, 30_000);
+      testing.voiceAfterS = testing.spoken ? Number(((milo.lastStartMs - pressedAt) / 1000).toFixed(1)) : null;
+      testing.receiptText = (await receiptP) ?? '';
       testing.receipt = testing.receiptText === 'Milo asked it aloud';
       testing.candQ = squash(await until(async () => (await cp.getByTestId('guest-milo-question').first().innerText().catch(() => '')).trim() || null, 20_000) ?? '');
-      testing.spoken = await miloSays(n0, 30_000);
       const p1 = (await miloPosts()).length;
       const n1 = milo.utterances;
-      await say(cand, 'c3', 1500);
+      await say(cand, 'c22', 1500);
       repeated = await miloSays(n1, 25_000);
       repeatLine = (await miloPosts()).slice(p1).find((t) => /test this function/i.test(t)) ?? '';
     }
     step('7 coach follow-up keyed to the answers', !!deck, `complexity suggestion ${s2 ? `"${s2.slice(0, 60)}" (I'll ask it)` : 'not shown'}; testing suggestion "${squash(deck).slice(0, 120)}"`);
-    step('8 Have Milo ask, read aloud', testing.receipt && testing.spoken && !!testing.candQ, `receipt "${testing.receiptText || 'none shown'}"; Milo spoke=${testing.spoken}; candidate's Milo line "${testing.candQ.slice(0, 100)}"`);
+    step('8 Have Milo ask, read aloud', testing.receipt && testing.spoken && !!testing.candQ, `receipt "${testing.receiptText || 'none shown'}"; Milo spoke=${testing.spoken}${testing.voiceAfterS !== null ? ` ${testing.voiceAfterS} s after the press` : ''}; candidate's Milo line "${testing.candQ.slice(0, 100)}"`);
     step('9 repeat the question, spoken', repeated && !!repeatLine, `Milo spoke=${repeated}; Milo's post "${repeatLine.slice(0, 120)}"`);
   }
-  await say(cand, 'c13', 1300);
+  await say(cand, 'c23', 800);
 
-  // 9. Hugo asks Milo privately: "Should we hire them?" → the fixed sentence.
-  scene(9, 'Ask Milo: "Should we hire them?"', 'Hugo asks Milo privately whether to hire. Milo refuses with its fixed sentence: it only finds what was said; it never judges the candidate.');
+  // 10. Hugo asks Milo privately: "Should we hire them?" → the fixed sentence.
+  scene(10, 'Ask Milo: "Should we hire them?"', 'Hugo asks Milo privately whether to hire. Milo refuses with its fixed sentence: it only finds what was said; it never judges the candidate.');
+  const notes = say(lead, 'h19', 600);
   if (A) {
-    await hp.getByTestId('interview-room-pane-tab-milo').click({ timeout: 10_000 });
+    await press(hp, hp.getByTestId('interview-room-pane-tab-milo'), { timeout: 10_000 });
     const box = hp.getByRole('textbox', { name: 'Your question for Milo' });
     await box.waitFor({ timeout: 15_000 });
+    await press(hp, box);
     await box.pressSequentially('Should we hire them?', { delay: 45 });
-    await hp.getByTestId('interview-room-tab-milo').getByRole('button', { name: 'Ask', exact: true }).click();
+    await press(hp, hp.getByTestId('interview-room-tab-milo').getByRole('button', { name: 'Ask', exact: true }));
     const refusal = squash(await until(async () => { const t = squash(await hp.getByTestId('interview-room-milo-answer').first().innerText().catch(() => '')); return t.includes(FIXED_REFUSAL) ? t : null; }, 20_000, 500) ?? '');
-    await hp.waitForTimeout(3000);
+    await notes;
+    await hp.waitForTimeout(1500);
     const candBody = squash(await cp.locator('body').innerText());
     step('10 hire question refused', refusal.includes(FIXED_REFUSAL) && !candBody.includes('Should we hire'), `answer "${refusal.slice(0, 140)}"; on the candidate's page: ${candBody.includes('Should we hire')}`);
     await padTab(hp);
   }
+  await notes;
 
-  // 10. Questions for me, next steps, goodbye; end; scorecard; recap.
-  scene(10, 'Wrapping up', 'Hugo asks whether the candidate has questions, explains next steps and ends the interview.');
-  await say(lead, 'h09', 1300); await say(cand, 'c14', 1300); await say(lead, 'h10', 1300); await say(cand, 'c15', 1300); await say(lead, 'h11', 1300);
+  // 11. Questions for me, next steps, goodbye; end; scorecard; recap.
+  scene(11, 'Wrapping up', 'Hugo asks whether the candidate has questions, explains next steps and ends the interview.');
+  await say(lead, 'h20', 700); await say(cand, 'c24', 600); await say(lead, 'h21', 600); await say(cand, 'c25', 600); await say(lead, 'h22', 600);
   await hp.waitForTimeout(1500);
   if (A) await miloState().catch((e) => note(`Milo's state at the end: ${String(e).slice(0, 120)}`));
-  scene(11, 'Scorecard and recap', 'The candidate sees the ended page; Hugo lands on the scorecard, rates and opens Milo\'s recap: every statement sourced to what the candidate said.');
-  await hp.getByTestId('interview-end').click();
+  scene(12, 'Scorecard and recap', 'The candidate sees the ended page; Hugo lands on the scorecard, rates and opens Milo\'s recap: every statement sourced to what the candidate said.');
+  await press(hp, hp.getByTestId('interview-end'));
   clearInterval(watchLost);
   const at = (t) => (t === null ? 'never' : `${Math.round((t - timeline.film.fromMs) / 1000)} s into the film`);
   step('C the call held', lostSeen.lead === null && lostSeen.cand === null, `the lead's room said the call dropped: ${at(lostSeen.lead)}; the candidate's page: ${at(lostSeen.cand)}`);
-  await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }).click({ timeout: 10_000 });
+  await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { timeout: 10_000 });
   const endedAt = Date.now();
   const candEnded = await cp.getByTestId('join-ended').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
   await hp.waitForURL(new RegExp(`/interviews/rounds/${IV}/scorecard$`), { timeout: 20_000 }).catch(() => undefined);
@@ -614,12 +830,14 @@ try {
   const rated = await rateAllUI(hp, 3).catch(() => 0);
   await hp.waitForTimeout(1200);
   await openRecapStep(hp).catch((e) => note(`recap step: ${String(e).slice(0, 120)}`));
+  const cutRecap = skipFrom('Skipping ahead: Milo writes the recap');
   const recapOk = await hp.getByTestId('interviews-recap-competency').first().waitFor({ timeout: 90_000 }).then(() => true, () => false);
+  cutRecap();
   const claims = hp.getByTestId('interviews-recap-claim');
   const nClaims = await claims.count();
-  if (nClaims) { await claims.first().click().catch(() => undefined); await hp.waitForTimeout(1500); }
+  if (nClaims) { await press(hp, claims.first()).catch(() => undefined); await hp.waitForTimeout(1500); }
   const recapText = squash(await hp.getByTestId('interviews-scorecard-recap-step').first().innerText().catch(() => ''));
-  await hp.waitForTimeout(4000);
+  await hp.waitForTimeout(2500);
   timeline.film.toMs = Date.now();
   const ivState = (await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}`)).json()).interview?.state;
   step('11 end, scorecard', ivState === 'ended' && candEnded && rated > 0, `state ${ivState}; candidate ended page=${candEnded}; lead landed on the scorecard=${onScorecard}; ${rated} ratings`);

@@ -10,7 +10,10 @@
         line with the moment it was played into a microphone) and <dir>/assistant-voice.jsonl (Milo's voice frames as the
         candidate's browser received them) and writes one side-by-side film: Interviewer on the left, Candidate on the right,
         each labelled, a caption bar per scene, and the call's sound (both people's lines and Milo's voice, each placed at the
-        moment it was heard). This ffmpeg may have no drawtext, so every label and caption is a PNG drawn with Pillow.
+        moment it was heard, each sound levelled to LINE_LUFS, a limiter on the mix). The timeline's `cuts` (stretches where
+        nothing happens on screen) are taken out and marked with a "Skipping ahead" banner; a cut never covers a spoken line or
+        Milo's voice (it is shrunk to the silence around them, or dropped), so Milo's latency is shown as it was. This ffmpeg may
+        have no drawtext, so every label and caption is a PNG drawn with Pillow.
 """
 import argparse
 import base64
@@ -29,6 +32,7 @@ BG = (11, 18, 32)
 INK = (241, 245, 249)
 MUTED = (148, 163, 184)
 ACCENT = (245, 158, 11)
+LINE_LUFS = -16
 FONTS = ['/System/Library/Fonts/Helvetica.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
 
 
@@ -124,6 +128,84 @@ def caption_png(path, n, title, caption):
     img.save(path)
 
 
+def skip_png(path, text):
+    f = font(28, True)
+    d0 = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
+    w = int(d0.textlength(text, font=f)) + 80
+    img = Image.new('RGBA', (w, 64), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, w - 1, 63], radius=18, fill=(15, 23, 42, 235), outline=ACCENT, width=3)
+    d.text((40, 14), text, font=f, fill=INK)
+    img.save(path)
+    return w
+
+
+def gain_to(path, target=LINE_LUFS):
+    """The gain (dB) that brings a sound to `target` integrated loudness (0 when it cannot be measured)."""
+    r = subprocess.run(['ffmpeg', '-nostats', '-hide_banner', '-i', path, '-af', 'ebur128', '-f', 'null', '-'], capture_output=True, text=True)
+    for line in r.stderr.split('Summary:')[-1].splitlines():
+        line = line.strip()
+        if line.startswith('I:') and 'LUFS' in line:
+            try:
+                return max(-12.0, min(14.0, target - float(line.split()[1])))
+            except ValueError:
+                return 0.0
+    return 0.0
+
+
+def clear_cuts(cuts, sounds, t0, dur):
+    """Each cut (film seconds) shrunk to the silence between sounds (0.3 s kept each side); one shorter than 1.5 s is dropped."""
+    busy = sorted(((c['atMs'] - t0) / 1000 - 0.3, (c['atMs'] - t0) / 1000 + c['secs'] + 0.3) for c in sounds)
+    kept = []
+    for cut in cuts:
+        a, b = max(0.0, (cut['fromMs'] - t0) / 1000), min(dur, (cut['toMs'] - t0) / 1000)
+        for s0, s1 in busy:
+            if s1 <= a or s0 >= b:
+                continue
+            if s0 - a >= b - s1:
+                b = min(b, s0)
+            else:
+                a = max(a, s1)
+        if b - a >= 1.5:
+            kept.append({'a': a, 'b': b, 'caption': cut.get('caption') or 'Skipping ahead'})
+        else:
+            print(f"  cut at {a:.1f} s dropped: it would cover speech")
+    kept.sort(key=lambda c: c['a'])
+    merged = []
+    for c in kept:
+        if merged and c['a'] <= merged[-1]['b']:
+            merged[-1]['b'] = max(merged[-1]['b'], c['b'])
+        else:
+            merged.append(c)
+    return merged
+
+
+def apply_cuts(src, final, cuts, dur, tmp):
+    """The film without the cuts, each marked by a banner for 3 s where it was."""
+    keep, at = [], 0.0
+    for c in cuts:
+        keep.append((at, c['a']))
+        at = c['b']
+    keep.append((at, dur))
+    inputs, fil, n = ['-i', src], [], 1
+    for i, (a, b) in enumerate(keep):
+        fil.append(f'[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[v{i}]')
+        fil.append(f'[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS[a{i}]')
+    fil.append(''.join(f'[v{i}][a{i}]' for i in range(len(keep))) + f'concat=n={len(keep)}:v=1:a=1[cv][ca]')
+    last, removed = 'cv', 0.0
+    for k, c in enumerate(cuts):
+        p = os.path.join(tmp, f'skip-{k}.png')
+        w = skip_png(p, f"{c['caption']} ({c['b'] - c['a']:.0f} s)")
+        inputs += ['-loop', '1', '-t', '4', '-i', p]
+        pos = c['a'] - removed
+        removed += c['b'] - c['a']
+        fil.append(f"[{last}][{n}:v]overlay={(W - w) // 2}:{HEAD + 24}:enable='between(t,{pos:.2f},{pos + 3:.2f})'[k{k}]")
+        last, n = f'k{k}', n + 1
+    run(['ffmpeg', '-y', '-v', 'error', *inputs, '-filter_complex', ';'.join(fil), '-map', f'[{last}]', '-map', '[ca]', '-c:a', 'aac', '-b:a', '160k',
+         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', final])
+    return dur - removed
+
+
 def assistant_voice(out):
     src = os.path.join(out, 'assistant-voice.jsonl')
     if not os.path.exists(src):
@@ -152,7 +234,7 @@ def assistant_voice(out):
             w.setsampwidth(2)
             w.setframerate(u['rate'])
             w.writeframes(bytes(u['pcm']))
-        res.append({'who': 'milo', 'file': p, 'atMs': u['at']})
+        res.append({'who': 'milo', 'file': p, 'atMs': u['at'], 'secs': len(u['pcm']) / 2 / u['rate']})
     print(f"  Milo's voice: {len(frames)} frames in {len(utts)} utterances")
     return res
 
@@ -203,23 +285,29 @@ def compose(out, final):
         fil.append(f"[{last}][{idx}:v]overlay=0:{HEAD + CELL_H}:enable='between(t,{a:.2f},{b:.2f})'[c{k}]")
         last = f'c{k}'
     # sound
-    clips = [{'file': os.path.join(out, s['file']), 'atMs': s['atMs']} for s in tl.get('speech', [])] + assistant_voice(out)
+    clips = [{'file': os.path.join(out, s['file']), 'atMs': s['atMs'], 'secs': s['durMs'] / 1000} for s in tl.get('speech', []) if s.get('file')] + assistant_voice(out)
     clips = [c for c in clips if t0 - 2000 <= c['atMs'] <= t1]
     amix = []
     for i, c in enumerate(clips):
         inputs += ['-i', c['file']]
         delay = max(0, int(c['atMs'] - t0))
-        fil.append(f'[{n}:a]aresample=48000,aformat=channel_layouts=mono,adelay={delay}:all=1[a{i}]')
+        # Every sound at one loudness (people's lines are levelled already; Milo's voice is levelled here), then one limiter.
+        fil.append(f'[{n}:a]aresample=48000,aformat=channel_layouts=mono,volume={gain_to(c["file"]):.2f}dB,adelay={delay}:all=1[a{i}]')
         amix.append(f'[a{i}]')
         n += 1
     if amix:
-        fil.append(f'{"".join(amix)}amix=inputs={len(amix)}:normalize=0:dropout_transition=0,apad,atrim=0:{dur:.3f},loudnorm=I=-16:TP=-1.5[aout]')
-    cmd = ['ffmpeg', '-y', '-v', 'error', *inputs, '-filter_complex', ';'.join(fil), '-map', f'[{last}]']
-    if amix:
-        cmd += ['-map', '[aout]', '-c:a', 'aac', '-b:a', '160k']
-    cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-t', f'{dur:.3f}', '-movflags', '+faststart', final]
+        fil.append(f'{"".join(amix)}amix=inputs={len(amix)}:normalize=0:dropout_transition=0,apad,atrim=0:{dur:.3f},alimiter=limit=0.89:level=disabled[aout]')
+    else:
+        inputs += ['-f', 'lavfi', '-t', f'{dur:.3f}', '-i', 'anullsrc=r=48000:cl=mono']
+        fil.append(f'[{n}:a]anull[aout]')
+        n += 1
+    cuts = clear_cuts(tl.get('cuts', []), clips, t0, dur)
+    full = os.path.join(tmp, 'full.mp4') if cuts else final
+    cmd = ['ffmpeg', '-y', '-v', 'error', *inputs, '-filter_complex', ';'.join(fil), '-map', f'[{last}]', '-map', '[aout]', '-c:a', 'aac', '-b:a', '160k']
+    cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-t', f'{dur:.3f}', '-movflags', '+faststart', full]
     run(cmd)
-    print(f'film: {final} ({dur:.1f} s, {len(clips)} sounds, {len(scenes)} scenes)')
+    length = apply_cuts(full, final, cuts, dur, tmp) if cuts else dur
+    print(f'film: {final} ({length:.1f} s of {dur:.1f} s recorded, {len(cuts)} cuts, {len(clips)} sounds, {len(scenes)} scenes)')
 
 
 def main():
