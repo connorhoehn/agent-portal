@@ -119,7 +119,7 @@ describe('why a logged line was not said aloud (sayLogged)', () => {
   });
 
   it('the meeting assistant\'s withheld codes: voice off, paused, not heard in time, anything else', async () => {
-    for (const [why, want] of [['voice-off', 'voice-off'], ['paused', 'paused'], ['not-quiet', 'not-heard'], ['timeout', 'not-heard'], ['mismatch', 'not-said'], ['busy', 'not-said']] as const) {
+    for (const [why, want] of [['voice-off', 'voice-off'], ['paused', 'paused'], ['not-quiet', 'not-heard'], ['timeout', 'not-heard'], ['mismatch', 'not-said'], ['refused', 'not-said']] as const) {
       sayAs({ outcome: 'posted', why });
       expect(await tryIt()).toEqual({ spoken: false, why: want });
     }

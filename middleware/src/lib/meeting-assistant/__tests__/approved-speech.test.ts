@@ -279,19 +279,68 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
     expect(sent).toEqual([]);
   });
 
-  it('voice off, paused, or a second request while one is outstanding: chat only, and the session is not asked', async () => {
+  it('a second line while one is outstanding goes to the session\'s queue: said after the first, its quiet wait counted from then', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r7q');
+      const s = fake();
+      const first = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+      await flush();
+      s.busy = true; // the session holds the second line unsent until the first is over (one line at a time)
+      const second = runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE);
+      await flush();
+      expect(s.asked.map((a) => a.text)).toEqual([QUESTION, 'Another question?']);
+      // The first line takes longer than the quiet wait; the second is still waiting for it, not withheld as not-quiet.
+      jest.advanceTimersByTime(SAY_QUIET_WAIT_MS + 1000);
+      s.frames(12, s.asked[0]!.id);
+      s.asked[0]!.ended(QUESTION);
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(await first).toEqual({ outcome: 'spoken', why: null });
+      s.asked[1]!.sent!();
+      s.frames(6, s.asked[1]!.id);
+      s.asked[1]!.ended('Another question?');
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(await second).toEqual({ outcome: 'spoken', why: null });
+      expect(sent.length).toBe(18);
+      expect(s.cancelled).toEqual([]);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('a queued line whose turn never comes within the quiet wait after the first is over stays in the chat', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r7r');
+      const s = fake();
+      const first = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+      await flush();
+      s.busy = true;
+      const second = runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE);
+      await flush();
+      s.asked[0]!.ended(null);
+      expect(await first).toEqual({ outcome: 'posted', why: 'no-words' });
+      jest.advanceTimersByTime(SAY_QUIET_WAIT_MS + 1);
+      expect(await second).toEqual({ outcome: 'posted', why: 'not-quiet' });
+      expect(s.cancelled).toEqual([s.asked[0]!.id, s.asked[1]!.id]);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('voice off or paused: chat only, and the session is not asked; turning the voice off ends every line waiting', async () => {
     factory = () => new FakeSession();
     await startCall('orgiq:saytest:r7');
     const s = fake();
     const first = runtime.sayHeldText(CALL, QUESTION, ALICE);
     await flush();
-    expect(await runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE)).toEqual({ outcome: 'posted', why: 'busy' });
-    expect(s.asked).toHaveLength(1);
+    const second = runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE);
+    await flush();
+    expect(s.asked).toHaveLength(2);
     runtime.setVoice(CALL, false);
     expect(await first).toBe('posted');
+    expect(await second).toEqual({ outcome: 'posted', why: 'voice-off' });
     // The caller's receipt reads why (interviews' "Have Milo ask"): the voice turned off, here before and during the say.
     expect(await runtime.sayHeldTextWhy(CALL, QUESTION, ALICE)).toEqual({ outcome: 'posted', why: 'voice-off' });
-    expect(s.asked).toHaveLength(1);
+    expect(s.asked).toHaveLength(2);
     expect(await runtime.sayHeldTextWhy('no-such-call', QUESTION, ALICE)).toEqual({ outcome: 'no-call', why: null });
   });
 });

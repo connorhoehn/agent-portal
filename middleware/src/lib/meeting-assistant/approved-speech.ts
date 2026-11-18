@@ -129,7 +129,7 @@ export function sayBoundMs(text: string): number {
 export type SayOutcome = 'spoken' | 'posted' | 'no-call';
 
 /** Why an approved utterance was not relayed: codes only, for the trace and for the caller's receipt. */
-export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'busy' | 'refused' | 'timeout' | 'not-quiet' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
+export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'refused' | 'timeout' | 'not-quiet' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
 
 /** An approved utterance's outcome with why it was not relayed (null when it was, or when Milo has no run in the call). */
 export interface SayResult { outcome: SayOutcome; why: SayWithheldWhy | null }
