@@ -37,6 +37,9 @@ export interface PendingRequest {
   endedAt: number;
 }
 
+/** Why Milo left (AssistantRecord `leftReason`). */
+export type LeftReason = 'call-ended';
+
 export interface AssistantRecord {
   callId: string;
   tenant: string;
@@ -50,6 +53,12 @@ export interface AssistantRecord {
   pausedBy: string | null;
   leftAt: number | null;
   leftBy: string | null;
+  /**
+   * Why Milo left, where its leaving says more than who: `call-ended` is the call ending under it (minutes-service `onCallEnded`,
+   * `leftBy` 'system'), so a room can say "Milo left when the call dropped" instead of guessing. Null for any other leave, and
+   * absent on a record written before it.
+   */
+  leftReason?: LeftReason | null;
   /** People who have acknowledged the transcription notice (the inviter does by inviting). */
   acked: string[];
   /** Everyone who held a seat while the assistant was in the call; the transcript is theirs. */

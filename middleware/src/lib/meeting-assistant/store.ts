@@ -16,7 +16,7 @@
 //  * A proposal is created once per (call, id). `saveProposal` writes only when the stored version is the one the caller
 //    read, so of two responses at once one wins and the other reads again (lib/meeting-assistant/proposals.ts retries).
 //    Its statement, outcome, digest, named people and executor are never rewritten.
-import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
+import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, LeftReason, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
 import { periodOf, sessionOf } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 
@@ -31,6 +31,8 @@ export interface StateChange {
   to: AssistantState;
   by: string;
   at: number;
+  /** For a change to `left`: why, when it says more than `by` (AssistantRecord `leftReason`); any other leave clears it. */
+  reason?: LeftReason;
 }
 
 /** Milo is invited back into a call it left (`rejoin`): the person, the moment, who is seated now, and the session bookkeeping to write with it. */
@@ -234,7 +236,7 @@ export class MemoryAssistantStore implements AssistantStore {
     r.state = change.to;
     if (change.to === 'paused') r.pausedBy = change.by;
     if (change.to === 'listening') r.pausedBy = null;
-    if (change.to === 'left') { r.leftAt = change.at; r.leftBy = change.by; }
+    if (change.to === 'left') { r.leftAt = change.at; r.leftBy = change.by; r.leftReason = change.reason ?? null; }
     return copy(r);
   }
 
@@ -243,7 +245,7 @@ export class MemoryAssistantStore implements AssistantStore {
     const r = this.records.get(callId);
     if (!r || r.state !== 'left' || r.leftAt !== change.leftAt) return null;
     if (this.minutes.get(callId)?.deleted || sessionOf(r).erasedAt != null) return null; // the call's words were erased: never joined again
-    r.state = 'listening'; r.invitedBy = change.by; r.leftAt = null; r.leftBy = null; r.pausedBy = null;
+    r.state = 'listening'; r.invitedBy = change.by; r.leftAt = null; r.leftBy = null; r.leftReason = null; r.pausedBy = null;
     r.acked = [change.by]; r.presentAtInvite = [...new Set(change.present)];
     for (const u of change.present) addTo(r.attendees, u);
     r.voice = false;

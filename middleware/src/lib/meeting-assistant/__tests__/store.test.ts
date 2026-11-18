@@ -54,6 +54,12 @@ describe('MemoryAssistantStore', () => {
     expect(await s.transition('call-1', { from: ['invited', 'listening', 'paused'], to: 'left', by: 'u-vera', at: 4 })).toBeNull();
   });
 
+  it('records why Milo left only when the leave says so (the call ending under it); a dismissal leaves it null', async () => {
+    expect(await s.transition('call-1', { from: ['listening'], to: 'left', by: 'system', at: 3, reason: 'call-ended' })).toMatchObject({ state: 'left', leftBy: 'system', leftReason: 'call-ended' });
+    const other = new MemoryAssistantStore(); await other.create(record());
+    expect(await other.transition('call-1', { from: ['listening'], to: 'left', by: 'u-vera', at: 3 })).toMatchObject({ state: 'left', leftBy: 'u-vera', leftReason: null });
+  });
+
   it('ack and attend are idempotent', async () => {
     await s.ack('call-1', 'u-release'); await s.ack('call-1', 'u-release'); await s.attend('call-1', 'u-priya'); await s.attend('call-1', 'u-priya');
     expect(await s.get('call-1')).toMatchObject({ acked: ['u-vera', 'u-release'], attendees: ['u-vera', 'u-release', 'u-priya'] });
@@ -162,6 +168,20 @@ describe('SqlAssistantStore statements', () => {
     expect(all[2]).toContain(`LIMIT ${MAX_PENDING_REQUESTS}`);
     expect(all[3]).toContain('WHERE call_id = :call AND seq > :after ORDER BY seq ASC LIMIT :limit');
     expect(all[4]).toContain('DELETE FROM meeting_transcript_lines WHERE at <= :cutoff::timestamptz');
+  });
+
+  it('transition binds why Milo left, clears it on rejoin, and a row reads it back (null for anything it does not know)', async () => {
+    await store().transition('call-1', { from: ['listening'], to: 'left', by: 'system', at: 1, reason: 'call-ended' });
+    await store().transition('call-1', { from: ['listening'], to: 'left', by: 'u-vera', at: 1 });
+    expect(norm(calls[0]!.sql)).toContain("left_reason = CASE WHEN :to = 'left' THEN :reason ELSE left_reason END");
+    expect(calls[0]!.params.find((p) => p.name === 'reason')).toMatchObject({ value: { stringValue: 'call-ended' } });
+    expect(calls[1]!.params.find((p) => p.name === 'reason')).toMatchObject({ value: { isNull: true } });
+    await store().rejoin('call-1', { leftAt: 1, by: 'u', at: 2, present: [], session: {} });
+    expect(norm(calls[2]!.sql)).toContain('left_reason = NULL');
+    const base = { call_id: 'c', tenant: 'orgiq', lobby: 'l', state: 'left', invited_by: 'u', invited_at: '2026-11-13T10:00:00Z' };
+    expect(recordFromRow({ ...base, left_reason: 'call-ended' }).leftReason).toBe('call-ended');
+    expect(recordFromRow({ ...base, left_reason: 'something-else' }).leftReason).toBeNull();
+    expect(recordFromRow(base).leftReason).toBeNull();
   });
 
   it('maps rows, including jsonb as text and as arrays', () => {
@@ -327,11 +347,11 @@ describe('inviting Milo back (rejoin) and adding to the minutes', () => {
   const change = (over: Record<string, unknown> = {}) => ({ leftAt: 9000, by: 'u-raj', at: 12_000, present: ['u-raj', 'u-sam'], session: { ledgerPart: 1, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] }, ...over });
 
   it('moves left -> listening once, only from the leave the caller read, with the new inviter, fresh acks and the voice off', async () => {
-    const s = new MemoryAssistantStore(); await s.create(left());
+    const s = new MemoryAssistantStore(); await s.create(left({ leftReason: 'call-ended' }));
     expect(await s.rejoin('call-1', change({ leftAt: 8999 }))).toBeNull();          // a different leave: someone else moved it
     const [a, b] = await Promise.all([s.rejoin('call-1', change()), s.rejoin('call-1', change({ by: 'u-sam' }))]);
     expect(b).toBeNull();
-    expect(a).toMatchObject({ state: 'listening', invitedBy: 'u-raj', invitedAt: 1000, leftAt: null, leftBy: null, pausedBy: null, acked: ['u-raj'], presentAtInvite: ['u-raj', 'u-sam'], voice: false });
+    expect(a).toMatchObject({ state: 'listening', invitedBy: 'u-raj', invitedAt: 1000, leftAt: null, leftBy: null, leftReason: null, pausedBy: null, acked: ['u-raj'], presentAtInvite: ['u-raj', 'u-sam'], voice: false });
     expect(a!.attendees).toEqual(['u-vera', 'u-raj', 'u-sam']);
     expect(sessionOf(a!)).toMatchObject({ ledgerPart: 1, periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-raj' }] });
     expect(await s.rejoin('call-1', change())).toBeNull();                            // not left any more
@@ -431,7 +451,7 @@ describe('inviting Milo back (rejoin) and adding to the minutes', () => {
     it('rejoin is ONE conditional update on the leave that was read, merging the session and adding the seated as attendees', async () => {
       expect(await store().rejoin('call-1', change())).toBeNull();
       const sql = norm(calls[0]!.sql);
-      expect(sql).toContain("UPDATE meeting_assistants SET state = 'listening', invited_by = :by, left_at = NULL, left_by = NULL, paused_by = NULL");
+      expect(sql).toContain("UPDATE meeting_assistants SET state = 'listening', invited_by = :by, left_at = NULL, left_by = NULL, left_reason = NULL, paused_by = NULL");
       expect(sql).toContain('acked = jsonb_build_array(:by::text), present_at_invite = :present::jsonb');
       expect(sql).toContain('voice = false, session = session || :session::jsonb');
       expect(sql).toContain("WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz");

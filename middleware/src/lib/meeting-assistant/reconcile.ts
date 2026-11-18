@@ -110,7 +110,7 @@ export async function reconcileAfterRestart(overrides: Partial<ReconcileDeps> = 
       if (record.state === 'listening' || record.state === 'paused') {
         if (await deps.callOver(callId)) {
           if (meetingAssistantEnabled()) await deps.endCall(callId);
-          else await store.transition(callId, { from: ['invited', 'listening', 'paused'], to: 'left', by: 'system', at: now });
+          else await store.transition(callId, { from: ['invited', 'listening', 'paused'], to: 'left', by: 'system', at: now, reason: 'call-ended' });
           result.left += 1;
         } else if (record.state === 'listening') {
           // Conditional: of two processes reconciling at once, only one moves the record and posts the notice.

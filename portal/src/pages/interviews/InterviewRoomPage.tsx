@@ -40,6 +40,7 @@ import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '.
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
+import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
   suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
@@ -48,7 +49,7 @@ import {
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloAsked, type MiloAskWhy, type MiloSaid, miloInviteBlock,
-  NO_SEAT_NOT_FOUND, callLossWords,
+  NO_SEAT_NOT_FOUND, callLossWords, miloLostLine,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -82,6 +83,8 @@ function InterviewRoom({ id }: { id: string }) {
   // A call lost under the live interview (every socket dropped at once, say): the room leaves it and says so, and the lead restarts it.
   const lost = useInterviewCallLoss(room?.state === 'live' ? lobbyName : null);
   const drawn = !!room && call.here && callDrawn(phase, true) && !lost.loss;
+  // Milo's record for the lost call: it left with the call, and the room says so (the bar is gone with the call).
+  const lostMilo = useMeetingAssistant(lost.loss?.callId ?? null);
   // U5: while the call is drawn, the shell folds its trail, primary rail and gutter.
   usePageChromeFold(drawn);
   // The page's tiles are the call's one media sink: the footer's own video panel stays shut while the call is this room's.
@@ -200,7 +203,8 @@ function InterviewRoom({ id }: { id: string }) {
         <CallBlock placement="pane" fit="contain" className={host?.recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
       </Stack>
       : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)}
-        lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart} />}
+        lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
+        miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} />}
     <RoomPane room={room} here={call.here} />
   </Stack>;
 }
@@ -209,9 +213,9 @@ function InterviewRoom({ id }: { id: string }) {
  * Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. After a lost
  * call it says the call dropped instead, and the lead's one action is Restart the call (the bar's start, the same interview).
  */
-function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart = null }: {
+function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart = null, miloLine = null }: {
   room: RoomView; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
-  lost?: ReturnType<typeof callLossWords> | null; onRestart?: (() => void) | null;
+  lost?: ReturnType<typeof callLossWords> | null; onRestart?: (() => void) | null; miloLine?: string | null;
 }) {
   if (!OPEN_STATES.has(room.state)) {
     const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
@@ -238,6 +242,7 @@ function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart =
       <Stack gap="md" className="px-[var(--ui-page-gutter)]">
         {lost ? <Stack gap="sm" align="start" data-testid="interview-room-call-lost">
           <T size="sm" tone="secondary" wrap>{lost.body}</T>
+          {miloLine && <T size="sm" tone="secondary" wrap data-testid="interview-room-milo-left">{miloLine}</T>}
           {lost.action && onRestart && <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>}
         </Stack>
         : <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'

@@ -26,6 +26,8 @@ export interface AssistantView {
   leftBy: string | null;
   /** The display name of whoever dismissed Milo; null when Milo left on its own (`leftBy` is 'system') or the name is unknown. */
   leftByName: string | null;
+  /** Why Milo left, when the record says more than who: 'call-ended' is Milo leaving with the call (the server's `leftReason`). */
+  leftReason: 'call-ended' | null;
   /** True when this person has not yet acknowledged the transcription notice. */
   youMustAck: boolean;
   /** Seconds Milo has listened, and the ceiling it leaves at; null while the server has not said. */
@@ -84,6 +86,7 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     callId, phase,
     invitedBy: text(b['invitedBy']), initiativeId: text(b['initiativeId']), invitedByName: text(b['invitedByName']),
     pausedBy: text(b['pausedBy']), leftBy: text(b['leftBy']), leftByName: text(b['leftByName']),
+    leftReason: phase === 'left' && b['leftReason'] === 'call-ended' ? 'call-ended' : null,
     youMustAck: phase !== 'none' && phase !== 'left' && b['youMustAck'] === true,
     listeningSeconds: seconds(b['listeningSeconds']), ceilingSeconds: seconds(b['ceilingSeconds']),
     voice: phase !== 'none' && phase !== 'left' && b['voice'] === true,
@@ -119,9 +122,10 @@ export const assistantPresent = (v: AssistantView): boolean => present(v.phase);
 /** Milo's time limit is reached (it left on its own at the ceiling). */
 const atLimit = (v: AssistantView): boolean => v.listeningSeconds !== null && v.ceilingSeconds !== null && v.listeningSeconds >= v.ceilingSeconds;
 
-/** Why Milo left, for the chip: who dismissed it, its time limit or a lost connection. */
+/** Why Milo left, for the chip: who dismissed it, the call ending under it, its time limit or a lost connection. */
 export function leftWords(v: AssistantView): string {
   return v.leftBy && v.leftBy !== 'system' ? `${v.leftByName ?? 'Someone'} dismissed ${ASSISTANT_NAME}`
+    : v.leftReason === 'call-ended' ? `${ASSISTANT_NAME} left when the call ended`
     : atLimit(v) ? `${ASSISTANT_NAME} reached its time limit` : `${ASSISTANT_NAME} lost its connection`;
 }
 

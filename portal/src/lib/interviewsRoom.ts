@@ -687,6 +687,17 @@ export const holdsLostCall = (loss: CallLoss | null, activeCallId: string | null
  */
 export const rejoinsAfterLoss = (loss: CallLoss | null, lobbyCallId: string | null): boolean => !!loss && !!lobbyCallId;
 
+/**
+ * After a lost call, Milo's line for the panel: Milo leaves with a call that ends (its record says so, `leftReason` 'call-ended'),
+ * so the room says that rather than leave the lead to find "Invite Milo" again in the bar. The lead is told how to bring Milo
+ * back (the bar's Invite, once the call is back: Milo cannot join the dead call). Null when Milo was not in it or left for any
+ * other reason (the bar says those).
+ */
+export function miloLostLine(milo: { phase: string; leftReason: string | null } | null | undefined, seat: 'lead' | 'panel' | null): string | null {
+  if (!seat || milo?.phase !== 'left' || milo.leftReason !== 'call-ended') return null;
+  return seat === 'lead' ? 'Milo left when the call dropped. Invite Milo again from the bar once the call is back.' : 'Milo left when the call dropped.';
+}
+
 export type CallLossSeat = 'lead' | 'panel' | 'candidate';
 /** What the room says about the lost call, per seat; `action` is the lead's restart (the others join the call once it is back). */
 export function callLossWords(seat: CallLossSeat): { title: string; body: string; action: string | null } {

@@ -157,6 +157,11 @@ test('in-call 3 / around 1: dismissing names its effect, and the left chip says 
   assert.equal(leftWords(view('left', { leftBy: 'u-b', leftByName: 'Bo Berg' })), 'Bo Berg dismissed Milo');
   assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 3600, ceilingSeconds: 3600 })), 'Milo reached its time limit');
   assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Milo lost its connection');
+  // The record says Milo left with the call: the chip says so instead of guessing a lost connection.
+  assert.equal(leftWords(view('left', { leftBy: 'system', leftReason: 'call-ended', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Milo left when the call ended');
+  assert.equal(view('left', { leftReason: 'call-ended' }).leftReason, 'call-ended');
+  assert.equal(view('left', { leftReason: 'something-else' }).leftReason, null);
+  assert.equal(view('listening', { leftReason: 'call-ended' }).leftReason, null);
 });
 
 test('in-call 4: the cards waiting on this viewer, soonest first, and how long until each expires', () => {

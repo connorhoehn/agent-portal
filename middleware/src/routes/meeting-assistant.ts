@@ -193,6 +193,8 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     invitedBy: record.invitedBy, invitedByName, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
     // Who dismissed Milo, by name, so the bar can say why it left ('system' is Milo itself leaving: its time limit or a lost connection).
     leftByName: record.leftBy && record.leftBy !== 'system' ? await nameOf(record.leftBy).catch(() => null) : null,
+    // Why, when the record knows more than who: 'call-ended' is Milo leaving with the call (null otherwise).
+    leftReason: record.state === 'left' ? record.leftReason ?? null : null,
     // After Milo left: whether it can be invited back, or why never in this call (the record was deleted, the call's listening time is used up).
     ...(record.state === 'left' ? {
       rejoin: await rejoinStanding(record, runtime.deps.clock()),

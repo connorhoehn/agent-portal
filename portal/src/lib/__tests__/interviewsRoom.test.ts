@@ -288,3 +288,16 @@ test('the lost call: the lead is offered the restart; the panel and the candidat
   assert.equal(callLossWords('candidate').action, null);
   assert.match(callLossWords('candidate').body, /rejoin as soon as your interviewer restarts the call/);
 });
+
+test('after a lost call the room says Milo left with it only when Milo\'s record says so; the lead is told how to bring Milo back', async () => {
+  const { miloLostLine } = await import('../interviewsRoom.ts');
+  const leftWithCall = { phase: 'left', leftReason: 'call-ended' };
+  assert.equal(miloLostLine(leftWithCall, 'lead'), 'Milo left when the call dropped. Invite Milo again from the bar once the call is back.');
+  assert.equal(miloLostLine(leftWithCall, 'panel'), 'Milo left when the call dropped.');
+  assert.equal(miloLostLine(leftWithCall, null), null);
+  // Dismissed earlier, or never in the call: the line is not drawn.
+  assert.equal(miloLostLine({ phase: 'left', leftReason: null }, 'lead'), null);
+  assert.equal(miloLostLine({ phase: 'none', leftReason: null }, 'lead'), null);
+  assert.equal(miloLostLine({ phase: 'listening', leftReason: null }, 'lead'), null);
+  assert.equal(miloLostLine(null, 'lead'), null);
+});

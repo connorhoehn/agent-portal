@@ -254,7 +254,7 @@ describe('a call that ended while the process was down', () => {
     const result = await reconcileAfterRestart({ clock: () => clock, taps: () => null, callOver: async () => true });
     await minutesIdle(); await flush();
     expect(result).toMatchObject({ left: 1, paused: 0 });
-    expect(await assistantStore().get(CALL)).toMatchObject({ state: 'left', leftBy: 'system' });
+    expect(await assistantStore().get(CALL)).toMatchObject({ state: 'left', leftBy: 'system', leftReason: 'call-ended' });
     expect(await assistantStore().getMinutes(CALL)).toMatchObject({ callId: CALL, lineCount: 1, writer: expect.any(String) });
     expect((await assistantStore().getMinutes(CALL))!.deleted).toBeUndefined();
     expect(entries().map((e) => e.sourceId).sort()).toEqual(['ma:call-1', 'ma:call-1:minutes']);   // the listening row once, plus the minutes' own
@@ -329,6 +329,22 @@ describe('a dismiss or a call end that finds no run in this process', () => {
     expect((await assistantStore().get(CALL))!.session).toMatchObject({ listeningSeconds: 60, settled: true });
     expect(entries().filter((e) => e.sourceId === 'ma:call-1')).toHaveLength(1);
     expect(holds()[0]!.status).toBe('settled');
+  });
+
+  it('a call end records why Milo left, and the state read says so; a dismissal does not', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000; await runtime.tick();
+    const next = freshRuntime();
+    await onCallEnded(CALL, { stop: (id: string) => next.stop(id), stopIntake: () => undefined }); await minutesIdle(); await flush();
+    expect(await assistantStore().get(CALL)).toMatchObject({ state: 'left', leftBy: 'system', leftReason: 'call-ended' });
+    expect((await get('state')).body).toMatchObject({ state: 'left', leftBy: 'system', leftByName: null, leftReason: 'call-ended' });
+  });
+
+  it('a dismissal leaves no reason beyond who', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000;
+    expect((await post('dismiss')).status).toBe(200); await flush();
+    expect((await get('state')).body).toMatchObject({ state: 'left', leftBy: 'alice', leftReason: null });
   });
 });
 

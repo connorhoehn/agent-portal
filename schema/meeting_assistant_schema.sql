@@ -149,6 +149,9 @@ ALTER TABLE meeting_minutes ADD COLUMN IF NOT EXISTS addition_attempts INTEGER N
 -- Package 7a: Milo speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;
 
+-- Why Milo left, where it says more than left_by: 'call-ended' is Milo leaving with its call (NULL for any other leave).
+ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS left_reason TEXT CHECK (left_reason IS NULL OR left_reason IN ('call-ended'));
+
 -- Meeting consent, package 1 (docs/meeting-consent-design.md): proposals people in the call appear to have agreed, waiting for their
 -- explicit consent. One row per proposal. It is consented only when two distinct people consented, including every named person and
 -- the executor, and no objection is open (lib/meeting-assistant/proposals.ts). The statement, outcome, digest, named people and executor

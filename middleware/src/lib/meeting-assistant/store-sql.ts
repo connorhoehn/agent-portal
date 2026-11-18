@@ -34,7 +34,7 @@ function keptLobbies(families: readonly string[]): { sql: string; params: SqlPar
 /** The record's period (types.ts `periodOf`) in SQL: the earlier periods kept in the session, plus one. */
 const PERIOD_SQL = `(CASE WHEN jsonb_typeof(session->'periods') = 'array' THEN jsonb_array_length(session->'periods') ELSE 0 END + 1)`;
 
-const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
+const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by, left_reason,
   acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests, voice, session`;
 
 const json = <T>(v: unknown, fallback: T): T => {
@@ -52,6 +52,7 @@ export function recordFromRow(r: Record<string, unknown>): AssistantRecord {
     callId: str(r['call_id']), tenant: str(r['tenant']), lobby: str(r['lobby']), initiativeId: strOrNull(r['initiative_id']),
     state: str(r['state']) as AssistantState, invitedBy: str(r['invited_by']), invitedAt: ms(r['invited_at']),
     pausedBy: strOrNull(r['paused_by']), leftAt: msOrNull(r['left_at']), leftBy: strOrNull(r['left_by']),
+    leftReason: r['left_reason'] === 'call-ended' ? 'call-ended' : null,
     acked: json<string[]>(r['acked'], []), attendees: json<string[]>(r['attendees'], []),
     presentAtInvite: json<string[]>(r['present_at_invite'], []),
     requests: Number(r['requests'] ?? 0), linesStored: Number(r['lines_stored'] ?? 0), nextSeq: Number(r['next_seq'] ?? 1),
@@ -154,10 +155,11 @@ export class SqlAssistantStore implements AssistantStore {
          paused_by = CASE WHEN :to = 'paused' THEN :by WHEN :to = 'listening' THEN NULL ELSE paused_by END,
          left_at = CASE WHEN :to = 'left' THEN :at::timestamptz ELSE left_at END,
          left_by = CASE WHEN :to = 'left' THEN :by ELSE left_by END,
+         left_reason = CASE WHEN :to = 'left' THEN :reason ELSE left_reason END,
          updated_at = now()
        WHERE call_id = :call AND state IN (${list(change.from)})
        RETURNING ${COLUMNS}`,
-      [s('call', callId), s('to', change.to), s('by', change.by), s('at', iso(change.at))],
+      [s('call', callId), s('to', change.to), s('by', change.by), s('at', iso(change.at)), sOrNull('reason', change.reason ?? null)],
     );
     return rows[0] ? recordFromRow(rows[0]) : null;
   }
@@ -166,7 +168,7 @@ export class SqlAssistantStore implements AssistantStore {
     // One conditional statement: only the record still `left` from the leave the caller read moves, so two rejoins make one period.
     // The session patch is merged over the stored JSON; the seated people join the attendees once each.
     const rows = await this.exec(
-      `UPDATE meeting_assistants SET state = 'listening', invited_by = :by, left_at = NULL, left_by = NULL, paused_by = NULL,
+      `UPDATE meeting_assistants SET state = 'listening', invited_by = :by, left_at = NULL, left_by = NULL, left_reason = NULL, paused_by = NULL,
          acked = jsonb_build_array(:by::text), present_at_invite = :present::jsonb,
          attendees = attendees || COALESCE((SELECT jsonb_agg(to_jsonb(p.u)) FROM jsonb_array_elements_text(:present::jsonb) AS p(u)
                                             WHERE NOT (meeting_assistants.attendees @> to_jsonb(p.u))), '[]'::jsonb),

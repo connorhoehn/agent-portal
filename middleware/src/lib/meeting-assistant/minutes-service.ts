@@ -535,7 +535,8 @@ export async function onCallEnded(callId: string, deps: { stop: (callId: string)
   const record = await store.get(callId);
   if (!record) return;
   if (record.state !== 'left') {
-    const done = await store.transition(callId, { from: ['invited', 'listening', 'paused'], to: 'left', by: 'system', at: Date.now() });
+    // The reason is kept on the record, so the room can say Milo left because the call ended rather than guess (a lost connection?).
+    const done = await store.transition(callId, { from: ['invited', 'listening', 'paused'], to: 'left', by: 'system', at: Date.now(), reason: 'call-ended' });
     if (!done) return;
   }
   deps.stopIntake(callId);
