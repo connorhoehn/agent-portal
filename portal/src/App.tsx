@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { meetingsAdvertised } from './lib/meetingAssistantModel';
 import { Routes, Route, Navigate, Outlet, useParams, useLocation } from 'react-router';
-import { Layout } from './components/shell/Layout';
+import { WorkspaceGate } from './components/shell/WorkspaceGate';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
@@ -355,7 +355,7 @@ export function App() {
       <Route path="workspaces" element={<Page element={<SelectContextPage />} />} />
       <Route path="select" element={<LegacyWorkspaceRedirect />} />
 
-      <Route element={<Layout />}>
+      <Route element={<WorkspaceGate />}>
         <Route index element={<HomeRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 

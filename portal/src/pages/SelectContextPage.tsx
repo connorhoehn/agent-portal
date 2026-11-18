@@ -43,6 +43,7 @@ import { orgiqReferenceReturnHref } from '../lib/dmPageReferences';
 import { markContextChosen } from '../lib/contextChoice';
 import demoPortraits from '../lib/demoPortraits.json';
 import { roleGrants } from '../lib/capabilityGrants';
+import { BareFrame } from '../components/shell/BareFrame';
 
 const TENANT_META: Record<Tenant, { label: string; blurb: string; accent: string }> = {
   orgiq: { label: 'Work', blurb: 'Initiatives, people, decisions, and the work you do together', accent: 'var(--color-primary)' },
@@ -646,9 +647,5 @@ function Band({ children }: { children: ReactNode }) {
  *  owns its own page background and content measure. Used by the SSO branch,
  *  which is a single centred message with no bands to divide. */
 function Screen({ children }: { children: ReactNode }) {
-  return (
-    <Stack gap="none" className="min-h-screen bg-[var(--color-bg)] px-6 py-10">
-      <Stack gap="none" className="mx-auto w-full max-w-5xl">{children}</Stack>
-    </Stack>
-  );
+  return <BareFrame>{children}</BareFrame>;
 }
