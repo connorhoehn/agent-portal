@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-18T17:09:15.528Z",
-  "serverHandlerSha": "3e75eb25e99526968a2ccc49bc8bf3f3f7092f2d460e807f00e5b97ed0b0d391",
+  "capturedAt": "2026-11-18T18:27:31.049Z",
+  "serverHandlerSha": "e0554dbc0e77c14f1e6a9c928dcf30dc536db4361187c14232cea3d258c98f61",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2005,10 +2005,76 @@
       }
     },
     "POST /api/bots": {
-      "skipped": "no body: GET /api/bots listed no bot to copy a model id from"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "bot": "object",
+        "bot.agentProjectId": "null",
+        "bot.agentProjectRepo": "null",
+        "bot.budgetPerDayUsd": "null",
+        "bot.budgetPerRunUsd": "null",
+        "bot.createdAt": "string",
+        "bot.createdBy": "string",
+        "bot.cronExpr": "null",
+        "bot.enabled": "boolean",
+        "bot.enforceAllocation": "boolean",
+        "bot.id": "string",
+        "bot.lastRunAt": "null",
+        "bot.maxRunsPerDay": "number",
+        "bot.model": "string",
+        "bot.name": "string",
+        "bot.orgProjectId": "null",
+        "bot.orgProjectName": "null",
+        "bot.pausedReason": "null",
+        "bot.prompt": "string",
+        "bot.requiresReview": "boolean",
+        "bot.template": "string",
+        "bot.todayRunCount": "number",
+        "bot.todaySpendUsd": "number",
+        "bot.trigger": "string"
+      },
+      "values": {},
+      "sent": [
+        "model",
+        "name",
+        "prompt",
+        "template",
+        "trigger"
+      ]
     },
     "POST /api/bots/:id/pause": {
-      "skipped": "no value found for :id under /api/bots (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bot": "object",
+        "bot.agentProjectId": "null",
+        "bot.agentProjectRepo": "null",
+        "bot.budgetPerDayUsd": "number",
+        "bot.budgetPerRunUsd": "number",
+        "bot.createdAt": "string",
+        "bot.createdBy": "string",
+        "bot.cronExpr": "string",
+        "bot.enabled": "boolean",
+        "bot.enforceAllocation": "boolean",
+        "bot.id": "string",
+        "bot.lastRunAt": "string",
+        "bot.maxRunsPerDay": "number",
+        "bot.model": "string",
+        "bot.name": "string",
+        "bot.orgProjectId": "string",
+        "bot.orgProjectName": "string",
+        "bot.pausedReason": "string",
+        "bot.prompt": "string",
+        "bot.requiresReview": "boolean",
+        "bot.template": "string",
+        "bot.todayRunCount": "number",
+        "bot.todaySpendUsd": "number",
+        "bot.trigger": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/bots/:id/resume": {
       "refused": {
@@ -2131,16 +2197,69 @@
       }
     },
     "POST /api/capabilities/browser-sessions": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "session": "object",
+        "session.agentName": "string",
+        "session.currentUrl": "string",
+        "session.lastActivityAt": "string",
+        "session.pageTitle": "string",
+        "session.profileId": "string",
+        "session.requestCount": "number",
+        "session.sessionId": "string",
+        "session.startedAt": "string",
+        "session.status": "string"
+      },
+      "values": {
+        "session.status": [
+          "ACTIVE"
+        ]
+      },
       "sent": [
         "agentName"
       ]
     },
     "POST /api/capabilities/browser-sessions/:sessionId/navigate": {
-      "skipped": "no value found for :sessionId under /api/capabilities/browser-sessions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "imageDataUrl": "null",
+        "ok": "boolean",
+        "session": "object",
+        "session.agentName": "string",
+        "session.currentUrl": "string",
+        "session.lastActivityAt": "string",
+        "session.pageTitle": "string",
+        "session.profileId": "string",
+        "session.requestCount": "number",
+        "session.sessionId": "string",
+        "session.startedAt": "string",
+        "session.status": "string"
+      },
+      "values": {
+        "session.status": [
+          "ACTIVE"
+        ]
+      },
+      "sent": [
+        "url"
+      ]
     },
     "POST /api/capabilities/browser-sessions/:sessionId/screenshot": {
-      "skipped": "no value found for :sessionId under /api/capabilities/browser-sessions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "imageDataUrl": "string",
+        "sessionId": "string",
+        "takenAt": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/capabilities/browser/crawl": {
       "refused": {
@@ -2149,7 +2268,14 @@
       }
     },
     "POST /api/capabilities/browser/crawl/:crawlId/cancel": {
-      "skipped": "no value found for :crawlId under /api/capabilities/browser/crawl (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/capabilities/browser/web-qa": {
       "refused": {
@@ -2158,13 +2284,31 @@
       }
     },
     "POST /api/capabilities/code-interpreter/execute": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "durationMs": "number",
+        "output": "string",
+        "sessionId": "string"
+      },
+      "values": {},
       "sent": [
         "code"
       ]
     },
     "POST /api/capabilities/guardrail/topics": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "topic": "object",
+        "topic.definition": "string",
+        "topic.enabled": "boolean",
+        "topic.name": "string"
+      },
+      "values": {},
       "sent": [
         "definition",
         "name"
@@ -2279,7 +2423,18 @@
       }
     },
     "POST /api/connections": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "name": "string",
+        "verified": "object",
+        "verified.login": "string",
+        "verified.name": "string",
+        "verified.scopes": "array",
+        "verified.scopes[]": "string"
+      },
+      "values": {},
       "sent": [
         "apiKey",
         "kind",
@@ -2353,10 +2508,139 @@
       }
     },
     "POST /api/designs/:id/answer": {
-      "skipped": "no value found for :id under /api/designs (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "affected": "array",
+        "affected[]": "object",
+        "affected[].impact": "string",
+        "affected[].orgProjectId": "string",
+        "affected[].orgProjectName": "string",
+        "createdAt": "string",
+        "dependsOn": "array",
+        "gates": "array",
+        "id": "string",
+        "kbSynced": "boolean",
+        "openQuestions": "number",
+        "orgProjectId": "string",
+        "orgProjectName": "string",
+        "postCount": "number",
+        "posts": "array",
+        "posts[]": "object",
+        "posts[].artifact": "null|object",
+        "posts[].artifact.name": "string",
+        "posts[].artifact.type": "string",
+        "posts[].artifact.url": "null",
+        "posts[].authorId": "string",
+        "posts[].authorKind": "string",
+        "posts[].authorName": "string",
+        "posts[].avatarUrl": "string",
+        "posts[].body": "string",
+        "posts[].createdAt": "string",
+        "posts[].id": "string",
+        "posts[].kind": "string",
+        "posts[].resolvedBy": "null|string",
+        "signoffs": "array",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "posts[].artifact.type": [
+          "browser screenshot"
+        ],
+        "posts[].kind": [
+          "analysis",
+          "answer",
+          "artifact",
+          "decision",
+          "option",
+          "problem",
+          "question",
+          "revision"
+        ],
+        "status": [
+          "proposed"
+        ]
+      },
+      "sent": [
+        "body",
+        "questionPostId"
+      ]
     },
     "POST /api/designs/:id/signoff": {
-      "skipped": "no value found for :id under /api/designs (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "affected": "array",
+        "affected[]": "object",
+        "affected[].impact": "string",
+        "affected[].orgProjectId": "string",
+        "affected[].orgProjectName": "string",
+        "createdAt": "string",
+        "dependsOn": "array",
+        "gates": "array",
+        "id": "string",
+        "kbSynced": "boolean",
+        "openQuestions": "number",
+        "orgProjectId": "string",
+        "orgProjectName": "string",
+        "postCount": "number",
+        "posts": "array",
+        "posts[]": "object",
+        "posts[].artifact": "null|object",
+        "posts[].artifact.name": "string",
+        "posts[].artifact.type": "string",
+        "posts[].artifact.url": "null",
+        "posts[].authorId": "string",
+        "posts[].authorKind": "string",
+        "posts[].authorName": "string",
+        "posts[].avatarUrl": "string",
+        "posts[].body": "string",
+        "posts[].createdAt": "string",
+        "posts[].id": "string",
+        "posts[].kind": "string",
+        "posts[].resolvedBy": "null",
+        "signoffs": "array",
+        "signoffs[]": "object",
+        "signoffs[].at": "string",
+        "signoffs[].avatarUrl": "string",
+        "signoffs[].decision": "string",
+        "signoffs[].personName": "string",
+        "signoffs[].role": "string",
+        "signoffs[].signerId": "string",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "posts[].artifact.type": [
+          "browser screenshot"
+        ],
+        "posts[].kind": [
+          "analysis",
+          "artifact",
+          "option",
+          "problem",
+          "question"
+        ],
+        "signoffs[].decision": [
+          "reject"
+        ],
+        "signoffs[].role": [
+          "admin"
+        ],
+        "status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/dev/calls/:callId/assistant-messages": {
       "refused": {
@@ -2413,7 +2697,13 @@
       }
     },
     "POST /api/devbox/sessions": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "sessionId": "string"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/drop/:token/upload": {
@@ -2435,16 +2725,195 @@
       }
     },
     "POST /api/grants": {
-      "skipped": "no body: GET /api/sprints or GET /api/roster listed nothing to grant against"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "grant": "object",
+        "grant.allocatedUsd": "number",
+        "grant.endsOn": "string",
+        "grant.grantedBy": "string",
+        "grant.granteeName": "string",
+        "grant.granteePersonId": "string",
+        "grant.hardCapUsd": "null",
+        "grant.id": "string",
+        "grant.initiativeSpendInWindowUsd": "number",
+        "grant.note": "null",
+        "grant.orgProjectId": "string",
+        "grant.orgProjectName": "string",
+        "grant.sprintId": "string",
+        "grant.sprintName": "string",
+        "grant.sprintStatus": "string",
+        "grant.startsOn": "string"
+      },
+      "values": {},
+      "sent": [
+        "amountUsd",
+        "granteePersonId",
+        "initiativeId",
+        "sprintId"
+      ]
     },
     "POST /api/graph/decisions": {
-      "skipped": "no body: GET /api/graph/projects listed no initiative"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "decidedAt": "null",
+        "decidedBy": "null",
+        "heldWork": "array",
+        "history": "array",
+        "history[]": "object",
+        "history[].at": "string",
+        "history[].by": "object",
+        "history[].by.id": "string",
+        "history[].by.name": "string",
+        "history[].callId": "null",
+        "history[].id": "string",
+        "history[].kind": "string",
+        "history[].people": "array",
+        "history[].people[]": "object",
+        "history[].people[].id": "string",
+        "history[].people[].name": "string",
+        "history[].rationale": "string",
+        "history[].source": "string",
+        "id": "string",
+        "options": "array",
+        "options[]": "object",
+        "options[].id": "string",
+        "options[].label": "string",
+        "outcome": "null",
+        "participants": "array",
+        "participants[]": "object",
+        "participants[].avatarUrl": "string",
+        "participants[].name": "string",
+        "participants[].personId": "string",
+        "participants[].role": "string",
+        "participants[].title": "string",
+        "participants[].weight": "number",
+        "projectId": "string",
+        "status": "string",
+        "summary": "null",
+        "topic": "string",
+        "viewerMayDecide": "boolean"
+      },
+      "values": {
+        "history[].kind": [
+          "raised"
+        ],
+        "participants[].role": [
+          "decider"
+        ],
+        "status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "initiativeId",
+        "source",
+        "state",
+        "statement"
+      ]
     },
     "POST /api/graph/decisions/:id/decide": {
-      "skipped": "no value found for :id under /api/graph/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "decidedAt": "string",
+        "decidedBy": "object",
+        "decidedBy.id": "string",
+        "decidedBy.name": "string",
+        "heldWork": "array",
+        "heldWork[]": "object",
+        "heldWork[].blocked": "boolean",
+        "heldWork[].id": "string",
+        "heldWork[].projectId": "string",
+        "heldWork[].title": "string",
+        "history": "array",
+        "history[]": "object",
+        "history[].at": "string",
+        "history[].by": "object",
+        "history[].by.id": "string",
+        "history[].by.name": "string",
+        "history[].id": "string",
+        "history[].kind": "string",
+        "history[].rationale": "string",
+        "id": "string",
+        "options": "array",
+        "options[]": "object",
+        "options[].detail": "string",
+        "options[].id": "string",
+        "options[].label": "string",
+        "outcome": "string",
+        "participants": "array",
+        "participants[]": "object",
+        "participants[].avatarUrl": "string",
+        "participants[].name": "string",
+        "participants[].personId": "string",
+        "participants[].role": "string",
+        "participants[].title": "string",
+        "participants[].weight": "number",
+        "projectId": "string",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "viewerMayDecide": "boolean"
+      },
+      "values": {
+        "history[].kind": [
+          "rejected"
+        ],
+        "participants[].role": [
+          "contributor",
+          "decider"
+        ],
+        "status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "outcome",
+        "rationale"
+      ]
     },
     "POST /api/graph/projects": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "activeAgentRuns": "number",
+        "agentSpendUsd": "number",
+        "allocatedUsd": "null",
+        "canWriteWork": "boolean",
+        "contributors": "array",
+        "contributors[]": "object",
+        "contributors[].avatarUrl": "string",
+        "contributors[].name": "string",
+        "contributors[].personId": "string",
+        "contributors[].role": "string",
+        "contributors[].title": "string",
+        "contributors[].weight": "number",
+        "createdAt": "string",
+        "id": "string",
+        "name": "string",
+        "ownerId": "string",
+        "ownerName": "string",
+        "repoFullName": "null",
+        "sponsorId": "null",
+        "sponsorName": "null",
+        "sponsorTitle": "null",
+        "status": "string",
+        "summary": "string"
+      },
+      "values": {
+        "contributors[].role": [
+          "owner"
+        ],
+        "status": [
+          "planning"
+        ]
+      },
       "sent": [
         "name",
         "owner_person_id"
@@ -2463,7 +2932,65 @@
       }
     },
     "POST /api/graph/work-items": {
-      "skipped": "no body: GET /api/graph/projects listed no initiative"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "assigneeDept": "null",
+        "assigneeId": "null",
+        "assigneeName": "null",
+        "blockedByDecisionId": "null",
+        "blockedReason": "null",
+        "childCount": "number",
+        "childDoneCount": "number",
+        "completedAt": "null",
+        "createdAt": "string",
+        "description": "null",
+        "estimateForecast": "null",
+        "estimateModel": "null",
+        "estimateReviewedAt": "null",
+        "estimateReviewedBy": "null",
+        "estimateReviewedByName": "null",
+        "estimatedAt": "null",
+        "estimatedBy": "null",
+        "estimatedByName": "null",
+        "estimatedCostUsd": "null",
+        "id": "string",
+        "key": "string",
+        "labels": "array",
+        "nextStep": "null",
+        "nextStepDetail": "null",
+        "parentId": "null",
+        "prStatus": "null",
+        "prUrl": "null",
+        "priority": "string",
+        "projectId": "string",
+        "projectName": "string",
+        "runbookPins": "array",
+        "sprintId": "null",
+        "status": "string",
+        "storyPoints": "null",
+        "summary": "null",
+        "title": "string",
+        "type": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "key": [
+          "ORG-OBS-15"
+        ],
+        "status": [
+          "open"
+        ],
+        "type": [
+          "story"
+        ]
+      },
+      "sent": [
+        "projectId",
+        "title",
+        "type"
+      ]
     },
     "POST /api/graph/work-items/:id/comments": {
       "refused": {
@@ -2481,17 +3008,21 @@
       "skipped": "no body: `statement` is Cedar policy source. GET /api/identity/policies needs a live policy store, so no real statement is readable offline, and writing one from memory is the invention this harness forbids."
     },
     "POST /api/identity/policies/test": {
-      "skipped": "no body: no role or capability name was readable off the server"
+      "skipped": "HTTP 503: POLICY_STORE_ID not configured (orgiq/admin)",
+      "sent": [
+        "action",
+        "role"
+      ]
     },
     "POST /api/identity/tenants": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "skipped": "HTTP 503: Aurora not configured — cannot provision tenants (orgiq/admin)",
       "sent": [
         "displayName",
         "id"
       ]
     },
     "POST /api/identity/users": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "skipped": "HTTP 503: Aurora not configured — cannot provision users (orgiq/admin)",
       "sent": [
         "displayName",
         "id"
@@ -2516,7 +3047,8 @@
       }
     },
     "POST /api/ingest/crawl/:id/sync": {
-      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin)"
+      "skipped": "HTTP 409: No knowledge base is configured (KNOWLEDGE_BASE_ID is unset), so a crawl cannot be synced into one. (orgiq/admin)",
+      "sent": []
     },
     "POST /api/ingest/schedules": {
       "refused": {
@@ -2525,7 +3057,26 @@
       }
     },
     "POST /api/ingest/start": {
-      "skipped": "no body: GET /api/ingest/data-sources listed no data source"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "job": "object",
+        "job.dataSourceId": "string",
+        "job.jobId": "string",
+        "job.knowledgeBaseId": "string",
+        "job.status": "string",
+        "knowledgeBaseId": "string",
+        "ok": "boolean"
+      },
+      "values": {
+        "job.status": [
+          "STARTING"
+        ]
+      },
+      "sent": [
+        "dataSourceId"
+      ]
     },
     "POST /api/ingest/survey": {
       "refused": {
@@ -2768,7 +3319,17 @@
       }
     },
     "POST /api/knowledge-base/sync": {
-      "skipped": "no body: GET /api/knowledge-base/data-sources listed no data source"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "jobId": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "dataSourceId"
+      ]
     },
     "POST /api/lab/consults": {
       "persona": "orgiq/admin",
@@ -2799,7 +3360,16 @@
       ]
     },
     "POST /api/lab/consults/:id/answer": {
-      "skipped": "no value found for :id under /api/lab/consults (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "consult": "object(dictionary)"
+      },
+      "values": {},
+      "sent": [
+        "answer"
+      ]
     },
     "POST /api/lab/experiences": {
       "persona": "orgiq/admin",
@@ -2862,7 +3432,29 @@
       ]
     },
     "POST /api/library/evals/:assetId/run": {
-      "skipped": "no value found for :assetId under /api/library/evals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "assetId": "string",
+        "id": "string",
+        "passRate": "number",
+        "passed": "number",
+        "ranAt": "string",
+        "ranBy": "string",
+        "results": "array",
+        "results[]": "object",
+        "results[].caseId": "string",
+        "results[].failures": "array",
+        "results[].output": "string",
+        "results[].passed": "boolean",
+        "total": "number",
+        "version": "string"
+      },
+      "values": {},
+      "sent": [
+        "version"
+      ]
     },
     "POST /api/local-compute/announce": {
       "persona": "anonymous",
@@ -2920,7 +3512,22 @@
       }
     },
     "POST /api/local-compute/nodes/:nodeId/work": {
-      "skipped": "no value found for :nodeId under /api/local-compute/nodes (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string",
+        "gate": "string"
+      },
+      "values": {
+        "gate": [
+          "accept_jobs"
+        ]
+      },
+      "sent": [
+        "kind",
+        "prompt"
+      ]
     },
     "POST /api/local-compute/pair/claim": {
       "persona": "anonymous",
@@ -2937,7 +3544,14 @@
       ]
     },
     "POST /api/local-compute/pair/start": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "code": "string",
+        "expiresAt": "string"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/local-compute/register": {
@@ -2977,16 +3591,73 @@
       "sent": []
     },
     "POST /api/observability/approvals/:id/decision": {
-      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "agentId": "string",
+        "approvalId": "string",
+        "decidedAt": "string",
+        "decidedBy": "string",
+        "decidedNote": "null",
+        "payload": "object",
+        "payload.action": "string",
+        "payload.document": "string",
+        "payload.references": "string",
+        "reason": "string",
+        "requestedAt": "string",
+        "status": "string",
+        "txId": "string"
+      },
+      "values": {
+        "payload.action": [
+          "index"
+        ],
+        "status": [
+          "APPROVED"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/observability/approvals/request": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "approvalId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "txId"
+      ]
     },
     "POST /api/observability/calibration/cases": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "calibrationId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "humanScore",
+        "prompt",
+        "response"
+      ]
     },
     "POST /api/observability/calibration/runs": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 503,
+      "shape": {
+        "$": "object",
+        "detail": "string",
+        "error": "string"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/observability/canary/ask": {
@@ -2996,7 +3667,13 @@
       }
     },
     "POST /api/observability/canary/halt": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/observability/canary/library": {
@@ -3024,7 +3701,13 @@
       }
     },
     "POST /api/observability/canary/reset": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/observability/canary/start": {
@@ -3034,16 +3717,48 @@
       }
     },
     "POST /api/observability/harness/cases": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "testId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "prompt"
+      ]
     },
     "POST /api/observability/harness/promote": {
-      "skipped": "no body: GET /api/observability/prompt-versions listed no registered prompt to promote"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "promotedAt": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "promptVersion"
+      ]
     },
     "POST /api/observability/harness/results/:invocationId/rejudge": {
       "skipped": "no value found for :invocationId under /api/observability/harness/results (orgiq/admin)"
     },
     "POST /api/observability/harness/runs": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "mode": "string",
+        "runId": "string"
+      },
+      "values": {
+        "mode": [
+          "sim"
+        ]
+      },
       "sent": []
     },
     "POST /api/observability/harness/runs/:id/execute": {
@@ -3053,10 +3768,41 @@
       }
     },
     "POST /api/observability/harness/runs/:runId/results": {
-      "skipped": "no value found for :runId under /api/observability/harness/runs (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "testId"
+      ]
     },
     "POST /api/observability/harness/trace": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "embeddingComputed": "boolean",
+        "estCostUsd": "null",
+        "inputTokens": "null",
+        "invocationId": "string",
+        "judgeCostUsd": "number",
+        "judgeInputTokens": "number",
+        "judgeOutputTokens": "number",
+        "judgeRationale": "string",
+        "judgeScore": "number",
+        "outputTokens": "null",
+        "schemaValid": "null",
+        "totalCostUsd": "number"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "prompt",
+        "response"
+      ]
     },
     "POST /api/observability/invocations/:invocationId/replay": {
       "refused": {
@@ -3065,13 +3811,48 @@
       }
     },
     "POST /api/observability/memory/events": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "memoryEventId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "kind",
+        "queryText"
+      ]
     },
     "POST /api/observability/prompt-versions": {
-      "skipped": "no body: GET /api/agents listed no agent"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "promptVersion": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "content"
+      ]
     },
     "POST /api/observability/quality/feedback": {
-      "skipped": "no body: GET /api/observability/recent-invocations listed no invocation to label"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "invocationId": "string",
+        "label": "string",
+        "note": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "invocationId",
+        "label",
+        "note"
+      ]
     },
     "POST /api/observability/test-fixtures/refresh-seed-timestamps": {
       "refused": {
@@ -3086,7 +3867,26 @@
       }
     },
     "POST /api/pipelines/approvals/:id/decide": {
-      "skipped": "no value found for :id under /api/pipelines/approvals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "decidedThrough": "string",
+        "decision": "string",
+        "id": "string",
+        "outcome": "string"
+      },
+      "values": {
+        "decision": [
+          "approve"
+        ],
+        "outcome": [
+          "answered"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/pipelines/decks/:id/preview": {
       "refused": {
@@ -3113,7 +3913,14 @@
       }
     },
     "POST /api/pipelines/runs/:id/cancel": {
-      "skipped": "no value found for :id under /api/pipelines/runs (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/pipelines/runs/:id/decks": {
       "refused": {
@@ -3146,25 +3953,505 @@
       }
     },
     "POST /api/runbooks/:id/applications": {
-      "skipped": "no value found for :id under /api/runbooks (orgiq/admin)"
+      "skipped": "no body: the route authenticates with an HMAC envelope over the raw body plus a run token bound to the run_ref, neither of which this harness can mint; routes/__tests__/runbooks*.test.ts and lib/__tests__/lab-cli-brief.test.ts cover the write."
     },
     "POST /api/runbooks/:id/retire": {
-      "skipped": "no value found for :id under /api/runbooks (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.id": "string",
+        "runbook.owner_person_id": "string",
+        "runbook.retired": "object",
+        "runbook.retired.at": "string",
+        "runbook.retired.by": "string",
+        "runbook.retired.reason": "string",
+        "runbook.retired.superseded_by": "null",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.status": "string",
+        "runbook.updated_at": "string"
+      },
+      "values": {
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "retired"
+        ]
+      },
+      "sent": [
+        "reason"
+      ]
     },
     "POST /api/runbooks/proposals": {
-      "skipped": "no body: GET /api/runbooks listed no runbook to propose retiring"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "null",
+        "proposal.decided_by": "null",
+        "proposal.expired": "boolean",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "null",
+        "proposal.proposed": "null",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.person_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "proposal.kind": [
+          "retire"
+        ],
+        "proposal.source.kind": [
+          "person"
+        ],
+        "proposal.status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "kind",
+        "rationale",
+        "runbook_id"
+      ]
     },
     "POST /api/runbooks/proposals/:pid/accept": {
-      "skipped": "no value found for :pid under /api/runbooks/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "string",
+        "proposal.decided_by": "string",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "string",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string",
+        "runbook": "object",
+        "runbook.created_at": "string",
+        "runbook.current_version": "number",
+        "runbook.id": "string",
+        "runbook.owner_person_id": "string",
+        "runbook.scope": "object",
+        "runbook.scope.kind": "string",
+        "runbook.scope.ref": "string",
+        "runbook.status": "string",
+        "runbook.updated_at": "string",
+        "version": "object",
+        "version.accepted_at": "string",
+        "version.accepted_by": "string",
+        "version.author": "object",
+        "version.author.id": "string",
+        "version.author.kind": "string",
+        "version.doc": "object",
+        "version.doc.failure_modes": "array",
+        "version.doc.failure_modes[]": "object",
+        "version.doc.failure_modes[].cause": "string",
+        "version.doc.failure_modes[].response": "string",
+        "version.doc.failure_modes[].symptom": "string",
+        "version.doc.not_for": "array",
+        "version.doc.not_for[]": "string",
+        "version.doc.notes": "string",
+        "version.doc.preconditions": "array",
+        "version.doc.preconditions[]": "string",
+        "version.doc.rollback": "array",
+        "version.doc.rollback[]": "object",
+        "version.doc.rollback[].command": "object",
+        "version.doc.rollback[].command.lang": "string",
+        "version.doc.rollback[].command.text": "string",
+        "version.doc.rollback[].do": "string",
+        "version.doc.steps": "array",
+        "version.doc.steps[]": "object",
+        "version.doc.steps[].command": "object",
+        "version.doc.steps[].command.lang": "string",
+        "version.doc.steps[].command.text": "string",
+        "version.doc.steps[].do": "string",
+        "version.doc.steps[].expect": "string",
+        "version.doc.steps[].why": "string",
+        "version.doc.summary": "string",
+        "version.doc.title": "string",
+        "version.doc.triggers": "object",
+        "version.doc.triggers.keywords": "array",
+        "version.doc.triggers.keywords[]": "string",
+        "version.doc.triggers.repos": "array",
+        "version.doc.triggers.repos[]": "string",
+        "version.doc.triggers.tools": "array",
+        "version.doc.triggers.tools[]": "string",
+        "version.doc.triggers.work_item_labels": "array",
+        "version.doc.triggers.work_item_labels[]": "string",
+        "version.doc.use_when": "array",
+        "version.doc.use_when[]": "string",
+        "version.doc.verify": "array",
+        "version.doc.verify[]": "object",
+        "version.doc.verify[].check": "string",
+        "version.doc.verify[].command": "object",
+        "version.doc.verify[].command.lang": "string",
+        "version.doc.verify[].command.text": "string",
+        "version.markdown": "string",
+        "version.proposal_id": "string",
+        "version.provenance": "object",
+        "version.provenance.lab_experience_ids": "array",
+        "version.provenance.run_refs": "array",
+        "version.provenance.run_refs[]": "string",
+        "version.provenance.session_ids": "array",
+        "version.provenance.session_ids[]": "string",
+        "version.provenance.source_artifact_ids": "array",
+        "version.runbook_id": "string",
+        "version.sha256": "string",
+        "version.version": "number"
+      },
+      "values": {
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "accepted"
+        ],
+        "runbook.scope.kind": [
+          "initiative"
+        ],
+        "runbook.status": [
+          "published"
+        ],
+        "version.author.kind": [
+          "run"
+        ]
+      },
+      "sent": [
+        "note"
+      ]
     },
     "POST /api/runbooks/proposals/:pid/merge": {
-      "skipped": "no value found for :pid under /api/runbooks/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "merged": "object",
+        "merged.base_version": "number",
+        "merged.created_at": "string",
+        "merged.decided_at": "string",
+        "merged.decided_by": "string",
+        "merged.id": "string",
+        "merged.kind": "string",
+        "merged.lint": "array",
+        "merged.merged_into": "string",
+        "merged.note": "string",
+        "merged.proposed": "object",
+        "merged.proposed.failure_modes": "array",
+        "merged.proposed.failure_modes[]": "object",
+        "merged.proposed.failure_modes[].cause": "string",
+        "merged.proposed.failure_modes[].response": "string",
+        "merged.proposed.failure_modes[].symptom": "string",
+        "merged.proposed.not_for": "array",
+        "merged.proposed.not_for[]": "string",
+        "merged.proposed.notes": "string",
+        "merged.proposed.preconditions": "array",
+        "merged.proposed.preconditions[]": "string",
+        "merged.proposed.rollback": "array",
+        "merged.proposed.rollback[]": "object",
+        "merged.proposed.rollback[].command": "object",
+        "merged.proposed.rollback[].command.lang": "string",
+        "merged.proposed.rollback[].command.text": "string",
+        "merged.proposed.rollback[].do": "string",
+        "merged.proposed.steps": "array",
+        "merged.proposed.steps[]": "object",
+        "merged.proposed.steps[].command": "object",
+        "merged.proposed.steps[].command.lang": "string",
+        "merged.proposed.steps[].command.text": "string",
+        "merged.proposed.steps[].do": "string",
+        "merged.proposed.steps[].expect": "string",
+        "merged.proposed.steps[].why": "string",
+        "merged.proposed.summary": "string",
+        "merged.proposed.title": "string",
+        "merged.proposed.triggers": "object",
+        "merged.proposed.triggers.keywords": "array",
+        "merged.proposed.triggers.keywords[]": "string",
+        "merged.proposed.triggers.repos": "array",
+        "merged.proposed.triggers.repos[]": "string",
+        "merged.proposed.triggers.tools": "array",
+        "merged.proposed.triggers.tools[]": "string",
+        "merged.proposed.triggers.work_item_labels": "array",
+        "merged.proposed.triggers.work_item_labels[]": "string",
+        "merged.proposed.use_when": "array",
+        "merged.proposed.use_when[]": "string",
+        "merged.proposed.verify": "array",
+        "merged.proposed.verify[]": "object",
+        "merged.proposed.verify[].check": "string",
+        "merged.proposed.verify[].command": "object",
+        "merged.proposed.verify[].command.lang": "string",
+        "merged.proposed.verify[].command.text": "string",
+        "merged.rationale": "string",
+        "merged.runbook_id": "string",
+        "merged.similar": "array",
+        "merged.source": "object",
+        "merged.source.kind": "string",
+        "merged.source.lab_experience_ids": "array",
+        "merged.source.run_ref": "string",
+        "merged.source.session_id": "string",
+        "merged.source.work_item_id": "string",
+        "merged.status": "string",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "null",
+        "proposal.decided_by": "null",
+        "proposal.expired": "boolean",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "null",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "merged.kind": [
+          "edit"
+        ],
+        "merged.source.kind": [
+          "run"
+        ],
+        "merged.status": [
+          "merged"
+        ],
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "into",
+        "note"
+      ]
     },
     "POST /api/runbooks/proposals/:pid/reject": {
-      "skipped": "no value found for :pid under /api/runbooks/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "proposal": "object",
+        "proposal.base_version": "number",
+        "proposal.created_at": "string",
+        "proposal.decided_at": "string",
+        "proposal.decided_by": "string",
+        "proposal.id": "string",
+        "proposal.kind": "string",
+        "proposal.lint": "array",
+        "proposal.merged_into": "null",
+        "proposal.note": "string",
+        "proposal.proposed": "object",
+        "proposal.proposed.failure_modes": "array",
+        "proposal.proposed.failure_modes[]": "object",
+        "proposal.proposed.failure_modes[].cause": "string",
+        "proposal.proposed.failure_modes[].response": "string",
+        "proposal.proposed.failure_modes[].symptom": "string",
+        "proposal.proposed.not_for": "array",
+        "proposal.proposed.not_for[]": "string",
+        "proposal.proposed.notes": "string",
+        "proposal.proposed.preconditions": "array",
+        "proposal.proposed.preconditions[]": "string",
+        "proposal.proposed.rollback": "array",
+        "proposal.proposed.rollback[]": "object",
+        "proposal.proposed.rollback[].command": "object",
+        "proposal.proposed.rollback[].command.lang": "string",
+        "proposal.proposed.rollback[].command.text": "string",
+        "proposal.proposed.rollback[].do": "string",
+        "proposal.proposed.steps": "array",
+        "proposal.proposed.steps[]": "object",
+        "proposal.proposed.steps[].command": "object",
+        "proposal.proposed.steps[].command.lang": "string",
+        "proposal.proposed.steps[].command.text": "string",
+        "proposal.proposed.steps[].do": "string",
+        "proposal.proposed.steps[].expect": "string",
+        "proposal.proposed.steps[].why": "string",
+        "proposal.proposed.summary": "string",
+        "proposal.proposed.title": "string",
+        "proposal.proposed.triggers": "object",
+        "proposal.proposed.triggers.keywords": "array",
+        "proposal.proposed.triggers.keywords[]": "string",
+        "proposal.proposed.triggers.repos": "array",
+        "proposal.proposed.triggers.repos[]": "string",
+        "proposal.proposed.triggers.tools": "array",
+        "proposal.proposed.triggers.tools[]": "string",
+        "proposal.proposed.triggers.work_item_labels": "array",
+        "proposal.proposed.triggers.work_item_labels[]": "string",
+        "proposal.proposed.use_when": "array",
+        "proposal.proposed.use_when[]": "string",
+        "proposal.proposed.verify": "array",
+        "proposal.proposed.verify[]": "object",
+        "proposal.proposed.verify[].check": "string",
+        "proposal.proposed.verify[].command": "object",
+        "proposal.proposed.verify[].command.lang": "string",
+        "proposal.proposed.verify[].command.text": "string",
+        "proposal.rationale": "string",
+        "proposal.runbook_id": "string",
+        "proposal.similar": "array",
+        "proposal.source": "object",
+        "proposal.source.kind": "string",
+        "proposal.source.lab_experience_ids": "array",
+        "proposal.source.run_ref": "string",
+        "proposal.source.session_id": "string",
+        "proposal.source.work_item_id": "string",
+        "proposal.status": "string"
+      },
+      "values": {
+        "proposal.kind": [
+          "edit"
+        ],
+        "proposal.source.kind": [
+          "run"
+        ],
+        "proposal.status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "note"
+      ]
     },
     "POST /api/runbooks/proposals/:pid/withdraw": {
-      "skipped": "no value found for :pid under /api/runbooks/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 403,
+      "shape": {
+        "$": "object",
+        "code": "string",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/saved-searches": {
       "refused": {
@@ -3173,7 +4460,7 @@
       }
     },
     "POST /api/scores/analysis": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "skipped": "HTTP 503: Aurora is mocked — no scores to analyse (orgiq/admin)",
       "sent": []
     },
     "POST /api/sdlc/changes/:id/address": {
@@ -3183,16 +4470,76 @@
       }
     },
     "POST /api/sdlc/changes/:id/decide": {
-      "skipped": "no value found for :id under /api/sdlc/changes (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "status": "string"
+      },
+      "values": {
+        "status": [
+          "approved"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/sdlc/changes/:id/deliver": {
-      "skipped": "no value found for :id under /api/sdlc/changes (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/sdlc/changes/:id/rereview": {
-      "skipped": "no value found for :id under /api/sdlc/changes (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "evaluationSeq": "number",
+        "ok": "boolean",
+        "policyScope": "string",
+        "policyVersion": "number",
+        "repinned": "boolean",
+        "status": "string",
+        "verdict": "string"
+      },
+      "values": {
+        "status": [
+          "needs_approval"
+        ],
+        "verdict": [
+          "approve"
+        ]
+      },
+      "sent": []
     },
     "POST /api/sdlc/policies": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "policy": "object",
+        "policy.action": "string",
+        "policy.config": "object",
+        "policy.enabled": "boolean",
+        "policy.id": "string",
+        "policy.kind": "string",
+        "policy.name": "string"
+      },
+      "values": {
+        "policy.action": [
+          "require_approval"
+        ],
+        "policy.kind": [
+          "require_review"
+        ]
+      },
       "sent": [
         "kind",
         "name"
@@ -3355,7 +4702,46 @@
       }
     },
     "POST /api/sprints": {
-      "skipped": "no body: GET /api/sprints listed no sprint to copy an initiative and a date window from"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "sprint": "object",
+        "sprint.doneItemCount": "number",
+        "sprint.endsOn": "string",
+        "sprint.estimatedCostUsd": "number",
+        "sprint.goal": "null",
+        "sprint.grantCount": "number",
+        "sprint.grantedUsd": "number",
+        "sprint.id": "string",
+        "sprint.initiativeSpendInWindowUsd": "number",
+        "sprint.isGrantee": "boolean",
+        "sprint.isSteward": "boolean",
+        "sprint.itemCount": "number",
+        "sprint.myItemCount": "number",
+        "sprint.myOpenItemCount": "number",
+        "sprint.name": "string",
+        "sprint.orgProjectId": "string",
+        "sprint.orgProjectName": "null",
+        "sprint.pointsDone": "number",
+        "sprint.pointsTotal": "number",
+        "sprint.startsOn": "string",
+        "sprint.status": "string",
+        "sprint.stewardAvatarUrl": "null",
+        "sprint.stewardName": "null",
+        "sprint.stewardPersonId": "null"
+      },
+      "values": {
+        "sprint.status": [
+          "planned"
+        ]
+      },
+      "sent": [
+        "endsOn",
+        "initiativeId",
+        "name",
+        "startsOn"
+      ]
     },
     "POST /api/voice/sessions": {
       "refused": {
@@ -3382,10 +4768,33 @@
       }
     },
     "POST /api/work/findings/:id/analyze": {
-      "skipped": "no value found for :id under /api/work/findings (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "alreadyKnown": "number",
+        "candidatesConsidered": "number",
+        "documentId": "string",
+        "links": "array",
+        "problem": "string",
+        "proposals": "array",
+        "textLength": "number",
+        "title": "string"
+      },
+      "values": {},
+      "sent": [
+        "dryRun"
+      ]
     },
     "POST /api/work/findings/:id/dismiss": {
-      "skipped": "no value found for :id under /api/work/findings (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "dismissed": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/work/findings/:id/promote": {
       "refused": {
@@ -3394,7 +4803,19 @@
       }
     },
     "POST /api/work/findings/analyze-batch": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "alreadyKnown": "number",
+        "analysed": "number",
+        "failed": "number",
+        "noLinks": "number",
+        "outcomes": "array",
+        "proposed": "number",
+        "remaining": "number"
+      },
+      "values": {},
       "sent": []
     },
     "POST /api/work/jobs": {
@@ -3410,16 +4831,70 @@
       }
     },
     "POST /api/work/jobs/:id/review": {
-      "skipped": "no value found for :id under /api/work/jobs (orgiq/admin)"
+      "skipped": "HTTP 404: job not found or not awaiting review (orgiq/admin)",
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/work/proposals": {
       "skipped": "no body: `kind` is a ProposalKind union with no run-time validation, and no GET route enumerates its members — inventing one is exactly the fiction this harness exists to stop."
     },
     "POST /api/work/proposals/:id/decide": {
-      "skipped": "no value found for :id under /api/work/proposals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "appliedAt": "string",
+        "applyError": "null",
+        "confidence": "number",
+        "createdAt": "string",
+        "decidedAt": "string",
+        "evidence": "object",
+        "findingId": "null",
+        "id": "string",
+        "jobId": "null",
+        "kind": "string",
+        "payload": "object",
+        "payload.documentId": "string",
+        "payload.documentTitle": "string",
+        "payload.entityId": "string",
+        "payload.entityName": "string",
+        "payload.entityType": "string",
+        "rationale": "string",
+        "reviewNote": "null",
+        "reviewer": "string",
+        "source": "string",
+        "status": "string",
+        "targetId": "string",
+        "targetType": "string"
+      },
+      "values": {
+        "kind": [
+          "link_document_mention"
+        ],
+        "status": [
+          "applied"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/work/sweeps/run": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "released": "number",
+        "results": "array",
+        "results[]": "object",
+        "results[].created": "number",
+        "results[].found": "number",
+        "results[].resolved": "number",
+        "results[].sweep": "string",
+        "results[].updated": "number"
+      },
+      "values": {},
       "sent": []
     },
     "POST /internal/devbox/:sessionId/shell-url": {
@@ -3483,13 +4958,109 @@
       }
     },
     "PUT /api/access/configuration": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "delegation": "object",
+        "delegation.maxDays": "number",
+        "durations": "object",
+        "durations.offered": "array",
+        "durations.offered[]": "string",
+        "durations.standingReasonMin": "number",
+        "escalation": "object",
+        "escalation.stepSlaHours": "number",
+        "escalation.tiers": "array",
+        "escalation.tiers[]": "string",
+        "items": "array",
+        "items[]": "object",
+        "items[].defaultDuration": "string",
+        "items[].id": "string",
+        "items[].kind": "string",
+        "items[].sensitive": "boolean",
+        "items[].stewardRule": "string",
+        "items[].tenant": "string",
+        "items[].title": "string",
+        "stewards": "array",
+        "stewards[]": "object",
+        "stewards[].role": "null|string",
+        "stewards[].rule": "string",
+        "stewards[].scope": "string",
+        "stewards[].tenant": "null|string"
+      },
+      "values": {
+        "items[].kind": [
+          "capability",
+          "initiative-membership",
+          "tenant-role"
+        ],
+        "items[].tenant": [
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ],
+        "stewards[].role": [
+          "access-admin",
+          "community-admin",
+          "hr-admin",
+          "org-leader",
+          "pipeline-admin",
+          "program-lead"
+        ],
+        "stewards[].tenant": [
+          "access",
+          "assessment",
+          "orgiq",
+          "pipelines",
+          "social"
+        ]
+      },
       "sent": [
         "items"
       ]
     },
     "PUT /api/access/policies/:id": {
-      "skipped": "no value found for :id under /api/access/policies (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "left": "object",
+        "left.role": "string",
+        "left.tenant": "string",
+        "reason": "string",
+        "right": "object",
+        "right.role": "string",
+        "right.tenant": "string",
+        "severity": "string",
+        "title": "string",
+        "updatedAt": "string",
+        "updatedBy": "object",
+        "updatedBy.displayName": "string",
+        "updatedBy.id": "string",
+        "updatedBy.personId": "null"
+      },
+      "values": {
+        "left.role": [
+          "sme"
+        ],
+        "left.tenant": [
+          "orgiq"
+        ],
+        "right.role": [
+          "org-leader"
+        ],
+        "right.tenant": [
+          "orgiq"
+        ],
+        "severity": [
+          "block"
+        ]
+      },
+      "sent": [
+        "severity"
+      ]
     },
     "PUT /api/assessment/configuration": {
       "persona": "assessment/admin",
@@ -3536,7 +5107,48 @@
       }
     },
     "PUT /api/budgets/:orgProjectId": {
-      "skipped": "no value found for :orgProjectId under /api/budgets (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "budget": "object",
+        "budget.allocatedUsd": "number",
+        "budget.allowFloorSpill": "boolean",
+        "budget.carryInUsd": "number",
+        "budget.carryOver": "string",
+        "budget.carryOverCapUsd": "null",
+        "budget.discretionaryHeldUsd": "number",
+        "budget.discretionaryRemainingUsd": "number",
+        "budget.discretionarySpentUsd": "number",
+        "budget.effectiveAllocatedUsd": "number",
+        "budget.effectiveHardCapUsd": "number",
+        "budget.floorHeldUsd": "number",
+        "budget.floorSpentUsd": "number",
+        "budget.hardCapSource": "string",
+        "budget.hardCapUsd": "null",
+        "budget.lastAgentActivityAt": "string",
+        "budget.maintenanceReserveUsd": "null",
+        "budget.maintenanceUsd": "number",
+        "budget.orgProjectId": "string",
+        "budget.orgProjectName": "string",
+        "budget.period": "string",
+        "budget.periodEnd": "string",
+        "budget.periodKey": "string",
+        "budget.periodStart": "string",
+        "budget.periodState": "string",
+        "budget.reserveSource": "string",
+        "budget.reserveUsd": "number",
+        "budget.rollingDays": "null",
+        "budget.runCountThisPeriod": "number",
+        "budget.spentThisPeriodUsd": "number",
+        "budget.updatedAt": "string",
+        "budget.updatedBy": "string",
+        "budget.updatedByName": "string"
+      },
+      "values": {},
+      "sent": [
+        "allocatedUsd"
+      ]
     },
     "PUT /api/budgets/:orgProjectId/limits": {
       "refused": {
@@ -3545,7 +5157,20 @@
       }
     },
     "PUT /api/budgets/learning": {
-      "skipped": "no body: GET /api/budgets/lines reported no learning cap"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "learning": "object",
+        "learning.capSource": "string",
+        "learning.capUsd": "number",
+        "learning.updatedAt": "string",
+        "learning.updatedBy": "string"
+      },
+      "values": {},
+      "sent": [
+        "monthlyCapUsd"
+      ]
     },
     "PUT /api/calls/:callId/page": {
       "refused": {
@@ -3554,7 +5179,30 @@
       }
     },
     "PUT /api/devbox/profiles/:id": {
-      "skipped": "no value found for :id under /api/devbox/profiles (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "profile": "object",
+        "profile.created_at": "string",
+        "profile.created_by": "string",
+        "profile.id": "string",
+        "profile.idle_minutes": "number",
+        "profile.max_lifetime_minutes": "number",
+        "profile.models": "array",
+        "profile.models[]": "string",
+        "profile.network_class": "string",
+        "profile.org_access": "string",
+        "profile.reason": "string",
+        "profile.task_timeout_s": "number",
+        "profile.version": "number"
+      },
+      "values": {},
+      "sent": [
+        "baseVersion",
+        "profile",
+        "reason"
+      ]
     },
     "PUT /api/graph/documents/:documentId": {
       "refused": {
@@ -3563,7 +5211,24 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
       "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
@@ -3573,7 +5238,18 @@
       }
     },
     "PUT /api/graph/work-items/:id/runbook-pins": {
-      "skipped": "no body: GET /api/runbooks lists no published org-wide runbook to pin"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runbookPins": "array",
+        "runbookPins[]": "string",
+        "workItemId": "string"
+      },
+      "values": {},
+      "sent": [
+        "runbookIds"
+      ]
     },
     "PUT /api/identity/policies/:id": {
       "skipped": "no value found for :id under /api/identity/policies (orgiq/admin)"
@@ -3582,10 +5258,16 @@
       "skipped": "no body: `schema` is a Cedar JSON schema; GET /api/identity/schema needs a live policy store, so none is readable offline."
     },
     "PUT /api/identity/users/:id/grants": {
-      "skipped": "no value found for :id under /api/identity/users (orgiq/admin)"
+      "skipped": "HTTP 403: you cannot change your own grants; ask another user admin (orgiq/admin)",
+      "sent": [
+        "grants"
+      ]
     },
     "PUT /api/identity/users/:id/person": {
-      "skipped": "no value found for :id under /api/identity/users (orgiq/admin)"
+      "skipped": "HTTP 503: Aurora not configured — cannot link person (orgiq/admin)",
+      "sent": [
+        "personId"
+      ]
     },
     "PUT /api/interview-invite/consents": {
       "refused": {
@@ -3642,7 +5324,17 @@
       }
     },
     "PUT /api/observability/canary/weight": {
-      "skipped": "no body: GET /api/observability/canary/weight reported no weight_b to echo back"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "weight_b": "number"
+      },
+      "values": {},
+      "sent": [
+        "weight_b"
+      ]
     },
     "PUT /api/observability/evaluations/config": {
       "refused": {
@@ -3657,10 +5349,77 @@
       }
     },
     "PUT /api/pipelines/configuration": {
-      "skipped": "no body: GET /api/pipelines/configuration named no defaultApproverRole to echo back"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "approverRoleOptions": "array",
+        "approverRoleOptions[]": "string",
+        "defaultApproverRole": "string",
+        "updatedBy": "string",
+        "updatedByName": "string"
+      },
+      "values": {},
+      "sent": [
+        "defaultApproverRole"
+      ]
     },
     "PUT /api/pipelines/definitions/:id/approvers": {
-      "skipped": "no value found for :id under /api/pipelines/definitions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "definition": "object",
+        "definition.approverRoles": "array",
+        "definition.contextTenant": "string",
+        "definition.description": "string",
+        "definition.enabled": "boolean",
+        "definition.id": "string",
+        "definition.kind": "string",
+        "definition.meta": "object",
+        "definition.meta.candidateId": "string",
+        "definition.meta.candidateStatus": "string",
+        "definition.meta.driftedFrom": "string",
+        "definition.meta.dryRunRunId": "null",
+        "definition.meta.initiativeId": "string",
+        "definition.meta.observationCount": "number",
+        "definition.meta.proposedKind": "string",
+        "definition.meta.updatedAt": "string",
+        "definition.meta.updatedBy": "string",
+        "definition.orphaned": "boolean",
+        "definition.owner": "string",
+        "definition.ownerName": "string",
+        "definition.recorded": "boolean",
+        "definition.source": "object",
+        "definition.source.id": "string",
+        "definition.source.table": "string",
+        "definition.steps": "array",
+        "definition.steps[]": "object",
+        "definition.steps[].detail": "string",
+        "definition.steps[].id": "string",
+        "definition.steps[].label": "string",
+        "definition.tenant": "string",
+        "definition.title": "string",
+        "definition.triggers": "array",
+        "definition.triggers[]": "object",
+        "definition.triggers[].detail": "string",
+        "definition.triggers[].type": "string",
+        "definition.version": "number"
+      },
+      "values": {
+        "definition.kind": [
+          "runbook"
+        ],
+        "definition.tenant": [
+          "pipelines"
+        ],
+        "definition.triggers[].type": [
+          "manual"
+        ]
+      },
+      "sent": [
+        "roles"
+      ]
     },
     "PUT /api/sdlc/policy-sets/:scope": {
       "refused": {
@@ -3684,7 +5443,36 @@
       }
     },
     "PUT /api/voice/settings": {
-      "skipped": "HTTP 401: Unauthenticated (orgiq/admin)",
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "default": "object",
+        "default.voice": "string",
+        "options": "object",
+        "options.paces": "array",
+        "options.paces[]": "object",
+        "options.paces[].id": "string",
+        "options.paces[].label": "string",
+        "options.styles": "array",
+        "options.styles[]": "object",
+        "options.styles[].hint": "string",
+        "options.styles[].id": "string",
+        "options.styles[].label": "string",
+        "options.voices": "array",
+        "options.voices[]": "object",
+        "options.voices[].bestQuality": "boolean",
+        "options.voices[].label": "string",
+        "options.voices[].language": "string",
+        "options.voices[].name": "string",
+        "options.voices[].presentation": "null|string",
+        "options.voices[].region": "null|string",
+        "options.voices[].value": "string",
+        "pace": "string",
+        "style": "string",
+        "voice": "string"
+      },
+      "values": {},
       "sent": [
         "pace",
         "style",
