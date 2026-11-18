@@ -37,20 +37,22 @@ describe('the interviews tenant gate: no session and a guest', () => {
     expect(GUEST_COOKIE_PATH).toBe('/api/interview-invite');
   });
 
-  it('the product: a caller with no session, and so a candidate\'s browser, is 401; a guest cookie by hand is 401', async () => {
+  it('the product: a caller with no session, and so a candidate\'s browser, is 401 sign-in required; a guest cookie by hand is a rejected credential', async () => {
     process.env['INSECURE_DEV_MODE'] = 'false';
     const anon = await request(app()).get('/api/interviews/interviews');
-    expect([anon.status, anon.body.code]).toEqual([401, 'SESSION_INVALID']);
+    expect([anon.status, anon.body.code]).toEqual([401, 'SIGN_IN_REQUIRED']);
     const guest = await request(app()).get('/api/interviews/interviews').set('Cookie', 'interviews.guest=any.value');
-    expect(guest.status).toBe(401);
+    expect([guest.status, guest.body.code]).toEqual([401, 'SESSION_INVALID']);
   });
 
   it('the development mode: no session is the demo identity, which this tenant does not cover, so 401 as in the product; a guest cookie by hand stays 401', async () => {
     process.env['INSECURE_DEV_MODE'] = 'true';
     process.env['NODE_ENV'] = 'development';
+    // The same code as the product's caller with no session: never SESSION_INVALID, which the portal reads as a retired
+    // session and refreshes, and a refresh here only hands back the same demo identity.
     const anon = await request(app()).get('/api/interviews/interviews');
-    expect([anon.status, anon.body.code]).toEqual([401, 'SESSION_INVALID']);
+    expect([anon.status, anon.body.code]).toEqual([401, 'SIGN_IN_REQUIRED']);
     const guest = await request(app()).get('/api/interviews/interviews').set('Cookie', 'interviews.guest=any.value');
-    expect(guest.status).toBe(401);
+    expect([guest.status, guest.body.code]).toEqual([401, 'SESSION_INVALID']);
   });
 });

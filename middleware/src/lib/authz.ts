@@ -334,14 +334,22 @@ export function resolveSession(req: Request): Session | null {
   return req.session ?? (demoFallbackAllowed() ? demoSession() : null);
 }
 
-function denyUnauthenticated(req: Request, res: Response, action: string): void {
+/**
+ * 401 for a caller the guards cannot name. Two answers, by what the request carried: a credential that was rejected (a bad,
+ * expired or superseded cookie, a guest cookie on a staff route: `req.sessionInvalid`) is SESSION_INVALID, which the portal
+ * reads as its session retired and refreshes; no credential at all is SIGN_IN_REQUIRED, which it does not, since a refresh
+ * cannot change it (in the development mode it only hands back the same demo identity). The audit row names the caller as
+ * anonymous either way, with which it was.
+ */
+function denyUnauthenticated(req: Request, res: Response, action: string, why = 'no session'): void {
+  const rejected = req.sessionInvalid === true;
   logAuthz({
     decision: 'DENY', action, sub: 'anonymous', role: '-',
-    path: req.path, reason: 'no session',
+    path: req.path, reason: rejected ? 'rejected credential' : why,
   });
   // ssoRequired only when an IdP actually exists — pointing a client at a
   // sign-in flow that isn't wired up is worse than a plain 401.
-  res.status(401).json({ error: 'Unauthenticated', code: 'SESSION_INVALID', ssoRequired: ssoAvailable() });
+  res.status(401).json({ error: 'Unauthenticated', code: rejected ? 'SESSION_INVALID' : 'SIGN_IN_REQUIRED', ssoRequired: ssoAvailable() });
 }
 
 /**
@@ -460,7 +468,7 @@ export function requireTenant(tenant: Tenant) {
     // The development mode's demo identity stands in for "no session". When it does not cover this tenant, the
     // caller is answered as the product answers a caller with no session (401), not as a signed-in member of
     // another tenant (403), so both worlds give a candidate's browser on a staff route the same answer.
-    if (req.sessionSource === 'demo') { denyUnauthenticated(req, res, 'TenantScope'); return; }
+    if (req.sessionSource === 'demo') { denyUnauthenticated(req, res, 'TenantScope', `no session (the demo identity does not cover tenant=${tenant})`); return; }
     logAuthz(eventFromSession(session, 'TenantScope', 'DENY', {
       path: req.path,
       reason: `route requires tenant=${tenant}`,
