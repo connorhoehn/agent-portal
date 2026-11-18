@@ -26,7 +26,7 @@ import {
   DEFAULT_RUN_LIMITS, RUN_LANGUAGES, isTerminal, serviceResult,
   type Executor, type ExecutorOutput, type ExecutorRun, type RunLanguage, type RunLimits, type RunResult, type RunStatus, type RunStream,
 } from './executor.js';
-import { createMockExecutor } from './mock-executor.js';
+import { createRunExecutor } from './backend.js';
 import { runStore, type RunPerson, type RunRecord, type RunStore, type StoredRunEvent } from './store.js';
 import {
   releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend,
@@ -147,8 +147,8 @@ export interface RunDeps {
 let defaultExecutor: Executor | null = null;
 const DEFAULTS: RunDeps = {
   store: runStore,
-  // The only backend this round. Real ones (rows I4.7–I4.9) are chosen here by setting.
-  executor: () => (defaultExecutor ??= createMockExecutor()),
+  // The mock, unless INTERVIEWS_RUN_BACKEND=docker picks the Docker runner on a developer's machine (backend.ts).
+  executor: () => (defaultExecutor ??= createRunExecutor()),
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,

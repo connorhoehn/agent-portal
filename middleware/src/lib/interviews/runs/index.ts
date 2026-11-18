@@ -14,6 +14,9 @@ import { eraseRunRows, lastRunRecord, runView, type RunView } from './service.js
 
 export * from './executor.js';
 export { createMockExecutor, MockExecutor, MOCK_MARKERS, MOCK_RUNTIME_VERSIONS, literalPrints, markerOf, type MockMarker } from './mock-executor.js';
+export { createDockerExecutor, DockerExecutor, DOCKER_BACKEND, DOCKER_RUNTIME_VERSIONS, DOCKER_SENTENCES } from './docker-executor.js';
+export { DOCKER_RUNTIMES, DOCKER_IMAGES } from './docker-runtimes.js';
+export { createRunExecutor, runBackendChoice, RUN_BACKEND_SETTING } from './backend.js';
 export { runStore, setRunStore, MemoryRunStore, type RunPerson, type RunRecord, type RunSide, type RunStore, type StoredRunEvent } from './store.js';
 export {
   MAX_RUNS_PER_INTERVIEW, DEFAULT_RUN_PRICE_USD, RUN_PRICE_SETTING, runPriceUsd, checkRunBody, startRun, listRuns, getRun, cancelRun, openRunEvents,
