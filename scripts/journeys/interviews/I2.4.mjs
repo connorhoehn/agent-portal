@@ -7,7 +7,7 @@
 // prints "NOT RUN <step>: …" when the call cannot start. Those steps run only on the social profile.
 //   I2.4a  the lead's room before the call: one title, then who, when, how long and the panel; the pane's tabs by round
 //          type (Pad, Questions, Milo, Chat; Plan, Milo, Chat), the questions in their tab; the trail is there before the call; one right pane and no shell chat pane; shots at both widths
-//   I2.4b  the knock in the lead's footer: "The candidate is waiting" with Admit and Not yet, the footer row one line at
+//   I2.4b  the knock in the lead's footer: "<Name> is waiting" with Admit and Not yet, the footer row one line at
 //          1280; Not yet from the deck → the candidate's turned-away line; knock again; Admit from the deck → the
 //          candidate's room
 //   I2.4c  the candidate let in: "Your interviewer has let you in", the bar's Join the call (enabled, or disabled for
@@ -120,7 +120,7 @@ export default async function run(ctx) {
     await lead.getByTestId('interview-room-ask-option-admit').click();
     const inRoom = await seen(guest.page, 'join-room-idle');
     const state = (await guestApi(guest.context, 'GET', '/admission')).body?.admission?.state;
-    return { ok: arrived && /The candidate is waiting/.test(askText) && footerOneLine && away && again && inRoom && state === 'admitted',
+    return { ok: arrived && / is waiting/.test(askText) && footerOneLine && away && again && inRoom && state === 'admitted',
       detail: `the deck "${askText.slice(0, 80)}"; the footer row ${row ? Math.round(row.height) : '?'} px at 1280; Not yet → the candidate ${away ? 'reads the turned-away line' : 'did NOT read it'}; Admit → ${inRoom ? 'the candidate is in the room' : 'NOT in the room'} (${state})` };
   });
 

@@ -20,7 +20,7 @@
 //     waiting candidate, Milo's suggestion.
 //
 // The lead's join starts the interview (POST start); End interview ends it (POST end), leaves the call and goes
-// to My interviews. Anyone without a seat reads the not-found page.
+// to the scorecard that is now due. Anyone without a seat reads the not-found page.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
@@ -33,6 +33,7 @@ import { CallBlock, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } fr
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
 import { usePageChromeFold } from '../../components/shell/pageChrome';
+import { scorecardPath } from '../../lib/interviewsScorecard';
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
@@ -44,6 +45,7 @@ import {
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloSaid, miloInviteBlock,
+  NO_SEAT_NOT_FOUND,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -146,7 +148,8 @@ function InterviewRoom({ id }: { id: string }) {
     const out = await endInterview(room.id, room.revision);
     if (!out.ok) { if (out.stale) refresh(); return { error: out.error }; }
     if (call.here) void leave?.();
-    navigate(MY_INTERVIEWS_HREF);
+    // The scorecard is what is due next: the lead lands on it, not on the desk.
+    navigate(scorecardPath(room.id));
     return {};
   }, [room, refresh, call.here, leave, navigate]);
   const knock = useCallback(async (admit: boolean): Promise<{ error?: string }> => {
@@ -166,9 +169,8 @@ function InterviewRoom({ id }: { id: string }) {
 
   if (error && !room) {
     return isNotFoundError(error) || /404|not found/i.test(error) ? (
-      <RecordNotFound heading="Interview" title="Interview not found"
-        body="There is no interview room here that you can open. You can open the rooms of the interviews you sit on."
-        backLabel="My interviews" onBack={() => navigate(MY_INTERVIEWS_HREF)} />
+      <RecordNotFound heading="Interview" title={NO_SEAT_NOT_FOUND.title} body={NO_SEAT_NOT_FOUND.body}
+        backLabel={NO_SEAT_NOT_FOUND.backLabel} onBack={() => navigate('/interviews')} />
     ) : (
       <UnavailableNotice error={error} what="this interview room" source="The room is read from the interviews tenant's rounds" onRetry={refresh} />
     );
@@ -205,10 +207,11 @@ function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boo
   // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
   return (
     <Stack gap="md" className="min-h-0 flex-1 overflow-auto" data-testid="interview-room-idle">
-      <PageHeader density="compact" title={live ? 'The call is on' : lead ? 'The call has not started' : 'Waiting for the lead'} />
+      <PageHeader density="compact" title={live ? 'The call is on' : room.state === 'live' ? 'The interview is live' : lead ? 'The call has not started' : 'Waiting for the lead'} />
       <Stack gap="md" className="px-[var(--ui-page-gutter)]">
         <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
-          : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
+          : room.state === 'live' ? 'The interview is live. Join the call from the bar at the bottom of the window.'
+            : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
             : 'You can join the call from the bar at the bottom of the window.'}</T>
         <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
       </Stack>

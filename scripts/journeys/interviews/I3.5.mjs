@@ -143,7 +143,7 @@ export default async function run(ctx) {
     const forbidden = [
       ['the suggestion quote', basedOn && basedOn.length > 12 ? basedOn.slice(0, 40) : null],
       ['the deck', 'Have Milo ask'], ['the deck', 'I’ll ask it'], ['the deck', 'Based on'],
-      ['a receipt', 'Milo asked it aloud'], ['a receipt', 'In the call chat only'],
+      ['a receipt', 'Milo asked it aloud'], ['a receipt', 'Milo posted the question in the chat'],
       ['a transcript line', 'token bucket per API key'], ['the session\'s own answer', 'Four.'],
     ].filter(([, s]) => s && (page.includes(s) || reads.includes(s)));
     const question = suggestionText && page.includes(suggestionText.slice(0, 30));

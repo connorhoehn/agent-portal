@@ -74,8 +74,8 @@ export function recordingLine(r: InterviewRecordView['recording'], media: 'none'
   if (r.state === 'deleted') return 'The recording of this interview has been deleted.';
   if (r.state === 'none') return 'There is no recording of this interview.';
   if (r.standIn) {
-    const length = r.durationSeconds ? `The recording runs ${lengthOf(r.durationSeconds)}. ` : '';
-    return `${length}This practice copy keeps the facts of the recording but no video, so there is nothing to play here.`;
+    const length = r.durationSeconds ? `Recording: ${lengthOf(r.durationSeconds)}. ` : '';
+    return `${length}Video is not kept in this demo workspace.`;
   }
   if (media === 'none') return 'There is no recording of this interview.';
   if (media === 'unreachable') return 'The recording could not be reached just now. Try again in a moment.';

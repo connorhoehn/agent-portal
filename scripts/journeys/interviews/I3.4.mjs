@@ -1,7 +1,7 @@
 // Piece I3.4: the suggestion as a footer prompt, and what the candidate reads of Milo (docs/interviews-tenant-plan.md row
 // I3.4, decisions 4, 8, 9, 20; contracts D7 and E9). Nadia's leadership round (behavioural: Wen leads, Hugo on the panel), the
 // call on the stand-in media of h3-call.mjs, lines from the mock injector, the scripted coach.
-//   I3.4a  a suggestion waits behind the knock: the deck asks "The candidate is waiting" first; Admit from the deck, then the
+//   I3.4a  a suggestion waits behind the knock: the deck asks "<Name> is waiting" first; Admit from the deck, then the
 //          suggestion is asked; End interview puts "End the interview" in front of it; Keep going brings the suggestion back
 //   I3.4b  Esc is a Skip: the deck hides, the server lets the suggestion go (a later answer is a 409), and a new suggestion
 //          comes back by itself
@@ -56,7 +56,7 @@ export default async function run(ctx) {
 
     await step('I3.4a', async () => {
       await say(room, WEN, 'Tell me about a time you led a team through a hard deadline.');
-      const knockFirst = await awaitDeck(room.leadPage, /The candidate is waiting/, 30_000);
+      const knockFirst = await awaitDeck(room.leadPage, / is waiting/, 30_000);
       const t0 = Date.now();
       while (!sg1 && Date.now() - t0 < 160_000) { sg1 = await readSuggestion(room.lead); if (!sg1) await sleep(3000); }
       const withBoth = await deckText(room.leadPage);
@@ -69,7 +69,7 @@ export default async function run(ctx) {
       await deckOf(room.leadPage).getByRole('button', { name: 'Keep going', exact: true }).first().click();
       const back = await awaitDeck(room.leadPage, /Milo suggests/, 10_000);
       const shots = await shootPage(room.leadPage, 'I3.4a-deck');
-      const ok = /The candidate is waiting/.test(knockFirst) && !!sg1 && /The candidate is waiting/.test(withBoth) && !/Milo suggests/.test(withBoth.split('The candidate is waiting')[0])
+      const ok = / is waiting/.test(knockFirst) && !!sg1 && / is waiting/.test(withBoth) && !/Milo suggests/.test(withBoth.split('The candidate is waiting')[0])
         && /Milo suggests/.test(after) && /End the interview/.test(endFirst) && !/Milo suggests/.test(endFirst.split('End the interview')[0]) && /Milo suggests/.test(back)
         && shots.every((s) => s.ok);
       return { ok, detail: `knock first "${knockFirst.slice(0, 50)}"; suggestion made ${!!sg1}; after Admit "${after.slice(0, 40)}"; End first "${endFirst.slice(0, 40)}"; Keep going → "${back.slice(0, 40)}"` };

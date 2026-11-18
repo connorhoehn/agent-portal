@@ -134,8 +134,8 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
       },
     });
     if (knock) list.push({
-      ...base, id: knockPromptId(room.interviewId, knock), kind: 'choice', eyebrow: 'Interview', title: 'The candidate is waiting',
-      question: 'The candidate is waiting.',
+      ...base, id: knockPromptId(room.interviewId, knock), kind: 'choice', eyebrow: 'Interview', title: `${room.candidateName} is waiting`,
+      question: 'Let them in?',
       options: [{ id: 'admit', label: 'Admit', emphasis: 'primary' }, { id: 'not-yet', label: 'Not yet' }],
       onAnswer: async (a) => {
         const admit = 'optionId' in a && a.optionId === 'admit';

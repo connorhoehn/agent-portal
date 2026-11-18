@@ -520,7 +520,7 @@ export function saidOf(body: unknown): { said?: MiloSaid; line?: string } {
 /** The prompt's receipt after "Have Milo ask": what happened, in a few words (the full sentence is the chat's or the line's). */
 export function miloAskReceipt(said: MiloSaid | undefined): string {
   if (said === 'spoken') return 'Milo asked it aloud';
-  if (said === 'chat') return 'In the call chat only';
+  if (said === 'chat') return 'Milo posted the question in the chat (Milo’s voice is off)';
   return SUGGESTION_RECEIPTS['milo-ask'];
 }
 
@@ -584,3 +584,6 @@ export function lastAskedOf(frame: unknown, channel: string, current: string | n
   }
   return found;
 }
+
+/** One refusal for a round page the viewer holds no seat on (room and record say the same, with one way back to the viewer's home). */
+export const NO_SEAT_NOT_FOUND = { title: 'Interview not found', body: 'There is no interview here that you can open.', backLabel: 'Home' } as const;

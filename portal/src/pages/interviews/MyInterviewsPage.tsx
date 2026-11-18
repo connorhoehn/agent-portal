@@ -46,6 +46,9 @@ import {
 import { PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
+/** The server's line is written for the panel; a lead is interviewing too, so the line says what is true for both. */
+const interviewingLine = (line: string): string => line.replace(/^You are on the panel/, 'You are interviewing');
+
 const COLUMNS: DataTableColumn<InterviewRow>[] = [
   {
     key: 'when', header: 'When', numeric: true, width: '168px', sortable: true, compare: (a, b) => (a.scheduledAt ?? '').localeCompare(b.scheduledAt ?? ''),
@@ -58,13 +61,13 @@ const COLUMNS: DataTableColumn<InterviewRow>[] = [
   { key: 'round', header: 'Round', render: (r) => <T size="sm" title={`${ROUND_TYPE_LABELS[r.round.type]}, ${r.round.minutes} minutes`}>{r.round.name}</T> },
   { key: 'opening', header: 'Opening', render: (r) => <T size="sm" title={`${r.opening.title}, ${r.opening.team}`}>{r.opening.title}</T> },
   {
-    key: 'seat', header: 'With', render: (r) => (r.seat === 'panel'
-      ? <PersonCell id={r.lead.id} name={r.lead.name} title={`${r.lead.name} leads; you are on the panel`} />
-      : r.panel.length ? <PersonCell id={r.panel[0]!.id} name={r.panel[0]!.name} title={`${r.panel.map((p) => p.name).join(', ')} on the panel; you lead`} />
-        : <T size="sm" tone="secondary">You lead</T>),
+    key: 'seat', header: 'With', render: (r) => (r.seat === 'lead'
+      ? (r.panel.length ? <PersonCell id={r.panel[0]!.id} name={r.panel[0]!.name} title={`${r.panel.map((p) => p.name).join(', ')} on the panel; you lead`} />
+        : <T size="sm" tone="secondary">You lead</T>)
+      : <PersonCell id={r.lead.id} name={r.lead.name} title={r.seat === 'panel' ? `${r.lead.name} leads; you are on the panel` : `${r.lead.name} leads`} />),
   },
   {
-    key: 'desk', header: 'Waiting for', width: '176px',
+    key: 'desk', header: 'Status', width: '176px',
     render: (r) => (isLive(r)
       ? <Chip tone="success" size="sm" data-testid="interviews-desk-live">Live now</Chip>
       : <Chip tone={deskTone(r)} size="sm" data-testid="interviews-desk-state">{deskLabel(r)}</Chip>),
@@ -134,7 +137,7 @@ function MyInterviewsWorkspace() {
       id: `interviews-panel-notice:${row.id}:${notice.version}:${n}`, scope: 'interviews-my-interviews', kind: 'choice',
       eyebrow: row.seat === 'lead' ? 'Before you accept to lead' : 'Before you accept the panel seat',
       title: notice.title,
-      question: notice.panelLine,
+      question: interviewingLine(notice.panelLine),
       fields: [
         { label: 'Round', value: `${row.round.name} with ${row.candidate.name}` },
         {
@@ -175,7 +178,7 @@ function MyInterviewsWorkspace() {
       id: `interviews-panel-notice-changed:${notice.version}:${n}`, scope: 'interviews-my-interviews', kind: 'choice',
       eyebrow: 'The notice has changed since you accepted',
       title: notice.title,
-      question: notice.panelLine,
+      question: interviewingLine(notice.panelLine),
       fields: [
         { label: 'Your rounds', value: status.pendingRounds === 1 ? 'One round you accepted is still to come.' : `${status.pendingRounds} rounds you accepted are still to come.` },
         {
@@ -208,14 +211,14 @@ function MyInterviewsWorkspace() {
     const done = answered.get(r.id);
     if (done) return <T size="xs" tone="secondary" data-testid="interviews-desk-answered">{done}</T>;
     if (r.myAnswer !== 'to-answer') {
-      const prepare = !isLive(r) && (r.bucket === 'to-prepare' || r.bucket === 'upcoming');
+      const prepare = (!isLive(r) && (r.bucket === 'to-prepare' || r.bucket === 'upcoming')) || (isLive(r) && r.seat === null);
       const card = hasScorecard(r);
       if (!prepare && !canOpenRoom(r) && !card) return null;
       return (
         <Inline gap="xs" wrap={false}>
-          {card && <Button size="sm" variant={r.bucket === 'scorecard-due' ? 'primary' : 'ghost'} data-testid="interviews-desk-scorecard"
+          {card && <Button size="sm" variant={r.bucket === 'scorecard-due' ? 'primary' : 'secondary'} data-testid="interviews-desk-scorecard"
             onClick={() => void navigate(scorecardPath(r.id))}>{r.bucket === 'scorecard-due' ? 'Fill in the scorecard' : 'Your scorecard'}</Button>}
-          {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'ghost'} data-testid="interviews-desk-prepare"
+          {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'secondary'} data-testid="interviews-desk-prepare"
             onClick={() => void navigate(preparePath(r.id))}>{r.seat === 'lead' ? 'Prepare' : 'Read the plan'}</Button>}
           {isLive(r) && r.seat !== null
             ? <Button size="sm" variant="primary" data-testid="interviews-desk-join" onClick={() => void navigate(roomHref(r.id))}>Join</Button>
@@ -227,7 +230,7 @@ function MyInterviewsWorkspace() {
       <Stack gap="none">
         <Inline gap="xs" wrap={false}>
           <Button size="sm" variant="primary" disabled={busy !== null} data-testid="interviews-desk-accept" onClick={() => { void accept(r); }}>Accept</Button>
-          <Button size="sm" variant="ghost" disabled={busy !== null} data-testid="interviews-desk-decline"
+          <Button size="sm" variant="secondary" disabled={busy !== null} data-testid="interviews-desk-decline"
             onClick={() => { setRowError(null); setNoticeFor(null); setAsked((n) => n + 1); setDeclining(r); }}>Decline…</Button>
         </Inline>
         {rowError?.id === r.id && <T size="xs" tone="danger">{rowError.text}</T>}
@@ -270,8 +273,7 @@ function MyInterviewsWorkspace() {
               columns={COLUMNS}
               keyField={(r) => r.id}
               rowActions={answerCell}
-              rowActionsHeader="Answer"
-              rowActionsHeaderHidden
+              rowActionsHeader="Actions"
               loading={isLoading && !data}
               pageSize={25}
               emptyMessage={query.trim() ? 'No interview matches this search.' : 'Nothing here right now.'}

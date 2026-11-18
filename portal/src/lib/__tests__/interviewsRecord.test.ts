@@ -54,7 +54,7 @@ test('the recording\'s one line per state', () => {
   assert.match(recordingLine({ ...base, state: 'declined' })!, /chose not to be recorded/);
   assert.match(recordingLine({ ...base, state: 'deleted' })!, /has been deleted/);
   assert.match(recordingLine({ ...base, state: 'none' })!, /no recording/);
-  assert.match(recordingLine({ ...base, state: 'available', durationSeconds: 3500, standIn: true })!, /runs 58 minutes.*nothing to play here/);
+  assert.match(recordingLine({ ...base, state: 'available', durationSeconds: 3500, standIn: true })!, /^Recording: 58 minutes\. Video is not kept in this demo workspace\.$/);
   assert.equal(recordingLine({ ...base, state: 'available' }, 'playable'), null);
   assert.match(recordingLine({ ...base, state: 'available' }, 'none')!, /no recording/);
   assert.match(recordingLine({ ...base, state: 'available' }, 'unreachable')!, /could not be reached/);

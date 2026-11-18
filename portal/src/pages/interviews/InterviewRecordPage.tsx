@@ -28,6 +28,8 @@ import {
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
+import { NO_SEAT_NOT_FOUND, roomHref } from '../../lib/interviewsRoom';
+import { roomPath } from '../../lib/interviewsPrepare';
 import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
@@ -40,11 +42,22 @@ export default function InterviewRecordPage() {
   const record = data?.record ?? null;
   useCrumbLabel(id, record ? `${record.interview.candidate.name}, ${record.interview.round.name}` : null);
   if (failure?.status === 404) {
-    return <RecordNotFound heading="Interview" title="Interview not found" body="There is no interview here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
+    return <RecordMissing id={id} onHome={() => navigate('/interviews')} onRoom={() => navigate(roomHref(id))} />;
   }
   if (error && !record) return <UnavailableNotice error={error} what="this interview" source="Interviews are read from the interviews tenant" onRetry={refresh} />;
   if (!record) return <DetailPage title="Interview" breadcrumbs={trail}><LoadingState label="Opening the interview…" /></DetailPage>;
   return <RecordWorkspace key={record.interview.id} record={record} trail={trail} />;
+}
+
+/** No record at this address: the viewer's own round that has not ended yet (it opens when it does), or nothing they may open. */
+function RecordMissing({ id, onHome, onRoom }: { id: string; onHome(): void; onRoom(): void }) {
+  const { data } = useFetch<{ room: { state: string } }>(roomPath(id));
+  const state = data?.room?.state;
+  if (state === 'accepted' || state === 'ready' || state === 'live') {
+    return <RecordNotFound heading="Interview" title="The record opens when the interview ends" body="Nothing has been recorded to show yet."
+      backLabel="Open the room" onBack={onRoom} />;
+  }
+  return <RecordNotFound heading="Interview" title={NO_SEAT_NOT_FOUND.title} body={NO_SEAT_NOT_FOUND.body} backLabel={NO_SEAT_NOT_FOUND.backLabel} onBack={onHome} />;
 }
 
 /** Media from platform-api, asked only when the server says a real recording may be there. */
@@ -111,6 +124,8 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const lengthSeconds = recording.durationSeconds
     ?? (interview.startedAt && interview.endedAt ? Math.max(0, (Date.parse(interview.endedAt) - Date.parse(interview.startedAt)) / 1000) : null);
   const recordingNote = recordingLine(recording, media?.state ?? null);
+  // A stand-in recording (the demo workspace keeps no video) is one meta line, not a section, so the code and the transcript start higher.
+  const standIn = recording.state === 'available' && recording.standIn;
   const transcriptNote = transcriptLine(transcript.state);
 
   const recordingPart = playing ? (
@@ -142,7 +157,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const words = transcriptNote ? (
     <DetailSection variant="heading" as="h2" first title="Transcript"><T size="sm" tone="secondary" wrap data-testid="interviews-record-transcript-line">{transcriptNote}</T></DetailSection>
   ) : (
-    <TranscriptPanel status="ready" segments={segments} currentTimeMs={timeMs} onSeek={moveTo}
+    <TranscriptPanel status="ready" segments={segments} headerMeta={<T size="xs" tone="tertiary">{segments.length === 1 ? '1 line' : `${segments.length} lines`}</T>} currentTimeMs={timeMs} onSeek={moveTo}
       emptyMessage="Nothing was transcribed in this interview." data-testid="interviews-record-transcript-panel" />
   );
 
@@ -167,10 +182,13 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
 
   const left = (
     <Stack gap="md" className="h-full min-h-0 min-w-0 pr-3" data-testid="interviews-record-body">
-      <DetailSection variant="heading" as="h2" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>
+      {!standIn && <DetailSection variant="heading" as="h2" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>}
       {technical
         ? <Stack gap="xs" className="min-h-0 flex-1" data-testid="interviews-record-code-section">
-            <T size="sm" weight="medium">Code</T>
+            <Inline gap="sm" align="baseline" wrap={false}>
+              <T size="sm" weight="medium">Code</T>
+              <T size="xs" tone="tertiary" data-testid="interviews-record-legend">Q question · P paste · R run</T>
+            </Inline>
             {code}
           </Stack>
         : <Stack gap="none" className="min-h-0 flex-1 overflow-y-auto">{moments}</Stack>}
@@ -184,7 +202,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
         interview.opening.title,
         ROUND_TYPE_LABELS[interview.round.type],
         interview.startedAt ? whenLabel(interview.startedAt) : null,
-        lengthSeconds ? lengthOf(lengthSeconds) : `${interview.round.minutes} minutes planned`,
+        standIn ? recordingNote : lengthSeconds ? lengthOf(lengthSeconds) : `${interview.round.minutes} minutes planned`,
       ].filter((x): x is string => Boolean(x))} />}>
       <SplitPane className="h-[calc(100vh-14rem)] min-h-[32rem]" defaultRatio={0.58} minPrimaryPx={420} minSecondaryPx={320} dividerLabel="Resize the recording and the transcript"
         primary={left}

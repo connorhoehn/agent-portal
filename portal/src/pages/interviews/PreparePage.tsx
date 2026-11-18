@@ -56,6 +56,10 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
   // The carried refusal stays until the person changes the plan again.
   useEffect(() => { if (dirty) onCarried(null); }, [dirty, onCarried]);
   const shownProblem = problem ?? carried;
+  // A reader (the panel, the recruiter) is not asked to choose: the plan is the lead's, named by first name.
+  const reader = record.seat !== 'lead';
+  const leadFirst = record.lead.name.split(' ')[0] ?? record.lead.name;
+  const missingShown = reader ? (record.missing && /^Waiting for a time from the recruiter\.?$/.test(record.missing) ? record.missing : null) : record.missing;
   const editable = record.canPrepare;
   const full = plan.length >= record.maxQuestions;
   const status = roundStatus(record.state);
@@ -113,7 +117,7 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
 
   const planSection = (
     <Stack gap="md">
-      <DetailSection variant="heading" as="h2" title="Your plan" hint={`${plan.length} of ${record.maxQuestions}`}>
+      <DetailSection variant="heading" as="h2" title={reader ? `${leadFirst}'s plan` : 'Your plan'} hint={reader && plan.length === 0 ? undefined : ofMax(plan.length, record.maxQuestions)}>
         <Stack gap="sm">
           {editable && (
             <Inline gap="sm" align="center" wrap={false}>
@@ -121,12 +125,12 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
               <T size="xs" tone="tertiary">{dirty ? 'You have changes that are not saved yet.' : 'Everything here is saved.'}</T>
             </Inline>
           )}
-          {record.missing && <T size="sm" tone="secondary" data-testid="interviews-prepare-missing">{record.missing}</T>}
-          {!editable && <T size="sm" tone="secondary" data-testid="interviews-prepare-readonly">{readOnlyLine(record)}</T>}
+          {missingShown && <T size="sm" tone="secondary" data-testid="interviews-prepare-missing">{missingShown}</T>}
+          {!editable && readOnlyLine(record) && <T size="sm" tone="secondary" data-testid="interviews-prepare-readonly">{readOnlyLine(record)}</T>}
           {shownProblem && <T size="sm" tone="danger" role="alert" data-testid="interviews-plan-problem">{shownProblem}</T>}
           {note && !shownProblem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
           {planned.length === 0
-            ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">Nothing in the plan yet. Add questions from the list below.</T>
+            ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">{reader ? `${leadFirst} has not chosen questions yet.` : 'Nothing in the plan yet. Add questions from the list below.'}</T>
             : <DataTable narrow rowHeight="content" data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id} staticRows="Each question in your plan, with its order controls"
               rowActions={editable ? planControls : undefined} rowActionsHeader="Order" rowActionsHeaderHidden />}
         </Stack>
@@ -153,7 +157,7 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
         </DetailSection>
       )}
       {groups.length === 0
-        ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the bank is in your plan.'}</T>
+        ? <T size="sm" tone="tertiary">{record.bank.length === 0 ? 'This opening has no questions for this kind of round yet. The recruiter adds them in the kit.' : 'Every question in the kit is in your plan.'}</T>
         : groups.map((g) => (
           <DetailSection key={g.competencyId} variant="heading" as="h2" title={g.name} hint={`${g.questions.length} to choose from`}>
             <DataTable narrow rowHeight="content" data-testid="interviews-bank-table" aria-label={`Questions for ${g.name}`} data={g.questions} columns={bankColumns} keyField={(q) => q.id} staticRows="Each question in the kit, with a button to add it"
@@ -187,11 +191,14 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
   );
 }
 
-function readOnlyLine(r: InterviewRecord): string {
-  if (r.state === 'assigned') return r.seat === 'lead' ? 'Accept this round first: you choose its questions once you have.' : `${r.lead.name} chooses the questions once they accept.`;
+/** "1 question (up to 8)": the plan's size against the most a round may carry, not a count of what the kit holds. */
+const ofMax = (n: number, max: number): string => `${n} ${n === 1 ? 'question' : 'questions'} (up to ${max})`;
+
+function readOnlyLine(r: InterviewRecord): string | null {
+  if (r.state === 'assigned') return r.seat === 'lead' ? 'Accept this round first: you choose its questions once you have.' : `${r.lead.name.split(' ')[0]} chooses the questions once they accept.`;
   if (r.state === 'live' || r.state === 'ended' || r.state === 'scored' || r.state === 'reviewed') return 'This round has started, so its plan is fixed.';
   if (r.state === 'declined' || r.state === 'cancelled') return 'This round is no longer going ahead.';
-  return `${r.lead.name} chooses the questions for this round.`;
+  return r.seat === 'lead' ? `${r.lead.name} chooses the questions for this round.` : null;
 }
 
 function Competencies({ record }: { record: InterviewRecord }) {

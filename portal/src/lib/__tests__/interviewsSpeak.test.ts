@@ -12,7 +12,7 @@ test('said and line are read off an answer body, and nothing else', () => {
 
 test('the Have Milo ask receipt says what happened', () => {
   assert.equal(miloAskReceipt('spoken'), 'Milo asked it aloud');
-  assert.equal(miloAskReceipt('chat'), 'In the call chat only');
+  assert.equal(miloAskReceipt('chat'), 'Milo posted the question in the chat (Milo’s voice is off)');
   assert.equal(miloAskReceipt(undefined), 'Sent to the call chat');
   assert.equal(sayPath('iv-1'), '/api/interviews/interviews/iv-1/say');
 });
