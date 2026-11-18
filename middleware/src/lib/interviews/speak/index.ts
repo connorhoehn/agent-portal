@@ -29,8 +29,6 @@ export { saidStore, setSaidStore, MemorySaidStore, SAID_SOURCES, type SaidRecord
 export const MILO_CAN_DO = 'I can repeat the question or tell you how much time is left. Ask "Milo, repeat the question" or "Milo, how much time is left?"';
 /** "Repeat the question" before Milo has asked one. */
 export const NO_QUESTION_YET = 'Milo has not asked a question yet.';
-/** A second button press inside the limit (the route's, U10). */
-export const TOO_SOON = 'Milo just answered. Ask again in a few seconds.';
 
 /** What a candidate's request is: one of the two fixed ones, or anything else (the fixed sentence). */
 export type CandidateRequest = 'repeat' | 'time' | 'other';

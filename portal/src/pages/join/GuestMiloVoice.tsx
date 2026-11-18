@@ -11,7 +11,7 @@
 //                      server's sentence beside them. Milo also says it aloud when it is listening with its voice on.
 //
 // Neither opens a socket or joins a channel; both render nothing until the candidate is in the call.
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { Button, Chip, Inline, T } from '@connorhoehn/ui-components/shared';
 import { SpeakerIcon } from '@connorhoehn/ui-components/video';
 import { useAssistantVoice } from '../../lib/assistantVoice';
@@ -45,15 +45,22 @@ export function GuestMiloVoice({ room, line = null }: { room: GuestRoom; line?: 
     const channel = `orgiq:huddle:${callId}`;
     return gateway.onMessage((frame) => setAsked((cur) => lastAskedOf(frame, channel, cur)));
   }, [callId, gateway.onMessage]);
+  // A repeat answers with the question already on the line (E4 #34): no second copy; the question is announced again instead.
+  const repeated = !!asked && !!line && line.trim() === asked.trim();
+  const announced = useRef(0);
+  const [announce, setAnnounce] = useState(0);
+  useEffect(() => { if (repeated) setAnnounce(++announced.current); }, [repeated, line]);
   if (!callId || room.state !== 'open') return null;
-  return <Inline gap="sm" align="center" wrap={false} className="min-w-0 px-4 py-1" data-testid="guest-milo-voice"
+  return <Inline gap="sm" align="center" className="min-w-0 px-4 py-1" data-testid="guest-milo-voice"
     data-voice-frames={voice.framesPlayed} data-voice-speaking={String(voice.speaking)}>
     {voice.speaking && <Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Milo is speaking</Chip>}
-    {asked && <T size="sm" weight="medium" className="shrink-0">Milo asked</T>}
-    {asked && <T size="sm" truncate title={asked} data-testid="guest-milo-question">{asked}</T>}
+    {/* One line that wraps: the label and the whole question, never cut. A repeat re-mounts it, so a screen reader reads it again. */}
+    {asked && <T key={announce} as="p" size="sm" role="status" className="min-w-0 flex-1" data-testid="guest-milo-asked">
+      <T as="span" size="sm" weight="medium">Milo asked </T><T as="span" size="sm" data-testid="guest-milo-question">{asked}</T>
+    </T>}
     {voice.needsGesture && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="guest-milo-enable-sound">Click to hear Milo</Button>}
     {/* The server's sentence to the candidate's last request, on this line rather than in the bar, so the bar never wraps at 1280. */}
-    {line && <T size="xs" tone="secondary" truncate title={line} className="ml-auto shrink-0" role="status" data-testid="guest-milo-line">{line}</T>}
+    {line && !repeated && <T size="xs" tone="secondary" title={line} className="ml-auto" role="status" data-testid="guest-milo-line">{line}</T>}
   </Inline>;
 }
 

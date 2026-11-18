@@ -1,18 +1,18 @@
 // Piece I3.8: the candidate's two fixed requests (docs/interviews-tenant-plan.md row I3.8, decision 10). On the scripted
 // session only; the answers are text the server holds and never reach a model. The lead and the candidate IN the call on a
-// fresh technical round (h8-room.mjs), Milo invited with its voice on. A press inside 10 s of the last is a plain sentence, so
+// fresh technical round (h8-room.mjs), Milo invited with its voice on. A press inside 10 s of the last is answered in text only, so
 // the steps wait 11 s between presses.
 //   I3.8a  "Repeat the question" before Milo asked any: the plain sentence "Milo has not asked a question yet."
-//   I3.8b  after a kit question Milo asked aloud: "Repeat the question" reads that question, it is said (the candidate's frames
+//   I3.8b  after a kit question Milo asked aloud: "Repeat the question" shows that question once on Milo's line, it is said (the candidate's frames
 //          move) and posted (the lead's chat holds it twice: the question, then the answer)
 //   I3.8c  "How much time is left?" answers from the join (minutes left, or the round's length) and the lead's chat holds it
-//   I3.8d  a second press inside 10 s gets "Milo just answered…" and nothing more is posted
+//   I3.8d  a second press inside 10 s still reads the time in text (E4 #35: the cooldown holds the voice, not the answer) and
+//          nothing more is posted
 //   I3.8e  a spoken request for a hint ("Milo, can you give me a hint?") gets the one fixed sentence in the chat on both sides;
 //          a typed one in the candidate's chat is written in the detail (the fixed sentence, or nothing, never anything else)
 import { askedMarker, staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, framesOf, letSound, chatText, padTab } from './h8-room.mjs';
 
 const NO_QUESTION_YET = 'Milo has not asked a question yet.';
-const TOO_SOON = 'Milo just answered. Ask again in a few seconds.';
 const CAN_DO = 'I can repeat the question or tell you how much time is left.';
 const count = (hay, needle) => (needle ? hay.split(needle).length - 1 : 0);
 
@@ -65,12 +65,15 @@ export default async function run(ctx) {
     const { said } = await askedMarker(L.page);
     await G.page.waitForTimeout(3000);
     const before = await framesOf(G.page);
-    const l = await press('repeat', new RegExp(prompt.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));  // the line from I3.8a is still there until the answer replaces it
+    // E4 #34: a repeat answers with the question already on Milo's line, so the line shows it once (no second copy).
+    await G.page.getByTestId('guest-milo-repeat').click();
     const after = await until(async () => { const f = await framesOf(G.page); return f > before ? f : null; }, 12_000) ?? await framesOf(G.page);
+    const l = ((await G.page.getByTestId('guest-milo-question').first().innerText().catch(() => '')) ?? '').trim();
+    const once = count(await G.page.getByTestId('guest-milo-voice').innerText().catch(() => ''), prompt.slice(0, 40)) === 1;
     const key = prompt.slice(0, 40);
     const leadChat = await until(async () => { const t = await chatText(L.page); return count(t, key) >= 2 ? t : null; }, 8000) ?? await chatText(L.page);
-    const ok = said === 'spoken' && l === prompt && after > before && count(leadChat, key) >= 2;
-    return { ok, detail: `the kit question ${said}; the candidate reads "${l.slice(0, 60)}"; frames ${before} → ${after}; the lead's chat holds it ${count(leadChat, key)} time(s)` };
+    const ok = said === 'spoken' && l === prompt && once && after > before && count(leadChat, key) >= 2;
+    return { ok, detail: `the kit question ${said}; the candidate reads "${l.slice(0, 60)}" ${once ? 'once' : 'MORE THAN ONCE'}; frames ${before} → ${after}; the lead's chat holds it ${count(leadChat, key)} time(s)` };
   });
 
   await step('I3.8c', async () => {
@@ -83,10 +86,11 @@ export default async function run(ctx) {
 
   await step('I3.8d', async () => {
     const chatBefore = await chatText(L.page);
-    const l = await press('time', /just answered/);
+    const l = await press('time', /minute|end of its time/);
     await L.page.waitForTimeout(2500);
     const chatAfter = await chatText(L.page);
-    return { ok: l === TOO_SOON && count(chatAfter, 'left in this round') === count(chatBefore, 'left in this round') && count(chatAfter, 'minutes long') === count(chatBefore, 'minutes long'), detail: `a second press reads "${l}"; nothing more posted ${chatAfter.length === chatBefore.length}` };
+    const timeLine = /^(About \d+ minutes? (are|is) left in this round\.|This round is \d+ minutes long\.|This round is at the end of its time\.)$/.test(l);
+    return { ok: timeLine && count(chatAfter, 'left in this round') === count(chatBefore, 'left in this round') && count(chatAfter, 'minutes long') === count(chatBefore, 'minutes long'), detail: `a second press reads "${l}"; nothing more posted ${chatAfter.length === chatBefore.length}` };
   });
 
   await step('I3.8e', async () => {

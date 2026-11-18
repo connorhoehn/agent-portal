@@ -3,7 +3,7 @@
 // through lib/interviews/speak's deps (no session, no provider). Every model client the interviews code could reach is a spy that
 // fails the test if it is called.
 //
-//   pressed many times          the first is answered; the rest inside 10 s read "Milo just answered…"; logged, posted, said once
+//   pressed many times          each is answered in text; only the first inside 10 s is logged, posted and said (E4 #35)
 //   while one is outstanding    a second press inside 10 s is the same plain sentence and is not logged
 //   the transcript declined     the button still answers from held text (pinned: the route reads no consent), logged once
 //   after the end               the guest's one not-found; nothing logged
@@ -56,7 +56,7 @@ import { interviewConsentsFixture } from '../../mock/interviews-consents.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import { setConsentStore } from '../../lib/interviews/consent/store.js';
 import { setInterviewsClockOffset, resetInterviewsClock } from '../../lib/interviews/clock.js';
-import { MemorySaidStore, NO_QUESTION_YET, TOO_SOON, setSpeakDeps } from '../../lib/interviews/speak/index.js';
+import { MemorySaidStore, NO_QUESTION_YET, setSpeakDeps } from '../../lib/interviews/speak/index.js';
 import { ScriptedCoachModel } from '../../lib/interviews/coach/model.js';
 import { ScriptedMiloModel } from '../../lib/interviews/milo-notes/model.js';
 
@@ -143,7 +143,7 @@ afterEach(() => {
 });
 afterAll(() => { setSpeakDeps(null); resetInterviewsClock(); });
 
-it('pressed many times: the first is answered, the rest inside 10 s read the plain sentence; logged, posted and said once', async () => {
+it('pressed many times: each is answered in text, and only the first inside 10 s is logged, posted and said (E4 #35)', async () => {
   const cookie = await admittedGuest();
   const lines: string[] = [];
   for (let i = 0; i < 6; i += 1) {
@@ -152,7 +152,8 @@ it('pressed many times: the first is answered, the rest inside 10 s read the pla
     lines.push(res.body.line);
   }
   expect(lines[0]).toMatch(/minutes|round/);
-  expect(lines.slice(1)).toEqual(Array(5).fill(TOO_SOON));
+  // The cooldown holds the voice, never the answer: a time press reads the time, a repeat the (absent) question.
+  lines.slice(1).forEach((l, n) => expect(l).toEqual(n % 2 === 0 ? NO_QUESTION_YET : lines[0]));
   expect([(await said.list(IV)).length, posts.length, spoken.length]).toEqual([1, 1, 1]);
   // Past the 10 s, the next is answered (and logged) again.
   setInterviewsClockOffset(11_000, true);
@@ -160,14 +161,14 @@ it('pressed many times: the first is answered, the rest inside 10 s read the pla
   expect((await said.list(IV)).map((r) => r.source)).toEqual(['time', 'repeat']);
 });
 
-it('a request while one is still being said: the plain sentence, not logged, not posted; the first finishes on its own', async () => {
+it('a request while one is still being said: answered in text, not logged, not posted; the first finishes on its own', async () => {
   const cookie = await admittedGuest();
   let release: () => void = () => {};
   voice = () => new Promise((r) => { release = () => r('spoken'); });
   const first = ask(cookie, { request: 'time' }).then((r) => r);
   for (let i = 0; i < 50 && posts.length === 0; i += 1) await new Promise((r) => setTimeout(r, 5));
   const second = await ask(cookie, { request: 'repeat' });
-  expect([second.status, second.body]).toEqual([200, { line: TOO_SOON }]);
+  expect([second.status, second.body]).toEqual([200, { line: NO_QUESTION_YET }]);
   release();
   expect((await first).body.line).toMatch(/minutes|round/);
   expect([(await said.list(IV)).length, posts.length, spoken.length]).toEqual([1, 1, 1]);
