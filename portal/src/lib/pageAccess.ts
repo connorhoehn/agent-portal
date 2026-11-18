@@ -131,28 +131,33 @@ export interface OtherWorkspaceRefusal {
   description: string;
   /** The session holds a grant in the page's workspace: offer "Switch workspace". */
   canSwitch: boolean;
+  /**
+   * The one next step: switch into the workspace, choose another account (the workspace chooser, where a dev
+   * sign-in also picks a person), or sign in. Never a silent jump to another workspace's front door.
+   */
+  next: 'switch' | 'choose' | 'sign-in';
 }
 
 /**
  * A URL that belongs to another workspace (App.tsx `RequireTenant` fallbacks, regression walk
  * 9 November 2026, defect B). It used to redirect silently to the viewer's own front door. The page
- * now says the URL is another workspace's and offers the switch only when the session holds a grant
- * there (`availableTenants`). It names that workspace and nothing else: never the page, never its
- * data, because a viewer with no grant there has no business learning what it holds.
+ * now says the URL is another workspace's, who the viewer is signed in as (a dropped or replaced
+ * cookie lands a person on the demo identity in Work, and the page has to say so), and the next step:
+ * the switch when the session holds a grant there (`availableTenants`), else the account chooser, or
+ * sign in when there is no session. It names that workspace and nothing else: never the page, never
+ * its data, because a viewer with no grant there has no business learning what it holds.
  */
 export function otherWorkspaceRefusal(
-  session: { tenant: string; availableTenants?: readonly string[] | null } | null | undefined,
+  session: { tenant: string; name?: string | null; availableTenants?: readonly string[] | null } | null | undefined,
   tenant: string,
 ): OtherWorkspaceRefusal {
   const name = workspaceName(tenant);
-  const here = session ? workspaceName(session.tenant) : null;
-  const canSwitch = !!session && session.tenant !== tenant && (session.availableTenants ?? []).includes(tenant);
-  const where = here ? `You are in ${here}. ` : '';
-  return {
-    title: `This page belongs to the ${name} workspace`,
-    description: canSwitch
-      ? `${where}Switch to ${name} to open it.`
-      : `${where}Your account has no access to ${name}.`,
-    canSwitch,
-  };
+  const title = `This page belongs to the ${name} workspace`;
+  if (!session) return { title, description: `You are signed out. Sign in with an account that has ${name} to open it.`, canSwitch: false, next: 'sign-in' };
+  const here = workspaceName(session.tenant);
+  const canSwitch = session.tenant !== tenant && (session.availableTenants ?? []).includes(tenant);
+  const where = session.name ? `You are signed in as ${session.name}, in ${here}. ` : `You are in ${here}. `;
+  return canSwitch
+    ? { title, description: `${where}Switch to ${name} to open it.`, canSwitch, next: 'switch' }
+    : { title, description: `${where}Your account has no access to ${name}. Choose another account, or ask for access to ${name}.`, canSwitch, next: 'choose' };
 }

@@ -38,7 +38,7 @@ import { MeetingTurnRunner } from './MeetingTurnRunner';
 import { AssistantPrivateAnswers } from './AssistantPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, footerCallItems, hasJoinedCall, idleHuddleControls } from './callShellModel';
-import { InterviewRoomAsks, InterviewRoomBarItems } from './InterviewRoomFooter';
+import { InterviewRoomAsks, InterviewRoomBarItems, InterviewRoomReturn } from './InterviewRoomFooter';
 import { VoiceFooterSlot } from './VoiceFooterPane';
 import { lineStarts } from './footerLines';
 import { usePhoneFooter } from './phoneFooter';
@@ -128,6 +128,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       {joined && !over && !meetingItems && items.reactions && <HuddleReactionBar />}
       <InterviewRoomBarItems lobbyName={host.lobby.lobbyName} callStartedAt={joined ? call.call?.startedAt ?? observedJoin.current?.at ?? null : null} />
       
+      {!over && <InterviewRoomReturn lobbyName={host.lobby.lobbyName} joined={joined} />}
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
       {!barShown && <DeviceSettings onClick={host.checkDevices} />}
     </>}

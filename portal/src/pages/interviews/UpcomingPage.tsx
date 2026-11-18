@@ -25,7 +25,8 @@ import {
   CONSENT_EFFECTS_PATH, consentColumnLabel, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
 } from '../../lib/interviewsUpcoming';
 import { finishedCount, isLive, upcomingRows, type UpcomingShow } from '../../lib/interviewsDesk';
-import { roomHref } from '../../lib/interviewsRoom';
+import { roomEntryLabel, roomHref } from '../../lib/interviewsRoom';
+import { useJoinedInterviewCall } from '../../components/shell/InterviewRoomFooter';
 import { PanelCell, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -75,8 +76,8 @@ function InviteStatusLoader({ row, override, link }: { row: InterviewRow; overri
 }
 
 /** The row's actions: Join for a live round, and one menu for the time and the link. */
-function RowActions({ row, override, busy, onJoin, onSetTime, onClearTime, onMake, onRevoke }: {
-  row: InterviewRow; override: InviteStatus | undefined; busy: boolean; onJoin(): void; onSetTime(): void; onClearTime(): void; onMake(status: InviteStatus | null): void; onRevoke(): void;
+function RowActions({ row, joinedId, override, busy, onJoin, onSetTime, onClearTime, onMake, onRevoke }: {
+  row: InterviewRow; joinedId: string | null; override: InviteStatus | undefined; busy: boolean; onJoin(): void; onSetTime(): void; onClearTime(): void; onMake(status: InviteStatus | null): void; onRevoke(): void;
 }) {
   const timeable = isTimeable(row.state);
   const { data } = useFetch<{ invite: InviteStatus }>(timeable && row.scheduledAt ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(row.id)}/invite` : null, undefined, { share: true });
@@ -90,7 +91,7 @@ function RowActions({ row, override, busy, onJoin, onSetTime, onClearTime, onMak
   ];
   return (
     <Inline gap="xs" align="center" wrap={false}>
-      {isLive(row) && row.seat && <Button size="sm" variant="primary" data-testid="interviews-upcoming-join" onClick={onJoin}>Join</Button>}
+      {isLive(row) && row.seat && <Button size="sm" variant="primary" data-testid="interviews-upcoming-join" onClick={onJoin}>{roomEntryLabel(row.id, joinedId)}</Button>}
       {items.length > 0 && <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${row.round.name} with ${row.candidate.name}`} align="end" triggerTestId="interviews-upcoming-actions" sections={[{ items }]} />}
     </Inline>
   );
@@ -98,6 +99,7 @@ function RowActions({ row, override, busy, onJoin, onSetTime, onClearTime, onMak
 
 function UpcomingWorkspace() {
   const navigate = useNavigate();
+  const joinedId = useJoinedInterviewCall();
   const { session } = useSession();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
   const withConsent = showsConsentColumn(session?.role);
@@ -267,7 +269,7 @@ function UpcomingWorkspace() {
               columns={COLUMNS}
               keyField={(r) => r.id}
               rowActions={(r) => (
-                <RowActions row={r} override={statuses.get(r.id)} busy={busy === r.id} onJoin={() => void navigate(roomHref(r.id))}
+                <RowActions row={r} joinedId={joinedId} override={statuses.get(r.id)} busy={busy === r.id} onJoin={() => void navigate(roomHref(r.id))}
                   onSetTime={() => { setRowError(null); setEditing(r.id); }} onClearTime={() => ask({ kind: 'time', row: r, iso: null })}
                   onMake={(s) => (s?.state === 'live' ? ask({ kind: 'replace', row: r }) : void make(r))} onRevoke={() => ask({ kind: 'revoke', row: r })} />
               )}

@@ -36,7 +36,8 @@ import {
   type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
 import { DESK_TABS, deskTabCounts, deskTabRows, firstDeskTab, isLive, type DeskTab } from '../../lib/interviewsDesk';
-import { roomHref } from '../../lib/interviewsRoom';
+import { roomEntryLabel, roomHref } from '../../lib/interviewsRoom';
+import { useJoinedInterviewCall } from '../../components/shell/InterviewRoomFooter';
 import { canOpenRoom, preparePath, roomPath } from '../../lib/interviewsPrepare';
 import { hasScorecard, scorecardPath } from '../../lib/interviewsScorecard';
 import {
@@ -81,6 +82,7 @@ export default function MyInterviewsPage() {
 
 function MyInterviewsWorkspace() {
   const navigate = useNavigate();
+  const joinedId = useJoinedInterviewCall();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
   const [query, setQuery] = useState('');
   /** Rows answered on this page: the confirmation shown in place until the desk reloads. */
@@ -221,7 +223,7 @@ function MyInterviewsWorkspace() {
           {prepare && <Button size="sm" variant={r.bucket === 'to-prepare' && r.seat === 'lead' ? 'primary' : 'secondary'} data-testid="interviews-desk-prepare"
             onClick={() => void navigate(preparePath(r.id))}>{r.seat === 'lead' ? 'Prepare' : 'Read the plan'}</Button>}
           {isLive(r) && r.seat !== null
-            ? <Button size="sm" variant="primary" data-testid="interviews-desk-join" onClick={() => void navigate(roomHref(r.id))}>Join</Button>
+            ? <Button size="sm" variant="primary" data-testid="interviews-desk-join" onClick={() => void navigate(roomHref(r.id))}>{roomEntryLabel(r.id, joinedId)}</Button>
             : canOpenRoom(r) && <Button size="sm" variant="secondary" data-testid="interviews-desk-room" onClick={() => void navigate(roomPath(r.id))}>Open the room</Button>}
         </Inline>
       );

@@ -6,9 +6,15 @@
 // with the full sentence as a tooltip, so the row stays one line at 1280. Nothing renders unless
 // the shell's call is the registered interview's, so no other tenant's footer changes.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { useCallHost } from '../../lib/conversationCall';
+import { useFetch } from '../../hooks/useFetch';
+import { INTERVIEWS_API } from '../../lib/interviews';
+import { issueInvite, roomLinkControl, type InviteStatus } from '../../lib/interviewsUpcoming';
+import { hasJoinedCall } from './callShellModel';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -92,6 +98,61 @@ export function useInterviewRoomMiloBlock(lobbyName: string | null | undefined):
   return useRoomFor(lobbyName)?.miloBlock ?? null;
 }
 
+// The links the lead made in this tab, by interview: a link is answered once, so leaving the room and coming back keeps it.
+const madeLinks = new Map<string, string>();
+
+/** The lead's "Make candidate link" / "Copy candidate link", while the candidate is not in yet (rows I2.1 and I3.x). */
+function CandidateLinkControl({ interviewId, candidateName }: { interviewId: string; candidateName: string }) {
+  const { data, refresh } = useFetch<{ invite: InviteStatus }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/invite`);
+  const [link, setLink] = useState<string | null>(() => madeLinks.get(interviewId) ?? null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+  const control = roomLinkControl(data?.invite ?? null, link !== null);
+  if (!control) return null;
+  const copy = async (value: string) => {
+    try { await navigator.clipboard.writeText(value); setNote({ text: 'Copied', error: false }); }
+    catch { setNote({ text: 'Copy failed: select the link from the tooltip', error: true }); }
+  };
+  const make = async () => {
+    setBusy(true); setNote(null);
+    const out = await issueInvite(interviewId);
+    setBusy(false);
+    if (!out.ok) { setNote({ text: out.error, error: true }); return; }
+    madeLinks.set(interviewId, out.link);
+    setLink(out.link);
+    refresh();
+    await copy(out.link);
+  };
+  return <Inline gap="xs" align="center" wrap={false} data-testid="interview-candidate-link">
+    {control.kind === 'copy' && link
+      ? <Tooltip content={`${link} (shown only in this tab; a new link stops it working)`} placement="top">
+        <Button size="sm" variant="secondary" aria-label={`Copy ${candidateName}'s link`} onClick={() => void copy(link)} data-testid="interview-candidate-link-copy">Copy candidate link</Button>
+      </Tooltip>
+      : control.kind === 'make' && <Tooltip content={control.hint} placement="top">
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void make()} data-testid="interview-candidate-link-make">{busy ? 'Making…' : control.label}</Button>
+      </Tooltip>}
+    {note && <T size="xs" tone={note.error ? 'danger' : 'secondary'} role={note.error ? 'alert' : 'status'} data-testid="interview-candidate-link-note">{note.text}</T>}
+  </Inline>;
+}
+
+/** The interview whose call this viewer has joined, or null (the desk's and the upcoming table's "Back to the call"). */
+export function useJoinedInterviewCall(): string | null {
+  const host = useCallHost();
+  return joinedInterviewOf(host?.lobby?.lobbyName, !!host && hasJoinedCall(host.call.call, host.call.phase));
+}
+
+/**
+ * In the docked call's extras, beside Leave: the way back to the room while the viewer is in an interview's call on any other
+ * page. It only navigates; the call is already joined.
+ */
+export function InterviewRoomReturn({ lobbyName, joined }: { lobbyName: string | null | undefined; joined: boolean }) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const id = joinedInterviewOf(lobbyName, joined);
+  if (!id || pathname === roomHref(id)) return null;
+  return <Button size="sm" variant="secondary" onClick={() => void navigate(roomHref(id))} data-testid="interview-open-room">Open the room</Button>;
+}
+
 /** In the call bar's extras: time left, the consent chip, and the lead's End interview. */
 export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName: string | null | undefined; callStartedAt: number | string | null | undefined }) {
   const room = useRoomFor(lobbyName);
@@ -107,6 +168,7 @@ export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName:
     {room.consent && <Tooltip content={room.consent.tooltip} placement="top">
       <Chip size="sm" tone={room.consent.tone} aria-label={room.consent.tooltip} data-testid="interview-consent">{room.consent.label}</Chip>
     </Tooltip>}
+    {room.lead && room.admission?.state !== 'admitted' && <CandidateLinkControl interviewId={room.interviewId} candidateName={room.candidateName} />}
     {room.lead && <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>}
   </Inline>;
 }

@@ -1,10 +1,14 @@
 # Row I2.1: the invite link and the guest identity. Format at parseRefusalTable (scripts/journeys/interviews/seed.mjs).
 # The guest's own read answers the guest only; staff and a caller with no session get the guest refusal (not-found).
 GET /api/interview-invite/interview | anon recruiter interviewer interviewer2 hiringManager workOnly | guest
-# The recruiter's routes for the link: an interviewer and a hiring manager hold no ManageCandidates and read not-found
-# (the interviews action gate, lib/interviews/gate.ts: never 403 inside the tenant); the tenant gate stops a guest, a
-# caller with no session and a Work-only person (403). The POST and DELETE use Aiko's round so the
-# guest's own link (Mateo's design round) is never replaced while the table runs.
-GET /api/interviews/interviews/{interviews.mateoDesign}/invite | interviewer interviewer2 hiringManager guest=403 guest:aikoCoding=403 anon=403 workOnly=403 | recruiter
-POST /api/interviews/interviews/{interviews.aikoCoding}/invite | interviewer interviewer2 hiringManager guest=403 anon=403 workOnly=403 | recruiter
+# The routes for the link: the recruiter's, and since the room's "Make candidate link" the round's lead's too for the POST
+# and the GET (their own round only; revoking stays the recruiter's). A panel member, an interviewer with no seat and a
+# hiring manager read not-found (the interviews action gate, lib/interviews/gate.ts: never 403 inside the tenant); the
+# tenant gate stops a guest, a caller with no session and a Work-only person (403). The POST and DELETE use Aiko's round
+# (Wen leads, Hugo has no seat) so the guest's own link (Mateo's design round) is never replaced while the table runs.
+GET /api/interviews/interviews/{interviews.mateoDesign}/invite | interviewer2 hiringManager guest=403 guest:aikoCoding=403 anon=403 workOnly=403 | recruiter interviewer
+POST /api/interviews/interviews/{interviews.aikoCoding}/invite | interviewer hiringManager guest=403 anon=403 workOnly=403 | recruiter interviewer2
 DELETE /api/interviews/interviews/{interviews.aikoCoding}/invite | interviewer interviewer2 hiringManager guest=403 anon=403 workOnly=403 | recruiter
+# The panel's seat is no lead's: Hugo sits on Nadia's leadership round, which Wen leads.
+POST /api/interviews/interviews/{interviews.nadiaLeadership}/invite | interviewer hiringManager | interviewer2
+GET /api/interviews/interviews/{interviews.nadiaLeadership}/invite | interviewer hiringManager | interviewer2

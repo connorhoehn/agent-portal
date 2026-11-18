@@ -42,6 +42,21 @@ export async function revokeInvite(id: string): Promise<{ ok: true; invite: Invi
   return r.ok && r.data?.invite ? { ok: true, invite: r.data.invite } : { ok: false, error: r.error ?? 'The link could not be revoked. Try again.' };
 }
 
+/**
+ * The lead's control in the room for the candidate's link (the server lets the round's lead make it for their own round):
+ * copy the link made in this tab, or make one. A live link made earlier cannot be copied (only its hash is kept), so the
+ * lead makes a new one, which stops the old one working. A closed round, or a status not read yet, shows nothing.
+ */
+export type RoomLinkControl = { kind: 'copy' } | { kind: 'make'; label: string; hint: string };
+export function roomLinkControl(status: InviteStatus | null, held: boolean): RoomLinkControl | null {
+  if (held) return { kind: 'copy' };
+  if (!status || status.state === 'closed') return null;
+  if (status.state === 'live') {
+    return { kind: 'make', label: 'Make a new candidate link', hint: 'The link made earlier is shown only once. A new link stops the old one working.' };
+  }
+  return { kind: 'make', label: 'Make candidate link', hint: 'The candidate joins from this link. It is shown once, so copy it when it is made.' };
+}
+
 /** The link's status in a sentence: made, opened, expires. */
 export function inviteLine(s: InviteStatus, when: (iso: string) => string): string {
   switch (s.state) {

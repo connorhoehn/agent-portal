@@ -16,6 +16,13 @@ export function interviewOfLobby(lobbyName: string | null | undefined): string |
   return m ? m[1]! : null;
 }
 export const isInterviewLobby = (lobbyName: string | null | undefined): boolean => interviewOfLobby(lobbyName) !== null;
+/** The interview whose call this viewer is in now (the shell's call is that interview's lobby and they have joined it); else null. */
+export const joinedInterviewOf = (lobbyName: string | null | undefined, joined: boolean): string | null => (joined ? interviewOfLobby(lobbyName) : null);
+/**
+ * A live round's way into its room: "Join" when the viewer is not in its call yet, "Back to the call" when they are (the call
+ * docks in the footer when they leave the room page). Both open the room; neither joins a second time.
+ */
+export const roomEntryLabel = (interviewId: string, joinedId: string | null): 'Join' | 'Back to the call' => (joinedId === interviewId ? 'Back to the call' : 'Join');
 
 // ── C5: the room's read and its two writes ──────────────────────────────────
 export const roomHref = (interviewId: string): string => `/interviews/rounds/${encodeURIComponent(interviewId)}/room`;

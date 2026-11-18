@@ -210,3 +210,13 @@ test('the idle room lists only what is off, in a fixed order (E4 #37)', () => {
   assert.equal(offForFact([]), null);
   assert.equal(offForFact(undefined), null);
 });
+
+test('back to a running call: the joined interview is read off the lobby, and its live row says "Back to the call" instead of Join', async () => {
+  const { joinedInterviewOf, roomEntryLabel, interviewLobbyName } = await import('../interviewsRoom.ts');
+  assert.equal(joinedInterviewOf(interviewLobbyName('iv-s4e8u2zk'), true), 'iv-s4e8u2zk');
+  assert.equal(joinedInterviewOf(interviewLobbyName('iv-s4e8u2zk'), false), null);
+  assert.equal(joinedInterviewOf('social:dm:abc', true), null);
+  assert.equal(roomEntryLabel('iv-s4e8u2zk', 'iv-s4e8u2zk'), 'Back to the call');
+  assert.equal(roomEntryLabel('iv-s4e8u2zk', 'iv-other'), 'Join');
+  assert.equal(roomEntryLabel('iv-s4e8u2zk', null), 'Join');
+});

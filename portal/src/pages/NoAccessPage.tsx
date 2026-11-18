@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { CapabilityDeniedFallback, PageSection } from '@connorhoehn/ui-components/shared';
 import type { EmptyStateAction } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../lib/auth';
+import { CHOOSER } from '../lib/tenantHome';
 import { useFetch } from '../hooks/useFetch';
 import { accessNextStep, noAccessReason, otherWorkspaceRefusal, rolesPhrase, workspaceName } from '../lib/pageAccess';
 import type { Tenant } from '../lib/tenants.generated';
@@ -88,17 +89,22 @@ export default function NoAccessPage({ roles }: { roles: readonly string[] }) {
 export function OtherWorkspacePage({ tenant }: { tenant: Tenant }) {
   const { pathname, search, hash } = useLocation();
   const navigate = useNavigate();
-  const { session, enterContext } = useSession();
+  const { session, enterContext, ssoEnabled, signInWithSso } = useSession();
   const [switching, setSwitching] = useState(false);
   const refusal = otherWorkspaceRefusal(session, tenant);
+  const here = `${pathname}${search}${hash}`;
   const actions: EmptyStateAction[] = [];
-  if (refusal.canSwitch) {
+  if (refusal.next === 'switch') {
     actions.push({
       label: switching ? 'Switching…' : 'Switch workspace',
-      onClick: () => { setSwitching(true); void enterContext(tenant, undefined, `${pathname}${search}${hash}`).finally(() => setSwitching(false)); },
+      onClick: () => { setSwitching(true); void enterContext(tenant, undefined, here).finally(() => setSwitching(false)); },
     });
+  } else if (refusal.next === 'sign-in') {
+    actions.push({ label: 'Sign in', onClick: () => (ssoEnabled ? signInWithSso() : navigate(CHOOSER)) });
+  } else {
+    actions.push({ label: 'Choose another account', onClick: () => navigate(CHOOSER) });
   }
-  actions.push({ label: 'Back to home', variant: 'link', onClick: () => navigate('/') });
+  if (session) actions.push({ label: 'Back to home', variant: 'link', onClick: () => navigate('/') });
   return (
     <PageSection title={`${workspaceName(tenant)} workspace`}>
       <CapabilityDeniedFallback title={refusal.title} description={refusal.description} actions={actions} testId="other-workspace" />

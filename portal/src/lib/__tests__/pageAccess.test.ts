@@ -95,11 +95,27 @@ test('another workspace\'s URL names the workspace, and offers the switch only w
   const none = otherWorkspaceRefusal(assessor, 'orgiq');
   assert.equal(none.canSwitch, false);
   assert.equal(none.title, 'This page belongs to the Work workspace');
-  assert.equal(none.description, 'You are in Assessment. Your account has no access to Work.');
+  assert.equal(none.description, 'You are in Assessment. Your account has no access to Work. Choose another account, or ask for access to Work.');
+  assert.equal(none.next, 'choose');
   const granted = otherWorkspaceRefusal(both, 'orgiq');
   assert.equal(granted.canSwitch, true);
   assert.equal(granted.description, 'You are in Social. Switch to Work to open it.');
+  assert.equal(granted.next, 'switch');
   assert.equal(otherWorkspaceRefusal({ tenant: 'pipelines', availableTenants: ['pipelines'] }, 'access').title, 'This page belongs to the Access workspace');
+});
+
+test('the generic landing for a workspace\'s URL names who is signed in and the next step, signed out included (interviews room link lane)', () => {
+  // The demo identity a dropped cookie falls back to: the page in Work's chrome must say whose page it is and who you are.
+  const demo = otherWorkspaceRefusal({ tenant: 'orgiq', name: 'Demo User', availableTenants: ['orgiq'] }, 'interviews');
+  assert.equal(demo.title, 'This page belongs to the Candidates workspace');
+  assert.match(demo.description, /^You are signed in as Demo User, in Work\. Your account has no access to Candidates\. Choose another account/);
+  assert.equal(demo.next, 'choose');
+  const out = otherWorkspaceRefusal(null, 'interviews');
+  assert.equal(out.next, 'sign-in');
+  assert.match(out.description, /signed out.*Candidates/);
+  const app = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+  const fn = app.slice(app.indexOf('function OtherWorkspace('), app.indexOf('function Gate('));
+  assert.doesNotMatch(fn, /HomeRedirect|Navigate/, 'the other-workspace landing never redirects');
 });
 
 test('the other-workspace page never names the page, and every tenant tree falls back to it', () => {

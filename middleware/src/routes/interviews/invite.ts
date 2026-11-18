@@ -7,15 +7,16 @@
 //   DELETE /interviews/:id/invite   revoke the live link; answers the status.
 //
 // The checks run in the openings writes' order (routes/interviews/openings.ts): the mount, the authority
-// (ManageCandidates: the recruiter's and the cross-tenant admin's, 403 for everyone else on every id
-// alike), the row (in the viewer's scope, else 404), then the rule (rules.ts: an interview that is
+// (ManageCandidates: the recruiter's and the cross-tenant admin's; failing that, the POST and the GET also
+// take the round's lead for their own round, so the person running the call can make the link from the room;
+// everyone else reads not-found on every id alike), the row (in the viewer's scope, else 404), then the rule (rules.ts: an interview that is
 // declined, cancelled or over, or whose time has long passed, gets no link: 409 with one plain sentence).
-// No page uses these yet; the upcoming table puts the action on its rows.
+// The recruiter's upcoming table and the lead's room ("Make candidate link") call them. Revoking stays the recruiter's.
 
 import { Router, type Request } from 'express';
 import { config } from '../../config.js';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
-import { requireAction, resolveSession } from '../../lib/authz.js';
+import { requireActionOr, resolveSession } from '../../lib/authz.js';
 import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
 import { inviteCeiling, inviteStatus, issuable, type InviteStatus } from '../../lib/interviews/invite/rules.js';
@@ -30,6 +31,21 @@ export const inviteRouter = Router();
 const NO_INTERVIEW = 'There is no interview here that you can open.';
 // A member without ManageCandidates reads the same not-found (lib/interviews/gate.ts), never a 403.
 const manage = interviewsAction('ManageCandidates', NO_INTERVIEW);
+/**
+ * ManageCandidates, or else the round's lead on their own round. A panel member, another interviewer and a
+ * hiring manager read the same not-found as for a round outside their scope.
+ */
+const manageOrLead = requireActionOr('ManageCandidates', (req, _res, next) => {
+  leadsThisRound(req).then((lead) => next(lead ? undefined : new NotFoundError(NO_INTERVIEW)), next);
+});
+
+async function leadsThisRound(req: Request): Promise<boolean> {
+  const session = resolveSession(req);
+  if (!session) return false;
+  const ix = await indexFor(req);
+  const interview = ix.world.interviews.find((i) => i.id === param(req, 'id'));
+  return !!interview && interview.leadId === session.sub;
+}
 const CLOSED = 'This interview is declined, cancelled or over, so it cannot have a link.';
 const PAST = 'This interview\'s time has passed, so a link made now would not work. Set a new time first.';
 
@@ -58,7 +74,7 @@ function portalOrigin(req: Request): string {
   return /^https?:\/\/[^\s/]+$/.test(origin) ? origin : '';
 }
 
-inviteRouter.post('/interviews/:id/invite', manage, asyncHandler(async (req, res) => {
+inviteRouter.post('/interviews/:id/invite', manageOrLead, asyncHandler(async (req, res) => {
   const interview = await interviewInScope(req);
   const now = interviewsNow();
   const verdict = issuable(interview, now);
@@ -76,7 +92,7 @@ inviteRouter.post('/interviews/:id/invite', manage, asyncHandler(async (req, res
   res.status(201).json({ link: `${portalOrigin(req)}${linkPath}`, linkPath, invite: await statusView(invite, interview) });
 }));
 
-inviteRouter.get('/interviews/:id/invite', manage, asyncHandler(async (req, res) => {
+inviteRouter.get('/interviews/:id/invite', manageOrLead, asyncHandler(async (req, res) => {
   const interview = await interviewInScope(req);
   res.setHeader('Cache-Control', 'no-store');
   res.json({ invite: await statusView(await inviteStore().latestInvite(interview.id), interview) });

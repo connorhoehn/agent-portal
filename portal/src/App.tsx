@@ -272,12 +272,13 @@ function HomeRedirect() {
  * A URL another workspace owns (every tenant tree's RequireTenant fallback). It used to redirect
  * silently to the viewer's own front door; now the URL stays and the page says whose it is, offering
  * "Switch workspace" only when the session holds a grant there (pages/NoAccessPage.tsx,
- * lib/pageAccess.ts `otherWorkspaceRefusal`). A signed-out visit still goes home to sign in.
+ * lib/pageAccess.ts `otherWorkspaceRefusal`). It is the one landing for any of a workspace's URLs a person
+ * cannot open from here, signed out included: it names whose page this is, who they are signed in as, and
+ * the next step (switch, choose another account, or sign in), never a jump to another workspace's door.
  */
 function OtherWorkspace({ tenant }: { tenant: Tenant }) {
-  const { session, isLoading } = useSession();
+  const { isLoading } = useSession();
   if (isLoading) return <Loading />;
-  if (!session) return <HomeRedirect />;
   return <Page element={<OtherWorkspacePage tenant={tenant} />} />;
 }
 

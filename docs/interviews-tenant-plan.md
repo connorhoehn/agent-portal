@@ -500,7 +500,7 @@ Sizes: S is under a day of builder time, M one to two, L more. Every row merges 
 
 | # | Item | Judged by | Needs | Size |
 |---|---|---|---|---|
-| I2.1 | Invite token and the guest identity (decision 3); the token leaves the address after first load | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
+| I2.1 | Invite token and the guest identity (decision 3); the token leaves the address after first load. Who may make the link: the recruiter (and the admin) for any round from Upcoming, and the round's lead for their own round from the room's call bar; revoking stays the recruiter's | tests: expiry, one interview only, reuse, revocation | I1.4 | M |
 | I2.2 | Lobby family `interviews:interview:<id>`, admission for panel and guest, a guest seat through the token bridge, the channel guard refusing a guest everywhere else (realtime, media) | gateway authority tests starting from a guest, the pad proof among them (a guest of another interview, and one not yet admitted, refused); platform-api tests: a guest token refused outside its video session | I2.1, I0.7; media is platform-api (the tenant list, guest tokens); realtime-modules needs nothing (I0.7 answer) | L |
 | I2.3 | Portal: landing, the notice and three consents, device check, waiting room, admitted by the interviewer | walk with a second browser context as the candidate | I2.2 | L |
 | I2.4 | The interview room for both sides (decision 21: the call fills the window, one far-right pane: Milo's context, or the pad in a technical round); the candidate's layout has no shell | walk step; screenshots at 1440 and 1280 | I2.3 | M |

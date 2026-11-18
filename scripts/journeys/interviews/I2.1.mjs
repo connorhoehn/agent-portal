@@ -9,6 +9,13 @@
 //   I2.1g  a second opening ends the first session: the first window's reload reads the dead page, the second stays in
 //   I2.1h  the page's own lines: a 429 from the exchange says to wait a minute, a network failure says to check the
 //          connection; neither is the dead page (O-051, walked here because the page's load is not a module of its own)
+//   I2.1i  the lead makes the candidate's link from the room: in Kwame's live round's call bar, "Make candidate link" turns
+//          into "Copy candidate link", the status names Hugo, and the link opens on the candidate's page; Wen (on no seat
+//          there) and the panel's seat read not-found
+//   I2.1j  the way back to a running call: on My interviews the round's row says "Back to the call", and the docked call's
+//          "Open the room" lands on the room without a second join
+import { joinRoomCall, roomUrl, stubCallMedia } from './h3-call.mjs';
+
 export default async function run(ctx) {
   const { SEED, record, signIn, resetMock, mintInvite, revokeInvite, openGuest, api, clock, shootPage, portal } = ctx;
   const iv = SEED.guestInterview;
@@ -120,6 +127,54 @@ export default async function run(ctx) {
       && /Check your connection, then open your link again\./.test(lines.offline) && lines.busyDead === 0 && lines.offlineDead === 0;
     return { ok, detail: `429: "${lines.busy}"; network failure: "${lines.offline}"` };
   });
+
+  let lead = null;
+  await step('I2.1i', async () => {
+    await resetMock();
+    const live = SEED.interviews.kwameLive;
+    const hugo = await signIn(SEED.cast.interviewer);
+    opened.push(hugo);
+    await hugo.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: portal }).catch(() => undefined);
+    await stubCallMedia(hugo, 'hugo-i21i');
+    const { page } = await joinRoomCall(ctx, hugo, live);
+    lead = page;
+    const make = page.getByTestId('interview-candidate-link-make').first();
+    const madeShown = await make.waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const makeLabel = madeShown ? (await make.innerText()).trim() : '';
+    if (madeShown) await make.click();
+    const copy = page.getByTestId('interview-candidate-link-copy').first();
+    const copyShown = await copy.waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const shots = await shootPage(page, 'lead-room-candidate-link');
+    const status = await api(hugo, 'GET', `/api/interviews/interviews/${live}/invite`);
+    const wen = await signIn(SEED.cast.interviewer2);
+    opened.push(wen);
+    const wenMake = await api(wen, 'POST', `/api/interviews/interviews/${live}/invite`, {});
+    const panelMake = await api(hugo, 'POST', `/api/interviews/interviews/${SEED.panelInterview}/invite`, {});
+    // Kwame's round is seeded with a live link the recruiter made, so the lead's button offers a new one (it stops the old).
+    const ok = ['Make candidate link', 'Make a new candidate link'].includes(makeLabel) && copyShown && status.status === 200 && status.body?.invite?.state === 'live'
+      && status.body?.invite?.issuedBy?.id === SEED.cast.interviewer && wenMake.status === 404 && panelMake.status === 404 && shots.every((x) => x.ok);
+    return { ok, detail: `call bar "${makeLabel || 'no Make candidate link'}" → copy ${copyShown ? 'shown' : 'MISSING'}; status ${status.status} ${status.body?.invite?.state} by ${status.body?.invite?.issuedBy?.name}; Wen (no seat) ${wenMake.status}, Hugo on the panel's seat ${panelMake.status}; shots ${shots.map((x) => `${x.width}${x.ok ? '' : ' scrolls sideways'}`).join(', ')}` };
+  });
+
+  await step('I2.1j', async () => {
+    if (!lead) return { ok: false, detail: 'no lead in a call (I2.1i failed)' };
+    const live = SEED.interviews.kwameLive;
+    let joins = 0;
+    lead.on('request', (rq) => { if (rq.method() === 'POST' && /\/join$/.test(new URL(rq.url()).pathname)) joins += 1; });
+    // In-app navigation, not a reload: a reload ends the page's call (the dock lives only within the app), and the room folds the rail.
+    await lead.evaluate(() => { window.history.pushState({}, '', '/interviews/my-interviews'); window.dispatchEvent(new PopStateEvent('popstate')); });
+    await lead.waitForURL((u) => u.pathname === '/interviews/my-interviews', { timeout: 15_000 }).catch(() => undefined);
+    const back = lead.getByTestId('interview-open-room').first();
+    const dockShown = await back.waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const rowLabels = (await lead.getByTestId('interviews-desk-join').allInnerTexts().catch(() => [])).map((t) => t.trim());
+    if (dockShown) await back.click();
+    await lead.waitForURL((u) => u.pathname === new URL(roomUrl(portal, live)).pathname, { timeout: 30_000 }).catch(() => undefined);
+    const atRoom = new URL(lead.url()).pathname === new URL(roomUrl(portal, live)).pathname;
+    const dockStill = await lead.getByTestId('shell-call-dock').first().isVisible().catch(() => false);
+    const ok = dockShown && atRoom && dockStill && joins === 0 && !rowLabels.includes('Join');
+    return { ok, detail: `docked call's Open the room ${dockShown ? 'shown' : 'MISSING'}; desk row buttons [${rowLabels.join(', ') || 'none on this tab'}]; back at the room ${atRoom}; still in the call ${dockStill}; second joins ${joins}` };
+  });
+  if (lead) await lead.getByTestId('shell-call-dock-leave').or(lead.getByRole('button', { name: 'Leave', exact: true })).first().click({ timeout: 5_000 }).catch(() => undefined);
 
   for (const c of opened) await c.close().catch(() => undefined);
   await greta.close();

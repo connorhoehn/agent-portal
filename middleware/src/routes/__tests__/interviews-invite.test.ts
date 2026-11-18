@@ -4,8 +4,9 @@
 // middleware, with ManageCandidates decided from the REAL seeds/roles/*/*.cedar files.
 //
 //   recruiter       issues, reads and revokes a link; the link is answered once and never again
-//   hiring-manager  every invite route refused (403)
-//   interviewer     every invite route refused (403)
+//   lead            makes, re-makes and reads the link for a round they lead (the room's control); never revokes
+//   hiring-manager  every invite route refused (404)
+//   interviewer     every invite route refused (404) on a round they do not lead, the panel's seat included
 //   another tenant  the tenant's usual refusal at the mount
 //   a guest         exchanges the link for its own cookie and reads its own interview, nothing more; refused
 //                   the moment the invite is revoked, expires, or a newer opening of the link replaces it
@@ -141,11 +142,40 @@ describe('the recruiter\'s routes', () => {
     expect((await GRETA.get('/interviews/iv-nope/invite')).status).toBe(404);
   });
 
-  it.each([['an interviewer', 'u-hugo'], ['the other interviewer', 'u-wen'], ['the hiring manager', 'u-amara']])('%s may not issue, read or revoke a link (not-found, never 403)', async (_who, user) => {
+  it.each([['an interviewer who does not lead it', 'u-wen'], ['the hiring manager', 'u-amara']])('%s may not issue, read or revoke a link (not-found, never 403)', async (_who, user) => {
     const them = as(user);
     expect((await them.post(`/interviews/${IV}/invite`)).status).toBe(404);
     expect((await them.get(`/interviews/${IV}/invite`)).status).toBe(404);
     expect((await them.del(`/interviews/${IV}/invite`)).status).toBe(404);
+  });
+
+  it('the round\'s lead makes, re-makes and reads the link for their own round, but may not revoke it', async () => {
+    const HUGO = as('u-hugo'); // leads Mateo's design round (IV)
+    const made = await HUGO.post(`/interviews/${IV}/invite`);
+    expect(made.status).toBe(201);
+    expect(made.headers['cache-control']).toBe('no-store');
+    expect(made.body.invite).toMatchObject({ state: 'live', issuedBy: { id: 'u-hugo', name: 'Hugo Marchetti' } });
+    const first = String(made.body.linkPath).split('#')[1]!;
+    const status = await HUGO.get(`/interviews/${IV}/invite`);
+    expect(status.status).toBe(200);
+    expect(JSON.stringify(status.body)).not.toContain(first);
+    // A new link revokes the one before, as it does for the recruiter.
+    expect((await HUGO.post(`/interviews/${IV}/invite`)).status).toBe(201);
+    expect((await exchange(first)).status).toBe(404);
+    expect((await HUGO.del(`/interviews/${IV}/invite`)).status).toBe(404);
+    // The rules still hold for the lead: a round that is over gets no link (Ingrid's coding round, lead Hugo).
+    expect((await HUGO.post('/interviews/iv-d7q4n9xe/invite')).status).toBe(409);
+  });
+
+  it('a panel member and another round\'s interviewer may not make or read the link (not-found, never 403)', async () => {
+    const PANEL = 'iv-n5z9f2cq'; // Nadia's leadership round: Wen leads, Hugo sits on the panel
+    expect((await as('u-hugo').post(`/interviews/${PANEL}/invite`)).status).toBe(404);
+    expect((await as('u-hugo').get(`/interviews/${PANEL}/invite`)).status).toBe(404);
+    expect((await as('u-wen').post(`/interviews/${PANEL}/invite`)).status).toBe(201);
+    const AIKO = 'iv-c3k8w2ma'; // Aiko's coding round: Wen leads, Hugo has no seat
+    expect((await as('u-hugo').post(`/interviews/${AIKO}/invite`)).status).toBe(404);
+    expect((await as('u-hugo').get(`/interviews/${AIKO}/invite`)).status).toBe(404);
+    expect(interviewInvitesFixture.rows().some((r) => r.interviewId === AIKO)).toBe(false);
   });
 
   it('another tenant\'s role is refused at the mount', async () => {
