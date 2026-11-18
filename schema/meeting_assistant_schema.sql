@@ -12,7 +12,7 @@
 -- pattern names them.
 
 CREATE TABLE IF NOT EXISTS meeting_assistants (
-  call_id            TEXT        PRIMARY KEY CHECK (call_id ~ '^[a-zA-Z0-9:_-]{1,256}$'),
+  call_id            TEXT        PRIMARY KEY CONSTRAINT meeting_assistants_call_id_check CHECK (call_id ~ '^[a-zA-Z0-9:_-]+$' AND length(call_id) <= 256),
   tenant             TEXT        NOT NULL,
   lobby              TEXT        NOT NULL,
   initiative_id      TEXT,
@@ -76,6 +76,12 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_actions (
 
 -- Package 4a: the live session's bookkeeping, unattributed lines, and the turns that carry a tool call to the asker's browser.
 -- `session` holds refused calls, listening seconds, the ceiling, the spend hold ids and the usage to settle (types.ts AssistantSession).
+-- The call id's rule, re-made on a table created before it changed. PostgreSQL's regular expressions take a repetition
+-- count of at most 255, so the first rule ('^[a-zA-Z0-9:_-]{1,256}$') failed every insert with "invalid repetition
+-- count(s)" (found by the interviews tenant's real-Postgres suite). Same meaning: those characters, 1 to 256 of them.
+ALTER TABLE meeting_assistants DROP CONSTRAINT IF EXISTS meeting_assistants_call_id_check;
+ALTER TABLE meeting_assistants ADD CONSTRAINT meeting_assistants_call_id_check CHECK (call_id ~ '^[a-zA-Z0-9:_-]+$' AND length(call_id) <= 256);
+
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS session JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(session) = 'object');
 -- A piece nobody's audio was voiced for is stored with no person; the name lock never counts it.
 ALTER TABLE meeting_transcript_lines ALTER COLUMN user_id DROP NOT NULL;
