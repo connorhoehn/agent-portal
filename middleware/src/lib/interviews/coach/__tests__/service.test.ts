@@ -66,13 +66,13 @@ const read = async (viewer = WEN, ref = refOf()) => {
 };
 
 describe('a fixed transcript through the scripted model', () => {
-  it('suggests the next competency\'s question, quoting the candidate, logs it shown, and books the hold', async () => {
+  it('suggests the next competency\'s question (not keyed to a line, so it quotes none), logs it shown, and books the hold', async () => {
     const body = await read();
     expect(body).toEqual({
       suggestion: {
         id: 'sg-1', text: 'Your team\'s roadmap slips by a quarter. Walk me through how you tell your stakeholders and what you change.',
         competency: { id: 'delivery', name: 'Delivery' },
-        basedOn: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.', shownAt: new Date(now).toISOString(),
+        basedOn: null, shownAt: new Date(now).toISOString(),
       },
       paused: null, retryAfterMs: 15_000,
     });
@@ -100,7 +100,7 @@ describe('a fixed transcript through the scripted model', () => {
     expect(await read()).toMatchObject({ suggestion: null, retryAfterMs: 15_000 });
     say('candidate', 'I told them early and moved two items to the next quarter.');
     const next = await read();
-    expect(next.suggestion).toMatchObject({ id: 'sg-2', competency: { id: 'influence' }, basedOn: 'I told them early and moved two items to the next quarter.' });
+    expect(next.suggestion).toMatchObject({ id: 'sg-2', competency: { id: 'influence' }, basedOn: null });
     expect(deps.reserve).toHaveBeenCalledTimes(2);
   });
 

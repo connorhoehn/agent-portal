@@ -68,19 +68,40 @@ export class BedrockCoachModel implements CoachModel {
 
 // ---- the scripted stand-in --------------------------------------------------------------------------------------------------------
 //
-// Deterministic, from the kit and the transcript it is given, never from meaning:
-//   1. the competencies in the kit's order; a competency is covered when an earlier suggestion was tied to it, or when a
-//      panel line contains the opening words of one of its bank questions (the question was asked);
-//   2. the first competency not covered, with its first bank question (chosen questions first, then the bank's order)
-//      that was neither suggested nor asked;
-//   3. when every competency is covered: the first follow-up of an asked or suggested question not yet suggested;
-//   4. when nothing is left: no answer (`nothing`).
-// The suggestion quotes the last candidate line (its first 200 characters, cut at a word) when there is one, else null.
+// Deterministic, from the kit and the transcript it is given, never from meaning. It stays inside the round (E4 finding
+// 41): the round's competencies are those of the questions the lead chose (all of the bank's when none were chosen).
+//   1. a follow-up that fits the last thing the candidate said: of the questions asked or suggested, the first follow-up
+//      not yet suggested or asked that shares the most content words with the candidate's last line (compared by stem,
+//      a pair of neighbouring words also read as one, so "fail over" meets "failover"); it quotes that line;
+//   2. the next chosen question not yet asked or suggested;
+//   3. with nothing chosen: the first competency not covered (an earlier suggestion tied to it, or one of its bank
+//      questions asked), with its first bank question neither suggested nor asked;
+//   4. the first remaining follow-up of an asked or suggested question;
+//   5. nothing left: no answer (`nothing`).
+// Steps 2 to 4 are not keyed to a line and quote none. A question counts as asked when a panel line holds its opening
+// words (its first six), or when one panel line holds at least half of its content words.
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 /** A question's opening words (its first six). */
 const opening = (s: string): string => words(s).split(' ').slice(0, 6).join(' ');
 const said = (needle: string, line: string): boolean => needle.length > 0 && words(line).includes(needle);
+
+const STOP = new Set(('what that this with about they them their there have does when where which were been from your would could should '
+  + 'tell more much some then than into also just like only very will want know here doing done happens happen time first next').split(' '));
+const stem = (w: string): string => {
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  const t = w.replace(/(?:ing|ed|es|s|e)$/, '');
+  return t.length >= 3 ? t : w;
+};
+/** Content words (four letters or more, common words out), stemmed, plus each neighbouring pair joined when one is content. */
+function contentOf(s: string): Set<string> {
+  const w = words(s).split(' ').filter(Boolean);
+  const content = (x: string) => x.length >= 4 && !STOP.has(x);
+  return new Set([...w.filter(content).map(stem), ...w.slice(1).flatMap((b, i) => (content(w[i]!) || content(b) ? [stem(`${w[i]}${b}`)] : []))]);
+}
+const overlap = (a: Set<string>, b: Set<string>): number => [...a].filter((x) => b.has(x)).length;
+/** Content words only (no joined pairs): what "half of its words" counts. */
+const plainContent = (s: string): Set<string> => new Set(words(s).split(' ').filter((x) => x.length >= 4 && !STOP.has(x)).map(stem));
 
 function quoteOf(text: string): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -92,28 +113,53 @@ function quoteOf(text: string): string {
 
 export function scriptedSuggestion(input: CoachInput): { text: string; competencyId: string; basedOn: string | null } | null {
   const panel = input.lines.filter((l) => l.side === 'panel').map((l) => l.text);
-  const asked = (prompt: string) => panel.some((t) => said(opening(prompt), t));
+  const panelWords = panel.map(plainContent);
+  const asked = (prompt: string) => {
+    if (panel.some((t) => said(opening(prompt), t))) return true;
+    const want = plainContent(prompt);
+    return want.size >= 2 && panelWords.some((p) => overlap(want, p) * 2 >= want.size);
+  };
   const suggested = new Set(input.previous.map((p) => p.text.replace(/\s+/g, ' ').trim()));
+  const fresh = (text: string) => !suggested.has(text) && !asked(text);
   const chosen = input.chosenQuestionIds;
   const bank = [...input.questions].sort((a, b) => {
     const ia = chosen.indexOf(a.id); const ib = chosen.indexOf(b.id);
     return (ia < 0 ? Infinity : ia) - (ib < 0 ? Infinity : ib);
   });
+  const chosenQs = bank.filter((q) => chosen.includes(q.id));
+  const round = new Set((chosenQs.length ? chosenQs : bank).map((q) => q.competencyId));
+  const inRound = bank.filter((q) => round.has(q.competencyId));
+  const open = inRound.filter((q) => asked(q.prompt) || suggested.has(q.prompt));
+  const followUps = open.flatMap((q) => q.followUps.filter(fresh).map((f) => ({ text: f, competencyId: q.competencyId })));
+
+  // 1. A follow-up that fits the candidate's last line.
   const lastCandidate = [...input.lines].reverse().find((l) => l.side === 'candidate');
-  const basedOn = lastCandidate ? quoteOf(lastCandidate.text).slice(0, MAX_BASED_ON_CHARS) : null;
-  const covered = new Set(input.previous.map((p) => p.competencyId));
-  for (const q of bank) if (asked(q.prompt)) covered.add(q.competencyId);
-  for (const c of input.competencies) {
-    if (covered.has(c.id)) continue;
-    const q = bank.find((x) => x.competencyId === c.id && !suggested.has(x.prompt) && !asked(x.prompt));
-    if (q) return { text: q.prompt, competencyId: c.id, basedOn };
+  if (lastCandidate) {
+    const heard = contentOf(lastCandidate.text);
+    let best: { text: string; competencyId: string } | null = null;
+    let most = 0;
+    for (const f of followUps) {
+      const n = overlap(contentOf(f.text), heard);
+      if (n > most) { most = n; best = f; }
+    }
+    if (best) return { ...best, basedOn: quoteOf(lastCandidate.text).slice(0, MAX_BASED_ON_CHARS) };
   }
-  for (const q of bank) {
-    if (!asked(q.prompt) && !suggested.has(q.prompt)) continue;
-    const f = q.followUps.find((x) => !suggested.has(x) && !asked(x));
-    if (f) return { text: f, competencyId: q.competencyId, basedOn };
+  // 2. The next chosen question.
+  const next = chosenQs.find((q) => fresh(q.prompt));
+  if (next) return { text: next.prompt, competencyId: next.competencyId, basedOn: null };
+  // 3. Nothing chosen: the first competency of the round with no question yet.
+  if (!chosenQs.length) {
+    const covered = new Set(input.previous.map((p) => p.competencyId));
+    for (const q of bank) if (asked(q.prompt)) covered.add(q.competencyId);
+    for (const c of input.competencies) {
+      if (covered.has(c.id) || !round.has(c.id)) continue;
+      const q = inRound.find((x) => x.competencyId === c.id && fresh(x.prompt));
+      if (q) return { text: q.prompt, competencyId: c.id, basedOn: null };
+    }
   }
-  return null;
+  // 4. Any follow-up left.
+  const f = followUps[0];
+  return f ? { ...f, basedOn: null } : null;
 }
 
 export class ScriptedCoachModel implements CoachModel {

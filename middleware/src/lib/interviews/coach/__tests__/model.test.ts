@@ -54,25 +54,29 @@ describe('the Bedrock model, over a fake client', () => {
 });
 
 describe('the scripted stand-in', () => {
-  it('asks the next competency with no question yet, quoting the last candidate line', () => {
-    expect(scriptedSuggestion(FIXED_INPUT)).toEqual({
-      text: 'Tell me about a time you disagreed with a technical decision.', competencyId: 'collaboration',
-      basedOn: 'The payments queue backed up, so I paged the on-call lead and we split the work.',
-    });
-  });
-
-  it('goes to the follow-ups once every competency is covered, then has nothing left', () => {
-    const covered: CoachInput = { ...FIXED_INPUT, previous: [{ text: 'Tell me about a time you disagreed with a technical decision.', competencyId: 'collaboration', answer: 'ask' }] };
-    expect(scriptedSuggestion(covered)).toMatchObject({ text: 'Who did you bring in, and when?', competencyId: 'communication' });
-    const done: CoachInput = { ...covered, previous: [...covered.previous,
-      { text: 'Who did you bring in, and when?', competencyId: 'communication', answer: 'skip' },
-      { text: 'What did you do once it was decided?', competencyId: 'collaboration', answer: 'ask' }] };
+  it('stays inside the round: the chosen question\'s follow-up, never a question of a competency nobody chose', () => {
+    expect(scriptedSuggestion(FIXED_INPUT)).toEqual({ text: 'Who did you bring in, and when?', competencyId: 'communication', basedOn: null });
+    const done: CoachInput = { ...FIXED_INPUT, previous: [{ text: 'Who did you bring in, and when?', competencyId: 'communication', answer: 'skip' }] };
     expect(scriptedSuggestion(done)).toBeNull();
   });
 
-  it('quotes nothing before the candidate has spoken, and answers as raw JSON the parser reads', async () => {
-    const quiet = { ...FIXED_INPUT, lines: FIXED_INPUT.lines.filter((l) => l.side === 'panel') };
-    expect(scriptedSuggestion(quiet)?.basedOn).toBeNull();
+  it('offers the follow-up that fits the candidate\'s last line, quoting it ("fail over" meets "failover")', () => {
+    const keyed: CoachInput = {
+      ...FIXED_INPUT,
+      questions: [{ ...FIXED_INPUT.questions[0]!, followUps: ['Who did you bring in, and when?', 'What happens when the failover lands mid-write?'] }, FIXED_INPUT.questions[1]!],
+      lines: [...FIXED_INPUT.lines, { seq: 3, side: 'candidate', text: 'Then we had to fail over to the second region.' }],
+    };
+    expect(scriptedSuggestion(keyed)).toEqual({ text: 'What happens when the failover lands mid-write?', competencyId: 'communication', basedOn: 'Then we had to fail over to the second region.' });
+  });
+
+  it('the next chosen question before any follow-up; with nothing chosen, the first competency with no question', () => {
+    const two: CoachInput = { ...FIXED_INPUT, chosenQuestionIds: ['q-incident', 'q-disagree'] };
+    expect(scriptedSuggestion(two)).toEqual({ text: 'Tell me about a time you disagreed with a technical decision.', competencyId: 'collaboration', basedOn: null });
+    const none: CoachInput = { ...FIXED_INPUT, chosenQuestionIds: [] };
+    expect(scriptedSuggestion(none)).toEqual({ text: 'Tell me about a time you disagreed with a technical decision.', competencyId: 'collaboration', basedOn: null });
+  });
+
+  it('answers as raw JSON the parser reads', async () => {
     const out = await new ScriptedCoachModel().suggest(FIXED_INPUT);
     expect(out.code).toBe('ok');
     expect(JSON.parse(out.raw!)).toEqual(scriptedSuggestion(FIXED_INPUT));

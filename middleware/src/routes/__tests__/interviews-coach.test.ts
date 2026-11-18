@@ -135,7 +135,7 @@ describe('the lead', () => {
     const first = await read(WEN);
     expect(first.status).toBe(200);
     expect(first.headers['cache-control']).toBe('no-store');
-    expect(first.body).toMatchObject({ paused: null, retryAfterMs: 15_000, suggestion: { competency: { id: 'delivery', name: 'Delivery' }, basedOn: 'One engineer kept missing reviews, so I set up a weekly one-to-one.' } });
+    expect(first.body).toMatchObject({ paused: null, retryAfterMs: 15_000, suggestion: { competency: { id: 'delivery', name: 'Delivery' }, basedOn: null } });
     expect(Object.keys(first.body.suggestion).sort()).toEqual(['basedOn', 'competency', 'id', 'shownAt', 'text']);
     expect((await read(WEN)).body.suggestion).toEqual(first.body.suggestion);
     const rows = interviewSuggestionsFixture.rows().filter((r) => r.interviewId === IV);
