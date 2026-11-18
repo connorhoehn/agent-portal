@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-18T00:02:55.625Z",
-  "serverHandlerSha": "c9828550778362f6ef2ac23d47aab76e7c6731cfc0ae62306ffc53e903e89774",
+  "capturedAt": "2026-11-18T02:48:31.285Z",
+  "serverHandlerSha": "f20cd2f195044d11fa967e274505e065406fafe236abca69f467c8ca169c31fd",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -7020,7 +7020,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -8424,14 +8424,27 @@
       "shape": {
         "$": "object",
         "artifacts": "array",
+        "artifacts[]": "object",
+        "artifacts[].createdAt": "string",
+        "artifacts[].id": "string",
+        "artifacts[].kind": "string",
+        "artifacts[].meta": "object",
+        "artifacts[].meta.agentId": "string",
+        "artifacts[].meta.aguiRunId": "string",
+        "artifacts[].meta.durationMs": "number",
+        "artifacts[].meta.href": "string",
+        "artifacts[].meta.invocationId": "string",
+        "artifacts[].runId": "string",
+        "artifacts[].stepId": "string",
+        "artifacts[].title": "string",
+        "artifacts[].uri": "string",
         "run": "object",
         "run.context": "object",
-        "run.context.botId": "null",
+        "run.context.agentId": "string",
+        "run.context.aguiRunId": "string",
         "run.context.error": "null",
         "run.context.id": "string",
-        "run.context.initiativeName": "string",
         "run.context.kind": "string",
-        "run.context.projectId": "string",
         "run.context.sourceStatus": "string",
         "run.context.sources": "array",
         "run.context.sources[]": "object",
@@ -8441,20 +8454,23 @@
         "run.context.sources[].table": "string",
         "run.context.table": "string",
         "run.context.tenant": "string",
+        "run.context.threadId": "string",
         "run.context.title": "string",
-        "run.context.trigger": "null",
-        "run.context.workItemId": "null",
-        "run.costUsd": "null",
+        "run.costUsd": "number",
         "run.definitionId": "string",
-        "run.finishedAt": "null",
+        "run.finishedAt": "string",
         "run.id": "string",
         "run.startedAt": "string",
         "run.status": "string",
         "run.tenant": "string",
         "run.triggerType": "string",
-        "run.triggeredBy": "null"
+        "run.triggeredBy": "string",
+        "run.triggeredByName": "string"
       },
       "values": {
+        "artifacts[].kind": [
+          "trace"
+        ],
         "run.context.kind": [
           "agent"
         ],
@@ -8462,13 +8478,13 @@
           "primary"
         ],
         "run.context.sources[].status": [
-          "running"
+          "completed"
         ],
         "run.context.tenant": [
           "orgiq"
         ],
         "run.status": [
-          "running"
+          "completed"
         ],
         "run.tenant": [
           "orgiq"
@@ -8489,23 +8505,25 @@
         "steps[].attempts": "array",
         "steps[].attempts[]": "object",
         "steps[].attempts[].attempt": "number",
-        "steps[].attempts[].finishedAt": "null",
+        "steps[].attempts[].finishedAt": "string",
+        "steps[].attempts[].label": "string",
         "steps[].attempts[].startedAt": "string",
         "steps[].attempts[].status": "string",
-        "steps[].finishedAt": "null",
+        "steps[].attempts[].toolCallId": "string",
+        "steps[].detail": "string",
+        "steps[].finishedAt": "string",
         "steps[].label": "string",
         "steps[].runId": "string",
-        "steps[].startedAt": "null|string",
+        "steps[].startedAt": "string",
         "steps[].status": "string",
         "steps[].stepId": "string"
       },
       "values": {
         "steps[].attempts[].status": [
-          "running"
+          "completed"
         ],
         "steps[].status": [
-          "pending",
-          "running"
+          "completed"
         ]
       }
     },
@@ -8543,6 +8561,7 @@
         "edges[]": "object",
         "edges[].capabilities": "array",
         "edges[].disclosure": "string",
+        "edges[].endedAt": "string",
         "edges[].fromId": "string",
         "edges[].id": "string",
         "edges[].relation": "string",
@@ -8555,6 +8574,7 @@
         "nodes[].capabilities": "array",
         "nodes[].capabilities[]": "string",
         "nodes[].disclosure": "string",
+        "nodes[].endedAt": "string",
         "nodes[].id": "string",
         "nodes[].kind": "string",
         "nodes[].startedAt": "string",
@@ -8578,8 +8598,7 @@
       },
       "values": {
         "edges[].status": [
-          "idle",
-          "running"
+          "completed"
         ],
         "nodes[].kind": [
           "project",
@@ -8587,8 +8606,8 @@
           "task"
         ],
         "nodes[].status": [
-          "idle",
-          "running"
+          "completed",
+          "idle"
         ]
       }
     },
@@ -8640,6 +8659,7 @@
       "values": {
         "edges[].status": [
           "completed",
+          "error",
           "idle",
           "running",
           "waiting"
@@ -8652,6 +8672,7 @@
         ],
         "nodes[].status": [
           "completed",
+          "error",
           "idle",
           "running",
           "waiting"
@@ -9371,14 +9392,27 @@
       "shape": {
         "$": "object",
         "artifacts": "array",
+        "artifacts[]": "object",
+        "artifacts[].createdAt": "string",
+        "artifacts[].id": "string",
+        "artifacts[].kind": "string",
+        "artifacts[].meta": "object",
+        "artifacts[].meta.agentId": "string",
+        "artifacts[].meta.aguiRunId": "string",
+        "artifacts[].meta.durationMs": "number",
+        "artifacts[].meta.href": "string",
+        "artifacts[].meta.invocationId": "string",
+        "artifacts[].runId": "string",
+        "artifacts[].stepId": "string",
+        "artifacts[].title": "string",
+        "artifacts[].uri": "string",
         "run": "object",
         "run.context": "object",
-        "run.context.botId": "null",
+        "run.context.agentId": "string",
+        "run.context.aguiRunId": "string",
         "run.context.error": "null",
         "run.context.id": "string",
-        "run.context.initiativeName": "string",
         "run.context.kind": "string",
-        "run.context.projectId": "string",
         "run.context.sourceStatus": "string",
         "run.context.sources": "array",
         "run.context.sources[]": "object",
@@ -9388,20 +9422,23 @@
         "run.context.sources[].table": "string",
         "run.context.table": "string",
         "run.context.tenant": "string",
+        "run.context.threadId": "string",
         "run.context.title": "string",
-        "run.context.trigger": "null",
-        "run.context.workItemId": "null",
-        "run.costUsd": "null",
+        "run.costUsd": "number",
         "run.definitionId": "string",
-        "run.finishedAt": "null",
+        "run.finishedAt": "string",
         "run.id": "string",
         "run.startedAt": "string",
         "run.status": "string",
         "run.tenant": "string",
         "run.triggerType": "string",
-        "run.triggeredBy": "null"
+        "run.triggeredBy": "string",
+        "run.triggeredByName": "string"
       },
       "values": {
+        "artifacts[].kind": [
+          "trace"
+        ],
         "run.context.kind": [
           "agent"
         ],
@@ -9409,13 +9446,13 @@
           "primary"
         ],
         "run.context.sources[].status": [
-          "running"
+          "completed"
         ],
         "run.context.tenant": [
           "orgiq"
         ],
         "run.status": [
-          "running"
+          "completed"
         ],
         "run.tenant": [
           "orgiq"
@@ -9436,23 +9473,25 @@
         "steps[].attempts": "array",
         "steps[].attempts[]": "object",
         "steps[].attempts[].attempt": "number",
-        "steps[].attempts[].finishedAt": "null",
+        "steps[].attempts[].finishedAt": "string",
+        "steps[].attempts[].label": "string",
         "steps[].attempts[].startedAt": "string",
         "steps[].attempts[].status": "string",
-        "steps[].finishedAt": "null",
+        "steps[].attempts[].toolCallId": "string",
+        "steps[].detail": "string",
+        "steps[].finishedAt": "string",
         "steps[].label": "string",
         "steps[].runId": "string",
-        "steps[].startedAt": "null|string",
+        "steps[].startedAt": "string",
         "steps[].status": "string",
         "steps[].stepId": "string"
       },
       "values": {
         "steps[].attempts[].status": [
-          "running"
+          "completed"
         ],
         "steps[].status": [
-          "pending",
-          "running"
+          "completed"
         ]
       }
     },
@@ -9463,7 +9502,7 @@
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :ref under /api/runs (anonymous)"
     },
     "GET /api/runs/:ref/runbooks/:id": {
-      "skipped": "no value found for :id under /api/runs/project-run%3A0b8a1c4e-2f6d-4a51-9c3b-7d1e5a904f11/runbooks (orgiq/admin); no value found for :id under /api/runs/project-run%3A0b8a1c4e-2f6d-4a51-9c3b-7d1e5a904f11/runbooks (assessment/admin); no value found for :ref under /api/runs (anonymous)"
+      "skipped": "no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (orgiq/admin); no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (assessment/admin); no value found for :ref under /api/runs (anonymous)"
     },
     "GET /api/runs/:ref/skills": {
       "persona": "orgiq/admin",
