@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-18T05:34:05.434Z",
-  "serverHandlerSha": "3d2e2397d29001909f98485c2d2d7a16ba5be77fcac1dfdebe973c6e39e7166b"
+  "capturedAt": "2026-11-18T06:44:36.834Z",
+  "serverHandlerSha": "5ce96a842c7cc2f3c3855dc1807e887df0887481aa98c943351e5536d4afc096"
  },
  "summary": {
   "routes": 961,
@@ -511,7 +511,7 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/answer",
-    "source": "src/routes/interviews/assignments.ts:120"
+    "source": "src/routes/interviews/assignments.ts:126"
    },
    {
     "method": "GET",
@@ -566,12 +566,12 @@
    {
     "method": "PUT",
     "path": "/api/interviews/interviews/:id/panel",
-    "source": "src/routes/interviews/assignments.ts:194"
+    "source": "src/routes/interviews/assignments.ts:200"
    },
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/panel-notice",
-    "source": "src/routes/interviews/assignments.ts:173"
+    "source": "src/routes/interviews/assignments.ts:179"
    },
    {
     "method": "POST",
@@ -666,7 +666,7 @@
    {
     "method": "PUT",
     "path": "/api/interviews/interviews/:id/time",
-    "source": "src/routes/interviews/assignments.ts:212"
+    "source": "src/routes/interviews/assignments.ts:218"
    },
    {
     "method": "GET",
@@ -681,7 +681,7 @@
    {
     "method": "GET",
     "path": "/api/interviews/interviews/panel-notice",
-    "source": "src/routes/interviews/assignments.ts:158"
+    "source": "src/routes/interviews/assignments.ts:164"
    },
    {
     "method": "POST",
@@ -4937,7 +4937,7 @@
   {"method":"POST","path":"/api/interviews/interviews","source":"src/routes/interviews/assignments.ts:104","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id","source":"src/routes/interviews.ts:113","declaredAt":"src/routes/interviews.ts:113","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/admit","source":"src/routes/interviews/admission.ts:58","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/answer","source":"src/routes/interviews/assignments.ts:120","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"accept or decline a seat on a round (ConductInterview)"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/answer","source":"src/routes/interviews/assignments.ts:126","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"accept or decline a seat on a round (ConductInterview)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/consents","source":"src/routes/interviews/consents.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/end","source":"src/routes/interviews/room.ts:81","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"DELETE","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:85","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
@@ -4948,8 +4948,8 @@
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-notes","source":"src/routes/interviews/milo.ts:63","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/pad/events","source":"src/routes/interviews/pad.ts:45","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log and its runs belong to the room, never to the voice navigator"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/pad/log","source":"src/routes/interviews/pad.ts:58","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"PUT","path":"/api/interviews/interviews/:id/panel","source":"src/routes/interviews/assignments.ts:194","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/panel-notice","source":"src/routes/interviews/assignments.ts:173","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acknowledging the recording notice is the interviewer's own act on My interviews"}},
+  {"method":"PUT","path":"/api/interviews/interviews/:id/panel","source":"src/routes/interviews/assignments.ts:200","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/panel-notice","source":"src/routes/interviews/assignments.ts:179","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acknowledging the recording notice is the interviewer's own act on My interviews"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/plan-draft","source":"src/routes/interviews/plan.ts:19","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/questions","source":"src/routes/interviews/prepare.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"choose a round's questions (Prepare)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/recap","source":"src/routes/interviews/recap.ts:90","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -4968,10 +4968,10 @@
   {"method":"POST","path":"/api/interviews/interviews/:id/start","source":"src/routes/interviews/room.ts:80","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/suggestion","source":"src/routes/interviews/coach.ts:39","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/suggestion/:suggestionId/answer","source":"src/routes/interviews/coach.ts:48","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"answering Milo's suggestion is the lead's act in the room"}},
-  {"method":"PUT","path":"/api/interviews/interviews/:id/time","source":"src/routes/interviews/assignments.ts:212","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
+  {"method":"PUT","path":"/api/interviews/interviews/:id/time","source":"src/routes/interviews/assignments.ts:218","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/transcript","source":"src/routes/interviews/milo.ts:55","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/waiting","source":"src/routes/interviews/admission.ts:52","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/interviews/interviews/panel-notice","source":"src/routes/interviews/assignments.ts:158","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interviews/interviews/panel-notice","source":"src/routes/interviews/assignments.ts:164","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/interviews/openings","source":"src/routes/interviews.ts:57","declaredAt":"src/routes/interviews.ts:57","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interviews/openings","source":"src/routes/interviews/openings.ts:84","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page"}},
   {"method":"GET","path":"/api/interviews/openings/:id","source":"src/routes/interviews.ts:65","declaredAt":"src/routes/interviews.ts:65","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},

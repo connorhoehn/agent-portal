@@ -2513,7 +2513,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/answer",
-      "source": "src/routes/interviews/assignments.ts:120"
+      "source": "src/routes/interviews/assignments.ts:126"
     },
     {
       "method": "GET",
@@ -2568,12 +2568,12 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/panel",
-      "source": "src/routes/interviews/assignments.ts:194"
+      "source": "src/routes/interviews/assignments.ts:200"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/panel-notice",
-      "source": "src/routes/interviews/assignments.ts:173"
+      "source": "src/routes/interviews/assignments.ts:179"
     },
     {
       "method": "POST",
@@ -2668,7 +2668,7 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/time",
-      "source": "src/routes/interviews/assignments.ts:212"
+      "source": "src/routes/interviews/assignments.ts:218"
     },
     {
       "method": "GET",
@@ -2683,7 +2683,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/panel-notice",
-      "source": "src/routes/interviews/assignments.ts:158"
+      "source": "src/routes/interviews/assignments.ts:164"
     },
     {
       "method": "GET",
