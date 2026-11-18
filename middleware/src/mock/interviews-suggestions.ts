@@ -41,18 +41,18 @@ export const interviewSuggestionsFixture = defineFixture<SuggestionRecord>({
   scenarios: {
     default: () => [
       // Ingrid's "Working together" round (Wen leads; started at -6d 13:00).
-      row({ id: 'sg-ingrid-together-1', interviewId: 'iv-f2b6t5zh', made: at(-6, 13, 9), throughSeq: 14, answer: 'ask',
+      row({ id: 'sg-mhzk2q4a7c1e93b05d', interviewId: 'iv-f2b6t5zh', made: at(-6, 13, 9), throughSeq: 14, answer: 'ask',
         text: 'Who did you bring in first when the alerts started, and how did you keep them updated?', competencyId: 'communication',
         basedOn: 'I paged the on-call lead and we split the investigation' }),
-      row({ id: 'sg-ingrid-together-2', interviewId: 'iv-f2b6t5zh', made: at(-6, 13, 21), throughSeq: 31, answer: 'skip', answeredAfterS: 8,
+      row({ id: 'sg-mhzk2r0b2f6a18c44e', interviewId: 'iv-f2b6t5zh', made: at(-6, 13, 21), throughSeq: 31, answer: 'skip', answeredAfterS: 8,
         text: 'Tell me about a time you disagreed with a technical decision. What did you do?', competencyId: 'collaboration', basedOn: null }),
       // Mateo's coding round (Hugo leads; started at -3d 14:00).
-      row({ id: 'sg-mateo-coding-1', interviewId: 'iv-j6x2d9sb', made: at(-3, 14, 18), throughSeq: 22, answer: 'milo-ask',
+      row({ id: 'sg-mi3n7t1c9d0b25e61a', interviewId: 'iv-j6x2d9sb', made: at(-3, 14, 18), throughSeq: 22, answer: 'milo-ask',
         text: 'What happens to a request that arrives just as the window resets?', competencyId: 'problem-solving',
         basedOn: 'each key gets a fixed window that resets every minute' }),
-      dropped('sg-mateo-coding-2', 'iv-j6x2d9sb', at(-3, 14, 31), 'malformed', 40),
+      dropped('sg-mi3n7u5d4a7c90f12b', 'iv-j6x2d9sb', at(-3, 14, 31), 'malformed', 40),
       // Jonah's leadership round (Wen leads; started at -1d 16:00).
-      row({ id: 'sg-jonah-leadership-1', interviewId: 'iv-g9r1y8lp', made: at(-1, 16, 12), throughSeq: 17, answer: 'ask',
+      row({ id: 'sg-mi6p1w2e8b3d46a07c', interviewId: 'iv-g9r1y8lp', made: at(-1, 16, 12), throughSeq: 17, answer: 'ask',
         text: 'What did you say in the first conversation, and what did you agree to check on afterwards?', competencyId: 'people-leadership',
         basedOn: 'I set up a weekly one-to-one with him and we agreed a plan' }),
     ],

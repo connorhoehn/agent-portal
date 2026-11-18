@@ -124,7 +124,7 @@ describe('the export of what Milo showed', () => {
     expect(JSON.stringify(doc.interview)).not.toMatch(/Ingrid/);
     expect(doc.sections['said-aloud']).toEqual({ lines: [] });
     const { suggestions } = doc.sections.suggestions;
-    expect(suggestions.map((s: { id: string }) => s.id)).toEqual(['sg-ingrid-together-1', 'sg-ingrid-together-2']);
+    expect(suggestions.map((s: { id: string }) => s.id)).toEqual(['sg-mhzk2q4a7c1e93b05d', 'sg-mhzk2r0b2f6a18c44e']);
     expect(suggestions[0]).toEqual(expect.objectContaining({
       text: expect.any(String), basedOn: expect.anything(), madeAt: expect.any(String), shownAt: expect.anything(),
       answer: 'ask', answeredAt: expect.any(String), spoken: expect.any(Boolean), modelId: expect.any(String), promptVersion: expect.any(String),

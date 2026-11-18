@@ -191,12 +191,12 @@ describe('everyone else', () => {
   ])('%s: not found on both routes, and nothing is made', async (_label, as, id) => {
     live(OTHER_ROUND);
     expect((await read(as, id)).status).toBe(404);
-    expect((await answer(as, 'sg-ingrid-together-1', { answer: 'ask' }, id)).status).toBe(404);
+    expect((await answer(as, 'sg-mhzk2q4a7c1e93b05d', { answer: 'ask' }, id)).status).toBe(404);
     expect(interviewSuggestionsFixture.rows().filter((r) => r.interviewId === id && id !== 'iv-nobody')).toHaveLength(0);
   });
 
   it('a lead cannot answer another interview\'s suggestion through their own', async () => {
-    expect((await answer(WEN, 'sg-mateo-coding-1', { answer: 'ask' })).status).toBe(404);
+    expect((await answer(WEN, 'sg-mi3n7t1c9d0b25e61a', { answer: 'ask' })).status).toBe(404);
   });
 
   it('another tenant\'s role is refused at the tenant\'s mount on both routes', async () => {

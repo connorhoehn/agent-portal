@@ -19,15 +19,15 @@ export const interviewCoachLogFixture = defineFixture<CoachLogRecord>({
   scenarios: {
     default: () => [
       // Ingrid's "Working together" round (Wen leads; started at -6d 13:00).
-      { id: 'ml-ingrid-together-1', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
+      { id: 'ml-mhzk3a1f5e2c07b98d', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
         question: 'What did she say about the on-call lead?', answer: 'The candidate spoke of it in line 8.',
         sources: [{ seq: 8, quote: 'I paged the on-call lead and we split the investigation' }],
         code: null, askedAt: at(-6, 13, 12), modelId: MODEL, promptVersion: PROMPT_VERSION },
-      { id: 'ml-ingrid-together-2', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
+      { id: 'ml-mhzk3b6a0d9e14c25f', interviewId: 'iv-f2b6t5zh', kind: 'answer', askedBy: 'u-wen',
         question: 'Is she a strong candidate?', answer: '', sources: [],
         code: 'refused-judgement', askedAt: at(-6, 13, 25), modelId: 'none', promptVersion: PROMPT_VERSION },
       // Mateo's coding round (Hugo leads; started at -3d 14:00).
-      { id: 'ml-mateo-coding-1', interviewId: 'iv-j6x2d9sb', kind: 'answer', askedBy: 'u-hugo',
+      { id: 'ml-mi3n8c2b7f4a63d01e', interviewId: 'iv-j6x2d9sb', kind: 'answer', askedBy: 'u-hugo',
         question: 'Where did he talk about the window reset?', answer: 'The candidate spoke of it in lines 19 and 24.',
         sources: [{ seq: 19, quote: 'Honestly it was a fixed-window counter: each key gets a fixed window that resets every minute, and we count requests in it.' },
           { seq: 24, quote: "It lands in the new window, so a client can send a full window's worth just before the reset and another just after." }],
