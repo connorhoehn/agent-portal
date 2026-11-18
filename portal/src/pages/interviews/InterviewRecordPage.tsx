@@ -24,7 +24,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { ROUND_TYPE_LABELS, roundStatus, whenLabel } from '../../lib/interviews';
 import {
-  MARKER_LABELS, atFromSearch, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
+  MARKER_LABELS, MEDIA_SAVING_RETRY_MS, atFromSearch, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf,
+  transcriptLine,
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
@@ -59,15 +60,24 @@ function RecordMissing({ id, onHome, onRoom }: { id: string; onHome(): void; onR
   return <RecordNotFound heading="Interview" title={NO_SEAT_NOT_FOUND.title} body={NO_SEAT_NOT_FOUND.body} backLabel={NO_SEAT_NOT_FOUND.backLabel} onBack={onHome} />;
 }
 
-/** Media from platform-api, asked only when the server says a real recording may be there. */
+/** Media from platform-api, asked only when the server says a real recording may be there; asked again every few seconds
+ *  while its video is still being saved (as a huddle's recording page does). */
 function useInterviewMedia(record: InterviewRecordView): InterviewMedia | null {
   const ask = record.recording.state === 'available' && !record.recording.standIn;
   const [media, setMedia] = useState<InterviewMedia | null>(null);
   useEffect(() => {
     if (!ask) return undefined;
     const ctl = new AbortController();
-    void loadInterviewMedia(record.interview.id, ctl.signal).then((m) => { if (!ctl.signal.aborted) setMedia(m); });
-    return () => ctl.abort();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = (): void => {
+      void loadInterviewMedia(record.interview.id, ctl.signal).then((m) => {
+        if (ctl.signal.aborted) return;
+        setMedia(m);
+        if (m.state === 'saving') timer = setTimeout(load, MEDIA_SAVING_RETRY_MS);
+      });
+    };
+    load();
+    return () => { ctl.abort(); if (timer) clearTimeout(timer); };
   }, [ask, record.interview.id]);
   return ask ? media : null;
 }

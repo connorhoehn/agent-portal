@@ -7,12 +7,13 @@
 //   none       there simply is none;
 //   available  otherwise.
 //
-// The recording itself lives in the media stack. In the mock world there is no media server: the seeded stand-in
-// (mock/interviews-records.ts) gives a recording row with a duration and nothing playable. Outside it, the record page
-// lists and plays the interview's recording through platform-api with the viewer's own realtime token, and platform-api
-// asks this middleware's `/recording-access` (recording-rules.ts, D3) on every list and every play. So this module never
-// returns a URL: `playbackUrl` is always null here, no share link is ever minted, and `available` outside the mock world
-// means "the candidate agreed and nothing removed it; ask the media service".
+// The recording itself lives in the media stack. The record page lists and plays the interview's recording through
+// platform-api with the viewer's own realtime token, and platform-api asks this middleware's `/recording-access`
+// (recording-rules.ts, D3) on every list and every play. So this module never returns a URL: `playbackUrl` is always null
+// here, no share link is ever minted, and `available` for a real recording means "the candidate agreed and nothing removed
+// it; ask the media service". The mock world keeps its seeded stand-ins (mock/interviews-records.ts: a recording row with a
+// duration and nothing playable); any other interview there is asked about like anywhere else when a platform-api is
+// configured for the browser (the social profile, where calls really record, as a hangout's do), and has none otherwise.
 import { config } from '../../../config.js';
 import { interviewRecordingsFixture } from '../../../mock/interviews-records.js';
 import type { ConsentRecord } from '../consent/store.js';
@@ -52,10 +53,11 @@ export interface RecordingPart {
 
 /** The recording's part of the record. */
 export function recordingPart(interviewId: string, consent: Pick<ConsentRecord, 'recording'> | null, removed: ReadonlySet<string>,
-  mock: boolean = config.mock?.aurora === true): RecordingPart {
+  mock: boolean = config.mock?.aurora === true, mediaService: boolean = Boolean(config.realtime?.platformApiUrl)): RecordingPart {
   const standIn = mock ? interviewRecordingsFixture.rows().find((r) => r.interviewId === interviewId) ?? null : null;
-  // Outside the mock world only the media service knows whether a recording exists; the candidate's yes is what lets the page ask.
-  const present = mock ? standIn !== null : consent?.recording === true;
+  // Only the media service knows whether a real recording exists; the candidate's yes is what lets the page ask. A mock world
+  // with no platform-api has no media service to ask.
+  const present = standIn !== null || ((!mock || mediaService) && consent?.recording === true);
   const state = partState({ agreed: consent ? consent.recording : null, removed: removed.has('recording'), present });
   return {
     state,

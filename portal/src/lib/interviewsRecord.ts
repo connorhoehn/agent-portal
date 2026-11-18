@@ -76,7 +76,7 @@ export function codeEmptyLine(r: Pick<InterviewRecordView, 'codeRemoved'>): stri
 }
 
 /** The one plain line the recording shows when there is no player. Null when a player shows. */
-export function recordingLine(r: InterviewRecordView['recording'], media: 'none' | 'playable' | 'unreachable' | null = null): string | null {
+export function recordingLine(r: InterviewRecordView['recording'], media: InterviewMedia['state'] | null = null): string | null {
   if (r.state === 'declined') return 'The candidate chose not to be recorded, so there is no recording of this interview.';
   if (r.state === 'deleted') return 'The recording of this interview has been deleted.';
   if (r.state === 'none') return 'There is no recording of this interview.';
@@ -85,6 +85,7 @@ export function recordingLine(r: InterviewRecordView['recording'], media: 'none'
     return `${length}Video is not kept in this demo workspace.`;
   }
   if (media === 'none') return 'There is no recording of this interview.';
+  if (media === 'saving') return 'Saving the video…';
   if (media === 'unreachable') return 'The recording could not be reached just now. Try again in a moment.';
   return null;
 }
@@ -163,7 +164,11 @@ export function playFrom(url: string, ms: number): string {
 
 // ── A real recording, through platform-api ───────────────────────────────────────────────────────────────────────────
 
-export interface InterviewMedia { state: 'playable' | 'none' | 'unreachable'; url: string | null; startedAt: string | null }
+/** `saving`: platform-api has the recording but is still saving its video (`mediaState: 'processing'`); ask again shortly. */
+export interface InterviewMedia { state: 'playable' | 'saving' | 'none' | 'unreachable'; url: string | null; startedAt: string | null }
+
+/** How long the record page waits before asking again about a recording still being saved (the huddle recordings' own pace). */
+export const MEDIA_SAVING_RETRY_MS = 5000;
 
 /** The lobby an interview's call runs in (the middleware's lib/interviews/lobby.ts). */
 export const interviewLobby = (interviewId: string): string => `interviews:interview:${interviewId}`;
@@ -171,7 +176,7 @@ export const interviewLobby = (interviewId: string): string => `interviews:inter
 /**
  * List the interview's lobby on platform-api and ask for the newest recording's playback, with the viewer's own token.
  * platform-api answers only the panel side (it asks /recording-access); a refusal reads as `none`, a failure as
- * `unreachable`. Never throws.
+ * `unreachable`, a recording whose video is still being saved as `saving` (never a live address). Never throws.
  */
 export async function loadInterviewMedia(interviewId: string, signal: AbortSignal, opts: {
   source?: Pick<RealtimeTokenSource, 'get'>; fetchImpl?: typeof fetch; platformApiUrl?: string;
@@ -198,9 +203,11 @@ export async function loadInterviewMedia(interviewId: string, signal: AbortSigna
     const play = await doFetch(`${root}/api/recordings/${encodeURIComponent(String(newest.recordingId))}/playback-token`, { method: 'POST', signal, cache: 'no-store', headers });
     if (play.status === 403 || play.status === 404) return none;
     if (!play.ok) return { ...none, state: 'unreachable' };
-    const url = recordingPlaybackUrl(await play.json() as RecordingPlayback);
+    const playback = await play.json() as RecordingPlayback;
+    const url = recordingPlaybackUrl(playback);
     const startedAt = typeof newest.startedAt === 'string' ? newest.startedAt : null;
-    return url ? { state: 'playable', url, startedAt } : { state: 'none', url: null, startedAt };
+    if (url) return { state: 'playable', url, startedAt };
+    return { state: playback?.mediaState === 'processing' ? 'saving' : 'none', url: null, startedAt };
   } catch {
     return signal.aborted ? none : { ...none, state: 'unreachable' };
   }
