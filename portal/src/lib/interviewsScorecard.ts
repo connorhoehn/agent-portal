@@ -6,6 +6,7 @@
 // The draft (what is typed before Submit) is kept in this browser only, per interview, and cleared on submit. It is
 // never sent anywhere until Submit.
 
+import { clockOf } from './interviewsRecord.ts';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
 import type { KitCompetency } from './interviewsKit.ts';
 import type { MiloAskBody } from './interviewsRoom.ts';
@@ -242,4 +243,13 @@ export function recapAskOutcome(r: { ok: boolean; status: number; data?: MiloAsk
 
 export async function askFromRecap(interviewId: string, question: string): Promise<ReturnType<typeof recapAskOutcome>> {
   return recapAskOutcome(await writeJson<MiloAskBody>(recapAskPath(interviewId), 'POST', { question }));
+}
+
+/**
+ * Where a recap answer's source sits (E4 #38): "Line 2, Mateo Álvarez" and the record's own clock for it ("0:07", ms from the
+ * record's start, as the record shows its lines), or null when the server sent no offset (an older server).
+ */
+export function recapSourceOf(s: { seq: number; speaker: string; offsetMs?: number }): { label: string; clock: string | null; seconds: number | null } {
+  const at = typeof s.offsetMs === 'number' && Number.isFinite(s.offsetMs) ? Math.max(0, s.offsetMs) : null;
+  return { label: `Line ${s.seq}${s.speaker ? `, ${s.speaker}` : ''}`, clock: at === null ? null : clockOf(at), seconds: at === null ? null : Math.floor(at / 1000) };
 }

@@ -112,13 +112,15 @@ export default async function run(ctx) {
     const second = await ask(SECOND_ASK);
     const lines = (await api(wen, 'GET', `/api/interviews/interviews/${I.jonahLeadership}/record`)).body?.record?.transcript?.lines ?? [];
     const cited = [...first.matchAll(/Line (\d+)/g)].map((m) => Number(m[1]));
-    const citedOk = cited.length >= 1 && cited.every((n) => lines.find((l) => l.seq === n)?.side === 'candidate') && cited.some((n) => /risky/i.test(lines.find((l) => l.seq === n)?.text ?? ''));
+    // E4 #38: each source reads the record's clock ("at 0:07", linking to the record), never a wall-clock time.
+    const clockOk = /Line \d+[^:]* at \d+:\d{2}(:\d{2})?: “/.test(first) && !/\b\d{1,2}:\d{2} ?(AM|PM)\b/.test(first);
+    const citedOk = clockOk && cited.length >= 1 && cited.every((n) => lines.find((l) => l.seq === n)?.side === 'candidate') && cited.some((n) => /risky/i.test(lines.find((l) => l.seq === n)?.text ?? ''));
     await clock.advance(25_000);
     const judged = await ask(JUDGING_ASK);
     const shots = await shootPage(p, 'recap-ask');
     const all = squash(await p.getByTestId('interviews-recap-ask').innerText());
     const ok = citedOk && second.includes(TOO_SOON) && judged.includes(FIXED) && !miloScoresIn(all) && !/strong hire|should (we )?hire/i.test(judged.replace(JUDGING_ASK, '')) && shots.every((s) => s.ok);
-    record('I5.2c', ok, `first ask quotes lines ${cited.join(', ')} (candidate's, one holds "risky"); a second inside 20 s: "${second.replace(SECOND_ASK, '').trim().slice(0, 70)}"; after the wait a judgement question: "${judged.replace(JUDGING_ASK, '').trim().slice(0, 50)}…"; ${widths(shots)}`);
+    record('I5.2c', ok, `first ask quotes lines ${cited.join(', ')} (candidate's, one holds "risky"; on the record's clock ${clockOk}); a second inside 20 s: "${second.replace(SECOND_ASK, '').trim().slice(0, 70)}"; after the wait a judgement question: "${judged.replace(JUDGING_ASK, '').trim().slice(0, 50)}…"; ${widths(shots)}`);
     await p.close();
   } catch (e) { record('I5.2c', false, `ask: ${why(e)}`); }
 

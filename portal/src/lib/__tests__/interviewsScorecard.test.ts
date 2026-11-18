@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, roundCompetencies, nextStep, openBodyOf, othersLine,
+  SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, recapSourceOf, roundCompetencies, nextStep, openBodyOf, othersLine,
   previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
@@ -161,4 +161,9 @@ test('a round requires only its own competencies; an optional one left unseen is
   assert.deepEqual(missingFrom(d, KIT, LIMITS, false, round.required), []);
   assert.deepEqual(bodyOf(d, KIT, 0).ratings, [{ competencyId: 'clarity', rating: 3, note: '' }]);
   assert.deepEqual(openBodyOf(d, KIT), { ratings: [{ competencyId: 'clarity', rating: 3 }] });
+});
+
+test('a recap answer\'s source reads the record\'s clock, not the wall clock (E4 #38)', () => {
+  assert.deepEqual(recapSourceOf({ seq: 2, speaker: 'Mateo Álvarez', offsetMs: 7_400 }), { label: 'Line 2, Mateo Álvarez', clock: '0:07', seconds: 7 });
+  assert.deepEqual(recapSourceOf({ seq: 3, speaker: '' }), { label: 'Line 3', clock: null, seconds: null });
 });

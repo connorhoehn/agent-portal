@@ -252,7 +252,7 @@ describe('asking Milo from the recap (F1)', () => {
     const res = await askAs(HUGO);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ refused: null, line: null, paused: null });
-    expect(res.body.answer.sources[0]).toEqual({ seq: 2, quote: FINISHED[1]!.text, speaker: 'Nadia Petrova', at: FINISHED[1]!.at });
+    expect(res.body.answer.sources[0]).toEqual({ seq: 2, quote: FINISHED[1]!.text, speaker: 'Nadia Petrova', at: FINISHED[1]!.at, offsetMs: expect.any(Number) }); // E4 #38: the record's clock
     expect(log()).toEqual([expect.objectContaining({ kind: 'answer', askedBy: 'u-hugo', code: null, modelId: 'scripted-milo' })]);
     expect(log()[0]!.askedAt >= '2026-11-16T10:00:00.000Z').toBe(true);
     expect(reserve).toHaveBeenCalledTimes(1);

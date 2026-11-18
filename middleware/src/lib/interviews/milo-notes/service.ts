@@ -128,7 +128,11 @@ export async function notesFor(ref: MiloRef): Promise<{ notes: MiloNotesView }> 
 
 // ── The private question (I3.6, the model) ──────────────────────────────────────────────────────────────────────────
 
-export interface AskSourceView { seq: number; quote: string; speaker: string; at: string }
+export interface AskSourceView {
+  seq: number; quote: string; speaker: string; at: string;
+  /** After the call: ms from the record's start, the clock the record shows (E4 #38); absent for the room's live ask. */
+  offsetMs?: number;
+}
 export interface AskAnswerView { id: string; question: string; text: string; sources: AskSourceView[]; askedAt: string }
 export type AskRefusedCode = AskRefusal | AfterCallRefusal | 'judgement' | 'personal' | 'dropped' | 'failed';
 /** E5's answer to the lead. */
@@ -255,6 +259,13 @@ async function finishedTranscript(ref: MiloRef): Promise<TranscriptLineView[] | 
   return t ? transcriptLineViews(t.lines, { candidate: ref.candidateName, nameOf: ref.nameOf }) : null;
 }
 
+/** The record's start, as its clock counts (record/index.ts readRecord): the interview's start, else the transcript's, else the set time. */
+async function recordStartMs(i: Interview): Promise<number> {
+  const transcriptStart = i.startedAt ? null : await recordTranscript(i).then((t) => t?.startedAt ?? null, () => null);
+  const at = i.startedAt ?? transcriptStart ?? i.scheduledAt ?? null;
+  return at ? Date.parse(at) : NaN;
+}
+
 export type AfterCallOutcome = { kind: 'not-found' } | { kind: 'not-ended'; body: AskBody } | { kind: 'ok'; body: AskBody };
 
 const inFlightAfter = new Set<string>();
@@ -326,12 +337,17 @@ export async function askMiloAfterCall(ref: MiloRef, viewer: { userId: string },
       return { kind: 'ok', body: refusedBody(failed ? 'failed' : 'dropped', failed ? FAILED_LINE : DROPPED_LINE) };
     }
     const bySeq = new Map(recent.map((l) => [l.seq, l]));
+    const start = await recordStartMs(interview);
+    const offsetOf = (at: string | undefined): { offsetMs?: number } => {
+      const ms = at ? Date.parse(at) - start : NaN;
+      return Number.isFinite(ms) ? { offsetMs: Math.max(0, ms) } : {};
+    };
     return {
       kind: 'ok',
       body: {
         answer: {
           id: written.id, question, text: parsed.value.answer, askedAt: written.askedAt,
-          sources: parsed.value.sources.map((s) => ({ seq: s.seq, quote: s.quote, speaker: bySeq.get(s.seq)?.speaker ?? '', at: bySeq.get(s.seq)?.at ?? '' })),
+          sources: parsed.value.sources.map((s) => ({ seq: s.seq, quote: s.quote, speaker: bySeq.get(s.seq)?.speaker ?? '', at: bySeq.get(s.seq)?.at ?? '', ...offsetOf(bySeq.get(s.seq)?.at) })),
         },
         refused: null, line: null, paused: null, retryAfterMs: null,
       },

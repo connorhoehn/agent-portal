@@ -22,6 +22,8 @@ import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-compone
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
+import { AppLink } from './interviewsCells';
+import { recordPath } from '../../lib/interviewsRecord';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -30,7 +32,7 @@ import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/in
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
-  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
+  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
@@ -401,10 +403,10 @@ function AskFromRecap({ interviewId }: { interviewId: string }) {
           placeholder="Where did they talk about testing?" submitLabel="Ask" aria-label="Your question for Milo" />
         {busy && <T size="xs" tone="tertiary">Milo is looking…</T>}
         {error && <T size="xs" tone="danger" role="alert" wrap>{error}</T>}
-        {latest && <RecapExchangeView exchange={latest} />}
+        {latest && <RecapExchangeView interviewId={interviewId} exchange={latest} />}
         {earlier.length > 0 && (
           <Disclosure density="compact" summary={<T size="xs" tone="secondary">{`Earlier questions (${earlier.length})`}</T>}>
-            <Stack gap="md">{earlier.map((x) => <RecapExchangeView key={x.key} exchange={x} />)}</Stack>
+            <Stack gap="md">{earlier.map((x) => <RecapExchangeView key={x.key} interviewId={interviewId} exchange={x} />)}</Stack>
           </Disclosure>
         )}
       </Stack>
@@ -412,7 +414,7 @@ function AskFromRecap({ interviewId }: { interviewId: string }) {
   );
 }
 
-function RecapExchangeView({ exchange }: { exchange: MiloExchange }) {
+function RecapExchangeView({ interviewId, exchange }: { interviewId: string; exchange: MiloExchange }) {
   return (
     <Stack gap="xs" data-testid="interviews-recap-ask-answer">
       <T size="xs" tone="tertiary" wrap>{exchange.question}</T>
@@ -421,7 +423,13 @@ function RecapExchangeView({ exchange }: { exchange: MiloExchange }) {
           <T size="sm" wrap>{exchange.answer.text}</T>
           {exchange.answer.sources.length > 0 && (
             <Stack as="ul" gap="xs">
-              {exchange.answer.sources.map((s) => <T as="li" key={s.seq} size="xs" tone="secondary" wrap>{`Line ${s.seq}${s.speaker ? `, ${s.speaker}` : ''}${s.at ? ` at ${new Date(s.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}: “${s.quote}”`}</T>)}
+              {/* The record's clock, not the wall clock, linking to the record (E4 #38). */}
+              {exchange.answer.sources.map((s) => {
+                const src = recapSourceOf(s);
+                return <T as="li" key={s.seq} size="xs" tone="secondary" wrap data-testid="interviews-recap-ask-source">
+                  {src.label}{src.clock !== null && <>{' at '}<AppLink to={`${recordPath(interviewId)}?at=${src.seconds}`} data-testid="interviews-recap-ask-source-at">{src.clock}</AppLink></>}{`: “${s.quote}”`}
+                </T>;
+              })}
             </Stack>
           )}
         </>
