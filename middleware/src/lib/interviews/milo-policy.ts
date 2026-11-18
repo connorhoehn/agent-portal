@@ -181,6 +181,11 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     if (answer?.transcription && answer.milo) return () => true;
     return (userId) => userId !== null && !isGuestId(userId);
   },
+  // An interview has no Meetings page: its notes are read on the round's record page, in the tenant's own paths.
+  meetingPath: (call) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    return interviewId ? `/interviews/rounds/${encodeURIComponent(interviewId)}/record` : '/interviews/my-interviews';
+  },
   rings: (_call, userId) => !isGuestId(userId),
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,

@@ -91,6 +91,12 @@ export interface MeetingAssistantPolicy {
   modelReadsSpeaker?(call: PolicyCall): Promise<(userId: string | null) => boolean>;
   /** Whether this person is told about the call outside it (the bell: private answers, proposals that need them, minutes ready). */
   rings(call: PolicyCall, userId: string): boolean;
+  /**
+   * The portal path of the page where this call's notes are read, for the bell's link ("Minutes are ready", a proposal that needs
+   * someone). The notification service refuses a link outside the tenant's own paths, so a family whose pages are not Work's names
+   * its own. Absent: Work's meeting page (`/iq/meetings/<callId>`).
+   */
+  meetingPath?(call: PolicyCall): string;
   /** Whether this meeting is in this person's Meetings list. */
   listsMeeting(minutes: MinutesRecord, userId: string): boolean;
   /** Whether what the live model says reaches the call: its voice through the relay, and its words posted in the call chat. */
@@ -217,6 +223,11 @@ export async function policyOfCall(callId: string, tenant: string): Promise<{ po
   const record = await assistantStore().get(callId).catch(() => null);
   return { policy: policyForLobby(record?.lobby), call: record ? policyCallOf(record) : { callId, lobby: null, tenant } };
 }
+
+/** Work's meeting page (`/iq/meetings/:callId`): where a call's notes are read unless its policy says otherwise. */
+export const meetingPagePath = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
+/** Where the bell sends someone for this call's notes: its policy's page, else Work's meeting page. */
+export const meetingPathOf = (policy: MeetingAssistantPolicy, call: PolicyCall): string => policy.meetingPath?.(call) ?? meetingPagePath(call.callId);
 
 /** The lines Milo's models may read of this call (`modelReadsSpeaker`): all of them by default; none when the policy cannot answer. */
 export async function linesForModels<L extends { userId: string | null; speakers?: readonly string[] }>(

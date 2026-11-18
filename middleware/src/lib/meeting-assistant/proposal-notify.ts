@@ -17,7 +17,7 @@ import { assistantStore } from './store-select.js';
 import { ASSISTANT_NAME } from './chat-types.js';
 import type { AssistantStore } from './store.js';
 import type { Proposal } from './types.js';
-import { hasFamilyPolicies, policyOfCall } from './policy.js';
+import { meetingPathOf, policyOfCall } from './policy.js';
 
 /** "the Auth Migration call" for a call on an initiative, else "a call". */
 export type CallLabel = string;
@@ -29,8 +29,6 @@ const ENDED_TITLES: Readonly<Record<'done' | 'failed' | 'expired', (label: CallL
 };
 export const handBackTitle = (label: CallLabel): string => `${ASSISTANT_NAME} could not run a proposal from ${label}`;
 export const readyTitle = (label: CallLabel): string => `A proposal from ${label} is ready for you to run`;
-/** The portal's meeting page (minutes-service.ts `meetingPagePath`, kept here to avoid loading the minutes stack). */
-const meetingPage = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
 
 /** The call as a notification names it: its initiative's name, or "a call". Never throws. */
 export async function callLabelOf(callId: string, store: AssistantStore = assistantStore()): Promise<CallLabel> {
@@ -61,11 +59,12 @@ async function tellOnce(p: Proposal, who: readonly string[], event: string, type
   if (!fresh.length) return [];
   for (const u of fresh) told.add(`${p.callId}\0${p.id}\0${event}\0${u}`);
   // Only people the call's policy lets the bell reach (policy.ts `rings`), asked after the marks so that two tellings at once still tell
-  // each person once; with no family's policy registered nothing is read and nobody is left out.
-  const ringing = hasFamilyPolicies() ? await policyOfCall(p.callId, p.tenant).then(({ policy, call }) => fresh.filter((u) => policy.rings(call, u))) : fresh;
+  // each person once; with no family's policy registered nothing is read and nobody is left out. The link is the policy's page too.
+  const { policy, call } = await policyOfCall(p.callId, p.tenant);
+  const ringing = fresh.filter((u) => policy.rings(call, u));
   if (!ringing.length) return [];
   return notify(ringing, {
-    type, title, action: { label: 'Open the meeting', href: meetingPage(p.callId) },
+    type, title, action: { label: 'Open the meeting', href: meetingPathOf(policy, call) },
     payload: { tenant: p.tenant, kind: type, callId: p.callId },
   });
 }

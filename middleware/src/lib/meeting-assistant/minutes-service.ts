@@ -29,12 +29,9 @@ import {
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSourceId, minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
-import { linesForModels, payerFields, policyCallOf, policyForLobby } from './policy.js';
+import { linesForModels, meetingPathOf, payerFields, policyCallOf, policyForLobby } from './policy.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { sessionOf, type AssistantRecord, type AssistantTurn, type MinutesRecord, type MinutesWriterKind, type TranscriptLine } from './types.js';
-
-/** Where the meeting page lives in the portal (`/iq/meetings/:callId`); the chat message and the notification link to it. */
-export const meetingPagePath = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
 
 export type MinutesWriterFactory = () => MinutesWriter | null;
 
@@ -121,7 +118,7 @@ export async function notifyMinutesReady(minutes: MinutesRecord, now: number = D
       // Once per writing: an addition (Milo was invited back and heard more) clears the claim, and its bell says the minutes changed.
       // The meeting's name after a colon, as the page titles it: "Minutes are ready: Observability Platform call".
       type: MINUTES_READY_TYPE, title: (minutes.additions ?? 0) > 0 ? `Minutes were updated: ${name}` : `Minutes are ready: ${name}`,
-      action: { label: 'Open the meeting', href: meetingPagePath(minutes.callId) },
+      action: { label: 'Open the meeting', href: meetingPathOf(policy, call) },
       payload: { tenant: minutes.tenant, kind: MINUTES_READY_TYPE, callId: minutes.callId },
     });
   } catch (e) { console.warn('[meeting-assistant] minutes notice not sent', (e as Error).message); return []; }
