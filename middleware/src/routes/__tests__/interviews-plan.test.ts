@@ -3,7 +3,7 @@
 // memory coach log; the model is the scripted stand-in or an injected fake, never a provider.
 //
 //   plan-draft   the lead of the round, while accepted or ready; a panel member, the recruiter, the hiring manager, another
-//                round's interviewer, the admin and a guest get 404 (the guest is refused at the gate); another tenant's role
+//                round's interviewer and the admin get 404; a guest holds no staff session and gets the gate's 401; another tenant's role
 //                is refused at the mount; a live round is 409.
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', auth: { policyStoreId: undefined, sessionSigningSecretArn: '', cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true, cloudwatch: true, guardrails: true, agentcore: true } },
@@ -59,6 +59,8 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
   const id = String(req.headers['x-user'] ?? '');
+  // A guest holds no staff session: lib/session.ts marks a guest-only request's session invalid, so every staff gate answers 401.
+  if (id.startsWith('guest:')) { req.sessionInvalid = true; next(); return; }
   const me = USERS.find((x) => x.id === id);
   if (me) {
     const tenant = String(req.headers['x-tenant'] ?? 'interviews');
@@ -132,7 +134,7 @@ describe('who may ask', () => {
   it('the lead of another round cannot ask about this one, and a guest and another tenant are refused', async () => {
     expect((await draft(HUGO, IV)).status).toBe(404);
     expect((await draft(WEN, OTHER_ROUND)).status).toBe(404);
-    expect([401, 403, 404]).toContain((await draft(GUEST)).status);
+    expect((await draft(GUEST)).status).toBe(401);
     expect((await draft(PRIYA)).status).toBe(403);
     expect(planRows()).toHaveLength(0);
   });

@@ -73,6 +73,7 @@ app.use((req, _res, next) => {
     const tenant = Object.keys(me.grants)[0]!;
     req.session = { sub: me.id, name: me.displayName, tenant, role: me.grants[tenant]![0], grants: me.grants, iat: 0, epoch: 0 } as Session;
     req.sessionInvalid = false;
+    req.sessionSource = 'cookie'; // a signed-in staff session, as a verified cookie makes it
   }
   next();
 });

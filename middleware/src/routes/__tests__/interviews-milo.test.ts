@@ -72,6 +72,8 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
   const id = String(req.headers['x-user'] ?? '');
+  // A guest holds no staff session: lib/session.ts marks a guest-only request's session invalid, so every staff gate answers 401.
+  if (id.startsWith('guest:')) { req.sessionInvalid = true; next(); return; }
   const me = USERS.find((x) => x.id === id);
   if (me) {
     const tenant = String(req.headers['x-tenant'] ?? 'interviews');
@@ -300,7 +302,7 @@ describe('everyone else', () => {
   });
 
   it('the candidate (a guest) is refused all three', async () => {
-    for (const res of [await transcript(GUEST), await notes(GUEST), await ask(GUEST, 'What about reviews?')]) expect([403, 404]).toContain(res.status);
+    for (const res of [await transcript(GUEST), await notes(GUEST), await ask(GUEST, 'What about reviews?')]) expect(res.status).toBe(401);
   });
 
   it.each(['assigned', 'accepted', 'ready', 'ended', 'scored', 'reviewed', 'declined', 'cancelled'])('state %s: both reads are not found', async (state) => {

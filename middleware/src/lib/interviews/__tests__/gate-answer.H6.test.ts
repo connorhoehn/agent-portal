@@ -4,9 +4,9 @@
 // A candidate's cookie is scoped to /api/interview-invite (lib/interviews/invite/guest.ts GUEST_COOKIE_PATH), so the
 // candidate's browser sends nothing on /api/interviews/*: there it is a caller with no session. The product (no
 // INSECURE_DEV_MODE) answers that caller 401 (lib/authz.ts denyUnauthenticated). The development mode hands a cookie-less
-// caller the demo identity, an orgiq session, which the interviews gate refuses with 403: the 403 the walk's tables record
-// is the mode's. A guest cookie carried onto the route by hand is never the demo identity (lib/session.ts), so it is 401 in
-// both. Nothing here changes a gate; it pins what each world answers.
+// caller the demo identity, an orgiq session; the tenant gate answers that stand-in for "no session" 401 too, so both worlds
+// agree (the owner's decision, 18 November: 401). A guest cookie carried onto the route by hand is never the demo identity
+// (lib/session.ts), so it is 401 in both.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
 
 import express from 'express';
@@ -45,11 +45,11 @@ describe('the interviews tenant gate: no session and a guest', () => {
     expect(guest.status).toBe(401);
   });
 
-  it('the development mode: no session is the demo identity, another tenant\'s session, so 403; a guest cookie by hand stays 401', async () => {
+  it('the development mode: no session is the demo identity, which this tenant does not cover, so 401 as in the product; a guest cookie by hand stays 401', async () => {
     process.env['INSECURE_DEV_MODE'] = 'true';
     process.env['NODE_ENV'] = 'development';
     const anon = await request(app()).get('/api/interviews/interviews');
-    expect([anon.status, anon.body.requiredTenant]).toEqual([403, 'interviews']);
+    expect([anon.status, anon.body.code]).toEqual([401, 'SESSION_INVALID']);
     const guest = await request(app()).get('/api/interviews/interviews').set('Cookie', 'interviews.guest=any.value');
     expect(guest.status).toBe(401);
   });

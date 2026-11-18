@@ -75,6 +75,8 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
   const id = String(req.headers['x-user'] ?? '');
+  // A guest holds no staff session: lib/session.ts marks a guest-only request's session invalid, so every staff gate answers 401.
+  if (id.startsWith('guest:')) { req.sessionInvalid = true; next(); return; }
   const me = USERS.find((x) => x.id === id);
   if (me) {
     const tenant = String(req.headers['x-tenant'] ?? 'interviews');

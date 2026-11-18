@@ -457,6 +457,10 @@ export function requireTenant(tenant: Tenant) {
       next();
       return;
     }
+    // The development mode's demo identity stands in for "no session". When it does not cover this tenant, the
+    // caller is answered as the product answers a caller with no session (401), not as a signed-in member of
+    // another tenant (403), so both worlds give a candidate's browser on a staff route the same answer.
+    if (req.sessionSource === 'demo') { denyUnauthenticated(req, res, 'TenantScope'); return; }
     logAuthz(eventFromSession(session, 'TenantScope', 'DENY', {
       path: req.path,
       reason: `route requires tenant=${tenant}`,

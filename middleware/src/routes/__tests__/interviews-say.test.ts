@@ -71,6 +71,8 @@ const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
   const id = String(req.headers['x-user'] ?? '');
+  // A guest holds no staff session: lib/session.ts marks a guest-only request's session invalid, so every staff gate answers 401.
+  if (id.startsWith('guest:')) { req.sessionInvalid = true; next(); return; }
   const me = USERS.find((x) => x.id === id);
   if (me) {
     const tenant = String(req.headers['x-tenant'] ?? 'interviews');
@@ -171,7 +173,7 @@ describe('POST /interviews/:id/say beyond the happy path (O-221)', () => {
   const sayQ = (as: ReturnType<typeof who>, body: unknown, id = IV) => as.post(`/interviews/${id}/say`, body);
   const prompt = (qid: string) => interviewOpeningsFixture.rows().flatMap((o) => o.kit.questions).find((q) => q.id === qid)!.prompt;
 
-  // The guest is stopped at the tenant's gate (403, as RULES.md measured in H0), before the route's own not-found.
+  // The guest holds no staff session, so the tenant's gate answers 401 (the owner's decision, 18 November), before the route's own not-found.
   it('every principal but the lead reads the one not-found, and nothing is logged, posted or said', async () => {
     const got: Record<string, number> = {};
     for (const [name, as] of [['panel member', HUGO], ['recruiter', GRETA], ['hiring manager', AMARA], ['interviewer with no seat', THIRD], ['admin', OPERATOR], ['guest', GUEST]] as const) {
@@ -179,7 +181,7 @@ describe('POST /interviews/:id/say beyond the happy path (O-221)', () => {
     }
     got['another tenant\'s role'] = (await sayQ(PRIYA, { questionId: 'q-em-slip' })).status;
     expect(got).toEqual({
-      'panel member': 404, recruiter: 404, 'hiring manager': 404, 'interviewer with no seat': 404, admin: 404, guest: 403, 'another tenant\'s role': 403,
+      'panel member': 404, recruiter: 404, 'hiring manager': 404, 'interviewer with no seat': 404, admin: 404, guest: 401, 'another tenant\'s role': 403,
     });
     expect([await said.list(IV), posts, spoken]).toEqual([[], [], []]);
   });
