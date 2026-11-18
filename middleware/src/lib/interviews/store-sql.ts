@@ -63,7 +63,7 @@ export const GET_INTERVIEW_SQL = `SELECT ${INTERVIEW_COLUMNS}
 export const INSERT_INTERVIEW_SQL = `INSERT INTO interviews (${INTERVIEW_COLUMNS})
   VALUES (:id, :application_id, :round_id, :type, :lead_id, ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))),
     CAST(:scheduled_at AS TIMESTAMPTZ), :minutes, :state, ARRAY(SELECT jsonb_array_elements_text(CAST(:question_ids AS JSONB))),
-    :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :call_id, CAST(:ended_at AS TIMESTAMPTZ),
+    :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :call_id, CAST(:started_at AS TIMESTAMPTZ), CAST(:ended_at AS TIMESTAMPTZ),
     CAST(:acceptances AS JSONB), CAST(:declines AS JSONB), 1)
   ON CONFLICT (id) DO NOTHING
   RETURNING ${INTERVIEW_COLUMNS}`;
@@ -240,7 +240,7 @@ export class SqlInterviewsStore implements InterviewsStore {
       textParam('lead_id', input.leadId), textParam('panel_ids', JSON.stringify(input.panelIds)), textParam('scheduled_at', input.scheduledAt),
       intParam('minutes', input.minutes), textParam('state', input.state), textParam('question_ids', JSON.stringify(input.questionIds)),
       textParam('assigned_by', input.assignedBy), textParam('assigned_at', input.assignedAt),
-      textParam('call_id', input.callId), textParam('ended_at', input.endedAt),
+      textParam('call_id', input.callId), textParam('started_at', input.startedAt ?? null), textParam('ended_at', input.endedAt),
       textParam('acceptances', JSON.stringify(input.acceptances)), textParam('declines', JSON.stringify(input.declines)),
     ]);
     return rows[0] ? interviewFromRow(rows[0]) : null;

@@ -241,6 +241,8 @@ const interview = (s: InterviewSeed): Interview => ({
   id: s.id, applicationId: s.app, roundId: s.round, type: s.type, leadId: s.lead, panelIds: s.panel ?? [],
   scheduledAt: s.start, minutes: s.minutes, state: s.state, questionIds: s.questions ?? [],
   assignedBy: GRETA, assignedAt: clock.daysAgo(s.assignedDaysAgo), callId: null, endedAt: s.ended ?? null,
+  // A round that has run started at its scheduled time in the seed; one that hasn't, never.
+  ...(s.state === 'live' || s.ended ? { startedAt: s.start } : {}),
   // Row I1.4: past `assigned`, every seat has accepted (a day after the assignment); still `assigned`, nobody has yet.
   acceptances: s.state === 'assigned' || s.state === 'declined' || s.state === 'cancelled' ? []
     : [{ userId: s.lead, seat: 'lead' as const, at: clock.daysAgo(Math.max(s.assignedDaysAgo - 1, 0)) },

@@ -21,7 +21,7 @@ const AT = '2026-11-16T10:00:00.000Z';
 const cells = (i: Interview): Record<string, unknown> => ({
   id: i.id, application_id: i.applicationId, round_id: i.roundId, type: i.type, lead_id: i.leadId, panel_ids: [...i.panelIds],
   scheduled_at: ts(i.scheduledAt), minutes: i.minutes, state: i.state, question_ids: [...i.questionIds], assigned_by: i.assignedBy,
-  assigned_at: ts(i.assignedAt), call_id: i.callId, ended_at: ts(i.endedAt),
+  assigned_at: ts(i.assignedAt), call_id: i.callId, started_at: ts(i.startedAt ?? null), ended_at: ts(i.endedAt),
   acceptances: JSON.stringify(i.acceptances), declines: JSON.stringify(i.declines), revision: i.revision,
 });
 
@@ -47,7 +47,7 @@ function interviewsTableExec(): { exec: SqlExec; seen: string[] } {
         id: b.get('id'), application_id: b.get('application_id'), round_id: b.get('round_id'), type: b.get('type'), lead_id: b.get('lead_id'),
         panel_ids: arr('panel_ids'), scheduled_at: at('scheduled_at'), minutes: b.get('minutes'), state: b.get('state'), question_ids: arr('question_ids'),
         assigned_by: b.get('assigned_by'), assigned_at: at('assigned_at'), call_id: b.get('call_id'),
-        ended_at: at('ended_at'), acceptances: b.get('acceptances'), declines: b.get('declines'), revision: 1,
+        started_at: at('started_at'), ended_at: at('ended_at'), acceptances: b.get('acceptances'), declines: b.get('declines'), revision: 1,
       };
       table.push(row);
       return [row];
