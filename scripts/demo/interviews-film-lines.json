@@ -1,0 +1,58 @@
+{
+ "voices": {
+  "hugo": {
+   "speaker": "ryan",
+   "instruct": "A warm, upbeat interviewer in his forties, friendly and conversational, smiling as he speaks, relaxed and natural, with lively intonation."
+  },
+  "cand": {
+   "speaker": "aiden",
+   "instruct": "An energetic young candidate in his late twenties, slightly nervous but confident, expressive and quick, animated like a real person chatting."
+  }
+ },
+ "lines": {
+  "h1": [
+   "hugo",
+   "Hey Mateo, thanks so much for joining! I'm Hugo, I'll be leading today, and Milo's here taking notes for us."
+  ],
+  "h2": [
+   "hugo",
+   "So, to kick things off... tell me about a project you're really proud of."
+  ],
+  "c1": [
+   "cand",
+   "Yeah, sure! So, honestly, the one I'm proudest of is the checkout service we rebuilt last year."
+  ],
+  "c2": [
+   "cand",
+   "We kept dropping orders whenever traffic spiked... so we added a queue and retries, and errors fell by about ninety percent!"
+  ],
+  "h3": [
+   "hugo",
+   "Oh, nice, that's a great one. Okay, let's get into the main question."
+  ],
+  "c3": [
+   "cand",
+   "Milo, can you repeat the question?"
+  ],
+  "c4": [
+   "cand",
+   "Milo, how much time is left?"
+  ],
+  "c7": [
+   "cand",
+   "Okay, cool, thanks! So for the ledger... I'd give every entry an idempotency key, and replicate the log before we acknowledge, so a failover never loses or duplicates a write."
+  ],
+  "h4": [
+   "hugo",
+   "Great. Let's jump into the pad, I'm dropping a small exercise in there now."
+  ],
+  "c6": [
+   "cand",
+   "Alright, let me write this out... and run it."
+  ],
+  "h5": [
+   "hugo",
+   "That's all the time we've got. Thanks, Mateo, this was really fun!"
+  ]
+ }
+}
