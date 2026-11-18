@@ -16,7 +16,8 @@
 //   * the events: each one stamped with the run's `seq`, the time, and an order `n` across the whole interview, kept
 //     with the run, and handed to every open reader of the interview at once. A reader that reconnects names the last
 //     event it had (`<runId>:<seq>`) and gets everything after it;
-//   * one result per run, written once;
+//   * one result per run, written once; the money follows the result even when the store refuses to write it, and a run
+//     whose result was not written is never started again by this process (a restart's recovery finishes its row);
 //   * a restart loses what was in flight: the first use of the service in a process writes every run left `queued`,
 //     `compiling` or `running` as `internal_error` and gives its money back (one middleware task: the gateway's
 //     one-task safeguard already covers the pads; several tasks would need the per-interview lock in the table).
@@ -194,14 +195,15 @@ let counters = new Map<string, number>();
 let pending = new Map<string, Map<number, RunEvent & { n: number }>>();
 let listeners = new Map<string, Set<Listener>>();
 let locks = new Map<string, Promise<unknown>>();
-let cancelledWhileQueued = new Set<string>();
+/** Runs this process ended (or is ending) without a result row yet: the queue never starts them. */
+let endedHere = new Set<string>();
 let recovered: Promise<void> | null = null;
 
 /** Tests: forget everything held in this process, as a restart would. */
 export function resetRunService(): void {
   for (const s of active.values()) if (s !== 'starting') for (const t of s.timers) clearTimeout(t);
   active = new Map(); counters = new Map(); pending = new Map(); listeners = new Map(); locks = new Map();
-  cancelledWhileQueued = new Set(); recovered = null; defaultExecutor = null;
+  endedHere = new Set(); recovered = null; defaultExecutor = null;
 }
 
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -299,7 +301,7 @@ async function pump(interviewId: string): Promise<void> {
   active.set(interviewId, 'starting');
   try {
     const d = deps();
-    const next = (await d.store().listRuns(interviewId)).find((r) => r.status === 'queued' && r.result === null && !cancelledWhileQueued.has(slotKey(interviewId, r.runId)));
+    const next = (await d.store().listRuns(interviewId)).find((r) => r.status === 'queued' && r.result === null && !endedHere.has(slotKey(interviewId, r.runId)));
     if (!next) { active.delete(interviewId); return; }
     begin(next);
   } catch (e) {
@@ -335,8 +337,13 @@ function begin(row: RunRecord): void {
     const reachedRunning = slot.status === 'running';
     const last = stamp(interviewId, runId, ++slot.seq, 'status', result.status);
     slot.chain = slot.chain.then(async () => {
-      await store.finishRun(interviewId, runId, result, iso(d.now()), [last]);
-      stored(interviewId, [last]);
+      try {
+        await store.finishRun(interviewId, runId, result, iso(d.now()), [last]);
+        stored(interviewId, [last]);
+      } catch (e) {
+        endedHere.add(slotKey(interviewId, runId));
+        console.warn('[interviews] run result not stored', (e as Error)?.name ?? 'error');
+      }
       try {
         const giveBack = result.status === 'internal_error' || result.status === 'runner_timeout' || (result.status === 'cancelled' && !reachedRunning);
         if (giveBack || !row.spendSourceId) await d.release([row.holdId]);
@@ -344,7 +351,7 @@ function begin(row: RunRecord): void {
       } catch (e) {
         console.warn('[interviews] run spend not booked', (e as Error)?.name ?? 'error');
       }
-    }).catch((e) => console.warn('[interviews] run result not stored', (e as Error)?.name ?? 'error')).finally(() => {
+    }).finally(() => {
       if (active.get(interviewId) === slot) active.delete(interviewId);
       slot.resolveDone();
       void pump(interviewId);
@@ -444,14 +451,16 @@ export async function cancelRun(interviewId: string, runId: string): Promise<Can
   }
   // Still queued: it never reaches the executor, and its money goes back.
   const key = slotKey(interviewId, runId);
-  cancelledWhileQueued.add(key);
+  endedHere.add(key);
   await counterFor(interviewId);
   const e = stamp(interviewId, runId, (row.events.at(-1)?.seq ?? 1) + 1, 'status', 'cancelled');
-  const done = await store.finishRun(interviewId, runId, serviceResult('cancelled', d.executor(), row.language), iso(d.now()), [e]);
-  stored(interviewId, [e]);
-  cancelledWhileQueued.delete(key);
-  if (done) await d.release([row.holdId]).catch(() => undefined);
-  return { kind: 'ok', run: done ?? (await store.getRun(interviewId, runId)) ?? row };
+  // A store that refuses the row leaves it to a restart's recovery (and unstarted here); the money goes back either way.
+  const out = await store.finishRun(interviewId, runId, serviceResult('cancelled', d.executor(), row.language), iso(d.now()), [e])
+    .then((done) => ({ done, refused: null }), (error: unknown) => ({ done: null, refused: { error } }));
+  if (!out.refused) { stored(interviewId, [e]); endedHere.delete(key); }
+  if (out.done || out.refused) await d.release([row.holdId]).catch(() => undefined);
+  if (out.refused) throw out.refused.error;
+  return { kind: 'ok', run: out.done ?? (await store.getRun(interviewId, runId)) ?? row };
 }
 
 // ── The stream ────────────────────────────────────────────────────────────────────────────────────────────────────

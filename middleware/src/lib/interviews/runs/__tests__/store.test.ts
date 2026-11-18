@@ -5,7 +5,10 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { SqlExec } from '../../store-sql.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
 import { interviewRunsFixture } from '../../../../mock/interviews-runs.js';
-import { serviceResult } from '../executor.js';
+import { RUN_STATUSES, serviceResult } from '../executor.js';
+import { tableShape } from '../../../../mock/core/parity/ddl.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MOCK_RUNTIME_VERSIONS } from '../mock-executor.js';
 import { MemoryRunStore, type RunRecord, type RunStore, type StoredRunEvent } from '../store.js';
 import {
@@ -126,6 +129,16 @@ describe('the statements', () => {
     expect(updates).toEqual([APPEND_EVENTS_SQL, SET_STATUS_SQL, FINISH_RUN_SQL]);
     for (const u of updates) expect(u).toMatch(/result IS NULL/);
     expect(RUN_STATEMENTS.filter((s) => /^DELETE/.test(s))).toEqual([ERASE_RUNS_SQL]);
+  });
+
+  it('the status rule accepts every status a run can end in, on a new cluster and on one made before the last status', () => {
+    const want = [...RUN_STATUSES].sort();
+    const created = tableShape('interviews_schema.sql', 'interview_runs')?.columns.find((c) => c.name === 'status')?.vocabulary;
+    expect([...(created ?? [])].sort()).toEqual(want);
+    const ddl = readFileSync(join(__dirname, '..', '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
+    const readded = /ALTER TABLE interview_runs ADD CONSTRAINT interview_runs_status_check CHECK \(status IN \(([^)]*)\)\)/.exec(ddl);
+    expect(ddl).toMatch(/ALTER TABLE interview_runs DROP CONSTRAINT IF EXISTS interview_runs_status_check;/);
+    expect((readded?.[1] ?? '').split(',').map((v) => v.trim().replace(/'/g, '')).sort()).toEqual(want);
   });
 });
 

@@ -148,6 +148,37 @@ describe('the queue', () => {
     expect(money.settle).not.toHaveBeenCalled();
   });
 
+  it('a result the store refuses still settles the money: a runner_timeout gives the hold back', async () => {
+    const refusing = new MemoryRunStore();
+    refusing.finishRun = async () => { throw new Error('status rule refused the row'); };
+    setRunDeps(deps({ store: () => refusing }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await startRun(IV, HUGO, body());
+    await flush();
+    ex.runs[0]!.emit({ type: 'result', result: ex.result('runner_timeout', ex.runs[0]!.request) });
+    await runsSettled(IV);
+    warn.mockRestore();
+    expect(money.release).toHaveBeenCalledWith(['h-run-0001']);
+    expect(money.settle).not.toHaveBeenCalled();
+    expect(ex.runs.length).toBe(1);
+  });
+
+  it('a queued cancel the store refuses still gives the money back, and that run is never started', async () => {
+    const refusing = new MemoryRunStore();
+    refusing.finishRun = async () => { throw new Error('store down'); };
+    setRunDeps(deps({ store: () => refusing }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await startRun(IV, HUGO, body());
+    await startRun(IV, HUGO, body());
+    await flush();
+    await expect(cancelRun(IV, 'run-0002')).rejects.toThrow('store down');
+    expect(money.release).toHaveBeenCalledWith(['h-run-0002']);
+    ex.runs[0]!.emit({ type: 'result', result: ex.result('succeeded', ex.runs[0]!.request) });
+    await runsSettled(IV);
+    warn.mockRestore();
+    expect(ex.runs.length).toBe(1);
+  });
+
   it('a start that throws is an internal_error, and the queue moves on', async () => {
     ex.throwOnStart = true;
     await startRun(IV, HUGO, body());

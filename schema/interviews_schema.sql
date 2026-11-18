@@ -431,7 +431,7 @@ CREATE TABLE IF NOT EXISTS interview_runs (
   started_by_id    TEXT NOT NULL,
   started_by_name  TEXT NOT NULL,
   started_by_side  TEXT NOT NULL CHECK (started_by_side IN ('panel', 'candidate')),
-  status           TEXT NOT NULL CHECK (status IN ('queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'memory_exceeded', 'cancelled', 'internal_error')),
+  status           TEXT NOT NULL CONSTRAINT interview_runs_status_check CHECK (status IN ('queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error')),
   queued_at        TIMESTAMPTZ NOT NULL,
   started_at       TIMESTAMPTZ,
   ended_at         TIMESTAMPTZ,
@@ -443,3 +443,7 @@ CREATE TABLE IF NOT EXISTS interview_runs (
   CHECK ((result IS NULL) = (ended_at IS NULL))
 );
 CREATE INDEX IF NOT EXISTS interview_runs_unfinished_idx ON interview_runs (queued_at) WHERE result IS NULL;
+-- Clusters created before `runner_timeout` (the runner never started the program) carry the ten-status list, which refuses
+-- that result; replace the rule by name (a re-run drops and re-adds the same rule).
+ALTER TABLE interview_runs DROP CONSTRAINT IF EXISTS interview_runs_status_check;
+ALTER TABLE interview_runs ADD CONSTRAINT interview_runs_status_check CHECK (status IN ('queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error'));
