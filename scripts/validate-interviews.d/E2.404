@@ -1,0 +1,78 @@
+# Row E2: isolation (lane H6). Format at parseRefusalTable (scripts/journeys/interviews/seed.mjs). Built from the other
+# lanes' tables (I1.x to I6.x) plus the cross-tenant rows; the channels, the admitted guest across two live rounds and
+# Milo's call routes are walk steps E2a to E2d (they need a socket, an admission or a running call).
+#
+# How the gates answer, measured (lane H6, "open item 3"): inside the tenant a viewer outside a row's scope reads 404; a role
+# that holds no such action reads 403 (the action's gate). Before the tenant: a person with no interviews grant reads 403
+# (requireTenant). A guest's cookie travels only on /api/interview-invite, so a candidate's browser is an ANONYMOUS caller on
+# every other path: on the mock world (INSECURE_DEV_MODE) an anonymous caller is the demo identity, an orgiq session, so
+# guest=403 and anon=403 below are the development mode's answers; with the mode off (the product) both are 401
+# (lib/authz.ts denyUnauthenticated). A guest cookie carried by hand onto a staff route is 401 in both worlds (lib/session.ts):
+# middleware/src/routes/__tests__/interviews-invite-sweep.test.ts pins that on every interviews route.
+
+# (a) Every other tenant's front routes: its list and one write. The interviews cast holds no grant there (403 at the gate);
+# the Work-only persona reads Work's list (the right principal, same world). No seeded cast member holds assessment,
+# pipelines, access or social, so those rows show refusals only.
+# On the mock world an anonymous caller (and so a candidate's browser) also reads Work's list: the demo identity. Not
+# pinned here as "allowed"; it is reported (dev mode only; the product answers 401).
+GET /api/work/jobs | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 | workOnly
+POST /api/work/proposals | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 guest=403 guest:kwameLive=403 anon=403 | | {}
+GET /api/assessment/decks | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 guest=403 guest:kwameLive=403 anon=403
+POST /api/assessment/feedback | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 guest=403 anon=403 | | {}
+GET /api/pipelines/definitions | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 guest=403 guest:kwameLive=403 anon=403
+POST /api/pipelines/definitions/def-h6-none/dry-run | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 guest=403 anon=403 | | {}
+GET /api/access/catalog | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 guest=403 guest:kwameLive=403 anon=403
+POST /api/access/requests | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 guest=403 anon=403 | | {}
+GET /api/social/channels | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 workOnly=403 guest=403 guest:kwameLive=403 anon=403
+POST /api/social/channels | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 guest=403 anon=403 | | {}
+GET /api/social/recordings | recruiter=403 interviewer=403 interviewer2=403 hiringManager=403 guest=403 anon=403
+# The recording service's own routes take a service signature, never a person (row I2.6).
+POST /api/realtime/recording-access | anon=401 guest=401 guest:kwameLive=401 recruiter=401 interviewer=401 hiringManager=401 workOnly=401 | | {}
+
+# The reverse: the Work-only persona, a caller with no session and a guest stop at the interviews tenant gate.
+GET /api/interviews/interviews | workOnly=403 anon=403 guest=403 guest:kwameLive=403 | recruiter interviewer interviewer2 hiringManager
+GET /api/interviews/candidates | workOnly=403 anon=403 guest=403 | recruiter interviewer interviewer2 hiringManager
+POST /api/interviews/candidates | workOnly=403 anon=403 guest=403 guest:aikoCoding=403 | | {}
+
+# (b) Every other interview.
+# An interviewer on a round they have no seat on: Hugo on Wen's rounds (Aiko's coding, Ravi's coding), Wen on Hugo's
+# (Mateo's design). The seat holder and the recruiter read the same rows.
+GET /api/interviews/interviews/{interviews.aikoCoding} | interviewer hiringManager guest=403 guest:kwameLive=403 | interviewer2 recruiter
+GET /api/interviews/interviews/{interviews.aikoCoding}/room | interviewer recruiter hiringManager guest=403 guest:aikoCoding=403 | interviewer2
+GET /api/interviews/interviews/{interviews.aikoCoding}/waiting | interviewer recruiter hiringManager guest:aikoCoding=403 | interviewer2
+GET /api/interviews/interviews/{interviews.aikoCoding}/consents | interviewer hiringManager guest:aikoCoding=403 | interviewer2 recruiter
+GET /api/interviews/interviews/{interviews.aikoCoding}/suggestion | interviewer recruiter hiringManager | interviewer2
+POST /api/interviews/interviews/{interviews.aikoCoding}/say | interviewer hiringManager guest:aikoCoding=403 | | {"questionId":"q-h6"}
+POST /api/interviews/interviews/{interviews.aikoCoding}/milo-ask | interviewer hiringManager guest:aikoCoding=403 | | {"question":"What did they say?"}
+POST /api/interviews/interviews/{interviews.aikoCoding}/plan-draft | interviewer hiringManager guest:aikoCoding=403 | | {}
+GET /api/interviews/interviews/{interviews.raviCoding}/record | interviewer hiringManager guest=403 | recruiter interviewer2
+GET /api/interviews/interviews/{interviews.raviCoding}/recap | interviewer hiringManager guest=403 | recruiter interviewer2
+GET /api/interviews/interviews/{interviews.raviCoding}/pad/log | interviewer hiringManager guest=403 | recruiter interviewer2
+GET /api/interviews/interviews/{interviews.raviCoding}/scorecard | interviewer hiringManager | recruiter interviewer2
+GET /api/interviews/interviews/{interviews.mateoDesign}/room | interviewer2 recruiter hiringManager guest=403 | interviewer
+GET /api/interviews/interviews/{interviews.mateoDesign}/waiting | interviewer2 recruiter hiringManager | interviewer
+GET /api/interviews/interviews/{interviews.mateoDesign}/scorecard | interviewer2 | interviewer recruiter hiringManager
+# The export and the panel-side reads of the live round: the recruiter's export only; the live notes and runs to its seats.
+GET /api/interviews/interviews/{interviews.raviCoding}/milo-export | interviewer interviewer2 hiringManager guest=403 | recruiter
+GET /api/interviews/interviews/{interviews.kwameLive}/milo-notes | recruiter hiringManager guest:kwameLive=403 workOnly=403 | interviewer interviewer2
+GET /api/interviews/interviews/{interviews.kwameLive}/runs | recruiter hiringManager guest:kwameLive=403 guest:aikoCoding=403 workOnly=403 | interviewer interviewer2
+# The runs stream (O-276): another tenant's person, a guest of this interview and of another, and staff with no seat. The
+# seats' stream is opened by the walk's pad pieces (I4.4); a stream is not judged as "allowed" here because it stays open.
+GET /api/interviews/interviews/{interviews.kwameLive}/runs/events | workOnly=403 guest=403 guest:kwameLive=403 guest:aikoCoding=403 anon=403 recruiter hiringManager
+GET /api/interview-invite/runs/events | guest guest:kwameLive guest:aikoCoding anon recruiter interviewer workOnly
+# A hiring manager on another's opening: Amara holds Backend and Engineering Manager, not iOS (Ravi applied to iOS).
+GET /api/interviews/openings/{openings.ios} | hiringManager interviewer | recruiter interviewer2
+GET /api/interviews/openings/{openings.ios}/spend | hiringManager interviewer interviewer2 | recruiter
+GET /api/interviews/candidates/{candidates.ravi} | hiringManager interviewer | recruiter interviewer2
+GET /api/interviews/candidates/{candidates.ravi}/debrief | hiringManager interviewer interviewer2 guest=403 | recruiter
+GET /api/interviews/candidates/{candidates.mateo}/debrief | interviewer interviewer2 | recruiter hiringManager
+GET /api/interviews/interviews/{interviews.raviCoding} | hiringManager interviewer | recruiter interviewer2
+POST /api/interviews/applications/{applications.ravi}/stage | hiringManager recruiter=403 interviewer=403 guest=403 workOnly=403 | | {}
+POST /api/interviews/candidates/{candidates.ravi}/deletion | hiringManager interviewer guest=403 workOnly=403 | | {}
+
+# The guest's own routes for a guest not let in (the admitted cases are walk step E2b).
+POST /api/interview-invite/runs | guest guest:kwameLive guest:aikoCoding anon interviewer | | {"runId":"h6-table-run-1","language":"python","entrypoint":"main.py","files":[{"path":"main.py","content":"print(1)"}]}
+GET /api/interview-invite/runs/run-kwame-01 | guest guest:kwameLive guest:aikoCoding anon interviewer
+POST /api/interview-invite/milo/request | guest guest:kwameLive anon recruiter | | {"request":"time"}
+POST /api/interview-invite/media/participant | guest guest:kwameLive anon interviewer | | {"callId":"h6-no-such-call","participantId":"guest:inv-h6-abc"}
+GET /api/interview-invite/interview | anon recruiter interviewer interviewer2 hiringManager workOnly | guest guest:kwameLive guest:aikoCoding
