@@ -26,7 +26,7 @@ describe('the recording eraser (D5)', () => {
     }) as unknown as typeof fetch;
     const e = recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's', RECORDING_ERASE_SERVICE_ID: 'bff' }, fetch: f });
     expect(await e.erase(['iv-1', 'iv-2'])).toBe(4);
-    expect(seen).toEqual([[{ lobbyName: 'interviews:interview:iv-1' }, true], [{ lobbyName: 'interviews:interview:iv-2' }, true]]);
+    expect(seen).toEqual([[{ lobbyName: 'interviews:interview:iv-1', purpose: 'recording-erase' }, true], [{ lobbyName: 'interviews:interview:iv-2', purpose: 'recording-erase' }, true]]);
   });
   it('signs as aws-agentcore by default, the only service platform-api accepts an erase from unless told otherwise', async () => {
     let ok = false;

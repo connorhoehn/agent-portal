@@ -47,6 +47,18 @@ export function recordingServiceUrl(env: NodeJS.ProcessEnv = process.env): strin
   return url.trim() ? url.trim().replace(/\/+$/, '') : null;
 }
 
+/**
+ * The one signer for this service's calls to platform-api's /internal/recordings routes: the request headers for `body`, signed as
+ * the service (platform-api accepts a recording call only from its RECORDING_ERASE_SERVICE_IDS, default `aws-agentcore`).
+ * Null when no SERVICE_AUTH_SECRET is set.
+ */
+export function signedRecordingHeaders(body: string | object, env: NodeJS.ProcessEnv = process.env): Record<string, string> | null {
+  const secret = env['SERVICE_AUTH_SECRET']?.trim();
+  if (!secret) return null;
+  const serviceId = env['RECORDING_ERASE_SERVICE_ID']?.trim() || 'aws-agentcore';
+  return { 'content-type': 'application/json', [SERVICE_AUTH_HEADER]: signEnvelope(body, { secret, serviceId }) };
+}
+
 /** The mock world's seeded stand-ins for a recording and a stored call's words. Each removes those of the given interviews and answers which interviews had one. */
 export interface StandIns {
   recordings(interviewIds: readonly string[]): string[];
@@ -90,17 +102,14 @@ export function recordingEraser(deps: Partial<RecordingDeps> = {}): Eraser {
         if (standIns > 0) return standIns;
         throw new EraserSkipped('no-service');
       }
-      const secret = env['SERVICE_AUTH_SECRET']?.trim();
-      if (!secret) throw new Error('SERVICE_AUTH_SECRET is not set, so recordings cannot be erased.');
-      // platform-api accepts a recording erase only from the services in its RECORDING_ERASE_SERVICE_IDS (default `aws-agentcore`).
-      const serviceId = env['RECORDING_ERASE_SERVICE_ID']?.trim() || 'aws-agentcore';
+      if (!signedRecordingHeaders({}, env)) throw new Error('SERVICE_AUTH_SECRET is not set, so recordings cannot be erased.');
       const doFetch = deps.fetch ?? fetch;
       let erased = standIns;
       for (const id of interviewIds) {
-        const body = { lobbyName: interviewLobby(id) };
+        const body = { lobbyName: interviewLobby(id), purpose: 'recording-erase' };
         const res = await doFetch(`${base}${RECORDING_ERASE_PATH}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', [SERVICE_AUTH_HEADER]: signEnvelope(body, { secret, serviceId }) },
+          headers: signedRecordingHeaders(body, env)!,
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(RECORDING_TIMEOUT_MS),
         });

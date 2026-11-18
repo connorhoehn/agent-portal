@@ -5,18 +5,21 @@
 // route never disagree. Signed as the same service as the recording erase. Best effort: it never throws, and a failure is one warning.
 // Skipped where no platform-api is configured (the plain mock world) and when the interview is not in a call state.
 
-import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import { decideRecording } from './recording-rules.js';
-import { recordingServiceUrl } from './retention/erasers.js';
+import { recordingServiceUrl, signedRecordingHeaders } from './retention/erasers.js';
 import { interviewLobby } from './retention/rules.js';
 
 export const RECORDING_DECISION_PATH = '/internal/recordings/interview-decision';
 const PUSH_TIMEOUT_MS = 8_000;
+/** A 503 means platform-api could not confirm the switch: tried again this many times in all, waiting longer each time. */
+const ATTEMPTS = 4;
+const BACKOFF_MS = 500;
 
 export interface PushDeps {
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
   warn: (message: string) => void;
+  sleep: (ms: number) => Promise<void>;
 }
 
 /** Answers true when platform-api accepted the decision, false when nothing was sent or it failed. */
@@ -26,21 +29,22 @@ export async function pushRecordingDecision(interviewId: string, deps: Partial<P
   try {
     const base = recordingServiceUrl(env);
     if (!base) return false;
-    const secret = env['SERVICE_AUTH_SECRET']?.trim();
-    if (!secret) return false;
     const lobbyName = interviewLobby(interviewId);
     const decision = await decideRecording(lobbyName, async () => true);
     // A call that is not open has nothing to switch.
     if (decision.status !== 200 || decision.body.reason === 'interview-not-open') return false;
-    const serviceId = env['RECORDING_ERASE_SERVICE_ID']?.trim() || 'aws-agentcore';
-    const body = { lobbyName, record: decision.body.record, transcribe: decision.body.transcribe, reason: decision.body.reason };
-    const res = await (deps.fetch ?? fetch)(`${base}${RECORDING_DECISION_PATH}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', [SERVICE_AUTH_HEADER]: signEnvelope(body, { secret, serviceId }) },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
-    });
-    if (!res.ok) throw new Error(`answered ${res.status}`);
+    const body = { lobbyName, purpose: 'interview-decision', record: decision.body.record, transcribe: decision.body.transcribe, reason: decision.body.reason };
+    const headers = signedRecordingHeaders(body, env);
+    if (!headers) return false;
+    const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    for (let attempt = 1; ; attempt += 1) {
+      const res = await (deps.fetch ?? fetch)(`${base}${RECORDING_DECISION_PATH}`, {
+        method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
+      });
+      if (res.ok) break;
+      if (res.status !== 503 || attempt >= ATTEMPTS) throw new Error(`answered ${res.status}${res.status === 503 ? ` after ${attempt} tries` : ''}`);
+      await sleep(BACKOFF_MS * 2 ** (attempt - 1));
+    }
     return true;
   } catch (err) {
     warn(`[interviews] recording decision not pushed: ${err instanceof Error ? err.message : 'failed'}`);
