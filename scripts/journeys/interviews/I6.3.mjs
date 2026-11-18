@@ -126,13 +126,15 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
   try {
     const hugo = await signIn(SEED.cast.interviewer);
     const page = await hugo.newPage();
-    await openActivity(page, mateo);
-    await page.getByTestId('interviews-profile-history').first().waitFor({ timeout: 30_000 });
+    // No Activity tab for an interviewer (E4 #29 left it empty for them), so no Deletions section anywhere on the profile.
+    await page.goto(profile(mateo), { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('interviews-candidate-profile').waitFor({ timeout: 30_000 });
+    await page.getByTestId('interviews-profile-tab-rounds').waitFor({ timeout: 30_000 });
     await page.waitForTimeout(1000);
-    const sections = await page.getByTestId('interviews-profile-deletions-section').count();
+    const sections = (await page.getByTestId('interviews-profile-deletions-section').count()) + (await page.getByTestId('interviews-profile-tab-activity').count());
     const r = await api(hugo, 'GET', `/api/interviews/candidates/${mateo}/deletions`);
     const ask = await api(hugo, 'POST', `/api/interviews/candidates/${mateo}/deletion`, { confirm: true });
-    record('I6.3c', sections === 0 && r.status === 404 && ask.status === 404, `interviewer: ${sections} Deletions sections; the log ${r.status}; asking ${ask.status}`);
+    record('I6.3c', sections === 0 && r.status === 404 && ask.status === 404, `interviewer: ${sections} Deletions sections or Activity tabs; the log ${r.status}; asking ${ask.status}`);
     await hugo.close();
   } catch (e) { record('I6.3c', false, `stopped: ${String(e?.message ?? e).split('\n')[0]}`); }
 

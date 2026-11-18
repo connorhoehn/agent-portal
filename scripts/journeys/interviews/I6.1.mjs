@@ -1,7 +1,7 @@
 // Piece I6.1: consent records on the profile (rows I6.1; decision 5). Consents sit on the profile's Activity tab.
 //   I6.1a  the recruiter reads Kwame's Consents: the live round's three answers (Yes) and the assigned round's dashes
 //   I6.1b  the opening's hiring manager reads that a notice was given, never an answer (page and API)
-//   I6.1c  an interviewer on the same profile finds no Consents section, and the API answers not-found
+//   I6.1c  an interviewer on the same profile finds no Activity tab and no Consents section, and the API answers not-found
 // Reads only.
 export default async function run({ portal, record, signIn, api, SEED, shootPage }) {
   const kwame = SEED.candidates.kwame;
@@ -62,14 +62,18 @@ export default async function run({ portal, record, signIn, api, SEED, shootPage
   try {
     const context = await signIn(SEED.cast.interviewer);
     const page = await context.newPage();
-    await openActivity(page);
-    await page.getByTestId('interviews-profile-history').first().waitFor({ timeout: 30_000 });
+    // An interviewer reads nothing on Activity (no stage history since E4 #29, no consents, no deletions), so the tab is
+    // not offered at all.
+    await page.goto(profile, { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('interviews-candidate-profile').waitFor({ timeout: 30_000 });
+    await page.getByTestId('interviews-profile-tab-rounds').waitFor({ timeout: 30_000 });
     await page.waitForTimeout(1000);
+    const tabs = await page.getByTestId('interviews-profile-tab-activity').count();
     const sections = await page.getByTestId('interviews-profile-consents-section').count();
-    const activity = await page.getByTestId('interviews-profile-activity').innerText();
+    const body = await page.getByTestId('interviews-candidate-profile').innerText();
     const r = await api(context, 'GET', `/api/interviews/candidates/${kwame}/consents`);
-    const ok = sections === 0 && !/Consents/.test(activity) && r.status === 404;
-    record('I6.1c', ok, `interviewer: ${sections} Consents sections on the Activity tab; API ${r.status}`);
+    const ok = tabs === 0 && sections === 0 && !/Consents/.test(body) && r.status === 404;
+    record('I6.1c', ok, `interviewer: ${tabs} Activity tabs, ${sections} Consents sections on the profile; API ${r.status}`);
     await context.close();
   } catch (e) { record('I6.1c', false, `stopped: ${String(e?.message ?? e).split('\n')[0]}`); }
 }

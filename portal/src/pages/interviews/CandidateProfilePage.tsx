@@ -171,6 +171,7 @@ function CandidateProfile({ id }: { id: string }) {
   // An interviewer's page has no list rail, so it keeps its own h1 (the name); beside a rail the frame's title is the h1.
   const framed = railKindFor(role) !== null;
   const deletions = useDeletionPrompt(id, role, profile?.candidate.name ?? 'This candidate', refresh);
+  const readsActivity = readsHistory(role) || readsConsents(role) || deletions.reads;
   const resume = useResumeState(id, profile?.candidate.name ?? '', manages);
   const [tab, setTab] = useState<ProfileTab>('rounds');
 
@@ -227,14 +228,15 @@ function CandidateProfile({ id }: { id: string }) {
             { id: 'rounds', label: 'Rounds', badge: rounds.length || undefined },
             { id: 'resume', label: 'Résumé' },
             { id: 'recordings', label: 'Recordings', badge: recorded.length || undefined },
-            { id: 'activity', label: 'Activity' },
+            // An interviewer reads no stage history, consents or deletions (E4 #29), so an Activity tab would be empty.
+            ...(readsActivity ? [{ id: 'activity', label: 'Activity' }] : []),
           ]} />
         {tab === 'rounds' && applications.map((a) => (
           <RoundsSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id} assigns={manages} />
         ))}
         {tab === 'resume' && <ResumeSection candidateId={candidate.id} manages={manages} state={resume} />}
         {tab === 'recordings' && <RecordingsSection rows={recorded} />}
-        {tab === 'activity' && (
+        {tab === 'activity' && readsActivity && (
           <Stack gap="md" data-testid="interviews-profile-activity">
             {readsHistory(role) && applications.map((a) => <HistorySection key={a.applicationId} app={a} several={applications.length > 1} />)}
             {readsConsents(role) && <ProfileConsents candidateId={candidate.id} />}
