@@ -33,6 +33,8 @@ export class MemoryResumeBytes implements ResumeBytesStore {
     return held ? Buffer.from(held) : null;
   }
   async remove(key: string): Promise<void> { this.held.delete(key); this.removed.add(key); }
+  /** A mock reset: the seeded files come back and uploads go (the rows are reset with the fixtures). */
+  reset(): void { this.held.clear(); this.removed.clear(); }
 }
 
 export class UnavailableResumeBytes implements ResumeBytesStore {

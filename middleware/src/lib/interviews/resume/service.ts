@@ -7,7 +7,7 @@
 // one orphan object that no row points to.
 
 import { randomUUID } from 'node:crypto';
-import { createResumeBytes, type ResumeBytesStore } from './bytes-store.js';
+import { MemoryResumeBytes, createResumeBytes, type ResumeBytesStore } from './bytes-store.js';
 import { createResumeRows, type ResumeRowStore } from './row-store.js';
 import { checkResumeBytes, cleanFileName, resumeStorageKey, sha256Hex, type UploadCheck } from './rules.js';
 import { RESUME_CONTENT_TYPE, type ResumeRecord } from './types.js';
@@ -17,6 +17,10 @@ let rows: ResumeRowStore | null = null;
 let bytes: ResumeBytesStore | null = null;
 export const resumeRows = (): ResumeRowStore => (rows ??= createResumeRows());
 export const resumeBytes = (): ResumeBytesStore => (bytes ??= createResumeBytes());
+/** POST /api/__mock/reset: a seeded file a walk removed (row I6.3) is back, as its row is. Only the memory store has anything to reset. */
+export function resetMockResumeBytes(): void {
+  if (bytes instanceof MemoryResumeBytes) bytes.reset();
+}
 export function setResumeStores(next: { rows?: ResumeRowStore | null; bytes?: ResumeBytesStore | null }): void {
   if (next.rows !== undefined) rows = next.rows;
   if (next.bytes !== undefined) bytes = next.bytes;

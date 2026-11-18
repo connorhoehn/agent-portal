@@ -71,6 +71,7 @@ import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { interviewsClockOffsetMs, interviewsNow, resetInterviewsClock, setInterviewsClockOffset } from '../lib/interviews/clock.js';
 import { runSoonTick } from '../lib/interviews/soon-sweep.js';
+import { resetMockResumeBytes } from '../lib/interviews/resume/service.js';
 import { sweep as runInterviewsRetentionSweep } from '../lib/interviews/retention/service.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
 import { getDemoState, resetDemoDirector, startDemoDirector, stopDemoDirector } from '../mock/demo-director.js';
@@ -535,6 +536,8 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
   clearMockScopes();
   // The interviews clock a walk may have moved (lib/interviews/clock.ts) goes back to the wall clock.
   resetInterviewsClock();
+  // The résumé files the memory store holds, and the seeded ones it remembers as removed, go back to the seed too.
+  resetMockResumeBytes();
   registry.resetAll(DEFAULT_SCENARIO);
   identityClonesFixture.reset();
   // Same reason as the line above: the microVM fleet lives in an in-memory Map
