@@ -106,18 +106,14 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     other.on('response', async (r) => { if (r.request().method() === 'PUT' && /\/questions$/.test(r.url())) refused = { status: r.status(), error: ((await r.json().catch(() => ({}))).error ?? '') }; });
     await other.getByTestId('interviews-bank-add').first().click();
     await other.getByTestId('interviews-plan-save').click();
-    const shownProblem = await other.getByTestId('interviews-plan-problem').waitFor({ timeout: 10_000 }).then(() => true, () => false);
-    if (!shownProblem) {
-      await other.close();
-      record('I1.7e', false, `FINDING: the stale save was refused by the server (${refused?.status}: "${(refused?.error ?? '').slice(0, 90)}") but the page shows no words about it; the person sees the list change with no explanation`);
-      throw new Error('I1.7e recorded');
-    }
-    const problem = await textOf(other, 'interviews-plan-problem');
+    await other.getByTestId('interviews-plan-problem').waitFor({ timeout: 10_000 });
     await other.waitForTimeout(1500);
+    // Read after the refetch: the words must outlive it.
+    const problem = await textOf(other, 'interviews-plan-problem');
     const shown = (await planPrompts(other)).length;
     const saved = (await read(hugo))?.questionsChosen?.length;
     await other.close();
-    record('I1.7e', /Someone else|out of date|reload/i.test(problem) && shown === saved, `a stale save says "${problem.slice(0, 120)}"; the page then shows ${shown} questions and ${saved} are saved`);
+    record('I1.7e', /Someone else|out of date|reload/i.test(problem) && shown === saved, `a stale save (${refused?.status}) says "${problem.slice(0, 120)}" after the refetch; the page then shows ${shown} questions and ${saved} are saved`);
   } catch (e) { if (e.message !== 'I1.7e recorded') record('I1.7e', false, `stale save: ${e.message.split('\n')[0]}`); }
 
   // ── I1.7f ──

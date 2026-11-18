@@ -22,16 +22,21 @@ export default function PreparePage() {
   const base = useFlushTrailItems();
   const { data, error, failure, refresh } = useFetch<{ interview: InterviewRecord }>(id ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}` : null);
   const record = data?.interview ?? null;
+  // A refused stale save remounts the workspace (it is keyed by revision); the refusal is held here so its words outlive the refetch.
+  const [carried, setCarried] = useState<string | null>(null);
   useCrumbLabel(id, record ? `${record.candidate.name}, ${record.round.name}` : null);
   if (failure?.status === 404) {
     return <RecordNotFound heading="Round" title="Round not found" body="There is no round here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
   }
   if (error && !record) return <UnavailableNotice error={error} what="this round" source="Rounds are read from the interviews tenant" onRetry={refresh} />;
   if (!record) return <FlushDetailFrame><DetailPage title="Prepare" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the round…</T></DetailPage></FlushDetailFrame>;
-  return <FlushDetailFrame><PrepareWorkspace key={`${record.id}:${record.revision}`} record={record} trail={base} onChanged={refresh} /></FlushDetailFrame>;
+  return <FlushDetailFrame><PrepareWorkspace key={`${record.id}:${record.revision}`} record={record} trail={base} onChanged={refresh} carried={carried} onCarried={setCarried} /></FlushDetailFrame>;
 }
 
-function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecord; trail: ReturnType<typeof useFlushTrailItems>; onChanged: () => void }) {
+function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
+  record: InterviewRecord; trail: ReturnType<typeof useFlushTrailItems>; onChanged: () => void;
+  carried: string | null; onCarried: (line: string | null) => void;
+}) {
   const navigate = useNavigate();
   const saved = useMemo(() => record.questionsChosen.map((q) => q.id), [record]);
   const [plan, setPlan] = useState<string[]>(saved);
@@ -48,15 +53,21 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
   const planned = plan.map((q) => byId.get(q)).filter((q): q is BankQuestion => !!q);
   const groups = bankGroups(record.bank, record.competencies, plan);
   const dirty = !samePlan(plan, saved);
+  // The carried refusal stays until the person changes the plan again.
+  useEffect(() => { if (dirty) onCarried(null); }, [dirty, onCarried]);
+  const shownProblem = problem ?? carried;
   const editable = record.canPrepare;
   const full = plan.length >= record.maxQuestions;
   const status = roundStatus(record.state);
 
   const save = async () => {
-    setBusy(true); setProblem(null); setNote(null);
+    setBusy(true); setProblem(null); setNote(null); onCarried(null);
     const out = await savePlan(record.id, record.revision, plan);
     setBusy(false);
-    if (!out.ok) { setProblem(out.error); if (out.stale) onChanged(); return; }
+    if (!out.ok) {
+      if (out.stale) { onCarried(out.error); onChanged(); } else setProblem(out.error);
+      return;
+    }
     setNote('Your plan is saved.');
     onChanged();
   };
@@ -112,8 +123,8 @@ function PrepareWorkspace({ record, trail, onChanged }: { record: InterviewRecor
           )}
           {record.missing && <T size="sm" tone="secondary" data-testid="interviews-prepare-missing">{record.missing}</T>}
           {!editable && <T size="sm" tone="secondary" data-testid="interviews-prepare-readonly">{readOnlyLine(record)}</T>}
-          {problem && <T size="sm" tone="danger" role="alert" data-testid="interviews-plan-problem">{problem}</T>}
-          {note && !problem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
+          {shownProblem && <T size="sm" tone="danger" role="alert" data-testid="interviews-plan-problem">{shownProblem}</T>}
+          {note && !shownProblem && <T size="sm" tone="secondary" role="status" data-testid="interviews-plan-note">{note}</T>}
           {planned.length === 0
             ? <T size="sm" tone="tertiary" data-testid="interviews-plan-empty">Nothing in the plan yet. Add questions from the list below.</T>
             : <DataTable narrow rowHeight="content" data-testid="interviews-plan-table" aria-label="Your plan" data={planned} columns={planColumns} keyField={(q) => q.id} staticRows="Each question in your plan, with its order controls"
