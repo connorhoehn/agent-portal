@@ -55,7 +55,7 @@ export function GuestMiloVoice({ room, line = null }: { room: GuestRoom; line?: 
     data-voice-frames={voice.framesPlayed} data-voice-speaking={String(voice.speaking)}>
     {voice.speaking && <Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Milo is speaking</Chip>}
     {/* One line that wraps: the label and the whole question, never cut. A repeat re-mounts it, so a screen reader reads it again. */}
-    {asked && <T key={announce} as="p" size="sm" role="status" className="min-w-0 flex-1" data-testid="guest-milo-asked">
+    {asked && <T key={announce} as="p" size="sm" role="status" className="min-w-0 flex-1" data-testid="guest-milo-question-line">
       <T as="span" size="sm" weight="medium">Milo asked </T><T as="span" size="sm" data-testid="guest-milo-question">{asked}</T>
     </T>}
     {voice.needsGesture && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="guest-milo-enable-sound">Click to hear Milo</Button>}
