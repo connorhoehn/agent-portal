@@ -5,7 +5,7 @@
 //
 //   a 64 KB snapshot in its own post     stored (the reporter sends a snapshot alone for this reason)
 //   a snapshot over 64 KB, under 100 KB  refused whole with the route's sentence (400), nothing stored
-//   a body over 100 KB                   refused with a sentence, never a 500 (it.failing: the app answers 500 today)
+//   a body over 100 KB                   refused with 413 and a sentence, never a 500
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -100,10 +100,8 @@ it('a body over the app\'s 100 KB limit is refused (4xx), and nothing is stored'
   expect(await snapshots()).toHaveLength(before);
 });
 
-// O-243 says a body past the limit is refused with a sentence, never a 500. The app's error handler (lib/async-handler.ts)
-// answers body-parser's "entity too large" as an unhandled error: 500 "Internal server error". A finding (index.ts and the
-// shared error handler are not this row's files).
-it.failing('a body over the app\'s 100 KB limit is a 413 with a plain sentence, never a 500', async () => {
+// O-243: a body past the limit is refused with a sentence, never a 500 (the shared error handler, lib/async-handler.ts).
+it('a body over the app\'s 100 KB limit is a 413 with a plain sentence, never a 500', async () => {
   const r = await post(snapshot(150 * 1024));
   expect(r.status).toBe(413);
   const body = (await r.json()) as { error?: string };

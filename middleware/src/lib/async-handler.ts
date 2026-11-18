@@ -58,6 +58,20 @@ export function errorHandler(
     res.status(err.status).json({ error: err.message, ...(err instanceof SessionInvalidError ? { code: err.code } : {}) });
     return;
   }
+  // express.json's limit (body-parser's "entity too large"): the caller's request, not the server's fault.
+  if (isTooLarge(err)) {
+    res.status(413).json({ error: TOO_LARGE });
+    return;
+  }
   console.error('[middleware] unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
+}
+
+/** The one sentence for a body over the app's size limit. */
+export const TOO_LARGE = 'This request is too large to read. Nothing was stored.';
+
+function isTooLarge(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { type?: unknown; status?: unknown };
+  return e.type === 'entity.too.large' || (e.status === 413 && 'expose' in e);
 }
