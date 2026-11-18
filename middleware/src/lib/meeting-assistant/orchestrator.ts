@@ -1371,10 +1371,11 @@ export class AssistantRuntime {
     const pieces = e.parts && e.parts.length > 1
       ? splitBySpeaker(run.timeline.intervals(), e.parts.map((p) => ({ ...p, startMs: p.startMs - lag, endMs: p.endMs - lag }))).map((p) => ({ ...p, startMs: p.startMs + lag, endMs: p.endMs + lag }))
       : [{ text: e.text, startMs: e.startMs, endMs: e.endMs }];
-    for (const p of pieces) await this.storePiece(run, p, inputNo, pieces.length === 1);
+    // The provider's end of the turn belongs to its last piece (an earlier piece is someone else's, who may still be speaking).
+    for (const [i, p] of pieces.entries()) await this.storePiece(run, p, inputNo, pieces.length === 1, e.turnEnded === true && i === pieces.length - 1);
   }
 
-  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number; mixed?: true }, inputNo = 0, whole = true): Promise<void> {
+  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number; mixed?: true }, inputNo = 0, whole = true, turnEnded = false): Promise<void> {
     const intervals = run.timeline.intervals();
     for (const i of intervals) if (i.endMs >= e.startMs - 2500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
     const lag = transcriptLag(run.lagSamples);
@@ -1391,6 +1392,7 @@ export class AssistantRuntime {
       userId: who.userId, text: e.text, at: run.sessionStartedAt + e.endMs, ...callOffsets(run, e),
       captionId: `live:${run.sessionNo}:${run.pieceNo}`,
       ...(who.speakers.length > 1 ? { speakers: who.speakers } : {}),
+      ...(turnEnded ? { turnEnded: true } : {}),
     });
     trace('line.lag', { lag });
     if (outcome.stored) { run.lastLineAt = Math.max(run.lastLineAt, outcome.stored.at); run.lastLineSeq = Math.max(run.lastLineSeq, outcome.stored.seq); run.lineInput.set(outcome.stored.seq, inputNo); if (run.lineInput.size > 200) run.lineInput.delete(run.lineInput.keys().next().value as number); }

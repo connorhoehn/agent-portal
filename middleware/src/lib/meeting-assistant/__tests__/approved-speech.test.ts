@@ -432,6 +432,17 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
       expect(sent).toHaveLength(TONE);
     } finally { off(); }
   });
+
+  it('a request on a line the provider ended is answered at once, with no wait for more words (its "?" never comes)', async () => {
+    const HELD: MeetingAssistantPolicy = { ...NO_RELAY, id: 'held-turn', answerFromHeldText: async (_c, r) => (r.askedBy === GUEST ? 'About 20 minutes are left in this round.' : null) };
+    const off = registerMeetingAssistantPolicy('orgiq:heldturn', HELD);
+    try {
+      await startCall('orgiq:heldturn:r1');
+      await intake.handle(CALL, { userId: GUEST, text: 'Milo, how much time is left', at: now, turnEnded: true });
+      await flush();
+      expect(mockPosts.approved).toEqual(['About 20 minutes are left in this round.']);
+    } finally { off(); }
+  });
 });
 
 describe('7. the fixed refusal for a request heard again, and the asker\'s name', () => {

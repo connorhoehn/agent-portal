@@ -338,3 +338,26 @@ describe('a word that makes the assistant\'s name part of something else', () =>
     expect(findAddress('Milo crop the screenshot')?.rest).toBe('crop the screenshot');
   });
 });
+
+describe('the provider ended the turn', () => {
+  // The Live API puts the closing "?" at the start of the next delta, so a finished request reads as cut by its text alone.
+  const ended = (userId: string, text: string): DetectorEvent[] =>
+    d.push({ callId: 'call-1', seq: ++seq, userId, participantId: `p-${userId}`, speakerName: userId, text, at: now, captionId: `c-${seq}` }, { turnEnded: true });
+  it('closes a request at once when the provider ended the turn on it, punctuation or not', () => {
+    expect(looksCut('Milo, how much time is left')).toBe(true);
+    expect(requests(ended('u-cand', 'Milo, how much time is left'))).toEqual([expect.objectContaining({ text: 'how much time is left', lines: [1] })]);
+  });
+  it('closes an open request continued on the line the provider ended', () => {
+    expect(requests(say('u-cand', 'Milo, can you'))).toHaveLength(0);
+    expect(requests(ended('u-cand', 'repeat the question'))).toEqual([expect.objectContaining({ text: 'can you repeat the question', lines: [1, 2] })]);
+  });
+  it('still waits for an opener of fewer words than a request', () => {
+    expect(requests(ended('u-cand', 'Milo, um'))).toHaveLength(0);
+    expect(requests(wait(DETECTOR_LIMITS.cutWaitMs))).toHaveLength(1);
+  });
+  it('without the provider\'s end, an unpunctuated request still waits the long time', () => {
+    say('u-cand', 'Milo, how much time is left');
+    expect(requests(wait(DETECTOR_LIMITS.quietMs))).toHaveLength(0);
+    expect(requests(wait(DETECTOR_LIMITS.cutWaitMs - DETECTOR_LIMITS.quietMs))).toHaveLength(1);
+  });
+});

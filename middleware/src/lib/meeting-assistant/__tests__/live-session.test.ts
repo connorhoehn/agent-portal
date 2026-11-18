@@ -180,7 +180,19 @@ describe('transcripts', () => {
     frame({ type: 'session.output_transcript.delta', start_ms: 17600, end_ms: 17800, delta: ' Four.' });
     await tick(1000);
     expect(order).toEqual(['input', 'output']);
-    expect(seen.inputTranscript[0]).toMatchObject({ text: 'Milo what is', startMs: 16000, endMs: 16600 });
+    expect(seen.inputTranscript[0]).toMatchObject({ text: 'Milo what is', startMs: 16000, endMs: 16600, turnEnded: true });
+    await s.close();
+  });
+
+  // The request detector closes on the provider's own end of the turn (detector.ts `turnEnded`): Milo answering, or a delegation.
+  it('marks the line its provider ended (a delegation, Milo speaking) and no other', async () => {
+    const { s, seen } = make({ idleFlushMs: 50 });
+    await s.start(START);
+    frame({ type: 'session.input_transcript.delta', start_ms: 1000, end_ms: 1200, delta: ' Milo, how much time is left' });
+    frame({ type: 'session.delegation.created', offset_ms: 1400 });
+    frame({ type: 'session.input_transcript.delta', start_ms: 5000, end_ms: 5200, delta: ' thinking out loud' });
+    await tick(120);
+    expect(seen.inputTranscript.map((i) => [i.text, i.turnEnded ?? false])).toEqual([['Milo, how much time is left', true], ['thinking out loud', false]]);
     await s.close();
   });
 

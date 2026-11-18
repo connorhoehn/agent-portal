@@ -24,7 +24,7 @@ export interface BackendTokens { inputTokens: number; outputTokens: number; cach
 export interface SessionEvents {
   /** One piece of what the call said, with its offsets on the session's own timeline (ms since `start`). */
   /** One person-turn of heard speech. `parts` are the provider's own pieces in order (word groups with their times), when it sent several: the server splits the turn where the voice changes. */
-  inputTranscript: { text: string; startMs: number; endMs: number; parts?: Array<{ text: string; startMs: number; endMs: number }> };
+  inputTranscript: { text: string; startMs: number; endMs: number; parts?: Array<{ text: string; startMs: number; endMs: number }>; /** The provider ended the person's turn here: it began to answer, or handed the request on (live-session.ts). */ turnEnded?: true };
   /** What Milo said. `final: false` is the text so far; `final: true` ends the piece. */
   outputTranscript: { text: string; final: boolean; /** Set when this is the utterance a `say` request produced: that request's id (never set otherwise). */ say?: string; /** For a final utterance: when it began and when its last word arrived, in ms on the session timeline (the same clock as a tool call's `atMs`). */ startedAt?: number; endedAt?: number; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string; /** How many input transcripts the session had emitted when this utterance began (lines heard before it). */ inputsBefore?: number };
   /** The delegation backend called a function. `atMs` is the session timeline when it arrived. */

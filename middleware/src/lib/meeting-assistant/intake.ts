@@ -95,7 +95,7 @@ export class LineIntake {
     if (!stored) return { stored: null, reason: 'duplicate', events: [] };
     this.tellStored(stored);
     const detector = this.detectors.get(callId) ?? this.newDetector(callId);
-    const events = detector.push(stored);
+    const events = detector.push(stored, { turnEnded: raw.turnEnded === true });
     await this.apply(callId, events);
     return { stored, events };
   }

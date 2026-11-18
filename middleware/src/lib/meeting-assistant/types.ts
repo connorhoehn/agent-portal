@@ -201,6 +201,8 @@ export interface RawLine {
   startMs?: number;
   endMs?: number;
   speakers?: string[];
+  /** The live session's provider ended the speaker's turn with this line (never stored; the request detector closes on it). */
+  turnEnded?: boolean;
 }
 
 /** An action Milo offered in the call chat (package 2 records the decision; running the tool is package 4). */

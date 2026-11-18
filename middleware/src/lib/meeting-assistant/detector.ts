@@ -215,7 +215,12 @@ export class RequestDetector {
   /** The speaker's open request, if any (for tests and the intake's counters). */
   hasOpen(userId: string): boolean { return this.open.has(userId); }
 
-  push(line: TranscriptLine): DetectorEvent[] {
+  /**
+   * `turnEnded`: the provider itself ended the speaker's turn with this line (it began answering or handed the request on), so a
+   * request with enough words closes now instead of waiting out `cutWaitMs`. The Live API puts a sentence's closing punctuation at
+   * the START of the next delta, so a finished request ("Milo, how much time is left") looks cut by its text alone.
+   */
+  push(line: TranscriptLine, opts: { turnEnded?: boolean } = {}): DetectorEvent[] {
     const events = this.expire();
     // A piece nobody's audio was voiced for has no speaker to ask anything: it is stored but never a request or a command.
     const userId = line.userId;
@@ -247,7 +252,7 @@ export class RequestDetector {
         startedClock: now, lastClock: now, lastLooksCut: true, captions: 1 };
       if (hit.rest) { appendText(o.parts, hit.rest); o.lastLooksCut = looksCut(hit.rest); }
       this.open.set(userId, o);
-      return this.capped(o, events, now);
+      return this.capped(o, events, now, opts.turnEnded === true);
     }
 
     const o = this.open.get(userId);
@@ -258,7 +263,7 @@ export class RequestDetector {
     o.lastClock = now;
     o.lastLooksCut = looksCut(text);
     o.captions += 1;
-    return this.capped(o, events, now);
+    return this.capped(o, events, now, opts.turnEnded === true);
   }
 
   /** Close every request whose quiet time or cap has passed on the clock. */
@@ -269,8 +274,9 @@ export class RequestDetector {
     const wait = o.lastLooksCut || words(text).length < DETECTOR_LIMITS.openerWords ? DETECTOR_LIMITS.cutWaitMs : DETECTOR_LIMITS.quietMs;
     return Math.min(o.lastClock + wait, o.startedClock + DETECTOR_LIMITS.maxMs);
   }
-  private capped(o: Open, events: DetectorEvent[], now: number): DetectorEvent[] {
-    if (o.captions >= DETECTOR_LIMITS.maxCaptions || now - o.startedClock >= DETECTOR_LIMITS.maxMs) events.push(...this.close(o));
+  private capped(o: Open, events: DetectorEvent[], now: number, turnEnded = false): DetectorEvent[] {
+    const complete = turnEnded && words(o.parts.join(' ')).length >= DETECTOR_LIMITS.openerWords;
+    if (complete || o.captions >= DETECTOR_LIMITS.maxCaptions || now - o.startedClock >= DETECTOR_LIMITS.maxMs) events.push(...this.close(o));
     return events;
   }
   private expire(): DetectorEvent[] {

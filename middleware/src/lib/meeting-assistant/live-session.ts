@@ -593,7 +593,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (p && text) {
       trace('input.flush', { t: this.sinceStart(), startMs: p.startMs, endMs: p.endMs, why, parts: p.parts.length });
       this.inputCount += 1;
-      this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}) });
+      this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}), ...(why === 'output' || why === 'delegation' ? { turnEnded: true as const } : {}) });
     }
     // The person's turn is over. Not when Milo's own output or a delegation is what ended it: the provider is answering then. A turn
     // that ended on its own may still get the voice's reply, which no event announces: the line waits `answerWaitMs` for it first.
