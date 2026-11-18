@@ -90,13 +90,15 @@ export async function joinCall(page) {
 }
 
 /** The candidate, admitted by `lead` (a context), in the call with the pane open. */
-export async function guestRoom(ctx, interviewId, lead, { width = 1440 } = {}) {
+/** `prepare(context)` runs on the candidate's fresh context before its first page loads (a piece's own routes, say). */
+export async function guestRoom(ctx, interviewId, lead, { width = 1440, prepare = null } = {}) {
   const recruiter = await ctx.signIn(ctx.SEED.cast.recruiter);
   const invite = await ctx.mintInvite(recruiter, interviewId);
   await recruiter.close();
   if (invite.status !== 201) throw new Error(`the link was not made (${invite.status} ${invite.error ?? ''})`);
   const context = await ctx.browser.newContext({ viewport: { width, height: 900 }, permissions: ['camera', 'microphone'] });
   await standIn(context, '**/api/interview-invite/realtime-token', GUEST_KEY, 'guest');
+  if (prepare) await prepare(context);
   const page = await context.newPage();
   const calls = watchCalls(page);
   await page.goto(`${ctx.portal}${invite.linkPath}`, { waitUntil: 'domcontentloaded' });
