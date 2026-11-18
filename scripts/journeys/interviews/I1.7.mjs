@@ -41,6 +41,14 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
   // ── I1.7b ──
   let offered = 0;
   try {
+    // The seeded Engineering Manager kit has one technical question; the recruiter adds two so the plan can be reordered.
+    const em = (await api(greta, 'GET', '/api/interviews/openings/op-em')).body?.opening;
+    const more = [1, 2].map((n) => ({ id: `q-w2w-${n}`, competencyId: 'system-design', roundType: 'technical', followUps: [],
+      prompt: n === 1 ? 'How would you split a monolith that forty teams deploy together?' : 'How do you decide what a deploy platform must not allow?' }));
+    const put = await api(greta, 'PUT', '/api/interviews/openings/op-em/kit', { revision: em.revision, kit: { rounds: em.rounds, competencies: em.competencies, questions: [...(em.questions ?? []), ...more] } });
+    if (put.status !== 200) throw new Error(`setup: the recruiter's kit write answered ${put.status}`);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await ready(page);
     const adds = page.getByTestId('interviews-bank-add');
     for (let n = 0; n < 3; n += 1) { if (await adds.count() === 0) break; await adds.first().click(); offered += 1; await page.waitForTimeout(300); }
     const before = await planPrompts(page);
@@ -49,9 +57,9 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await page.getByRole('button', { name: `Take question ${offered} out of your plan` }).click();
     const trimmed = await planPrompts(page);
     await page.getByTestId('interviews-plan-save').click();
-    await page.getByTestId('interviews-plan-note').waitFor({ timeout: 30_000 });
-    const after = await read(hugo);
+    // The saved-note line is replaced when the page refetches, so the room button (the round is Ready) is the sign of the save.
     await page.getByTestId('interviews-prepare-room').waitFor({ timeout: 30_000 });
+    const after = await read(hugo);
     const chip = await textOf(page, 'interviews-prepare-state');
     const ok = offered >= 2 && before.length === offered && moved[0] === before[1] && moved[1] === before[0] && trimmed.length === offered - 1 && JSON.stringify(trimmed) === JSON.stringify(moved.slice(0, offered - 1))
       && after?.state === 'ready' && after?.questionsChosen?.length === offered - 1 && /Ready/i.test(chip);
@@ -90,9 +98,10 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     // The first page saves while the second still holds the old revision.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await ready(page);
+    const had = (await read(hugo))?.questionsChosen?.length ?? 0;
     await page.getByTestId('interviews-bank-add').first().click();
     await page.getByTestId('interviews-plan-save').click();
-    await page.getByTestId('interviews-plan-note').waitFor({ timeout: 30_000 });
+    for (let i = 0; i < 40 && ((await read(hugo))?.questionsChosen?.length ?? 0) <= had; i += 1) await page.waitForTimeout(500);
     await other.getByTestId('interviews-bank-add').first().click();
     await other.getByTestId('interviews-plan-save').click();
     await other.getByTestId('interviews-plan-problem').waitFor({ timeout: 30_000 });

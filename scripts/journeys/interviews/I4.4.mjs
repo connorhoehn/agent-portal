@@ -29,7 +29,9 @@ export default async function run(ctx) {
   const base = `/api/interviews/interviews/${iv}/runs`;
   let n = 0;
   const runId = () => `h8-${Date.now().toString(36)}-${(n += 1)}`;
-  const files = (content) => ({ language: 'python', entrypoint: 'main.py', files: [{ path: 'main.py', content }] });
+  const files = (content, lang = 'python') => (lang === 'swift'
+    ? { language: 'swift', entrypoint: 'main.swift', files: [{ path: 'main.swift', content }] }
+    : { language: 'python', entrypoint: 'main.py', files: [{ path: 'main.py', content }] });
   const runOf = async (id) => (await api(L.context, 'GET', `${base}/${id}`)).body?.run ?? null;
   const settled = async (id, ms = 25_000) => until(async () => { const r = await runOf(id); return r && !['queued', 'compiling', 'running'].includes(r.status) ? r : null; }, ms, 500);
 
@@ -52,7 +54,7 @@ export default async function run(ctx) {
   }
 
   await step('I4.4a', async () => {
-    await typeInPad(L.page, 'print("hello from the lead")');
+    await typeInPad(L.page, 'console.log("hello from the lead")');
     await L.page.waitForTimeout(800);
     await L.page.getByTestId('interview-pad-run').click();
     const lo = await until(async () => { const t = await outputText(L.page); return /hello from the lead/.test(t) && /Finished/.test(t) ? t : null; }, 20_000);
@@ -80,7 +82,9 @@ export default async function run(ctx) {
   await step('I4.4c', async () => {
     const cases = [
       { marker: 'fail', status: 'failed', pane: /Failed/, also: /Exit code\s*[1-9]/ },
-      { marker: 'compile-error', status: 'compile_error', pane: /Didn.t compile|Failed/, also: /./ },
+      // An interpreted language has no compile step: the mock fails a Python run with a syntax error (status failed).
+      { marker: 'compile-error', status: 'failed', pane: /Failed/, also: /./ },
+      { marker: 'compile-error', status: 'compile_error', pane: /Didn.t compile|Failed/, also: /./, lang: 'swift' },
       { marker: 'timeout', status: 'timed_out', pane: /Timed out/, also: /./ },
       { marker: 'memory', status: 'memory_exceeded', pane: /Out of memory/, also: /./ },
       { marker: 'flood', status: 'succeeded', pane: /Finished/, also: /Cut at the output limit/ },
@@ -90,7 +94,7 @@ export default async function run(ctx) {
     let ok = true;
     for (const c of cases) {
       const id = runId();
-      const r = await api(L.context, 'POST', base, { runId: id, ...files(`print("case ${c.marker}")\n# mock:${c.marker}\n`) });
+      const r = await api(L.context, 'POST', base, { runId: id, ...files(c.lang === 'swift' ? `print("case ${c.marker}")\n// mock:${c.marker}\n` : `print("case ${c.marker}")\n# mock:${c.marker}\n`, c.lang) });
       if (r.status !== 202) { ok = false; seen.push(`${c.marker}: start ${r.status}`); continue; }
       const done = await settled(id, 30_000);
       const both = await until(async () => {

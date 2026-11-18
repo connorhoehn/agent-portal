@@ -80,10 +80,17 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await page.getByTestId('interviews-resume-remove').click();
     await deck.getByText('Remove this résumé?').last().waitFor({ timeout: 15_000 });
     await deck.getByRole('button', { name: /Remove/ }).last().click();
-    await page.getByTestId('interviews-resume-none').waitFor({ timeout: 30_000 });
-    const gone = (await resumeOf(greta, chloe)).status;
+    let gone = (await resumeOf(greta, chloe)).status;
+    for (let i = 0; i < 20 && gone !== 404; i += 1) { await page.waitForTimeout(500); gone = (await resumeOf(greta, chloe)).status; }
+    const updated = await page.getByTestId('interviews-resume-none').waitFor({ timeout: 8_000 }).then(() => true, () => false);
+    if (!updated) {
+      const stale = (await textOf(page, 'interviews-profile-resume-section')).slice(0, 100);
+      record('I1.6c', false, `FINDING: Remove took the file out on the server (${gone}) but the page keeps showing the removed résumé until it is reloaded ("${stale}"); the prompt said the résumé was removed`);
+      await openTab(page, chloe);
+    } else {
     const line = await textOf(page, 'interviews-resume-none');
     record('I1.6c', kept === 200 && gone === 404 && /No résumé/.test(line), `Keep it left the file (${kept}); Remove took it out (${gone}) and the page says "${line}"`);
+    }
   } catch (e) { record('I1.6c', false, `remove: ${e.message.split('\n')[0]}`); }
 
   // ── I1.6d ──

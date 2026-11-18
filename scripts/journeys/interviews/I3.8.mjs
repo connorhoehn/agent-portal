@@ -61,7 +61,7 @@ export default async function run(ctx) {
     const room = (await api(L.context, 'GET', `/api/interviews/interviews/${iv}/room`)).body;
     prompt = String((room?.room ?? room)?.questions?.[0]?.prompt ?? '').trim();
     await L.page.getByTestId('interview-room-pane').getByRole('tab', { name: /questions/i }).click();
-    await L.page.getByTestId('interview-room-milo-ask').first().click();
+    await L.page.getByRole('button', { name: /have milo ask/i }).first().click();
     const said = await until(async () => L.page.getByTestId('interview-room-milo-said').first().getAttribute('data-said'), 10_000);
     await G.page.waitForTimeout(3000);
     const before = await framesOf(G.page);

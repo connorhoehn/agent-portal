@@ -25,7 +25,7 @@ export default async function run({ portal, SEED, record, signIn, resetMock }) {
   try {
     await g.goto(`${portal}/interviews/openings/${SEED.openings.backend}`, { waitUntil: 'domcontentloaded' });
     await frame().waitFor({ timeout: 30_000 });
-    await g.getByText('Senior Backend Engineer').first().waitFor({ timeout: 30_000 });
+    await g.getByText('Senior Backend Engineer').locator('visible=true').first().waitFor({ timeout: 30_000 });
     const text = (await frame().innerText()).replace(/\s+/g, ' ');
     const all = ['Senior Backend Engineer', 'iOS Engineer', 'Engineering Manager'].every((t) => text.includes(t));
     record('I1.3e', all, `the opening opened beside the rail, which lists the three openings: ${all}`);
@@ -50,7 +50,7 @@ export default async function run({ portal, SEED, record, signIn, resetMock }) {
     await deck().getByRole('button', { name: /Leave and discard/ }).last().click();
     await g.waitForURL((u) => u.pathname.includes(`/openings/${SEED.openings.ios}`), { timeout: 15_000 });
     await g.goto(`${portal}/interviews/openings/${SEED.openings.backend}`, { waitUntil: 'domcontentloaded' });
-    await g.getByText('Senior Backend Engineer').first().waitFor({ timeout: 30_000 });
+    await g.getByText('Senior Backend Engineer').locator('visible=true').first().waitFor({ timeout: 30_000 });
     const changed = (await g.locator('body').innerText()).includes('(changed)');
     record('I1.3g', !changed, `Leave and discard opened iOS Engineer; the first opening still reads its old title (changed: ${changed})`);
   } catch (e) { record('I1.3g', false, `guard, leave: ${e.message.split('\n')[0]}`); }
@@ -59,6 +59,8 @@ export default async function run({ portal, SEED, record, signIn, resetMock }) {
     const p = await amara.newPage();
     await p.goto(`${portal}/interviews/my-openings`, { waitUntil: 'domcontentloaded' });
     await p.getByTestId('interviews-my-openings-table').waitFor({ timeout: 30_000 });
+    await p.waitForFunction(() => document.querySelectorAll('[data-testid^="interviews-openings-stage-"]').length >= 2, null, { timeout: 30_000 }).catch(() => undefined);
+    await p.waitForTimeout(500);
     const tabs = await p.locator('[data-testid^="interviews-openings-stage-"]').all();
     const out = [];
     for (const t of tabs) {

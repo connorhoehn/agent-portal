@@ -76,7 +76,21 @@ async function joinFrom(page, scope, name) {
 /** The panel's footer: Join the call. Resolves once the room's pad or chat is the call's (bounded). */
 export async function joinCall(page) {
   await page.waitForTimeout(1500);
-  await joinFrom(page, page.getByTestId('shell-footer'), /join the call/i);
+  // As h3-call.mjs does: the footer's own start (the first person in) or join (the call is running) control, by test id.
+  const start = page.getByTestId('shell-footer-context-start');
+  const join = page.getByTestId('shell-footer-context-join');
+  const which = await Promise.any([
+    start.first().waitFor({ timeout: 30_000 }).then(() => start.first()),
+    join.first().waitFor({ timeout: 30_000 }).then(() => join.first()),
+  ]).catch(() => null);
+  if (!which) {
+    const text = ((await page.getByTestId('shell-footer').innerText().catch(() => '')) || 'no footer').replace(/\s+/g, ' ').slice(0, 200);
+    throw new Error(`no Join the call in the footer; it reads "${text}"`);
+  }
+  await until(async () => !(await which.isDisabled()), 20_000);
+  await which.click({ timeout: 8000 });
+  await page.getByRole('dialog').getByRole('button', { name: /join|start|continue/i }).last().click({ timeout: 3000 }).catch(() => undefined);
+  await page.getByTestId('shell-call-dock').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
   await page.waitForTimeout(4000);
 }
 
