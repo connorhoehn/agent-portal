@@ -39,6 +39,7 @@ import { scorecardPath } from '../../lib/interviewsScorecard';
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
+import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
   suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
@@ -47,7 +48,7 @@ import {
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloAsked, type MiloAskWhy, type MiloSaid, miloInviteBlock,
-  NO_SEAT_NOT_FOUND,
+  NO_SEAT_NOT_FOUND, callLossWords,
 } from '../../lib/interviewsRoom';
 
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
@@ -78,7 +79,9 @@ function InterviewRoom({ id }: { id: string }) {
   const host = useCallHost();
   const phase = host?.call.phase ?? 'idle';
   const joined = call.here && hasJoinedCall(host?.call.call, phase);
-  const drawn = !!room && call.here && callDrawn(phase, true);
+  // A call lost under the live interview (every socket dropped at once, say): the room leaves it and says so, and the lead restarts it.
+  const lost = useInterviewCallLoss(room?.state === 'live' ? lobbyName : null);
+  const drawn = !!room && call.here && callDrawn(phase, true) && !lost.loss;
   // U5: while the call is drawn, the shell folds its trail, primary rail and gutter.
   usePageChromeFold(drawn);
   // The page's tiles are the call's one media sink: the footer's own video panel stays shut while the call is this room's.
@@ -196,13 +199,20 @@ function InterviewRoom({ id }: { id: string }) {
         {host?.recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{host.recordingNote}</Inline>}
         <CallBlock placement="pane" fit="contain" className={host?.recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
       </Stack>
-      : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
+      : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)}
+        lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart} />}
     <RoomPane room={room} here={call.here} />
   </Stack>;
 }
 
-/** Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. */
-function RoomIdle({ room, live, admission, off, onBack }: { room: RoomView; live: boolean; admission: Admission | null; off: string | null; onBack(): void }) {
+/**
+ * Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. After a lost
+ * call it says the call dropped instead, and the lead's one action is Restart the call (the bar's start, the same interview).
+ */
+function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart = null }: {
+  room: RoomView; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
+  lost?: ReturnType<typeof callLossWords> | null; onRestart?: (() => void) | null;
+}) {
   if (!OPEN_STATES.has(room.state)) {
     const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
     return <EmptyState title={over ? 'This interview has ended' : 'This interview is not ready for a call'}
@@ -224,12 +234,16 @@ function RoomIdle({ room, live, admission, off, onBack }: { room: RoomView; live
   // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
   return (
     <Stack gap="md" className="min-h-0 flex-1 overflow-auto" data-testid="interview-room-idle">
-      <PageHeader density="compact" title={live ? 'The call is on' : room.state === 'live' ? 'The interview is live' : lead ? 'The call has not started' : 'Waiting for the lead'} />
+      <PageHeader density="compact" title={lost ? lost.title : live ? 'The call is on' : room.state === 'live' ? 'The interview is live' : lead ? 'The call has not started' : 'Waiting for the lead'} />
       <Stack gap="md" className="px-[var(--ui-page-gutter)]">
-        <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
+        {lost ? <Stack gap="sm" align="start" data-testid="interview-room-call-lost">
+          <T size="sm" tone="secondary" wrap>{lost.body}</T>
+          {lost.action && onRestart && <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>}
+        </Stack>
+        : <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
           : room.state === 'live' ? 'The interview is live. Join the call from the bar at the bottom of the window.'
             : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-            : 'You can join the call from the bar at the bottom of the window.'}</T>
+            : 'You can join the call from the bar at the bottom of the window.'}</T>}
         <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
       </Stack>
     </Stack>

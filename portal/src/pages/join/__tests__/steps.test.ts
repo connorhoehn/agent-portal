@@ -84,6 +84,14 @@ test('what the room shows: a plain line when the call cannot open here; join, th
   assert.equal(roomView({ token: 'ready', joined: false, left: true }), 'rejoin');
 });
 
+test('a lost call reads as lost, never as the candidate\'s own Leave, until the call is joined again', () => {
+  assert.equal(roomView({ token: 'ready', joined: false, left: true, lost: true }), 'lost');
+  // Still holding the dead call (the page leaves it at once): lost, not the call.
+  assert.equal(roomView({ token: 'ready', joined: true, left: false, lost: true }), 'lost');
+  assert.equal(roomView({ token: 'off', joined: false, left: true, lost: true }), 'unavailable');
+  assert.equal(roomView({ token: 'ready', joined: true, left: false, lost: false }), 'call');
+});
+
 // ── Row I6.4: a part the deployment requires ─────────────────────────────────────────────────────────────────
 import { REQUIRED_LINE, declinedRequired, heldLines, partsInWords } from '../steps.ts';
 

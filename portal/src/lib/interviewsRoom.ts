@@ -634,3 +634,65 @@ export function lastAskedOf(frame: unknown, channel: string, current: string | n
 
 /** One refusal for a round page the viewer holds no seat on (room and record say the same, with one way back to the viewer's home). */
 export const NO_SEAT_NOT_FOUND = { title: 'Interview not found', body: 'There is no interview here that you can open.', backLabel: 'Home' } as const;
+
+// ── The lost call ───────────────────────────────────────────────────────────
+// The call can be lost under a live interview. When every socket of a call drops at once (a laptop that slept), the call
+// service ends the call as its last participant drops; when one person's socket stays down past the rejoin grace, the call
+// goes on (or ends) without them. Either way the library's client could not hear it (its socket was down): on waking it keeps
+// its call and its clock and re-announces itself into a call it is no longer in, and the call service answers each frame with
+// a `not-in-call` refusal. The room reads those refusals, and a server end of the call it was in, as the call LOST: it leaves
+// the dead call (the clock and the tiles stop), says so in plain words, and joins the next call that is on in the interview's
+// lobby (the lead's restart, through the same bound start as the first join). The interview record stays live throughout.
+
+export interface CallLoss { callId: string }
+export type CallLossEvent =
+  /** The call service refused one of this client's frames because it is not in `callId` (realtime-modules CallService `not-in-call`). */
+  | { kind: 'refused'; callId: string }
+  /** The library tore the call down, for `reason` (its own `left`, or a server end such as `peer-disconnected`). */
+  | { kind: 'ended'; callId: string; reason: string | null }
+  /** This viewer is in a call of the interview's lobby. */
+  | { kind: 'joined'; callId: string }
+  /** The interview is no longer live (ended, or the room closed): nothing is lost any more. */
+  | { kind: 'closed' };
+
+/** The ends the call service makes itself (realtime-modules CallService): nobody in the call chose them. */
+const SERVER_ENDS = new Set(['peer-disconnected', 'rejoin-grace-expired']);
+
+/** The call service's refusal of a frame for a call, from a raw gateway frame: that call's id; null for any other frame. */
+export function refusedCallOf(frame: unknown): string | null {
+  if (!frame || typeof frame !== 'object') return null;
+  const f = frame as Record<string, unknown>;
+  return f['type'] === 'error' && f['service'] === 'call' && f['code'] === 'not-in-call' && typeof f['callId'] === 'string' && f['callId'] ? f['callId'] : null;
+}
+
+/**
+ * The room's lost call after one event. Only the call this viewer was last joined in (`joinedCallId`) can be lost, so a refusal
+ * while a join is still settling, or about a call this page never held, changes nothing. A new call joined in the lobby clears it.
+ */
+export function nextCallLoss(prev: CallLoss | null, event: CallLossEvent, joinedCallId: string | null): CallLoss | null {
+  switch (event.kind) {
+    case 'closed': return null;
+    case 'joined': return prev && event.callId !== prev.callId ? null : prev;
+    case 'refused': return event.callId === joinedCallId ? (prev?.callId === event.callId ? prev : { callId: event.callId }) : prev;
+    case 'ended': return event.callId === joinedCallId && !!event.reason && SERVER_ENDS.has(event.reason) ? (prev?.callId === event.callId ? prev : { callId: event.callId }) : prev;
+  }
+}
+
+/** This client still holds the lost call (its clock runs, its tiles show): it leaves it. */
+export const holdsLostCall = (loss: CallLoss | null, activeCallId: string | null): boolean => !!loss && activeCallId === loss.callId;
+
+/**
+ * After the loss, with no call held, a call is on in the interview's lobby (the lead restarted it, or the others' call went on):
+ * this viewer joins it. `lobbyCallId` is the lobby's live call as the gateway reports it while this client holds none.
+ */
+export const rejoinsAfterLoss = (loss: CallLoss | null, lobbyCallId: string | null): boolean => !!loss && !!lobbyCallId;
+
+export type CallLossSeat = 'lead' | 'panel' | 'candidate';
+/** What the room says about the lost call, per seat; `action` is the lead's restart (the others join the call once it is back). */
+export function callLossWords(seat: CallLossSeat): { title: string; body: string; action: string | null } {
+  const title = 'The call dropped';
+  if (seat === 'lead') return { title, action: 'Restart the call',
+    body: 'The connection to the call was lost. The interview is still on: restart the call to carry on, and the candidate rejoins when you do.' };
+  if (seat === 'panel') return { title, action: null, body: 'The connection to the call was lost. The interview is still on: you rejoin as soon as the call is back.' };
+  return { title, action: null, body: 'The connection to the call was lost. The interview is still on: you rejoin as soon as your interviewer restarts the call.' };
+}

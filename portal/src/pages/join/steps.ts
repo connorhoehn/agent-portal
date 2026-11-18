@@ -203,12 +203,15 @@ export function roomStepAfterRead(read: RoomRead): 'admitted' | 'ended' | null {
 /**
  * What the room shows while it is open. `unavailable`: guest realtime is off in this deployment (the token route is
  * not found), a plain line, never an error page. Before joining, and after leaving, the call is offered: `join`
- * the first time, `rejoin` after Leave. `call` once the candidate is in it.
+ * the first time, `rejoin` after Leave. `call` once the candidate is in it. `lost` after the call dropped under the live
+ * interview (lib/interviewsRoom.ts, the lost call): the page says so and joins the call again once it is back, so it is never
+ * read as the candidate's own Leave.
  */
-export type RoomView = 'loading' | 'unavailable' | 'join' | 'rejoin' | 'call';
-export function roomView(f: { token: 'loading' | 'ready' | 'off'; joined: boolean; left: boolean }): RoomView {
+export type RoomView = 'loading' | 'unavailable' | 'join' | 'rejoin' | 'lost' | 'call';
+export function roomView(f: { token: 'loading' | 'ready' | 'off'; joined: boolean; left: boolean; lost?: boolean }): RoomView {
   if (f.token === 'off') return 'unavailable';
   if (f.token === 'loading') return 'loading';
+  if (f.lost) return 'lost';
   if (f.joined) return 'call';
   return f.left ? 'rejoin' : 'join';
 }

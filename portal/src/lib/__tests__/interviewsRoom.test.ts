@@ -224,3 +224,67 @@ test('back to a running call: the joined interview is read off the lobby, and it
   assert.equal(roomEntryLabel('iv-s4e8u2zk', 'iv-other'), 'Join');
   assert.equal(roomEntryLabel('iv-s4e8u2zk', null), 'Join');
 });
+
+test('the lost call: the call service\'s not-in-call refusal for the call this viewer was in marks it lost; nothing else does', async () => {
+  const { nextCallLoss, refusedCallOf } = await import('../interviewsRoom.ts');
+  const refusal = { type: 'error', service: 'call', message: 'Not in this call', code: 'not-in-call', action: 'participant-state', callId: 'c-1', lobbyName: 'interviews:interview:iv-1' };
+  assert.equal(refusedCallOf(refusal), 'c-1');
+  for (const other of [{ ...refusal, code: 'watch-denied' }, { ...refusal, service: 'chat' }, { ...refusal, type: 'call' }, { ...refusal, callId: '' }, null, 'x', {}]) {
+    assert.equal(refusedCallOf(other), null, JSON.stringify(other));
+  }
+  // Only the call last joined: a refusal while a join settles, or about another call, changes nothing.
+  assert.deepEqual(nextCallLoss(null, { kind: 'refused', callId: 'c-1' }, 'c-1'), { callId: 'c-1' });
+  assert.equal(nextCallLoss(null, { kind: 'refused', callId: 'c-1' }, null), null);
+  assert.equal(nextCallLoss(null, { kind: 'refused', callId: 'c-0' }, 'c-1'), null);
+  // Further refusals for the same call keep the same loss.
+  const lost = { callId: 'c-1' };
+  assert.equal(nextCallLoss(lost, { kind: 'refused', callId: 'c-1' }, 'c-1'), lost);
+});
+
+test('the lost call: a server end of the joined call is a loss, the viewer\'s own leave is not', async () => {
+  const { nextCallLoss } = await import('../interviewsRoom.ts');
+  assert.deepEqual(nextCallLoss(null, { kind: 'ended', callId: 'c-1', reason: 'peer-disconnected' }, 'c-1'), { callId: 'c-1' });
+  assert.deepEqual(nextCallLoss(null, { kind: 'ended', callId: 'c-1', reason: 'rejoin-grace-expired' }, 'c-1'), { callId: 'c-1' });
+  for (const reason of ['left', 'switched', 'declined', 'no-answer', null]) {
+    assert.equal(nextCallLoss(null, { kind: 'ended', callId: 'c-1', reason }, 'c-1'), null, String(reason));
+  }
+  // The room's own leave of the dead call (reason `left`) keeps the loss it is acting on.
+  const lost = { callId: 'c-1' };
+  assert.equal(nextCallLoss(lost, { kind: 'ended', callId: 'c-1', reason: 'left' }, 'c-1'), lost);
+});
+
+test('the lost call: the next call joined in the lobby clears it, and so does the interview closing', async () => {
+  const { nextCallLoss } = await import('../interviewsRoom.ts');
+  const lost = { callId: 'c-1' };
+  assert.equal(nextCallLoss(lost, { kind: 'joined', callId: 'c-2' }, 'c-1'), null);
+  // Still holding the dead call (before the room leaves it) is not a new call.
+  assert.equal(nextCallLoss(lost, { kind: 'joined', callId: 'c-1' }, 'c-1'), lost);
+  assert.equal(nextCallLoss(lost, { kind: 'closed' }, 'c-1'), null);
+  assert.equal(nextCallLoss(null, { kind: 'joined', callId: 'c-2' }, 'c-1'), null);
+});
+
+test('the lost call: the room leaves the dead call it still holds, then joins whatever call is on in the lobby', async () => {
+  const { holdsLostCall, rejoinsAfterLoss } = await import('../interviewsRoom.ts');
+  const lost = { callId: 'c-1' };
+  assert.equal(holdsLostCall(lost, 'c-1'), true);
+  assert.equal(holdsLostCall(lost, null), false);
+  assert.equal(holdsLostCall(lost, 'c-2'), false);
+  assert.equal(holdsLostCall(null, 'c-1'), false);
+  // The lead's restart (a new call), or the others' call that went on (the same id, now joined afresh).
+  assert.equal(rejoinsAfterLoss(lost, 'c-2'), true);
+  assert.equal(rejoinsAfterLoss(lost, 'c-1'), true);
+  assert.equal(rejoinsAfterLoss(lost, null), false);
+  assert.equal(rejoinsAfterLoss(null, 'c-2'), false);
+});
+
+test('the lost call: the lead is offered the restart; the panel and the candidate are told they rejoin', async () => {
+  const { callLossWords } = await import('../interviewsRoom.ts');
+  const lead = callLossWords('lead');
+  assert.equal(lead.title, 'The call dropped');
+  assert.equal(lead.action, 'Restart the call');
+  assert.match(lead.body, /interview is still on/);
+  assert.equal(callLossWords('panel').action, null);
+  assert.match(callLossWords('panel').body, /rejoin as soon as the call is back/);
+  assert.equal(callLossWords('candidate').action, null);
+  assert.match(callLossWords('candidate').body, /rejoin as soon as your interviewer restarts the call/);
+});

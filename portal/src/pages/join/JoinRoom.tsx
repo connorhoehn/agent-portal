@@ -23,7 +23,8 @@ import { Button, EmptyState, Inline, LoadingState, Stack, T } from '@connorhoehn
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
-import { callTimeLabel, guestRoomNameFor, timeLeftTone } from '../../lib/interviewsRoom';
+import { callLossWords, callTimeLabel, guestRoomNameFor, timeLeftTone } from '../../lib/interviewsRoom';
+import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
@@ -139,8 +140,10 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   const host = useCallHost();
   const phase = host?.call.phase ?? 'idle';
   const joined = call.here && hasJoinedCall(host?.call.call, phase);
+  // A call lost under the open interview (every socket dropped at once, say): the page leaves it, says so, and joins the call once it is back.
+  const { loss } = useInterviewCallLoss(room.state === 'open' && !over ? lobbyName : null);
   // A call the candidate left reads as left ("You left the call", Join again), never as an ended call with Dismiss: the interview is still on.
-  const drawn = call.here && callDrawn(phase, true) && phase !== 'ended';
+  const drawn = call.here && callDrawn(phase, true) && phase !== 'ended' && !loss;
 
   // Leave returns to a line that offers to rejoin.
   const [left, setLeft] = useState(false);
@@ -174,7 +177,8 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
   // The pad never depends on the call: a call that fails, or one not joined yet, keeps the pad (the chat waits for the call).
   const paneShown = paneOpen && (technical || (joined && callId !== null));
-  const view = roomView({ token: 'ready', joined, left });
+  const view = roomView({ token: 'ready', joined, left, lost: !!loss });
+  const lostWords = callLossWords('candidate');
   // Milo's sentence to the candidate's last request: asked from the bar, shown on the line above it.
   const [miloLine, setMiloLine] = useState<string | null>(null);
   useEffect(() => { if (!joined) setMiloLine(null); }, [joined]);
@@ -186,10 +190,10 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
           {drawn
             ? <CallBlock placement="pane" fit="contain" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
             : <EmptyState
-              title={view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
-              body={view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
+              title={view === 'lost' ? lostWords.title : view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
+              body={view === 'lost' ? lostWords.body : view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
                 : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
-              testId={view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
+              testId={view === 'lost' ? 'join-room-call-lost' : view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
         </SidePaneSplit>
         {paneShown && <GuestRoomPane room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
         <GuestMiloVoice room={room} line={miloLine} />
