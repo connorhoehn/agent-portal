@@ -9,7 +9,7 @@
 //          of the candidate's
 //   I3.6f  the off lines on the transcript read: Milo not invited, the candidate not answered, the transcript declined
 //   I3.6g  the budget pause: with the opening's caps at $0 the ask answers paused, no answer
-//   I3.6h  a round started early: its time line does not say it starts later (today it does: a finding)
+//   I3.6h  a round started early: its time line counts from when the lead started it, never "Starts in"
 import { liveRoom, inject, sleep, guestReads, guestChatText, setCaps, candidateAnswers } from './h3-call.mjs';
 
 export default async function run(ctx) {
@@ -111,7 +111,7 @@ export default async function run(ctx) {
 
   // A round started before its set time (the lead may start early): the time line still counts to the set time.
   await step('I3.6h', async () => ({ ok: typeof liveTimeLine === 'string' && !/^Starts in/.test(liveTimeLine),
-    detail: `the live round's time line: "${liveTimeLine}" (FINDING when it reads "Starts in": the notes count from the set time even after the lead started the round)` }));
+    detail: `the live round's time line: "${liveTimeLine}" (a round started before its set time counts from its start)` }));
 
   // The off lines, by the API on a live round with no call: not invited, not answered, declined. Aiko's coding round (Wen
   // leads): no earlier piece left a call of Milo's in its lobby (the mock reset keeps Milo's call records, and the newest

@@ -48,6 +48,18 @@ describe('competencyNotes', () => {
   });
 });
 
+describe('notesStartMs: a round started before its set time (I3.6h)', () => {
+  it('counts from when the lead started it, so the live round never reads "Starts in"; a late start keeps the set time', () => {
+    const set = '2026-11-23T10:00:00.000Z'; const early = '2026-11-17T09:00:00.000Z'; const late = '2026-11-23T10:05:00.000Z';
+    const now = Date.parse(early) + 10 * 60_000;
+    expect(notesStartMs(set, null, early)).toBe(Date.parse(early));
+    expect(timeCheck(notesStartMs(set, null, early), 60, now).line).toBe('10 of 60 min, 50 min left.');
+    expect(notesStartMs(set, null, late)).toBe(Date.parse(set));
+    expect(notesStartMs(set, null, null)).toBe(Date.parse(set));
+    expect(notesStartMs(null, 5, early)).toBe(Date.parse(early));
+  });
+});
+
 describe('timeCheck', () => {
   const start = Date.UTC(2026, 10, 17, 10, 0);
   it('counts minutes in and left from the start', () => {

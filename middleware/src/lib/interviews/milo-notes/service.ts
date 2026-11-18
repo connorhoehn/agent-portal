@@ -122,7 +122,7 @@ export async function notesFor(ref: MiloRef): Promise<{ notes: MiloNotesView }> 
   const competencies = competencyNotes({
     competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name })), chosen: chosenOf(ref), panelLines, suggestions,
   });
-  const time = timeCheck(notesStartMs(interview.scheduledAt, transcript?.startedAtMs ?? null), interview.minutes, d.now());
+  const time = timeCheck(notesStartMs(interview.scheduledAt, transcript?.startedAtMs ?? null, interview.startedAt ?? null), interview.minutes, d.now());
   return { notes: { competencies, time } };
 }
 

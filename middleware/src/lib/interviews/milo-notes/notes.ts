@@ -71,9 +71,14 @@ export function timeCheck(startMs: number | null, minutes: number, nowMs: number
   return { startedAt, minutesIn, minutes, minutesLeft: Math.max(0, left), line: left === 0 ? `${minutesIn} of ${minutes} min, no time left.` : line };
 }
 
-/** Where the time check counts from: the set time, else when Milo joined the call. */
-export function notesStartMs(scheduledAt: string | null, callStartedAtMs: number | null): number | null {
+/**
+ * Where the time check counts from: the set time, else when Milo joined the call. A round the lead started before its set time
+ * counts from that start (`startedAt`, finding I3.6h: a live round never reads "Starts in"); one started late keeps its set time.
+ */
+export function notesStartMs(scheduledAt: string | null, callStartedAtMs: number | null, startedAt: string | null = null): number | null {
   const set = scheduledAt ? Date.parse(scheduledAt) : NaN;
+  const started = startedAt ? Date.parse(startedAt) : NaN;
+  if (Number.isFinite(started) && !(started >= set)) return started;
   if (Number.isFinite(set)) return set;
   return callStartedAtMs !== null && Number.isFinite(callStartedAtMs) ? callStartedAtMs : null;
 }
