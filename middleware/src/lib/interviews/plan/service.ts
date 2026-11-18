@@ -108,12 +108,13 @@ export async function draftPlan(ref: PlanRef, viewer: { userId: string }): Promi
   if (viewer.userId !== interview.leadId) return { kind: 'not-found' };
   if (!isPreparable(interview.state)) return { kind: 'not-preparable', body: body(null, null, PLAN_LINES.notPreparable) };
   if (inFlight.has(interview.id)) return { kind: 'ok', body: body(null, null, PLAN_LINES.inFlight) };
-  const store = d.log();
-  const earlier = await store.list(interview.id, 'plan');
-  if (earlier.filter(counts).length >= MAX_PLAN_DRAFTS) return { kind: 'ok', body: body(null, null, PLAN_LINES.atMax) };
-
+  // Taken in the same tick as the check, before any await (O-128): a second ask that arrives while the earlier drafts are read
+  // is told a draft is on its way, so two asks never make two model calls or pass the three-draft cap in this process.
   inFlight.add(interview.id);
   try {
+    const store = d.log();
+    const earlier = await store.list(interview.id, 'plan');
+    if (earlier.filter(counts).length >= MAX_PLAN_DRAFTS) return { kind: 'ok', body: body(null, null, PLAN_LINES.atMax) };
     const model = d.model();
     const input = planInputOf(ref);
     const row = (over: Partial<CoachLogRecord>): CoachLogRecord => ({

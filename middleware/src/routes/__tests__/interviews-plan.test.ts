@@ -229,11 +229,9 @@ describe('two asks almost at once (hardening H3, O-128)', () => {
     expect(planRows()).toHaveLength(1);
   });
 
-  // Found here: draftPlan checks its in-flight set BEFORE awaiting the earlier drafts and adds itself only AFTER, so two asks
-  // that both reach it before that read returns each draft (two model calls, two holds, and past the three-draft cap). Over
-  // HTTP with the memory log the read returns before the second request arrives; with the SQL log (a real round trip) two
-  // tabs a few milliseconds apart fall in that window. Held as it.failing and reported; not fixed here (money).
-  it.failing('two asks that reach the service in the same tick make one model call', async () => {
+  // O-128: draftPlan takes its in-flight mark before it reads the earlier drafts, so two asks in the same tick (two tabs a few
+  // milliseconds apart against the SQL log) make one model call and cannot pass the three-draft cap.
+  it('two asks that reach the service in the same tick make one model call', async () => {
     const { draftPlan } = await import('../../lib/interviews/plan/index.js');
     const { interviewApplicationsFixture } = await import('../../mock/interviews.js');
     const calls = jest.fn();
