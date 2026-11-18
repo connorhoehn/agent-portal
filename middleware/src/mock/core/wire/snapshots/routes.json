@@ -2343,12 +2343,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/consents",
-      "source": "src/routes/interview-invite-consents.ts:64"
+      "source": "src/routes/interview-invite-consents.ts:65"
     },
     {
       "method": "PUT",
       "path": "/api/interview-invite/consents",
-      "source": "src/routes/interview-invite-consents.ts:70"
+      "source": "src/routes/interview-invite-consents.ts:71"
     },
     {
       "method": "POST",
