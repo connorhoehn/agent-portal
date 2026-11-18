@@ -57,7 +57,7 @@ export default async function run(ctx) {
     // The pad's language outlives a reset (an earlier piece in the same run may have chosen one): choose it, then type its print.
     await chooseLanguage(L.page, 'JavaScript');
     await L.page.waitForTimeout(800);
-    await typeInPad(L.page, 'console.log("hello from the lead")');
+    await typeInPad(L.page, '\nconsole.log("hello from the lead")');
     // Run reads the pad as the gateway holds it: wait until the candidate's pad shows the typed line, then press Run.
     await until(async () => /hello from the lead/.test(await padText(G.page)), 10_000);
     await L.page.waitForTimeout(800);
