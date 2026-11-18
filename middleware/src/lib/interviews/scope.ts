@@ -29,6 +29,13 @@ export interface Viewer {
 const MONEY_READERS: ReadonlySet<string> = new Set(['recruiter', 'hiring-manager', 'admin']);
 export const mayReadOpeningMoney = (role: string): boolean => MONEY_READERS.has(role);
 
+/**
+ * Who reads an application's stage history, so the hiring decision and its reason (E4 #29): the recruiter, the
+ * opening's hiring manager (scope narrows them to their own openings) and the admin. An interviewer never does,
+ * even for a candidate they interviewed: the profile read sends them an empty history.
+ */
+export const mayReadStageHistory = (role: string): boolean => MONEY_READERS.has(role);
+
 export type Reach = 'everything' | 'assigned' | 'own-openings' | 'nothing';
 
 export function reachOf(role: string): Reach {

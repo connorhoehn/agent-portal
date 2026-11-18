@@ -6,7 +6,7 @@ import type {
   ApplicationStage, Candidate, InterviewState, InterviewsWorld, Interview, KitCompetency, KitQuestion, KitRound, Opening,
   OpeningState, Recommendation, RoundType, Scorecard, StageChange, CompetencyRating,
 } from './types.js';
-import { mayReadOpeningMoney, reachOf, type Viewer } from './scope.js';
+import { mayReadOpeningMoney, mayReadStageHistory, reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { Seat } from './types.js';
@@ -146,7 +146,7 @@ export interface CandidateRecord {
     applicationId: string;
     opening: { id: string; title: string; team: string };
     stage: ApplicationStage;
-    /** Each move with who made it by name (null: the candidate's own application). */
+    /** Each move with who made it by name (null: the candidate's own application). Empty for an interviewer, who never reads the decision or its reason (scope.ts mayReadStageHistory). */
     history: Array<StageChange & { byName: string | null }>;
     /** Each round with the latest scorecards the viewer may read (the world is already scoped: an interviewer reads the others' only once their own is in, scope.ts othersRevealed). */
     interviews: Array<InterviewRow & { results: Array<{ interviewer: PersonRef; recommendation: Recommendation }> }>;
@@ -375,7 +375,8 @@ export class WorldIndex {
         if (!o) return [];
         return [{
           applicationId: a.id, opening: { id: o.id, title: o.title, team: o.team }, stage: a.stage,
-          history: a.history.map((h) => ({ ...h, byName: h.by ? this.people(h.by).name : null })),
+          // An interviewer reads no stage history: it carries the hiring decision and its reason (E4 #29).
+          history: mayReadStageHistory(this.viewer.role) ? a.history.map((h) => ({ ...h, byName: h.by ? this.people(h.by).name : null })) : [],
           interviews: this.interviewsOf(a.id).flatMap((i) => {
             const row = this.interviewRow(i);
             return row ? [{ ...row, results: this.scorecardsOf(i.id).map((s) => ({ interviewer: this.people(s.interviewerId), recommendation: s.recommendation })) }] : [];

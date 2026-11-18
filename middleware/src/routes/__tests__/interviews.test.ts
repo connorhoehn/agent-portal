@@ -150,6 +150,14 @@ describe('an interviewer reads only the interviews assigned to them', () => {
     expect((await HUGO('/api/interviews/openings/op-backend')).status).toBe(200);
   });
 
+  it('reads no stage history on a candidate they interviewed: never the hiring decision or its reason (E4 #29)', async () => {
+    const hugo = await HUGO('/api/interviews/candidates/cand-qz63q3a3');
+    expect(hugo.status).toBe(200);
+    expect(hugo.body.candidate.applications.every((a: { history: unknown[] }) => a.history.length === 0)).toBe(true);
+    const amara = await AMARA('/api/interviews/candidates/cand-qz63q3a3');
+    expect(amara.body.candidate.applications[0].history.length).toBeGreaterThan(0);
+  });
+
   it('sees only their own scorecards: Wen\'s card on Ingrid is not in Hugo\'s read of her', async () => {
     const res = await HUGO('/api/interviews/candidates');
     const ingrid = res.body.items.find((r: { candidate: { name: string } }) => r.candidate.name === 'Ingrid Solberg');
