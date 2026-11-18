@@ -63,6 +63,14 @@ const FINAL = path.join(OUT, 'interviews-call.mp4');
 const py = (...a) => new Promise((resolve) => spawn('python3', [COMPOSE, ...a], { stdio: 'inherit' }).on('exit', (c) => resolve(c ?? 1)));
 if (args.includes('--compose-only')) process.exit(await py('compose', '--out', OUT, '--final', FINAL));
 
+// A take needs the machine awake for its whole length: one that slept on battery dropped both browsers and ended the call. Refuse to start
+// on battery, and hold the system, display and disk awake (caffeinate -dimsu) until this process exits.
+if (process.platform === 'darwin') {
+  const power = execFileSync('pmset', ['-g', 'batt']).toString();
+  if (!/'AC Power'/.test(power)) { console.error(`film: refusing to start on battery (pmset: ${power.split('\n')[0]}); plug the machine in`); process.exit(2); }
+  spawn('caffeinate', ['-dimsu', '-w', String(process.pid)], { stdio: 'ignore', detached: true }).unref();
+}
+
 const MW_PORT = Number(process.env.IVFILM_MW_PORT || 4180);
 const PORTAL_PORT = Number(process.env.IVFILM_PORTAL_PORT || 5280);
 const PORTAL = `http://localhost:${PORTAL_PORT}`;
@@ -448,17 +456,25 @@ try {
 
   // 3. Milo in, voice on (not in a rehearsal: nothing is spent); small talk; the warm-up question.
   scene(3, 'Small talk', 'Hugo invites Milo and turns its voice on, says good morning and asks about data structures and algorithms.');
-  let A = null; let invitedAt = Date.now();
+  let A = null;
+  // Milo's state as the product reports it; every read keeps the listening time the product booked (the spend report's only source).
+  const booked = { listeningSeconds: null, readStatus: null };
+  const miloState = async () => {
+    const r = await lead.api.get(A('state'));
+    booked.readStatus = r.status();
+    const body = r.ok() ? await r.json().catch(() => ({})) : {};
+    if (typeof body.listeningSeconds === 'number') booked.listeningSeconds = body.listeningSeconds;
+    return body;
+  };
   if (!REHEARSE) {
     await hp.getByTestId('assistant-invite').first().click({ timeout: 15_000 });
     await hp.getByTestId('assistant-budget-ask').getByRole('button', { name: /go ahead/i }).click({ timeout: 4000 }).catch(() => undefined);
     await until(async () => callId, 10_000);
     A = (rest) => `${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/${rest}`;
-    const listening = await until(async () => ((await (await lead.api.get(A('state'))).json()).state === 'listening' ? true : null), 30_000, 1000);
-    invitedAt = Date.now();
+    const listening = await until(async () => ((await miloState()).state === 'listening' ? true : null), 30_000, 1000);
     await hp.getByTestId('assistant-status-mark').first().click({ timeout: 10_000 }).catch(() => undefined);
     await hp.getByRole('menuitem', { name: /Turn Milo's voice on/ }).click({ timeout: 10_000 }).catch(() => undefined);
-    const voiceOn = await until(async () => ((await (await lead.api.get(A('state'))).json()).voice === true ? true : null), 10_000, 500);
+    const voiceOn = await until(async () => ((await miloState()).voice === true ? true : null), 10_000, 500);
     if (!voiceOn) { const r = await lead.api.post(A('voice'), { data: { on: true } }); note(`voice on from the footer did not take; by the API ${r.status()}`); }
     step('3 Milo listening, voice on', !!listening, `Milo listening=${!!listening}; voice on from the footer=${!!voiceOn}; call ${callId}`);
   }
@@ -468,7 +484,7 @@ try {
   await say(lead, 'h02', 1300); await say(cand, 'c02', 1300);
   if (A) {
     const heard = await until(async () => { const l = (await (await lead.api.get(A('transcript?limit=50'))).json()).lines ?? []; return l.length ? l : null; }, 15_000, 1500);
-    if (!heard) { note('Milo heard nothing; dismissed to stop the spend'); await lead.api.post(A('dismiss'), { data: {} }); A = null; }
+    if (!heard) { note('Milo heard nothing; dismissed to stop the spend'); await lead.api.post(A('dismiss'), { data: {} }); await miloState().catch(() => undefined); A = null; }
   }
   await say(lead, 'h03', 1300); await say(cand, 'c03', 1300);
 
@@ -566,8 +582,7 @@ try {
   scene(10, 'Wrapping up', 'Hugo asks whether the candidate has questions, explains next steps and ends the interview.');
   await say(lead, 'h09', 1300); await say(cand, 'c14', 1300); await say(lead, 'h10', 1300); await say(cand, 'c15', 1300); await say(lead, 'h11', 1300);
   await hp.waitForTimeout(1500);
-  const st = A ? await (await lead.api.get(A('state'))).json().catch(() => ({})) : {};
-  const listenedS = A ? (st.listeningSeconds ?? Math.round((Date.now() - invitedAt) / 1000)) : 0;
+  if (A) await miloState().catch((e) => note(`Milo's state at the end: ${String(e).slice(0, 120)}`));
   scene(11, 'Scorecard and recap', 'The candidate sees the ended page; Hugo lands on the scorecard, rates and opens Milo\'s recap: every statement sourced to what the candidate said.');
   await hp.getByTestId('interview-end').click();
   await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }).click({ timeout: 10_000 });
@@ -618,7 +633,11 @@ try {
     step('T transcript, two speakers credited', hugoCredited && candCredited && wrong === 0, `lines ${lines.length} by side ${JSON.stringify(sides)}; Hugo credited=${hugoCredited}; candidate credited=${candCredited}; wrongly credited ${wrong}`);
     step('M Milo spoke', milo.utterances >= 3, `${milo.utterances} utterances, ${milo.frames} voice frames received by the candidate's browser`);
   }
-  report.spend = { listeningSeconds: listenedS, estimateUsd: Number(((listenedS / 3600) * 3).toFixed(4)), basis: 'listening minutes x $3/h' };
+  // Never estimated from the wall clock: what the product booked, or unknown (with the last read's status) when it could not be read.
+  const listenedS = A === null && booked.listeningSeconds === null ? 0 : booked.listeningSeconds;
+  report.spend = listenedS === null
+    ? { listeningSeconds: null, estimateUsd: null, basis: `unknown: Milo's state could not be read (last status ${booked.readStatus})` }
+    : { listeningSeconds: listenedS, estimateUsd: Number(((listenedS / 3600) * 3).toFixed(4)), basis: "the product's booked listening time x $3/h" };
   report.call = { callId, endedAt: new Date(endedAt).toISOString(), filmSeconds: Math.round((timeline.film.toMs - timeline.film.fromMs) / 1000) };
   report.pageErrors = [...lead.errors, ...cand.errors].slice(0, 20);
 } catch (e) {
