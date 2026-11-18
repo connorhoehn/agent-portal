@@ -6,6 +6,7 @@ import { ScriptedCoachModel, BedrockCoachModel, setCoachModelFactory } from '../
 import { ANSWER_TEXT, BedrockRecapModel, makeRecapModel, ScriptedRecapModel, scriptedRecap } from '../model.js';
 import { parseRecapAnswer } from '../parse.js';
 import { FIXED_INPUT } from './fixed-input.js';
+import type { RecapInput } from '../prompt.js';
 
 afterEach(() => setCoachModelFactory(null));
 
@@ -18,6 +19,51 @@ describe('the scripted recap', () => {
       ] }],
       notCovered: ['collaboration'],
     });
+  });
+
+  it('the film\'s round: a question\'s answers run past the lead\'s conversation to the next asked question, and two questions share the competency', () => {
+    // The final take (18 November): the lead reads Two Sum (8), asks the language (9), the candidate answers it, asks a clarifying
+    // question, then answers the problem; later the lead asks the complexity in their own words (20, no question's opening),
+    // and Milo reads the testing follow-up (a said-log row, negative number) before the candidate answers it.
+    const TWO_SUM = 'Given an array of integers and a target, return the indices of the two numbers that add up to the target. Each input has exactly one answer, and the same element may not be used twice.';
+    const TESTING = 'How would you test this function?';
+    const input: RecapInput = {
+      competencies: [{ id: 'problem-solving', name: 'Problem solving', lookFor: 'Breaks the problem down.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } }],
+      questions: [
+        { text: TWO_SUM, competencyId: 'problem-solving', how: 'chosen' },
+        { text: 'What is the runtime complexity of your solution, in time and in space?', competencyId: 'problem-solving', how: 'ask' },
+        { text: TESTING, competencyId: 'problem-solving', how: 'milo-ask' },
+      ],
+      lines: [
+        { seq: 6, side: 'candidate', text: 'Mostly hash maps and queues in our payment services.' },
+        { seq: 8, side: 'panel', text: 'Okay, a coding problem. Given an array of integers and a target, return the indices of the two numbers that add up to the target' },
+        { seq: 9, side: 'panel', text: 'We usually use Java here, but pick whatever you like. What language would you like to use' },
+        { seq: 10, side: 'candidate', text: 'Uh! Python, please' },
+        { seq: 11, side: 'panel', text: 'Python it is! I\'m dropping the problem into the pad now' },
+        { seq: 12, side: 'candidate', text: 'Quick question, can I use the same number twice? And is there always exactly one answer' },
+        { seq: 13, side: 'panel', text: 'Good question! There\'s always exactly one answer, and you can\'t use the same element twice' },
+        { seq: 14, side: 'candidate', text: 'Okay. So the brute force is to check every pair. That\'s O of N squared. But I think I can do better with a hash map' },
+        { seq: 15, side: 'candidate', text: 'I\'ll use a dictionary to store what I\'ve seen. And for each number! I check whether its complement is already in there' },
+        { seq: 16, side: 'candidate', text: 'Here, Milo! How much time is left' },
+        { seq: 20, side: 'panel', text: 'Nice! What\'s the runtime complexity' },
+        { seq: 21, side: 'candidate', text: 'Right! O of N time, since we only pass through the list once, and O of N space for the map' },
+        { seq: -1, side: 'panel', text: TESTING },
+        { seq: 23, side: 'candidate', text: 'Milo, can you repeat the question' },
+        { seq: 24, side: 'candidate', text: 'Sure! I\'d test the example from the problem. A case with no valid pair. Duplicates like three and three, and negative numbers.' },
+      ],
+    };
+    const out = scriptedRecap(input);
+    expect(out.notCovered).toEqual([]);
+    const seqs = out.competencies[0]!.evidence.map((e) => e.seq);
+    expect(seqs.length).toBeLessThanOrEqual(4);
+    // The Two Sum answer (14, 15) and the testing answer (24) are both cited; requests to Milo never are.
+    expect(seqs).toEqual(expect.arrayContaining([14, 15, 24]));
+    expect(seqs).not.toContain(16);
+    expect(seqs).not.toContain(23);
+    expect(seqs).not.toContain(6); // before any asked question
+    // In timeline order (Milo's row has a negative number, so order is by position, not number).
+    const at = (seq: number) => input.lines.findIndex((l) => l.seq === seq);
+    expect(seqs.map(at)).toEqual([...seqs.map(at)].sort((a, b) => a - b));
   });
 
   it('passes its own parse, and says nothing when no asked question was heard', async () => {

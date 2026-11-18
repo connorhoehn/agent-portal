@@ -48,10 +48,14 @@ export class BedrockRecapModel implements RecapModel {
 // ---- the scripted stand-in --------------------------------------------------------------------------------------------------------
 //
 // Deterministic from its input, never from meaning, and honest: it invents nothing.
-//   For each competency in the kit's order: the panel lines that contain the opening words (the first six) of one of the
-//   asked questions tied to that competency; after each such line, the candidate lines that follow it until the next
-//   panel line (a question Milo said aloud is a panel line of the timeline, service.ts `withMiloQuestions`). A candidate line that
-//   speaks to Milo (a repeat or time request) is a request, not an answer, and never counts. Each becomes one statement, ANSWER_TEXT, beside the line's own words as its quote (its first
+//   A QUESTION LINE is a panel line that contains the opening words (the first six) of any asked question (a question Milo said
+//   aloud is a panel line of the timeline, service.ts `withMiloQuestions`). Each question line opens a window that runs to the
+//   next question line; the panel's other lines inside it are conversation (the language, a clarification) and do not end it,
+//   so an answer given after them still counts. For each competency in the kit's order, its windows are those opened by its own
+//   questions; their candidate lines are the answers, except a line that speaks to Milo (a repeat or time request), which is a
+//   request. The competency's MAX_CLAIMS_PER_COMPETENCY is shared across its windows in turn, each giving its longest line not
+//   yet taken (a long line is the likeliest answer; a short one is "Python, please"), so every question asked gets its share;
+//   the statements are listed in timeline order. Each becomes one statement, ANSWER_TEXT, beside the line's own words as its quote (its first
 //   MAX_QUOTE_CHARS characters, cut at a word) and the line's number: a stand-in cannot restate a line in fewer words
 //   without inventing, so it says only that the line answered the question and lets the quote speak (the screen shows
 //   the statement and the quote once each). At most MAX_CLAIMS_PER_COMPETENCY.
@@ -74,24 +78,32 @@ export const ANSWER_TEXT = 'The candidate said this in answer to the question.';
 export function scriptedRecap(input: RecapInput): { competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[]; notCovered: string[] } {
   const competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[] = [];
   const notCovered: string[] = [];
+  const openingsOf = (competencyId: string | null) => input.questions.filter((q) => competencyId === null || q.competencyId === competencyId)
+    .map((q) => opening(q.text)).filter((o) => o.length > 0);
+  const opens = (n: number, openings: readonly string[]) => input.lines[n]!.side === 'panel' && openings.some((o) => words(input.lines[n]!.text).includes(o));
+  const anyQuestion = openingsOf(null);
   for (const c of input.competencies) {
-    const openings = input.questions.filter((q) => q.competencyId === c.id).map((q) => opening(q.text)).filter((o) => o.length > 0);
-    const evidence: { text: string; seq: number; quote: string }[] = [];
-    const used = new Set<number>();
-    const answersFrom = (k: number) => {
-      for (; k < input.lines.length && input.lines[k]!.side === 'candidate'; k += 1) {
+    const own = openingsOf(c.id);
+    // Each window: the candidate's answer lines (by position) from one of this competency's question lines to the next question line.
+    const windows: number[][] = [];
+    input.lines.forEach((_l, n) => {
+      if (!opens(n, own)) return;
+      const answers: number[] = [];
+      for (let k = n + 1; k < input.lines.length && !opens(k, anyQuestion); k += 1) {
         const line = input.lines[k]!;
-        if (used.has(line.seq) || evidence.length >= MAX_CLAIMS_PER_COMPETENCY || addressesMilo(line.text)) continue;
-        const quote = quoteOf(line.text);
-        if (!quote) continue;
-        used.add(line.seq);
-        evidence.push({ text: ANSWER_TEXT, seq: line.seq, quote });
+        if (line.side === 'candidate' && !addressesMilo(line.text) && quoteOf(line.text)) answers.push(k);
       }
-    };
-    input.lines.forEach((l, n) => {
-      if (l.side !== 'panel' || !openings.some((o) => words(l.text).includes(o))) return;
-      answersFrom(n + 1);
+      windows.push(answers.sort((a, b) => input.lines[b]!.text.length - input.lines[a]!.text.length || a - b));
     });
+    const taken = new Set<number>();
+    for (let round = 0; taken.size < MAX_CLAIMS_PER_COMPETENCY && windows.some((w) => w.some((k) => !taken.has(k))); round += 1) {
+      for (const w of windows) {
+        if (taken.size >= MAX_CLAIMS_PER_COMPETENCY) break;
+        const next = w.find((k) => !taken.has(k));
+        if (next !== undefined) taken.add(next);
+      }
+    }
+    const evidence = [...taken].sort((a, b) => a - b).map((k) => ({ text: ANSWER_TEXT, seq: input.lines[k]!.seq, quote: quoteOf(input.lines[k]!.text) }));
     if (evidence.length) competencies.push({ id: c.id, evidence });
     else notCovered.push(c.id);
   }
