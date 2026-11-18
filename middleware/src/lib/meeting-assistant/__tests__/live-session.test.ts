@@ -114,6 +114,24 @@ describe('a socket error', () => {
       await new Promise<void>((r) => refuse.close(() => r()));
     }
   });
+
+  it('stays quiet about a socket error once a close was asked for, and still ends the session once', async () => {
+    const hangup = jest.fn(async () => true);
+    const { s, seen } = make({ hangup });
+    await s.start(START);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const closed = s.close(); // the fake never answers session.close
+      await tick();
+      (s as unknown as { socket: WebSocket }).socket.emit('error', new Error('ECONNRESET'));
+      await closed;
+      expect(warn.mock.calls.map((c) => c.join(' ')).join('\n')).not.toMatch(/live socket error/);
+      expect(seen.closed).toEqual([{ reason: 'socket-error' }]);
+      expect(hangup).not.toHaveBeenCalled(); // a requested close is not the drop path: no second hang-up
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe('audio and typed text', () => {

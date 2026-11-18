@@ -189,7 +189,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     socket.addEventListener('message', (msg: { data?: unknown }) => this.onMessage(msg?.data));
     socket.addEventListener('error', (ev: unknown) => {
       const cause = socketErrorCause(ev);
-      console.warn('[meeting-assistant] live socket error', cause);
+      // Once a close was asked for (or the session already ended), a socket error is the hang-up itself, not news: stay quiet,
+      // and still let the drop path release the close waiting on it.
+      if (this.closing === null && !this.ended) console.warn('[meeting-assistant] live socket error', cause);
       this.fail?.(new Error(`the live socket failed: ${cause}`)); this.dropped('socket-error');
     });
     socket.addEventListener('close', () => { this.fail?.(new Error('the live socket closed before the session started')); this.dropped('socket-closed'); });
