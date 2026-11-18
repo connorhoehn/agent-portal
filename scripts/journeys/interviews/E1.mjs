@@ -262,7 +262,8 @@ export default async function run(ctx) {
       await gp.getByTestId('interviews-candidate-profile').waitFor({ timeout: 30_000 });
       S.candidateId = decodeURIComponent(new URL(gp.url()).pathname.split('/').pop());
       const row = ((await api(greta, 'GET', '/api/interviews/candidates')).body?.items ?? []).find((r) => r.candidate?.name === NAME);
-      const header = squash(await gp.getByTestId('interviews-candidate-profile').innerText());
+      // The candidate's name is the page's title (E4 #5), above the profile's sections.
+      const header = squash(await gp.getByRole('heading', { level: 1 }).first().innerText());
       return { ok: !!row && row.candidate?.id === S.candidateId && row.stage === 'applied' && header.includes(NAME) && shots.every((s) => s.ok),
         detail: `the profile opened for ${NAME}; the list row is at stage ${row?.stage}; the form ${widths(shots)}` };
     });
