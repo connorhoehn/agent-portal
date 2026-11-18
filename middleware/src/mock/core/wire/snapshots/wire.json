@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-18T18:27:19.618Z",
-  "serverHandlerSha": "e0554dbc0e77c14f1e6a9c928dcf30dc536db4361187c14232cea3d258c98f61",
+  "capturedAt": "2026-11-18T19:05:33.141Z",
+  "serverHandlerSha": "14e995034080ff7bc2280f04a255a0cda4d6d81cd7835954c68a232b72b8358d",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -1096,7 +1096,7 @@
       "skipped": "no value found for :runId under /api/assessment/drafts (orgiq/admin); no value found for :runId under /api/assessment/drafts (assessment/admin); no value found for :runId under /api/assessment/drafts (anonymous)"
     },
     "GET /api/assessment/events": {
-      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/feedback": {
       "persona": "orgiq/admin",
@@ -1215,7 +1215,7 @@
       "values": {}
     },
     "GET /api/assessment/knowledge/doc/version": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/versions": {
       "persona": "orgiq/admin",
@@ -1233,7 +1233,7 @@
       "values": {}
     },
     "GET /api/assessment/knowledge/doc/workflows": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/comments": {
       "persona": "orgiq/admin",
@@ -1256,19 +1256,19 @@
       }
     },
     "GET /api/assessment/knowledge/doc/workflows/review-requests": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/reviewers": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/reviews": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/doc/workflows/sections/:sectionId/items": {
       "skipped": "no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (orgiq/admin); no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (assessment/admin); no value found for :sectionId under /api/assessment/knowledge/doc/workflows/sections (anonymous)"
     },
     "GET /api/assessment/knowledge/source/asset": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/knowledge/tree": {
       "persona": "orgiq/admin",
@@ -2067,7 +2067,7 @@
       "skipped": "no value found for :id under /api/assessment/work-graph/teams (orgiq/admin); no value found for :id under /api/assessment/work-graph/teams (assessment/admin); no value found for :id under /api/assessment/work-graph/teams (anonymous)"
     },
     "GET /api/assessment/work-graph/workspace/graph": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/assessment/workspace": {
       "persona": "orgiq/admin",
@@ -7035,7 +7035,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -10735,7 +10735,7 @@
       "skipped": "no value found for :recordingId under /api/social/recordings (orgiq/admin); no value found for :recordingId under /api/social/recordings (assessment/admin); no value found for :recordingId under /api/social/recordings (anonymous)"
     },
     "GET /api/social/resolve": {
-      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 401 (anonymous)"
     },
     "GET /api/social/rooms": {
       "persona": "orgiq/admin",
