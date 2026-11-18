@@ -64,7 +64,8 @@ export default async function run(ctx) {
     leaks.push(...panelSide(waitText, [SEED.names[SEED.cast.interviewer]]));
     const waitShots = await shootPage(guest.page, 'guest-waiting');
     // E4 #31: the header names the role's interview, never the staff tenant ("Candidates").
-    const brand = (await guest.page.locator('header').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+    // The shell's brand is the page's first line of text (the shell draws no <header> element of its own).
+    const brand = (waitText.split('\n').map((l) => l.trim()).find(Boolean) ?? '').replace(/\s+/g, ' ');
     const lead = await until(async () => (await waiting(hugo, iv))?.state === 'waiting');
     const shots = [...consentShots, ...deviceShots, ...waitShots];
     const ok = marks.landing === 'Invitation' && marks.consents === 'Your answers' && marks.devices === 'Camera and microphone' && marks.waiting === 'Waiting'
