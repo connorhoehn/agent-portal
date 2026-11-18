@@ -111,9 +111,9 @@ const pointer = (id: string) => interviewCandidatesFixture.rows().find((c) => c.
 
 describe('who may read', () => {
   it('the recruiter reads any record, without its storage key', async () => {
-    const res = await GRETA.get(R('cand-mateo'));
+    const res = await GRETA.get(R('cand-rx6tcaqj'));
     expect(res.status).toBe(200);
-    expect(res.body.resume).toMatchObject({ id: 'rf-mateo', candidateId: 'cand-mateo', contentType: 'application/pdf', uploadedBy: { id: 'u-greta', name: 'Greta Lindqvist' } });
+    expect(res.body.resume).toMatchObject({ id: 'rf-rx6tcaqj', candidateId: 'cand-rx6tcaqj', contentType: 'application/pdf', uploadedBy: { id: 'u-greta', name: 'Greta Lindqvist' } });
     expect(res.body.resume.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(res.body)).not.toContain('storageKey');
     expect(JSON.stringify(res.body)).not.toContain('interviews/resumes');
@@ -121,48 +121,48 @@ describe('who may read', () => {
   });
 
   it('the hiring manager reads their own opening\'s candidates and no one else', async () => {
-    expect((await AMARA.get(R('cand-mateo'))).status).toBe(200);
-    expect((await AMARA.get(`${R('cand-mateo')}/file`)).status).toBe(200);
-    expect((await AMARA.get(R('cand-aiko'))).status).toBe(404);
-    expect((await AMARA.get(`${R('cand-aiko')}/file`)).status).toBe(404);
+    expect((await AMARA.get(R('cand-rx6tcaqj'))).status).toBe(200);
+    expect((await AMARA.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(200);
+    expect((await AMARA.get(R('cand-s52jevud'))).status).toBe(404);
+    expect((await AMARA.get(`${R('cand-s52jevud')}/file`)).status).toBe(404);
   });
 
   it('an interviewer reads the candidates they have a round on and no one else', async () => {
-    expect((await HUGO.get(R('cand-mateo'))).status).toBe(200);
-    expect((await HUGO.get(`${R('cand-mateo')}/file`)).status).toBe(200);
-    expect((await HUGO.get(R('cand-aiko'))).status).toBe(404);
-    expect((await WEN.get(R('cand-aiko'))).status).toBe(200);
-    expect((await WEN.get(`${R('cand-mateo')}/file`)).status).toBe(404);
+    expect((await HUGO.get(R('cand-rx6tcaqj'))).status).toBe(200);
+    expect((await HUGO.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(200);
+    expect((await HUGO.get(R('cand-s52jevud'))).status).toBe(404);
+    expect((await WEN.get(R('cand-s52jevud'))).status).toBe(200);
+    expect((await WEN.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(404);
   });
 
   it('a role from another tenant is refused at the mount on every route', async () => {
-    expect((await OUTSIDER.get(R('cand-mateo'))).status).toBe(403);
-    expect((await OUTSIDER.get(`${R('cand-mateo')}/file`)).status).toBe(403);
-    expect((await OUTSIDER.put(R('cand-mateo'), PDF)).status).toBe(403);
-    expect((await OUTSIDER.del(R('cand-mateo'))).status).toBe(403);
+    expect((await OUTSIDER.get(R('cand-rx6tcaqj'))).status).toBe(403);
+    expect((await OUTSIDER.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(403);
+    expect((await OUTSIDER.put(R('cand-rx6tcaqj'), PDF)).status).toBe(403);
+    expect((await OUTSIDER.del(R('cand-rx6tcaqj'))).status).toBe(403);
   });
 
   it('a candidate with no résumé, and a candidate that does not exist, are not found', async () => {
-    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
-    expect((await GRETA.get(`${R('cand-chloe')}/file`)).status).toBe(404);
-    expect((await GRETA.del(R('cand-chloe'))).status).toBe(404);
+    expect((await GRETA.get(R('cand-9p2atayb'))).status).toBe(404);
+    expect((await GRETA.get(`${R('cand-9p2atayb')}/file`)).status).toBe(404);
+    expect((await GRETA.del(R('cand-9p2atayb'))).status).toBe(404);
     expect((await GRETA.get(R('cand-nobody'))).status).toBe(404);
     expect((await GRETA.put(R('cand-nobody'), PDF)).status).toBe(404);
-    expect((await GRETA.get(R('cand-chloe'))).body.error).toBe('This candidate has no résumé attached.');
+    expect((await GRETA.get(R('cand-9p2atayb'))).body.error).toBe('This candidate has no résumé attached.');
   });
 
   it('the candidate\'s record carries the summary, or null', async () => {
-    const withIt = (await GRETA.get('/candidates/cand-mateo')).body.candidate;
+    const withIt = (await GRETA.get('/candidates/cand-rx6tcaqj')).body.candidate;
     expect(withIt.resume).toMatchObject({ fileName: expect.stringMatching(/\.pdf$/), uploadedBy: { id: 'u-greta', name: 'Greta Lindqvist' } });
     expect(Object.keys(withIt.resume).sort()).toEqual(['fileName', 'sizeBytes', 'uploadedAt', 'uploadedBy']);
-    expect((await GRETA.get('/candidates/cand-chloe')).body.candidate.resume).toBeNull();
-    expect((await AMARA.get('/candidates/cand-mateo')).body.candidate.resume).toMatchObject({ fileName: expect.any(String) });
+    expect((await GRETA.get('/candidates/cand-9p2atayb')).body.candidate.resume).toBeNull();
+    expect((await AMARA.get('/candidates/cand-rx6tcaqj')).body.candidate.resume).toMatchObject({ fileName: expect.any(String) });
   });
 });
 
 describe('the file read', () => {
   it('answers the bytes with the safe headers', async () => {
-    const res = await GRETA.get(`${R('cand-ingrid')}/file`);
+    const res = await GRETA.get(`${R('cand-qz63q3a3')}/file`);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
     expect(res.headers['content-disposition']).toMatch(/^inline; filename="[^"]+\.pdf"; filename\*=UTF-8''[^ ]+\.pdf$/);
@@ -175,13 +175,13 @@ describe('the file read', () => {
 
 describe('the recruiter uploads', () => {
   it('attaches a first résumé: the record, the pointer, and the same bytes back', async () => {
-    const res = await GRETA.put(R('cand-chloe'), PDF, 'application/pdf', encodeURIComponent('Chloé Martin résumé.pdf'));
+    const res = await GRETA.put(R('cand-9p2atayb'), PDF, 'application/pdf', encodeURIComponent('Chloé Martin résumé.pdf'));
     expect(res.status).toBe(200);
-    expect(res.body.resume).toMatchObject({ candidateId: 'cand-chloe', fileName: 'Chloé Martin résumé.pdf', sizeBytes: PDF.length, contentType: 'application/pdf', uploadedBy: { id: 'u-greta' } });
+    expect(res.body.resume).toMatchObject({ candidateId: 'cand-9p2atayb', fileName: 'Chloé Martin résumé.pdf', sizeBytes: PDF.length, contentType: 'application/pdf', uploadedBy: { id: 'u-greta' } });
     expect(res.body.resume.id).toMatch(/^rf-/);
     expect(JSON.stringify(res.body)).not.toContain('storageKey');
-    expect(pointer('cand-chloe')).toBe(res.body.resume.id);
-    const file = await GRETA.get(`${R('cand-chloe')}/file`);
+    expect(pointer('cand-9p2atayb')).toBe(res.body.resume.id);
+    const file = await GRETA.get(`${R('cand-9p2atayb')}/file`);
     expect(Buffer.from(file.body).equals(PDF)).toBe(true);
     expect(file.headers['content-disposition']).toContain("filename*=UTF-8''Chlo%C3%A9%20Martin%20r%C3%A9sum%C3%A9.pdf");
   });
@@ -191,41 +191,41 @@ describe('the recruiter uploads', () => {
     const removed: string[] = [];
     const spy = { put: bytes.put.bind(bytes), get: bytes.get.bind(bytes), remove: async (k: string) => { removed.push(k); await bytes.remove(k); } };
     setResumeStores({ bytes: spy });
-    const first = (await GRETA.put(R('cand-chloe'), PDF)).body.resume;
-    const second = (await GRETA.put(R('cand-chloe'), buildSimplePdf(['Second']))).body.resume;
+    const first = (await GRETA.put(R('cand-9p2atayb'), PDF)).body.resume;
+    const second = (await GRETA.put(R('cand-9p2atayb'), buildSimplePdf(['Second']))).body.resume;
     expect(second.id).not.toBe(first.id);
-    expect(removed).toEqual([`interviews/resumes/cand-chloe/${first.id}.pdf`]);
-    expect((await GRETA.get(R('cand-chloe'))).body.resume.id).toBe(second.id);
-    expect(pointer('cand-chloe')).toBe(second.id);
+    expect(removed).toEqual([`interviews/resumes/cand-9p2atayb/${first.id}.pdf`]);
+    expect((await GRETA.get(R('cand-9p2atayb'))).body.resume.id).toBe(second.id);
+    expect(pointer('cand-9p2atayb')).toBe(second.id);
     // a seeded one: the seeded file's row and pointer go too
-    const seeded = (await GRETA.put(R('cand-mateo'), PDF)).body.resume;
-    expect(removed).toContain('interviews/resumes/cand-mateo/rf-mateo.pdf');
-    expect(pointer('cand-mateo')).toBe(seeded.id);
+    const seeded = (await GRETA.put(R('cand-rx6tcaqj'), PDF)).body.resume;
+    expect(removed).toContain('interviews/resumes/cand-rx6tcaqj/rf-rx6tcaqj.pdf');
+    expect(pointer('cand-rx6tcaqj')).toBe(seeded.id);
   });
 
   it('the shown name is cleaned and never builds the key', async () => {
-    const res = await GRETA.put(R('cand-chloe'), PDF, 'application/pdf', encodeURIComponent('../../evil/\u0000x'));
+    const res = await GRETA.put(R('cand-9p2atayb'), PDF, 'application/pdf', encodeURIComponent('../../evil/\u0000x'));
     expect(res.body.resume.fileName).toBe('x.pdf');
-    const none = await GRETA.put(R('cand-chloe'), PDF);
+    const none = await GRETA.put(R('cand-9p2atayb'), PDF);
     expect(none.body.resume.fileName).toBe('resume.pdf');
   });
 
   it('refuses a file that is not a PDF by content, whatever its name or declared type', async () => {
-    const res = await GRETA.put(R('cand-chloe'), Buffer.from('MZ\x90\x00 not a pdf at all'), 'application/pdf', 'resume.pdf');
+    const res = await GRETA.put(R('cand-9p2atayb'), Buffer.from('MZ\x90\x00 not a pdf at all'), 'application/pdf', 'resume.pdf');
     expect(res.status).toBe(415);
     expect(res.body.error).toBe('Only PDF files can be attached as a résumé.');
-    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
-    expect(pointer('cand-chloe')).toBeNull();
+    expect((await GRETA.get(R('cand-9p2atayb'))).status).toBe(404);
+    expect(pointer('cand-9p2atayb')).toBeNull();
   });
 
   it('refuses another declared type, even for PDF bytes', async () => {
-    expect((await GRETA.put(R('cand-chloe'), PDF, 'application/octet-stream')).status).toBe(415);
-    expect((await GRETA.put(R('cand-chloe'), PDF, 'text/plain')).status).toBe(415);
-    expect((await GRETA.put(R('cand-chloe'), JSON.stringify({ a: 1 }), 'application/json')).status).toBe(415);
+    expect((await GRETA.put(R('cand-9p2atayb'), PDF, 'application/octet-stream')).status).toBe(415);
+    expect((await GRETA.put(R('cand-9p2atayb'), PDF, 'text/plain')).status).toBe(415);
+    expect((await GRETA.put(R('cand-9p2atayb'), JSON.stringify({ a: 1 }), 'application/json')).status).toBe(415);
   });
 
   it('refuses an empty body', async () => {
-    const res = await GRETA.put(R('cand-chloe'), Buffer.alloc(0));
+    const res = await GRETA.put(R('cand-9p2atayb'), Buffer.alloc(0));
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('The file is empty. Choose the résumé again.');
   });
@@ -233,29 +233,29 @@ describe('the recruiter uploads', () => {
   it('refuses a body over the limit, and keeps the old résumé', async () => {
     const big = Buffer.alloc(RESUME_MAX_BYTES + 10, 0x20);
     Buffer.from('%PDF-1.4').copy(big);
-    const res = await GRETA.put(R('cand-mateo'), big);
+    const res = await GRETA.put(R('cand-rx6tcaqj'), big);
     expect(res.status).toBe(413);
     expect(res.body.error).toBe('That file is larger than 10 MB. Choose a smaller PDF.');
-    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+    expect((await GRETA.get(R('cand-rx6tcaqj'))).body.resume.id).toBe('rf-rx6tcaqj');
   });
 
   it('says so plainly when no storage is set up', async () => {
     setResumeStores({ bytes: new UnavailableResumeBytes() });
-    const res = await GRETA.put(R('cand-chloe'), PDF);
+    const res = await GRETA.put(R('cand-9p2atayb'), PDF);
     expect(res.status).toBe(503);
     expect(res.body.error).toBe('Résumés cannot be stored here yet, so this file was not saved.');
-    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
-    expect((await GRETA.get(`${R('cand-mateo')}/file`)).status).toBe(404);
+    expect((await GRETA.get(R('cand-9p2atayb'))).status).toBe(404);
+    expect((await GRETA.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(404);
   });
 });
 
 describe('only the recruiter writes', () => {
   it.each([['hiring manager', AMARA], ['interviewer', HUGO], ['other interviewer', WEN]])('%s is refused on a candidate they can open and on one they cannot', async (_n, who_) => {
-    for (const id of ['cand-mateo', 'cand-aiko']) {
+    for (const id of ['cand-rx6tcaqj', 'cand-s52jevud']) {
       expect((await who_.put(R(id), PDF)).status).toBe(403);
       expect((await who_.del(R(id))).status).toBe(403);
     }
-    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+    expect((await GRETA.get(R('cand-rx6tcaqj'))).body.resume.id).toBe('rf-rx6tcaqj');
   });
 });
 
@@ -263,23 +263,23 @@ describe('delete', () => {
   it('removes the bytes and the row, clears the pointer, and a second delete is not found', async () => {
     const bytes = new MemoryResumeBytes();
     setResumeStores({ bytes });
-    const up = (await GRETA.put(R('cand-chloe'), PDF)).body.resume;
-    expect(await bytes.get(`interviews/resumes/cand-chloe/${up.id}.pdf`)).not.toBeNull();
-    expect((await GRETA.del(R('cand-chloe'))).status).toBe(200);
-    expect(await bytes.get(`interviews/resumes/cand-chloe/${up.id}.pdf`)).toBeNull();
-    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
-    expect(pointer('cand-chloe')).toBeNull();
-    expect((await GRETA.del(R('cand-chloe'))).status).toBe(404);
+    const up = (await GRETA.put(R('cand-9p2atayb'), PDF)).body.resume;
+    expect(await bytes.get(`interviews/resumes/cand-9p2atayb/${up.id}.pdf`)).not.toBeNull();
+    expect((await GRETA.del(R('cand-9p2atayb'))).status).toBe(200);
+    expect(await bytes.get(`interviews/resumes/cand-9p2atayb/${up.id}.pdf`)).toBeNull();
+    expect((await GRETA.get(R('cand-9p2atayb'))).status).toBe(404);
+    expect(pointer('cand-9p2atayb')).toBeNull();
+    expect((await GRETA.del(R('cand-9p2atayb'))).status).toBe(404);
   });
 });
 
 describe('the flag', () => {
   it('with INTERVIEWS_ENABLED off every route is not found', async () => {
     process.env['INTERVIEWS_ENABLED'] = '0';
-    expect((await GRETA.get(R('cand-mateo'))).status).toBe(404);
-    expect((await GRETA.get(`${R('cand-mateo')}/file`)).status).toBe(404);
-    expect((await GRETA.put(R('cand-mateo'), PDF)).status).toBe(404);
-    expect((await GRETA.del(R('cand-mateo'))).status).toBe(404);
+    expect((await GRETA.get(R('cand-rx6tcaqj'))).status).toBe(404);
+    expect((await GRETA.get(`${R('cand-rx6tcaqj')}/file`)).status).toBe(404);
+    expect((await GRETA.put(R('cand-rx6tcaqj'), PDF)).status).toBe(404);
+    expect((await GRETA.del(R('cand-rx6tcaqj'))).status).toBe(404);
   });
 });
 
@@ -288,14 +288,14 @@ describe('uploads at their edges', () => {
   it('two uploads at once leave one record, and the stored bytes are the ones that record names (O-030)', async () => {
     const a = buildSimplePdf(['First Person', 'Fictional headline', 'One line.']);
     const b = buildSimplePdf(['Second Person', 'Fictional headline', 'Another line.']);
-    const both = await Promise.all([GRETA.put(R('cand-chloe'), a, 'application/pdf', 'a.pdf'), GRETA.put(R('cand-chloe'), b, 'application/pdf', 'b.pdf')]);
+    const both = await Promise.all([GRETA.put(R('cand-9p2atayb'), a, 'application/pdf', 'a.pdf'), GRETA.put(R('cand-9p2atayb'), b, 'application/pdf', 'b.pdf')]);
     expect(both.map((r) => r.status)).toEqual([200, 200]);
-    const held = await readResume('cand-chloe');
+    const held = await readResume('cand-9p2atayb');
     expect(held).not.toBeNull();
     expect(held!.resume.sha256).toBe(sha256Hex(held!.bytes));
     expect([sha256Hex(a), sha256Hex(b)]).toContain(held!.resume.sha256);
-    expect(pointer('cand-chloe')).toBe(held!.resume.id);
-    expect((await GRETA.get(`${R('cand-chloe')}/file`)).status).toBe(200);
+    expect(pointer('cand-9p2atayb')).toBe(held!.resume.id);
+    expect((await GRETA.get(`${R('cand-9p2atayb')}/file`)).status).toBe(200);
   });
 
   // A request written by hand, so the declared length and the bytes actually sent can disagree.
@@ -310,7 +310,7 @@ describe('uploads at their edges', () => {
         sock.on('data', (d) => { got += d.toString(); if (/\r\n\r\n/.test(got)) setTimeout(finish, 50); });
         sock.on('close', () => resolve(got));
         sock.on('error', () => resolve(got));
-        sock.write(`PUT ${API}${R('cand-mateo')} HTTP/1.1\r\nHost: x\r\nx-user: u-greta\r\nx-tenant: interviews\r\nContent-Type: application/pdf\r\nContent-Length: ${declared}\r\n\r\n${sent}`);
+        sock.write(`PUT ${API}${R('cand-rx6tcaqj')} HTTP/1.1\r\nHost: x\r\nx-user: u-greta\r\nx-tenant: interviews\r\nContent-Type: application/pdf\r\nContent-Length: ${declared}\r\n\r\n${sent}`);
         setTimeout(() => sock.end(), 150);
         setTimeout(finish, 2000);
       });
@@ -321,21 +321,21 @@ describe('uploads at their edges', () => {
     const answer = await raw(RESUME_MAX_BYTES + 1, '%PDF-1.4 tiny');
     expect(answer).toMatch(/^HTTP\/1\.1 413/);
     expect(answer).toContain('That file is larger than 10 MB. Choose a smaller PDF.');
-    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+    expect((await GRETA.get(R('cand-rx6tcaqj'))).body.resume.id).toBe('rf-rx6tcaqj');
   });
 
   it('a body cut short of its Content-Length never replaces the old résumé (O-030)', async () => {
     const answer = await raw(5000, '%PDF-1.4 only a few bytes');
     // The server either never answers a cut request or says the file could not be read; it does not store it.
     if (answer) expect(answer).toMatch(/^HTTP\/1\.1 (400|413)/);
-    expect((await GRETA.get(R('cand-mateo'))).body.resume.id).toBe('rf-mateo');
+    expect((await GRETA.get(R('cand-rx6tcaqj'))).body.resume.id).toBe('rf-rx6tcaqj');
   });
 
   it('a PDF by its first bytes that is corrupt inside is stored and read back as it came; the page says it cannot be shown (O-030)', async () => {
     const corrupt = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from('this is not a pdf body, only a header that looks like one')]);
-    const put = await GRETA.put(R('cand-chloe'), corrupt, 'application/pdf', 'broken.pdf');
+    const put = await GRETA.put(R('cand-9p2atayb'), corrupt, 'application/pdf', 'broken.pdf');
     expect(put.status).toBe(200);
-    const file = await GRETA.get(`${R('cand-chloe')}/file`);
+    const file = await GRETA.get(`${R('cand-9p2atayb')}/file`);
     expect(file.status).toBe(200);
     expect(Buffer.from(file.body as Buffer).equals(corrupt)).toBe(true);
     expect(file.headers['content-security-policy']).toBe('sandbox');
@@ -347,7 +347,7 @@ describe('the browser-origin check, in the order index.ts mounts it (O-031)', ()
   guarded.use(browserOrigin);
   guarded.use(app);
   const put = (headers: Record<string, string>) => {
-    let r = request(guarded).put(`${API}${R('cand-chloe')}`).set('x-user', 'u-greta').set('x-tenant', 'interviews').set('Content-Type', 'application/pdf');
+    let r = request(guarded).put(`${API}${R('cand-9p2atayb')}`).set('x-user', 'u-greta').set('x-tenant', 'interviews').set('Content-Type', 'application/pdf');
     for (const [k, v] of Object.entries(headers)) r = r.set(k, v);
     return r.send(PDF as never);
   };
@@ -356,7 +356,7 @@ describe('the browser-origin check, in the order index.ts mounts it (O-031)', ()
     const res = await put({ Origin: 'https://evil.example', Host: 'portal.test' });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'Browser origin is not allowed' });
-    expect((await GRETA.get(R('cand-chloe'))).status).toBe(404);
+    expect((await GRETA.get(R('cand-9p2atayb'))).status).toBe(404);
   });
 
   it('lets the API\'s own origin and a caller with no Origin through', async () => {

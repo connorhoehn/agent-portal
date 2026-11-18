@@ -163,10 +163,10 @@ describe('the export of what Milo showed', () => {
 describe('a hiring manager of another opening', () => {
   it('gets not-found on the consents of a candidate on an opening that is not theirs, and on that round\'s export', async () => {
     // Amara manages the Backend and Engineering Manager openings; Ravi applied to iOS.
-    const res = await consents('u-amara', 'cand-ravi');
+    const res = await consents('u-amara', 'cand-w4pvy8m9');
     expect(res.status).toBe(404);
     expect(JSON.stringify(res.body)).not.toMatch(/Ravi|Coding|noticeVersion/);
-    expect((await consents('u-greta', 'cand-ravi')).status).toBe(200);
+    expect((await consents('u-greta', 'cand-w4pvy8m9')).status).toBe(200);
     expect((await exportOf('u-amara', 'iv-p2v7j4ye')).status).toBe(404);
     // Her own opening's candidate answers as the notice reading.
     expect((await consents('u-amara', CAND)).body.reads).toBe('notice');

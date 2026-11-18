@@ -109,7 +109,7 @@ describe('the recruiter reads everything in the tenant', () => {
     expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(12);
     const aiko = await GRETA('/api/interviews/interviews/iv-c3k8w2ma');
     expect(aiko.body.interview).toMatchObject({ candidate: { name: 'Aiko Tanaka' }, lead: { name: 'Wen Zhao' }, state: 'ready', seat: null });
-    const ingrid = await GRETA('/api/interviews/candidates/cand-ingrid');
+    const ingrid = await GRETA('/api/interviews/candidates/cand-qz63q3a3');
     expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-d7q4n9xe', 'iv-f2b6t5zh']);
     // The profile reads who moved each stage by name, and each round's readable results.
     const app = ingrid.body.candidate.applications[0];
@@ -137,7 +137,7 @@ describe('an interviewer reads only the interviews assigned to them', () => {
 
   it('cannot open another interviewer\'s interview, or its candidate or opening, by id', async () => {
     expect((await HUGO('/api/interviews/interviews/iv-c3k8w2ma')).status).toBe(404);
-    expect((await HUGO('/api/interviews/candidates/cand-aiko')).status).toBe(404);
+    expect((await HUGO('/api/interviews/candidates/cand-s52jevud')).status).toBe(404);
     expect((await HUGO('/api/interviews/openings/op-ios')).status).toBe(404);
     expect((await WEN('/api/interviews/interviews/iv-k1p5w8ra')).status).toBe(404);
   });
@@ -146,7 +146,7 @@ describe('an interviewer reads only the interviews assigned to them', () => {
     const own = await HUGO('/api/interviews/interviews/iv-k1p5w8ra');
     expect(own.status).toBe(200);
     expect(own.body.interview).toMatchObject({ seat: 'lead', questionsChosen: [{ id: 'q-be-ledger' }] });
-    expect((await HUGO('/api/interviews/candidates/cand-mateo')).status).toBe(200);
+    expect((await HUGO('/api/interviews/candidates/cand-rx6tcaqj')).status).toBe(200);
     expect((await HUGO('/api/interviews/openings/op-backend')).status).toBe(200);
   });
 
@@ -168,7 +168,7 @@ describe('a hiring manager reads only their own openings and what hangs off them
 
   it('never the opening that is not theirs, nor its candidates or interviews', async () => {
     expect((await AMARA('/api/interviews/openings/op-ios')).status).toBe(404);
-    expect((await AMARA('/api/interviews/candidates/cand-aiko')).status).toBe(404);
+    expect((await AMARA('/api/interviews/candidates/cand-s52jevud')).status).toBe(404);
     expect((await AMARA('/api/interviews/interviews/iv-p2v7j4ye')).status).toBe(404);
     const names = (await AMARA('/api/interviews/candidates')).body.items.map((r: { candidate: { name: string } }) => r.candidate.name);
     expect(names).toHaveLength(8);

@@ -49,8 +49,8 @@ describe('an interviewer', () => {
   it('reads a colleague\'s scorecards on a candidate only once their own for every round they sit on there is in (row I5.3)', () => {
     // Ingrid: Hugo's coding and Wen's working-together are both in, so each reads the other's.
     // Mateo: Hugo's coding is in but he also leads the design round, still to run: nobody else's (there are none yet either).
-    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-mateo-coding']);
-    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-ravi-coding']);
+    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n']);
+    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-b75vwqbq', 'sc-ju3s5t85', 'sc-szbsws4n']);
   });
 });
 
@@ -61,7 +61,7 @@ describe('a hiring manager', () => {
     expect(amara.candidates).toHaveLength(8);
     expect(amara.candidates.map((c) => c.name)).not.toContain('Aiko Tanaka');
     expect(ids(amara.interviews)).not.toContain('iv-p2v7j4ye');
-    expect(ids(amara.scorecards)).toEqual(['sc-ingrid-coding', 'sc-ingrid-together', 'sc-mateo-coding']);
+    expect(ids(amara.scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n']);
   });
 
   it('another hiring manager reads none of them', () => {
@@ -149,7 +149,7 @@ describe('the wire shapes', () => {
 
   it('a candidate record lists their applications with the interviews the viewer may read', () => {
     const ix = index('u-wen', 'interviewer');
-    const rec = ix.candidateRecord(ix.candidates.get('cand-ingrid')!);
+    const rec = ix.candidateRecord(ix.candidates.get('cand-qz63q3a3')!);
     expect(rec.applications).toHaveLength(1);
     expect(rec.applications[0]!.interviews.map((i) => i.id)).toEqual(['iv-f2b6t5zh']);
     // Wen's own is in, so the profile's rows carry the scorecards of the rounds she can read (her own round only here).

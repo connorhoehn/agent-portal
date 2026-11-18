@@ -200,10 +200,10 @@ describe('a candidate\'s deletion request', () => {
     registerEraser(recordingEraser({ env: ENV, fetch: rec.f, standIns: NO_STAND_INS }));
     await heldCall(assistant);
     await inviteStore().issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'b'.repeat(64), issuedBy: 'u-greta', issuedAt: new Date(NOW - DAY_MS).toISOString(), expiresAt: new Date(NOW + 9 * DAY_MS).toISOString() });
-    const resume = (await resumeRows().get('cand-mateo'))!;
+    const resume = (await resumeRows().get('cand-rx6tcaqj'))!;
     expect(await resumeBytes().get(resume.storageKey)).not.toBeNull();
 
-    const { row, created } = await deleteCandidateMedia('cand-mateo', 'u-greta', deps);
+    const { row, created } = await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps);
     expect(created).toBe(true);
     expect(row).toMatchObject({ reason: 'request', requestedBy: 'u-greta', left: [], attempts: 1 });
     expect(row.interviewIds.sort()).toEqual(['iv-j6x2d9sb', 'iv-k1p5w8ra']);
@@ -224,28 +224,28 @@ describe('a candidate\'s deletion request', () => {
     expect(await assistant.getMinutes('call-mateo')).toBeNull();
     expect(await assistant.get('call-mateo')).toBeNull();
     expect(await assistant.listTurns('call-mateo')).toEqual([]);
-    expect(await resumeRows().get('cand-mateo')).toBeNull();
+    expect(await resumeRows().get('cand-rx6tcaqj')).toBeNull();
     expect(await resumeBytes().get(resume.storageKey)).toBeNull();
     expect((await inviteStore().latestInvite('iv-k1p5w8ra'))?.revokedBy).toBe('u-greta');
 
     // The records stay, without the contact details; the log names none of them.
     expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-j6x2d9sb')).toBe(true);
     expect(interviewScorecardsFixture.rows().some((s) => s.interviewId === 'iv-j6x2d9sb')).toBe(true);
-    const cand = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!;
+    const cand = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!;
     expect(cand).toMatchObject({ name: 'Name removed', email: '', headline: '', location: '', notes: '', source: 'Careers page' });
-    const logged = JSON.stringify(await deletionsOf('cand-mateo'));
+    const logged = JSON.stringify(await deletionsOf('cand-rx6tcaqj'));
     expect(logged).not.toMatch(/Mateo Álvarez|Álvarez|mail\.example|Madrid|\.pdf|rate limiter|ride-hailing/);
 
     // A second request changes nothing.
-    const again = await deleteCandidateMedia('cand-mateo', 'u-greta', deps);
+    const again = await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps);
     expect(again).toEqual({ row, created: false });
     expect(rec.sent).toHaveLength(2);
-    expect(await deletionsOf('cand-mateo')).toHaveLength(1);
+    expect(await deletionsOf('cand-rx6tcaqj')).toHaveLength(1);
   });
 
   it('records that there was nothing to call where no recording service is configured, and still finishes', async () => {
     registerEraser(recordingEraser({ env: {}, standIns: NO_STAND_INS }));
-    const { row } = await deleteCandidateMedia('cand-ravi', 'u-greta', deps);
+    const { row } = await deleteCandidateMedia('cand-w4pvy8m9', 'u-greta', deps);
     expect(row.left).toEqual([{ kind: 'recording', why: 'no-service', retry: false }]);
     expect(row.doneAt).not.toBeNull();
   });
@@ -253,13 +253,13 @@ describe('a candidate\'s deletion request', () => {
   it('leaves a running call for the next sweep, which finishes the request once the call is over', async () => {
     registerEraser(recordingEraser({ env: {}, standIns: NO_STAND_INS }));
     await heldCall(assistant, false);
-    const first = await deleteCandidateMedia('cand-mateo', 'u-greta', deps);
+    const first = await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps);
     expect(first.row.doneAt).toBeNull();
     expect(first.row.left).toContainEqual({ kind: 'transcript-and-minutes', why: 'call-running', retry: true });
     expect((await assistant.lines('call-mateo', 0, 10))).toHaveLength(1);
     await assistant.transition('call-mateo', { from: ['listening'], to: 'left', by: 'u-hugo', at: NOW });
     expect((await sweep(deps)).retried).toBe(1);
-    const [row] = await deletionsOf('cand-mateo');
+    const [row] = await deletionsOf('cand-rx6tcaqj');
     expect(row!.doneAt).not.toBeNull();
     expect(row!.removed).toContainEqual({ kind: 'transcript-and-minutes', count: 1 });
     expect(await assistant.lines('call-mateo', 0, 10)).toEqual([]);

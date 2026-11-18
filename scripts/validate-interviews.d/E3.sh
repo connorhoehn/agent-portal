@@ -44,7 +44,7 @@ row_E3() {
   if [ "$nd" -le 9 ]; then ok "the discipline script: $nd failing, baseline 9"; else fail "the discipline script: $nd failing, baseline 9"; fi
   local ty; ty=$(printf '%s\n' "$disc" | sed -n 's/.*raw typography utilities on bare text: \([0-9]*\).*/\1/p' | head -1)
   if [ -n "$ty" ] && [ "$ty" -le 6 ]; then ok "the type-scale ratchet: $ty of 8"; else fail "the type-scale ratchet: ${ty:-?} of 8, want at most 6"; fi
-  # The seeded ids: no first name in an interview id; the other three kinds are written it.failing until the reseed script runs.
+  # The seeded ids: no first name in an interview, candidate, application or scorecard id (O-189).
   [ "$QUICK" -eq 1 ] || jest_ok "the seeded-id guard" src/mock/__tests__/interviews-seed-ids.test.ts
   # The candidate's pages and both live rooms, every state at 1440 and 1280 (E3-door).
   if [ "$QUICK" -eq 0 ]; then

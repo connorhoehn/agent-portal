@@ -66,7 +66,7 @@ describe('the name shown', () => {
 });
 
 describe('the storage key is made from ids', () => {
-  it('has the documented shape', () => { expect(resumeStorageKey('cand-mateo', 'rf-1')).toBe('interviews/resumes/cand-mateo/rf-1.pdf'); });
+  it('has the documented shape', () => { expect(resumeStorageKey('cand-rx6tcaqj', 'rf-1')).toBe('interviews/resumes/cand-rx6tcaqj/rf-1.pdf'); });
   it.each([['../x', 'rf-1'], ['cand-1', 'a/b'], ['', 'rf-1'], ['cand-1', ''], ['cand 1', 'rf-1'], ['cand-1', 'rf-1.pdf']])('refuses %j / %j', (c, f) => {
     expect(() => resumeStorageKey(c, f)).toThrow();
   });

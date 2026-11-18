@@ -21,24 +21,24 @@ describe('in memory', () => {
     expect(interviewScorecardsFixture.rows().length).toBeLessThan(before);
   });
   it('redacts a candidate once', async () => {
-    expect(await r.redactCandidate('cand-lucia')).toBe(1);
-    expect(await r.redactCandidate('cand-lucia')).toBe(0);
+    expect(await r.redactCandidate('cand-88j9dpte')).toBe(1);
+    expect(await r.redactCandidate('cand-88j9dpte')).toBe(0);
     expect(await r.redactCandidate('cand-nobody')).toBe(0);
-    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-lucia')).toMatchObject({ name: 'Name removed', email: '', location: '', source: 'Careers page' });
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-88j9dpte')).toMatchObject({ name: 'Name removed', email: '', location: '', source: 'Careers page' });
   });
   it('replaces every reason on the candidate\'s stage moves with the one phrase, keeps the stage, time and mover, and a repeat changes nothing', async () => {
-    const before = structuredClone(interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history);
-    const others = structuredClone(interviewApplicationsFixture.rows().filter((a) => a.candidateId !== 'cand-mateo'));
+    const before = structuredClone(interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history);
+    const others = structuredClone(interviewApplicationsFixture.rows().filter((a) => a.candidateId !== 'cand-rx6tcaqj'));
     expect(before.some((h) => h.reason !== null)).toBe(true);
-    expect(await r.redactStageReasons('cand-mateo')).toBe(1);
-    const after = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
+    expect(await r.redactStageReasons('cand-rx6tcaqj')).toBe(1);
+    const after = interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history;
     expect(after.map((h) => [h.stage, h.at, h.by])).toEqual(before.map((h) => [h.stage, h.at, h.by]));
     expect(after.map((h) => h.reason)).toEqual(before.map((h) => (h.reason === null ? null : REDACTED_REASON)));
     expect(JSON.stringify(after)).not.toMatch(/payments interest/);
-    expect(await r.redactStageReasons('cand-mateo')).toBe(0);
-    expect(await r.redactStageReasons('cand-kwame')).toBe(0); // no reasons written
+    expect(await r.redactStageReasons('cand-rx6tcaqj')).toBe(0);
+    expect(await r.redactStageReasons('cand-nx59ftdv')).toBe(0); // no reasons written
     expect(await r.redactStageReasons('cand-nobody')).toBe(0);
-    expect(interviewApplicationsFixture.rows().filter((a) => a.candidateId !== 'cand-mateo')).toEqual(others);
+    expect(interviewApplicationsFixture.rows().filter((a) => a.candidateId !== 'cand-rx6tcaqj')).toEqual(others);
   });
 });
 

@@ -98,10 +98,10 @@ afterAll(() => setResumeStores({ rows: null, bytes: null }));
 
 describe('asking for a deletion', () => {
   it('the recruiter asks, with confirmation, and gets the log row; a second ask changes nothing', async () => {
-    expect((await GRETA.ask('cand-mateo', {})).status).toBe(400);
-    expect((await GRETA.ask('cand-mateo', { confirm: 'yes' })).status).toBe(400);
-    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.email).toBe('mateo.alvarez@mail.example');
-    const res = await GRETA.ask('cand-mateo');
+    expect((await GRETA.ask('cand-rx6tcaqj', {})).status).toBe(400);
+    expect((await GRETA.ask('cand-rx6tcaqj', { confirm: 'yes' })).status).toBe(400);
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!.email).toBe('mateo.alvarez@mail.example');
+    const res = await GRETA.ask('cand-rx6tcaqj');
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.body.created).toBe(true);
@@ -115,70 +115,70 @@ describe('asking for a deletion', () => {
     });
     expect(res.body.deletion.doneAt).not.toBeNull();
     expect(JSON.stringify(res.body)).not.toMatch(/iv-j6x2d9sb|iv-k1p5w8ra|Álvarez|mail\.example/);
-    expect(await resumeRows().get('cand-mateo')).toBeNull();
+    expect(await resumeRows().get('cand-rx6tcaqj')).toBeNull();
     expect(interviewConsentsFixture.rows().some((c) => c.interviewId === 'iv-j6x2d9sb')).toBe(true);
-    const again = await GRETA.ask('cand-mateo');
+    const again = await GRETA.ask('cand-rx6tcaqj');
     expect(again.body).toEqual({ deletion: res.body.deletion, created: false });
   });
 
   it('the profile shows what the redaction left', async () => {
-    await GRETA.ask('cand-mateo');
-    const res = await request(app).get(`${API}/candidates/cand-mateo`).set('x-user', 'u-greta');
+    await GRETA.ask('cand-rx6tcaqj');
+    const res = await request(app).get(`${API}/candidates/cand-rx6tcaqj`).set('x-user', 'u-greta');
     expect(res.status).toBe(200);
     expect(res.body.candidate.candidate).toMatchObject({ name: 'Name removed', location: '', headline: '' });
   });
 
   it('everyone but the recruiter is refused with not-found (never 403 inside the tenant), as is a recruiter asking about a candidate that is not there', async () => {
-    expect((await HUGO.ask('cand-mateo')).status).toBe(404);
-    expect((await AMARA.ask('cand-mateo')).status).toBe(404);
-    expect((await ADMIN.ask('cand-mateo')).status).toBe(404);
+    expect((await HUGO.ask('cand-rx6tcaqj')).status).toBe(404);
+    expect((await AMARA.ask('cand-rx6tcaqj')).status).toBe(404);
+    expect((await ADMIN.ask('cand-rx6tcaqj')).status).toBe(404);
     expect((await GRETA.ask('cand-nobody')).status).toBe(404);
-    expect((await OUTSIDER.ask('cand-mateo')).status).toBe(403);
-    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.name).toBe('Mateo Álvarez');
+    expect((await OUTSIDER.ask('cand-rx6tcaqj')).status).toBe(403);
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!.name).toBe('Mateo Álvarez');
   });
 });
 
 describe('reading the deletion log', () => {
   it('the recruiter and the opening\'s hiring manager read it, newest first; nobody else finds it', async () => {
-    expect((await GRETA.log('cand-mateo')).body).toEqual({ items: [], periods: { mediaDays: 90, recordYears: 4, deletionDays: 30 } });
-    await GRETA.ask('cand-mateo');
-    const greta = await GRETA.log('cand-mateo');
+    expect((await GRETA.log('cand-rx6tcaqj')).body).toEqual({ items: [], periods: { mediaDays: 90, recordYears: 4, deletionDays: 30 } });
+    await GRETA.ask('cand-rx6tcaqj');
+    const greta = await GRETA.log('cand-rx6tcaqj');
     expect(greta.status).toBe(200);
     expect(greta.body.items).toHaveLength(1);
-    expect((await AMARA.log('cand-mateo')).body).toEqual(greta.body);
-    expect((await HUGO.log('cand-mateo')).status).toBe(404);
-    expect((await ADMIN.log('cand-mateo')).status).toBe(404);
+    expect((await AMARA.log('cand-rx6tcaqj')).body).toEqual(greta.body);
+    expect((await HUGO.log('cand-rx6tcaqj')).status).toBe(404);
+    expect((await ADMIN.log('cand-rx6tcaqj')).status).toBe(404);
     expect((await GRETA.log('cand-nobody')).status).toBe(404);
-    expect((await OUTSIDER.log('cand-mateo')).status).toBe(403);
+    expect((await OUTSIDER.log('cand-rx6tcaqj')).status).toBe(403);
   });
 
   it('says on each row whether it is late: open past its date, or finished after it', async () => {
     const day = 86_400_000;
     const at = (ms: number) => new Date(ms).toISOString();
-    const base = { candidateId: 'cand-mateo', interviewIds: ['iv-j6x2d9sb'], reason: 'request' as const, requestedBy: 'u-greta', removed: [], left: [], attempts: 1 };
+    const base = { candidateId: 'cand-rx6tcaqj', interviewIds: ['iv-j6x2d9sb'], reason: 'request' as const, requestedBy: 'u-greta', removed: [], left: [], attempts: 1 };
     await deletionStore().insert({ ...base, id: 'del-late', requestedAt: at(Date.now() - 40 * day), dueBy: at(Date.now() - 10 * day), doneAt: null,
       left: [{ kind: 'recording', why: 'failed', retry: true }] });
     await deletionStore().insert({ ...base, id: 'del-done-late', requestedAt: at(Date.now() - 50 * day), dueBy: at(Date.now() - 20 * day), doneAt: at(Date.now() - 15 * day) });
     await deletionStore().insert({ ...base, id: 'del-open', requestedAt: at(Date.now() - day), dueBy: at(Date.now() + 29 * day), doneAt: null });
-    const items = (await GRETA.log('cand-mateo')).body.items as Array<{ id: string; overdue: boolean; doneLate: boolean }>;
+    const items = (await GRETA.log('cand-rx6tcaqj')).body.items as Array<{ id: string; overdue: boolean; doneLate: boolean }>;
     expect(items.map((i) => [i.id, i.overdue, i.doneLate])).toEqual([['del-open', false, false], ['del-late', true, false], ['del-done-late', false, true]]);
   });
 
   it('a deletion leaves the stage, time and mover of each stage move and replaces its reason with the one phrase', async () => {
-    await GRETA.ask('cand-mateo');
-    const history = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
+    await GRETA.ask('cand-rx6tcaqj');
+    const history = interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history;
     expect(history.map((h) => h.reason)).toEqual([null, null, 'Reason removed.']);
     expect(history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing']);
   });
 
   it('a hiring manager of another opening finds nothing', async () => {
-    expect((await AMARA.log('cand-aiko')).status).toBe(404);
+    expect((await AMARA.log('cand-s52jevud')).status).toBe(404);
   });
 
   it('with INTERVIEWS_ENABLED off both are not found', async () => {
     process.env['INTERVIEWS_ENABLED'] = '0';
-    expect((await GRETA.ask('cand-mateo')).status).toBe(404);
-    expect((await GRETA.log('cand-mateo')).status).toBe(404);
+    expect((await GRETA.ask('cand-rx6tcaqj')).status).toBe(404);
+    expect((await GRETA.log('cand-rx6tcaqj')).status).toBe(404);
   });
 });
 
@@ -188,37 +188,37 @@ describe('after a deletion', () => {
   const decide = (appId: string, body: object) => request(app).post(`${API}/applications/${appId}/stage`).set('x-user', 'u-amara').set('x-tenant', 'interviews').send(body);
 
   it('the candidate can apply again: the same address on the same opening is a new candidate, whole, and the old row stays redacted', async () => {
-    const email = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.email;
+    const email = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!.email;
     // Before the deletion the same address on the same opening is the duplicate it is.
     expect((await add({ name: 'Mateo Álvarez', email: email.toUpperCase(), openingId: 'op-backend' })).status).toBe(409);
-    expect((await GRETA.ask('cand-mateo')).body.created).toBe(true);
+    expect((await GRETA.ask('cand-rx6tcaqj')).body.created).toBe(true);
     const res = await add({ name: 'Mateo Álvarez', email, openingId: 'op-backend', source: 'Careers page' });
     expect(res.status).toBe(201);
-    expect(res.body.candidate.id).not.toBe('cand-mateo');
+    expect(res.body.candidate.id).not.toBe('cand-rx6tcaqj');
     expect(res.body.candidate).toMatchObject({ name: 'Mateo Álvarez', email });
     expect(res.body.application).toMatchObject({ openingId: 'op-backend', stage: 'applied' });
-    const old = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!;
+    const old = interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!;
     expect(old).toMatchObject({ name: 'Name removed', email: '' });
     // The new candidate has a log of their own: nothing of the old deletion is shown on them.
     expect((await GRETA.log(res.body.candidate.id)).body.items).toEqual([]);
     // Asking again for the old one changes nothing; the new one is untouched by it.
-    expect((await GRETA.ask('cand-mateo')).body.created).toBe(false);
+    expect((await GRETA.ask('cand-rx6tcaqj')).body.created).toBe(false);
     expect(interviewCandidatesFixture.rows().find((c) => c.id === res.body.candidate.id)!.name).toBe('Mateo Álvarez');
   });
 
   it('a stage reason written after the deletion is kept as written, and asking again does not take it out (pinned; a question for the lead)', async () => {
-    expect((await GRETA.ask('cand-mateo')).body.created).toBe(true);
-    const before = structuredClone(interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history);
+    expect((await GRETA.ask('cand-rx6tcaqj')).body.created).toBe(true);
+    const before = structuredClone(interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history);
     expect(before.every((h) => h.reason === null || h.reason === 'Reason removed.')).toBe(true);
     const reason = 'Held while the panel finishes the design round.';
-    const res = await decide('app-mateo', { decision: 'hold', reason, basedOn: before.length });
+    const res = await decide('app-7b69njmx', { decision: 'hold', reason, basedOn: before.length });
     expect(res.status).toBe(201);
-    const after = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
+    const after = interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history;
     expect(after).toHaveLength(before.length + 1);
     expect(after[after.length - 1]!.reason).toBe(reason);
     expect(after.slice(0, -1).map((h) => h.reason)).toEqual(before.map((h) => h.reason));
-    const again = await GRETA.ask('cand-mateo');
+    const again = await GRETA.ask('cand-rx6tcaqj');
     expect(again.body.created).toBe(false);
-    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history.at(-1)!.reason).toBe(reason);
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history.at(-1)!.reason).toBe(reason);
   });
 });

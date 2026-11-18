@@ -105,7 +105,7 @@ beforeEach(() => {
 });
 afterAll(() => setNotificationSink(null));
 
-const LUCIA = { applicationId: 'app-lucia', roundId: 'rd-coding', leadId: 'u-hugo', panelIds: ['u-wen'] };
+const LUCIA = { applicationId: 'app-g393z287', roundId: 'rd-coding', leadId: 'u-hugo', panelIds: ['u-wen'] };
 const assign = async (body: object = LUCIA) => GRETA.post('/interviews', body);
 const rowOf = async (as: ReturnType<typeof who>, id: string) => (await as.get(`/interviews/${id}`)).body.interview;
 /** Every word a bell shows or carries, for the "nothing about the candidate" checks. */
@@ -138,7 +138,7 @@ describe('assigning a round', () => {
       payload: { tenant: 'interviews', category: 'Candidates', audience: 'interviewer' },
       action: { href: '/interviews/my-interviews' },
     });
-    expect(bellText()).not.toMatch(/Luc[ií]a|Navarro|lucia|app-lucia|cand-/);
+    expect(bellText()).not.toMatch(/Luc[ií]a|Navarro|lucia|app-g393z287|cand-/);
   });
 
   it('refuses a bad assignment with one sentence per field', async () => {
@@ -146,7 +146,7 @@ describe('assigning a round', () => {
     expect(res.status).toBe(400);
     expect(res.body.fields.map((f: { path: string }) => f.path)).toEqual(['roundId', 'panelIds.0', 'panelIds.1']);
     expect(res.body.error).toBe('The round was not assigned: 3 things need fixing.');
-    expect((await assign({ ...LUCIA, applicationId: 'app-kwame' })).body.fields[0].path).toBe('roundId');
+    expect((await assign({ ...LUCIA, applicationId: 'app-pn7v4yev' })).body.fields[0].path).toBe('roundId');
   });
 
   it('the hiring manager and the interviewer cannot assign; another tenant\'s role never reaches the route', async () => {
@@ -436,7 +436,7 @@ describe('two writers and a caller with no interviews role', () => {
     const second = who('u-greta');
     const both = await Promise.all([assign(), second.post('/interviews', LUCIA)]);
     const statuses = both.map((r) => r.status).sort();
-    const lucia = (await GRETA.get('/interviews')).body.items.filter((i: { candidate: { id: string }; round: { id: string } }) => i.candidate.id === 'cand-lucia' && i.round.id === 'rd-coding');
+    const lucia = (await GRETA.get('/interviews')).body.items.filter((i: { candidate: { id: string }; round: { id: string } }) => i.candidate.id === 'cand-88j9dpte' && i.round.id === 'rd-coding');
     // Whatever the two answers, the candidate must not end with the same round twice.
     expect({ statuses, rounds: lucia.length }).toEqual({ statuses: [201, 400], rounds: 1 });
   });

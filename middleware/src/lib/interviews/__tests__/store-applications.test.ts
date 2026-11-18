@@ -54,7 +54,7 @@ function tablesExec(): SqlExec {
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
-const INGRID = 'app-ingrid';
+const INGRID = 'app-vfzc2x6g';
 const decision = (over: Partial<StageChange & { decision: string; scorecardsMissing: number }> = {}) => ({
   stage: 'offer' as const, at: '2026-11-16T10:00:00.000Z', by: 'u-amara', reason: 'Both rounds were strong on the things this team needs.',
   decision: 'advance', scorecardsMissing: 0, ...over,

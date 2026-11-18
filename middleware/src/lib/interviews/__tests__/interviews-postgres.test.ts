@@ -218,7 +218,7 @@ async function seedWorld(): Promise<void> {
     const [o, c, a, i, s] = await Promise.all([interviews.listOpenings(), interviews.listCandidates(), interviews.listApplications(), interviews.listInterviews(), interviews.listScorecards()]);
     expect(o.map((x) => x.id).sort()).toEqual(interviewOpeningsFixture.rows().map((x) => x.id).sort());
     expect(c).toHaveLength(interviewCandidatesFixture.rows().length);
-    expect(a.find((x) => x.id === 'app-mateo')!.history).toEqual(interviewApplicationsFixture.rows().find((x) => x.id === 'app-mateo')!.history);
+    expect(a.find((x) => x.id === 'app-7b69njmx')!.history).toEqual(interviewApplicationsFixture.rows().find((x) => x.id === 'app-7b69njmx')!.history);
     const live = i.find((x) => x.id === KWAME_LIVE)!;
     expect(live).toMatchObject({ state: 'live', panelIds: interviewsFixture.rows().find((x) => x.id === KWAME_LIVE)!.panelIds, revision: 1 });
     expect(s).toHaveLength(interviewScorecardsFixture.rows().length);
@@ -367,7 +367,7 @@ async function seedWorld(): Promise<void> {
       expect(t).toMatchObject({ callId: 'call-pg-mateo', startedAt: T0 });
       expect(t!.lines.map((l) => [l.side, l.speaker, l.text])).toEqual([
         ['panel', 'Hugo Marchetti', 'Tell me about a rate limiter.'],
-        ['candidate', interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.name, 'A token bucket per key.'],
+        ['candidate', interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!.name, 'A token bucket per key.'],
       ]);
       expect(await recordTranscript({ id: 'iv-k1p5w8ra', callId: null })).toBeNull();
       await psql(`DELETE FROM meeting_assistants WHERE call_id = 'call-pg-mateo';`);
@@ -400,7 +400,7 @@ async function seedWorld(): Promise<void> {
 
   describe('O-157 two hiring managers racing on basedOn (I5.5)', () => {
     it('two decisions against the same history length at once: one lands, the other is stale with the history as it now is', async () => {
-      const app = (await interviews.listApplications()).find((a) => a.id === 'app-mateo')!;
+      const app = (await interviews.listApplications()).find((a) => a.id === 'app-7b69njmx')!;
       const change = (reason: string) => ({ stage: 'on-hold' as const, at: T0, by: 'u-amara', reason, decision: 'hold', scorecardsMissing: 0 }) as never;
       const [a, b] = await Promise.all([interviews.decideStage(app.id, change('First.'), app.history.length), interviews.decideStage(app.id, change('Second.'), app.history.length)]);
       expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
@@ -415,7 +415,7 @@ async function seedWorld(): Promise<void> {
 
   describe('O-178 JSONB, string_to_array, the redaction and the row-level rules (I6.3)', () => {
     it('the deletion log keeps its interview ids as JSONB, coverage reads them back by reason, and an update is compare-and-set', async () => {
-      const row = await deletions.insert({ id: 'del-pg-1', candidateId: 'cand-mateo', interviewIds: [MATEO_CODING, 'iv-k1p5w8ra'], reason: 'request',
+      const row = await deletions.insert({ id: 'del-pg-1', candidateId: 'cand-rx6tcaqj', interviewIds: [MATEO_CODING, 'iv-k1p5w8ra'], reason: 'request',
         requestedAt: T0, requestedBy: 'u-greta', dueBy: at(30 * 24 * 60), doneAt: null, removed: [], left: [{ kind: 'recording', why: 'pending', retry: true }], attempts: 0 });
       expect(row).toMatchObject({ interviewIds: [MATEO_CODING, 'iv-k1p5w8ra'], revision: 1 });
       await deletions.insert({ ...row, id: 'del-pg-2', reason: 'media-period', interviewIds: ['iv-d7q4n9xe'] });
@@ -437,16 +437,16 @@ async function seedWorld(): Promise<void> {
       expect(await records.eraseConsents([MATEO_CODING])).toBe(0);
     });
     it('the redaction takes the contact details out once and every stage reason, in order, and is a no-op the second time', async () => {
-      expect(await records.redactCandidate('cand-mateo')).toBe(1);
-      expect(await records.redactCandidate('cand-mateo')).toBe(0);
-      expect(await one(`SELECT name, email, headline, location, notes, source FROM interview_candidates WHERE id = 'cand-mateo'`))
-        .toMatchObject({ ...REDACTED_CONTACT, source: interviewCandidatesFixture.rows().find((c) => c.id === 'cand-mateo')!.source });
-      const before = interviewApplicationsFixture.rows().find((a) => a.id === 'app-mateo')!.history;
-      expect(await records.redactStageReasons('cand-mateo')).toBe(1);
-      const after = (await interviews.listApplications()).find((a) => a.id === 'app-mateo')!.history;
+      expect(await records.redactCandidate('cand-rx6tcaqj')).toBe(1);
+      expect(await records.redactCandidate('cand-rx6tcaqj')).toBe(0);
+      expect(await one(`SELECT name, email, headline, location, notes, source FROM interview_candidates WHERE id = 'cand-rx6tcaqj'`))
+        .toMatchObject({ ...REDACTED_CONTACT, source: interviewCandidatesFixture.rows().find((c) => c.id === 'cand-rx6tcaqj')!.source });
+      const before = interviewApplicationsFixture.rows().find((a) => a.id === 'app-7b69njmx')!.history;
+      expect(await records.redactStageReasons('cand-rx6tcaqj')).toBe(1);
+      const after = (await interviews.listApplications()).find((a) => a.id === 'app-7b69njmx')!.history;
       expect(after.map((h) => h.stage)).toEqual(before.map((h) => h.stage));
       expect(after.map((h) => h.reason)).toEqual(before.map((h) => (h.reason === null ? null : REDACTED_REASON)));
-      expect(await records.redactStageReasons('cand-mateo')).toBe(0);
+      expect(await records.redactStageReasons('cand-rx6tcaqj')).toBe(0);
       expect(REDACT_CANDIDATE_SQL).toContain('NOT (name = :name AND email = :email)');
       expect(REDACT_STAGE_REASONS_SQL).toContain('WITH ORDINALITY');
     });
@@ -462,7 +462,7 @@ async function seedWorld(): Promise<void> {
       await said.append({ id: 'said-pg-rls', interviewId: KWAME_LIVE, callId: null, kind: 'question', source: 'kit', questionId: 'q-1', suggestionId: null,
         text: 'Walk me through it.', askedBy: 'u-hugo', saidAt: at(1), spoken: false });
       await invites.issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'c'.repeat(64), issuedBy: 'u-greta', issuedAt: at(1), expiresAt: at(60) });
-      await deletions.insert({ id: 'del-pg-rls', candidateId: 'cand-mateo', interviewIds: [MATEO_CODING], reason: 'request', requestedAt: T0, requestedBy: 'u-greta',
+      await deletions.insert({ id: 'del-pg-rls', candidateId: 'cand-rx6tcaqj', interviewIds: [MATEO_CODING], reason: 'request', requestedAt: T0, requestedBy: 'u-greta',
         dueBy: at(30 * 24 * 60), doneAt: null, removed: [], left: [], attempts: 0 });
       const empty: string[] = [];
       for (const table of INTERVIEW_TABLES) {
@@ -482,7 +482,7 @@ async function seedWorld(): Promise<void> {
         .filter((t) => empty.includes(t)));
       expect(INTERVIEW_TABLES.length - empty.length).toBeGreaterThanOrEqual(13);
       await expect(as('orgiq', `INSERT INTO interview_deletions (id, candidate_id, interview_ids, reason, requested_at, due_by, removed, left_behind, attempts, revision)
-        VALUES ('del-pg-x', 'cand-mateo', '[]', 'request', now(), now(), '[]', '[]', 0, 1)`)).rejects.toThrow(/row-level security/);
+        VALUES ('del-pg-x', 'cand-rx6tcaqj', '[]', 'request', now(), now(), '[]', '[]', 0, 1)`)).rejects.toThrow(/row-level security/);
     });
   });
 

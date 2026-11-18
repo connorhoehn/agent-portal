@@ -100,7 +100,7 @@ test('roundStatus words each interview state and candidateHref addresses the pro
   assert.equal(roundStatus('accepted').label, 'Accepted');
   assert.equal(roundStatus('ended').label, 'Scorecard due');
   assert.equal(roundStatus('reviewed').label, 'Done');
-  assert.equal(candidateHref('cand-ingrid'), '/interviews/candidates/cand-ingrid');
+  assert.equal(candidateHref('cand-qz63q3a3'), '/interviews/candidates/cand-qz63q3a3');
 });
 
 test('"Upcoming" in the desk is a round accepted with a time', () => {

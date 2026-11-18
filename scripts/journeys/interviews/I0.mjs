@@ -44,7 +44,7 @@ export default async function run({ portal, record, signIn, namesIn, shoot, home
 
     const theirs = await context.request.get(`${portal}/api/interviews/interviews/iv-c3k8w2ma`);
     const mine = await context.request.get(`${portal}/api/interviews/interviews/iv-k1p5w8ra`);
-    const theirCandidate = await context.request.get(`${portal}/api/interviews/candidates/cand-aiko`);
+    const theirCandidate = await context.request.get(`${portal}/api/interviews/candidates/cand-s52jevud`);
     record('I0.5d', theirs.status() === 404 && theirCandidate.status() === 404 && mine.status() === 200,
       `another interviewer's interview by address: ${theirs.status()}, its candidate: ${theirCandidate.status()}; their own: ${mine.status()}`);
 

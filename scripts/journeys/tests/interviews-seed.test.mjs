@@ -32,7 +32,7 @@ test('no seeded interview id carries a first name', () => {
 
 test('a path names seeded ids, and an unknown name throws', () => {
   assert.equal(seedPath('/api/interviews/interviews/{interviews.mateoDesign}/record'), `/api/interviews/interviews/${SEED.interviews.mateoDesign}/record`);
-  assert.equal(seedPath('/api/x/{openings.ios}/{candidates.aiko}'), '/api/x/op-ios/cand-aiko');
+  assert.equal(seedPath('/api/x/{openings.ios}/{candidates.aiko}'), '/api/x/op-ios/cand-s52jevud');
   assert.throws(() => seedPath('/api/interviews/interviews/{interviews.nobody}'), /no seeded id/);
 });
 

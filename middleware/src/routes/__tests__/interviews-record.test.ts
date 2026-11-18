@@ -136,7 +136,7 @@ describe('who reads the record', () => {
 describe('the parts', () => {
   it('the seeded stand-in: header, recording facts, the transcript with names, the markers', async () => {
     const r = (await HUGO(record(MATEO))).body.record;
-    expect(r.interview).toMatchObject({ state: 'scored', round: { name: 'Coding', type: 'technical', minutes: 60 }, candidate: { id: 'cand-mateo', name: 'Mateo Álvarez' },
+    expect(r.interview).toMatchObject({ state: 'scored', round: { name: 'Coding', type: 'technical', minutes: 60 }, candidate: { id: 'cand-rx6tcaqj', name: 'Mateo Álvarez' },
       opening: { id: 'op-backend' } });
     expect(r.recording).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
     expect(r.transcript.state).toBe('available');
@@ -203,7 +203,7 @@ describe('the parts', () => {
   });
 
   it('deleted: the deletion log removed the recording and the transcript', async () => {
-    interviewDeletionsFixture.rows().push({ id: 'del-test', candidateId: 'cand-mateo', interviewIds: [MATEO], reason: 'request', requestedAt: '2026-11-15T09:00:00.000Z',
+    interviewDeletionsFixture.rows().push({ id: 'del-test', candidateId: 'cand-rx6tcaqj', interviewIds: [MATEO], reason: 'request', requestedAt: '2026-11-15T09:00:00.000Z',
       requestedBy: 'u-greta', dueBy: '2026-12-15T09:00:00.000Z', doneAt: '2026-11-15T09:05:00.000Z',
       removed: [{ kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 32 }], left: [], attempts: 1, revision: 1 });
     const r = (await GRETA(record(MATEO))).body.record;

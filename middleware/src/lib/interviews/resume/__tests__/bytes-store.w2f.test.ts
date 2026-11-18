@@ -4,8 +4,8 @@ jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock:
 import { MemoryResumeBytes } from '../bytes-store.js';
 import { resetMockResumeBytes, setResumeStores, resumeBytes } from '../service.js';
 
-const SEEDED = 'interviews/resumes/cand-mateo/rf-mateo.pdf';
-const UPLOAD = 'interviews/resumes/cand-chloe/rf-new.pdf';
+const SEEDED = 'interviews/resumes/cand-rx6tcaqj/rf-rx6tcaqj.pdf';
+const UPLOAD = 'interviews/resumes/cand-9p2atayb/rf-new.pdf';
 
 describe('the memory résumé store across a mock reset', () => {
   afterEach(() => setResumeStores({ bytes: null }));

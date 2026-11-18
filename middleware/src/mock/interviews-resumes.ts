@@ -48,48 +48,48 @@ export function buildSimplePdf(lines: readonly string[]): Buffer {
 interface Seed { name: string; headline: string; lines: string[]; uploadedDaysAgo: number }
 
 const SEEDS: Record<string, Seed> = {
-  'cand-mateo': { name: 'Mateo Alvarez', headline: 'Backend engineer, ride-hailing marketplace', uploadedDaysAgo: 30, lines: [
+  'cand-rx6tcaqj': { name: 'Mateo Alvarez', headline: 'Backend engineer, ride-hailing marketplace', uploadedDaysAgo: 30, lines: [
     'Summary: Six years building pricing and dispatch services in Kotlin and Go.',
     'Tripline Mobility (4 years): built the trip-pricing service; cut p99 quote latency from 900 ms to 220 ms.',
     'Tripline Mobility: moved surge calculation to an event-driven pipeline; on call for the pricing stack.',
     'Cobalt Rides (2 years): payment retries, idempotency keys and a refunds ledger.',
     'Skills: Kotlin, Go, PostgreSQL, Kafka, distributed tracing.',
     'Education: BSc Computer Science, Fictional Polytechnic of Madrid.' ] },
-  'cand-ingrid': { name: 'Ingrid Solberg', headline: 'Senior software engineer, card issuing', uploadedDaysAgo: 33, lines: [
+  'cand-qz63q3a3': { name: 'Ingrid Solberg', headline: 'Senior software engineer, card issuing', uploadedDaysAgo: 33, lines: [
     'Summary: Nine years in card issuing and authorisation systems.',
     'Fjordcard (5 years): led the move of the card-authorisation service to a second region with no downtime.',
     'Fjordcard: introduced per-merchant rate limits and a replayable settlement log.',
     'Northgate Payments (4 years): built the dispute intake service in Java.',
     'Skills: Java, Kotlin, PostgreSQL, multi-region design, incident response.',
     'Education: MSc Informatics, Fictional University of Oslo.' ] },
-  'cand-kwame': { name: 'Kwame Asante', headline: 'Software engineer, logistics platform', uploadedDaysAgo: 12, lines: [
+  'cand-nx59ftdv': { name: 'Kwame Asante', headline: 'Software engineer, logistics platform', uploadedDaysAgo: 12, lines: [
     'Summary: Five years of backend work and maintainer of an open-source job queue library.',
     'Harbour Freight Systems (3 years): built the shipment-tracking API and its retry scheduler.',
     'Open source: maintainer of a small job queue library for Node.js (priorities, back-off, dead letters).',
     'Skills: TypeScript, Node.js, Redis, PostgreSQL, queue design.',
     'Education: BSc Computer Engineering, Fictional University of Coastal Ghana.' ] },
-  'cand-aiko': { name: 'Aiko Tanaka', headline: 'iOS engineer, food delivery app', uploadedDaysAgo: 17, lines: [
+  'cand-s52jevud': { name: 'Aiko Tanaka', headline: 'iOS engineer, food delivery app', uploadedDaysAgo: 17, lines: [
     'Summary: Five years of iOS development, three of them on a food delivery app.',
     'Bento Run (3 years): shipped offline order history and the live courier map in Swift.',
     'Bento Run: moved checkout screens to SwiftUI; crash-free sessions from 98.9 to 99.7 percent.',
     'Pixel Mill Studio (2 years): client apps in UIKit and Objective-C.',
     'Skills: Swift, SwiftUI, Combine, Core Data, XCTest.',
     'Education: BEng Information Science, Fictional Institute of Technology Tokyo.' ] },
-  'cand-ravi': { name: 'Ravi Menon', headline: 'Mobile engineer, retail banking app', uploadedDaysAgo: 21, lines: [
+  'cand-w4pvy8m9': { name: 'Ravi Menon', headline: 'Mobile engineer, retail banking app', uploadedDaysAgo: 21, lines: [
     'Summary: Seven years of mobile engineering in retail banking.',
     'Lakeside Bank (4 years): led the move from UIKit to SwiftUI for two screens and wrote the migration guide.',
     'Lakeside Bank: built the transaction search with debounced, cancellable requests.',
     'Orchard Mobile (3 years): Android and iOS clients for a savings product.',
     'Skills: Swift, Kotlin, SwiftUI, accessibility, release engineering.',
     'Education: BTech Computer Science, Fictional Institute of Technology Pune.' ] },
-  'cand-nadia': { name: 'Nadia Petrova', headline: 'Engineering lead, developer tools', uploadedDaysAgo: 14, lines: [
+  'cand-xbmv4nvd': { name: 'Nadia Petrova', headline: 'Engineering lead, developer tools', uploadedDaysAgo: 14, lines: [
     'Summary: Twelve years in engineering, the last five leading a developer tools group of eight.',
     'Sprocket Labs (5 years): lead of the build and release platform; cut mean build time by 40 percent.',
     'Sprocket Labs: set up the on-call rotation and the quarterly planning process for the group.',
     'Brightwire (7 years): engineer, then tech lead of the packaging team.',
     'Skills: people management, platform strategy, hiring, incident leadership.',
     'Education: MSc Computer Science, Fictional University of Sofia.' ] },
-  'cand-jonah': { name: 'Jonah Whitaker', headline: 'Engineering manager, insurance platform', uploadedDaysAgo: 16, lines: [
+  'cand-zrtncmb2': { name: 'Jonah Whitaker', headline: 'Engineering manager, insurance platform', uploadedDaysAgo: 16, lines: [
     'Summary: Engineering manager of two teams on an insurance platform.',
     'Harbourline Insurance (6 years): manage fourteen engineers across quoting and claims.',
     'Harbourline Insurance: coached two engineers into tech lead roles; led a successful reorganisation of claims.',

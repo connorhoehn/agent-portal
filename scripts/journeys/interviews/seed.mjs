@@ -19,12 +19,12 @@ export const SEED = Object.freeze({
   names: Object.freeze({ 'u-greta': 'Greta Lindqvist', 'u-hugo': 'Hugo Marchetti', 'u-wen': 'Wen Zhao', 'u-amara': 'Amara Okafor' }),
   openings: Object.freeze({ backend: 'op-backend', ios: 'op-ios', em: 'op-em' }),
   candidates: Object.freeze({
-    mateo: 'cand-mateo', ingrid: 'cand-ingrid', kwame: 'cand-kwame', lucia: 'cand-lucia', daniel: 'cand-daniel', aiko: 'cand-aiko',
-    ravi: 'cand-ravi', chloe: 'cand-chloe', samuel: 'cand-samuel', nadia: 'cand-nadia', jonah: 'cand-jonah', elif: 'cand-elif',
+    mateo: 'cand-rx6tcaqj', ingrid: 'cand-qz63q3a3', kwame: 'cand-nx59ftdv', lucia: 'cand-88j9dpte', daniel: 'cand-d7vdruga', aiko: 'cand-s52jevud',
+    ravi: 'cand-w4pvy8m9', chloe: 'cand-9p2atayb', samuel: 'cand-6smu3v2v', nadia: 'cand-xbmv4nvd', jonah: 'cand-zrtncmb2', elif: 'cand-pf3xhgxf',
   }),
   applications: Object.freeze({
-    mateo: 'app-mateo', ingrid: 'app-ingrid', kwame: 'app-kwame', lucia: 'app-lucia', daniel: 'app-daniel', aiko: 'app-aiko',
-    ravi: 'app-ravi', chloe: 'app-chloe', samuel: 'app-samuel', nadia: 'app-nadia', jonah: 'app-jonah', elif: 'app-elif',
+    mateo: 'app-7b69njmx', ingrid: 'app-vfzc2x6g', kwame: 'app-pn7v4yev', lucia: 'app-g393z287', daniel: 'app-y2pmbks8', aiko: 'app-3j6avdmd',
+    ravi: 'app-j7zuguu3', chloe: 'app-4shk59u3', samuel: 'app-ddk4nvfg', nadia: 'app-efd7rc6g', jonah: 'app-5j2chffb', elif: 'app-5xecwhnp',
   }),
   rounds: Object.freeze({ coding: 'rd-coding', design: 'rd-design', together: 'rd-together', leadership: 'rd-leadership' }),
   /** Interviews by candidate and round, with the seeded state, lead and panel in the comment. */

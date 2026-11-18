@@ -49,10 +49,10 @@ function tableExec(pointers: Map<string, string | null>) {
 }
 
 const NEW: ResumeRecord = {
-  id: 'rf-new', candidateId: 'cand-mateo', fileName: 'Mateo-new.pdf', sizeBytes: 1234, contentType: 'application/pdf', sha256: 'a'.repeat(64),
-  uploadedBy: 'u-greta', uploadedAt: '2026-11-16T09:30:00.000Z', storageKey: 'interviews/resumes/cand-mateo/rf-new.pdf',
+  id: 'rf-new', candidateId: 'cand-rx6tcaqj', fileName: 'Mateo-new.pdf', sizeBytes: 1234, contentType: 'application/pdf', sha256: 'a'.repeat(64),
+  uploadedBy: 'u-greta', uploadedAt: '2026-11-16T09:30:00.000Z', storageKey: 'interviews/resumes/cand-rx6tcaqj/rf-new.pdf',
 };
-const FIRST_TIME: ResumeRecord = { ...NEW, id: 'rf-chloe', candidateId: 'cand-chloe', fileName: 'Chloe.pdf', storageKey: 'interviews/resumes/cand-chloe/rf-chloe.pdf' };
+const FIRST_TIME: ResumeRecord = { ...NEW, id: 'rf-9p2atayb', candidateId: 'cand-9p2atayb', fileName: 'Chloe.pdf', storageKey: 'interviews/resumes/cand-9p2atayb/rf-9p2atayb.pdf' };
 
 /** What the candidate row points at, as each implementation keeps it. */
 type Harness = { name: string; store: ResumeRowStore; pointer: (candidateId: string) => Promise<string | null> };
@@ -71,32 +71,32 @@ describe.each(harnesses)('the %s résumé rows', (_name, make) => {
   beforeEach(() => { h = make(); });
 
   it('reads the seeded résumé and nothing for a candidate with none', async () => {
-    expect(await h.store.get('cand-mateo')).toMatchObject({ id: 'rf-mateo', candidateId: 'cand-mateo', contentType: 'application/pdf', uploadedBy: 'u-greta' });
-    expect(await h.store.get('cand-chloe')).toBeNull();
-    expect(await h.pointer('cand-mateo')).toBe('rf-mateo');
-    expect(await h.pointer('cand-chloe')).toBeNull();
+    expect(await h.store.get('cand-rx6tcaqj')).toMatchObject({ id: 'rf-rx6tcaqj', candidateId: 'cand-rx6tcaqj', contentType: 'application/pdf', uploadedBy: 'u-greta' });
+    expect(await h.store.get('cand-9p2atayb')).toBeNull();
+    expect(await h.pointer('cand-rx6tcaqj')).toBe('rf-rx6tcaqj');
+    expect(await h.pointer('cand-9p2atayb')).toBeNull();
   });
 
   it('a first résumé is written and the candidate points at it', async () => {
     expect(await h.store.replace(FIRST_TIME)).toBeNull();
-    expect(await h.store.get('cand-chloe')).toEqual(FIRST_TIME);
-    expect(await h.pointer('cand-chloe')).toBe('rf-chloe');
+    expect(await h.store.get('cand-9p2atayb')).toEqual(FIRST_TIME);
+    expect(await h.pointer('cand-9p2atayb')).toBe('rf-9p2atayb');
   });
 
   it('a new one replaces the old: one row, the old row handed back, the pointer moved', async () => {
-    const before = (await h.store.get('cand-mateo'))!;
+    const before = (await h.store.get('cand-rx6tcaqj'))!;
     expect(await h.store.replace(NEW)).toEqual(before);
-    expect(await h.store.get('cand-mateo')).toEqual(NEW);
-    expect(await h.pointer('cand-mateo')).toBe('rf-new');
+    expect(await h.store.get('cand-rx6tcaqj')).toEqual(NEW);
+    expect(await h.pointer('cand-rx6tcaqj')).toBe('rf-new');
   });
 
   it('removal hands the row back, clears the pointer, and a second removal finds nothing', async () => {
-    const before = (await h.store.get('cand-ingrid'))!;
-    expect(await h.store.remove('cand-ingrid')).toEqual(before);
-    expect(await h.store.get('cand-ingrid')).toBeNull();
-    expect(await h.pointer('cand-ingrid')).toBeNull();
-    expect(await h.store.remove('cand-ingrid')).toBeNull();
-    expect(await h.store.get('cand-mateo')).not.toBeNull();
+    const before = (await h.store.get('cand-qz63q3a3'))!;
+    expect(await h.store.remove('cand-qz63q3a3')).toEqual(before);
+    expect(await h.store.get('cand-qz63q3a3')).toBeNull();
+    expect(await h.pointer('cand-qz63q3a3')).toBeNull();
+    expect(await h.store.remove('cand-qz63q3a3')).toBeNull();
+    expect(await h.store.get('cand-rx6tcaqj')).not.toBeNull();
   });
 });
 
@@ -108,7 +108,7 @@ describe('the SQL store runs its statements in order', () => {
     await sql.replace(NEW);
     expect(seen).toEqual([DELETE_RESUME_SQL, INSERT_RESUME_SQL, POINT_CANDIDATE_SQL]);
     seen.length = 0;
-    await sql.remove('cand-mateo');
+    await sql.remove('cand-rx6tcaqj');
     expect(seen).toEqual([DELETE_RESUME_SQL, POINT_CANDIDATE_SQL]);
   });
 });
@@ -149,7 +149,7 @@ describe('a replace that fails midway (the service\'s order: put the new bytes, 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { buildSimplePdf } = require('../../../../mock/interviews-resumes.js') as typeof import('../../../../mock/interviews-resumes.js');
   const NEWPDF = buildSimplePdf(['Replacement Person', 'Fictional headline', 'A line.']);
-  const upload = { candidateId: 'cand-mateo', bytes: NEWPDF, rawName: 'replacement.pdf', uploadedBy: 'u-greta' };
+  const upload = { candidateId: 'cand-rx6tcaqj', bytes: NEWPDF, rawName: 'replacement.pdf', uploadedBy: 'u-greta' };
   let bytes: InstanceType<typeof MemoryResumeBytes>;
   let rows: ResumeRowStore;
   beforeEach(() => {
@@ -159,14 +159,14 @@ describe('a replace that fails midway (the service\'s order: put the new bytes, 
     setResumeStores({ rows, bytes });
   });
   afterAll(() => setResumeStores({ rows: null, bytes: null }));
-  const seed = async () => { const old = (await rows.get('cand-mateo'))!; await bytes.put(old.storageKey, Buffer.from('%PDF-1.4 old')); return old; };
+  const seed = async () => { const old = (await rows.get('cand-rx6tcaqj'))!; await bytes.put(old.storageKey, Buffer.from('%PDF-1.4 old')); return old; };
 
   it('the new bytes cannot be put: nothing changes, the old row and bytes stand and the error reaches the caller', async () => {
     const old = await seed();
     jest.spyOn(bytes, 'put').mockRejectedValueOnce(new Error('bucket down'));
     await expect(storeResume(upload)).rejects.toThrow('bucket down');
-    expect(await rows.get('cand-mateo')).toEqual(old);
-    expect((await readResume('cand-mateo'))?.bytes.toString()).toBe('%PDF-1.4 old');
+    expect(await rows.get('cand-rx6tcaqj')).toEqual(old);
+    expect((await readResume('cand-rx6tcaqj'))?.bytes.toString()).toBe('%PDF-1.4 old');
   });
 
   it('the row cannot be swapped: the new bytes are taken back out, the old row and bytes stand', async () => {
@@ -179,8 +179,8 @@ describe('a replace that fails midway (the service\'s order: put the new bytes, 
     expect(removed).toHaveLength(1);
     expect(removed[0]).not.toBe(old.storageKey);
     expect(await bytes.get(removed[0]!)).toBeNull();
-    expect(await rows.get('cand-mateo')).toEqual(old);
-    expect((await readResume('cand-mateo'))?.bytes.toString()).toBe('%PDF-1.4 old');
+    expect(await rows.get('cand-rx6tcaqj')).toEqual(old);
+    expect((await readResume('cand-rx6tcaqj'))?.bytes.toString()).toBe('%PDF-1.4 old');
   });
 
   it('the old bytes cannot be dropped after the swap: the upload still succeeds, one orphan is left that no row points to, and nothing personal is logged', async () => {
@@ -189,7 +189,7 @@ describe('a replace that fails midway (the service\'s order: put the new bytes, 
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const out = await storeResume(upload);
     expect(out.ok).toBe(true);
-    expect((await rows.get('cand-mateo'))?.fileName).toBe('replacement.pdf');
+    expect((await rows.get('cand-rx6tcaqj'))?.fileName).toBe('replacement.pdf');
     expect(await bytes.get(old.storageKey)).not.toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(warn.mock.calls)).not.toMatch(/mateo|replacement|delete refused|Person/i);

@@ -76,7 +76,7 @@ function interviewsTableExec(): { exec: SqlExec; seen: string[] } {
 }
 
 const opening = () => interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!;
-const NEW = (): Interview => newInterview({ applicationId: 'app-lucia', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN] }, opening(), 'iv-k3v9q2m8x1zt', 'u-greta', AT);
+const NEW = (): Interview => newInterview({ applicationId: 'app-g393z287', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN] }, opening(), 'iv-k3v9q2m8x1zt', 'u-greta', AT);
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
@@ -97,7 +97,7 @@ describe.each([
 
   it('a taken id creates nothing', async () => {
     expect(await store.createInterview({ ...NEW(), id: 'iv-h4m7c3vu' })).toBeNull();
-    expect((await read('iv-h4m7c3vu')).applicationId).toBe('app-kwame');
+    expect((await read('iv-h4m7c3vu')).applicationId).toBe('app-pn7v4yev');
   });
 
   it('answers a seat at the revision it was made against, and bumps it', async () => {

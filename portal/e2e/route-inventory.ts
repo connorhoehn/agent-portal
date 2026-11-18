@@ -230,20 +230,20 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
 
 /** Every staff page of the Candidates tenant a signed-in role reaches by address, each walked as the
  *  seeded role that uses it (the sweep user cannot open them). Ids are the mock seed's
- *  (middleware/src/mock/interviews.ts): cand-ingrid has a debrief, iv-k1p5w8ra is coming up (Hugo),
+ *  (middleware/src/mock/interviews.ts): cand-qz63q3a3 has a debrief, iv-k1p5w8ra is coming up (Hugo),
  *  iv-g9r1y8lp is ended with Wen's scorecard due, iv-d7q4n9xe is scored with Hugo's submitted. */
 export const INTERVIEWS_STAFF_ROUTES: ReadonlyArray<{ path: string; user: string; pattern?: string }> = [
   { path: '/interviews/candidates', user: 'u-greta' },
-  { path: '/interviews/candidates/cand-ingrid', user: 'u-greta', pattern: '/interviews/candidates/:id' },
+  { path: '/interviews/candidates/cand-qz63q3a3', user: 'u-greta', pattern: '/interviews/candidates/:id' },
   { path: '/interviews/candidates/new', user: 'u-greta' },
-  { path: '/interviews/candidates/cand-mateo/assign', user: 'u-greta', pattern: '/interviews/candidates/:id/assign' },
+  { path: '/interviews/candidates/cand-rx6tcaqj/assign', user: 'u-greta', pattern: '/interviews/candidates/:id/assign' },
   { path: '/interviews/upcoming', user: 'u-greta' },
   { path: '/interviews/openings', user: 'u-greta' },
   { path: '/interviews/openings/op-backend', user: 'u-greta', pattern: '/interviews/openings/:id' },
   { path: '/interviews/openings/op-backend/edit', user: 'u-greta', pattern: '/interviews/openings/:id/edit' },
   { path: '/interviews/openings/new', user: 'u-greta' },
   { path: '/interviews/my-openings', user: 'u-amara' },
-  { path: '/interviews/candidates/cand-ingrid/debrief', user: 'u-amara', pattern: '/interviews/candidates/:id/debrief' },
+  { path: '/interviews/candidates/cand-qz63q3a3/debrief', user: 'u-amara', pattern: '/interviews/candidates/:id/debrief' },
   { path: '/interviews/my-interviews', user: 'u-hugo' },
   { path: '/interviews/rounds/iv-k1p5w8ra/prepare', user: 'u-hugo', pattern: '/interviews/rounds/:id/prepare' },
   { path: '/interviews/rounds/iv-g9r1y8lp/scorecard', user: 'u-wen', pattern: '/interviews/rounds/:id/scorecard (to fill)' },

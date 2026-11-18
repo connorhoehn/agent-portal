@@ -51,7 +51,7 @@ describe('the export of a seeded interview (row I6.2)', () => {
     const { interviewsStore } = await import('../../store-select.js');
     doc = async (id) => {
       const iv = (await interviewsStore().listInterviews()).find((i) => i.id === id)!;
-      return buildMiloExport({ interview: iv, candidateId: 'cand-mateo', openingId: 'op-backend', roundName: 'Coding' }, new Date('2026-11-17T10:00:00Z'));
+      return buildMiloExport({ interview: iv, candidateId: 'cand-rx6tcaqj', openingId: 'op-backend', roundName: 'Coding' }, new Date('2026-11-17T10:00:00Z'));
     };
   });
   afterEach(async () => {
@@ -77,7 +77,7 @@ describe('the export of a seeded interview (row I6.2)', () => {
     expect(after.sections['milo-for-you']).toEqual({ rows: [] });
     // The panel's acknowledgements are the staff's own record of reading the notice, not the candidate's: no eraser takes them.
     expect(after.sections['panel-notices']).toMatchObject({ interviewId: MATEO_CODING });
-    expect(after.interview).toMatchObject({ id: MATEO_CODING, candidateId: 'cand-mateo' });
+    expect(after.interview).toMatchObject({ id: MATEO_CODING, candidateId: 'cand-rx6tcaqj' });
     expect(JSON.stringify(after)).not.toMatch(/Mateo/);
   });
 

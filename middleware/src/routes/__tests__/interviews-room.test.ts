@@ -108,7 +108,7 @@ describe('reading the room', () => {
 
   it('carries the candidate\'s name and nothing else about them', async () => {
     const text = JSON.stringify((await roomOf(HUGO, MATEO)).body);
-    expect(text).not.toMatch(/@|cand-mateo|resume|résumé|headline/i);
+    expect(text).not.toMatch(/@|cand-rx6tcaqj|resume|résumé|headline/i);
   });
 
   it.each([

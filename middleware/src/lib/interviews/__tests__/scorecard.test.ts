@@ -119,7 +119,7 @@ describe('others hidden until yours is in (scope.ts)', () => {
   function world(cards: Scorecard[], designState: Interview['state'] = 'cancelled'): InterviewsWorld {
     const interviews = interviewsFixture.rows().map((i) => (i.id === 'iv-n5z9f2cq' ? { ...i, state: 'ended' as const }
       : i.id === 'iv-m8t3h6ng' ? { ...i, state: designState } : i));
-    return { openings: interviewOpeningsFixture.rows(), candidates: [], applications: [{ id: 'app-nadia', candidateId: 'cand-nadia', openingId: 'op-em', stage: 'interviewing', appliedAt: 'T', history: [] }],
+    return { openings: interviewOpeningsFixture.rows(), candidates: [], applications: [{ id: 'app-efd7rc6g', candidateId: 'cand-xbmv4nvd', openingId: 'op-em', stage: 'interviewing', appliedAt: 'T', history: [] }],
       interviews, scorecards: [...interviewScorecardsFixture.rows(), ...cards] };
   }
   const wens = card({ id: 'sc-w', interviewId: 'iv-n5z9f2cq', interviewerId: 'u-wen' });
@@ -127,9 +127,9 @@ describe('others hidden until yours is in (scope.ts)', () => {
   const nadiaCards = (w: InterviewsWorld, id: string, role: string) => visibleWorld(w, { id, role }).scorecards.filter((s) => s.interviewId.startsWith('iv-m8t3h6ng') || s.interviewId.startsWith('iv-n5z9f2cq')).map((s) => s.id);
 
   it('a panel member reads none of the others\' before their own is in, and all of them after', () => {
-    expect(othersRevealed(world([wens]), 'u-hugo', 'app-nadia')).toBe(false);
+    expect(othersRevealed(world([wens]), 'u-hugo', 'app-efd7rc6g')).toBe(false);
     expect(nadiaCards(world([wens]), 'u-hugo', 'interviewer')).toEqual([]);
-    expect(othersRevealed(world([wens, hugos]), 'u-hugo', 'app-nadia')).toBe(true);
+    expect(othersRevealed(world([wens, hugos]), 'u-hugo', 'app-efd7rc6g')).toBe(true);
     expect(nadiaCards(world([wens, hugos]), 'u-hugo', 'interviewer')).toEqual(['sc-w', 'sc-h']);
   });
 
@@ -139,7 +139,7 @@ describe('others hidden until yours is in (scope.ts)', () => {
   });
 
   it('a round still to run on the same candidate keeps the others hidden until that one is in too', () => {
-    expect(othersRevealed(world([wens, hugos], 'accepted'), 'u-hugo', 'app-nadia')).toBe(false);
+    expect(othersRevealed(world([wens, hugos], 'accepted'), 'u-hugo', 'app-efd7rc6g')).toBe(false);
     expect(nadiaCards(world([wens, hugos], 'accepted'), 'u-hugo', 'interviewer')).toEqual(['sc-h']);
   });
 
@@ -151,7 +151,7 @@ describe('others hidden until yours is in (scope.ts)', () => {
 
   it('another opening\'s hiring manager, and an interviewer of another candidate\'s round, read none', () => {
     expect(nadiaCards(world([wens, hugos]), 'u-someone-else', 'hiring-manager')).toEqual([]);
-    expect(othersRevealed(world([wens, hugos]), 'u-third', 'app-nadia')).toBe(false);
+    expect(othersRevealed(world([wens, hugos]), 'u-third', 'app-efd7rc6g')).toBe(false);
     expect(nadiaCards(world([wens, hugos]), 'u-third', 'interviewer')).toEqual([]);
   });
 });

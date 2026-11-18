@@ -18,7 +18,7 @@ afterEach(() => fixtureRegistry.resetAll('default'));
 
 describe('assigning a round', () => {
   // Lucía is in screening for the backend opening and has no round yet.
-  const good = { applicationId: 'app-lucia', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN] };
+  const good = { applicationId: 'app-g393z287', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN] };
 
   it('a good assignment is cleaned and becomes an assigned interview with no time', () => {
     const r = checkAssignment({ ...good, roundId: ' rd-coding ', extra: 1 }, world(), INTERVIEWERS);
@@ -30,7 +30,7 @@ describe('assigning a round', () => {
 
   it('the application must exist and still be moving, on an open opening', () => {
     expect(paths(checkAssignment({ ...good, applicationId: 'app-nowhere' }, world(), INTERVIEWERS))).toEqual(['applicationId']);
-    expect(paths(checkAssignment({ ...good, applicationId: 'app-daniel' }, world(), INTERVIEWERS))).toEqual(['applicationId']);
+    expect(paths(checkAssignment({ ...good, applicationId: 'app-y2pmbks8' }, world(), INTERVIEWERS))).toEqual(['applicationId']);
     const w = world();
     w.openings = w.openings.map((o) => (o.id === 'op-backend' ? { ...o, state: 'paused' as const } : o));
     const r = checkAssignment(good, w, INTERVIEWERS);
@@ -40,13 +40,13 @@ describe('assigning a round', () => {
   it('the round must be one of the opening\'s, and not already held for this candidate', () => {
     expect(paths(checkAssignment({ ...good, roundId: 'rd-leadership' }, world(), INTERVIEWERS))).toEqual(['roundId']);
     expect(paths(checkAssignment({ ...good, roundId: '' }, world(), INTERVIEWERS))).toEqual(['roundId']);
-    expect(paths(checkAssignment({ ...good, applicationId: 'app-kwame' }, world(), INTERVIEWERS))).toEqual(['roundId']);
+    expect(paths(checkAssignment({ ...good, applicationId: 'app-pn7v4yev' }, world(), INTERVIEWERS))).toEqual(['roundId']);
   });
 
   it('a declined or cancelled round does not hold it: it may be assigned again', () => {
     const w = world();
     w.interviews = w.interviews.map((i) => (i.id === 'iv-h4m7c3vu' || i.id === 'iv-s4e8u2zk' ? { ...i, state: 'declined' as const } : i));
-    expect(checkAssignment({ ...good, applicationId: 'app-kwame' }, w, INTERVIEWERS).ok).toBe(true);
+    expect(checkAssignment({ ...good, applicationId: 'app-pn7v4yev' }, w, INTERVIEWERS).ok).toBe(true);
   });
 
   it('the lead and the panel are interviewers here: at most two more, never the lead, never twice', () => {
@@ -77,7 +77,7 @@ describe('assigning a round', () => {
 });
 
 describe('answering a seat', () => {
-  const fresh = (): Interview => ({ ...newInterview({ applicationId: 'app-lucia', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN, THIRD] },
+  const fresh = (): Interview => ({ ...newInterview({ applicationId: 'app-g393z287', roundId: 'rd-coding', leadId: HUGO, panelIds: [WEN, THIRD] },
     interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!, 'iv-x', 'u-greta', AT) });
   const apply = (i: Interview, change: object): Interview => ({ ...i, ...change });
 

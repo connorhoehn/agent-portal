@@ -20,7 +20,7 @@ describe('the memory bytes store', () => {
 
   it('answers a seeded key from the seed, and nothing for an unknown key', async () => {
     const s = new MemoryResumeBytes();
-    const key = 'interviews/resumes/cand-mateo/rf-mateo.pdf';
+    const key = 'interviews/resumes/cand-rx6tcaqj/rf-rx6tcaqj.pdf';
     expect(isPdfBytes((await s.get(key))!)).toBe(true);
     expect((await s.get(key))!.equals(seededResumeBytes(key)!)).toBe(true);
     expect(await s.get('interviews/resumes/cand-nobody/rf-x.pdf')).toBeNull();

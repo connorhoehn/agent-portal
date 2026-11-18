@@ -4,8 +4,8 @@ import { candidateHref } from '../interviews.ts';
 import { openingRail, pipelineNameHref, stageFilterOf, stageTabs } from '../interviewsOpenings.ts';
 
 test('a name opens the profile whether or not the debrief is ready', () => {
-  assert.equal(pipelineNameHref({ candidate: { id: 'cand-ingrid' }, debriefReady: true } as never), candidateHref('cand-ingrid'));
-  assert.equal(pipelineNameHref({ candidate: { id: 'cand-ingrid' }, debriefReady: false } as never), '/interviews/candidates/cand-ingrid');
+  assert.equal(pipelineNameHref({ candidate: { id: 'cand-qz63q3a3' }, debriefReady: true } as never), candidateHref('cand-qz63q3a3'));
+  assert.equal(pipelineNameHref({ candidate: { id: 'cand-qz63q3a3' }, debriefReady: false } as never), '/interviews/candidates/cand-qz63q3a3');
 });
 
 test('stage tabs count in decision order and leave out empty stages', () => {

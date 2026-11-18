@@ -115,29 +115,29 @@ function keysOf(value: unknown, out: string[] = []): string[] {
 describe('who reads the debrief', () => {
   it('the recruiter, the opening\'s hiring manager and the admin read it; only the hiring manager is offered the decision', async () => {
     for (const [as, decides] of [[GRETA, false], [AMARA, true], [OPERATOR, false]] as const) {
-      const r = await debrief(as, 'cand-ingrid');
+      const r = await debrief(as, 'cand-qz63q3a3');
       expect(r.status).toBe(200);
       expect(r.headers['cache-control']).toBe('no-store');
       const [a] = r.body.debrief.applications;
-      expect(a.applicationId).toBe('app-ingrid');
+      expect(a.applicationId).toBe('app-vfzc2x6g');
       expect(a.decide !== null).toBe(decides);
     }
   });
 
   it('an interviewer who has submitted, another opening\'s hiring manager and a candidate off the hiring manager\'s openings are not found', async () => {
-    expect((await debrief(HUGO, 'cand-ingrid')).status).toBe(404);
-    expect((await debrief(WEN, 'cand-ingrid')).status).toBe(404);
-    expect((await debrief(OTHER_HM, 'cand-ingrid')).status).toBe(404);
-    expect((await debrief(AMARA, 'cand-ravi')).status).toBe(404);
+    expect((await debrief(HUGO, 'cand-qz63q3a3')).status).toBe(404);
+    expect((await debrief(WEN, 'cand-qz63q3a3')).status).toBe(404);
+    expect((await debrief(OTHER_HM, 'cand-qz63q3a3')).status).toBe(404);
+    expect((await debrief(AMARA, 'cand-w4pvy8m9')).status).toBe(404);
     expect((await debrief(GRETA, 'cand-nobody')).status).toBe(404);
   });
 
   it('another tenant\'s role is refused at the mount', async () => {
-    expect([401, 403, 404]).toContain((await debrief(PRIYA, 'cand-ingrid')).status);
+    expect([401, 403, 404]).toContain((await debrief(PRIYA, 'cand-qz63q3a3')).status);
   });
 
   it('shows each round side by side: every scorecard whole, who is due, the recap and record paths; no consent, no score of its own', async () => {
-    const a = (await debrief(AMARA, 'cand-ingrid')).body.debrief.applications[0];
+    const a = (await debrief(AMARA, 'cand-qz63q3a3')).body.debrief.applications[0];
     expect(a.stage).toBe('debrief');
     expect(a.basedOn).toBe(a.history.length);
     expect(a.competencies.length).toBeGreaterThan(0);
@@ -152,9 +152,9 @@ describe('who reads the debrief', () => {
   });
 
   it('a round still owed a scorecard names who is due; one not yet held has no recap or record', async () => {
-    const jonah = (await debrief(AMARA, 'cand-jonah')).body.debrief.applications[0];
+    const jonah = (await debrief(AMARA, 'cand-zrtncmb2')).body.debrief.applications[0];
     expect(jonah.rounds[0]).toMatchObject({ state: 'ended', scorecards: [], due: [{ id: 'u-wen', name: 'Wen Zhao' }] });
-    const mateo = (await debrief(GRETA, 'cand-mateo')).body.debrief.applications[0];
+    const mateo = (await debrief(GRETA, 'cand-rx6tcaqj')).body.debrief.applications[0];
     expect(mateo.rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-k1p5w8ra')).toMatchObject({ state: 'ready', due: [], recapPath: null, recordPath: null });
   });
 });
@@ -162,76 +162,76 @@ describe('who reads the debrief', () => {
 describe('who decides', () => {
   it('the recruiter and the admin read and do not decide: refused with that sentence', async () => {
     for (const as of [GRETA, OPERATOR]) {
-      const r = await decide(as, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 });
+      const r = await decide(as, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 });
       expect(r.status).toBe(403);
       expect(r.body.error).toMatch(/Only the hiring manager of this opening records a decision/);
     }
   });
 
   it('an interviewer is refused at the action; another opening\'s hiring manager, and the hiring manager off their opening, are not found', async () => {
-    expect((await decide(HUGO, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(403);
-    expect((await decide(OTHER_HM, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(404);
-    expect((await decide(AMARA, 'app-ravi', { decision: 'hold', reason: REASON, basedOn: 3 })).status).toBe(404);
+    expect((await decide(HUGO, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(403);
+    expect((await decide(OTHER_HM, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(404);
+    expect((await decide(AMARA, 'app-j7zuguu3', { decision: 'hold', reason: REASON, basedOn: 3 })).status).toBe(404);
     expect((await decide(AMARA, 'app-nobody', { decision: 'hold', reason: REASON, basedOn: 1 })).status).toBe(404);
-    expect([401, 403, 404]).toContain((await decide(PRIYA, 'app-ingrid', { decision: 'hold', reason: REASON, basedOn: 4 })).status);
+    expect([401, 403, 404]).toContain((await decide(PRIYA, 'app-vfzc2x6g', { decision: 'hold', reason: REASON, basedOn: 4 })).status);
   });
 
   it('a bad body is refused with the field, and nothing is written', async () => {
-    const r = await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: 'ok', basedOn: 4 });
+    const r = await decide(AMARA, 'app-vfzc2x6g', { decision: 'advance', reason: 'ok', basedOn: 4 });
     expect(r.status).toBe(400);
     expect(r.body.fields[0].field).toBe('reason');
-    expect((await debrief(AMARA, 'cand-ingrid')).body.debrief.applications[0].history).toHaveLength(4);
+    expect((await debrief(AMARA, 'cand-qz63q3a3')).body.debrief.applications[0].history).toHaveLength(4);
   });
 });
 
 describe('the decision', () => {
   it('advance from debrief: the stage moves to offer under the hiring manager\'s name, the scored rounds become reviewed, and the recruiter is told', async () => {
-    const r = await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 });
+    const r = await decide(AMARA, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 });
     expect(r.status).toBe(201);
     const a = r.body.debrief.applications[0];
     expect(a.stage).toBe('offer');
     expect(a.basedOn).toBe(5);
     expect(a.history[4]).toMatchObject({ stage: 'offer', by: 'u-amara', byName: 'Amara Okafor', reason: REASON, decision: 'advance', scorecardsMissing: 0 });
     expect(a.history.slice(0, 4).every((h: { decision: unknown }) => h.decision === null)).toBe(true);
-    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-ingrid').map((i) => i.state)).toEqual(['reviewed', 'reviewed']);
+    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-vfzc2x6g').map((i) => i.state)).toEqual(['reviewed', 'reviewed']);
     expect(a.decide.options.every((o: { allowed: boolean }) => !o.allowed)).toBe(true);
     await settle();
     expect(sent.map((s) => s.userId)).toEqual(['u-greta']);
   });
 
   it('a stale page is refused with the debrief as it now reads; a later decision is a new entry, never an edit', async () => {
-    expect((await decide(AMARA, 'app-ingrid', { decision: 'hold', reason: REASON, basedOn: 4 })).status).toBe(201);
-    const stale = await decide(AMARA, 'app-ingrid', { decision: 'reject', reason: REASON, basedOn: 4 });
+    expect((await decide(AMARA, 'app-vfzc2x6g', { decision: 'hold', reason: REASON, basedOn: 4 })).status).toBe(201);
+    const stale = await decide(AMARA, 'app-vfzc2x6g', { decision: 'reject', reason: REASON, basedOn: 4 });
     expect(stale.status).toBe(409);
     expect(stale.body.error).toMatch(/changed while you were reading/);
     expect(stale.body.debrief.applications[0]).toMatchObject({ stage: 'on-hold', basedOn: 5 });
-    const later = await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: 'The second team said yes after all.', basedOn: 5 });
+    const later = await decide(AMARA, 'app-vfzc2x6g', { decision: 'advance', reason: 'The second team said yes after all.', basedOn: 5 });
     expect(later.status).toBe(201);
     expect(later.body.debrief.applications[0].history.slice(4).map((h: { decision: string }) => h.decision)).toEqual(['hold', 'advance']);
   });
 
   it('advance waits for a round still to run; hold does not; a held candidate cannot be held again but can be rejected', async () => {
-    const early = await decide(AMARA, 'app-mateo', { decision: 'advance', reason: REASON, basedOn: 3 });
+    const early = await decide(AMARA, 'app-7b69njmx', { decision: 'advance', reason: REASON, basedOn: 3 });
     expect(early.status).toBe(409);
     expect(early.body.error).toMatch(/still to run/);
-    expect((await decide(AMARA, 'app-mateo', { decision: 'hold', reason: REASON, basedOn: 3 })).body.debrief.applications[0].stage).toBe('on-hold');
-    expect((await decide(AMARA, 'app-mateo', { decision: 'hold', reason: REASON, basedOn: 4 })).status).toBe(409);
-    expect((await decide(AMARA, 'app-mateo', { decision: 'reject', reason: REASON, basedOn: 4 })).body.debrief.applications[0].stage).toBe('rejected');
+    expect((await decide(AMARA, 'app-7b69njmx', { decision: 'hold', reason: REASON, basedOn: 3 })).body.debrief.applications[0].stage).toBe('on-hold');
+    expect((await decide(AMARA, 'app-7b69njmx', { decision: 'hold', reason: REASON, basedOn: 4 })).status).toBe(409);
+    expect((await decide(AMARA, 'app-7b69njmx', { decision: 'reject', reason: REASON, basedOn: 4 })).body.debrief.applications[0].stage).toBe('rejected');
     // Mateo's design round was ready, not scored: nothing is marked reviewed but the scored coding round.
-    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-mateo').map((i) => [i.id, i.state]))
+    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-7b69njmx').map((i) => [i.id, i.state]))
       .toEqual([['iv-j6x2d9sb', 'reviewed'], ['iv-k1p5w8ra', 'ready']]);
   });
 
   it('with no scorecard in, nothing is decided; with one still due, the decision records how many were missing', async () => {
-    expect((await decide(AMARA, 'app-jonah', { decision: 'reject', reason: REASON, basedOn: 3 })).status).toBe(409);
+    expect((await decide(AMARA, 'app-5j2chffb', { decision: 'reject', reason: REASON, basedOn: 3 })).status).toBe(409);
     const jonah = interviewsFixture.rows().find((i) => i.id === 'iv-g9r1y8lp')!;
     jonah.panelIds = ['u-hugo'];
     interviewScorecardsFixture.rows().push({ id: 'sc-jonah-wen', interviewId: jonah.id, interviewerId: 'u-wen', ratings: [], recommendation: 'yes', summary: 's',
       submittedAt: '2026-11-16T10:00:00.000Z', version: 1, changedAfterRecap: false, correctionReason: null });
-    const before = (await debrief(AMARA, 'cand-jonah')).body.debrief.applications[0];
+    const before = (await debrief(AMARA, 'cand-zrtncmb2')).body.debrief.applications[0];
     expect(before.decide.scorecardsMissing).toBe(1);
     expect(before.rounds[0].due).toEqual([{ id: 'u-hugo', name: 'Hugo Marchetti' }]);
-    const r = await decide(AMARA, 'app-jonah', { decision: 'hold', reason: REASON, basedOn: 3 });
+    const r = await decide(AMARA, 'app-5j2chffb', { decision: 'hold', reason: REASON, basedOn: 3 });
     expect(r.status).toBe(201);
     expect(r.body.debrief.applications[0].history[3]).toMatchObject({ decision: 'hold', scorecardsMissing: 1 });
     expect(jonah.state).toBe('ended');
@@ -270,7 +270,7 @@ describe('the bells after the call', () => {
   });
 
   it('decided: the opening\'s recruiter, that a decision was recorded and by whom, opening the debrief', async () => {
-    expect(await stageDecided('app-ingrid', 'u-amara')).toEqual(['u-greta']);
+    expect(await stageDecided('app-vfzc2x6g', 'u-amara')).toEqual(['u-greta']);
     expect(sent[0]!.input).toMatchObject({ title: 'A decision was recorded on Senior Backend Engineer',
       body: 'Recorded by Amara Okafor. Open the debrief to read it and arrange what follows.',
       action: { href: expect.stringMatching(/^\/interviews\/rounds\/iv-(d7q4n9xe|f2b6t5zh)\/debrief$/) }, payload: { audience: 'recruiter', kind: 'interview-decided' } });
@@ -305,7 +305,7 @@ describe('a late scorecard after a hold', () => {
 
   it('a hold with Hugo\'s scorecard still due is recorded with one missing; his scorecard then arrives and reads in the round, while the decision keeps what it said', async () => {
     hugoDue();
-    const held = await decide(AMARA, 'app-jonah', { decision: 'hold', reason: REASON, basedOn: 3 });
+    const held = await decide(AMARA, 'app-5j2chffb', { decision: 'hold', reason: REASON, basedOn: 3 });
     expect(held.status).toBe(201);
     expect(held.body.debrief.applications[0].history[3]).toMatchObject({ decision: 'hold', scorecardsMissing: 1 });
     expect(held.body.debrief.applications[0].stage).toBe('on-hold');
@@ -313,7 +313,7 @@ describe('a late scorecard after a hold', () => {
 
     const late = await HUGO.post(`/interviews/${JONAH}/scorecard`, await scorecardBody(HUGO, JONAH));
     expect(late.status).toBe(201);
-    const a = (await debrief(AMARA, 'cand-jonah')).body.debrief.applications[0];
+    const a = (await debrief(AMARA, 'cand-zrtncmb2')).body.debrief.applications[0];
     expect(a.rounds[0]).toMatchObject({ state: 'scored', due: [] });
     expect(a.rounds[0].scorecards.map((s: { interviewer: { id: string } }) => s.interviewer.id).sort()).toEqual(['u-hugo', 'u-wen']);
     // The entry is the record of what the hiring manager knew then: it is never edited, and the stage did not move.
@@ -324,9 +324,9 @@ describe('a late scorecard after a hold', () => {
 
   it('after the late scorecard the held candidate can still be rejected from the page as it now reads, and the round is reviewed', async () => {
     hugoDue();
-    await decide(AMARA, 'app-jonah', { decision: 'hold', reason: REASON, basedOn: 3 });
+    await decide(AMARA, 'app-5j2chffb', { decision: 'hold', reason: REASON, basedOn: 3 });
     await HUGO.post(`/interviews/${JONAH}/scorecard`, await scorecardBody(HUGO, JONAH));
-    const next = await decide(AMARA, 'app-jonah', { decision: 'reject', reason: 'The role needs more people leadership than this round showed.', basedOn: 4 });
+    const next = await decide(AMARA, 'app-5j2chffb', { decision: 'reject', reason: 'The role needs more people leadership than this round showed.', basedOn: 4 });
     expect(next.status).toBe(201);
     const a = next.body.debrief.applications[0];
     expect(a.history.slice(3).map((h: { decision: string; scorecardsMissing: number }) => [h.decision, h.scorecardsMissing])).toEqual([['hold', 1], ['reject', 0]]);
@@ -337,43 +337,43 @@ describe('a late scorecard after a hold', () => {
 describe('a hiring manager with two applications', () => {
   /** Ingrid also applied to the Engineering Manager opening, Amara\'s second: two applications, one candidate, one hiring manager. */
   function second() {
-    const first = interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid')!;
-    interviewApplicationsFixture.rows().push({ ...first, id: 'app-ingrid-em', openingId: 'op-em', stage: 'interviewing', history: first.history.slice(0, 3).map((h) => ({ ...h })) });
+    const first = interviewApplicationsFixture.rows().find((a) => a.id === 'app-vfzc2x6g')!;
+    interviewApplicationsFixture.rows().push({ ...first, id: 'app-vfzc2x6g-em', openingId: 'op-em', stage: 'interviewing', history: first.history.slice(0, 3).map((h) => ({ ...h })) });
   }
 
   it('the debrief lists both, each with its own stage and basedOn; deciding one leaves the other alone', async () => {
     second();
-    const before = (await debrief(AMARA, 'cand-ingrid')).body.debrief.applications;
-    expect(before.map((a: { applicationId: string }) => a.applicationId).sort()).toEqual(['app-ingrid', 'app-ingrid-em']);
-    const em = before.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid-em');
+    const before = (await debrief(AMARA, 'cand-qz63q3a3')).body.debrief.applications;
+    expect(before.map((a: { applicationId: string }) => a.applicationId).sort()).toEqual(['app-vfzc2x6g', 'app-vfzc2x6g-em']);
+    const em = before.find((a: { applicationId: string }) => a.applicationId === 'app-vfzc2x6g-em');
     expect(em).toMatchObject({ stage: 'interviewing', basedOn: 3 });
     expect(em.rounds).toEqual([]);
 
-    const r = await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 });
+    const r = await decide(AMARA, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 });
     expect(r.status).toBe(201);
     const after = r.body.debrief.applications;
-    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid')).toMatchObject({ stage: 'offer', basedOn: 5 });
-    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-ingrid-em')).toMatchObject({ stage: 'interviewing', basedOn: 3 });
-    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid-em')!.history).toHaveLength(3);
+    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-vfzc2x6g')).toMatchObject({ stage: 'offer', basedOn: 5 });
+    expect(after.find((a: { applicationId: string }) => a.applicationId === 'app-vfzc2x6g-em')).toMatchObject({ stage: 'interviewing', basedOn: 3 });
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-vfzc2x6g-em')!.history).toHaveLength(3);
   });
 
   it('a page read for one application\'s basedOn does not authorise the other: the other is judged on its own history and its own rounds', async () => {
     second();
-    const stale = await decide(AMARA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 4 });
+    const stale = await decide(AMARA, 'app-vfzc2x6g-em', { decision: 'hold', reason: REASON, basedOn: 4 });
     expect(stale.status).toBe(409);
     expect(stale.body.error).toMatch(/changed while you were reading/);
     // On its own history it is current, but it has no round with a scorecard in, so nothing can be decided yet.
-    const current = await decide(AMARA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 3 });
+    const current = await decide(AMARA, 'app-vfzc2x6g-em', { decision: 'hold', reason: REASON, basedOn: 3 });
     expect(current.status).toBe(409);
     expect(current.body.error).not.toMatch(/changed while you were reading/);
-    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-ingrid-em')!.history).toHaveLength(3);
+    expect(interviewApplicationsFixture.rows().find((a) => a.id === 'app-vfzc2x6g-em')!.history).toHaveLength(3);
   });
 
   it('the recruiter reads both and decides neither; another opening\'s hiring manager gets neither', async () => {
     second();
-    expect((await debrief(GRETA, 'cand-ingrid')).body.debrief.applications).toHaveLength(2);
-    expect((await decide(GRETA, 'app-ingrid-em', { decision: 'hold', reason: REASON, basedOn: 3 })).status).toBe(403);
-    expect((await debrief(OTHER_HM, 'cand-ingrid')).status).toBe(404);
+    expect((await debrief(GRETA, 'cand-qz63q3a3')).body.debrief.applications).toHaveLength(2);
+    expect((await decide(GRETA, 'app-vfzc2x6g-em', { decision: 'hold', reason: REASON, basedOn: 3 })).status).toBe(403);
+    expect((await debrief(OTHER_HM, 'cand-qz63q3a3')).status).toBe(404);
   });
 });
 
@@ -392,7 +392,7 @@ describe('a correction after the decision', () => {
     expect(early.status).toBe(201);
     expect(early.body.scorecard.mine).toMatchObject({ version: 2, correctionReason: 'I misremembered the second question.' });
 
-    expect((await decide(AMARA, 'app-ingrid', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(201);
+    expect((await decide(AMARA, 'app-vfzc2x6g', { decision: 'advance', reason: REASON, basedOn: 4 })).status).toBe(201);
     expect(interviewsFixture.rows().find((i) => i.id === CODING)!.state).toBe('reviewed');
 
     const late = await correction(HUGO, CODING);
@@ -405,7 +405,7 @@ describe('a correction after the decision', () => {
   });
 
   it('after the decision nobody else on the round may correct either, and the first-version path is closed too', async () => {
-    await decide(AMARA, 'app-ingrid', { decision: 'hold', reason: REASON, basedOn: 4 });
+    await decide(AMARA, 'app-vfzc2x6g', { decision: 'hold', reason: REASON, basedOn: 4 });
     const together = 'iv-f2b6t5zh';
     expect((await correction(WEN, together)).status).toBe(409);
     expect(interviewsFixture.rows().find((i) => i.id === together)!.state).toBe('reviewed');

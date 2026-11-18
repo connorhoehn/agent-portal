@@ -90,9 +90,9 @@ describe.each([
     const backend = world.openings.find((o) => o.id === 'op-backend')!;
     expect(backend.kit.rounds.map((r) => r.name)).toEqual(['Coding', 'System design', 'Working together']);
     expect(backend.kit.questions.find((q) => q.id === 'q-be-ratelimit')!.starter!.python).toContain('class RateLimiter');
-    expect(world.applications.find((a) => a.id === 'app-ingrid')!.history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing', 'debrief']);
+    expect(world.applications.find((a) => a.id === 'app-vfzc2x6g')!.history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing', 'debrief']);
     expect(world.interviews.find((i) => i.id === 'iv-n5z9f2cq')!.panelIds).toEqual(['u-hugo']);
-    expect(world.scorecards.find((s) => s.id === 'sc-ingrid-coding')!.ratings.map((r) => r.rating)).toEqual([4, 4]);
+    expect(world.scorecards.find((s) => s.id === 'sc-szbsws4n')!.ratings.map((r) => r.rating)).toEqual([4, 4]);
     expect(world.openings.find((o) => o.id === 'op-ios')!.hiringManagerId).toBeNull();
   });
 });

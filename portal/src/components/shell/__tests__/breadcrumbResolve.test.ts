@@ -158,12 +158,13 @@ test('an opening beside the Openings rail has Hire, Openings and its own crumb, 
 });
 
 test('a candidate page reads its home by the viewer’s role, and assign / debrief end the trail', () => {
-  const id = 'cand-ingrid';
-  const name = { label: id, id };
+  const id = 'cand-qz63q3a3';
+  // An id-shaped segment shows shortened until the page names it (as the random interview ids do).
+  const name = { label: 'cand-qz6…', id };
   const linked = { ...name, path: `/interviews/candidates/${id}` };
   assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'recruiter'),
     [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }, name]);
-  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'admin').map((c) => c.label), ['Hire', 'Candidates', id]);
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'admin').map((c) => c.label), ['Hire', 'Candidates', 'cand-qz6…']);
   assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'hiring-manager'),
     [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }, name]);
   assert.deepEqual(resolveBreadcrumbs(`/interviews/candidates/${id}`, 'interviewer'),
