@@ -21,7 +21,7 @@
 //   E1k  Hugo invites Milo and turns its voice on from the footer; lines are heard; Milo's suggestion arrives; "Have Milo
 //        ask": the receipt, the question on the candidate's side (their Milo line and their chat), and none of the deck's words
 //   E1l  the candidate asks how much time is left: the fixed sentence, on their side and in the lead's chat
-//   E1m  Hugo ends the interview: the candidate reads the ended page; the round is ended
+//   E1m  Hugo ends the interview: he lands on its scorecard; the candidate reads the ended page; the round is ended
 //   E1n  Hugo's scorecard: ratings, Milo's recap (every statement sourced), one question to Milo (the answer cites a line),
 //        a recommendation, submitted
 //   E1o  the record on one clock: the run marker and Milo's question marker each move the code and the time together (the code
@@ -413,11 +413,13 @@ export default async function run(ctx) {
       await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }).click({ timeout: 10_000 });
       await C.page.getByTestId('join-ended').first().waitFor({ timeout: 30_000 });
       const shots = await shootPage(C.page, 'E1-candidate-ended');
-      await hp.waitForURL(/\/interviews\/my-interviews/, { timeout: 20_000 }).catch(() => undefined);
+      // Ending lands the lead on the round's scorecard, now due (E4 #16).
+      const due = new RegExp(`/interviews/rounds/${S.tech}/scorecard$`);
+      await hp.waitForURL(due, { timeout: 20_000 }).catch(() => undefined);
       const r = await readInterview(hugo, S.tech);
       const ended = squash(await C.page.getByTestId('join-ended').first().innerText());
-      return { ok: r?.state === 'ended' && /\/interviews\/my-interviews/.test(hp.url()) && !miloScoresIn(ended) && shots.every((s) => s.ok),
-        detail: `the round is ${r?.state}; Hugo is back on My interviews ${/my-interviews/.test(hp.url())}; the candidate reads "${ended.slice(0, 90)}"; ${widths(shots)}` };
+      return { ok: r?.state === 'ended' && due.test(new URL(hp.url()).pathname) && !miloScoresIn(ended) && shots.every((s) => s.ok),
+        detail: `the round is ${r?.state}; Hugo lands on its scorecard ${due.test(new URL(hp.url()).pathname)}; the candidate reads "${ended.slice(0, 90)}"; ${widths(shots)}` };
     });
     await C?.context.close().catch(() => undefined);
 
