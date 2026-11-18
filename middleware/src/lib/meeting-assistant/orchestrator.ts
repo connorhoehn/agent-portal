@@ -1563,7 +1563,7 @@ export class AssistantRuntime {
           if (speechHold) {
             try { said = await this.sayHeldText(callId, held, e.askedBy); } finally { await speechHold.release().catch(() => undefined); }
           }
-          await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, spoken: said === 'spoken' }).catch(() => undefined);
+          await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, posted: posted !== null, spoken: said === 'spoken' }).catch(() => undefined);
           continue;
         }
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening

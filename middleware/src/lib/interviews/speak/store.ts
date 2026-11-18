@@ -2,9 +2,10 @@
 // `interview_said_log`. One row per time the server put approved words in the call: a question the lead approved (a
 // suggestion's "Have Milo ask", or a kit question from the Questions tab), and Milo's answers to the candidate's two fixed
 // requests and its one fixed refusal. The row is written BEFORE the words are posted or said, so the log never misses
-// something the candidate heard; `spoken` is filled once afterwards, only when the words were relayed aloud.
+// something the candidate heard; `posted` is set once the words reached the call chat, and `spoken` once they were
+// relayed aloud.
 //
-// Append-only: a row is written once; only `spoken` is ever set (false to true). Rows leave only through `erase`
+// Append-only: a row is written once; only `posted` and `spoken` are ever set (false to true). Rows leave only through `erase`
 // (retention: a decision record, like the coach's log). Two implementations behind one interface, chosen as
 // lib/interviews/coach/store.ts chooses: memory under the mock providers, SQL (store-sql.ts) otherwise. The memory store's
 // rows live in this process only (the mock world's reset does not clear them; nothing seeded reads them).
@@ -30,6 +31,8 @@ export interface SaidRecord {
   /** Who asked for it: the lead, or the candidate's guest id. */
   askedBy: string;
   saidAt: string;
+  /** True once the words were posted in the call chat: the candidate read them. A row that never got there was not said. */
+  posted: boolean;
   /** True once the words were relayed aloud on the call's voice. */
   spoken: boolean;
 }
@@ -39,6 +42,8 @@ export interface SaidStore {
   list(interviewId: string): Promise<SaidRecord[]>;
   /** Append one row; a used id throws. */
   append(row: SaidRecord): Promise<SaidRecord>;
+  /** Set `posted`; the row as it now is, or null when there is no such row. */
+  markPosted(interviewId: string, id: string): Promise<SaidRecord | null>;
   /** Set `spoken`; the row as it now is, or null when there is no such row. */
   markSpoken(interviewId: string, id: string): Promise<SaidRecord | null>;
   /** Remove every row of these interviews; how many went. */
@@ -61,10 +66,18 @@ export class MemorySaidStore implements SaidStore {
     return copy(row);
   }
 
+  async markPosted(interviewId: string, id: string): Promise<SaidRecord | null> {
+    return this.mark(interviewId, id, 'posted');
+  }
+
   async markSpoken(interviewId: string, id: string): Promise<SaidRecord | null> {
+    return this.mark(interviewId, id, 'spoken');
+  }
+
+  private mark(interviewId: string, id: string, field: 'posted' | 'spoken'): SaidRecord | null {
     const row = this.rows.find((r) => r.interviewId === interviewId && r.id === id);
     if (!row) return null;
-    row.spoken = true;
+    row[field] = true;
     return copy(row);
   }
 

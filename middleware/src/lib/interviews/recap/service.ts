@@ -80,9 +80,10 @@ const defaultTaken: RecapDeps['taken'] = async (interviewId) => {
 /** A question Milo put in the call (an approved question, or its repeat): its words, and when the server put them in. */
 export interface SaidQuestion { text: string; saidAt: string }
 
-const defaultSaid: RecapDeps['said'] = async (interviewId) => {
+/** The said log's questions (and repeats) that reached the call: a row whose words were never posted was asked of nobody. */
+export const saidInCall: RecapDeps['said'] = async (interviewId) => {
   const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interviewId));
-  return rows.filter((r) => r.kind === 'question' || r.source === 'repeat').map((r) => ({ text: r.text, saidAt: r.saidAt }));
+  return rows.filter((r) => r.posted && (r.kind === 'question' || r.source === 'repeat')).map((r) => ({ text: r.text, saidAt: r.saidAt }));
 };
 
 const DEFAULTS: RecapDeps = {
@@ -90,7 +91,7 @@ const DEFAULTS: RecapDeps = {
   consents: coachConsents,
   transcript: recordOrAssistantTranscript,
   taken: defaultTaken,
-  said: defaultSaid,
+  said: saidInCall,
   model: makeRecapModel,
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,

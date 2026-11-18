@@ -110,7 +110,7 @@ export interface MeetingAssistantPolicy {
    * After a held answer was posted (with the approved mark) and offered to the call's voice as approved words (orchestrator.ts
    * `sayHeldText`): whether it was relayed. For the family's own log. Absent: nothing is noted.
    */
-  heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; spoken: boolean }): Promise<void>;
+  heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; posted: boolean; spoken: boolean }): Promise<void>;
   /**
    * Before a posted held answer is offered to the call's voice: the family's money check for the speech. A release to call once
    * the say is over, or null to keep the answer in the chat only (a reached cap). Absent: said with no check.

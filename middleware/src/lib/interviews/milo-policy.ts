@@ -218,9 +218,9 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   },
   heldTextSaid: async (call, said) => {
     const interviewId = interviewOfLobby(call.lobby);
-    if (!interviewId || !said.spoken) return;
-    const { noteHeldSpoken } = await import('./speak/index.js');
-    await noteHeldSpoken(interviewId, said.text, said.askedBy);
+    if (!interviewId) return;
+    const { noteHeldSaid } = await import('./speak/index.js');
+    await noteHeldSaid(interviewId, said.text, said.askedBy, said);
   },
   // Decision 17: an interview's transcript and minutes are media, kept 90 days by default or until a deletion request, and removed
   // by the interviews retention (retention/erasers.ts `transcript-and-minutes`), never by the meeting assistant's 30-day sweep.

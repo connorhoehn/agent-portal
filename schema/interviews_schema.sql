@@ -304,6 +304,11 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
   spoken          BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_log (interview_id, said_at);
+-- `posted`: the words reached the call chat (the candidate read them). A row is written before that, so one whose post never
+-- happened (Milo not in the call, the post refused) stays false and is no question the candidate was asked. Rows written
+-- before the column were spoken only after their post.
+ALTER TABLE interview_said_log ADD COLUMN IF NOT EXISTS posted BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE interview_said_log SET posted = TRUE WHERE spoken AND NOT posted;
 
 -- ── invites (row I2.1) ──────────────────────────────────────────────────────
 -- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,

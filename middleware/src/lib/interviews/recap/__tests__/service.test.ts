@@ -8,8 +8,9 @@ import type { CoachModelResult } from '../../coach/model.js';
 import type { CoachTranscript } from '../../coach/transcript.js';
 import { ScriptedRecapModel, type RecapModel } from '../model.js';
 import { RECAP_MAX_LINES, type RecapInput } from '../prompt.js';
-import { checkOpenRatings, eraseRecapRows, openRecap, ratingsAtRecap, readRecap, recapInput, RECAP_MAX_ATTEMPTS, resetRecapAttempts, setRecapDeps, type RecapDeps, type RecapRef } from '../service.js';
+import { checkOpenRatings, eraseRecapRows, openRecap, ratingsAtRecap, readRecap, recapInput, RECAP_MAX_ATTEMPTS, resetRecapAttempts, saidInCall, setRecapDeps, type RecapDeps, type RecapRef } from '../service.js';
 import { MemoryRecapStore } from '../store.js';
+import { MemorySaidStore, setSaidStore, type SaidRecord } from '../../speak/store.js';
 
 // Nadia's leadership round, made to have ended: the Engineering Manager kit (behavioural).
 const IV = 'iv-n5z9f2cq';
@@ -104,6 +105,23 @@ describe('a question Milo asked aloud (Have Milo ask): its answer is evidence, u
     expect(recapInput(refOf(), plain, taken(), said()).lines.map((l) => l.seq)).toEqual([1, 2, 3, 4]);
     deps.said.mockRejectedValue(new Error('said store down'));
     await expect(openRecap(refOf(), WEN, ratings(3))).rejects.toThrow('said store down');
+  });
+
+  it('the said log gives only the questions (and repeats) that reached the call: a row never posted was asked of nobody', async () => {
+    const log = new MemorySaidStore();
+    setSaidStore(log);
+    try {
+      const row = (id: string, sec: number, over: Partial<SaidRecord>): SaidRecord => ({ id, interviewId: IV, callId: 'call-1', kind: 'question', source: 'suggestion',
+        questionId: null, suggestionId: null, text: slip().prompt, askedBy: 'u-wen', saidAt: at(sec), posted: true, spoken: false, ...over });
+      await log.append(row('said-1', 30, { spoken: true }));
+      await log.append(row('said-2', 35, { posted: false, text: 'Milo was not in the call for this one.' }));
+      await log.append(row('said-3', 45, { kind: 'answer', source: 'repeat' }));
+      await log.append(row('said-4', 47, { kind: 'answer', source: 'repeat', posted: false }));
+      await log.append(row('said-5', 50, { kind: 'answer', source: 'time', text: 'About 5 minutes are left in this round.' }));
+      expect(await saidInCall(IV)).toEqual([{ text: slip().prompt, saidAt: at(30) }, { text: slip().prompt, saidAt: at(45) }]);
+    } finally {
+      setSaidStore(null);
+    }
   });
 });
 

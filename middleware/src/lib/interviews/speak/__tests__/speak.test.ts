@@ -6,9 +6,9 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { SqlExec } from '../../store-sql.js';
 import {
   MILO_CAN_DO, MemorySaidStore, NO_QUESTION_YET, answerCandidate, candidateLine, candidateRequestOf, lastQuestion, logCandidateLine,
-  noteHeldSpoken, roundStartMs, sayApproved, setSaidStore, setSpeakDeps, timeLeftLine, type SaidRecord, type SaidStore,
+  noteHeldSaid, roundStartMs, sayApproved, setSaidStore, setSpeakDeps, timeLeftLine, type SaidRecord, type SaidStore,
 } from '../index.js';
-import { ERASE_SAID_SQL, INSERT_SAID_SQL, LIST_SAID_SQL, MARK_SPOKEN_SQL, SqlSaidStore } from '../store-sql.js';
+import { ERASE_SAID_SQL, INSERT_SAID_SQL, LIST_SAID_SQL, MARK_POSTED_SQL, MARK_SPOKEN_SQL, SqlSaidStore } from '../store-sql.js';
 
 const IV = { id: 'iv-1', callId: 'call-1', minutes: 45, scheduledAt: null as string | null };
 const NOW = Date.parse('2026-11-17T15:00:00.000Z');
@@ -24,6 +24,7 @@ beforeEach(() => {
   const logged: SaidStore = {
     list: (id) => store.list(id),
     append: async (row) => { order.push(`log:${row.kind}`); return store.append(row); },
+    markPosted: async (id, rowId) => { order.push('posted'); return store.markPosted(id, rowId); },
     markSpoken: async (id, rowId) => { order.push('spoken'); return store.markSpoken(id, rowId); },
     erase: (ids) => store.erase(ids),
   };
@@ -41,19 +42,20 @@ afterAll(() => { setSpeakDeps(null); setSaidStore(null); });
 describe('approved words: logged, then posted, then said', () => {
   it('the log row and the chat post come before the session is asked; spoken is marked only when relayed', async () => {
     const out = await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Design a URL shortener.', askedBy: 'u-wen', questionId: 'q-1' });
-    expect(order).toEqual(['log:question', 'post:question', 'say', 'spoken']);
+    expect(order).toEqual(['log:question', 'post:question', 'posted', 'say', 'spoken']);
     expect(out.said).toBe('spoken');
-    expect((await store.list('iv-1'))[0]).toMatchObject({ kind: 'question', source: 'kit', questionId: 'q-1', text: 'Design a URL shortener.', spoken: true });
+    expect((await store.list('iv-1'))[0]).toMatchObject({ kind: 'question', source: 'kit', questionId: 'q-1', text: 'Design a URL shortener.', posted: true, spoken: true });
   });
 
   it('withheld or voice off: chat only, the row stays unspoken; Milo not in the call: nothing posted, nothing said', async () => {
     sayOut = 'posted';
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('chat');
-    expect((await store.list('iv-1'))[0]!.spoken).toBe(false);
+    expect((await store.list('iv-1'))[0]).toMatchObject({ posted: true, spoken: false });
     order.length = 0;
     setSpeakDeps({ store: () => store, post: async () => false, say: async () => { order.push('say'); return { outcome: 'spoken' as const, why: null }; }, now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }) });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('none');
     expect(order).toEqual([]);
+    expect((await store.list('iv-1'))[1]).toMatchObject({ posted: false, spoken: false });
   });
 });
 
@@ -90,18 +92,19 @@ describe('the candidate\'s requests (decision 10)', () => {
   it('the button: logged as an answer, posted with the answer mark, said', async () => {
     const out = await answerCandidate(IV, 'time', 'guest:inv-1');
     expect(out).toEqual({ line: 'About 35 minutes are left in this round.', said: 'spoken' });
-    expect(order).toEqual(['log:answer', 'post:answer', 'say', 'spoken']);
+    expect(order).toEqual(['log:answer', 'post:answer', 'posted', 'say', 'spoken']);
     expect(posted).toEqual([{ text: out.line, kind: 'answer' }]);
   });
 
-  it('the spoken request: logged unspoken (the orchestrator posts and says it), then marked spoken by its words and asker', async () => {
+  it('the spoken request: logged unposted (the orchestrator posts and says it), then marked by its words and asker', async () => {
     const line = await logCandidateLine(IV, 'Milo, please give me a hint', 'guest:inv-1');
     expect(line).toBe(MILO_CAN_DO);
     expect(order).toEqual(['log:answer']);
-    await noteHeldSpoken('iv-1', MILO_CAN_DO, 'guest:other');
-    expect((await store.list('iv-1'))[0]!.spoken).toBe(false);
-    await noteHeldSpoken('iv-1', MILO_CAN_DO, 'guest:inv-1');
-    expect((await store.list('iv-1'))[0]!.spoken).toBe(true);
+    await noteHeldSaid('iv-1', MILO_CAN_DO, 'guest:other', { posted: true, spoken: true });
+    await noteHeldSaid('iv-1', MILO_CAN_DO, 'guest:inv-1', { posted: false, spoken: false });
+    expect((await store.list('iv-1'))[0]).toMatchObject({ posted: false, spoken: false });
+    await noteHeldSaid('iv-1', MILO_CAN_DO, 'guest:inv-1', { posted: true, spoken: true });
+    expect((await store.list('iv-1'))[0]).toMatchObject({ posted: true, spoken: true });
   });
 });
 
@@ -116,9 +119,10 @@ function saidTableExec(): SqlExec {
     if (sql === INSERT_SAID_SQL) {
       if (table.some((r) => r['id'] === s('id'))) throw new Error('duplicate key');
       const row = { id: s('id'), interview_id: s('interview_id'), call_id: s('call_id'), kind: s('kind'), source: s('source'), question_id: s('question_id'),
-        suggestion_id: s('suggestion_id'), text: s('text'), asked_by: s('asked_by'), said_at: s('said_at')!.replace('T', ' ').replace('Z', ''), spoken: param(params, 'spoken').booleanValue };
+        suggestion_id: s('suggestion_id'), text: s('text'), asked_by: s('asked_by'), said_at: s('said_at')!.replace('T', ' ').replace('Z', ''), posted: param(params, 'posted').booleanValue, spoken: param(params, 'spoken').booleanValue };
       table.push(row); return [{ ...row }];
     }
+    if (sql === MARK_POSTED_SQL) { const r = table.find((x) => x['interview_id'] === s('interview_id') && x['id'] === s('id')); if (!r) return []; r['posted'] = true; return [{ ...r }]; }
     if (sql === MARK_SPOKEN_SQL) { const r = table.find((x) => x['interview_id'] === s('interview_id') && x['id'] === s('id')); if (!r) return []; r['spoken'] = true; return [{ ...r }]; }
     if (sql === ERASE_SAID_SQL) { const ids = new Set(String(s('interview_ids')).split(',')); const gone = table.filter((r) => ids.has(String(r['interview_id']))); for (const g of gone) table.splice(table.indexOf(g), 1); return gone.map((g) => ({ id: g['id'] })); }
     throw new Error(`unexpected statement: ${sql.slice(0, 40)}`);
@@ -127,8 +131,8 @@ function saidTableExec(): SqlExec {
 
 describe.each([['memory', () => new MemorySaidStore()], ['sql', () => new SqlSaidStore(saidTableExec())]] as const)('the said log (%s)', (_name, make) => {
   const row = (over: Partial<SaidRecord> = {}): SaidRecord => ({ id: 'said-a', interviewId: 'iv-1', callId: 'call-1', kind: 'question', source: 'kit', questionId: 'q-1',
-    suggestionId: null, text: 'Q?', askedBy: 'u-wen', saidAt: '2026-11-17T15:00:00.000Z', spoken: false, ...over });
-  it('appends once, lists oldest first, marks spoken, erases by interview', async () => {
+    suggestionId: null, text: 'Q?', askedBy: 'u-wen', saidAt: '2026-11-17T15:00:00.000Z', posted: false, spoken: false, ...over });
+  it('appends once, lists oldest first, marks posted and spoken, erases by interview', async () => {
     const s = make();
     await s.append(row({ id: 'said-b', saidAt: '2026-11-17T15:01:00.000Z' }));
     await s.append(row());
@@ -138,6 +142,8 @@ describe.each([['memory', () => new MemorySaidStore()], ['sql', () => new SqlSai
     expect(await s.list('iv-1')).toEqual([row(), row({ id: 'said-b', saidAt: '2026-11-17T15:01:00.000Z' })]);
     expect(await s.markSpoken('iv-1', 'said-b')).toMatchObject({ id: 'said-b', spoken: true });
     expect(await s.markSpoken('iv-1', 'nope')).toBeNull();
+    expect(await s.markPosted('iv-1', 'said-a')).toMatchObject({ id: 'said-a', posted: true, spoken: false });
+    expect(await s.markPosted('iv-1', 'nope')).toBeNull();
     expect(await s.erase(['iv-1'])).toBe(2);
     expect(await s.list('iv-1')).toEqual([]);
     expect(await s.list('iv-2')).toHaveLength(1);
@@ -167,7 +173,7 @@ describe('a restart between the log row and the speech', () => {
       say: async (_c, text) => { said.push(text); return { outcome: 'spoken' as const, why: null }; },
     });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'After the restart.', askedBy: 'u-wen' })).said).toBe('spoken');
-    await noteHeldSpoken('iv-1', 'Before the restart.', 'u-wen');
+    await noteHeldSaid('iv-1', 'Before the restart.', 'u-wen', { posted: true, spoken: true });
     expect(said).toEqual(['After the restart.']);
     expect((await store.list('iv-1')).map((r) => [r.text, r.spoken])).toEqual([['Before the restart.', false], ['After the restart.', true]]);
   });

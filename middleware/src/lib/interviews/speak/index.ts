@@ -5,7 +5,7 @@
 // and one fixed sentence. Each goes the same way, in this order: a row in the said log (store.ts), the words in the call chat
 // with the approved mark (the one kind of Milo's message the candidate reads), then the call's own live session is asked to say
 // them verbatim through the meeting assistant's one gate and relay (orchestrator.ts `sayHeldText`, gate reason `approved`), and
-// the row is marked spoken only when they were relayed. No model is ever asked anything here.
+// the row is marked posted once the chat has the words, and spoken only when they were relayed. No model is ever asked anything here.
 //
 // Money (decision 18's `speech` part): the voice is the call's live session, whose minutes the listening hold already pays.
 // Speech is still an explicit part of that money: before the words are said, a small hold (SPEECH_HOLD_USD, part `speech`,
@@ -179,13 +179,13 @@ export interface SayInput {
   suggestionId?: string | null;
 }
 
-/** The said log's row for approved words, written before they are posted or said (`spoken` false). */
+/** The said log's row for approved words, written before they are posted or said (`posted` and `spoken` false). */
 export async function logSaid(interview: Pick<Interview, 'id' | 'callId'>, input: SayInput): Promise<SaidRecord> {
   const d = deps();
   return d.store().append({
     id: d.newId(), interviewId: interview.id, callId: interview.callId, kind: input.kind, source: input.source,
     questionId: input.questionId ?? null, suggestionId: input.suggestionId ?? null, text: input.text, askedBy: input.askedBy,
-    saidAt: new Date(d.now()).toISOString(), spoken: false,
+    saidAt: new Date(d.now()).toISOString(), posted: false, spoken: false,
   });
 }
 
@@ -214,8 +214,9 @@ export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, i
   if (!callId) return { said: 'none', row };
   const posted = await d.post(callId, input.text, input.kind).catch(() => false);
   if (!posted) return { said: 'none', row };
+  await d.store().markPosted(interview.id, row.id).catch(() => null);
   const aloud = await sayLogged(interview.id, row, callId);
-  return aloud.spoken ? { said: 'spoken', row: { ...row, spoken: true } } : { said: 'chat', row };
+  return { said: aloud.spoken ? 'spoken' : 'chat', row: { ...row, posted: true, spoken: aloud.spoken } };
 }
 
 /** The words for a candidate's request, from what the server holds (no model). */
@@ -241,26 +242,33 @@ export async function answerCandidate(interview: Pick<Interview, 'id' | 'callId'
 }
 
 /**
- * The spoken request's half (milo-policy.ts `answerFromHeldText`): the line, logged as an answer that is not yet spoken. The
- * orchestrator then posts it and says it, and `noteHeldSpoken` marks the row.
+ * The spoken request's half (milo-policy.ts `answerFromHeldText`): the line, logged as an answer not yet posted or spoken. The
+ * orchestrator then posts it and says it, and `noteHeldSaid` marks the row.
  */
 export async function logCandidateLine(interview: Pick<Interview, 'id' | 'callId' | 'minutes' | 'scheduledAt'>, text: string, askedBy: string): Promise<string> {
   const d = deps();
   const { text: line, source } = await candidateLine(interview, candidateRequestOf(text));
   await d.store().append({
     id: d.newId(), interviewId: interview.id, callId: interview.callId, kind: 'answer', source, questionId: null, suggestionId: null,
-    text: line, askedBy, saidAt: new Date(d.now()).toISOString(), spoken: false,
+    text: line, askedBy, saidAt: new Date(d.now()).toISOString(), posted: false, spoken: false,
   });
   return line;
 }
 
-/** The orchestrator relayed a held answer aloud: mark the latest unspoken row with those words for that asker. */
-export async function noteHeldSpoken(interviewId: string, text: string, askedBy: string): Promise<void> {
+/**
+ * The orchestrator posted (and perhaps said) a held answer: mark the latest row with those words for that asker that is not
+ * yet posted. A post that failed marks nothing, so the row stays out of the round's record.
+ */
+export async function noteHeldSaid(interviewId: string, text: string, askedBy: string, said: { posted: boolean; spoken: boolean }): Promise<void> {
+  if (!said.posted) return;
   const d = deps();
   const rows = await d.store().list(interviewId);
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const r = rows[i]!;
-    if (r.kind === 'answer' && !r.spoken && r.text === text && r.askedBy === askedBy) { await d.store().markSpoken(interviewId, r.id); return; }
+    if (r.kind !== 'answer' || r.posted || r.text !== text || r.askedBy !== askedBy) continue;
+    await d.store().markPosted(interviewId, r.id);
+    if (said.spoken) await d.store().markSpoken(interviewId, r.id);
+    return;
   }
 }
 

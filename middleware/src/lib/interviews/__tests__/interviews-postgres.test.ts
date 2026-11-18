@@ -460,7 +460,7 @@ async function seedWorld(): Promise<void> {
       await pad.append(MATEO_CODING, [{ ...interviewPadLogFixture.rows().find((r) => r.interviewId === MATEO_CODING)!, at: at(1), clientAt: at(1) }]);
       await runs.insertRun({ ...interviewRunsFixture.rows()[0]!, interviewId: KWAME_LIVE, runId: 'run-pg-rls', status: 'queued', startedAt: null, endedAt: null, result: null, events: [] });
       await said.append({ id: 'said-pg-rls', interviewId: KWAME_LIVE, callId: null, kind: 'question', source: 'kit', questionId: 'q-1', suggestionId: null,
-        text: 'Walk me through it.', askedBy: 'u-hugo', saidAt: at(1), spoken: false });
+        text: 'Walk me through it.', askedBy: 'u-hugo', saidAt: at(1), posted: false, spoken: false });
       await invites.issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'c'.repeat(64), issuedBy: 'u-greta', issuedAt: at(1), expiresAt: at(60) });
       await deletions.insert({ id: 'del-pg-rls', candidateId: 'cand-rx6tcaqj', interviewIds: [MATEO_CODING], reason: 'request', requestedAt: T0, requestedBy: 'u-greta',
         dueBy: at(30 * 24 * 60), doneAt: null, removed: [], left: [], attempts: 0 });
@@ -487,9 +487,9 @@ async function seedWorld(): Promise<void> {
   });
 
   describe('O-226 the said log (I3.5, UI r2 SPEAK)', () => {
-    it('appends once, lists oldest first, marks spoken once, and erases by interview', async () => {
+    it('appends once, lists oldest first, marks posted and spoken once, and erases by interview', async () => {
       const row = (id: string, saidAt: string) => ({ id, interviewId: KWAME_LIVE, callId: null, kind: 'question' as const, source: 'kit' as const, questionId: 'q-1',
-        suggestionId: null, text: 'Walk me through it.', askedBy: 'u-hugo', saidAt, spoken: false });
+        suggestionId: null, text: 'Walk me through it.', askedBy: 'u-hugo', saidAt, posted: false, spoken: false });
       await said.append(row('said-pg-2', at(2)));
       await said.append(row('said-pg-1', at(1)));
       await expect(said.append(row('said-pg-1', at(3)))).rejects.toThrow();
@@ -497,6 +497,8 @@ async function seedWorld(): Promise<void> {
       const [m1, m2] = await Promise.all([said.markSpoken(KWAME_LIVE, 'said-pg-1'), said.markSpoken(KWAME_LIVE, 'said-pg-1')]);
       expect(m1?.spoken && m2?.spoken).toBe(true);
       expect(await said.markSpoken(KWAME_LIVE, 'said-none')).toBeNull();
+      expect(await said.markPosted(KWAME_LIVE, 'said-pg-2')).toMatchObject({ id: 'said-pg-2', posted: true, spoken: false });
+      expect((await said.list(KWAME_LIVE)).map((r) => r.posted)).toEqual([false, true]);
       expect(await said.erase([KWAME_LIVE])).toBe(2);
     });
   });

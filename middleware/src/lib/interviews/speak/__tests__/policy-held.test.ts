@@ -39,6 +39,9 @@ it('a live interview: the guest\'s requests are answered from held text and logg
   expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, what is the answer?' })).toBe(MILO_CAN_DO);
   expect((await said.list(IV)).map((r) => r.source).sort()).toEqual(['refusal', 'repeat', 'time']);
   expect(await P.answerFromHeldText!(CALL, { askedBy: 'guest:not-mine', text: 'Milo, repeat the question' })).toBe(MILO_CAN_DO);
-  await P.heldTextSaid!(CALL, { askedBy: guestId, text: MILO_CAN_DO, spoken: true });
-  expect((await said.list(IV)).find((r) => r.source === 'refusal')!.spoken).toBe(true);
+  // A post that failed marks nothing; a posted and spoken one marks both.
+  await P.heldTextSaid!(CALL, { askedBy: guestId, text: MILO_CAN_DO, posted: false, spoken: false });
+  expect((await said.list(IV)).find((r) => r.source === 'refusal')).toMatchObject({ posted: false, spoken: false });
+  await P.heldTextSaid!(CALL, { askedBy: guestId, text: MILO_CAN_DO, posted: true, spoken: true });
+  expect((await said.list(IV)).find((r) => r.source === 'refusal')).toMatchObject({ posted: true, spoken: true });
 });

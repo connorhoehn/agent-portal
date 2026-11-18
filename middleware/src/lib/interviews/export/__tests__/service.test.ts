@@ -95,11 +95,11 @@ describe('the export of a seeded interview (row I6.2)', () => {
     setSaidStore(new MemorySaidStore());
     await saidStore().append({
       id: 'said-x', interviewId: MATEO_CODING, callId: null, kind: 'question', source: 'kit', questionId: 'q-limiter', suggestionId: null,
-      text: SAID_TEXT, askedBy: 'u-hugo', saidAt: '2026-11-14T14:12:00.000Z', spoken: true,
+      text: SAID_TEXT, askedBy: 'u-hugo', saidAt: '2026-11-14T14:12:00.000Z', posted: true, spoken: true,
     });
     await saidStore().append({
       id: 'said-y', interviewId: MATEO_CODING, callId: null, kind: 'answer', source: 'time', questionId: null, suggestionId: null,
-      text: 'About 20 minutes are left.', askedBy: 'guest:inv-abc123', saidAt: '2026-11-14T14:20:00.000Z', spoken: false,
+      text: 'About 20 minutes are left.', askedBy: 'guest:inv-abc123', saidAt: '2026-11-14T14:20:00.000Z', posted: true, spoken: false,
     });
     const out = await doc(MATEO_CODING);
     expect(Object.keys(out.sections).sort()).toEqual(['milo-for-you', 'notices', 'panel-notices', 'recap', 'said-aloud', 'suggestions']);

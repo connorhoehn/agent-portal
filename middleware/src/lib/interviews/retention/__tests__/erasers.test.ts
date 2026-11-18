@@ -116,7 +116,7 @@ describe('the said log\'s eraser (row I3.5; decision 17)', () => {
   const DAY = 86_400_000;
   const saidRow = (interviewId: string, id: string) => ({
     id, interviewId, callId: null, kind: 'question' as const, source: 'kit' as const, questionId: 'q-1', suggestionId: null,
-    text: 'Walk me through the limiter.', askedBy: 'u-lead', saidAt: '2026-01-10T14:10:00.000Z', spoken: true,
+    text: 'Walk me through the limiter.', askedBy: 'u-lead', saidAt: '2026-01-10T14:10:00.000Z', posted: true, spoken: true,
   });
   const iv = (id: string, state: string) => ({
     id, applicationId: 'app-x', roundId: 'rd', type: 'technical', leadId: 'u-lead', panelIds: [], scheduledAt: '2026-01-10T14:00:00.000Z', minutes: 60,
