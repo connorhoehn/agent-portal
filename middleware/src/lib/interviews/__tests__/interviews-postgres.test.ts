@@ -137,6 +137,7 @@ import { setSuggestionStore } from '../coach/store.js';
 import { SqlCoachLogStore } from '../milo-notes/store-sql.js';
 import { SqlRecapStore } from '../recap/store-sql.js';
 import { SqlSaidStore } from '../speak/store-sql.js';
+import { SqlMiloSettingsStore } from '../milo-settings.js';
 import { SqlPadLogStore } from '../pad/log/store-sql.js';
 import { SqlRunStore } from '../runs/store-sql.js';
 import { SqlDeletionStore } from '../retention/store-sql.js';
@@ -162,6 +163,7 @@ const suggestions = new SqlSuggestionStore(pgExec);
 const coachLog = new SqlCoachLogStore(pgExec);
 const recaps = new SqlRecapStore(pgExec);
 const said = new SqlSaidStore(pgExec);
+const miloSettings = new SqlMiloSettingsStore(pgExec);
 const pad = new SqlPadLogStore(pgExec);
 const runs = new SqlRunStore(pgExec);
 const deletions = new SqlDeletionStore(pgExec);
@@ -462,6 +464,10 @@ async function seedWorld(): Promise<void> {
       await said.append({ id: 'said-pg-rls', interviewId: KWAME_LIVE, callId: null, kind: 'question', source: 'kit', questionId: 'q-1', suggestionId: null,
         text: 'Walk me through it.', askedBy: 'u-hugo', saidAt: at(1), posted: false, spoken: false });
       await invites.issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'c'.repeat(64), issuedBy: 'u-greta', issuedAt: at(1), expiresAt: at(60) });
+      // The lead's pad-help switch: set, read back, the last change wins.
+      await miloSettings.setCandidateMayAsk(KWAME_LIVE, true, 'u-hugo', at(1));
+      expect(await miloSettings.setCandidateMayAsk(KWAME_LIVE, false, 'u-hugo', at(2))).toMatchObject({ candidateMayAsk: false, updatedBy: 'u-hugo' });
+      expect((await miloSettings.get(KWAME_LIVE)).candidateMayAsk).toBe(false);
       await deletions.insert({ id: 'del-pg-rls', candidateId: 'cand-rx6tcaqj', interviewIds: [MATEO_CODING], reason: 'request', requestedAt: T0, requestedBy: 'u-greta',
         dueBy: at(30 * 24 * 60), doneAt: null, removed: [], left: [], attempts: 0 });
       const empty: string[] = [];
