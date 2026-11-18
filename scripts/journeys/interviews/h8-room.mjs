@@ -1,5 +1,5 @@
 // Lane H8's helpers for the pieces that need both sides IN the call (I4.2, I4.3, I4.4, I3.5, I3.8). Lowercase, so the
-// walk runner does not run it as a piece (h4-kit.mjs is the precedent). It is a harness gap until the lead adds these to
+// walk runner does not run it as a piece (h4-kit.mjs is the precedent). The call stand-in itself is lib.mjs standInCall; the rest stays here until the lead adds these to
 // lib.mjs: the mock world has no platform-api, so a call starts only with the SFU stood in, the way
 // scripts/journeys/meeting-assistant.mjs does it (the realtime token's platformApiUrl points at a stand-in host that every
 // request to answers locally; nothing leaves the machine, nothing is recorded).
@@ -13,9 +13,11 @@
 //   callIdOf(page-or-calls)                       the call id the page talked to (/api/calls/:id/…)
 //   who(e)                                        a step error as one line
 
+import { standInCall, PREJOIN_KEYS } from './lib.mjs';
+
 export const STAND_IN_SFU = 'http://interviews-h8.test';
-const PANEL_KEY = 'orgiq.call-prejoin.v1';
-const GUEST_KEY = 'interviews.guest-prejoin.v1';
+const PANEL_KEY = PREJOIN_KEYS.panel;
+const GUEST_KEY = PREJOIN_KEYS.guest;
 
 export const why = (e) => {
   const lines = (e instanceof Error ? e.message : String(e)).split('\n').map((l) => l.trim()).filter(Boolean);
@@ -30,20 +32,8 @@ export const until = async (fn, ms = 15_000, step = 400) => {
   return v;
 };
 
-/** Mic and camera off at the pre-join, the token's SFU pointed at the stand-in, and the stand-in answering every call. */
-async function standIn(context, tokenRoute, key, label) {
-  await context.addInitScript(([k]) => { try { localStorage.setItem(k, JSON.stringify({ micOn: false, cameraOn: false, remember: true })); } catch { /* storage off */ } }, [key]);
-  await context.route(tokenRoute, async (route) => {
-    const response = await route.fetch();
-    let json = {};
-    try { json = await response.json(); } catch { /* not JSON */ }
-    await route.fulfill({ response, json: { ...json, platformApiUrl: STAND_IN_SFU, videoUrl: null } });
-  });
-  await context.route(`${STAND_IN_SFU}/**`, (route) => {
-    const p = new URL(route.request().url()).pathname;
-    return route.fulfill({ json: p.endsWith('/join') ? { participantId: `participant-${label}`, token: null } : p.endsWith('/end') ? { ok: true } : { sessionId: 'h8-signalling-only', recording: { enabled: false, reason: 'default' } } });
-  });
-}
+/** Mic and camera off at the pre-join, the token's SFU pointed at the stand-in, and the stand-in answering every call (lib.mjs standInCall). */
+const standIn = (context, tokenRoute, key, label) => standInCall(context, { sfu: STAND_IN_SFU, tokenRoute, prejoinKey: key, label, sessionId: 'h8-signalling-only' });
 
 /** The call ids a page has talked to, newest last. */
 function watchCalls(page) {

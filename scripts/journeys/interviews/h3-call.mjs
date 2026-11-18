@@ -8,23 +8,12 @@
 // speaks, records or calls a model: the coach, Milo's notes and the plan run on their scripted stand-ins.
 
 export const STAND_IN_SFU = 'http://interviews-h3.test';
-const PRE_JOIN_KEY = 'orgiq.call-prejoin.v1';
+import { standInCall, PREJOIN_KEYS } from './lib.mjs';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Stub a context's call media (before its first page): mic and camera off, the SFU a stand-in that answers join/end. */
-export async function stubCallMedia(context, label) {
-  await context.addInitScript(([key]) => localStorage.setItem(key, JSON.stringify({ micOn: false, cameraOn: false, remember: true })), [PRE_JOIN_KEY]);
-  await context.route('**/realtime-token', async (route) => {
-    const response = await route.fetch();
-    let json = {};
-    try { json = await response.json(); } catch { /* not JSON: pass it through */ return route.fulfill({ response }); }
-    await route.fulfill({ response, json: { ...json, platformApiUrl: STAND_IN_SFU, videoUrl: null } });
-  });
-  await context.route(`${STAND_IN_SFU}/**`, (route) => {
-    const p = new URL(route.request().url()).pathname;
-    return route.fulfill({ json: p.endsWith('/join') ? { participantId: `participant-${label}`, token: null } : p.endsWith('/end') ? { ok: true } : { sessionId: 'interviews-h3-signalling-only', recording: { enabled: false, reason: 'default' } } });
-  });
-}
+/** Stub a context's call media (before its first page): mic and camera off, the SFU a stand-in that answers join/end (lib.mjs standInCall). */
+export const stubCallMedia = (context, label) => standInCall(context, { sfu: STAND_IN_SFU, label, tokenRoute: '**/realtime-token', prejoinKey: PREJOIN_KEYS.panel, sessionId: 'interviews-h3-signalling-only' });
 
 /** Watch a page for the call id it talks to (its /api/calls/<id>/… requests). → () => the id seen, or null. */
 export function watchCallId(page) {

@@ -17,6 +17,7 @@
 //   clock.set(ms) / clock.advance(ms) / clock.sweep('soon' | 'retention') / clock.reset() / clock.minutesFromNow(n)   the mock clock
 //   bells(page, /re/)          the lines in a person's bell that match
 //   refusals(tablePath)        a judge table of "this route answers 404 to these principals" (see matrix below)
+//   standInCall(context, opts) a call's media stood in (module export, also on the context): see its comment
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,6 +35,33 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
 export { SEED, seedPath, parseRefusalTable };
+
+// ── the call's media, stood in ───────────────────────────────────────────────────────────────────────────────
+// The mock world has no platform-api, so a call starts only with its SFU stood in, the way
+// scripts/journeys/meeting-assistant.mjs does it ("Two people share one call without media"): the realtime token
+// advertises a stand-in host, and every request to that host is answered here (join → a participant, end → ok,
+// anything else → a signalling-only session with no recording). Mic and camera are off at the pre-join. Seats, the
+// call chat, the gateway, the pad and Milo's record are real; nothing leaves the machine and nothing is recorded.
+/** The pre-join keys the pages remember mic and camera under: staff (the work call) and the candidate's. */
+export const PREJOIN_KEYS = Object.freeze({ panel: 'orgiq.call-prejoin.v1', guest: 'interviews.guest-prejoin.v1' });
+/**
+ * Stand a context's call media in, before its first page. `sfu` is the stand-in host (an unresolvable http://….test);
+ * `tokenRoute` the realtime-token route the page reads (staff: any …/realtime-token; the candidate:
+ * '**\/api/interview-invite/realtime-token'); `label` names the participant.
+ */
+export async function standInCall(context, { sfu, label, tokenRoute = '**/realtime-token', prejoinKey = PREJOIN_KEYS.panel, sessionId = 'signalling-only' }) {
+  await context.addInitScript(([k]) => { try { localStorage.setItem(k, JSON.stringify({ micOn: false, cameraOn: false, remember: true })); } catch { /* storage off */ } }, [prejoinKey]);
+  await context.route(tokenRoute, async (route) => {
+    const response = await route.fetch();
+    let json;
+    try { json = await response.json(); } catch { return route.fulfill({ response }); }  // not JSON: pass it through
+    await route.fulfill({ response, json: { ...json, platformApiUrl: sfu, videoUrl: null } });
+  });
+  await context.route(`${sfu}/**`, (route) => {
+    const p = new URL(route.request().url()).pathname;
+    return route.fulfill({ json: p.endsWith('/join') ? { participantId: `participant-${label}`, token: null } : p.endsWith('/end') ? { ok: true } : { sessionId, recording: { enabled: false, reason: 'default' } } });
+  });
+}
 
 export async function createContext() {
   const portal = process.env.PORTAL_URL;
@@ -356,6 +384,6 @@ export async function createContext() {
     SEED, api, guestApi, shootPage, clock,
     mintInvite, revokeInvite, openGuest, guestSession, guestConsents, answerConsents, toWaiting, ALL_YES,
     readInterview, waiting, admit, startInterview, endInterview, setTime,
-    bells, refusals,
+    bells, refusals, standInCall,
   };
 }
