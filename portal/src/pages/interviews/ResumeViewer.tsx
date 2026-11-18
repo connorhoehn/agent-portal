@@ -15,7 +15,8 @@ import { resumeFilePath, resumePath, type ResumeRecord } from '../../lib/intervi
 export default function ResumeViewer({ candidateId, version = 0 }: { candidateId: string; version?: number }) {
   const { data, error, isLoading } = useFetch<{ resume: ResumeRecord }>(candidateId ? `${resumePath(candidateId)}?v=${version}` : null);
   const [failedId, setFailedId] = useState<string | null>(null);
-  const resume = data?.resume;
+  // A not-found answer after a removal wins over the file read before it (useFetch keeps its last data on an error).
+  const resume = error && isNotFoundError(error) ? undefined : data?.resume;
 
   if (!resume) {
     if (isLoading && !error) return <T size="sm" tone="secondary" data-testid="interviews-resume-loading">Loading the résumé…</T>;

@@ -328,11 +328,12 @@ function RecordingsSection({ rows }: { rows: RecordedRound[] }) {
 
 /** The résumé's state, held by the page so its removal prompt (like the deletion's) stays in the dock whichever tab is open. */
 function useResumeState(candidateId: string, name: string, manages: boolean) {
-  const { data, refresh } = useFetch<{ resume: ResumeRecord }>(manages && candidateId ? resumePath(candidateId) : null);
+  const { data, error, refresh } = useFetch<{ resume: ResumeRecord }>(manages && candidateId ? resumePath(candidateId) : null);
   const [version, setVersion] = useState(0);
   const [asked, setAsked] = useState(0);
   const [removing, setRemoving] = useState(false);
-  const resume = data?.resume ?? null;
+  // After a removal the reread answers 404 while useFetch keeps the file it read before; the not-found answer wins.
+  const resume = error && isNotFoundError(error) ? null : data?.resume ?? null;
   const reread = () => { setVersion((v) => v + 1); refresh(); };
 
   const prompts = useMemo<ComposerPrompt[]>(() => {

@@ -82,15 +82,11 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await deck.getByRole('button', { name: /Remove/ }).last().click();
     let gone = (await resumeOf(greta, chloe)).status;
     for (let i = 0; i < 20 && gone !== 404; i += 1) { await page.waitForTimeout(500); gone = (await resumeOf(greta, chloe)).status; }
-    const updated = await page.getByTestId('interviews-resume-none').waitFor({ timeout: 8_000 }).then(() => true, () => false);
-    if (!updated) {
-      const stale = (await textOf(page, 'interviews-profile-resume-section')).slice(0, 100);
-      record('I1.6c', false, `FINDING: Remove took the file out on the server (${gone}) but the page keeps showing the removed résumé until it is reloaded ("${stale}"); the prompt said the résumé was removed`);
-      await openTab(page, chloe);
-    } else {
+    await page.getByTestId('interviews-resume-none').waitFor({ timeout: 8_000 });
     const line = await textOf(page, 'interviews-resume-none');
-    record('I1.6c', kept === 200 && gone === 404 && /No résumé/.test(line), `Keep it left the file (${kept}); Remove took it out (${gone}) and the page says "${line}"`);
-    }
+    const removeLeft = await page.getByTestId('interviews-resume-remove').count();
+    record('I1.6c', kept === 200 && gone === 404 && /No résumé/.test(line) && removeLeft === 0,
+      `Keep it left the file (${kept}); Remove took it out (${gone}) and the page says "${line}" without a reload${removeLeft ? ', but Remove is still offered' : ''}`);
   } catch (e) { record('I1.6c', false, `remove: ${e.message.split('\n')[0]}`); }
 
   // ── I1.6d ──
