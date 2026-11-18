@@ -37,7 +37,7 @@ import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '.
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import {
-  MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents,
+  MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
   suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
@@ -106,6 +106,14 @@ function InterviewRoom({ id }: { id: string }) {
   const consents = useFetch<{ answered: boolean; off: ConsentPart[] }>(readsConsents(room?.seat ?? null, open) ? consentsPath(id) : null);
   const refreshConsents = consents.refresh;
   useEffect(() => { if (admission && admission.state !== 'not-knocked') refreshConsents(); }, [admission?.state, refreshConsents]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Until the candidate has answered, read again every few seconds (bounded like the waiting poll), so Invite unblocks by itself.
+  const consentsPolling = pollsConsents(room?.seat ?? null, open, consents.data);
+  useEffect(() => {
+    if (!consentsPolling) return;
+    let reads = 0;
+    const timer = window.setInterval(() => { if (reads++ >= WAITING_MAX_READS) { window.clearInterval(timer); return; } refreshConsents(); }, WAITING_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [consentsPolling, refreshConsents]);
   const consent = consents.error ? null : consentChip(consents.data);
   const miloBlock = consents.error ? null : miloInviteBlock(consents.data);
 

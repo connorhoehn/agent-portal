@@ -18,7 +18,7 @@
 //   I3.4h  reads stop at the end: no suggestion read after End; the transcript and notes polls stop after their three misses
 //   I3.4i  the Milo-off lines on the lead's bar in place of Invite: "Milo waits for answers" with no answers, "Milo is off" with
 //          the transcript declined (after a reload); the panel member's bar carries the consent line ("No transcript or Milo") and no prompt
-//   I3.4j  the lead's open bar takes the candidate's answers without a reload (today it does not: a finding)
+//   I3.4j  the lead's open bar takes the candidate's answers without a reload (the room reads them again until they exist)
 import { liveRoom, inject, sleep, chatOf, guestReads, guestChatText, words, setCaps, guestIdentity, guestJoinCall, candidateAnswers, stubCallMedia, joinRoomCall } from './h3-call.mjs';
 
 export default async function run(ctx) {
@@ -218,7 +218,7 @@ export default async function run(ctx) {
       await candidateAnswers(ctx, recruiter, aiko, { recording: true, transcription: false, milo: false });
       const end = Date.now() + 45_000;
       while (Date.now() < end) { liveLine = (await block.first().innerText({ timeout: 1000 }).catch(() => 'none')).trim(); if (liveLine === 'Milo is off') break; await sleep(1000); }
-      return { ok: liveLine === 'Milo is off', detail: `no answers: "${waits}"; the lead's open bar 45 s after the candidate declined the transcript: "${liveLine}" (FINDING when it still waits: the room reads the answers once, on load)` };
+      return { ok: liveLine === 'Milo is off', detail: `no answers: "${waits}"; the lead's open bar 45 s after the candidate declined the transcript: "${liveLine}"` };
     } finally { for (const c of [lead, recruiter]) await c.close().catch(() => undefined); }
   });
 

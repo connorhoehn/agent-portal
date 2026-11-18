@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
-  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion,
+  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, pollsConsents,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
 
@@ -193,4 +193,13 @@ test('I3.4b: Esc on a showing suggestion skips it once on the server, so the rea
   assert.equal(escSkipsSuggestion(true, 'sg-1', 'sg-1'), null); // sent already
   assert.equal(escSkipsSuggestion(false, 'sg-1', null), null); // the deck is open
   assert.equal(escSkipsSuggestion(true, null, null), null); // Esc with no suggestion (the knock, the End question)
+});
+
+test('I3.4j: the open room reads the candidate\'s answers again until they exist, then stops; nobody outside the room reads them', () => {
+  assert.equal(pollsConsents('lead', true, undefined), true); // the first read has not come back
+  assert.equal(pollsConsents('lead', true, { answered: false }), true);
+  assert.equal(pollsConsents('panel', true, { answered: false }), true);
+  assert.equal(pollsConsents('lead', true, { answered: true }), false);
+  assert.equal(pollsConsents(null, true, { answered: false }), false);
+  assert.equal(pollsConsents('lead', false, { answered: false }), false);
 });

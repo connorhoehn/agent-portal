@@ -263,6 +263,12 @@ export const pausedLine = (seat: 'lead' | 'panel' | null, paused: 'budget' | nul
 
 /** The consents line is for any seat on the interview (decision 5). */
 export const readsConsents = (seat: 'lead' | 'panel' | null, open: boolean): boolean => seat !== null && open;
+/**
+ * The open room reads the candidate's answers again (every WAITING_POLL_MS, bounded by the page) until they exist, so the lead's
+ * bar and Invite follow the candidate's answers without a reload (finding I3.4j). Once answered they do not change in the room.
+ */
+export const pollsConsents = (seat: 'lead' | 'panel' | null, open: boolean, consents: { answered: boolean } | null | undefined): boolean =>
+  readsConsents(seat, open) && consents?.answered !== true;
 
 // ── E5: Milo for you and the live transcript (MILO-FOR-YOU; rows I3.6, I3.7; decisions 4, 6, 20, 21) ──
 // All three live in the room's one right pane. The panel (every seat) reads the notes and the transcript; only the
