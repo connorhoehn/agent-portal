@@ -161,7 +161,7 @@ describe('POST /interviews/:id/say beyond the happy path (O-221)', () => {
     setSpeakDeps({
       store: () => said,
       post: async (_c, text) => { posts.push(text); return true; },
-      say: async (_c, text) => { const out = await voice(text); if (out === 'spoken') spoken.push(text); return out; },
+      say: async (_c, text) => { const out = await voice(text); if (out === 'spoken') spoken.push(text); return { outcome: out, why: null }; },
       callOf: async () => 'call-1',
       now: () => now,
     });

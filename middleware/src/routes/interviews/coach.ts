@@ -55,6 +55,9 @@ coachRouter.post('/interviews/:id/suggestion/:suggestionId/answer', asyncHandler
   if (out.kind === 'not-found') throw new NotFoundError(NO_SUGGESTION);
   if (out.kind === 'answered') { res.status(409).json({ error: ANSWERED }); return; }
   if (out.kind === 'not-live') { res.status(409).json({ error: NOT_LIVE }); return; }
-  // Row I3.5: after "Have Milo ask", whether Milo said it aloud (absent when Milo is not in the call); the lead's one sentence when not.
-  res.json({ suggestion: null, ...(out.said ? { said: out.said, ...(out.said === 'chat' ? { line: NOT_SAID_ALOUD } : {}) } : {}) });
+  // Row I3.5: after "Have Milo ask", whether Milo said it aloud, posted it in the call chat only, or neither; `why` when not aloud
+  // (speak/index.ts NotAloudWhy), and the lead's one sentence when it is in the chat.
+  res.json({ suggestion: null, ...(out.said ? {
+    said: out.said, ...(out.why ? { why: out.why } : {}), ...(out.said === 'chat' ? { line: NOT_SAID_ALOUD } : {}),
+  } : {}) });
 }));

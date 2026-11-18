@@ -46,7 +46,7 @@ import {
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
   ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
-  queuePadQuestion, sayQuestion, type MiloSaid, miloInviteBlock,
+  queuePadQuestion, sayQuestion, type MiloAsked, type MiloAskWhy, type MiloSaid, miloInviteBlock,
   NO_SEAT_NOT_FOUND,
 } from '../../lib/interviewsRoom';
 
@@ -141,11 +141,11 @@ function InterviewRoom({ id }: { id: string }) {
       setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (t) => window.clearTimeout(t as number | undefined),
     });
   }, [asking, id, roundMinutes]);
-  const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloSaid }> => {
+  const answerAsk = useCallback(async (suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloAsked; why?: MiloAskWhy }> => {
     const out = await answerSuggestion(id, suggestionId, answer);
     if (!out.ok && !out.gone) return { error: out.error };
     setSuggestion((s) => (s?.id === suggestionId ? null : s));
-    return out.ok && out.said ? { said: out.said } : {};
+    return out.ok && out.said ? { said: out.said, ...(out.why ? { why: out.why } : {}) } : {};
   }, [id]);
 
   const leave = host?.call.leave;

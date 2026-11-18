@@ -328,7 +328,7 @@ describe('POST /interviews/:id/say (I3.5)', () => {
     setSpeakDeps({
       store: () => said,
       post: async (_c, text) => { steps.push(`post:${text.slice(0, 12)}`); return inCall; },
-      say: async () => { steps.push('say'); return voice; },
+      say: async () => { steps.push('say'); return { outcome: voice, why: null }; },
       now: () => now,
     });
     interviewsFixture.rows().find((i) => i.id === IV)!.callId = 'call-1';

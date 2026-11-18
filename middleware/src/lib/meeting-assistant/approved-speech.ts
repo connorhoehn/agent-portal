@@ -128,8 +128,11 @@ export function sayBoundMs(text: string): number {
 /** What became of an approved utterance: relayed (`spoken`), or in chat only (`posted`); `no-call` when Milo has no run in the call. */
 export type SayOutcome = 'spoken' | 'posted' | 'no-call';
 
-/** Why an approved utterance was not relayed: codes only, for the trace. */
+/** Why an approved utterance was not relayed: codes only, for the trace and for the caller's receipt. */
 export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'busy' | 'refused' | 'timeout' | 'not-quiet' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
+
+/** An approved utterance's outcome with why it was not relayed (null when it was, or when Milo has no run in the call). */
+export interface SayResult { outcome: SayOutcome; why: SayWithheldWhy | null }
 
 /** The one plain sentence the lead reads when the words could not be said aloud. */
 export const NOT_SAID_ALOUD = 'Milo could not say it aloud. The question is in the call chat.';

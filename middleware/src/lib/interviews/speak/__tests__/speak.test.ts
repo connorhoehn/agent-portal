@@ -30,7 +30,7 @@ beforeEach(() => {
   setSpeakDeps({
     store: () => logged,
     post: async (_c, text, kind) => { order.push(`post:${kind}`); posted.push({ text, kind }); return true; },
-    say: async () => { order.push('say'); return sayOut; },
+    say: async () => { order.push('say'); return { outcome: sayOut, why: null }; },
     miloJoinedAt: async () => NOW - 10 * 60_000,
     now: () => NOW,
     newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
@@ -51,7 +51,7 @@ describe('approved words: logged, then posted, then said', () => {
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('chat');
     expect((await store.list('iv-1'))[0]!.spoken).toBe(false);
     order.length = 0;
-    setSpeakDeps({ store: () => store, post: async () => false, say: async () => { order.push('say'); return 'spoken'; }, now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }) });
+    setSpeakDeps({ store: () => store, post: async () => false, say: async () => { order.push('say'); return { outcome: 'spoken' as const, why: null }; }, now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }) });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('none');
     expect(order).toEqual([]);
   });
@@ -164,7 +164,7 @@ describe('a restart between the log row and the speech', () => {
     const said: string[] = [];
     setSpeakDeps({
       store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
-      say: async (_c, text) => { said.push(text); return 'spoken'; },
+      say: async (_c, text) => { said.push(text); return { outcome: 'spoken' as const, why: null }; },
     });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'After the restart.', askedBy: 'u-wen' })).said).toBe('spoken');
     await noteHeldSpoken('iv-1', 'Before the restart.', 'u-wen');

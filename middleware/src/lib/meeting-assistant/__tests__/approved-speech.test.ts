@@ -254,10 +254,10 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
       await startCall('orgiq:saytest:r5c');
       const s = fake();
       s.busy = true;
-      const pending = runtime.sayHeldText(CALL, QUESTION, ALICE);
+      const pending = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
       await flush();
       jest.advanceTimersByTime(SAY_QUIET_WAIT_MS + 1);
-      expect(await pending).toBe('posted');
+      expect(await pending).toEqual({ outcome: 'posted', why: 'not-quiet' });
       expect(s.cancelled).toEqual([s.asked[0]!.id]);
       expect(voiceTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ ev: 'voice.approved', decision: 'withheld', why: 'not-quiet' })]));
       expect(sent).toEqual([]);
@@ -285,13 +285,14 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
     const s = fake();
     const first = runtime.sayHeldText(CALL, QUESTION, ALICE);
     await flush();
-    expect(await runtime.sayHeldText(CALL, 'Another question?', ALICE)).toBe('posted');
+    expect(await runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE)).toEqual({ outcome: 'posted', why: 'busy' });
     expect(s.asked).toHaveLength(1);
     runtime.setVoice(CALL, false);
     expect(await first).toBe('posted');
-    expect(await runtime.sayHeldText(CALL, QUESTION, ALICE)).toBe('posted');
+    // The caller's receipt reads why (interviews' "Have Milo ask"): the voice turned off, here before and during the say.
+    expect(await runtime.sayHeldTextWhy(CALL, QUESTION, ALICE)).toEqual({ outcome: 'posted', why: 'voice-off' });
     expect(s.asked).toHaveLength(1);
-    expect(await runtime.sayHeldText('no-such-call', QUESTION, ALICE)).toBe('no-call');
+    expect(await runtime.sayHeldTextWhy('no-such-call', QUESTION, ALICE)).toEqual({ outcome: 'no-call', why: null });
   });
 });
 

@@ -125,7 +125,7 @@ test('a panel member never sees a paused line; the lead sees it only for the bud
   assert.equal(pausedLine('lead', null), null);
   assert.equal(pausedLine('lead', 'model'), SUGGESTIONS_MODEL_PAUSED_LINE);
   assert.equal(pausedLine('panel', 'model'), null);
-  assert.equal(SUGGESTION_RECEIPTS['milo-ask'], 'Sent to the call chat');
+  assert.equal('milo-ask' in SUGGESTION_RECEIPTS, false, 'Have Milo ask has no fixed receipt: it says what the server did (miloAskReceipt)');
   assert.equal(readsConsents('panel', true), true);
   assert.equal(readsConsents('lead', false), false);
   assert.equal(readsConsents(null, true), false);

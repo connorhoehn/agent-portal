@@ -49,7 +49,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
+import { saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -1142,16 +1142,21 @@ export class AssistantRuntime {
    * utterance is outstanding, or it was withheld; `no-call` when Milo has no run in this call. Never throws.
    */
   async sayHeldText(callId: string, text: string, by: string): Promise<SayOutcome> {
+    return (await this.sayHeldTextWhy(callId, text, by)).outcome;
+  }
+
+  /** `sayHeldText` with why the words were not relayed, for a caller that tells the asker (interviews' "Have Milo ask" receipt). */
+  async sayHeldTextWhy(callId: string, text: string, by: string): Promise<SayResult> {
     void by; // who asked is the caller's log row; the trace carries codes only
     const run = this.runs.get(callId);
-    if (!run || run.finished) return 'no-call';
+    if (!run || run.finished) return { outcome: 'no-call', why: null };
     const session = run.session;
     const words = text.trim().slice(0, 1500);
     const early: SayWithheldWhy | null = !words ? 'empty' : !session?.sayVerbatim ? 'no-say' : !run.voice ? 'voice-off' : run.voiceHeld ? 'paused' : run.approved ? 'busy' : null;
-    if (early || !session?.sayVerbatim) { trace('voice.approved', { decision: 'chat', why: early ?? 'no-say' }); return 'posted'; }
+    if (early || !session?.sayVerbatim) { trace('voice.approved', { decision: 'chat', why: early ?? 'no-say' }); return { outcome: 'posted', why: early ?? 'no-say' }; }
     this.saySeq += 1;
     const id = `say_${this.saySeq}`;
-    return new Promise<SayOutcome>((resolve) => {
+    return new Promise<SayResult>((resolve) => {
       const hold: ApprovedHold = {
         id, text: words, session, frames: [], timer: null, releasing: false,
         finish: (outcome, why) => {
@@ -1163,7 +1168,7 @@ export class AssistantRuntime {
           if (outcome !== 'spoken') { try { session.cancelSay?.(id); } catch { /* best effort */ } }
           trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : 'withheld', why, frames: hold.frames.length, chars: words.length });
           hold.frames = [];
-          resolve(outcome);
+          resolve({ outcome, why: why === 'relayed' ? null : why });
         },
       };
       run.approved = hold;

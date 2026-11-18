@@ -252,9 +252,9 @@ export async function readSuggestion(interviewId: string, fetcher: typeof fetch 
 /** The answer; `gone` is a 409 (answered elsewhere, or the interview ended): the prompt clears quietly. */
 export async function answerSuggestion(
   interviewId: string, suggestionId: string, answer: SuggestionAnswerId,
-): Promise<{ ok: true; said?: MiloSaid; line?: string } | { ok: false; gone: boolean; error: string }> {
+): Promise<{ ok: true; said?: MiloAsked; why?: MiloAskWhy; line?: string } | { ok: false; gone: boolean; error: string }> {
   const r = await writeJson<{ suggestion?: null; said?: unknown; line?: unknown }>(suggestionAnswerPath(interviewId, suggestionId), 'POST', { answer });
-  // Row I3.5: after "Have Milo ask", whether Milo said it aloud, and the lead's one sentence when it could not.
+  // Row I3.5: after "Have Milo ask", whether Milo said it aloud, posted it in the chat only, or neither, and why.
   if (r.ok) return { ok: true, ...saidOf(r.data) };
   return { ok: false, gone: r.status === 409, error: r.error ?? 'That did not go through. Try again.' };
 }
@@ -270,9 +270,9 @@ export const escSkipsSuggestion = (collapsed: boolean, suggestionId: string | nu
 /** One prompt per suggestion. */
 export const suggestionPromptId = (interviewId: string, suggestionId: string): string => `interview-suggestion:${interviewId}:${suggestionId}`;
 
-/** What the receipt says; Milo's words are posted to the call chat, not spoken. */
-export const SUGGESTION_RECEIPTS: Record<SuggestionAnswerId, string> = {
-  ask: 'You will ask it', 'milo-ask': 'Sent to the call chat', skip: 'Skipped',
+/** What the receipt says. "Have Milo ask" has none fixed: it says what the server did with the words (miloAskReceipt). */
+export const SUGGESTION_RECEIPTS: Record<Exclude<SuggestionAnswerId, 'milo-ask'>, string> = {
+  ask: 'You will ask it', skip: 'Skipped',
 };
 
 /** The one quiet line when the budget has paused suggestions: the lead's only. */
@@ -531,20 +531,43 @@ export function candidateLine(admission: Admission | null, seat: 'lead' | 'panel
 // ── Milo asks aloud (rows I3.5, I3.8; decisions 9, 11; contract U10) ─────────────────────────────────────────────────
 /** How Milo's approved words went: aloud (and in the call chat), or in the call chat only. */
 export type MiloSaid = 'spoken' | 'chat';
+/** "Have Milo ask" on a suggestion can also end with nothing posted (`none`). */
+export type MiloAsked = MiloSaid | 'none';
+/**
+ * Why the words were not said aloud (the server's speak/index.ts NotAloudWhy): Milo's voice is off, Milo is paused, the
+ * interview's budget refused the speech, Milo did not get to say it in time, Milo is not in the call, or anything else.
+ */
+export type MiloAskWhy = 'voice-off' | 'paused' | 'budget' | 'not-heard' | 'not-in-call' | 'not-said';
+const ASK_WHYS: readonly MiloAskWhy[] = ['voice-off', 'paused', 'budget', 'not-heard', 'not-in-call', 'not-said'];
 
-/** `said` and `line` read off an answer body; nothing for anything else. */
-export function saidOf(body: unknown): { said?: MiloSaid; line?: string } {
+/** `said`, `why` and `line` read off an answer body; nothing for anything else. */
+export function saidOf(body: unknown): { said?: MiloAsked; why?: MiloAskWhy; line?: string } {
   const b = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  const said = b['said'] === 'spoken' || b['said'] === 'chat' ? b['said'] : undefined;
+  const said = b['said'] === 'spoken' || b['said'] === 'chat' || b['said'] === 'none' ? b['said'] : undefined;
+  const why = ASK_WHYS.find((w) => w === b['why']);
   const line = typeof b['line'] === 'string' && b['line'].trim() ? b['line'].slice(0, 300) : undefined;
-  return { ...(said ? { said } : {}), ...(line ? { line } : {}) };
+  return { ...(said ? { said } : {}), ...(why ? { why } : {}), ...(line ? { line } : {}) };
 }
 
-/** The prompt's receipt after "Have Milo ask": what happened, in a few words (the full sentence is the chat's or the line's). */
-export function miloAskReceipt(said: MiloSaid | undefined): string {
+/** The reason in the receipt's words. */
+const NOT_ALOUD: Record<MiloAskWhy, string> = {
+  'voice-off': 'Milo’s voice is off',
+  paused: 'Milo is paused',
+  budget: 'this interview’s budget does not cover Milo speaking',
+  'not-heard': 'Milo could not say it in time',
+  'not-in-call': 'Milo is not in the call',
+  'not-said': 'Milo could not say it aloud',
+};
+
+/**
+ * The prompt's receipt after "Have Milo ask": what happened and, short of aloud, why, in a few words (the full sentence is the
+ * chat's or the line's). It says the words are in the chat only when the server says it posted them.
+ */
+export function miloAskReceipt(said: MiloAsked | undefined, why?: MiloAskWhy): string {
   if (said === 'spoken') return 'Milo asked it aloud';
-  if (said === 'chat') return 'Milo posted the question in the chat (Milo’s voice is off)';
-  return SUGGESTION_RECEIPTS['milo-ask'];
+  if (said === 'chat') return `Milo posted the question in the chat (${NOT_ALOUD[why ?? 'not-said']})`;
+  if (said === 'none') return why === 'not-in-call' ? 'Not sent: Milo is not in the call. Ask it yourself' : 'Not sent: Milo could not post it. Ask it yourself';
+  return 'Milo did not say whether it was sent. Check the call chat';
 }
 
 export const sayPath = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/say`;
@@ -554,6 +577,7 @@ export async function sayQuestion(interviewId: string, questionId: string): Prom
   const r = await writeJson<{ said?: unknown; line?: unknown }>(sayPath(interviewId), 'POST', { questionId });
   if (!r.ok) return { ok: false, error: r.error ?? 'That did not go through. Try again.' };
   const { said, line } = saidOf(r.data);
+  if (said === 'none') return { ok: false, error: line ?? 'Milo is not in the call.' };
   return { ok: true, said: said ?? 'chat', line: line ?? 'The question is in the call chat.' };
 }
 

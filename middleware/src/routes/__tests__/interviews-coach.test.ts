@@ -150,7 +150,8 @@ describe('the lead', () => {
     expect((await answer(WEN, sid, { answer: 'maybe' })).status).toBe(400);
     const ok = await answer(WEN, sid, { answer: 'milo-ask' });
     expect(ok.status).toBe(200);
-    expect(ok.body).toEqual({ suggestion: null });
+    // Posted to the call chat; no meeting assistant runs here to say it, so the receipt's reason is that Milo is not in the call.
+    expect(ok.body).toEqual({ suggestion: null, said: 'chat', why: 'not-in-call', line: 'Milo could not say it aloud. The question is in the call chat.' });
     expect(interviewSuggestionsFixture.rows().find((r) => r.id === sid)).toMatchObject({ answer: 'milo-ask', spoken: false });
     expect(postApproved).toHaveBeenCalledWith('call-1', body.suggestion.text, { userId: 'u-wen' });
     expect((await answer(WEN, sid, { answer: 'skip' })).status).toBe(409);

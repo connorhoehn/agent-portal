@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { useLocation, useNavigate } from 'react-router';
 import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 import { useCallHost } from '../../lib/conversationCall';
 import { useFetch } from '../../hooks/useFetch';
 import { INTERVIEWS_API } from '../../lib/interviews';
@@ -36,7 +36,7 @@ export interface InterviewRoomFooterState {
   /** The quiet line when the budget paused suggestions (the lead's only; null otherwise). */
   pausedLine: string | null;
   /** `said` (Have Milo ask): aloud, or in the call chat only (row I3.5). */
-  answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloSaid }>;
+  answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloAsked; why?: MiloAskWhy }>;
 }
 
 // One registration at a time: the room page that is mounted.
@@ -219,7 +219,7 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
         const answer: SuggestionAnswerId = 'optionId' in a && (a.optionId === 'milo-ask' || a.optionId === 'skip') ? a.optionId : 'ask';
         const out = await room.answerSuggestion(sg.id, answer);
         if (out.error) return { error: out.error };
-        return { receipt: answer === 'milo-ask' ? miloAskReceipt(out.said) : SUGGESTION_RECEIPTS[answer] };
+        return { receipt: answer === 'milo-ask' ? miloAskReceipt(out.said, out.why) : SUGGESTION_RECEIPTS[answer] };
       },
     });
     return list;

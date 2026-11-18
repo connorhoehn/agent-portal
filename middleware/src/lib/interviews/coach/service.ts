@@ -25,7 +25,7 @@ import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type TranscriptSource } from './transcript.js';
 import { interviewsNowMs } from '../clock.js';
-import { logSaid, sayLogged } from '../speak/index.js';
+import { logSaid, sayLogged, type NotAloudWhy } from '../speak/index.js';
 
 /** D7's view of a suggestion. */
 export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
@@ -235,8 +235,13 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
   }
 }
 
-/** `said` (Have Milo ask only, when Milo is in the call): aloud and in chat, or in chat only. */
-export type AnswerOutcome = { kind: 'ok'; said?: 'spoken' | 'chat' } | { kind: 'not-found' } | { kind: 'not-live' } | { kind: 'answered' };
+/**
+ * `said` (Have Milo ask only): aloud and in chat, in chat only, or nowhere; `why` with anything short of aloud, so the lead's
+ * receipt says what happened and never claims a chat post that was not made.
+ */
+export type AnswerOutcome =
+  | { kind: 'ok'; said?: 'spoken' | 'chat' | 'none'; why?: NotAloudWhy }
+  | { kind: 'not-found' } | { kind: 'not-live' } | { kind: 'answered' };
 
 /** D7's answer, by the lead, while the interview is live; once. */
 export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }, suggestionId: string, answer: SuggestionAnswer): Promise<AnswerOutcome> {
@@ -246,26 +251,25 @@ export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }
   if (interview.state !== 'live') return { kind: 'not-live' };
   const written = await d.store().answerSuggestion(interview.id, suggestionId, answer, iso(d.now()));
   if (!written.ok) return written.reason === 'stale' ? { kind: 'answered' } : { kind: 'not-found' };
-  let said: 'spoken' | 'chat' | undefined;
-  if (answer === 'milo-ask') {
-    // Logged first (above, and in the said log); then the approved words go to the call's chat when Milo is in the call, and
-    // then to its voice as approved words.
-    try {
-      const t = await d.transcript({ id: interview.id, callId: interview.callId });
-      if (t) {
-        const speak = d.speak ?? { log: logSaid, say: sayLogged };
-        const row = await speak.log({ id: interview.id, callId: t.callId }, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
-        if (await d.postApproved(t.callId, written.row.text, viewer)) {
-          const out = await speak.say(interview.id, row, t.callId);
-          if (out === 'spoken') { said = 'spoken'; await d.store().markSpoken?.(interview.id, written.row.id); }
-          else if (out === 'chat') said = 'chat';
-        }
-      }
-    } catch (e) {
-      console.warn('[interviews] approved question not posted', (e as Error)?.name ?? 'error');
-    }
+  if (answer !== 'milo-ask') return { kind: 'ok' };
+  // Logged first (above, and in the said log); then the approved words go to the call's chat when Milo is in the call, and
+  // then to its voice as approved words.
+  let posted = false;
+  try {
+    const t = await d.transcript({ id: interview.id, callId: interview.callId });
+    if (!t) return { kind: 'ok', said: 'none', why: 'not-in-call' };
+    const speak = d.speak ?? { log: logSaid, say: sayLogged };
+    const row = await speak.log({ id: interview.id, callId: t.callId }, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
+    posted = await d.postApproved(t.callId, written.row.text, viewer);
+    if (!posted) return { kind: 'ok', said: 'none', why: 'not-in-call' };
+    const aloud = await speak.say(interview.id, row, t.callId);
+    if (!aloud.spoken) return { kind: 'ok', said: 'chat', why: aloud.why };
+    await d.store().markSpoken?.(interview.id, written.row.id);
+    return { kind: 'ok', said: 'spoken' };
+  } catch (e) {
+    console.warn('[interviews] approved question not posted', (e as Error)?.name ?? 'error');
+    return { kind: 'ok', said: posted ? 'chat' : 'none', why: 'not-said' };
   }
-  return { kind: 'ok', ...(said ? { said } : {}) };
 }
 
 /** D6: remove these interviews' rows from the suggestion log (a record-class eraser). */

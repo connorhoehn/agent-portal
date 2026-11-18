@@ -230,7 +230,8 @@ describe('a failing model', () => {
 describe('the lead\'s answer', () => {
   it('is written once; a second is answered; Have Milo ask is logged unspoken and then posted to the call chat', async () => {
     const { suggestion } = await read();
-    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok' });
+    // Posted, but no meeting assistant runs in this process to say it: in the chat, and why not aloud.
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat', why: 'not-in-call' });
     const [row] = await store.listSuggestions(IV);
     expect(row).toMatchObject({ answer: 'milo-ask', spoken: false, answeredAt: new Date(now).toISOString() });
     expect(deps.postApproved).toHaveBeenCalledWith('call-1', suggestion!.text, WEN);
@@ -268,9 +269,9 @@ describe('the consent read (D4)', () => {
 
 // Lane SPEAK (row I3.5): after the log row and the chat post, the words are said aloud; `spoken` only when relayed.
 describe('Have Milo ask, said aloud (I3.5)', () => {
-  it('logs, posts, then says; spoken and `said: spoken` only when relayed; chat only otherwise', async () => {
+  it('logs, posts, then says; spoken and `said: spoken` only when relayed; chat only otherwise, with why', async () => {
     const steps: string[] = [];
-    let out: 'spoken' | 'chat' | 'no-call' = 'spoken';
+    let out: { spoken: true } | { spoken: false; why: string } = { spoken: true };
     const speak = {
       log: jest.fn(async (_i: unknown, input: { text: string }) => { steps.push('log'); return { id: 'said-1', text: input.text, askedBy: 'u-wen' } as never; }),
       say: jest.fn(async () => { steps.push('say'); return out; }),
@@ -281,12 +282,33 @@ describe('Have Milo ask, said aloud (I3.5)', () => {
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'spoken' });
     expect(steps).toEqual(['log', 'post', 'say']);
     expect((await store.listSuggestions(IV)).find((r) => r.id === suggestion!.id)).toMatchObject({ answer: 'milo-ask', spoken: true });
-    out = 'chat'; now += 10 * 60_000;
+    out = { spoken: false, why: 'budget' }; now += 10 * 60_000;
     ({ suggestion } = await read());
     if (suggestion) {
-      expect(await answerSuggestion(refOf(), WEN, suggestion.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat' });
+      expect(await answerSuggestion(refOf(), WEN, suggestion.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat', why: 'budget' });
       expect((await store.listSuggestions(IV)).find((r) => r.id === suggestion!.id)).toMatchObject({ spoken: false });
     }
+  });
+
+  it('nothing posted (Milo not in the call, or no call found) answers `said: none` with why, never a chat claim', async () => {
+    const speak = { log: jest.fn(async () => ({ id: 'said-1' }) as never), say: jest.fn() };
+    (deps.postApproved as jest.Mock).mockImplementation(async () => false);
+    setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
+    const { suggestion } = await read();
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'none', why: 'not-in-call' });
+    expect(speak.say).not.toHaveBeenCalled();
+  });
+
+  it('a failure after the chat post still says the words are in the chat; one before it says nothing was posted', async () => {
+    const speak = { log: jest.fn(async () => ({ id: 'said-1' }) as never), say: jest.fn(async () => { throw new Error('boom'); }) };
+    (deps.postApproved as jest.Mock).mockImplementation(async () => true);
+    setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
+    let { suggestion } = await read();
+    expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat', why: 'not-said' });
+    speak.log.mockImplementation(async () => { throw new Error('log down'); });
+    now += 10 * 60_000;
+    ({ suggestion } = await read());
+    if (suggestion) expect(await answerSuggestion(refOf(), WEN, suggestion.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'none', why: 'not-said' });
   });
 });
 

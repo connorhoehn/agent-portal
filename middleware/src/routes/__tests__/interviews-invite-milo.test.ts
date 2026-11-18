@@ -127,7 +127,7 @@ beforeEach(() => {
   setSpeakDeps({
     store: () => said,
     post: async (_c, text) => { posts.push(text); return true; },
-    say: async (_c, text) => { const out = await voice(); if (out === 'spoken') spoken.push(text); return out; },
+    say: async (_c, text) => { const out = await voice(); if (out === 'spoken') spoken.push(text); return { outcome: out, why: null }; },
     callOf: async () => 'call-1',
     miloJoinedAt: async () => Date.now() - 5 * 60_000,
   });

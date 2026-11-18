@@ -10,11 +10,34 @@ test('said and line are read off an answer body, and nothing else', () => {
   assert.deepEqual(saidOf(null), {});
 });
 
-test('the Have Milo ask receipt says what happened', () => {
+test('the Have Milo ask receipt says what happened, and why when not aloud', () => {
   assert.equal(miloAskReceipt('spoken'), 'Milo asked it aloud');
-  assert.equal(miloAskReceipt('chat'), 'Milo posted the question in the chat (Milo’s voice is off)');
-  assert.equal(miloAskReceipt(undefined), 'Sent to the call chat');
+  assert.equal(miloAskReceipt('chat', 'voice-off'), 'Milo posted the question in the chat (Milo’s voice is off)');
+  assert.equal(miloAskReceipt('chat', 'paused'), 'Milo posted the question in the chat (Milo is paused)');
+  assert.equal(miloAskReceipt('chat', 'budget'), 'Milo posted the question in the chat (this interview’s budget does not cover Milo speaking)');
+  assert.equal(miloAskReceipt('chat', 'not-heard'), 'Milo posted the question in the chat (Milo could not say it in time)');
+  assert.equal(miloAskReceipt('chat', 'not-in-call'), 'Milo posted the question in the chat (Milo is not in the call)');
+  assert.equal(miloAskReceipt('chat', 'not-said'), 'Milo posted the question in the chat (Milo could not say it aloud)');
+  assert.equal(miloAskReceipt('chat'), 'Milo posted the question in the chat (Milo could not say it aloud)');
+  assert.equal(miloAskReceipt('none', 'not-in-call'), 'Not sent: Milo is not in the call. Ask it yourself');
+  assert.equal(miloAskReceipt('none', 'not-said'), 'Not sent: Milo could not post it. Ask it yourself');
   assert.equal(sayPath('iv-1'), '/api/interviews/interviews/iv-1/say');
+});
+
+test('the receipt never says the words are in the chat unless the server says it posted them', () => {
+  for (const said of ['none', undefined] as const) {
+    for (const why of [undefined, 'voice-off', 'budget', 'not-in-call', 'not-said'] as const) {
+      const r = miloAskReceipt(said, why);
+      assert.doesNotMatch(r, /Sent to the call chat|posted the question/, `${said}/${why}: ${r}`);
+    }
+  }
+  assert.equal(miloAskReceipt(undefined), 'Milo did not say whether it was sent. Check the call chat');
+});
+
+test('why is read off the answer body only when it is one the server sends', () => {
+  assert.deepEqual(saidOf({ suggestion: null, said: 'none', why: 'not-in-call' }), { said: 'none', why: 'not-in-call' });
+  assert.deepEqual(saidOf({ said: 'chat', why: 'budget' }), { said: 'chat', why: 'budget' });
+  assert.deepEqual(saidOf({ said: 'chat', why: 'gremlins' }), { said: 'chat' });
 });
 
 test('the candidate reads the last question Milo asked from the chat frames, never an answer or a person', () => {

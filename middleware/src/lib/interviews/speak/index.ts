@@ -20,6 +20,7 @@
 // `answerCandidate` here.
 import { randomBytes } from 'node:crypto';
 import { interviewsNowMs } from '../clock.js';
+import type { SayResult, SayWithheldWhy } from '../../meeting-assistant/approved-speech.js';
 import type { Interview } from '../types.js';
 import { saidStore, type SaidKind, type SaidRecord, type SaidSource, type SaidStore } from './store.js';
 
@@ -93,17 +94,37 @@ export async function holdSpeechMoney(interviewId: string, key: string): Promise
     const out = await reserveInterviewSpend({ interviewId, part: 'speech', key, estimateUsd: SPEECH_HOLD_USD, expiresInMs: SPEECH_HOLD_TTL_MS });
     if (!out.ok) return { ok: false };
     return { ok: true, release: async () => { await releaseInterviewSpend([out.holdId]).catch(() => undefined); } };
-  } catch {
+  } catch (e) {
+    // Still a refusal (nothing is said without the hold), but a broken money door is told apart from a reached cap here.
+    console.warn('[interviews] speech hold failed', (e as Error)?.name ?? 'error', (e as Error)?.message ?? '');
     return { ok: false };
   }
 }
+
+/**
+ * Why approved words were not said aloud, in the terms the lead's receipt uses: Milo's voice is off, Milo is paused, the money
+ * hold was refused (`budget`), the session did not say them in time (`not-heard`: no quiet to speak into, or no utterance inside
+ * the bound), Milo is not in the call, or anything else the meeting assistant withheld them for (`not-said`).
+ */
+export type NotAloudWhy = 'voice-off' | 'paused' | 'budget' | 'not-heard' | 'not-in-call' | 'not-said';
+
+/** The receipt's reason for the meeting assistant's withheld code (approved-speech.ts SayWithheldWhy). */
+export function notAloudWhy(why: SayWithheldWhy | null): NotAloudWhy {
+  if (why === 'voice-off') return 'voice-off';
+  if (why === 'paused') return 'paused';
+  if (why === 'not-quiet' || why === 'timeout') return 'not-heard';
+  return 'not-said';
+}
+
+/** One try at saying logged words aloud: relayed, or why not. */
+export type Aloud = { spoken: true } | { spoken: false; why: NotAloudWhy };
 
 export interface SpeakDeps {
   store: () => SaidStore;
   /** Post approved words in the call chat (the approved mark; `answer`: also the answer mark). False when Milo is not in the call. */
   post: (callId: string, text: string, kind: SaidKind) => Promise<boolean>;
-  /** Ask the call's live session to say the words (orchestrator.ts `sayHeldText`). */
-  say: (callId: string, text: string, by: string) => Promise<'spoken' | 'posted' | 'no-call'>;
+  /** Ask the call's live session to say the words, and why it did not (orchestrator.ts `sayHeldTextWhy`). */
+  say: (callId: string, text: string, by: string) => Promise<SayResult>;
   /** When Milo joined this call (epoch ms), or null when it is not in it. */
   miloJoinedAt: (callId: string) => Promise<number | null>;
   /** The call Milo is in for this interview: its `callId` when Milo has a record there, else Milo's newest open record in the lobby. */
@@ -121,7 +142,7 @@ const defaultDeps = (): SpeakDeps => ({
     return (await (kind === 'answer' ? chat.postApprovedAnswer(callId, text) : chat.postApprovedQuestion(callId, text))) !== null;
   },
   // The running meeting assistant's runtime, never a new one: with none in this process Milo is in no call here.
-  say: async (callId, text, by) => (await (await import('../../meeting-assistant/orchestrator.js')).peekAssistantRuntime()?.sayHeldText(callId, text, by)) ?? 'no-call',
+  say: async (callId, text, by) => (await (await import('../../meeting-assistant/orchestrator.js')).peekAssistantRuntime()?.sayHeldTextWhy(callId, text, by)) ?? { outcome: 'no-call', why: null },
   miloJoinedAt: async (callId) => {
     const { assistantStore } = await import('../../meeting-assistant/store-select.js');
     const record = await assistantStore().get(callId).catch(() => null);
@@ -168,14 +189,21 @@ export async function logSaid(interview: Pick<Interview, 'id' | 'callId'>, input
   });
 }
 
-/** Say logged-and-posted words aloud on the call's voice (orchestrator.ts `sayHeldText`); marks the row when relayed. */
-export async function sayLogged(interviewId: string, row: SaidRecord, callId: string): Promise<'spoken' | 'chat' | 'no-call'> {
+/**
+ * Say logged-and-posted words aloud on the call's voice (orchestrator.ts `sayHeldTextWhy`), behind the speech hold; marks the
+ * row when relayed. Never throws: a say that throws reads as withheld.
+ */
+export async function sayLogged(interviewId: string, row: SaidRecord, callId: string): Promise<Aloud> {
   const d = deps();
   const hold = await d.holdSpeech(interviewId, row.id).catch((): SpeechHold => ({ ok: false }));
-  if (!hold.ok) return 'chat';
-  const out = await d.say(callId, row.text, row.askedBy).catch(() => 'posted' as const).finally(() => hold.release());
-  if (out === 'spoken') await d.store().markSpoken(interviewId, row.id).catch(() => null);
-  return out === 'spoken' ? 'spoken' : out === 'no-call' ? 'no-call' : 'chat';
+  if (!hold.ok) return { spoken: false, why: 'budget' };
+  const out = await d.say(callId, row.text, row.askedBy)
+    .catch((): SayResult => ({ outcome: 'posted', why: 'not-relayed' }))
+    .finally(() => hold.release());
+  if (out.outcome === 'no-call') return { spoken: false, why: 'not-in-call' };
+  if (out.outcome !== 'spoken') return { spoken: false, why: notAloudWhy(out.why) };
+  await d.store().markSpoken(interviewId, row.id).catch(() => null);
+  return { spoken: true };
 }
 
 /** Log, post, then say: the one path for approved words in an interview call. Never throws for the voice; a log failure throws. */
@@ -186,12 +214,8 @@ export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, i
   if (!callId) return { said: 'none', row };
   const posted = await d.post(callId, input.text, input.kind).catch(() => false);
   if (!posted) return { said: 'none', row };
-  const hold = await d.holdSpeech(interview.id, row.id).catch((): SpeechHold => ({ ok: false }));
-  if (!hold.ok) return { said: 'chat', row };
-  const out = await d.say(callId, input.text, input.askedBy).catch(() => 'posted' as const).finally(() => hold.release());
-  if (out !== 'spoken') return { said: 'chat', row };
-  const marked = await d.store().markSpoken(interview.id, row.id).catch(() => null);
-  return { said: 'spoken', row: marked ?? { ...row, spoken: true } };
+  const aloud = await sayLogged(interview.id, row, callId);
+  return aloud.spoken ? { said: 'spoken', row: { ...row, spoken: true } } : { said: 'chat', row };
 }
 
 /** The words for a candidate's request, from what the server holds (no model). */
