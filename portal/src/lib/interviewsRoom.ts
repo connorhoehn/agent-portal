@@ -240,6 +240,14 @@ export async function answerSuggestion(
   return { ok: false, gone: r.status === 409, error: r.error ?? 'That did not go through. Try again.' };
 }
 
+/**
+ * Esc on the deck while a suggestion shows is a Skip (decision W2P, finding I3.4b): the server lets it go, so the page's read
+ * starts again and Milo's next suggestion comes. Hiding it alone left it waiting on the server, which shows the same one again
+ * and never a new one, and the read had stopped. Returns the suggestion to skip, once (`skipped`: the one already sent).
+ */
+export const escSkipsSuggestion = (collapsed: boolean, suggestionId: string | null, skipped: string | null): string | null =>
+  collapsed && suggestionId !== null && suggestionId !== skipped ? suggestionId : null;
+
 /** One prompt per suggestion. */
 export const suggestionPromptId = (interviewId: string, suggestionId: string): string => `interview-suggestion:${interviewId}:${suggestionId}`;
 

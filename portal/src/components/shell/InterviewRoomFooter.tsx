@@ -5,10 +5,10 @@
 // asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep going). The quiet facts are chips
 // with the full sentence as a tooltip, so the row stays one line at 1280. Nothing renders unless
 // the shell's call is the registered interview's, so no other tenant's footer changes.
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloSaid, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -166,8 +166,17 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
   // A new knock asks again even after Esc hid the deck.
   const knockId = room && knock ? knockPromptId(room.interviewId, knock) : null;
   useEffect(() => { if (knockId && deck.collapsed) deck.setCollapsed(false); }, [knockId]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Esc hides a suggestion without answering; the next one comes back.
+  // Esc on a suggestion is a Skip (escSkipsSuggestion): the server lets it go and the next one comes back by itself.
   const suggestionId = room?.lead ? room.suggestion?.id ?? null : null;
+  const skippedByEsc = useRef<string | null>(null);
+  // Only on the Esc itself (the deck collapsing), so a suggestion that arrives later is never skipped unseen; the deck opens again
+  // once it is sent, so nothing else waits behind a hidden deck.
+  useEffect(() => {
+    const skip = escSkipsSuggestion(deck.collapsed, suggestionId, skippedByEsc.current);
+    if (!skip || !room) return;
+    skippedByEsc.current = skip;
+    void room.answerSuggestion(skip, 'skip').finally(() => deck.setCollapsed(false));
+  }, [deck.collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (suggestionId && deck.collapsed) deck.setCollapsed(false); }, [suggestionId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Esc on the End question is "Keep going".
   useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
-  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION,
+  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
 
@@ -186,4 +186,11 @@ test('the footer builds a suggestion prompt only for the lead\'s registration', 
   assert.equal(suggestionForPrompt(true, SG), SG);
   assert.equal(suggestionForPrompt(false, SG), null);
   assert.equal(suggestionForPrompt(true, null), null);
+});
+
+test('I3.4b: Esc on a showing suggestion skips it once on the server, so the read starts again; nothing else is skipped', () => {
+  assert.equal(escSkipsSuggestion(true, 'sg-1', null), 'sg-1');
+  assert.equal(escSkipsSuggestion(true, 'sg-1', 'sg-1'), null); // sent already
+  assert.equal(escSkipsSuggestion(false, 'sg-1', null), null); // the deck is open
+  assert.equal(escSkipsSuggestion(true, null, null), null); // Esc with no suggestion (the knock, the End question)
 });

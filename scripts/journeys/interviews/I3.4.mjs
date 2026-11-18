@@ -3,8 +3,8 @@
 // call on the stand-in media of h3-call.mjs, lines from the mock injector, the scripted coach.
 //   I3.4a  a suggestion waits behind the knock: the deck asks "The candidate is waiting" first; Admit from the deck, then the
 //          suggestion is asked; End interview puts "End the interview" in front of it; Keep going brings the suggestion back
-//   I3.4b  Esc hides the suggestion without answering it (the read still holds it); a later suggestion comes back by itself
-//          (today it does not: a finding)
+//   I3.4b  Esc is a Skip: the deck hides, the server lets the suggestion go (a later answer is a 409), and a new suggestion
+//          comes back by itself
 //   I3.4b2 answered from another tab, the lead's page rejoined: the next suggestion is asked
 //   I3.4c  a 409 from another tab: the suggestion answered by the API first (the other tab); the deck's answer gets the 409
 //          and the deck lets the suggestion go (it is not asked again); a further answer reads "This suggestion was already answered."
@@ -86,25 +86,31 @@ export default async function run(ctx) {
       return { ok, detail: `page ${page.includes(needle)}, reads ${reads.includes(needle)}, chat pane ${chat.includes(needle)}, frames ${inFrames} (${frames.length} seen)` };
     });
 
+    // Esc is a Skip (decision W2P): the server lets the suggestion go, the page's read starts again, and the next one comes.
+    let sgAfterEsc = null;
     await step('I3.4b', async () => {
       // Esc from inside the deck (it arrives without taking focus, so a person's Esc follows a Tab into it).
       await deckOf(room.leadPage).getByRole('button', { name: 'Skip', exact: true }).first().focus().catch(() => undefined);
       await room.leadPage.keyboard.press('Escape');
       await sleep(1500);
       const hidden = !/Milo suggests/.test(await deckText(room.leadPage));
-      const still = await readSuggestion(room.lead);
-      // A later suggestion: the gap moved past and a new line said. The hidden one still waits (the coach shows the same one
-      // again, never a new one beside it) and the page's poll stopped when it arrived, so nothing can bring the deck back.
+      const again = await api(room.lead, 'POST', `${sgPath}/${sg1.id}/answer`, { answer: 'ask' });
+      const let_go = again.status === 409;
+      // A later suggestion: the gap moved past and a new line said; it comes back by itself.
       await clock.advance(91_000);
       await say(room, WEN, 'How did you split the work between the two streams?');
-      const back = await awaitDeck(room.leadPage, /Milo suggests/, 40_000);
-      const ok = hidden && still?.id === sg1.id && /Milo suggests/.test(back);
-      return { ok, detail: `Esc hid it ${hidden}; the server still holds it waiting ${still?.id === sg1.id}; 40 s later, with the gap passed and a new line, the deck ${/Milo suggests/.test(back) ? 'is back' : 'stays empty (FINDING: after Esc the lead gets no suggestion again in this call; the waiting one blocks new ones and the page has no way to reopen it)'}` };
+      const back = await awaitDeck(room.leadPage, /Milo suggests/, 60_000);
+      sgAfterEsc = await readSuggestion(room.lead);
+      const fresh = !!sgAfterEsc && sgAfterEsc.id !== sg1.id;
+      const ok = hidden && let_go && /Milo suggests/.test(back) && fresh;
+      return { ok, detail: `Esc hid it ${hidden}; the server let it go (a later answer ${again.status}); the deck came back with a new suggestion ${/Milo suggests/.test(back) && fresh} ("${back.slice(0, 60)}")` };
     });
 
-    // The other tab: the hidden suggestion is answered by the API, and the lead's page rejoins the call so its poll starts again.
+    // The other tab: the waiting suggestion is answered by the API, and the lead's page rejoins the call so its poll starts again.
     await step('I3.4b2', async () => {
-      const a = await api(room.lead, 'POST', `${sgPath}/${sg1.id}/answer`, { answer: 'ask' });
+      const waiting = sgAfterEsc ?? await readSuggestion(room.lead);
+      if (!waiting) return { ok: false, detail: 'no suggestion waiting to answer from the other tab' };
+      const a = await api(room.lead, 'POST', `${sgPath}/${waiting.id}/answer`, { answer: 'ask' });
       await room.leadPage.close();
       room.leadPage = (await joinRoomCall(ctx, room.lead, iv)).page;
       const next = await awaitDeck(room.leadPage, /Milo suggests/, 160_000);
