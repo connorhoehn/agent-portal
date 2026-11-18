@@ -15,7 +15,7 @@
 //          line of the pad or the output is written in the detail, not judged (the pinned request is code.test.ts's)
 //   I4.4e  an opening with no cap (cleared through the opening editor's route as the recruiter; resetMock restores it): the
 //          lead reads the cap sentence, the candidate reads a sentence with nothing about money, and no run is stored
-import { staffRoom, joinCall, guestRoom, synced, typeInPad, padText, outputText, until, why, inviteMilo, hear, suggestion } from './h8-room.mjs';
+import { chooseLanguage, staffRoom, joinCall, guestRoom, synced, typeInPad, padText, outputText, until, why, inviteMilo, hear, suggestion } from './h8-room.mjs';
 
 const MONEY = /\$|cap\b|spend|budget|cost|money|pay|dollar/i;
 
@@ -54,6 +54,9 @@ export default async function run(ctx) {
   }
 
   await step('I4.4a', async () => {
+    // The pad's language outlives a reset (an earlier piece in the same run may have chosen one): choose it, then type its print.
+    await chooseLanguage(L.page, 'JavaScript');
+    await L.page.waitForTimeout(800);
     await typeInPad(L.page, 'console.log("hello from the lead")');
     // Run reads the pad as the gateway holds it: wait until the candidate's pad shows the typed line, then press Run.
     await until(async () => /hello from the lead/.test(await padText(G.page)), 10_000);
@@ -62,7 +65,8 @@ export default async function run(ctx) {
     const lo = await until(async () => { const t = await outputText(L.page); return /hello from the lead/.test(t) && /Finished/.test(t) ? t : null; }, 20_000);
     const go = await until(async () => { const t = await outputText(G.page); return /hello from the lead/.test(t) && /Finished/.test(t) ? t : null; }, 20_000);
     const ok = !!lo && !!go && /Run by you/.test(lo) && /Interviewer/.test(go) && !go.includes(leadName);
-    return { ok, detail: `the lead's pane "${(lo ?? await outputText(L.page)).slice(0, 140)}"; the candidate's "${(go ?? await outputText(G.page)).slice(0, 140)}"` };
+    const typed = ok ? '' : ` [the pad holds ${JSON.stringify((await padText(L.page)).slice(-120))}]`;
+    return { ok, detail: `the lead's pane "${(lo ?? await outputText(L.page)).slice(0, 140)}"${typed}; the candidate's "${(go ?? await outputText(G.page)).slice(0, 140)}"` };
   });
 
   await step('I4.4b', async () => {
