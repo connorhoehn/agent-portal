@@ -399,7 +399,19 @@ function parseCatalogue(manifest) {
   const [navBody] = balanced(raw, raw.indexOf('[', raw.indexOf('=', navStart)));
   const navigatePages = [...navBody.matchAll(/id:\s*'([\w-]+)',\s*path:\s*'([^']+)',\s*tenants:\s*\[([^\]]*)\]/g)].map((m) => ({ id: m[1], path: m[2], tenants: strLits(m[3]) }));
   const voiceTenants = strLits(/export const VOICE_TENANTS = \[([^\]]*)\]/.exec(raw)?.[1] ?? '');
-  return { tools, navigatePages, voiceTenants };
+  // Tools that run on the server inside one family's call (INTERVIEW_TOOLS): no browser runner and no route, so they cover none.
+  const sStart = raw.indexOf('export const INTERVIEW_TOOLS');
+  const sBody = sStart < 0 ? '' : raw.slice(sStart, raw.indexOf('\n];', sStart));
+  const sHeads = [...sBody.matchAll(/\n\s*\{\s*\n\s*name:\s*'(\w+)'/g)];
+  const serverTools = sHeads.map((h, i) => {
+    const block = sBody.slice(h.index, sHeads[i + 1]?.index ?? sBody.length);
+    return {
+      name: h[1], kind: /\bkind:\s*'(\w+)'/.exec(block)?.[1] ?? null, tenants: strLits(/tenants:\s*\[([^\]]*)\]/.exec(block)?.[1] ?? ''),
+      who: /\bwho:\s*'(\w+)'/.exec(block)?.[1] ?? null, spend: /\bspend:\s*'(\w+)'/.exec(block)?.[1] ?? null,
+      mapsTo: /mapsTo:\s*(["'])([\s\S]*?)\1\s*,?\s*\n/.exec(block)?.[2] ?? '', line: lineAt(raw, sStart + h.index + 1),
+    };
+  });
+  return { tools, navigatePages, voiceTenants, serverTools };
 }
 
 /** `METHOD /api/...` references inside a mapsTo string; `<tenant>` and `<apiPrefix>` expand to every indexed tenant's prefix. */
@@ -598,6 +610,8 @@ export const V2_RULES = [
   [/^(POST|PUT) \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log and its runs belong to the room, never to the voice navigator'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/say$/, 'never', null, 'Milo saying an approved question aloud is the lead\'s choice in the room, never the voice navigator\'s'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-intro$/, 'never', null, 'Milo introducing itself is the lead\'s button in the room (or Milo\'s own `introduce` server tool in the call), never the voice navigator\'s'],
+  [/^PUT \/api\/interviews\/interviews\/:[^/]+\/milo-settings$/, 'never', null, 'whether the candidate may ask Milo to change the pad is the lead\'s switch in the room'],
   [/^POST \/api\/interviews\/candidates$/, 'never', null, 'hiring setup (ManageCandidates): adding a candidate is done on the form'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],
   [/^POST \/api\/interviews\/applications\/:[^/]+\/stage$/, 'never', null, 'the stage decision is the hiring manager\'s, with a reason, on the debrief'],
@@ -825,7 +839,7 @@ function build() {
     coveredRoutes: people.filter((r) => r.coveredBy.length).length, coveredReads: people.filter((r) => r.kind === 'read' && r.coveredBy.length).length,
     coveredWrites: people.filter((r) => r.kind === 'write' && r.coveredBy.length).length, coveredPages: pageRows.filter((r) => r.coveredBy.length).length,
     pagesWithPageId: pageRows.filter((r) => r.pageId).length,
-    v1Tools: catalogue.tools.length, v2Tools: V2_TOOLS.length, v2Decisions: count(people, (r) => r.v2.decision ?? 'undecided'),
+    v1Tools: catalogue.tools.length, serverTools: catalogue.serverTools.length, v2Tools: V2_TOOLS.length, v2Decisions: count(people, (r) => r.v2.decision ?? 'undecided'),
     v2ToolRoutes: count(people.filter((r) => r.v2.tool && r.v2.decision !== 'not-yet'), (r) => r.v2.tool),
     v2Backlog: count(people.filter((r) => r.v2.decision === 'not-yet'), (r) => r.v2.tool), undecided: undecided.map((r) => `${r.method} ${r.path}`), contradictions,
     staleSnapshotLines: rows.filter((r) => r.stale).length, unresolvedDeclarations, missingFromSnapshot,
@@ -836,7 +850,7 @@ function build() {
   return {
     sources: { ...PATHS, capturedAt: writes.capturedAt, serverHandlerSha: writes.serverHandlerSha },
     summary, roles, tenants: manifest.tenants.map((t) => ({ id: t.id, apiPrefix: t.apiPrefix, roles: t.roles, presenceLobby: t.presenceLobby, huddleChat: t.huddleChat })),
-    voiceTenants: catalogue.voiceTenants, v1Tools: catalogue.tools, navigatePages: catalogue.navigatePages, v2Tools: V2_TOOLS,
+    voiceTenants: catalogue.voiceTenants, v1Tools: catalogue.tools, serverTools: catalogue.serverTools, navigatePages: catalogue.navigatePages, v2Tools: V2_TOOLS,
     v2Rules: V2_RULES.map(([re, decision, tool, note]) => ({ pattern: re.source, decision, tool, note })), rows: all,
   };
 }

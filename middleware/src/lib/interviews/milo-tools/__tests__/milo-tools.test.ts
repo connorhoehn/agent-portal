@@ -1,5 +1,7 @@
 // Milo's interview tools (milo-tools/index.ts `runMiloTool`): per tool, allowed, refused by permission, refused by its checks,
 // and run once; the fallback and acknowledgement lines; and the isolation of the server tools from every other family.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, cloudwatch: true, guardrails: true, agentcore: true } } }));
 import { INTERVIEW_TOOLS, toolsForTenant, VOICE_TENANTS, VOICE_TOOLS } from '../../../voice/catalogue.js';
 import { meetingFunctionTools } from '../../../meeting-assistant/instructions.js';
@@ -232,6 +234,9 @@ describe('the scripted stand-in and the isolation of the server tools', () => {
       expect(toolsForTenant(tenant).map((t) => t.name).filter((n) => names.includes(n))).toEqual([]);
       expect(meetingFunctionTools(tenant).map((t) => t.name).filter((n) => names.includes(n))).toEqual([]);
     }
+    // The inventory (scripts/voice/inventory.mjs, docs/voice-tool-inventory.json) lists them as server tools, with who may ask.
+    const inventory = JSON.parse(readFileSync(join(__dirname, '../../../../../../docs/voice-tool-inventory.json'), 'utf8')) as { serverTools: Array<{ name: string; who: string; kind: string }> };
+    expect(inventory.serverTools.map((t) => [t.name, t.who, t.kind])).toEqual(INTERVIEW_TOOLS.map((t) => [t.name, t.who, 'server']));
     const work = DEFAULT_POLICY.sessionTools({ callId: 'c', lobby: 'orgiq:initiative:x', tenant: 'orgiq' });
     expect(('tools' in work ? work.tools : []).map((t) => t.name).filter((n) => names.includes(n))).toEqual([]);
   });

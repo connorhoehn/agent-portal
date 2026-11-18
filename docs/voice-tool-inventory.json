@@ -394,6 +394,7 @@
   "coveredPages": 113,
   "pagesWithPageId": 113,
   "v1Tools": 16,
+  "serverTools": 6,
   "v2Tools": 15,
   "v2Decisions": {
    "not-yet": 223,
@@ -2592,6 +2593,74 @@
    "line": 1018
   }
  ],
+ "serverTools": [
+  {
+   "name": "time_left",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "anyone",
+   "spend": "none",
+   "mapsTo": "server: lib/interviews/milo-tools time_left",
+   "line": 1123
+  },
+  {
+   "name": "repeat_question",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "anyone",
+   "spend": "none",
+   "mapsTo": "server: lib/interviews/milo-tools repeat_question",
+   "line": 1131
+  },
+  {
+   "name": "introduce",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "lead",
+   "spend": "none",
+   "mapsTo": "server: lib/interviews/milo-tools introduce",
+   "line": 1139
+  },
+  {
+   "name": "pad_add_tests",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "pad",
+   "spend": "none",
+   "mapsTo": "server: lib/interviews/milo-tools pad_add_tests (the pad, as Milo)",
+   "line": 1147
+  },
+  {
+   "name": "pad_add_import",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "pad",
+   "spend": "none",
+   "mapsTo": "server: lib/interviews/milo-tools pad_add_import (the pad, as Milo)",
+   "line": 1171
+  },
+  {
+   "name": "pad_add_helper",
+   "kind": "server",
+   "tenants": [
+    "interviews"
+   ],
+   "who": "pad",
+   "spend": "interview",
+   "mapsTo": "server: lib/interviews/milo-tools pad_add_helper (the pad, as Milo)",
+   "line": 1183
+  }
+ ],
  "navigatePages": [
   {
    "id": "automate",
@@ -4264,6 +4333,18 @@
    "decision": "never",
    "tool": null,
    "note": "Milo saying an approved question aloud is the lead's choice in the room, never the voice navigator's"
+  },
+  {
+   "pattern": "^POST \\/api\\/interviews\\/interviews\\/:[^/]+\\/milo-intro$",
+   "decision": "never",
+   "tool": null,
+   "note": "Milo introducing itself is the lead's button in the room (or Milo's own `introduce` server tool in the call), never the voice navigator's"
+  },
+  {
+   "pattern": "^PUT \\/api\\/interviews\\/interviews\\/:[^/]+\\/milo-settings$",
+   "decision": "never",
+   "tool": null,
+   "note": "whether the candidate may ask Milo to change the pad is the lead's switch in the room"
   },
   {
    "pattern": "^POST \\/api\\/interviews\\/candidates$",
