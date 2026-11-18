@@ -6,9 +6,17 @@
 // ratchet use), with only the guest's cookie. Each path parameter is filled with the guest's OWN interview id,
 // the most tempting value there is, and the interviews routes are walked a second time with ANOTHER interview's.
 //
-// Every route must refuse the guest (a 4xx or 5xx) except the guest's own (GUEST_ROUTES: the exchange, its
-// interview, its realtime token, the knock and its admission, CONSENT's two consents routes, and its room) and a public route, which is allowed only when it answers the guest exactly what it answers a
-// caller whose credential was rejected (same status, same body): the guest gains nothing by being a guest.
+// Every route must refuse the guest (a 4xx or 5xx) except the guest's own routes that answer before admission
+// (GUEST_ROUTES: the exchange, its interview, its realtime token, the knock and its admission, CONSENT's two consents
+// routes, and its room) and a public route, which is allowed only when it answers the guest exactly what it answers a
+// caller whose credential was rejected (same status, same body): the guest gains nothing by being a guest. The guest's
+// routes that need the lead's admission (GUEST_ADMITTED_ROUTES) are swept too, and refuse a guest not let in.
+// Lane H6 (row E2) adds: the router's guest routes must be exactly the two sets named here (a route added later fails
+// the sweep until it is named); each guest route refuses no cookie, a staff session and a guest not admitted, and an
+// admitted guest of one live interview reaches nothing of another; the routes rounds 3 to 6 added are named and refused;
+// and the reverse, a Work-only person and a caller holding only a guest cookie on every interviews route.
+// The server runs with Milo on (MEETING_ASSISTANT_ENABLED, as the walk runs it), so Milo's call routes are judged by
+// their gates, not by the feature flag's 404.
 // Writes to the mock control routes (/api/__mock/*: reset, scenarios, the clock) are not sent: they would
 // reset the very world the guest stands in. Then: a staff session against the guest routes, and the guest
 // after the recruiter revokes the link. Expiry and the flag are in interviews-invite.test.ts (they need the
@@ -33,6 +41,27 @@ const GUEST_ROUTES = new Set([
   'PUT /api/interview-invite/consents',
   'GET /api/interview-invite/room',
 ]);
+/** The guest's routes that answer only once the lead has let the guest in (and, for most, while the interview is live). */
+const GUEST_ADMITTED_ROUTES = new Set([
+  'POST /api/interview-invite/pad/events',
+  'POST /api/interview-invite/runs',
+  'GET /api/interview-invite/runs',
+  'GET /api/interview-invite/runs/events',
+  'GET /api/interview-invite/runs/:runId',
+  'POST /api/interview-invite/runs/:runId/cancel',
+  'POST /api/interview-invite/milo/request',
+  'POST /api/interview-invite/media/participant',
+]);
+
+/** The routes rounds 3 to 6 added (OWED O-184), as the routers name them. */
+const ROUNDS_3_TO_6 = [
+  'GET /api/interviews/interviews/:id/transcript', 'GET /api/interviews/interviews/:id/milo-notes', 'POST /api/interviews/interviews/:id/milo-ask',
+  'GET /api/interviews/interviews/:id/recap', 'POST /api/interviews/interviews/:id/recap/open', 'POST /api/interviews/interviews/:id/recap/ask',
+  'POST /api/interviews/interviews/:id/plan-draft', 'GET /api/interviews/interviews/:id/record', 'GET /api/interviews/interviews/:id/consents',
+  'GET /api/interviews/candidates/:id/consents', 'GET /api/interviews/interviews/:id/milo-export', 'GET /api/interviews/candidates/:id/debrief',
+  'POST /api/interviews/applications/:id/stage', 'POST /api/interviews/candidates/:id/deletion', 'GET /api/interviews/candidates/:id/deletions',
+  'GET /api/interviews/interviews/:id/suggestion', 'POST /api/interviews/interviews/:id/suggestion/:suggestionId/answer',
+];
 
 /** dev:mock's environment, read from package.json as the journeys read it. */
 function devMockEnv(): Record<string, string> {
@@ -71,7 +100,7 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${port}`;
   child = spawn(process.execPath, [join(ROOT, 'node_modules', '.bin', 'tsx'), 'src/index.ts'], {
     cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...devMockEnv(), PORT: String(port), MOCK_PERSIST_PAIRINGS: '0', VOICE_LOG_DIR: mkdtempSync(join(tmpdir(), 'guest-sweep-voice-')), JEST_WORKER_ID: '' },
+    env: { ...process.env, ...devMockEnv(), PORT: String(port), MOCK_PERSIST_PAIRINGS: '0', MOCK_VOICE: '1', MEETING_ASSISTANT_ENABLED: 'true', VOICE_LOG_DIR: mkdtempSync(join(tmpdir(), 'guest-sweep-voice-')), JEST_WORKER_ID: '' },
   });
   child.stdout?.on('data', (d: Buffer) => { log = (log + d.toString()).slice(-4000); });
   child.stderr?.on('data', (d: Buffer) => { log = (log + d.toString()).slice(-4000); });
@@ -118,7 +147,7 @@ describe('a guest against every route the server mounts', () => {
 
   afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
 
-  it('refuses the guest everywhere but its two routes; a public route answers it no more than a rejected credential', async () => {
+  it('refuses the guest everywhere but its own routes; a public route answers it no more than a rejected credential', async () => {
     const { routes } = enumerateRoutes();
     const seen = new Set<string>();
     const leaks: string[] = [];
@@ -156,12 +185,23 @@ describe('a guest against every route the server mounts', () => {
     }
     // The after-call question (contract F1) is enumerated and refused to the guest like the room's ask.
     expect([statusOf.has('POST /api/interviews/interviews/:id/recap/ask'), (statusOf.get('POST /api/interviews/interviews/:id/recap/ask') ?? 0) >= 400]).toEqual([true, true]);
+    // Lane H6 (O-184): the routes rounds 3 to 6 added, by name. Each is enumerated from the routers and refused to the guest, on its
+    // own interview and on another.
+    for (const key of ROUNDS_3_TO_6) {
+      for (const k of key.includes('/interviews/:id') ? [key, `${key} (another interview)`] : [key]) {
+        expect([k, statusOf.has(k), (statusOf.get(k) ?? 0) >= 400]).toEqual([k, true, true]);
+      }
+    }
+    // A guest cookie carried onto a staff route is the gate's 401 (lib/session.ts: a guest is never the demo identity), on every
+    // interviews route: never a 403 that would say the tenant exists for it, never a 404 from inside a route.
+    const notGate = [...statusOf].filter(([k, st]) => k.includes(' /api/interviews') && st !== 401).map(([k, st]) => `${k} ${st}`);
+    expect(notGate).toEqual([]);
     expect(refused).toBeGreaterThan(targets.length * 0.9);
     // What the public surface is, for the record (health, config, the sign-in page's lists): printed, not hidden.
     console.log(`guest sweep: ${targets.length} requests, ${refused} refused, ${publicRoutes.length} public:\n  ${publicRoutes.join('\n  ')}`);
   }, 300_000);
 
-  it('the guest\'s own two routes answer the guest; a staff session is no guest on them', async () => {
+  it('the guest\'s own read answers the guest; a staff session is no guest on it or on the exchange', async () => {
     expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
     expect((await call('GET', '/api/interview-invite/interview', staff)).status).toBe(404);
     expect((await call('POST', '/api/interview-invite/exchange', staff, {})).status).toBe(404);
@@ -319,4 +359,148 @@ describe('lane SPEAK (rows I3.5, I3.8): Milo\'s approved words and a guest', () 
     expect((await call('GET', '/api/interview-invite/milo/request', guest)).status).toBeGreaterThanOrEqual(400);
     expect((await call('GET', '/api/interview-invite/interview', guest)).status).toBe(200);
   });
+});
+
+// Lane H6 (row E2; OWED O-275): every guest route named from the router itself, and for each, who it refuses. A guest route
+// takes no interview id: the guest's cookie names the interview. So "a guest of another interview" is proved on what an
+// admitted guest of one live interview can reach of another live interview (its runs, by id), and on what each guest's own
+// reads name (its own interview only).
+describe('lane H6: every guest route, from the router', () => {
+  const KWAME_LIVE = 'iv-s4e8u2zk'; // live, technical, Hugo leads, two seeded runs
+  let greta = ''; let hugo = '';
+  let notAdmitted = ''; let admittedKwame = ''; let admittedOwn = '';
+  const login = async (userId: string) => cookieOf(await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId }) }), 'orgiq.session');
+  const guestOf = async (interviewId: string): Promise<string> => {
+    const made = await fetch(`${base}/api/interviews/interviews/${interviewId}/invite`, { method: 'POST', headers: { cookie: greta, 'content-type': 'application/json' }, body: '{}' });
+    expect([interviewId, made.status]).toEqual([interviewId, 201]);
+    const token = String(((await made.json()) as { linkPath: string }).linkPath).split('#')[1];
+    return cookieOf(await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) }), 'interviews.guest');
+  };
+  const letIn = async (guest: string, interviewId: string) => {
+    // The three answers first (Kwame's are seeded, so his answer is a 409 that changes nothing), then the knock and Admit.
+    const notice = (json(await call('GET', '/api/interview-invite/consents', guest))['notice'] ?? {}) as { version?: string };
+    expect((await call('PUT', '/api/interview-invite/consents', guest, { noticeVersion: notice.version, recording: true, transcription: true, milo: true })).status).toBeLessThan(500);
+    expect((await call('POST', '/api/interview-invite/knock', guest, {})).status).toBe(200);
+    expect((await call('POST', `/api/interviews/interviews/${interviewId}/admit`, hugo, { admit: true })).status).toBe(200);
+  };
+  const json = (a: Answer): Record<string, unknown> => { try { return JSON.parse(a.body) as Record<string, unknown>; } catch { return {}; } };
+  const runIds = (a: Answer): string[] => ((json(a)['runs'] ?? []) as Array<{ runId: string }>).map((r) => r.runId);
+  const REFUSAL = JSON.stringify({ error: 'This link no longer works.' });
+  const RUN_BODY = (runId: string) => ({ runId, language: 'python', entrypoint: 'main.py', files: [{ path: 'main.py', content: 'print(1)' }] });
+  const BODIES: Record<string, unknown> = {
+    'POST /api/interview-invite/pad/events': { events: [{ kind: 'paste', clientAt: '2026-11-17T10:00:00.000Z', from: 0, inserted: 10, lines: 1, via: 'paste' }] },
+    'POST /api/interview-invite/runs': RUN_BODY('h6-sweep-run-0001'),
+    'POST /api/interview-invite/milo/request': { request: 'time' },
+    'POST /api/interview-invite/media/participant': { callId: 'h6-no-such-call', participantId: 'guest:inv-x-abc' },
+  };
+  const pathOf = (key: string) => key.split(' ')[1]!.replace(':runId', 'run-kwame-01');
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    greta = await login('u-greta'); hugo = await login('u-hugo');
+    notAdmitted = await guestOf(OTHER);
+    admittedKwame = await guestOf(KWAME_LIVE);
+    await letIn(admittedKwame, KWAME_LIVE);
+    // A second live technical round with a guest let in: Hugo starts Mateo's design round (ready, his).
+    const own = json(await call('GET', `/api/interviews/interviews/${OWN}`, hugo))['interview'] as { revision: number };
+    expect((await call('POST', `/api/interviews/interviews/${OWN}/start`, hugo, { revision: own.revision })).status).toBe(200);
+    admittedOwn = await guestOf(OWN);
+    await letIn(admittedOwn, OWN);
+    expect((await call('POST', `/api/interviews/interviews/${OWN}/runs`, hugo, RUN_BODY('h6-own-run-0001'))).status).toBe(202);
+  }, 60_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  it('names every guest route the router mounts, and no more', () => {
+    const mounted = new Set(enumerateRoutes().routes.filter((r) => r.path.startsWith('/api/interview-invite') && r.method !== 'HEAD' && r.method !== 'OPTIONS').map((r) => `${r.method} ${r.path}`));
+    const named = new Set([...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]);
+    expect([...mounted].filter((k) => !named.has(k)).sort()).toEqual([]);
+    expect([...named].filter((k) => !mounted.has(k)).sort()).toEqual([]);
+    expect(mounted.size).toBe(16);
+  });
+
+  it('refuses each guest route to no cookie and to a staff session, with the one not-found', async () => {
+    for (const key of [...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]) {
+      if (key === 'GET /api/interview-invite/runs/events') continue; // a stream once open; its refusals are below with the others'
+      const [method] = key.split(' ');
+      for (const [who, cookie] of [['no cookie', null], ['staff', hugo]] as const) {
+        const a = await call(method!, pathOf(key), cookie, BODIES[key] ?? {});
+        // The exchange reads a token, not a cookie: with none in the body it is the same not-found.
+        expect([key, who, a.status]).toEqual([key, who, 404]);
+      }
+    }
+    for (const cookie of [null, hugo]) expect((await call('GET', '/api/interview-invite/runs/events', cookie)).status).toBe(404);
+  });
+
+  it('refuses each route that needs admission to a guest the lead has not let in', async () => {
+    for (const key of GUEST_ADMITTED_ROUTES) {
+      const [method] = key.split(' ');
+      const a = await call(method!, pathOf(key), notAdmitted, BODIES[key] ?? {});
+      expect([key, a.status, a.body]).toEqual([key, 404, REFUSAL]);
+    }
+    // Its cookie is good: these were refusals of a live guest, not of a dead link.
+    expect((await call('GET', '/api/interview-invite/interview', notAdmitted)).status).toBe(200);
+  });
+
+  it('answers an admitted guest of a live round on its own routes', async () => {
+    for (const key of GUEST_ADMITTED_ROUTES) {
+      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant') continue; // a stream; a call the mock has not started
+      const [method] = key.split(' ');
+      const a = await call(method!, pathOf(key), admittedKwame, BODIES[key] ?? {});
+      expect([key, a.status < 300]).toEqual([key, true]);
+    }
+    // No call is running, so the media binding is the same not-found as any other (the bound case is interview-invite-media's).
+    expect((await call('POST', '/api/interview-invite/media/participant', admittedKwame, BODIES['POST /api/interview-invite/media/participant'])).status).toBe(404);
+  });
+
+  it('keeps one live round\'s guest out of another live round\'s runs', async () => {
+    const kwame = runIds(await call('GET', '/api/interview-invite/runs', admittedKwame));
+    const own = runIds(await call('GET', '/api/interview-invite/runs', admittedOwn));
+    expect(kwame).toEqual(expect.arrayContaining(['run-kwame-01', 'run-kwame-02']));
+    expect(kwame).not.toContain('h6-own-run-0001');
+    expect(own).toContain('h6-own-run-0001');
+    expect(own.filter((id) => id.startsWith('run-kwame'))).toEqual([]);
+    for (const [guest, foreign] of [[admittedKwame, 'h6-own-run-0001'], [admittedOwn, 'run-kwame-01']] as const) {
+      expect((await call('GET', `/api/interview-invite/runs/${foreign}`, guest)).status).toBe(404);
+      expect((await call('POST', `/api/interview-invite/runs/${foreign}/cancel`, guest, {})).status).toBe(404);
+    }
+    // A run id already used in the other round is a new run of its own round, never a reach into the other's.
+    const reuse = await call('POST', '/api/interview-invite/runs', admittedOwn, RUN_BODY('run-kwame-01'));
+    expect(reuse.status).toBeLessThan(500);
+    const after = await call('GET', `/api/interviews/interviews/${KWAME_LIVE}/runs`, hugo);
+    expect(((json(after)['runs'] ?? []) as Array<{ runId: string }>).filter((r) => r.runId === 'run-kwame-01')).toHaveLength(1);
+  });
+
+  it('names only its own interview in each guest\'s reads', async () => {
+    for (const [guest, mine, theirs] of [[admittedKwame, KWAME_LIVE, OWN], [admittedOwn, OWN, KWAME_LIVE], [notAdmitted, OTHER, KWAME_LIVE]] as const) {
+      for (const p of ['/interview', '/admission', '/consents', '/room', '/realtime-token']) {
+        const a = await call('GET', `/api/interview-invite${p}`, guest);
+        expect([p, a.body.includes(theirs)]).toEqual([p, false]);
+        if (p === '/room' && a.status === 200) expect(a.body).toContain(mine);
+      }
+    }
+  });
+});
+
+// Lane H6 (row E2): the reverse. A person of another tenant (the Work-only persona) is stopped at the tenant gate on every
+// interviews route (403, before any route reads anything), and so is a caller holding only a guest cookie (401).
+describe('lane H6: another tenant\'s person and a bare guest cookie on every interviews route', () => {
+  it('answers the Work-only persona 403 and the guest cookie 401 on every route, enumerated', async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    const theo = cookieOf(await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId: 'u-theo' }) }), 'orgiq.session');
+    const keys = [...new Set(enumerateRoutes().routes.filter((r) => r.path.startsWith('/api/interviews/') && r.method !== 'HEAD' && r.method !== 'OPTIONS').map((r) => `${r.method} ${r.path}`))];
+    expect(keys.length).toBeGreaterThan(55);
+    const wrong: string[] = [];
+    for (const key of keys) {
+      const [method, path] = key.split(' ');
+      for (const id of [OWN, 'iv-s4e8u2zk']) {
+        const p = path!.replace(/:[A-Za-z_]+/g, id);
+        const asTheo = await call(method!, p, theo, {});
+        if (asTheo.status !== 403) wrong.push(`${key} (${id}) Work-only ${asTheo.status}`);
+        const asCookie = await call(method!, p, 'interviews.guest=not.a-guest', {});
+        if (asCookie.status !== 401) wrong.push(`${key} (${id}) guest cookie ${asCookie.status}`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  }, 120_000);
 });
