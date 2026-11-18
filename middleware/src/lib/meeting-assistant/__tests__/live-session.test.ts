@@ -92,6 +92,30 @@ describe('start', () => {
   });
 });
 
+describe('a socket error', () => {
+  it('names the HTTP status of a refused upgrade in the rejection and the warning, never the key', async () => {
+    const http = await import('node:http');
+    const refuse = http.createServer((_req, res) => { res.writeHead(503); res.end(); });
+    refuse.on('upgrade', (_req, sock) => { sock.write('HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n'); sock.destroy(); });
+    await new Promise<void>((r) => refuse.listen(0, '127.0.0.1', () => r()));
+    const base = process.env['OPENAI_BASE_URL'];
+    process.env['OPENAI_BASE_URL'] = `http://127.0.0.1:${(refuse.address() as AddressInfo).port}/v1`;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const { s } = make();
+      const err = await s.start(START).then(() => null, (e: Error) => e);
+      expect(err?.message).toMatch(/the live socket failed: .*503/);
+      const logged = warn.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(logged).toMatch(/live socket error.*503/);
+      expect(`${err?.message}\n${logged}`).not.toContain(KEY);
+    } finally {
+      warn.mockRestore();
+      process.env['OPENAI_BASE_URL'] = base;
+      await new Promise<void>((r) => refuse.close(() => r()));
+    }
+  });
+});
+
 describe('audio and typed text', () => {
   it('sends audio as base64 session.input_audio.append and ignores empty chunks', async () => {
     const { s } = make();

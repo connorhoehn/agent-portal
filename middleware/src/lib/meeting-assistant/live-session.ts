@@ -91,6 +91,18 @@ interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
 interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number; /** The `say` request this utterance belongs to. */ say?: string }
 
+/**
+ * What a socket `error` event carries, as one short line: the event's or its error's message (the `ws` package words a refused
+ * upgrade as "Unexpected server response: <status>", which is the HTTP status). Never headers, never the key.
+ */
+export function socketErrorCause(ev: unknown): string {
+  const e = ev as { message?: unknown; error?: { message?: unknown; code?: unknown } } | null | undefined;
+  const parts = [e?.error?.message, e?.message, e?.error?.code].filter((x): x is string => typeof x === 'string' && x.length > 0);
+  const text = [...new Set(parts)].join(' / ') || 'no detail from the socket';
+  const key = process.env['OPENAI_API_KEY'];
+  return (key ? text.split(key).join('[key]') : text).replace(/\s+/g, ' ').slice(0, 200);
+}
+
 export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'openai' as const;
   readonly acceptsText = false;
@@ -154,7 +166,11 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       });
     });
     socket.addEventListener('message', (msg: { data?: unknown }) => this.onMessage(msg?.data));
-    socket.addEventListener('error', () => { this.fail?.(new Error('the live socket failed')); this.dropped('socket-error'); });
+    socket.addEventListener('error', (ev: unknown) => {
+      const cause = socketErrorCause(ev);
+      console.warn('[meeting-assistant] live socket error', cause);
+      this.fail?.(new Error(`the live socket failed: ${cause}`)); this.dropped('socket-error');
+    });
     socket.addEventListener('close', () => { this.fail?.(new Error('the live socket closed before the session started')); this.dropped('socket-closed'); });
     try { await started; } catch (e) { this.finish('start-failed'); try { socket.close(1000); } catch { /* already closed */ } throw e; } finally { clearTimeout(timer); }
   }
