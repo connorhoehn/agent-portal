@@ -13,7 +13,7 @@ import { interviewConsentsFixture } from '../../../mock/interviews-consents.js';
 import { spendHolds } from '../../../mock/spend-holds.js';
 import { spendEntries } from '../../../mock/spend-ledger.js';
 import { userSpendThisPeriod } from '../../../providers/user-budgets.js';
-import { DEFAULT_POLICY, limitsOfCall, payerFields, policyForLobby, policyFamilies, type PolicyCall } from '../../meeting-assistant/policy.js';
+import { DEFAULT_POLICY, limitsOfCall, minutesWordingOf, payerFields, policyForLobby, policyFamilies, type PolicyCall } from '../../meeting-assistant/policy.js';
 import { realSpend, sourceIdFor } from '../../meeting-assistant/spend.js';
 import type { AssistantRecord, MinutesRecord } from '../../meeting-assistant/types.js';
 import { MemoryInviteStore, setInviteStore } from '../invite/store.js';
@@ -69,6 +69,15 @@ describe('registration', () => {
     expect(policyForLobby(LOBBY)).toBe(P);
     expect(policyForLobby('orgiq:initiative:p-auth')).toBe(DEFAULT_POLICY);
     expect(policyForLobby('interviews:pad:iv-1')).toBe(DEFAULT_POLICY);
+  });
+});
+
+describe('the notices\' wording: notes for the panel only (E4 #33)', () => {
+  it('an interview call says the notes are the panel\'s only; any other call keeps the meeting\'s words', async () => {
+    const { noticeText } = await import('../../meeting-assistant/chat.js');
+    expect(noticeText.joined('Hugo Marchetti', 30, 75, minutesWordingOf(LOBBY))).toContain('Milo writes notes for the interview panel only and leaves after 75 minutes.');
+    expect(noticeText.rejoined('Hugo Marchetti', 30, 10, minutesWordingOf(LOBBY))).toContain('Milo adds what it hears to the notes for the interview panel only and leaves');
+    expect(noticeText.joined('Vera', 30, 60, minutesWordingOf('orgiq:initiative:p-auth'))).toContain('Milo writes minutes for the people in the call');
   });
 });
 

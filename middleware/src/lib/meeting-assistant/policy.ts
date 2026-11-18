@@ -129,7 +129,21 @@ export interface MeetingAssistantPolicy {
    * meeting assistant's own (limits.ts). Absent: the defaults. A policy that cannot work it out answers its most restrictive figure.
    */
   listeningLimitMinutes?(call: PolicyCall): Promise<number>;
+  /**
+   * Whose notes Milo writes, in the notices' own sentences (the chat's join and rejoin notices and the in-call acknowledgement).
+   * Absent: MINUTES_WORDING, "minutes for the people in the call". An interview's call holds the candidate, who never reads them.
+   */
+  readonly minutesWording?: MinutesWording;
 }
+
+/** What Milo writes and for whom, after its name: the first period's words, and a later period's. No full stop. */
+export interface MinutesWording { writes: string; adds: string }
+export const MINUTES_WORDING: MinutesWording = Object.freeze({
+  writes: 'writes minutes for the people in the call',
+  adds: 'adds what it hears to the minutes for the people in the call',
+});
+/** The wording a lobby's policy gives its notices. */
+export const minutesWordingOf = (lobby: string | null | undefined): MinutesWording => policyForLobby(lobby).minutesWording ?? MINUTES_WORDING;
 
 /** Today's behaviour, for every lobby Milo can be invited into. */
 export const DEFAULT_POLICY: MeetingAssistantPolicy = Object.freeze<MeetingAssistantPolicy>({

@@ -239,3 +239,11 @@ test('consent 11: the over-budget ask says what is bought, for how long and by h
   assert.equal(budgetAskWords('invite', { estimateUsd: null, remainingUsd: null, seconds: null }).detail, 'Inviting Milo goes past your budget. Go ahead anyway?');
   assert.doesNotMatch(budgetAskWords('resume', { estimateUsd: 1, remainingUsd: 0, seconds: 60 }).detail, /session/);
 });
+
+test('an interview\'s notice says the notes are the panel\'s only; a meeting\'s keeps its words (E4 #33)', () => {
+  const panel = { writes: 'writes notes for the interview panel only', adds: 'adds what it hears to the notes for the interview panel only' };
+  assert.match(noticeText(view('listening', { youMustAck: true, minutesWording: panel })).body, /Milo writes notes for the interview panel only\.$/);
+  assert.match(noticeText(view('listening', { period: 2, youMustAck: true, minutesWording: panel })).body, /Milo adds what it hears to the notes for the interview panel only\./);
+  assert.match(noticeText(view('listening', { youMustAck: true })).body, /Milo writes minutes for the people in the call\.$/);
+  assert.match(noticeText(view('listening', { youMustAck: true, minutesWording: { writes: '' } })).body, /minutes for the people in the call\.$/);
+});

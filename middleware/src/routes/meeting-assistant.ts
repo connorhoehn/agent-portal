@@ -73,7 +73,7 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { ackedBefore, newAssistantSession, periodOf, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits, type AssistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf, type ReserveOutcome } from '../lib/meeting-assistant/spend.js';
-import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { familyOfLobby, hasFamilyPolicies, payerFields, policyCallOf, policyFamilies, limitsOfCall, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js'; import { CANNOT_LISTEN_PAST_ROUND, INTERVIEW_FAMILY, registerInterviewsMiloPolicy } from '../lib/interviews/milo-policy.js'; import { interviewsEnabled } from '../lib/interviews/flag.js';
+import { ASSISTANT_NAME } from '../lib/meeting-assistant/chat-types.js'; import { familyOfLobby, hasFamilyPolicies, payerFields, policyCallOf, policyFamilies, limitsOfCall, minutesWordingOf, policyForLobby, type PolicyCall, type ReadAccess } from '../lib/meeting-assistant/policy.js'; import { CANNOT_LISTEN_PAST_ROUND, INTERVIEW_FAMILY, registerInterviewsMiloPolicy } from '../lib/interviews/milo-policy.js'; import { interviewsEnabled } from '../lib/interviews/flag.js';
 type SpendRefusal = Extract<ReserveOutcome, { ok: false }>['refusal'];
 import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import {
@@ -206,6 +206,8 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     ...(record.state === 'listening' || record.state === 'paused' ? { extendSeconds: extendSecondsOf(record, await limitsOfCall(policyCallOf(record))) } : {}),
     // This person acknowledged in an earlier period of this call: their notice says they acknowledge once more.
     youAckedBefore: ackedBefore(record, session.sub),
+    // Whose notes Milo writes, in the acknowledgement's words (the family's policy: an interview's are the panel's only, E4 #33).
+    minutesWording: minutesWordingOf(record.lobby),
     // Which period of Milo in this call this is (1 for the first); a notice closed in an earlier period shows again in a new one.
     period: (recordSession(record).periods?.length ?? 0) + 1,
     mustAck: owing, youMustAck: owing.includes(session.sub),
@@ -301,7 +303,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
       const started = await startSession(callId, current, session).then(() => true, () => false);
       if (started) await armAudio(callId, pre);
     }
-    if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays) + noticeText.nameTwins(await Promise.all([...new Set([...current.presentAtInvite, session.sub])].map((u) => nameOf(u)))));
+    if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, undefined, minutesWordingOf(current.lobby)) + noticeText.nameTwins(await Promise.all([...new Set([...current.presentAtInvite, session.sub])].map((u) => nameOf(u)))));
     res.json(await view((await store.get(callId)) ?? current, callId, session)); return;
   }
   if (!sessionAvailable()) { console.warn('[meeting-assistant] no live session provider is configured'); throw new AppError(503, NOT_SET_UP); }
@@ -358,7 +360,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   }
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
   await armAudio(callId, pre);
-  await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays) + noticeText.nameTwins(names));
+  await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, undefined, minutesWordingOf(lobby)) + noticeText.nameTwins(names));
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
 
@@ -490,7 +492,7 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
   runtime.setVoice(callId, false);
   await armAudio(callId, pre);
   await assistantAudio().refresh(callId).catch(() => undefined); // only the person inviting Milo back is heard until the others acknowledge
-  await postNoticeQuietly(callId, noticeText.rejoined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, Math.round(grant / 60)) + noticeText.nameTwins(names));
+  await postNoticeQuietly(callId, noticeText.rejoined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays, Math.round(grant / 60), minutesWordingOf(prior.lobby)) + noticeText.nameTwins(names));
   res.json(await view(moved, callId, session));
 }
 

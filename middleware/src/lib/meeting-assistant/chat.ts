@@ -14,6 +14,7 @@
 //
 // When: only while an assistant record exists for the call and is not `left`; the dismiss notice is the one
 // exception (`leaving`). A private reply is not a chat message: `postPrivately` goes to one person's notifications.
+import { MINUTES_WORDING, type MinutesWording } from './policy.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { config } from '../../config.js';
@@ -79,18 +80,18 @@ export async function postAsAssistant(callId: string, message: { text: string; m
 // Notices. Plain sentences, no emoji. Names are display names.
 
 export const noticeText = {
-  joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
+  joined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60), wording: MinutesWording = MINUTES_WORDING): string =>
     `${ASSISTANT_NAME} joined at ${inviterName}'s invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
-    `${ASSISTANT_NAME} writes minutes for the people in the call and leaves after ${minutes} minutes. ` +
+    `${ASSISTANT_NAME} ${wording.writes} and leaves after ${minutes} minutes. ` +
     `Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
   /**
    * Milo was invited back into a call it had left: the same facts as `joined`, said again, because everyone acknowledges for the new
    * period. Said to everyone, so it never says "again" (some never acknowledged); it says the voice is off, since an invitation back
    * always turns it off, and "adds what it hears to the minutes", as the consent notice of a later period does.
    */
-  rejoined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60)): string =>
+  rejoined: (inviterName: string, retentionDays: number = config.meetingAssistant.transcriptRetentionDays, minutes: number = Math.round(assistantLimits().maxSeconds / 60), wording: MinutesWording = MINUTES_WORDING): string =>
     `${ASSISTANT_NAME} is back in this call at ${inviterName}'s invitation and is listening again. Once you acknowledge, what you say is sent to the speech provider and kept as text for ${retentionDays} days. ` +
-    `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call and leaves after ${minutes >= 1 ? `${minutes} minutes` : 'less than a minute'}. ` +
+    `${ASSISTANT_NAME} ${wording.adds} and leaves after ${minutes >= 1 ? `${minutes} minutes` : 'less than a minute'}. ` +
     `${ASSISTANT_NAME}'s voice is off until someone turns it on. Anyone here can pause ${ASSISTANT_NAME}, or dismiss it for everyone.`,
   /**
    * Added to the join and the rejoin notice: of the seated people's display names, those whose first name is a way Milo's name is

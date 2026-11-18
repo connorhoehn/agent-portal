@@ -49,6 +49,8 @@ export interface AssistantView {
   extendSeconds: number | null;
   /** This person acknowledged Milo in an earlier period of this call: their notice says everyone acknowledges once more. */
   youAckedBefore: boolean;
+  /** Whose notes Milo writes, after its name (the call family's policy; an interview's are the panel's only). Absent: the meeting's. */
+  minutesWording?: { writes: string; adds: string };
   /** Which period of Milo in this call this is (1 for the first, 2 after it was invited back once, ...). */
   period: number;
 }
@@ -91,6 +93,7 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     leaving: phase === 'left' && b['leaving'] === true,
     extendSeconds: phase === 'listening' || phase === 'paused' ? seconds(b['extendSeconds']) : null,
     youAckedBefore: b['youAckedBefore'] === true,
+    ...wordingOf(b['minutesWording']),
     period: typeof b['period'] === 'number' && Number.isInteger(b['period']) && b['period'] >= 1 ? b['period'] : 1,
     openRequests: present(phase) ? list(b['openRequests'], (r) => {
       const name = text(r['askerName']);
@@ -253,6 +256,14 @@ export function assistantControls(input: { enabled: boolean; inCall: boolean; ca
   };
 }
 
+/** The meeting's own words for whose notes Milo writes (middleware meeting-assistant/policy.ts MINUTES_WORDING). */
+const MINUTES_WORDING = { writes: 'writes minutes for the people in the call', adds: 'adds what it hears to the minutes for the people in the call' } as const;
+/** The server's wording, when it sent both sentences as text. */
+function wordingOf(raw: unknown): { minutesWording?: { writes: string; adds: string } } {
+  const w = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
+  return w && typeof w['writes'] === 'string' && typeof w['adds'] === 'string' && w['writes'] && w['adds'] ? { minutesWording: { writes: w['writes'], adds: w['adds'] } } : {};
+}
+
 /** The transcription notice shows to someone who still owes an acknowledgement while Milo is in the call. */
 export const noticeVisible = (enabled: boolean, v: AssistantView): boolean => enabled && assistantPresent(v) && v.youMustAck;
 
@@ -263,12 +274,13 @@ export const noticeVisible = (enabled: boolean, v: AssistantView): boolean => en
  */
 export function noticeText(v: AssistantView): { title: string; body: string } {
   const who = v.invitedByName ?? 'A participant';
+  const words = v.minutesWording ?? MINUTES_WORDING;
   const kept = 'After that your words are sent to the speech provider and kept as text for the retention period set by your organisation.';
   if (v.period <= 1) return {
     title: `${who} invited ${ASSISTANT_NAME} to listen to this call`,
-    body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. ${kept} ${ASSISTANT_NAME} writes minutes for the people in the call.`,
+    body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. ${kept} ${ASSISTANT_NAME} ${words.writes}.`,
   };
-  const later = `${ASSISTANT_NAME} adds what it hears to the minutes for the people in the call. ${ASSISTANT_NAME}'s voice is off until someone turns it on.`;
+  const later = `${ASSISTANT_NAME} ${words.adds}. ${ASSISTANT_NAME}'s voice is off until someone turns it on.`;
   return v.youAckedBefore ? {
     title: `${who} invited ${ASSISTANT_NAME} back into this call`,
     body: `${ASSISTANT_NAME} is listening to this call again. Everyone acknowledges once more: nothing you say is kept until you do. ${kept} ${later}`,

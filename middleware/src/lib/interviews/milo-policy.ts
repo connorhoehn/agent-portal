@@ -32,6 +32,7 @@
 //                         cap (speak/index.ts `holdSpeechMoney`); refused, the answer stays in the chat and nothing is said.
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
 //   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
+//   minutesWording        "writes notes for the interview panel only": the candidate is in the call and never reads them (E4 #33).
 import { randomBytes } from 'node:crypto';
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
@@ -219,6 +220,8 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   // Decision 17: an interview's transcript and minutes are media, kept 90 days by default or until a deletion request, and removed
   // by the interviews retention (retention/erasers.ts `transcript-and-minutes`), never by the meeting assistant's 30-day sweep.
   keepsOwnRetention: true,
+  // E4 #33: the candidate is in the call and never reads Milo's notes; the notices say whose they are.
+  minutesWording: { writes: 'writes notes for the interview panel only', adds: 'adds what it hears to the notes for the interview panel only' },
   listeningLimitMinutes: async (call) => {
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
