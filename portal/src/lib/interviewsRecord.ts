@@ -44,6 +44,13 @@ export const RECORD_STATES: readonly InterviewState[] = ['ended', 'scored', 'rev
 export const hasRecord = (state: InterviewState): boolean => RECORD_STATES.includes(state);
 
 /** `m:ss`, or `h:mm:ss` past the hour. */
+/** `?at=<seconds>` as ms from the interview's start; null when it is absent, not a number or negative. */
+export function atFromSearch(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === '') return null;
+  const s = Number(raw);
+  return Number.isFinite(s) && s >= 0 ? Math.round(s * 1000) : null;
+}
+
 export function clockOf(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(total / 3600);

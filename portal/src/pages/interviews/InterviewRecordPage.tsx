@@ -17,14 +17,14 @@ import { CodePlayback, CodeRunOutput } from '@connorhoehn/ui-components/code-pad
 import { SplitPane } from '@connorhoehn/ui-components/shared';
 import { RecordingPlayer, TranscriptPanel, type RecordingPlayerHandle } from '@connorhoehn/ui-components/video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { ROUND_TYPE_LABELS, roundStatus, whenLabel } from '../../lib/interviews';
 import {
-  MARKER_LABELS, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
+  MARKER_LABELS, atFromSearch, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf, transcriptLine,
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
@@ -100,11 +100,15 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const segments = useMemo(() => segmentsOf(transcript.lines, 0, endMs), [transcript.lines, endMs]);
   const player = useRef<RecordingPlayerHandle>(null);
   // The page's one time, ms from the interview's start. The player (when there is one) sets it as it plays.
-  const [timeMs, setTimeMs] = useState(0);
+  // A recap source links here with `?at=<seconds>` (from the interview's start): code, transcript and clock open at that time.
+  const [search] = useSearchParams();
+  const atMs = atFromSearch(search.get('at'));
+  const [timeMs, setTimeMs] = useState(atMs ?? 0);
   const moveTo = useCallback((ms: number) => {
     setTimeMs(ms);
     player.current?.seek(Math.max(0, ms + shift) / 1000);
   }, [shift]);
+  useEffect(() => { if (atMs !== null) moveTo(atMs); }, [atMs, moveTo]);
 
   const padLog = usePadLog(interview.id, technical);
   const runs: RunView[] = record.runs ?? [];

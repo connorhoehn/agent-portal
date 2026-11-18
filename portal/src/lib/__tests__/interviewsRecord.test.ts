@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, sentencesOf, transcriptLine,
+  atFromSearch, clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, sentencesOf, transcriptLine,
   type RecordLine,
 } from '../interviewsRecord.ts';
 
@@ -142,4 +142,13 @@ test('one speaker\'s fragments are read as one sentence; finished sentences, oth
   const seg = segmentsOf(lines, 0, 100_000);
   assert.equal(seg[0]!.text, 'How would you reverse a linked list in place?');
   assert.deepEqual([seg[0]!.startMs, seg[0]!.endMs], [10_000, 14_000]);
+});
+
+test('?at is seconds from the start, read as ms; anything else is no seek (E4 #38)', () => {
+  assert.equal(atFromSearch('7'), 7000);
+  assert.equal(atFromSearch('63.5'), 63500);
+  assert.equal(atFromSearch(null), null);
+  assert.equal(atFromSearch(''), null);
+  assert.equal(atFromSearch('abc'), null);
+  assert.equal(atFromSearch('-3'), null);
 });

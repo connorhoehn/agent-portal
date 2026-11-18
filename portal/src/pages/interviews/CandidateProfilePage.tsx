@@ -236,7 +236,7 @@ function CandidateProfile({ id }: { id: string }) {
         {tab === 'recordings' && <RecordingsSection rows={recorded} />}
         {tab === 'activity' && (
           <Stack gap="md" data-testid="interviews-profile-activity">
-            {applications.map((a) => <HistorySection key={a.applicationId} app={a} several={applications.length > 1} />)}
+            {readsHistory(role) && applications.map((a) => <HistorySection key={a.applicationId} app={a} several={applications.length > 1} />)}
             {readsConsents(role) && <ProfileConsents candidateId={candidate.id} />}
             {deletions.reads && <DeletionsSection rows={deletions.rows} asks={deletions.asks} onAsk={deletions.ask} />}
           </Stack>
@@ -296,6 +296,9 @@ function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApp
     </DetailSection>
   );
 }
+
+/** The server answers an interviewer an empty history (scope.ts mayReadStageHistory): the section is not drawn for them. */
+const readsHistory = (role: string): boolean => role !== 'interviewer';
 
 function HistorySection({ app, several }: { app: ProfileApplication; several: boolean }) {
   const moves = [...app.history].sort((a, b) => b.at.localeCompare(a.at));

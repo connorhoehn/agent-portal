@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  codeBlockLanguage, consentOffLine, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
+  codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
   suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, pollsConsents,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
@@ -202,4 +202,11 @@ test('I3.4j: the open room reads the candidate\'s answers again until they exist
   assert.equal(pollsConsents('lead', true, { answered: true }), false);
   assert.equal(pollsConsents(null, true, { answered: false }), false);
   assert.equal(pollsConsents('lead', false, { answered: false }), false);
+});
+
+test('the idle room lists only what is off, in a fixed order (E4 #37)', () => {
+  assert.equal(offForFact(['milo', 'recording', 'transcription']), 'recording, transcript, Milo');
+  assert.equal(offForFact(['transcription']), 'transcript');
+  assert.equal(offForFact([]), null);
+  assert.equal(offForFact(undefined), null);
 });

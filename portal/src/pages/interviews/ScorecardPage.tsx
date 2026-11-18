@@ -28,7 +28,7 @@ import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableN
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
-import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
+import { MILO_QUESTION_MAX, NO_SEAT_NOT_FOUND, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
@@ -44,9 +44,9 @@ export default function ScorecardPage() {
   const base = useFlushTrailItems();
   const { data, error, failure, refresh } = useFetch<{ scorecard: ScorecardPageView }>(id ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/scorecard` : null);
   const view = data?.scorecard ?? null;
-  useCrumbLabel(id, view ? `${view.interview.candidate.name}, ${view.interview.round.name}` : null);
+  useCrumbLabel(id, view ? (view.interview.seat === null ? view.interview.candidate.name : `${view.interview.candidate.name}, ${view.interview.round.name}`) : null);
   if (failure?.status === 404) {
-    return <RecordNotFound heading="Scorecard" title="Scorecard not found" body="There is no interview here that you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
+    return <RecordNotFound heading="Scorecard" title={NO_SEAT_NOT_FOUND.title} body={NO_SEAT_NOT_FOUND.body} backLabel={NO_SEAT_NOT_FOUND.backLabel} onBack={() => navigate('/interviews')} />;
   }
   if (error && !view) return <UnavailableNotice error={error} what="this scorecard" source="Scorecards are read from the interviews tenant" onRetry={refresh} />;
   if (!view) return <FlushDetailFrame><DetailPage title="Scorecard" breadcrumbs={base}><T size="sm" tone="tertiary">Loading the scorecard…</T></DetailPage></FlushDetailFrame>;
@@ -188,7 +188,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const recapStep = (
     <Stack gap="md" data-testid="interviews-scorecard-recap-step">
       {correctingLine}
-      <RecapView interviewId={interview.id} competencies={competencies} initial={recap} ratings={draft.ratings} />
+      <RecapView interviewId={interview.id} competencies={round.required} initial={recap} ratings={draft.ratings} />
       <AskFromRecap interviewId={interview.id} />
       <Inline gap="sm">
         <Button size="sm" variant="secondary" data-testid="interviews-scorecard-back-to-ratings" onClick={() => goTo(previousStep('recap'))}>Back to my ratings</Button>
@@ -253,7 +253,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           {s.earlier.length > 0 && <Versions versions={s.earlier} competencies={competencies} />}
         </Stack>
       ))}
-      {!seated && interview.endedAt !== null && <RecapView interviewId={interview.id} competencies={competencies} initial={null} ratings={null} />}
+      {!seated && interview.endedAt !== null && <RecapView interviewId={interview.id} competencies={round.required} initial={null} ratings={null} />}
     </Stack>
   );
 

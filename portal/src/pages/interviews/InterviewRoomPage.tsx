@@ -28,7 +28,9 @@ import { Button, ChatComposer, Disclosure, EmptyState, Inline, KeyValue, Loading
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
-import { useCrumbLabel } from '../../lib/crumbLabels';
+import { useCrumbLabel, useCrumbTrail } from '../../lib/crumbLabels';
+import { interviewsRoundHome } from '../../components/shell/breadcrumbResolve';
+import { useSession } from '../../lib/auth';
 import { CallBlock, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
@@ -43,7 +45,7 @@ import {
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
-  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, type RoomTabId,
+  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloSaid, miloInviteBlock,
   NO_SEAT_NOT_FOUND,
 } from '../../lib/interviewsRoom';
@@ -63,6 +65,10 @@ function InterviewRoom({ id }: { id: string }) {
   const room = data?.room ?? null;
   // The trail's round crumb (U6): "Mateo Álvarez, System design".
   useCrumbLabel(id, room ? roundCrumbLabel(room) : undefined);
+  // A round the viewer cannot read still hangs under their home (recruiter and admin: Hire › Candidates), not under "Upcoming › Round".
+  const { session } = useSession();
+  const unreadable = !room && !!error && (isNotFoundError(error) || /404|not found/i.test(error));
+  useCrumbTrail(id, unreadable ? [...interviewsRoundHome(session?.role, true), { label: NO_SEAT_NOT_FOUND.title }] : null);
 
   const open = !!room && OPEN_STATES.has(room.state);
   const lobbyName = open ? room.lobbyName : null;
@@ -185,13 +191,13 @@ function InterviewRoom({ id }: { id: string }) {
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {drawn
       ? <CallBlock placement="pane" fit="contain" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
-      : <RoomIdle room={room} live={call.live} admission={admission} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
+      : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
     <RoomPane room={room} here={call.here} />
   </Stack>;
 }
 
 /** Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. */
-function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boolean; admission: Admission | null; onBack(): void }) {
+function RoomIdle({ room, live, admission, off, onBack }: { room: RoomView; live: boolean; admission: Admission | null; off: string | null; onBack(): void }) {
   if (!OPEN_STATES.has(room.state)) {
     const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
     return <EmptyState title={over ? 'This interview has ended' : 'This interview is not ready for a call'}
@@ -208,6 +214,7 @@ function RoomIdle({ room, live, admission, onBack }: { room: RoomView; live: boo
     { label: 'Length', value: `${room.round.minutes} min` },
     { label: 'Panel', value: panelLine(room.seats) },
     ...(waiting ? [{ label: 'The candidate', value: waiting }] : []),
+    ...(off ? [{ label: 'Off for this interview', value: off }] : []),
   ];
   // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
   return (

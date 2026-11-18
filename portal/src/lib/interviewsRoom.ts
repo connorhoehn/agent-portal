@@ -143,6 +143,16 @@ export function consentOffLine(off: readonly ConsentPart[] | null | undefined): 
   return `${list} ${words.length === 1 ? 'is' : 'are'} off for this interview`;
 }
 
+const OFF_FACT_WORDS: Record<ConsentPart, string> = { recording: 'recording', transcription: 'transcript', milo: 'Milo' };
+const OFF_FACT_ORDER: readonly ConsentPart[] = ['recording', 'transcription', 'milo'];
+
+/** The idle room's fact (E4 #37): what is off, in a fixed order, "recording, transcript, Milo"; null when nothing is off. */
+export function offForFact(off: readonly ConsentPart[] | null | undefined): string | null {
+  const set = new Set(off ?? []);
+  const words = OFF_FACT_ORDER.filter((p) => set.has(p)).map((p) => OFF_FACT_WORDS[p]);
+  return words.length ? words.join(', ') : null;
+}
+
 /** The pad's language as the library's read-only code block names it; the rest are plain text. */
 export const codeBlockLanguage = (language: PadLanguage): 'ts' | 'js' | 'text' =>
   language === 'typescript' ? 'ts' : language === 'javascript' ? 'js' : 'text';
