@@ -22,7 +22,7 @@ jest.mock('../chat.js', () => ({
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, HELD_REFUSAL_REPEAT_MS, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, type StartContext } from '../orchestrator.js';
 import { ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -306,20 +306,22 @@ describe('7. the fixed refusal for a request heard again, and the asker\'s name'
     displayName: async (_c, userId) => (userId === GUEST ? 'Jordan Lee' : null),
   };
 
-  it('the same refusal for the same asker inside the window is posted once; after it, again; other answers are not held back', async () => {
+  it('the same refusal for the same asker is posted once, however long after it is heard again; after another answer to them, again', async () => {
     const off = registerMeetingAssistantPolicy('orgiq:refusaltest', HELD);
     try {
       await startCall('orgiq:refusaltest:r1');
-      const ask = async (text: string) => { await intake.handle(CALL, { userId: GUEST, text, at: now }); now += 5000; await intake.tick(); await flush(); };
+      const ask = async (text: string, by = GUEST) => { await intake.handle(CALL, { userId: by, text, at: now }); now += 5000; await intake.tick(); await flush(); };
       await ask('Milo, what is two plus two?');
       now += 25_000;
       await ask('Milo, what is two plus two?'); // the same audio, looped 30 s later
+      now += 86_000;
+      await ask('Milo, what is two plus two?'); // and again 91 s after the first (the live run on main 95dc9446)
       expect(mockPosts.approved).toEqual([REFUSAL]);
-      expect(mockTrace.some((t) => t.ev === 'held.repeat')).toBe(true);
+      expect(mockTrace.filter((t) => t.ev === 'held.repeat')).toHaveLength(2);
       await ask('Milo, how much time is left?');
       await ask('Milo, how much time is left?');
-      expect(mockPosts.approved.filter((t) => t !== REFUSAL)).toHaveLength(2);
-      now += HELD_REFUSAL_REPEAT_MS;
+      expect(mockPosts.approved.filter((t) => t !== REFUSAL)).toHaveLength(2); // other answers are not held back
+      await ask('Milo, what is two plus two?'); // Milo said something else in between: refused again, once
       await ask('Milo, what is two plus two?');
       expect(mockPosts.approved.filter((t) => t === REFUSAL)).toHaveLength(2);
     } finally { off(); }

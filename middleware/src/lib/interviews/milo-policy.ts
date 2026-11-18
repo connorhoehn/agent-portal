@@ -177,7 +177,7 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     if (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false))) return MILO_CAN_DO;
     return logCandidateLine(interview, request.text, request.askedBy).catch(() => MILO_CAN_DO);
   },
-  // The same fixed sentence for a request heard again (looping audio) is posted once a minute per asker (orchestrator.ts).
+  // The same fixed sentence for a request heard again (looping audio) is posted once per asker until Milo answers them something else (orchestrator.ts).
   heldRefusal: MILO_CAN_DO,
   // The candidate is not in the directory: Milo's chat names them by the interview's own record (seated as "Candidate" otherwise).
   displayName: async (call, userId) => {

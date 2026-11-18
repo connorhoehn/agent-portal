@@ -265,7 +265,7 @@ describe('how Milo\'s chat names the candidate, and the fixed refusal', () => {
     expect(await P.displayName!(CALL, LEAD)).toBeNull();
   });
 
-  it('declares its one fixed refusal, so a request heard again is refused once a minute', async () => {
+  it('declares its one fixed refusal, so a request heard again is refused once until Milo answers something else', async () => {
     const { MILO_CAN_DO } = await import('../speak/index.js');
     expect(P.heldRefusal).toBe(MILO_CAN_DO);
   });

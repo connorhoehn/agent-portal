@@ -100,7 +100,8 @@ export interface MeetingAssistantPolicy {
   heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; spoken: boolean }): Promise<void>;
   /**
    * The one fixed sentence `answerFromHeldText` answers a request it will not serve with. The same sentence for the same asker is
-   * posted (and said) once per `HELD_REFUSAL_REPEAT_MS`: a request heard again (audio that loops, a repeat) is not refused twice.
+   * posted (and said) once, and again only after Milo has answered that asker something else: a request heard again (audio that
+   * loops, a repeat minutes later) is not refused twice.
    */
   readonly heldRefusal?: string;
   /** How Milo's chat names a person this family knows and the directory does not (an interview's candidate); null: the directory's name. */

@@ -327,8 +327,8 @@ interface CallRun {
   speech: AssistantSpeech;
   /** The approved utterance being held whole while the session says it (approved-speech.ts); at most one at a time. */
   approved?: ApprovedHold | null;
-  /** When the policy's fixed refusal was last posted, per asker (`heldRefusal`). */
-  heldRefusedAt?: Map<string, number>;
+  /** What Milo last answered each asker in the chat (held text or a reply): the fixed refusal is not posted twice in a row (`heldRefusal`). */
+  lastAnswerTo?: Map<string, string>;
   /** True only while the held frames of a checked approved utterance are being handed to the gate (its reason is then `approved`). */
   releasingApproved?: boolean;
   /** When the provider says the open session ends (epoch ms), or null when it did not say. */
@@ -559,8 +559,6 @@ interface ApprovedHold {
   finish: (outcome: SayOutcome, why: SayWithheldWhy | 'relayed') => void;
 }
 
-/** The policy's fixed refusal is posted once per asker in this long (heldRefusal): a loop of the same audio is not refused again. */
-export const HELD_REFUSAL_REPEAT_MS = 60_000;
 
 /** How far ahead of its playout an approved utterance is queued on the relay (2 s: under the relay's 3 s cap). */
 const APPROVED_AHEAD_FRAMES = 20;
@@ -1477,6 +1475,7 @@ export class AssistantRuntime {
     // The call's policy may keep everything the live model says out of the call (an interview: only approved words are said).
     if (!run.policy.relaysLiveSpeech(run.call)) { decide('drop.policy'); return; }
     if (asker === null) { await postNoticeQuietly(run.ctx.callId, e.text.slice(0, 1500)); return; }
+    (run.lastAnswerTo ??= new Map()).set(asker, e.text);
     await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await this.nameIn(run, asker) });
   }
 
@@ -1491,13 +1490,10 @@ export class AssistantRuntime {
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
         if (held !== null) {
-          // The fixed refusal again for the same asker inside the window (the same audio heard twice): not posted or said again.
-          if (run.policy.heldRefusal !== undefined && held === run.policy.heldRefusal) {
-            const seen = (run.heldRefusedAt ??= new Map());
-            const last = seen.get(e.askedBy);
-            if (last !== undefined && this.now() - last < HELD_REFUSAL_REPEAT_MS) { trace('held.repeat', {}); continue; }
-            seen.set(e.askedBy, this.now());
-          }
+          // The fixed refusal for an asker whose last answer from Milo was already that refusal (the same request heard again, however
+          // long after): not posted or said again. Once Milo has answered that asker something else, the refusal is posted again.
+          if (run.policy.heldRefusal !== undefined && held === run.policy.heldRefusal && run.lastAnswerTo?.get(e.askedBy) === held) { trace('held.repeat', {}); continue; }
+          (run.lastAnswerTo ??= new Map()).set(e.askedBy, held);
           // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
           const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await this.nameIn(run, e.askedBy) }).catch(() => null);
           const said = posted ? await this.sayHeldText(callId, held, e.askedBy) : 'posted';
