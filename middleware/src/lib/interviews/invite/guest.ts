@@ -146,7 +146,9 @@ export function requireGuest(opts: GuestLoadOptions = {}) {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Referrer-Policy', 'no-referrer');
       if (!loaded) {
-        if (raw) clearGuestCookie(res);
+        // The cookie stays while it still opens the ended room (an admitted guest after the end, finding I2.4e): every other read
+        // is refused, but a reload keeps showing "the interview has ended" with the deletion line, not "this link no longer works".
+        if (raw && (opts.endedAfterAdmission || !(await loadGuest(raw, interviewsNow(), { endedAfterAdmission: true })))) clearGuestCookie(res);
         res.status(404).json(GUEST_REFUSAL);
         return;
       }

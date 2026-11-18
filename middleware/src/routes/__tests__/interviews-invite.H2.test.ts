@@ -267,7 +267,7 @@ describe('a link with no origin when the portal origin is not set (O-052)', () =
 });
 
 describe('the realtime token asked after the end (O-072, the server half)', () => {
-  it('is not-found and drops the cookie; the room\'s read then has no guest to answer for', async () => {
+  it('is not-found and keeps the cookie, so a reload still reads the ended room (I2.4e); without the cookie nothing answers', async () => {
     const cookie = guestCookie(await exchange(await issue()));
     const roomWrite = async (what: 'start' | 'end') => {
       const revision = (await as('u-hugo').get(`/interviews/${IV}/room`)).body.room.revision;
@@ -280,8 +280,8 @@ describe('the realtime token asked after the end (O-072, the server half)', () =
     expect((await roomWrite('end')).status).toBe(200);
     const after = await request(app).get('/api/interview-invite/realtime-token').set('Cookie', cookie);
     expect([after.status, after.body]).toEqual([404, { error: 'This link no longer works.' }]);
-    expect(guestSetCookie(after)).toMatch(/Expires=Thu, 01 Jan 1970/);
-    // While the browser still sends it, the room answers `ended`; once dropped, nothing does (the page shows the dead link).
+    expect(guestSetCookie(after) ?? '').not.toMatch(/Expires=Thu, 01 Jan 1970/);
+    // The browser keeps sending it: the room answers `ended` (the candidate's reload shows the ended page); with no cookie, nothing does.
     expect((await request(app).get('/api/interview-invite/room').set('Cookie', cookie)).body.room?.state).toBe('ended');
     expect((await request(app).get('/api/interview-invite/room')).status).toBe(404);
   });
