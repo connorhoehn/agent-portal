@@ -101,8 +101,10 @@ export default async function run(ctx) {
       const before = await padText(H.page);
       await H.page.getByTestId('interview-pad-insert').first().click({ timeout: 5000 });
       await H.page.getByRole('menuitem').first().click({ timeout: 5000 });
-      const after = await until(async () => { const t = await padText(H.page); return t && t !== before ? t : null; }, 8000);
-      const same = after ? await until(async () => ((await padText(W.page)) === after && (await padText(C.page)) === after ? true : null), 10_000) : null;
+      const first = await until(async () => { const t = await padText(H.page); return t && t !== before ? t : null; }, 8000);
+      // The insert lands in two pieces (the prompt as comments, then the starter): read all three once it has settled.
+      const same = first ? await until(async () => { const [h, w, c] = [await padText(H.page), await padText(W.page), await padText(C.page)]; return h === w && w === c && h !== before ? true : null; }, 12_000) : null;
+      const after = first ? await padText(H.page) : null;
       const added = after && before !== null && after.startsWith(before) ? after.slice(before.length) : null;
       const commented = !!added && added.split('\n').some((l) => /^\s*(#|\/\/)\s*\S/.test(l));
       const tabs = (await C.page.getByTestId('join-room-pane').getByRole('tab').allInnerTexts()).map((s) => s.trim());

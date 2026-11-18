@@ -68,7 +68,7 @@ export default async function run(ctx) {
     basedOn = ((await H.page.getByTestId('interview-suggestion-based-on').first().getAttribute('title').catch(() => null)) ?? '').trim();
     const before = await frames();
     await H.page.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i }).click();
-    const receiptP = catchText(H.page, null, /Milo asked it aloud/, 6000);
+    const receiptP = catchText(H.page, null, /Milo asked it aloud/, 20_000);
     const marks = await watchSpeaking(6000);
     const receipt = await receiptP;
     const after = await until(async () => { const f = await frames(); return f.candidate > before.candidate && f.lead > before.lead && f.panel > before.panel ? f : null; }, 12_000) ?? await frames();
@@ -78,9 +78,11 @@ export default async function run(ctx) {
     const candChat = await chatText(C.page);
     await padTab(H.page); await padTab(C.page);
     const key = suggestionText.slice(0, 40);
-    const ok = /Milo asked it aloud/.test(receipt) && after.candidate > before.candidate && after.lead > before.lead && after.panel > before.panel
+    const receiptShown = /Milo asked it aloud/.test(receipt);
+    const rest = after.candidate > before.candidate && after.lead > before.lead && after.panel > before.panel
       && !!key && deckText.includes(key.slice(0, 25)) && leadChat.includes(key) && candChat.includes(key);
-    return { ok, detail: `receipt "${receipt.slice(0, 80)}"; frames ${JSON.stringify(before)} → ${JSON.stringify(after)}; speaking seen ${JSON.stringify(marks)}; the candidate's line "${key}"; in the lead's chat ${leadChat.includes(key)}, the candidate's ${candChat.includes(key)}` };
+    const ok = receiptShown && rest;
+    return { ok, detail: `${rest && !receiptShown ? 'FINDING: everything happened (Milo said it, the chat and the candidate hold it) but the prompt never showed its receipt "Milo asked it aloud" in 20 s; ' : ''}receipt "${receiptShown ? receipt.match(/Milo asked it aloud/)[0] : 'not shown'}"; frames ${JSON.stringify(before)} → ${JSON.stringify(after)}; speaking seen ${JSON.stringify(marks)}; the candidate's line "${key}"; in the lead's chat ${leadChat.includes(key)}, the candidate's ${candChat.includes(key)}` };
   });
 
   await step('I3.5b', async () => {
