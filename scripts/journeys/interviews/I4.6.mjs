@@ -73,13 +73,12 @@ export default async function run(ctx) {
 
   if (docker) {
     await step('I4.6c', async () => {
-      // The starter's body is `pass`: the candidate replaces the whole document with a complete answer and its two cases.
-      const text = (await padText(G.page)) ?? '';
-      const head = text.slice(0, text.indexOf('def two_sum('));
+      // The starter's body is `pass`: the candidate replaces the whole document (which may hold an earlier piece's code: the
+      // shared document outlives the mock world's reset) with a complete answer and its two cases.
       const code = `def two_sum(nums, target):${BODY}\n\nprint(two_sum([2, 7, 11, 15], 9))\nprint(two_sum([3, 2, 4], 6))\n`;
       await pad(G.page).locator('.cm-content').click();
       await G.page.keyboard.press('ControlOrMeta+A');
-      await G.page.keyboard.insertText(`${head}${code}`);
+      await G.page.keyboard.insertText(code);
       const since = Math.floor(Date.now() / 1000) - 1;
       await G.page.getByTestId('interview-pad-run').click();
       const want = /\[0, 1\]\s*\[1, 2\]/;
@@ -88,7 +87,9 @@ export default async function run(ctx) {
       await new Promise((r) => setTimeout(r, 2000));
       const started = execFileSync('docker', ['events', '--since', String(since), '--until', String(Math.floor(Date.now() / 1000)), '--filter', 'label=interviews.run=1', '--filter', 'event=start', '--format', '{{.Actor.Attributes.name}}'], { timeout: 15_000 })
         .toString().split('\n').filter((n) => /^iv-run-[0-9a-f]{16}$/.test(n)).length;
-      return { ok: !!candOut && !!leadOut && started >= 1, detail: `candidate "${(candOut ?? await outputText(G.page)).slice(0, 100)}"; the lead sees it=${!!leadOut}; run containers started ${started}` };
+      const shown = candOut ?? await outputText(G.page);
+      const tail = candOut ? '' : `; the pad ends ${JSON.stringify(((await padText(G.page)) ?? '').split('\n').slice(-12))}`;
+      return { ok: !!candOut && !!leadOut && started >= 1, detail: `candidate "${shown.slice(0, candOut ? 100 : 500)}"; the lead sees it=${!!leadOut}; run containers started ${started}${tail}` };
     });
   } else {
     console.log('I4.6c not run: start the walk with INTERVIEWS_RUN_BACKEND=docker to run code for real');
