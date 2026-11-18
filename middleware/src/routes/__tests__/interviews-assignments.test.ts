@@ -290,7 +290,7 @@ describe('reassigning', () => {
 describe('PUT /interviews/:id/time (row I1.5)', () => {
   const FUTURE = '2031-03-04T15:30:00.000Z';
 
-  it('sets, changes and clears the time without moving the state; the panel hears of a set or a change, never about the candidate', async () => {
+  it('sets, changes and clears the time without moving the state; the panel hears of a set, a change or a clear, never about the candidate', async () => {
     const id = (await assign()).body.interview.id;
     await flush(); sent.length = 0;
     const set = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: FUTURE });
@@ -307,7 +307,8 @@ describe('PUT /interviews/:id/time (row I1.5)', () => {
     sent.length = 0;
     expect((await GRETA.put(`/interviews/${id}/time`, { revision: 3, scheduledAt: null })).body.interview.scheduledAt).toBeNull();
     await flush();
-    expect(sent).toEqual([]);
+    expect(sent.map((s) => s.userId).sort()).toEqual(['u-hugo', 'u-wen']);
+    expect(sent[0]!.item.title).toContain('no longer has a time');
   });
 
   it('refuses a past time, an off-minute time and a started round in words; a stale revision is 409; only the recruiter writes', async () => {

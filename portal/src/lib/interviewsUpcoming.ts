@@ -42,7 +42,7 @@ export async function revokeInvite(id: string): Promise<{ ok: true; invite: Invi
   return r.ok && r.data?.invite ? { ok: true, invite: r.data.invite } : { ok: false, error: r.error ?? 'The link could not be revoked. Try again.' };
 }
 
-/** The link's status in a sentence: sent, opened, expires. */
+/** The link's status in a sentence: made, opened, expires. */
 export function inviteLine(s: InviteStatus, when: (iso: string) => string): string {
   switch (s.state) {
     case 'none': return 'No link yet';
@@ -51,8 +51,8 @@ export function inviteLine(s: InviteStatus, when: (iso: string) => string): stri
     case 'closed': return 'Round closed';
     case 'other-interview': return 'Replaced';
     default: {
-      const sent = s.issuedAt ? `Sent ${when(s.issuedAt)}` : 'Sent';
-      const opened = s.openCount > 0 && s.lastOpenedAt ? `opened ${s.openCount === 1 ? 'once' : `${s.openCount} times`}` : 'not opened';
+      const sent = s.issuedAt ? `Made ${when(s.issuedAt)}` : 'Made';
+      const opened = s.openCount > 0 && s.lastOpenedAt ? `opened ${s.openCount === 1 ? 'once' : `${s.openCount} times`}` : 'not opened yet';
       return `${sent}, ${opened}${s.expiresAt ? `, expires ${when(s.expiresAt)}` : ''}`;
     }
   }

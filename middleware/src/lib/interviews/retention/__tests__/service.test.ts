@@ -243,6 +243,20 @@ describe('a candidate\'s deletion request', () => {
     expect(await deletionsOf('cand-rx6tcaqj')).toHaveLength(1);
   });
 
+  it('takes the personal data and the recordings as two separate requests, each once', async () => {
+    registerEraser(recordingEraser({ env: ENV, fetch: recordingFetch(() => 0).f, standIns: NO_STAND_INS }));
+    const personal = await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps, 'personal');
+    expect(personal.created).toBe(true);
+    expect(personal.row.removed.map((r) => r.kind)).toEqual(['resume', 'contact-details', 'stage-reasons']);
+    expect(personal.row.doneAt).not.toBeNull();
+    expect((await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps, 'personal')).created).toBe(false);
+    const recordings = await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps, 'recordings');
+    expect(recordings.created).toBe(true);
+    expect(recordings.row.removed.map((r) => r.kind)).not.toContain('resume');
+    expect((await deleteCandidateMedia('cand-rx6tcaqj', 'u-greta', deps, 'recordings')).created).toBe(false);
+    expect(await deletionsOf('cand-rx6tcaqj')).toHaveLength(2);
+  });
+
   it('records that there was nothing to call where no recording service is configured, and still finishes', async () => {
     registerEraser(recordingEraser({ env: {}, standIns: NO_STAND_INS }));
     const { row } = await deleteCandidateMedia('cand-w4pvy8m9', 'u-greta', deps);

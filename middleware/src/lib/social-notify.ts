@@ -795,6 +795,8 @@ export interface InterviewTimedEvent {
   actorId: string;
   /** True when the round already had a time, so the item reads "a new time". */
   changed: boolean;
+  /** True when the time was taken away: the item reads "no longer has a time". */
+  cleared?: boolean;
 }
 
 /** A round was given or moved to a time → its lead and panel, a bell that opens My interviews. The time itself is on the page, in the viewer's zone. */
@@ -809,8 +811,8 @@ export async function notifyInterviewTimed(ev: InterviewTimedEvent): Promise<str
       sent.push(...await notify([userId], {
         id: `interview-timed:${roundKey(ev.interviewId)}:${userId}:${Date.now().toString(36)}`,
         type: 'system',
-        title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} ${ev.changed ? 'has a new time' : 'has a time'}`,
-        body: `Set by ${by}. See the time in My interviews.`,
+        title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} ${ev.cleared ? 'no longer has a time' : ev.changed ? 'has a new time' : 'has a time'}`,
+        body: ev.cleared ? `Cleared by ${by}. You are told again when it has a new one.` : `Set by ${by}. See the time in My interviews.`,
         payload: { tenant: 'interviews', kind: 'interview-timed', audience: 'interviewer', actorId: ev.actorId },
         action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
       }));

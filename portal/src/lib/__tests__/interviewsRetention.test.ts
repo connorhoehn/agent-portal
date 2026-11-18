@@ -1,7 +1,7 @@
 // The deletion log's lines on a candidate's profile (lib/interviewsRetention.ts, row I6.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { askedByLine, deletionPath, deletionQuestion, deletionState, deletionsPath, lateLine, leftLines, removedLine } from '../interviewsRetention.ts';
+import { askedByLine, deletionPath, deletionDone, deletionQuestion, deletionState, personalDeletionQuestion, deletionsPath, lateLine, leftLines, removedLine } from '../interviewsRetention.ts';
 
 test('what was removed reads as one sentence', () => {
   assert.equal(removedLine({ removed: [{ kind: 'recording', count: 2 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }], doneAt: 'x', left: [] }),
@@ -62,6 +62,7 @@ test('the prompt says what goes and what stays for how long, in two sentences', 
   const q = deletionQuestion({ mediaDays: 90, recordYears: 4, deletionDays: 30 });
   assert.equal(q.split('. ').length, 2);
   assert.match(q, /removes the recordings, transcripts and Milo's minutes/);
+  assert.doesNotMatch(q, /résumé|contact/);
   assert.match(q, /stay for four years/);
   assert.match(deletionQuestion({ mediaDays: 90, recordYears: 6, deletionDays: 30 }), /stay for 6 years/);
 });
@@ -69,4 +70,16 @@ test('the prompt says what goes and what stays for how long, in two sentences', 
 test('the paths live under the candidate', () => {
   assert.equal(deletionsPath('c 1'), '/api/interviews/candidates/c%201/deletions');
   assert.equal(deletionPath('c 1'), '/api/interviews/candidates/c%201/deletion');
+});
+
+test('the personal-data prompt names what goes, and each button hides once its kind is done', () => {
+  const p = personalDeletionQuestion({ mediaDays: 90, recordYears: 4, deletionDays: 30 });
+  assert.match(p, /name, contact details and résumé/);
+  assert.match(p, /cannot be undone/);
+  const done = { reason: 'request' as const, doneAt: '2026-11-01T00:00:00Z' };
+  assert.equal(deletionDone([], 'recordings'), false);
+  assert.equal(deletionDone([{ ...done, scope: 'personal' }], 'personal'), true);
+  assert.equal(deletionDone([{ ...done, scope: 'personal' }], 'recordings'), false);
+  assert.equal(deletionDone([{ ...done, scope: 'all' }], 'recordings'), true);
+  assert.equal(deletionDone([{ reason: 'request', doneAt: null, scope: 'recordings' }], 'recordings'), false);
 });

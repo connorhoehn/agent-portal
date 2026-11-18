@@ -18,6 +18,9 @@ import { problemsByPath } from '../../lib/interviewsKit';
 
 const LIST = '/interviews/candidates';
 
+/** Refuses an address that cannot be one. Nothing is sent, so only its shape is checked. */
+const emailProblem = (v: string): string | null => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : 'Enter an email address like name@example.com.');
+
 export default function NewCandidatePage() {
   const navigate = useNavigate();
   const [search] = useSearchParams();
@@ -86,13 +89,17 @@ export default function NewCandidatePage() {
             <Button size="sm" variant="ghost" data-testid="interviews-new-candidate-cancel"
               onClick={() => { if (!dirty) { void navigate(LIST); return; } setAsked(asked + 1); setAsking('cancel'); }}>Cancel</Button>
             <Button size="sm" variant="primary" disabled={!dirty} data-testid="interviews-new-candidate-create"
-              onClick={() => { setProblems(new Map()); setAsked(asked + 1); setAsking('create'); }}>Add…</Button>
+              onClick={() => {
+                const bad = emailProblem(form.email);
+                if (bad) { setProblems(new Map([['email', bad]])); return; }
+                setProblems(new Map()); setAsked(asked + 1); setAsking('create');
+              }}>Add…</Button>
           </Inline>
         )}>
         <Stack gap="md" className="max-w-[56rem] pb-6" data-testid="interviews-new-candidate-form">
           <Inline gap="sm" align="start">
             {text('name', 'Name', true)}
-            {text('email', 'Email', true, 'Where the interview invitation goes.')}
+            {text('email', 'Email', true, "For your records; Candidates doesn't send email. You send them the interview link yourself.")}
           </Inline>
           <Inline gap="sm" align="start">
             <FormField label="Opening" required error={problems.get('openingId')} className="min-w-[16rem] flex-1">

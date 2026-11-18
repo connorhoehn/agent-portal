@@ -227,7 +227,7 @@ assignmentsRouter.put('/interviews/:id/time', assign, asyncHandler(async (req, r
   if (!checked.ok) { res.status(400).json({ error: timeProblemsLine(checked.problems.length), fields: checked.problems }); return; }
   const written = await interviewsStore().setTime(i.id, checked.value.scheduledAt, revision);
   const after = await answerWrite(req, res, written);
-  if (after && written.ok && checked.value.scheduledAt !== null && checked.value.scheduledAt !== i.scheduledAt) {
-    void notifyInterviewTimed({ interviewId: i.id, ...bellWords(after, i), userIds: [i.leadId, ...i.panelIds], actorId: session.sub, changed: i.scheduledAt !== null });
+  if (after && written.ok && checked.value.scheduledAt !== i.scheduledAt && (checked.value.scheduledAt !== null || i.scheduledAt !== null)) {
+    void notifyInterviewTimed({ interviewId: i.id, ...bellWords(after, i), userIds: [i.leadId, ...i.panelIds], actorId: session.sub, changed: i.scheduledAt !== null, cleared: checked.value.scheduledAt === null });
   }
 }));

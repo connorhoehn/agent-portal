@@ -48,19 +48,30 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
     await openActivity(page, mateo);
     stage = 'the Deletions table';
     await page.getByTestId('interviews-profile-deletions').waitFor({ timeout: 30_000 });
-    stage = 'the ask button';
-    await page.getByTestId('interviews-deletion-ask').click();
-    stage = 'the prompt';
+    stage = 'the recordings ask';
+    await page.getByTestId('interviews-deletion-ask-recordings').click();
+    stage = 'the recordings prompt';
     const question = page.getByText(/This removes the recordings/).first();
     await question.waitFor({ timeout: 15_000 });
     const asked = await question.innerText();
-    stage = 'the prompt\'s Delete';
-    // The deck numbers its options ("1 Delete", "2 Keep everything").
-    await page.getByRole('button', { name: /^\s*\d?\s*Delete\s*$/ }).first().click();
+    stage = 'the recordings prompt\'s Delete';
+    // The deck numbers its options ("1 Delete recordings", "2 Keep it").
+    await page.getByRole('button', { name: /^\s*\d?\s*Delete recordings\s*$/ }).first().click();
+    const recordingsReceipt = page.getByText(/^Removed .*recording/).first();
+    await recordingsReceipt.waitFor({ timeout: 15_000 });
+    // Once done it is not offered again, and the personal data is still there to ask for.
+    await page.getByTestId('interviews-deletion-ask-recordings').waitFor({ state: 'detached', timeout: 15_000 });
+    stage = 'the personal data ask';
+    await page.getByTestId('interviews-deletion-ask-personal').click();
+    stage = 'the personal data prompt';
+    await page.getByText(/This removes the candidate's name, contact details and résumé/).first().waitFor({ timeout: 15_000 });
+    stage = 'the personal data prompt\'s Delete';
+    await page.getByRole('button', { name: /^\s*\d?\s*Delete personal data\s*$/ }).first().click();
     stage = 'the receipt';
     const receiptLine = page.getByText(/^Removed .*résumé/).first();
     await receiptLine.waitFor({ timeout: 15_000 });
     const receipt = (await receiptLine.innerText()).replace(/\s+/g, ' ').trim();
+    await page.getByTestId('interviews-deletion-ask-personal').waitFor({ state: 'detached', timeout: 15_000 });
     stage = 'after the receipt';
     // The table and the header follow the request.
     const deletions = page.getByTestId('interviews-profile-deletions');
@@ -76,14 +87,14 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
     const afterRuns = (await recordOf(greta, iv.mateoCoding))?.runs?.length ?? -1;
     const afterPad = await padEvents(greta, iv.mateoCoding);
     const first = (await log(greta, mateo)).items;
-    const again = await api(greta, 'POST', `/api/interviews/candidates/${mateo}/deletion`, { confirm: true });
+    const again = await api(greta, 'POST', `/api/interviews/candidates/${mateo}/deletion`, { confirm: true, scope: 'personal' });
     const second = (await log(greta, mateo)).items;
     const ok = /scorecards and the record of their consent answers stay for four years/.test(asked) && /résumé/.test(receipt)
       && /Done/.test(tableText) && /résumé/.test(tableText) && /contact details/.test(tableText)
       && place === 'Removed' && resume === 'No résumé has been added yet.' && reasons >= 1
       && beforeRuns > 0 && typeof beforePad === 'number' && beforePad > 0 && afterRuns === 0 && afterPad === 0
-      && first.length === 1 && first[0].reason === 'request' && first[0].doneAt
-      && again.status === 200 && again.body.created === false && again.body.deletion.id === first[0].id && second.length === 1
+      && first.length === 2 && first.every((r) => r.reason === 'request' && r.doneAt)
+      && again.status === 200 && again.body.created === false && again.body.deletion.id === first[0].id && second.length === 2
       && shots.every((s) => s.ok);
     record('I6.3a', ok, `receipt "${receipt}"; table "${tableText.slice(-160)}"; prompt ${/stay for four years/.test(asked) ? 'states the record period' : 'MISSING the period'}; place "${place}"; résumé "${resume}"; ${reasons} reasons replaced; Mateo's coding round: runs ${beforeRuns}→${afterRuns}, pad events ${beforePad}→${afterPad}; second ask created=${again.body?.created}, ${second.length} log row`);
     // I6.3h: the log names what went in plain words (portal lib/interviewsRetention.ts KIND_LABELS).
@@ -102,9 +113,9 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
     await openActivity(page, mateo);
     const deletions = page.getByTestId('interviews-profile-deletions');
     await deletions.getByText('Done', { exact: true }).first().waitFor({ timeout: 30_000 });
-    const asks = await page.getByTestId('interviews-deletion-ask').count();
+    const asks = (await page.getByTestId('interviews-deletion-ask-recordings').count()) + (await page.getByTestId('interviews-deletion-ask-personal').count());
     const r = await api(amara, 'GET', `/api/interviews/candidates/${mateo}/deletions`);
-    const ok = asks === 0 && r.status === 200 && r.body.items.length === 1 && r.headers['cache-control'] === 'no-store'
+    const ok = asks === 0 && r.status === 200 && r.body.items.length === 2 && r.headers['cache-control'] === 'no-store'
       && !/iv-|mail\.example/.test(JSON.stringify(r.body));
     record('I6.3b', ok, `hiring manager: the Deletions table reads "${short(await deletions.innerText())}", ${asks} ask buttons; API ${r.status}, ${r.body?.items?.length} rows`);
     await amara.close();

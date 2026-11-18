@@ -17,8 +17,8 @@
 // server sends declines to nobody else); the hiring manager's view is read-only.
 //
 // Row I6.3: a "Deletions" section at the end of the profile for the recruiter and the opening's hiring manager (when, what
-// was removed and what is left, by whom). The recruiter's "Delete recordings and transcripts" is asked through a prompt
-// in the composer's deck (what goes and what stays, in two sentences), never a dialog. Afterwards the résumé section
+// was removed and what is left, by whom). The recruiter's "Delete recordings and transcripts" and "Delete personal data" are two actions, each asked through its own
+// prompt in the composer's deck (what goes and what stays), never a dialog, and neither is offered once done. Afterwards the résumé section
 // shows its no-file line and the contact fields show what the redaction left.
 
 import {
@@ -48,7 +48,7 @@ import { hasRecord, recordPath } from '../../lib/interviewsRecord';
 import { AppLink } from './interviewsCells';
 import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
 import {
-  REDACTED_NAME, askedByLine, deletionQuestion, deletionState, deletionsPath, lateLine, leftLines, removedLine, requestDeletion,
+  REDACTED_NAME, askedByLine, deletionDone, deletionQuestion, deletionState, personalDeletionQuestion, deletionsPath, lateLine, leftLines, removedLine, requestDeletion,
   type DeletionView, type RetentionPeriods,
 } from '../../lib/interviewsRetention';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
@@ -169,7 +169,7 @@ function CandidateProfile({ id }: { id: string }) {
   const manages = role === 'recruiter' || role === 'admin';
   // An interviewer's page has no list rail, so it keeps its own h1 (the name); beside a rail the frame's title is the h1.
   const framed = railKindFor(role) !== null;
-  const deletions = useDeletionPrompt(id, role, refresh);
+  const deletions = useDeletionPrompt(id, role, profile?.candidate.name ?? 'This candidate', refresh);
   const resume = useResumeState(id, profile?.candidate.name ?? '', manages);
   const [tab, setTab] = useState<ProfileTab>('rounds');
 
@@ -433,39 +433,50 @@ const DELETION_COLUMNS: DataTableColumn<DeletionView>[] = [
   { key: 'state', header: 'Status', width: '120px', render: (r) => { const s = deletionState(r); return <Chip tone={s.tone} size="sm">{s.label}</Chip>; } },
 ];
 
-/** The deletion log and, for the recruiter, the prompt that asks for one. Hooks only; the section draws it. */
-function useDeletionPrompt(candidateId: string, role: string, refreshProfile: () => void) {
+type DeletionKind = 'recordings' | 'personal';
+
+/** The deletion log and, for the recruiter, the two prompts that ask for one (the recordings, the personal data). Hooks only; the section draws it. */
+function useDeletionPrompt(candidateId: string, role: string, name: string, refreshProfile: () => void) {
   const reads = role === 'recruiter' || role === 'hiring-manager';
   const asks = role === 'recruiter';
   const { data, refresh } = useFetch<{ items: DeletionView[]; periods: RetentionPeriods }>(reads && candidateId ? deletionsPath(candidateId) : null);
-  const [asking, setAsking] = useState(0);
+  const [asking, setAsking] = useState<{ kind: DeletionKind; n: number } | null>(null);
+  const [asked, setAsked] = useState(0);
   const [done, setDone] = useState(0);
   const periods = data?.periods ?? null;
   const prompts = useMemo<ComposerPrompt[]>(() => {
     if (!asks || !asking || !periods) return [];
+    const personal = asking.kind === 'personal';
     const scope = `interviews-deletion:${candidateId}`;
     return [{
-      id: `${scope}:ask-${asking}`, scope, kind: 'choice', eyebrow: 'Delete recordings and transcripts', title: 'This candidate',
-      question: deletionQuestion(periods),
-      options: [{ id: 'delete', label: 'Delete', emphasis: 'danger' }, { id: 'keep', label: 'Keep everything', emphasis: 'primary' }],
+      id: `${scope}:ask-${asking.kind}-${asking.n}`, scope, kind: 'choice', eyebrow: personal ? 'Delete personal data' : 'Delete recordings and transcripts', title: name,
+      question: personal ? personalDeletionQuestion(periods) : deletionQuestion(periods),
+      options: [{ id: 'delete', label: personal ? 'Delete personal data' : 'Delete recordings', emphasis: 'danger' }, { id: 'keep', label: 'Keep it', emphasis: 'primary' }],
       onAnswer: async (a) => {
-        if (!('optionId' in a) || a.optionId !== 'delete') { setAsking(0); return { receipt: 'Kept. Nothing was removed.' }; }
-        const out = await requestDeletion(candidateId);
-        setAsking(0); refresh();
+        if (!('optionId' in a) || a.optionId !== 'delete') { setAsking(null); return { receipt: 'Kept. Nothing was removed.' }; }
+        const out = await requestDeletion(candidateId, asking.kind);
+        setAsking(null); refresh();
         if (!out.ok) return { error: out.error };
         setDone((n) => n + 1); refreshProfile();
         return { receipt: out.created ? `${removedLine(out.deletion)}` : 'This was already deleted. Nothing changed.' };
       },
     }];
-  }, [asks, asking, periods, candidateId, refresh, refreshProfile]);
-  return { reads, asks, rows: data?.items ?? null, prompts, done, ask: () => setAsking((n) => n + 1) };
+  }, [asks, asking, periods, candidateId, name, refresh, refreshProfile]);
+  return { reads, asks, rows: data?.items ?? null, prompts, done, ask: (kind: DeletionKind) => { setAsked((n) => n + 1); setAsking({ kind, n: asked + 1 }); } };
 }
 
-function DeletionsSection({ rows, asks, onAsk }: { rows: DeletionView[] | null; asks: boolean; onAsk: () => void }) {
+function DeletionsSection({ rows, asks, onAsk }: { rows: DeletionView[] | null; asks: boolean; onAsk: (kind: DeletionKind) => void }) {
+  const recordingsDone = deletionDone(rows, 'recordings');
+  const personalDone = deletionDone(rows, 'personal');
   return (
     <Stack gap="md" className="pb-4" data-testid="interviews-profile-deletions-section">
       <DetailSection variant="heading" as="h2" title="Deletions" hint={rows ? plural(rows.length, 'deletion') : undefined}
-        actions={asks ? <Button size="sm" variant="ghost" data-testid="interviews-deletion-ask" onClick={onAsk}>Delete recordings and transcripts</Button> : undefined}>
+        actions={asks && rows ? (
+          <Inline gap="xs" wrap={false}>
+            {!recordingsDone && <Button size="sm" variant="ghost" data-testid="interviews-deletion-ask-recordings" onClick={() => onAsk('recordings')}>Delete recordings and transcripts…</Button>}
+            {!personalDone && <Button size="sm" variant="ghost" data-testid="interviews-deletion-ask-personal" onClick={() => onAsk('personal')}>Delete personal data…</Button>}
+          </Inline>
+        ) : undefined}>
         {rows === null
           ? <LoadingState label="Loading deletions…" />
           : (

@@ -4,6 +4,8 @@
 import { INTERVIEWS_API } from './interviews.ts';
 import { writeJson } from './writeJson.ts';
 
+export type DeletionScope = 'recordings' | 'personal' | 'all';
+
 export interface RetentionPeriods { mediaDays: number; recordYears: number; deletionDays: number }
 
 export interface DeletionLeft { kind: string; why: 'pending' | 'failed' | 'call-running' | 'no-service'; retry: boolean }
@@ -22,6 +24,8 @@ export interface DeletionView {
   overdue: boolean;
   /** Finished, but after the date it was due by. */
   doneLate: boolean;
+  /** What a request covered. Older rows, made before the two were separate, are `all`. */
+  scope?: DeletionScope;
 }
 
 export const deletionsPath = (candidateId: string): string => `${INTERVIEWS_API}/candidates/${encodeURIComponent(candidateId)}/deletions`;
@@ -93,10 +97,21 @@ export function lateLine(row: Pick<DeletionView, 'dueBy' | 'overdue' | 'doneLate
 
 const yearsLabel = (n: number): string => (n === 1 ? 'one year' : n === 4 ? 'four years' : `${n} years`);
 
-/** The prompt's two sentences: what goes, and what stays and for how long. */
+/** The prompt's two sentences for the recordings: what goes, and what stays and for how long. */
 export function deletionQuestion(p: RetentionPeriods): string {
-  return 'This removes the recordings, transcripts and Milo\'s minutes of every interview with this candidate, their résumé, their contact details and the reasons written when their stage was changed, and turns off their interview link. '
-    + `The scorecards and the record of their consent answers stay for ${yearsLabel(p.recordYears)} after each interview, without the contact details.`;
+  return 'This removes the recordings, transcripts and Milo\'s minutes, the code pad history and the code runs of every interview with this candidate, and turns off their interview link. '
+    + `The scorecards and the record of their consent answers stay for ${yearsLabel(p.recordYears)} after each interview.`;
+}
+
+/** The prompt for the candidate's personal data: what goes, and that it cannot be undone. */
+export function personalDeletionQuestion(p: RetentionPeriods): string {
+  return 'This removes the candidate\'s name, contact details and résumé, and the reasons written when their stage was changed. It cannot be undone. '
+    + `Their scorecards and the record of their consent answers stay for ${yearsLabel(p.recordYears)} after each interview, without the contact details.`;
+}
+
+/** Whether a request of this scope has finished for the candidate: its button is not offered again. */
+export function deletionDone(rows: readonly Pick<DeletionView, 'reason' | 'doneAt' | 'scope'>[] | null, scope: 'recordings' | 'personal'): boolean {
+  return (rows ?? []).some((r) => r.reason === 'request' && r.doneAt !== null && (r.scope === 'all' || r.scope === undefined || r.scope === scope));
 }
 
 /** The profile's name for a candidate whose contact details were taken out (the server's own placeholder). */
@@ -104,8 +119,8 @@ export const REDACTED_NAME = 'Name removed';
 
 export type DeletionOutcome = { ok: true; deletion: DeletionView; created: boolean } | { ok: false; error: string };
 
-export async function requestDeletion(candidateId: string): Promise<DeletionOutcome> {
-  const r = await writeJson<{ deletion: DeletionView; created: boolean }>(deletionPath(candidateId), 'POST', { confirm: true });
+export async function requestDeletion(candidateId: string, scope: 'recordings' | 'personal'): Promise<DeletionOutcome> {
+  const r = await writeJson<{ deletion: DeletionView; created: boolean }>(deletionPath(candidateId), 'POST', { confirm: true, scope });
   if (r.ok && r.data) return { ok: true, deletion: r.data.deletion, created: r.data.created };
   return { ok: false, error: r.error ?? 'The deletion could not be confirmed. The Deletions list shows what was done; ask again to finish it.' };
 }

@@ -90,7 +90,7 @@ function RowActions({ row, override, busy, onJoin, onSetTime, onClearTime, onMak
   ];
   return (
     <Inline gap="xs" align="center" wrap={false}>
-      {isLive(row) && <Button size="sm" variant="primary" data-testid="interviews-upcoming-join" onClick={onJoin}>Join</Button>}
+      {isLive(row) && row.seat && <Button size="sm" variant="primary" data-testid="interviews-upcoming-join" onClick={onJoin}>Join</Button>}
       {items.length > 0 && <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${row.round.name} with ${row.candidate.name}`} align="end" triggerTestId="interviews-upcoming-actions" sections={[{ items }]} />}
     </Inline>
   );
@@ -140,7 +140,7 @@ function UpcomingWorkspace() {
         title: `${row.round.name} with ${row.candidate.name}`,
         question: next
           ? `Set the time to ${whenWithZone(next)}? The lead and the panel are told.`
-          : 'Clear the time? The round goes back to having none, and nobody is told.',
+          : 'Clear the time? The round goes back to having none. The lead and the panel are told.',
         fields,
         onAnswer: async (a) => {
           if (a.kind !== 'confirm' || !a.confirmed) { setPending(null); setEditing(null); return { receipt: 'Kept. The time did not change.' }; }

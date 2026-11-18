@@ -3,7 +3,8 @@
 // ViewInterviews gate.
 //
 //   POST /candidates/:id/deletion    the recruiter (ManageCandidates, 403 for everyone else on every id alike), the
-//                                    candidate in scope (404), body `{ confirm: true }` (400 otherwise). Runs the
+//                                    candidate in scope (404), body `{ confirm: true, scope?: 'recordings' | 'personal' }` (400 otherwise;
+//                                    no scope means both, as before the two were separate). Runs the
 //                                    deletion (lib/interviews/retention/service.ts) and answers `{ deletion, created }`:
 //                                    a repeat answers the earlier row with `created: false`.
 //   GET  /candidates/:id/deletions   the recruiter and the hiring manager of the candidate's opening: `{ items, periods }`,
@@ -18,7 +19,7 @@ import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
 import { interviewsAction } from '../../lib/interviews/gate.js';
 import { indexFor, param, peopleLookup } from '../../lib/interviews/request.js';
-import { deleteCandidateMedia, deletionsOf } from '../../lib/interviews/retention/service.js';
+import { deleteCandidateMedia, deletionsOf, scopeOfRow, type DeletionScope } from '../../lib/interviews/retention/service.js';
 import { retentionPeriods } from '../../lib/interviews/retention/periods.js';
 import type { DeletionRow } from '../../lib/interviews/retention/store.js';
 import { doneLate, isOverdue } from '../../lib/interviews/retention/overdue.js';
@@ -45,6 +46,8 @@ export interface DeletionView {
   overdue: boolean;
   /** Done, but after its `dueBy`. */
   doneLate: boolean;
+  /** What a request covered: the recordings, the personal data, or both (a request made before the two were separate). */
+  scope: DeletionScope;
 }
 
 async function viewOf(rows: DeletionRow[], nowMs: number = interviewsNowMs()): Promise<DeletionView[]> {
@@ -52,7 +55,7 @@ async function viewOf(rows: DeletionRow[], nowMs: number = interviewsNowMs()): P
   return rows.map((r) => ({
     id: r.id, reason: r.reason, requestedAt: r.requestedAt, requestedBy: r.requestedBy ? people(r.requestedBy) : null,
     dueBy: r.dueBy, doneAt: r.doneAt, interviews: r.interviewIds.length, removed: r.removed, left: r.left,
-    overdue: isOverdue(r, nowMs), doneLate: doneLate(r),
+    overdue: isOverdue(r, nowMs), doneLate: doneLate(r), scope: scopeOfRow(r),
   }));
 }
 
@@ -71,7 +74,13 @@ retentionRouter.post('/candidates/:id/deletion', manage, asyncHandler(async (req
     res.status(400).json({ error: 'Confirm the deletion to go ahead. Nothing was removed.' });
     return;
   }
-  const { row, created } = await deleteCandidateMedia(candidateId, resolveSession(req)!.sub);
+  const asked = (req.body as { scope?: unknown }).scope;
+  if (asked !== undefined && asked !== 'recordings' && asked !== 'personal') {
+    res.status(400).json({ error: 'Say what to delete: the recordings, or the personal data. Nothing was removed.' });
+    return;
+  }
+  const scope = asked ?? 'all';
+  const { row, created } = await deleteCandidateMedia(candidateId, resolveSession(req)!.sub, {}, scope);
   res.setHeader('Cache-Control', 'no-store');
   res.json({ deletion: (await viewOf([row]))[0], created });
 }));

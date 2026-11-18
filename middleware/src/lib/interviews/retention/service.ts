@@ -87,8 +87,22 @@ function candidateOf(world: InterviewsWorld, iv: Interview): string | null {
 
 interface Step { kind: string; run: () => Promise<number> }
 
+/**
+ * What a request covers. `recordings`: the recordings, transcripts, minutes, pad history, runs and the interview link.
+ * `personal`: the résumé, the contact details (name included) and the reasons written on stage changes. `all`: both
+ * (a request made before the two were separate, and a request that names no scope). The scope is carried in the row's
+ * id (`del-r-`, `del-p-`; a plain `del-` is `all`), so the log needs no new column.
+ */
+export type DeletionScope = 'recordings' | 'personal' | 'all';
+const SCOPE_MARK: Record<DeletionScope, string> = { recordings: 'del-r-', personal: 'del-p-', all: 'del-' };
+export function scopeOfRow(row: Pick<DeletionRow, 'id'>): DeletionScope {
+  return row.id.startsWith('del-r-') ? 'recordings' : row.id.startsWith('del-p-') ? 'personal' : 'all';
+}
+/** A finished or open row answers a request when it is for the same scope, or is the older both-in-one. */
+const covers = (row: Pick<DeletionRow, 'id'>, want: DeletionScope): boolean => scopeOfRow(row) === 'all' || scopeOfRow(row) === want;
+
 /** Every step a row of this reason runs. `withCandidate`: a record row also takes the résumé and contact details. */
-function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewIds'>, d: RetentionDeps, by: string | null, withCandidate: boolean): Step[] {
+function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewIds'> & { id?: string }, d: RetentionDeps, by: string | null, withCandidate: boolean, scope: DeletionScope = row.id ? scopeOfRow({ id: row.id }) : 'all'): Step[] {
   const ids = row.interviewIds;
   const registered = (cls: 'media' | 'record'): Step[] => erasersOf(cls).map((e) => ({ kind: e.kind, run: () => e.erase(ids) }));
   const resume: Step = { kind: 'resume', run: async () => ((await d.removeResume(row.candidateId)) ? 1 : 0) };
@@ -104,6 +118,8 @@ function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewId
       return n;
     },
   };
+  if (scope === 'recordings') return [...registered('media'), invite];
+  if (scope === 'personal') return [resume, contact, reasons];
   return [...registered('media'), invite, resume, contact, reasons];
 }
 
@@ -137,10 +153,10 @@ async function runSteps(row: DeletionRow, steps: Step[], d: RetentionDeps): Prom
   return saved.reason === 'stale' ? saved.row : row;
 }
 
-async function startRow(d: RetentionDeps, fields: { candidateId: string; interviewIds: string[]; reason: DeletionReason; by: string | null }, steps: Step[]): Promise<DeletionRow> {
+async function startRow(d: RetentionDeps, fields: { candidateId: string; interviewIds: string[]; reason: DeletionReason; by: string | null }, steps: Step[], id: string = d.newId()): Promise<DeletionRow> {
   const now = d.now();
   const row = await d.store().insert({
-    id: d.newId(), candidateId: fields.candidateId, interviewIds: fields.interviewIds, reason: fields.reason,
+    id, candidateId: fields.candidateId, interviewIds: fields.interviewIds, reason: fields.reason,
     requestedAt: iso(now), requestedBy: fields.by, dueBy: iso(deletionDueByMs(now, d.periods())), doneAt: null,
     removed: [], left: steps.map((s) => ({ kind: s.kind, why: 'pending', retry: true })), attempts: 0,
   });
@@ -150,17 +166,19 @@ async function startRow(d: RetentionDeps, fields: { candidateId: string; intervi
 export interface DeletionOutcome { row: DeletionRow; created: boolean }
 
 /** The candidate's deletion request (the route has checked who asks and that the candidate is in their scope). */
-export async function deleteCandidateMedia(candidateId: string, by: string, deps: Partial<RetentionDeps> = {}): Promise<DeletionOutcome> {
+export async function deleteCandidateMedia(candidateId: string, by: string, deps: Partial<RetentionDeps> = {}, scope: DeletionScope = 'all'): Promise<DeletionOutcome> {
   const d = { ...defaults, ...deps };
   const world = await d.load();
   const ids = interviewsOfCandidate(world, candidateId).map((i) => i.id);
-  const rows = (await d.store().forCandidate(candidateId)).filter((r) => r.reason === 'request');
+  const rows = (await d.store().forCandidate(candidateId)).filter((r) => r.reason === 'request' && covers(r, scope));
   const open = rows.find((r) => r.doneAt === null);
   if (open) return { row: await runSteps(open, stepsLeft(open, stepsFor(open, d, by, true)), d), created: false };
+  // Recordings are per interview: a finished request stands while it names every interview the candidate has. The personal data is the candidate's own.
   const last = rows[0];
-  if (last && ids.every((id) => last.interviewIds.includes(id))) return { row: last, created: false };
-  const fields = { candidateId, interviewIds: ids, reason: 'request' as const, by };
-  return { row: await startRow(d, fields, stepsFor(fields, d, by, true)), created: true };
+  if (last && (scope === 'personal' || ids.every((id) => last.interviewIds.includes(id)))) return { row: last, created: false };
+  const fields = { candidateId, interviewIds: ids, reason: 'request' as const, by, scope };
+  const draft = { ...fields, id: d.newId().replace(/^del-/, SCOPE_MARK[scope]) };
+  return { row: await startRow(d, fields, stepsFor(draft, d, by, true, scope), draft.id), created: true };
 }
 
 /** The candidate's deletion log, newest first. */
