@@ -4,6 +4,8 @@
 // starts a process; docker-executor.real.test.ts runs the same runner against a real Docker when REAL_DOCKER_RUNS=1.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import { EventEmitter } from 'node:events';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { DEFAULT_RUN_LIMITS, RUN_LANGUAGES, type ExecutorOutput, type RunLanguage, type RunLimits, type RunRequest, type RunResult } from '../executor.js';
 import { checkSpec, createDockerProcesses, dockerRunArgs, type ContainerSpec, type DockerChild, type SpawnImpl } from '../docker-process.js';
@@ -76,6 +78,17 @@ function start(fake: ReturnType<typeof fakeDocker>, req: RunRequest, opts: { pre
 const tick = () => new Promise((r) => setImmediate(r));
 
 describe('the Docker runner: the command it starts', () => {
+  it('only docker-process.ts can start a process, and only the docker binary (the I4.4 judge holds the same rule)', () => {
+    const dir = join(__dirname, '..');
+    const sources = readdirSync(dir).filter((f) => f.endsWith('.ts')).map((f) => ({ f, text: readFileSync(join(dir, f), 'utf8') }));
+    const spawners = sources.filter((s) => /from '(node:)?child_process'/.test(s.text)).map((s) => s.f);
+    expect(spawners).toEqual(['docker-process.ts']);
+    const dp = sources.find((s) => s.f === 'docker-process.ts')!.text;
+    expect(dp).toContain("import { spawn } from 'node:child_process';");
+    expect(dp.match(/\bspawn\([^)]*/g)).toEqual(['spawn(DOCKER_BIN, [...args], { ...options, stdio: [...options.stdio] }']);
+    for (const s of sources) expect(s.text).not.toMatch(/from '(node:)?(vm|worker_threads|net|http|https|dgram|tls|cluster)'|\beval\(|new Function\(/);
+  });
+
   it('starts only the docker binary, without a shell, with exactly the hardened argument list', () => {
     const fake = fakeDocker();
     start(fake, request('python'));

@@ -109,7 +109,8 @@ export function dockerRemoveArgs(name: string): string[] {
 }
 
 const OPTIONS = { shell: false, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true } as const;
-const nodeSpawn: SpawnImpl = (command, args, options) => spawn(command, [...args], { ...options, stdio: [...options.stdio] });
+// Whatever it is handed, the real spawner starts only the docker binary.
+const nodeSpawn: SpawnImpl = (_command, args, options) => spawn(DOCKER_BIN, [...args], { ...options, stdio: [...options.stdio] });
 
 export function createDockerProcesses(spawnImpl: SpawnImpl = nodeSpawn): DockerProcesses {
   return {
