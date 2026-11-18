@@ -29,6 +29,8 @@ export default async function run(ctx) {
   const greta = await signIn(SEED.cast.recruiter);
   const page = await wen.newPage();
   let competencies = 0;
+  // The recap covers the round's own competencies only (E4 #40), the ones the form requires (E4 #30).
+  let roundCompetencies = 0;
 
   // ── I5.3a: the form, and the others hidden ────────────────────────────────────────────────────────────────────────────
   try {
@@ -36,6 +38,7 @@ export default async function run(ctx) {
     await seen(page, 'interviews-scorecard-form');
     const read = (await scorecardApi(wen, JONAH)).body.scorecard;
     competencies = read.competencies.length;
+    roundCompetencies = read.required.length;
     const groups = await ratingGroups(page).count();
     // E4 #30: the round's own competencies are required, the kit's others optional ("Not seen in this round").
     const required = await page.getByTestId('interviews-scorecard-required').count();
@@ -85,12 +88,12 @@ export default async function run(ctx) {
     const again = await readRecap();
     const pageText = squash(await page.getByTestId('interviews-scorecard').innerText());
     const checks = {
-      prompt: /recorded as they stand/.test(asked), blocks: first.blocks === competencies, statements: first.n >= 1, sourced, noTone: first.tones === 0, own: own === competencies,
-      stored: stored?.state === 'ready', reloadBlocks: again.blocks === competencies, reloadStatements: again.n === first.n, reloadOwn: /Your rating[^A-Z]*3 of 4/.test(again.text),
+      prompt: /recorded as they stand/.test(asked), blocks: first.blocks === roundCompetencies && roundCompetencies > 0, statements: first.n >= 1, sourced, noTone: first.tones === 0, own: own === roundCompetencies,
+      stored: stored?.state === 'ready', reloadBlocks: again.blocks === roundCompetencies, reloadStatements: again.n === first.n, reloadOwn: /Your rating[^A-Z]*3 of 4/.test(again.text),
       milo: !miloScoresIn(pageText), consent: !consentIn(pageText), shots: shots.every((s) => s.ok), noClipAt1280: clipped === 0,
     };
     const ok = Object.values(checks).every(Boolean);
-    record('I5.3b', ok, `[failing: ${failing(checks)}] prompt "${asked.slice(0, 60)}…", ${first.blocks} competencies, ${first.n} statements each with its line and quote (${sourced}), tones ${first.tones}, own ratings shown ${own}; a reload at the recap step: ${again.blocks} competencies, ${again.n} statements; ${widths(shots)}`);
+    record('I5.3b', ok, `[failing: ${failing(checks)}] prompt "${asked.slice(0, 60)}…", ${first.blocks} of the round's ${roundCompetencies} competencies, ${first.n} statements each with its line and quote (${sourced}), tones ${first.tones}, own ratings shown ${own}; a reload at the recap step: ${again.blocks} competencies, ${again.n} statements; ${widths(shots)}`);
   } catch (e) { record('I5.3b', false, `rate and recap: ${why(e)}`); }
 
   // ── I5.3c: change a rating after the recap, then submit ───────────────────────────────────────────────────────────────
