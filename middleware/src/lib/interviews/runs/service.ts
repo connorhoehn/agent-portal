@@ -42,8 +42,8 @@ export const MAX_RUN_FILES = 8;
 export const MAX_RUN_SOURCE_BYTES = 64 * 1024;
 export const MAX_RUN_STDIN_BYTES = 64 * 1024;
 export const MAX_PATH_CHARS = 128;
-/** Time a compile may take on top of the wall time before the safeguard stops the run. */
-export const COMPILE_ALLOWANCE_MS = 30_000;
+/** Time a runner's start and a compile may take on top of the wall time before the safeguard stops the run. */
+export const COMPILE_ALLOWANCE_MS = 40_000;
 export const WALL_GRACE_MS = 5_000;
 export const CANCEL_GRACE_MS = 3_000;
 /** A run's hold expires on its own after this (a full queue of runs ahead of it fits). */

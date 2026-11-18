@@ -13,6 +13,7 @@ import { DOCKER_IMAGES, DOCKER_RUNTIMES } from '../docker-runtimes.js';
 import { createDockerExecutor, DOCKER_BACKEND, DOCKER_SENTENCES, runTar } from '../docker-executor.js';
 import { createRunExecutor, runBackendChoice } from '../backend.js';
 import { MockExecutor } from '../mock-executor.js';
+import { COMPILE_ALLOWANCE_MS } from '../service.js';
 
 class FakeChild extends EventEmitter implements DockerChild {
   stdin: Writable;
@@ -57,7 +58,7 @@ const request = (language: RunLanguage, limits: Partial<RunLimits> = {}, stdin?:
   limits: { ...DEFAULT_RUN_LIMITS, ...limits }, ...(stdin !== undefined ? { stdin } : {}),
 });
 
-function start(fake: ReturnType<typeof fakeDocker>, req: RunRequest, opts: { prepareMs?: number; stopGraceMs?: number } = {}) {
+function start(fake: ReturnType<typeof fakeDocker>, req: RunRequest, opts: { startMs?: number; compileMs?: number; stopGraceMs?: number } = {}) {
   const events: Extract<ExecutorOutput, { type: 'event' }>[] = [];
   let resolve: (r: RunResult) => void = () => undefined;
   const result = new Promise<RunResult>((r) => { resolve = r; });
@@ -71,6 +72,8 @@ function start(fake: ReturnType<typeof fakeDocker>, req: RunRequest, opts: { pre
   return {
     handle, events, result, results: () => results, markerOf,
     statuses: () => events.filter((e) => e.stream === 'status').map((e) => e.data),
+    /** The script's compile marker on stdout: the compile begins. */
+    compile: () => fake.run().child.out(`${markerOf()}:compile\n`),
     /** The script's marker line on both streams: the program starts. */
     begin: () => { const m = markerOf(); fake.run().child.out(`${m}\n`); fake.run().child.err(`${m}\n`); },
   };
@@ -156,6 +159,16 @@ describe('the Docker runner: the command it starts', () => {
     }
   });
 
+  it('a compiled row prints its compile marker before compiling, and its start and compile fit the service\'s allowance', () => {
+    for (const rt of Object.values(DOCKER_RUNTIMES)) {
+      const markAt = rt.script.indexOf(`printf '%s:compile\\n' "$1";`);
+      expect(markAt >= 0).toBe(rt.compiled);
+      expect(rt.compileMs > 0).toBe(rt.compiled);
+      if (rt.compiled) expect(markAt).toBeLessThan(rt.script.indexOf('|| exit 97'));
+      expect(rt.startMs + rt.compileMs).toBeLessThanOrEqual(COMPILE_ALLOWANCE_MS);
+    }
+  });
+
   it('refuses a spec off the allowlist before anything starts', () => {
     const rt = DOCKER_RUNTIMES.python;
     const good: ContainerSpec = { name: 'iv-run-0123456789abcdef', image: rt.image, script: rt.script, marker: 'a'.repeat(32), entrypoint: 'main.py', memoryMb: 256, cpus: 1, pidsLimit: 64, env: {} };
@@ -228,9 +241,10 @@ describe('the Docker runner: statuses and output', () => {
     expect(r.statuses()).toEqual(['compiling', 'running']);
   });
 
-  it('compile_error: exit 97 before the marker, with the compiler\'s words', async () => {
+  it('compile_error: exit 97 before the marker, with the compiler\'s words (and not the compile marker)', async () => {
     const fake = fakeDocker();
     const r = start(fake, request('go'));
+    r.compile();
     fake.run().child.err('./main.go:3:2: undefined: totl\n');
     await tick();
     fake.run().child.close(97);
@@ -267,20 +281,35 @@ describe('the Docker runner: statuses and output', () => {
 
   it('runner_timeout when the container never prints its marker: the runner\'s failure, said in a sentence, not the candidate\'s timeout', async () => {
     const fake = fakeDocker();
-    const r = start(fake, request('python'), { prepareMs: 20 });
+    const r = start(fake, request('python'), { startMs: 20 });
     const res = await r.result;
     expect(res).toMatchObject({ status: 'runner_timeout', exitCode: null, stderr: DOCKER_SENTENCES.slowStart, stdout: '' });
     expect(r.statuses()).toEqual([]);
     expect(fake.removes()[0]!.args[0]).toBe('rm');
   });
 
-  it('runner_timeout when the compile step outlasts its limit before the program starts', async () => {
+  it('runner_timeout when a compiled language\'s container never begins its compile', async () => {
     const fake = fakeDocker();
-    const r = start(fake, request('cpp'), { prepareMs: 20 });
+    const r = start(fake, request('cpp'), { startMs: 20, compileMs: 60_000 });
     const res = await r.result;
-    expect(res.status).toBe('runner_timeout');
+    expect(res).toMatchObject({ status: 'runner_timeout', stderr: DOCKER_SENTENCES.slowStart });
     expect(r.statuses()).toEqual(['compiling']);
     expect(fake.removes().length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a compile that outlasts its limit is the candidate\'s compile timeout (timed_out, charged), never runner_timeout', async () => {
+    const fake = fakeDocker();
+    const r = start(fake, request('cpp'), { startMs: 30, compileMs: 40 });
+    r.compile();
+    fake.run().child.err('main.cpp: deep template instantiation\n');
+    // Past the start limit, inside the compile limit: still compiling.
+    await new Promise((x) => setTimeout(x, 35));
+    expect(r.results()).toBe(0);
+    const res = await r.result;
+    const said = DOCKER_SENTENCES.slowCompile(40);
+    expect(res).toMatchObject({ status: 'timed_out', exitCode: null, compileOutput: `main.cpp: deep template instantiation\n${said}`, stderr: said });
+    expect(res.compileOutput).not.toContain(':compile');
+    expect(r.statuses()).toEqual(['compiling']);
   });
 
   it('cancelled while running, once, and a second cancel is harmless', async () => {

@@ -7,7 +7,7 @@ import type { Executor, ExecutorOutput, RunRequest, RunResult } from '../executo
 import { serviceResult } from '../executor.js';
 import { MemoryRunStore, type RunRecord } from '../store.js';
 import {
-  cancelRun, checkRunBody, ensureRecovered, getRun, guestRunView, listRuns, MAX_RUNS_PER_INTERVIEW, openRunEvents, plainPath, runPriceUsd, runsSettled,
+  cancelRun, checkRunBody, COMPILE_ALLOWANCE_MS, WALL_GRACE_MS, ensureRecovered, getRun, guestRunView, listRuns, MAX_RUNS_PER_INTERVIEW, openRunEvents, plainPath, runPriceUsd, runsSettled,
   setRunDeps, startRun, type RunBody, type RunDeps, type RunEvent,
 } from '../service.js';
 import { lastRun } from '../index.js';
@@ -257,7 +257,7 @@ describe('the safeguards', () => {
       await startRun(IV, HUGO, body());
       await flush();
       ex.runs[0]!.emit({ type: 'event', stream: 'status', data: 'running' });
-      await jest.advanceTimersByTimeAsync(10_000 + 30_000 + 5_000 + 10);
+      await jest.advanceTimersByTimeAsync(10_000 + COMPILE_ALLOWANCE_MS + WALL_GRACE_MS + 10);
       await runsSettled(IV);
       ex.runs[0]!.emit({ type: 'result', result: ex.result('succeeded', ex.runs[0]!.request) });
       const r = await row('run-0001');

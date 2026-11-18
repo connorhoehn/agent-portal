@@ -10,9 +10,10 @@
 //
 // Statuses: `compiling` at the start for compiled languages, `running` when the script prints the run's marker (just
 // before the program starts). Then: exit 0 `succeeded`; exit 137 that the runner did not cause `memory_exceeded`;
-// any other exit `failed`; the program's own `wallMs` running out `timed_out`; the runner's timer running out BEFORE the marker (the container
-// or its compile step never got the program started: a slow daemon or image start, `prepareMs`) `runner_timeout`, which is the
-// runner's failure and not the candidate's, with a plain sentence on stderr; a cancel `cancelled`; exit 97 before the marker `compile_error`; Docker unreachable, an image
+// any other exit `failed`; the program's own `wallMs` running out `timed_out`; the compile outlasting `compileMs` after
+// the compile marker `timed_out` too (the candidate's compile, charged, with a sentence in the compile output); the
+// runner's start timer running out before ANY marker (a slow daemon or image start, `startMs`) `runner_timeout`, which is
+// the runner's failure and not the candidate's, with a plain sentence on stderr; a cancel `cancelled`; exit 97 before the marker `compile_error`; Docker unreachable, an image
 // missing or anything else before the marker `internal_error`, with a plain sentence on stderr. Output: the first
 // `maxOutputBytes` of each stream are kept and streamed; past that it is cut and flagged and the run goes on; past four
 // times that the run is stopped as an output flood and ends `failed`. Every stop removes the container by name.
@@ -38,6 +39,7 @@ export const DOCKER_SENTENCES = {
   noImage: (lang: string, image: string) => `The ${lang} image (${image}) is not on this machine, so the run could not start. Pull it once with: docker pull ${image}\n`,
   failedStart: 'The code runner could not start this run.\n',
   slowStart: 'The code runner did not get this program started in time, so it never ran. This is the runner, not your code. Try again.\n',
+  slowCompile: (ms: number) => `The program took longer than ${Math.round(ms / 1000)} seconds to compile, so it was stopped.\n`,
   flood: (max: number) => `The program printed more than ${FLOOD_FACTOR} times the ${Math.round(max / 1024)} KB output limit, so it was stopped.\n`,
 } as const;
 
@@ -46,8 +48,9 @@ const LANGUAGE_NAMES: Readonly<Record<RunLanguage, string>> = { python: 'Python'
 export interface DockerExecutorOptions {
   /** The processes it starts. Default: the real `docker` binary. Tests pass a fake spawner. */
   processes?: DockerProcesses;
-  /** Overrides the row's `prepareMs` (tests). */
-  prepareMs?: number;
+  /** Override the row's `startMs` and `compileMs` (tests). */
+  startMs?: number;
+  compileMs?: number;
   /** After a stop, how long to wait for `docker run` to end before ending the run anyway. */
   stopGraceMs?: number;
   /** A second `docker rm -f` this long after a stop, for a container that was still being created at the first. */
@@ -129,6 +132,7 @@ export class DockerExecutor implements Executor {
     const limits = request.limits;
     const maxOut = limits.maxOutputBytes;
     const startedAt = this.now();
+    let compilingAt: number | null = null;
     let runningAt: number | null = null;
     let done = false;
     let stopReason: StopReason | null = null;
@@ -140,6 +144,8 @@ export class DockerExecutor implements Executor {
     const marker = randomBytes(16).toString('hex');
     const name = `${CONTAINER_PREFIX}${randomBytes(8).toString('hex')}`;
     const markerLine = Buffer.from(`${marker}\n`);
+    const compileLine = Buffer.from(`${marker}:compile\n`);
+    const compileMs = this.opts.compileMs ?? rt?.compileMs ?? 0;
     // Before its marker, a stream's bytes are the runner's or the compiler's (held whole, at most a little).
     const pre = { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
     const past = { stdout: false, stderr: false };
@@ -208,6 +214,11 @@ export class DockerExecutor implements Executor {
       }
       if (produced[stream] > maxOut * FLOOD_FACTOR) stop('flood');
     };
+    const compileBegan = () => {
+      if (compilingAt !== null || runningAt !== null || done || stopReason) return;
+      compilingAt = this.now();
+      arm(compileMs);
+    };
     const running = () => {
       // After a stop, the run never reports `running` (a cancel while compiling stays `compiling`).
       if (runningAt !== null || done || stopReason) return;
@@ -218,7 +229,12 @@ export class DockerExecutor implements Executor {
     const onData = (stream: 'stdout' | 'stderr', chunk: Buffer) => {
       if (done) return;
       if (past[stream]) { write(stream, decoders[stream].decode(chunk, { stream: true })); return; }
-      const all = Buffer.concat([pre[stream], chunk]);
+      let all = Buffer.concat([pre[stream], chunk]);
+      if (stream === 'stdout' && compilingAt === null && rt?.compiled) {
+        // What came before the compile marker is the runner's unpacking; the compiler's words start after it.
+        const c = all.indexOf(compileLine);
+        if (c >= 0) { all = all.subarray(c + compileLine.length); compileBegan(); }
+      }
       const at = all.indexOf(markerLine);
       if (at < 0) {
         // Keep what came before the marker, at most twice the output limit (a compiler's words are short).
@@ -237,12 +253,18 @@ export class DockerExecutor implements Executor {
       for (const s of ['stdout', 'stderr'] as const) if (past[s]) write(s, decoders[s].decode());
       if (stopReason === 'cancel') return finish('cancelled', null);
       if (stopReason === 'timeout') {
-        // Before the marker the program never started: the runner's failure, said in a sentence, and not the candidate's timeout.
-        if (runningAt === null) {
-          if (Buffer.byteLength(out.stderr) + Buffer.byteLength(DOCKER_SENTENCES.slowStart) <= maxOut) { out.stderr += DOCKER_SENTENCES.slowStart; event('stderr', DOCKER_SENTENCES.slowStart); }
-          return finish('runner_timeout', null);
+        if (runningAt !== null) return finish('timed_out', null);
+        // The compile began and outlasted its limit: the candidate's compile timeout, charged like any timeout.
+        if (compilingAt !== null) {
+          const s = DOCKER_SENTENCES.slowCompile(compileMs);
+          out.compileOutput = cutBytes(preText() + s, maxOut);
+          if (Buffer.byteLength(out.stderr) + Buffer.byteLength(s) <= maxOut) { out.stderr += s; event('stderr', s); }
+          return finish('timed_out', null);
         }
-        return finish('timed_out', null);
+        // No marker at all: the program never started and its compile never began. The runner's failure, said in a
+        // sentence, and not the candidate's timeout.
+        if (Buffer.byteLength(out.stderr) + Buffer.byteLength(DOCKER_SENTENCES.slowStart) <= maxOut) { out.stderr += DOCKER_SENTENCES.slowStart; event('stderr', DOCKER_SENTENCES.slowStart); }
+        return finish('runner_timeout', null);
       }
       if (stopReason === 'flood') {
         const s = DOCKER_SENTENCES.flood(maxOut);
@@ -290,7 +312,7 @@ export class DockerExecutor implements Executor {
     }
 
     if (rt.compiled) event('status', 'compiling');
-    arm(this.opts.prepareMs ?? rt.prepareMs);
+    arm(this.opts.startMs ?? rt.startMs);
     child.on('error', (err: Error & { code?: string }) => {
       if (done) return;
       clear();
