@@ -195,15 +195,22 @@ let counters = new Map<string, number>();
 let pending = new Map<string, Map<number, RunEvent & { n: number }>>();
 let listeners = new Map<string, Set<Listener>>();
 let locks = new Map<string, Promise<unknown>>();
-/** Runs this process ended (or is ending) without a result row yet: the queue never starts them. */
-let endedHere = new Set<string>();
+/**
+ * Runs this process ended whose result row is not written yet (being written, or refused by the store), with that ending. The
+ * queue never starts them, and every read shows them ended (`withEnding`), as the stream already does from the pending status
+ * event, so a refused row never leaves a reader's run spinning; a restart's recovery ends them in the store.
+ */
+interface Ending { result: RunResult; endedAt: string; event: StoredRunEvent }
+let endedHere = new Map<string, Ending>();
+/** The waits before writing a result row again after the store refused it. */
+const RESULT_WRITE_RETRY_MS = [200, 1000] as const;
 let recovered: Promise<void> | null = null;
 
 /** Tests: forget everything held in this process, as a restart would. */
 export function resetRunService(): void {
   for (const s of active.values()) if (s !== 'starting') for (const t of s.timers) clearTimeout(t);
   active = new Map(); counters = new Map(); pending = new Map(); listeners = new Map(); locks = new Map();
-  endedHere = new Set(); recovered = null; defaultExecutor = null;
+  endedHere = new Map(); recovered = null; defaultExecutor = null;
 }
 
 const iso = (ms: number): string => new Date(ms).toISOString();
@@ -237,6 +244,33 @@ function stamp(interviewId: string, runId: string, seq: number, stream: RunStrea
   return e;
 }
 const stored = (interviewId: string, events: readonly StoredRunEvent[]) => { const p = pending.get(interviewId); for (const e of events) p?.delete(e.n); };
+
+/** A row as readers see it: ended, when this process ended it and its result row is not written yet. */
+function withEnding(r: RunRecord): RunRecord {
+  const end = r.result === null ? endedHere.get(slotKey(r.interviewId, r.runId)) : undefined;
+  return end ? { ...r, status: end.result.status, result: end.result, endedAt: end.endedAt, events: [...r.events, end.event] } : r;
+}
+
+/**
+ * Write a run's ending: readers see it ended at once (endedHere), the row is written, and a refusal is tried again
+ * (RESULT_WRITE_RETRY_MS). Resolves to the stored row, or rejects with the last refusal, leaving the ending held.
+ */
+async function writeEnding(interviewId: string, runId: string, result: RunResult, endedAt: string, event: StoredRunEvent): Promise<RunRecord | null> {
+  const key = slotKey(interviewId, runId);
+  endedHere.set(key, { result, endedAt, event });
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const done = await deps().store().finishRun(interviewId, runId, result, endedAt, [event]);
+      stored(interviewId, [event]);
+      endedHere.delete(key);
+      return done;
+    } catch (e) {
+      const wait = RESULT_WRITE_RETRY_MS[attempt];
+      if (wait === undefined) throw e;
+      await new Promise<void>((r) => { const t = setTimeout(r, wait); t.unref?.(); });
+    }
+  }
+}
 
 // ── Recovery ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -338,10 +372,8 @@ function begin(row: RunRecord): void {
     const last = stamp(interviewId, runId, ++slot.seq, 'status', result.status);
     slot.chain = slot.chain.then(async () => {
       try {
-        await store.finishRun(interviewId, runId, result, iso(d.now()), [last]);
-        stored(interviewId, [last]);
+        await writeEnding(interviewId, runId, result, iso(d.now()), last);
       } catch (e) {
-        endedHere.add(slotKey(interviewId, runId));
         console.warn('[interviews] run result not stored', (e as Error)?.name ?? 'error');
       }
       try {
@@ -420,17 +452,19 @@ function requestCancel(slot: Slot): void {
 /** The interview's runs, newest first. */
 export async function listRuns(interviewId: string): Promise<RunRecord[]> {
   await ensureRecovered();
-  return (await deps().store().listRuns(interviewId)).reverse();
+  return (await deps().store().listRuns(interviewId)).map(withEnding).reverse();
 }
 
 export async function getRun(interviewId: string, runId: string): Promise<RunRecord | null> {
   await ensureRecovered();
-  return deps().store().getRun(interviewId, runId);
+  const row = await deps().store().getRun(interviewId, runId);
+  return row && withEnding(row);
 }
 
 /** The interview's newest run, or null. */
 export async function lastRunRecord(interviewId: string): Promise<RunRecord | null> {
-  return (await deps().store().listRuns(interviewId)).at(-1) ?? null;
+  const row = (await deps().store().listRuns(interviewId)).at(-1);
+  return row ? withEnding(row) : null;
 }
 
 export type CancelOutcome = { kind: 'ok'; run: RunRecord } | { kind: 'not-found' };
@@ -440,27 +474,27 @@ export async function cancelRun(interviewId: string, runId: string): Promise<Can
   await ensureRecovered();
   const d = deps();
   const store = d.store();
-  const row = await store.getRun(interviewId, runId);
-  if (!row) return { kind: 'not-found' };
+  const found = await store.getRun(interviewId, runId);
+  if (!found) return { kind: 'not-found' };
+  const row = withEnding(found);
   if (row.result !== null) return { kind: 'ok', run: row };
   const slot = active.get(interviewId);
   if (slot && slot !== 'starting' && slot.runId === runId) {
     requestCancel(slot);
     await Promise.race([slot.done, new Promise<void>((r) => { const t = setTimeout(r, CANCEL_GRACE_MS * 2); t.unref?.(); })]);
-    return { kind: 'ok', run: (await store.getRun(interviewId, runId)) ?? row };
+    const now = await store.getRun(interviewId, runId);
+    return { kind: 'ok', run: now ? withEnding(now) : row };
   }
   // Still queued: it never reaches the executor, and its money goes back.
-  const key = slotKey(interviewId, runId);
-  endedHere.add(key);
   await counterFor(interviewId);
   const e = stamp(interviewId, runId, (row.events.at(-1)?.seq ?? 1) + 1, 'status', 'cancelled');
-  // A store that refuses the row leaves it to a restart's recovery (and unstarted here); the money goes back either way.
-  const out = await store.finishRun(interviewId, runId, serviceResult('cancelled', d.executor(), row.language), iso(d.now()), [e])
+  // A store that refuses the row leaves it to a restart's recovery (held ended and unstarted here); the money goes back either way.
+  const out = await writeEnding(interviewId, runId, serviceResult('cancelled', d.executor(), row.language), iso(d.now()), e)
     .then((done) => ({ done, refused: null }), (error: unknown) => ({ done: null, refused: { error } }));
-  if (!out.refused) { stored(interviewId, [e]); endedHere.delete(key); }
   if (out.done || out.refused) await d.release([row.holdId]).catch(() => undefined);
   if (out.refused) throw out.refused.error;
-  return { kind: 'ok', run: out.done ?? (await store.getRun(interviewId, runId)) ?? row };
+  const now = out.done ?? (await store.getRun(interviewId, runId));
+  return { kind: 'ok', run: now ? withEnding(now) : row };
 }
 
 // ── The stream ────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -161,6 +161,26 @@ describe('the queue', () => {
     expect(money.release).toHaveBeenCalledWith(['h-run-0001']);
     expect(money.settle).not.toHaveBeenCalled();
     expect(ex.runs.length).toBe(1);
+    // Readers see the run ended, with its result, though its row could not be written.
+    expect(await getRun(IV, 'run-0001')).toMatchObject({ status: 'runner_timeout', result: { status: 'runner_timeout' } });
+    expect((await listRuns(IV))[0]).toMatchObject({ runId: 'run-0001', status: 'runner_timeout' });
+    expect((await getRun(IV, 'run-0001'))!.events.at(-1)).toMatchObject({ stream: 'status', data: 'runner_timeout' });
+  });
+
+  it('a result the store refuses once is written on a retry', async () => {
+    const flaky = new MemoryRunStore();
+    const real = flaky.finishRun.bind(flaky);
+    let tries = 0;
+    flaky.finishRun = async (...a) => { tries += 1; if (tries === 1) throw new Error('connection reset'); return real(...a); };
+    setRunDeps(deps({ store: () => flaky }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await startRun(IV, HUGO, body());
+    await flush();
+    ex.runs[0]!.emit({ type: 'result', result: ex.result('succeeded', ex.runs[0]!.request) });
+    await runsSettled(IV);
+    warn.mockRestore();
+    expect(tries).toBe(2);
+    expect((await flaky.getRun(IV, 'run-0001'))!.result?.status).toBe('succeeded');
   });
 
   it('a queued cancel the store refuses still gives the money back, and that run is never started', async () => {
