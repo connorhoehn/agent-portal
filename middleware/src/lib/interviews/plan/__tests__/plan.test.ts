@@ -92,9 +92,11 @@ describe('the scripted stand-in', () => {
     expect(scriptedPlan(KIT).questions.map((q) => q.questionId)).toEqual(['q1', 'q2', 'q3']);
     expect(scriptedPlan({ ...KIT, minutes: 90 }).questions.map((q) => q.questionId)).toEqual(['q1', 'q2', 'q3', 'q4']);
   });
-  it('names the competency in every reason, and passes the parse with the guard', () => {
+  it('gives each question its own reason (its competency and its first follow-up, else what to listen for), and passes the parse with the guard', () => {
     const plan = scriptedPlan(KIT);
-    expect(plan.questions[0]!.why).toBe('It gathers evidence for Leadership.');
+    expect(plan.questions[0]!.why).toBe('Serves Leadership. Listen for: owns outcomes.');
+    const withFollowUp = scriptedPlan({ ...KIT, questions: KIT.questions.map((q) => (q.id === 'q1' ? { ...q, followUps: ['What did you notice first?'] } : q)) });
+    expect(withFollowUp.questions[0]!.why).toBe('Serves Leadership. A follow-up ready: “What did you notice first?”');
     expect(parsePlan(JSON.stringify(plan), BANK, 3)).toMatchObject({ ok: true, drops: { why: 0 } });
   });
   it('skips a competency with no question and is empty for an empty bank', () => {

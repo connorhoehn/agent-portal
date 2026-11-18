@@ -120,7 +120,7 @@ describe('who may ask', () => {
     const kit = interviewOpeningsFixture.rows().find((o) => o.id === 'op-em')!.kit;
     for (const id of ids) expect(kit.questions.find((q) => q.id === id)?.roundType).toBe('behavioural');
     expect(new Set(ids).size).toBe(ids.length);
-    for (const q of res.body.plan.questions) expect(q.why).toMatch(/^It gathers evidence for /);
+    for (const q of res.body.plan.questions) expect(q.why).toMatch(/^Serves /);
   });
 
   it.each([['a panel member', HUGO], ['the recruiter', GRETA], ['the hiring manager', AMARA], ['another round\'s interviewer', THIRD], ['the admin', OPERATOR]])('%s gets not-found and no row, no hold', async (_l, as) => {

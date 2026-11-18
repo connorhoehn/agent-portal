@@ -72,7 +72,7 @@ export function planInputOf(ref: PlanRef): PlanInput {
     roundType: interview.type,
     minutes: interview.minutes,
     competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
-    questions: opening.kit.questions.filter((q) => q.roundType === interview.type).map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId })),
+    questions: opening.kit.questions.filter((q) => q.roundType === interview.type).map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId, followUps: q.followUps })),
   };
 }
 

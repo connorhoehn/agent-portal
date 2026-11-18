@@ -35,7 +35,7 @@ export interface PlanInput {
   minutes: number;
   competencies: readonly Pick<KitCompetency, 'id' | 'name' | 'lookFor'>[];
   /** The bank's questions for this round type, in the kit's order. */
-  questions: readonly Pick<KitQuestion, 'id' | 'prompt' | 'competencyId'>[];
+  questions: readonly (Pick<KitQuestion, 'id' | 'prompt' | 'competencyId'> & { followUps?: readonly string[] })[];
 }
 
 export const PLAN_SYSTEM_PROMPT = [

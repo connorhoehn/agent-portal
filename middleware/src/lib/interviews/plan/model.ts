@@ -3,7 +3,7 @@
 // `makeMiloModel` reads it, so a test's `setCoachModelFactory` and the mock world flip this model with the others.
 import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockMiloModel, makeMiloModel, type MiloModelResult } from '../milo-notes/model.js';
-import { buildPlanRequest, MINUTES_PER_QUESTION, planCap, type PlanInput } from './prompt.js';
+import { buildPlanRequest, MAX_WHY_CHARS, MINUTES_PER_QUESTION, planCap, type PlanInput } from './prompt.js';
 
 export const SCRIPTED_PLAN_MODEL_ID = 'scripted-plan';
 
@@ -17,7 +17,20 @@ export interface PlanModel {
  * Deterministic, from the kit alone: the first bank question of each competency, in the kit's order, until the minutes
  * are filled (one question per MINUTES_PER_QUESTION, the same cap the parse holds); when every competency has had one and
  * minutes remain, a second pass takes each competency's next question. A competency with no question is skipped.
+ * Each reason is the question's own: the competency it serves and the kit's first follow-up for it, ready to ask
+ * (E4 finding 48); a question with no follow-up says what to listen for (the competency's "look for"). The stand-in
+ * reads the kit only, never the candidate (the plan's prompt rule), so it ties no reason to a résumé.
  */
+const fits = (s: string): string | null => (s.length <= MAX_WHY_CHARS ? s : null);
+
+/** One reason per question: its competency and its first follow-up, else what to listen for, else the competency alone. */
+export function whyOf(c: PlanInput['competencies'][number], q: PlanInput['questions'][number]): string {
+  const follow = q.followUps?.[0]?.trim();
+  return (follow && fits(`Serves ${c.name}. A follow-up ready: “${follow}”`))
+    || fits(`Serves ${c.name}. Listen for: ${c.lookFor.charAt(0).toLowerCase()}${c.lookFor.slice(1)}`)
+    || `Serves ${c.name}.`;
+}
+
 export function scriptedPlan(input: PlanInput): { questions: Array<{ questionId: string; why: string }> } {
   const cap = planCap(input.minutes);
   const byComp = input.competencies.map((c) => ({ c, qs: input.questions.filter((q) => q.competencyId === c.id) }));
@@ -29,7 +42,7 @@ export function scriptedPlan(input: PlanInput): { questions: Array<{ questionId:
       if (!q) continue;
       any = true;
       if (out.length >= cap) break;
-      out.push({ questionId: q.id, why: `It gathers evidence for ${c.name}.` });
+      out.push({ questionId: q.id, why: whyOf(c, q) });
     }
     if (!any) break;
   }
