@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { _setVoiceWebSocket } from '../../voice/openai.js';
 import { OpenAiLiveSession } from '../live-session.js';
+import { readAloudContent, READ_ALOUD_MARK, saidVerbatim } from '../approved-speech.js';
 import type { SessionEvents } from '../session.js';
 import type { ResponsesFunctionTool } from '../../voice/catalogue.js';
 
@@ -73,13 +74,13 @@ describe('sayVerbatim on the live session', () => {
     await s.start(START);
     expect(s.sayVerbatim('say_1', Q, () => undefined)).toBe(true);
     await tick(20);
-    expect(received.find((e) => e['type'] === 'session.commentary.append')).toEqual(expect.objectContaining({ delegation_id: null, content: Q }));
+    expect(received.find((e) => e['type'] === 'session.commentary.append')).toEqual(expect.objectContaining({ delegation_id: null, content: readAloudContent(Q) }));
     expect(s.sayVerbatim('say_2', '   ', () => undefined)).toBe(false);
     await s.close();
   });
 
   it('claims the next utterance from quiet: its frames and final transcript carry `say`, and `ended` gets the transcript once', async () => {
-    const { s, seen } = make({ utteranceGapMs: 40 });
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);
     const ended: Array<string | null> = [];
     s.sayVerbatim('say_1', Q, (t) => ended.push(t));
@@ -103,7 +104,7 @@ describe('sayVerbatim on the live session', () => {
   });
 
   it('an utterance already running when the request is sent is not claimed; the next one from quiet is', async () => {
-    const { s, seen } = make({ utteranceGapMs: 40 });
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);
     const ended: Array<string | null> = [];
     audio(3000); words('I was saying', 0);
@@ -123,12 +124,89 @@ describe('sayVerbatim on the live session', () => {
   });
 
   it('a close forgets the request (the caller\'s bound withholds it)', async () => {
-    const { s } = make({ utteranceGapMs: 40 });
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);
     const ended: Array<string | null> = [];
     s.sayVerbatim('say_1', Q, (t) => ended.push(t));
     await s.close();
     expect(ended).toEqual([]);
     expect(s.sayVerbatim('say_2', Q, () => undefined)).toBe(false);
+  });
+
+  // The real provider (17 November): words stream as the audio plays and stall part way through a sentence for longer than the 900 ms
+  // that ends an ordinary utterance. Cutting there handed the check half a line, and every approved line was withheld.
+  const TIME = 'About 59 minutes are left in this round.';
+  const QUESTION = 'Can you walk me through how you would design a rate limiter for an API that serves many customers?';
+  const stalled = async (text: string, cutAt: number, stallMs: number) => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 400 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', text, (t) => ended.push(t));
+    await tick(20);
+    const w = text.split(' ');
+    audio(3000); words(w.slice(0, cutAt).join(' '), 0);
+    for (let i = 0; i < 4; i += 1) audio(0); // the voice stops too: its tail ends
+    await tick(stallMs);
+    const duringStall = [...ended];
+    audio(3000); words(` ${w.slice(cutAt).join(' ')}`, 2000);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(150);
+    await s.close();
+    return { duringStall, ended };
+  };
+
+  it('a stall longer than the ordinary gap does not end a claimed utterance: the time-left line reaches the check whole', async () => {
+    const { duringStall, ended } = await stalled(TIME.replace('59', 'fifty-nine'), 3, 200);
+    expect(duringStall).toEqual([]);
+    expect(ended).toEqual(['About fifty-nine minutes are left in this round.']);
+    expect(saidVerbatim(TIME, ended[0])).toBe(true);
+  });
+
+  it('the long approved question, stalled mid-sentence, reaches the check whole', async () => {
+    const { ended } = await stalled(QUESTION, 9, 250);
+    expect(ended).toEqual([QUESTION]);
+    expect(saidVerbatim(QUESTION, ended[0])).toBe(true);
+  });
+
+  it('words that never complete end at the long gap with what was said, and that partial line fails the check', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 200 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', TIME, (t) => ended.push(t));
+    await tick(20);
+    audio(3000); words('About fifty-nine minutes are', 0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(100);
+    expect(ended).toEqual([]); // past the ordinary gap, inside the long one: still open
+    await tick(250);
+    expect(ended).toEqual(['About fifty-nine minutes are']);
+    expect(saidVerbatim(TIME, ended[0])).toBe(false);
+    await s.close();
+  });
+
+  it('a paraphrase, or words that run on past the line, still reach the check as said and fail it', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 200 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', TIME, (t) => ended.push(t));
+    await tick(20);
+    audio(3000); words('About fifty-nine minutes are left in this round.', 0);
+    audio(3000); words(' Good luck.', 400); // still voicing: the run-on joins the line
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(350);
+    expect(ended).toEqual(['About fifty-nine minutes are left in this round. Good luck.']);
+    expect(saidVerbatim(TIME, ended[0])).toBe(false);
+    s.sayVerbatim('say_2', TIME, (t) => ended.push(t));
+    await tick(20);
+    audio(3000); words('There are still about fifty-nine minutes left.', 1000);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(350);
+    expect(ended).toHaveLength(2);
+    expect(saidVerbatim(TIME, ended[1])).toBe(false);
+    await s.close();
+  });
+
+  it('the line is sent quoted after the read-aloud mark, which the session instructions explain', () => {
+    expect(readAloudContent(' Say "hi" now. ')).toBe(`${READ_ALOUD_MARK} "Say \\"hi\\" now."`);
   });
 });

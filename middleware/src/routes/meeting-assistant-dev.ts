@@ -23,6 +23,11 @@
 //   Creates a proposal (source `dev`) exactly as the watcher will, through the same checks: nobody is consented, the outcome is frozen
 //   and digested. 201 with the proposal, 200 when that id exists, 409 when the assistant was never in the call.
 //
+//   POST /api/dev/calls/:callId/assistant-say
+//   body: { text, by }
+//   Asks Milo to say approved words aloud through the call's live session (orchestrator.ts `sayHeldText`): held whole, checked against
+//   the session's transcript, then relayed or withheld. Answers when that is decided: { outcome: 'spoken' | 'posted' | 'no-call' }.
+//
 //   GET /api/dev/calls/:callId/assistant-audio
 //   The live sink token and channel for the tap simulator, and the audio counters. See the route below.
 //
@@ -211,4 +216,17 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/typed-message', gate,
     const b = (req.body ?? {}) as Record<string, unknown>;
     await assistantRuntime().onTypedMessage(callId, need(b['userId'], 'userId', 128), need(b['text'], 'text', 2000));
     res.status(202).json({ callId });
+  }));
+
+// POST /api/dev/calls/:callId/assistant-say  body: { text, by }
+// Approved speech for the scenario suite (scripts/meeting-assistant/scenarios/14-approved-speech.mjs): the same path an interview's
+// approved question takes (sayHeldText). Nothing is posted in the chat by this route. 200 { outcome } once the utterance is decided.
+meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-say', gate,
+  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
+  asyncHandler(async (req, res) => {
+    const callId = req.params['callId'];
+    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const outcome = await assistantRuntime().sayHeldText(callId, need(b['text'], 'text', 1500), need(b['by'], 'by', 128));
+    res.json({ callId, outcome });
   }));

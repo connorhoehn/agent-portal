@@ -23,7 +23,11 @@
 // from that start until both its transcript has been flushed and its audio has ended (`last`), then the request's `ended` is called. A claim
 // can be wrong (the model spoke something else first); that is safe because the caller relays nothing until the transcript of what
 // was claimed equals the words it asked for (orchestrator.ts `sayHeldText`), and an utterance that runs on into other words fails
-// that check.
+// that check. The provider streams a spoken line's words as its audio plays and stalls part way through a sentence (measured 17
+// November: 1 to 2 s with neither words nor voice), so a claimed utterance is NOT ended by the ordinary 900 ms of output quiet: it
+// ends once its words equal the words asked for and both sides have been quiet `saySettleMs`, or after `sayGapMs` of quiet on both
+// sides whatever it says. Words that arrive after its transcript closed but before its audio ended join it (a run-on fails the check).
+// The words are sent framed as a line to read aloud (`readAloudContent`), and the session's instructions say what such a line is.
 //
 // Transcripts arrive only as DELTAS (no "done" event is documented). Input is cut into pieces: at a sentence end, at a gap of
 // more than `gapMs`, at a delegation, at close, and after `idleFlushMs` of quiet. Output is cut into UTTERANCES: one runs from its
@@ -37,6 +41,7 @@ import {
   MAX_PROVIDER_ERRORS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
 } from './session.js';
 import { trace } from './trace.js';
+import { readAloudContent, saidVerbatim } from './approved-speech.js';
 
 export interface OpenAiLiveSessionOptions {
   model: string;
@@ -49,6 +54,10 @@ export interface OpenAiLiveSessionOptions {
   gapMs?: number;
   /** Quiet on the output side that ends one spoken utterance (default 900 ms). */
   utteranceGapMs?: number;
+  /** Quiet (no words, no voice) that ends an utterance claimed by a `say` whose words are not yet the ones asked for (default 2500 ms). */
+  sayGapMs?: number;
+  /** Quiet that ends a claimed utterance whose words already equal the ones asked for (default 600 ms). */
+  saySettleMs?: number;
   /** Timer functions, injectable so a test can move time by hand. */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void };
   clock?: () => number;
@@ -113,9 +122,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private tailLeft = 0;
   private audioSeq = 0;
   /** `say` requests sent and not yet claimed by an utterance, oldest first. */
-  private sayQueue: Array<{ id: string; ended: (transcript: string | null) => void }> = [];
+  private sayQueue: Array<{ id: string; text: string; ended: (transcript: string | null) => void }> = [];
   /** The `say` request whose utterance is being emitted now. */
-  private saying: { id: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null } | null = null;
+  private saying: { id: string; text: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null } | null = null;
   private closing: Promise<void> | null = null;
   private onClosed: (() => void) | null = null;
   private fail: ((e: Error) => void) | null = null;
@@ -174,8 +183,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   /** Say the server's words aloud (session.ts `sayVerbatim`): sent as spoken commentary; the next utterance from quiet is claimed for it. */
   sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void): boolean {
     if (this.ended || !this.opened || !text.trim()) return false;
-    this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: text.slice(0, 2000) });
-    this.sayQueue.push({ id, ended });
+    this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: readAloudContent(text.slice(0, 1800)) });
+    this.sayQueue.push({ id, text, ended });
     trace('say.asked', { t: this.sinceStart(), queued: this.sayQueue.length });
     return true;
   }
@@ -330,6 +339,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) {
         if (this.tailLeft === 0) { trace('voice.start', { t: this.sinceStart() }); if (!this.output) this.claimSay(); }
         this.tailLeft = OUTPUT_TAIL_FRAMES;
+        // A claimed utterance's voice still running: its words are not over yet, whatever their pace.
+        if (this.output?.say && this.outputTimer !== null) this.armOutput();
       }
       else if (this.tailLeft === 0) continue;
       else this.tailLeft -= 1;
@@ -345,7 +356,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private claimSay(): void {
     if (this.saying || this.sayQueue.length === 0) return;
     const next = this.sayQueue.shift()!;
-    this.saying = { id: next.id, ended: next.ended, textDone: false, audioDone: true, transcript: null };
+    this.saying = { id: next.id, text: next.text, ended: next.ended, textDone: false, audioDone: true, transcript: null };
     trace('say.claimed', { t: this.sinceStart() });
   }
 
@@ -382,6 +393,13 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       const at = this.sinceStart();
       // Milo beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
       // utterance is judged (the provider's input deltas come in small pieces, and its idle flush would land after a short answer).
+      // Words after a claimed utterance's transcript closed while its voice still runs: they are its words (a run-on fails the check).
+      const s = this.saying;
+      if (!this.output && s && s.textDone && !s.audioDone) {
+        s.transcript = `${s.transcript ?? ''} ${delta}`.replace(/\s+/g, ' ').trim();
+        this.emit('outputTranscript', { text: s.transcript, final: false, say: s.id });
+        return;
+      }
       if (!this.output) {
         this.flushInput('output');
         // From quiet (no voice running): this utterance may be the one a `say` asked for. With the voice already running under a claim,
@@ -404,11 +422,24 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
 
   private armOutput(): void {
     this.clearOutputTimer();
-    const fire = () => { this.outputTimer = null; this.flushOutput(); };
-    const ms = this.opts.utteranceGapMs ?? 900;
+    const fire = () => { this.outputTimer = null; this.onOutputQuiet(); };
+    const ms = this.outputGapMs();
     const t = this.opts.timers;
     if (t) this.outputTimer = t.set(fire, ms);
     else { const h = setTimeout(fire, ms); h.unref?.(); this.outputTimer = h; }
+  }
+
+  /** The quiet that ends the open utterance: the ordinary gap, or a claimed one's (settle when its words are complete, else the long gap). */
+  private outputGapMs(): number {
+    const p = this.output, s = this.saying;
+    if (!p?.say || !s || s.id !== p.say) return this.opts.utteranceGapMs ?? 900;
+    return saidVerbatim(s.text, p.text) ? (this.opts.saySettleMs ?? 600) : (this.opts.sayGapMs ?? 2500);
+  }
+
+  /** Output quiet: the utterance ends, unless it is a claimed one whose voice is still running (then the wait starts again). */
+  private onOutputQuiet(): void {
+    if (this.output?.say && this.saying?.id === this.output.say && this.tailLeft > 0) { this.armOutput(); return; }
+    this.flushOutput();
   }
 
   private armIdle(): void {

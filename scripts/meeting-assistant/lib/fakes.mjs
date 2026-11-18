@@ -123,6 +123,22 @@ export class FakeProvider {
       if (id) this.replySpans.set(id, { startMs: st.audioMs, endMs: st.audioMs + frames.length * 100, text, conn: this.connections });
       st.script.push(...frames); this.seen.replies.push(text.slice(0, 40));
     };
+    /** One word every 300 ms (three voiced frames each), its delta as it plays; after half the words, `stallMs` of quiet on both sides. */
+    const speakStalled = (text, stallMs) => {
+      const words = text.trim().split(/\s+/).filter(Boolean);
+      const half = Math.ceil(words.length / 2);
+      const stallFrames = Math.round(stallMs / 100);
+      let wall = 0;
+      const startMs = st.audioMs;
+      words.forEach((w, i) => {
+        if (i === half) { for (let k = 0; k < stallFrames; k += 1) st.script.push({ voiced: false }); wall += stallMs; }
+        for (let k = 0; k < 3; k += 1) st.script.push({ voiced: true, id: 'say' });
+        const at = startMs + wall;
+        later(wall, () => send({ type: 'session.output_transcript.delta', start_ms: Math.round(at), end_ms: Math.round(at + 300), delta: ` ${w}` }));
+        wall += 300;
+      });
+      this.seen.replies.push(text.slice(0, 40));
+    };
     /** Voice first, words after (the real provider's order): returns what sends the transcript, for the caller to send later. */
     const voiceFirst = (text, frames, mark) => {
       const startMs = st.audioMs;
@@ -235,6 +251,19 @@ export class FakeProvider {
         const r = typeof f === 'function' ? f(out) : typeof f === 'string' ? { text: f, frames: 25 } : null;
         // As the real one: the second model writes the words about the result (a message item), then the voice speaks them.
         if (r) later(300, () => { send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message' } } }); later(400, () => speakText(r.text, r.frames ?? 25, entry.dry.id ? `${entry.dry.id}:followup` : undefined)); });
+      } else if (ev.type === 'session.commentary.append') {
+        // Words the server asks to be said verbatim (approved speech). Spoken the way the real provider was measured to (17 November):
+        // one transcript delta per word as its audio plays, and a stall part way through in which both the words and the voice stop
+        // for longer than the 900 ms that ends an ordinary utterance. `sayStyle.rewrite` makes it say something else (a paraphrase).
+        send({ type: 'session.commentary.appended', client_event_id: ev.event_id });
+        const style = this.sayStyle ?? {};
+        // The line is sent quoted after a read-aloud mark (approved-speech.ts readAloudContent); the fake reads the quoted line.
+        const raw = String(ev.content ?? '');
+        let content = raw;
+        try { const q = raw.indexOf(' "'); if (q >= 0) content = JSON.parse(raw.slice(q + 1)); } catch { content = raw; }
+        const said = typeof style.rewrite === 'function' ? style.rewrite(content) : content;
+        (this.seen.commentary ??= []).push(content.slice(0, 80));
+        later(style.delayMs ?? 400, () => speakStalled(said, style.stallMs ?? 1400));
       } else if (ev.type === 'session.thinking.append') {
         // Context the server appends (a write done, declined or expired): the call's `afterContext` says what Milo says about it.
         const f = st.lastCall?.dry?.afterContext;

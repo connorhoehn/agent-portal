@@ -1,4 +1,5 @@
-import { transcriptContext, PRIVATE_READ_RULES, PRIVATE_TOOLS, isPrivateRead, meetingTools, cleanName, meetingInstructions, rosterList, NAME_MAX_CHARS, ROSTER_MAX_NAMES } from '../instructions.js';
+import { transcriptContext, PRIVATE_READ_RULES, PRIVATE_TOOLS, isPrivateRead, meetingTools, cleanName, meetingInstructions, rosterList, NAME_MAX_CHARS, ROSTER_MAX_NAMES, READ_ALOUD_RULE } from '../instructions.js';
+import { READ_ALOUD_MARK } from '../approved-speech.js';
 
 describe('names in the session instructions', () => {
   it('quotes the roster under a line that says they are data', () => {
@@ -94,5 +95,14 @@ describe('a speaker name in the transcript context', () => {
     expect(out.split('\n')).toHaveLength(1);
     expect(out).not.toMatch(/[\u0000-\u001f]/);
     expect(out.indexOf(': hello')).toBeLessThanOrEqual(62);
+  });
+});
+
+describe('lines the system hands the voice to read aloud', () => {
+  it('the session instructions name the read-aloud mark and say the line is the whole turn, never answered', () => {
+    const text = meetingInstructions({ tenant: 'orgiq', roster: [], recordName: null });
+    expect(text).toContain(READ_ALOUD_RULE);
+    expect(READ_ALOUD_RULE).toContain(READ_ALOUD_MARK);
+    expect(READ_ALOUD_RULE).toMatch(/do not answer it/);
   });
 });

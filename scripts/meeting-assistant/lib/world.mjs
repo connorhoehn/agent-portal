@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { Guard, DEADMAN_PATH, deadmanMsFor, maxMinutesFor, PRICE_PER_MINUTE } from './safety.mjs';
 import { FakeProvider, PassThroughProxy, startFakeMedia } from './fakes.mjs';
@@ -16,6 +16,29 @@ import { Lane } from './audio.mjs';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const MW = path.join(ROOT, 'middleware');
+
+/**
+ * The middleware env file that holds the provider key: this checkout's, or, in a git worktree that has none, the main checkout's (the
+ * file is gitignored, so a worktree starts without it and it is never copied). Null when there is none.
+ */
+export function middlewareEnvFile() {
+  const own = path.join(MW, '.env');
+  if (fs.existsSync(own)) return own;
+  try {
+    const common = execFileSync('git', ['-C', ROOT, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
+    const main = path.join(path.dirname(common), 'middleware', '.env');
+    return fs.existsSync(main) ? main : null;
+  } catch { return null; }
+}
+
+/** The key from that file for a paid child whose own checkout has none (passed in its environment only; never printed). */
+function providerKeyEnv() {
+  const file = middlewareEnvFile();
+  if (!file || file === path.join(MW, '.env')) return {};
+  const m = /^OPENAI_API_KEY=(.*)$/m.exec(fs.readFileSync(file, 'utf8'));
+  const v = m ? m[1].trim().replace(/^(['"])(.*)\1$/, '$2') : '';
+  return v ? { OPENAI_API_KEY: v } : {};
+}
 export const SINK_SECRET = 'dry-sink-secret';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const stamp = () => Date.now().toString(36);
@@ -72,7 +95,7 @@ export function startMiddleware({ dir, ports, dry, limitSeconds, useProxy = fals
     ...(dry ? {
       OPENAI_API_KEY: 'dry-run-key', OPENAI_BASE_URL: `http://127.0.0.1:${ports.provider}/v1`,
       MEETING_ASSISTANT_MEDIA_URL: `http://127.0.0.1:${ports.media}`, MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN: 'dry-admin-token', MEETING_ASSISTANT_SINK_BASE_URL: sinkBase, MEETING_ASSISTANT_SINK_SECRET: SINK_SECRET,
-    } : (useProxy ? { OPENAI_BASE_URL: `http://127.0.0.1:${ports.proxy}/v1` } : {})), // paid: the key is read by the middleware itself from its own env file
+    } : { ...providerKeyEnv(), ...(useProxy ? { OPENAI_BASE_URL: `http://127.0.0.1:${ports.proxy}/v1` } : {}) }), // paid: the key is read by the middleware itself from its own env file (in a worktree: the main checkout's)
   };
   const logFile = fs.openSync(path.join(dir, 'middleware.log'), 'w');
   return spawn(process.execPath, [path.join(MW, 'node_modules', 'tsx', 'dist', 'cli.mjs'), 'src/index.ts'], { cwd: MW, env, stdio: ['ignore', logFile, logFile] });

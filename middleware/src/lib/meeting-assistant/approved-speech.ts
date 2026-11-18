@@ -96,6 +96,18 @@ export function saidVerbatim(asked: string, transcript: string | null | undefine
   return a === b || a.replace(/ /g, '') === b.replace(/ /g, '');
 }
 
+/**
+ * What the session is sent for a line to say verbatim. Spoken context (`session.commentary.append`) on its own is something the voice
+ * talks ABOUT: given an approved question it answered the question, and given the time left it said "Sure, and just so you know,
+ * there's still about fifty-nine minutes left" (17 November, real provider). So the line goes as a quoted line to read aloud, and the
+ * session's instructions (instructions.ts READ_ALOUD_RULE) say that such a line is read word for word and nothing else is said.
+ */
+export function readAloudContent(text: string): string {
+  return `${READ_ALOUD_MARK} ${JSON.stringify(text.trim())}`;
+}
+/** The words that open every line the system hands the voice to read aloud. */
+export const READ_ALOUD_MARK = 'READ ALOUD, word for word, exactly this line and nothing else:';
+
 /** The shortest and longest time an approved utterance may take, from the request to its last frame and its final transcript. */
 export const SAY_MIN_BOUND_MS = 8_000;
 export const SAY_MAX_BOUND_MS = 45_000;

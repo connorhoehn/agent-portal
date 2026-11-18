@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { middlewareEnvFile } from './lib/world.mjs';
 import {
   Reporter, World, portsFor, makeContext, billingOf, Budget, parseBudget, printPlan, worstCaseUsd, installSafetyHandlers, tailLog, sleep, hasSay,
 } from './lib/harness.mjs';
@@ -61,7 +62,7 @@ const ports = portsFor(portBase);
 
 if (!DRY) {
   // The key is read by the middleware itself from its env file; this only checks that it is there, without reading it out.
-  const envFile = path.resolve(HERE, '..', '..', 'middleware', '.env');
+  const envFile = middlewareEnvFile();
   let present = false;
   try { const t = fs.readFileSync(envFile, 'utf8'); present = /^OPENAI_API_KEY=\S/m.test(t) && !/^OPENAI_API_KEY=.*REPLACE_ME/m.test(t); } catch { present = false; }
   if (!present) { console.error('scenarios: the middleware env file has no OPENAI_API_KEY; nothing was started and nothing was spent'); process.exit(2); }
