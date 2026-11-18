@@ -33,7 +33,7 @@ beforeEach(() => {
     say: async () => { order.push('say'); return sayOut; },
     miloJoinedAt: async () => NOW - 10 * 60_000,
     now: () => NOW,
-    newId: () => `said-${++n}`,
+    newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
   });
 });
 afterAll(() => { setSpeakDeps(null); setSaidStore(null); });
@@ -51,7 +51,7 @@ describe('approved words: logged, then posted, then said', () => {
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('chat');
     expect((await store.list('iv-1'))[0]!.spoken).toBe(false);
     order.length = 0;
-    setSpeakDeps({ store: () => store, post: async () => false, say: async () => { order.push('say'); return 'spoken'; }, now: () => NOW, newId: () => `said-${++n}` });
+    setSpeakDeps({ store: () => store, post: async () => false, say: async () => { order.push('say'); return 'spoken'; }, now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }) });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'Q', askedBy: 'u-wen' })).said).toBe('none');
     expect(order).toEqual([]);
   });
@@ -152,7 +152,7 @@ describe('a restart between the log row and the speech', () => {
   it('the row stays unspoken and is never said later on its own', async () => {
     const asked: string[] = [];
     setSpeakDeps({
-      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`,
+      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
       say: (_c, text) => { asked.push(text); return new Promise(() => { /* the process stops here: no answer, ever */ }); },
     });
     void sayApproved(IV, { kind: 'question', source: 'kit', text: 'Before the restart.', askedBy: 'u-wen' });
@@ -163,7 +163,7 @@ describe('a restart between the log row and the speech', () => {
     // After the restart: fresh dependencies over the same stored rows.
     const said: string[] = [];
     setSpeakDeps({
-      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`,
+      store: () => store, post: async () => true, callOf: async () => 'call-1', now: () => NOW, newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
       say: async (_c, text) => { said.push(text); return 'spoken'; },
     });
     expect((await sayApproved(IV, { kind: 'question', source: 'kit', text: 'After the restart.', askedBy: 'u-wen' })).said).toBe('spoken');

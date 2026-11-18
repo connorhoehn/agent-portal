@@ -183,7 +183,7 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 
 **Open after wave 2 (pinned as failing tests or findings, not yet repaired).**
 - ~~Decision 6: the coach guard and the Ask pre-check let through some paraphrased or non-English judgements ("Should we hire them?").~~ Closed 17 November by the judgement detector (see decision 6); the pins are plain tests now.
-- Milo's speech reserves no money against the interview's cap (`speak-money.test.ts`).
+- ~~Milo's speech reserves no money against the interview's cap.~~ Closed 18 November: every line said aloud (approved words, the candidate's buttons, a spoken request's held answer) first holds $0.01 under part `speech` and releases it after, since the listening period's minutes book the audio; a refused hold keeps the line in the chat, unsaid (`speak-money.test.ts`).
 - Past 20,000 pad events the snapshots stop with the edits, so the record's playback freezes (`store.h8.test.ts`).
 - The candidate's request detector reads six phrases as "repeat" or "time" (harmless: held text only).
 - A "starting soon" bell can repeat after a restart on the real notification store (O-043).

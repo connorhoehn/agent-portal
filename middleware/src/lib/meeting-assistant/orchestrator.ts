@@ -1496,7 +1496,14 @@ export class AssistantRuntime {
           (run.lastAnswerTo ??= new Map()).set(e.askedBy, held);
           // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
           const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await this.nameIn(run, e.askedBy) }).catch(() => null);
-          const said = posted ? await this.sayHeldText(callId, held, e.askedBy) : 'posted';
+          // The family's money check for the speech (interviews: a hold under the interview's cap); refused, the answer stays in the chat.
+          const speechHold = posted && run.policy.holdHeldSpeech
+            ? await run.policy.holdHeldSpeech(run.call, { askedBy: e.askedBy, text: held }).catch(() => null)
+            : posted ? { release: async () => undefined } : null;
+          let said: SayOutcome = 'posted';
+          if (speechHold) {
+            try { said = await this.sayHeldText(callId, held, e.askedBy); } finally { await speechHold.release().catch(() => undefined); }
+          }
           await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, spoken: said === 'spoken' }).catch(() => undefined);
           continue;
         }

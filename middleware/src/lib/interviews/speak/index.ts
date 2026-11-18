@@ -7,6 +7,13 @@
 // them verbatim through the meeting assistant's one gate and relay (orchestrator.ts `sayHeldText`, gate reason `approved`), and
 // the row is marked spoken only when they were relayed. No model is ever asked anything here.
 //
+// Money (decision 18's `speech` part): the voice is the call's live session, whose minutes the listening hold already pays.
+// Speech is still an explicit part of that money: before the words are said, a small hold (SPEECH_HOLD_USD, part `speech`,
+// key the said row's id) is taken against the interview's and the opening's caps through the one door
+// (spend.ts `reserveInterviewSpend`). Refused (a reached cap, no cap set), the words stay in the chat and nothing is said.
+// Granted, the hold is released once the say is over, because the listening period's minute meter books the audio; the hold
+// is a cap check that can be raced fairly, not a second charge.
+//
 // The candidate's requests come two ways and get the same answers: spoken in the call ("Milo, repeat the question"), found by the
 // meeting assistant's detector and answered through the interviews policy (milo-policy.ts `answerFromHeldText`, which only logs:
 // the orchestrator posts and says it), and the two buttons on the candidate's page (routes/interview-invite-milo.ts), which call
@@ -61,6 +68,26 @@ export function lastQuestion(rows: readonly SaidRecord[]): string | null {
   return null;
 }
 
+/** What one spoken line holds against the interview's cap while it is said (a short utterance of the session's audio). */
+export const SPEECH_HOLD_USD = 0.01;
+/** How long a speech hold lives if nothing releases it (longer than the orchestrator's longest say bound). */
+export const SPEECH_HOLD_TTL_MS = 120_000;
+
+/** A speech hold: granted with its release, or refused (the words stay in the chat). */
+export type SpeechHold = { ok: true; release: () => Promise<void> } | { ok: false };
+
+/** Hold SPEECH_HOLD_USD for one line under the interview's `speech` part; never throws (a failure is a refusal). */
+export async function holdSpeechMoney(interviewId: string, key: string): Promise<SpeechHold> {
+  try {
+    const { reserveInterviewSpend, releaseInterviewSpend } = await import('../spend.js');
+    const out = await reserveInterviewSpend({ interviewId, part: 'speech', key, estimateUsd: SPEECH_HOLD_USD, expiresInMs: SPEECH_HOLD_TTL_MS });
+    if (!out.ok) return { ok: false };
+    return { ok: true, release: async () => { await releaseInterviewSpend([out.holdId]).catch(() => undefined); } };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export interface SpeakDeps {
   store: () => SaidStore;
   /** Post approved words in the call chat (the approved mark; `answer`: also the answer mark). False when Milo is not in the call. */
@@ -73,6 +100,8 @@ export interface SpeakDeps {
   callOf: (interview: { id: string; callId: string | null }) => Promise<string | null>;
   now: () => number;
   newId: () => string;
+  /** Hold the speech's money for one line (holdSpeechMoney). */
+  holdSpeech: (interviewId: string, key: string) => Promise<SpeechHold>;
 }
 
 const defaultDeps = (): SpeakDeps => ({
@@ -99,6 +128,7 @@ const defaultDeps = (): SpeakDeps => ({
   },
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
+  holdSpeech: holdSpeechMoney,
 });
 
 let override: Partial<SpeakDeps> | null = null;
@@ -131,7 +161,9 @@ export async function logSaid(interview: Pick<Interview, 'id' | 'callId'>, input
 /** Say logged-and-posted words aloud on the call's voice (orchestrator.ts `sayHeldText`); marks the row when relayed. */
 export async function sayLogged(interviewId: string, row: SaidRecord, callId: string): Promise<'spoken' | 'chat' | 'no-call'> {
   const d = deps();
-  const out = await d.say(callId, row.text, row.askedBy).catch(() => 'posted' as const);
+  const hold = await d.holdSpeech(interviewId, row.id).catch((): SpeechHold => ({ ok: false }));
+  if (!hold.ok) return 'chat';
+  const out = await d.say(callId, row.text, row.askedBy).catch(() => 'posted' as const).finally(() => hold.release());
   if (out === 'spoken') await d.store().markSpoken(interviewId, row.id).catch(() => null);
   return out === 'spoken' ? 'spoken' : out === 'no-call' ? 'no-call' : 'chat';
 }
@@ -144,7 +176,9 @@ export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, i
   if (!callId) return { said: 'none', row };
   const posted = await d.post(callId, input.text, input.kind).catch(() => false);
   if (!posted) return { said: 'none', row };
-  const out = await d.say(callId, input.text, input.askedBy).catch(() => 'posted' as const);
+  const hold = await d.holdSpeech(interview.id, row.id).catch((): SpeechHold => ({ ok: false }));
+  if (!hold.ok) return { said: 'chat', row };
+  const out = await d.say(callId, input.text, input.askedBy).catch(() => 'posted' as const).finally(() => hold.release());
   if (out !== 'spoken') return { said: 'chat', row };
   const marked = await d.store().markSpoken(interview.id, row.id).catch(() => null);
   return { said: 'spoken', row: marked ?? { ...row, spoken: true } };

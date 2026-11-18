@@ -99,6 +99,11 @@ export interface MeetingAssistantPolicy {
    */
   heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; spoken: boolean }): Promise<void>;
   /**
+   * Before a posted held answer is offered to the call's voice: the family's money check for the speech. A release to call once
+   * the say is over, or null to keep the answer in the chat only (a reached cap). Absent: said with no check.
+   */
+  holdHeldSpeech?(call: PolicyCall, said: { askedBy: string; text: string }): Promise<{ release: () => Promise<void> } | null>;
+  /**
    * The one fixed sentence `answerFromHeldText` answers a request it will not serve with. The same sentence for the same asker is
    * posted (and said) once, and again only after Milo has answered that asker something else: a request heard again (audio that
    * loops, a repeat minutes later) is not refused twice.

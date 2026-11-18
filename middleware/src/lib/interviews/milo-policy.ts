@@ -25,8 +25,11 @@
 //                         a sentence from the round's minutes and its start, anything else one fixed sentence naming those
 //                         two (speak/index.ts). The line is logged here; the orchestrator posts it with the approved mark and
 //                         says it as approved words; `heldTextSaid` marks the log row spoken. A panel member's request: null.
+//   holdHeldSpeech        the speech's money (decision 18): a held answer said aloud first holds a little under the interview's
+//                         cap (speak/index.ts `holdSpeechMoney`); refused, the answer stays in the chat and nothing is said.
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
 //   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
+import { randomBytes } from 'node:crypto';
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
 import { visibleWorld } from './scope.js';
@@ -186,6 +189,14 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     if (!interviewId || !(await guestOfInterview(userId, interviewId).catch(() => false))) return GUEST_DISPLAY_NAME;
     const { candidateName } = await import('./record/transcript.js');
     return (await candidateName(interviewId).catch(() => null)) ?? GUEST_DISPLAY_NAME;
+  },
+  // The speech's money (speak/index.ts): a held answer said aloud holds SPEECH_HOLD_USD under the interview's cap; refused, chat only.
+  holdHeldSpeech: async (call) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId) return null;
+    const { holdSpeechMoney } = await import('./speak/index.js');
+    const hold = await holdSpeechMoney(interviewId, `held-${randomBytes(6).toString('hex')}`);
+    return hold.ok ? { release: hold.release } : null;
   },
   heldTextSaid: async (call, said) => {
     const interviewId = interviewOfLobby(call.lobby);
