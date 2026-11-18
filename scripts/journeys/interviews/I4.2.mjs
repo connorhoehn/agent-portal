@@ -94,7 +94,7 @@ export default async function run(ctx) {
       const got = await until(async () => { const s = await seen(); return Object.entries(want).every(([k, names]) => names.every((n) => s[k].includes(n))) ? s : null; }, 12_000) ?? await seen();
       const leak = got.C.filter((n) => n !== leadName && n !== 'Candidate');
       const ok = Object.entries(want).every(([k, names]) => names.every((n) => got[k].includes(n))) && leak.length === 0;
-      return { ok, detail: `carets: lead ${JSON.stringify(got.H)}, panel ${JSON.stringify(got.W)}, candidate ${JSON.stringify(got.C)}${leak.length ? `; the candidate reads a panel member's name: ${JSON.stringify(leak)}` : ''}` };
+      return { ok, detail: `carets: lead ${JSON.stringify(got.H)}, panel ${JSON.stringify(got.W)}, candidate ${JSON.stringify(got.C)}${leak.length ? `; FINDING: the candidate reads a panel member's name on a pad caret: ${JSON.stringify(leak)} (the contract gives the candidate the lead's name only)` : ''}` };
     });
     await step('I4.2e', async () => {
       const inserts = { lead: await H.page.getByTestId('interview-pad-insert').count(), panel: await W.page.getByTestId('interview-pad-insert').count(), candidate: await C.page.getByTestId('interview-pad-insert').count() };
@@ -107,7 +107,8 @@ export default async function run(ctx) {
       const commented = !!added && added.split('\n').some((l) => /^\s*(#|\/\/)\s*\S/.test(l));
       const tabs = (await C.page.getByTestId('join-room-pane').getByRole('tab').allInnerTexts()).map((s) => s.trim());
       const ok = inserts.lead === 1 && inserts.panel === 0 && inserts.candidate === 0 && !!same && !!added && commented && JSON.stringify(tabs) === '["Pad","Chat"]';
-      return { ok, detail: `Insert a question: ${JSON.stringify(inserts)}; kept what was there ${!!added}, the prompt as comments ${commented}, the same for all three ${!!same}; the candidate's tabs ${JSON.stringify(tabs)}` };
+      const lens = same ? '' : `; pad lengths lead ${after?.length}, panel ${(await padText(W.page)).length}, candidate ${(await padText(C.page)).length}`;
+      return { ok, detail: `Insert a question: ${JSON.stringify(inserts)}; kept what was there ${!!added}, the prompt as comments ${commented}, the same for all three ${!!same}${lens}; the candidate's tabs ${JSON.stringify(tabs)}` };
     });
     await step('I4.2f', async () => {
       // Milo joins from the footer's own control (Work's Invite Milo), then the Questions tab's "Have Milo ask".
@@ -116,17 +117,19 @@ export default async function run(ctx) {
       await H.page.getByTestId('interview-room-pane').getByRole('tab', { name: /questions/i }).click({ timeout: 5000 });
       const room = (await api(H.context, 'GET', `/api/interviews/interviews/${live}/room`)).body;
       const prompt = String((room?.room ?? room)?.questions?.[0]?.prompt ?? '').trim();
+      const key0 = prompt.split(/\s+/).slice(0, 4).join(' ');
+      const timesBefore = before && key0 ? before.split(key0).length - 1 : 0;  // I4.2e's insert already put the first question here
       await H.page.getByRole('button', { name: /have milo ask/i }).first().click({ timeout: 5000 });
       const { said } = await askedMarker(H.page);
       await H.page.getByTestId('interview-room-pane').getByRole('tab', { name: /^pad$/i }).click({ timeout: 5000 }).catch(() => undefined);
       const after = await until(async () => { const t = await padText(H.page); return t && t !== before ? t : null; }, 15_000);
       const cand = after ? await until(async () => ((await padText(C.page)) === after ? after : null), 10_000) : null;
       const key = prompt.split(/\s+/).slice(0, 4).join(' ');
-      const times = after && key ? after.split(key).length - 1 : -1;
+      const times = after && key ? after.split(key).length - 1 - timesBefore : -1;
       await H.page.waitForTimeout(3000);
       const settled = await padText(H.page);
       const ok = !!inCall && !!said && said !== 'error' && !!cand && times === 1 && settled === after;
-      return { ok, detail: `Milo in the call ${!!inCall}; said ${said}; the question in the pad ${times} time(s) ("${key}…"); the candidate's pad the same ${!!cand}; no second insert ${settled === after}` };
+      return { ok, detail: `Milo in the call ${!!inCall}; said ${said}; the question added to the pad ${times} time(s) (${timesBefore} there already) ("${key}…"); the candidate's pad the same ${!!cand}; no second insert ${settled === after}` };
     });
   }
   await close();

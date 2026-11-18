@@ -65,7 +65,7 @@ export default async function run(ctx) {
     const { said } = await askedMarker(L.page);
     await G.page.waitForTimeout(3000);
     const before = await framesOf(G.page);
-    const l = await press('repeat', /\S/);
+    const l = await press('repeat', new RegExp(prompt.slice(0, 25).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));  // the line from I3.8a is still there until the answer replaces it
     const after = await until(async () => { const f = await framesOf(G.page); return f > before ? f : null; }, 12_000) ?? await framesOf(G.page);
     const key = prompt.slice(0, 40);
     const leadChat = await until(async () => { const t = await chatText(L.page); return count(t, key) >= 2 ? t : null; }, 8000) ?? await chatText(L.page);

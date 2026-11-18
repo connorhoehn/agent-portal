@@ -188,12 +188,12 @@ export const hear = (ctx, room, callId, userId, text) => ctx.api(room.context, '
 /** Audio frames this page's Milo voice has played: the candidate's chip, or the panel's bar. */
 export const framesOf = async (page) => {
   const g = page.getByTestId('guest-milo-voice').first();
-  const at = (await g.count()) ? g : page.getByTestId('assistant-menu').first();
+  const at = (await g.count()) ? g : page.locator('[data-testid="assistant-status-mark"],[data-testid="assistant-menu"]').first();
   return Number(await at.getAttribute('data-voice-frames', { timeout: 2000 }).catch(() => '-1'));
 };
 /** True when this page shows Milo speaking at this moment (the candidate's chip, the panel's bar). */
 export const speakingOn = async (page) => (await page.getByTestId('guest-milo-speaking').count()) > 0
-  || (await page.getByTestId('assistant-menu').first().getAttribute('data-voice-speaking', { timeout: 500 }).catch(() => null)) === 'true';
+  || (await page.locator('[data-testid="assistant-status-mark"],[data-testid="assistant-menu"]').first().getAttribute('data-voice-speaking', { timeout: 500 }).catch(() => null)) === 'true';
 /** A click on the page so the browser lets it play sound (the voice player's gesture), and the bar's own sound button. */
 export async function letSound(page) {
   await page.mouse.click(5, 5).catch(() => undefined);
@@ -248,7 +248,8 @@ export async function catchText(page, testId, re, ms = 8000) {
   const end = Date.now() + ms;
   let last = '';
   while (Date.now() < end) {
-    last = ((await page.getByTestId(testId).first().innerText({ timeout: 500 }).catch(() => '')) || '').replace(/\s+/g, ' ');
+    const el = testId ? page.getByTestId(testId).first() : page.locator('body');  // no test id: anywhere on the page
+    last = ((await el.innerText({ timeout: 500 }).catch(() => '')) || '').replace(/\s+/g, ' ');
     if (re.test(last)) return last;
     await new Promise((r) => setTimeout(r, 120));
   }

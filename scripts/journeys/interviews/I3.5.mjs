@@ -68,7 +68,7 @@ export default async function run(ctx) {
     basedOn = ((await H.page.getByTestId('interview-suggestion-based-on').first().getAttribute('title').catch(() => null)) ?? '').trim();
     const before = await frames();
     await H.page.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i }).click();
-    const receiptP = catchText(H.page, 'interview-room-ask', /asked it aloud/, 6000);
+    const receiptP = catchText(H.page, null, /Milo asked it aloud/, 6000);
     const marks = await watchSpeaking(6000);
     const receipt = await receiptP;
     const after = await until(async () => { const f = await frames(); return f.candidate > before.candidate && f.lead > before.lead && f.panel > before.panel ? f : null; }, 12_000) ?? await frames();
