@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-18T15:27:18.834Z",
-  "serverHandlerSha": "711109335f153c481eff2d709b070296f21b2cc05329346e2a110ee3ed7a9e50",
+  "capturedAt": "2026-11-18T16:42:50.633Z",
+  "serverHandlerSha": "3e75eb25e99526968a2ccc49bc8bf3f3f7092f2d460e807f00e5b97ed0b0d391",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -3011,12 +3011,12 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
+        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -10418,45 +10418,10 @@
       }
     },
     "GET /api/social/plane/active": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "counts": "object",
-        "counts.inCall": "number",
-        "counts.people": "number",
-        "counts.sharing": "number",
-        "counts.withActivity": "number",
-        "limits": "array",
-        "limits[]": "string",
-        "observedAt": "string",
-        "people": "array",
-        "people[]": "object",
-        "people[].activity": "null|string",
-        "people[].displayName": "string",
-        "people[].inCall": "null",
-        "people[].status": "string",
-        "people[].userId": "string",
-        "people[].workSharing": "null"
-      },
-      "values": {
-        "people[].status": [
-          "online"
-        ]
-      }
+      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/social/plane/calls": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "calls": "array",
-        "counts": "object",
-        "counts.missed": "number",
-        "counts.total": "number",
-        "source": "string"
-      },
-      "values": {}
+      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/social/plane/capabilities": {
       "persona": "orgiq/admin",
@@ -12192,7 +12157,6 @@
         "not_applicable",
         "offline",
         "ok",
-        "online",
         "open",
         "pending",
         "promoted",
