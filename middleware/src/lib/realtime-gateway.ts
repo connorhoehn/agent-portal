@@ -151,6 +151,20 @@ export function gatewayVerdictCache(opts: { maxAgeMs?: number } = {}): GatewayVe
 }
 
 const USER_ADDRESSED = new Set(['call', 'call-page', 'call-chat', 'notification:new', 'notification:bulk-update', 'notification:read']);
+/**
+ * A candidate reads the lead's name on the pad and nobody else's (row I4.2): the pad's caret and presence frames go
+ * through `padFrameForGuest` before anything else (directRecipientFilter passes such frames straight through); every
+ * other frame goes to `inner` untouched, with its synchronous send kept.
+ */
+function padGuestFilter(senderContext: (clientId: string) => Record<string, unknown> | null, inner: ClientMessageFilter): ClientMessageFilter {
+  return args => {
+    const frame = args.message && typeof args.message === 'object' ? args.message as Record<string, unknown> : null;
+    if (!frame || !isPadNamedFrame(frame)) return inner(args);
+    return padFrameForGuest(args.ctx as Record<string, unknown> | null, frame, { senderContext })
+      .then(seen => (seen ? inner({ ...args, message: seen }) : null), () => null);
+  };
+}
+
 function revalidatedRecipientFilter(inner: ClientMessageFilter): ClientMessageFilter {
   const revalidated = withPrincipalRevalidation({ filterClientMessage: inner }, recipientPrincipal).filterClientMessage;
   return args => {
@@ -298,19 +312,13 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     // Recipient checks are never shared. A peer skips only its redundant
     // publisher re-check for a frame whose origin proof is this fresh.
     publishProofMaxAgeMs: publishProofMaxAgeMs(),
-    filterClientMessage: revalidatedRecipientFilter(directRecipientFilter(callGuards(getLobby), async ({ clientId, message, ctx }) => {
+    filterClientMessage: revalidatedRecipientFilter(padGuestFilter(getCtx, directRecipientFilter(callGuards(getLobby), async ({ clientId, message }) => {
       try {
-        let frame = message as Record<string, unknown>;
+        const frame = message as Record<string, unknown>;
         if (frame.type === 'call-page') return isCallPageSnapshot(frame) ? await pageRuntime?.filterSnapshot(clientId, frame) ?? null : null;
-        // A candidate reads the lead's name on the pad and nobody else's (row I4.2).
-        if (isPadNamedFrame(frame)) {
-          const seen = await padFrameForGuest(ctx as Record<string, unknown> | null, frame, { senderContext: getCtx });
-          if (!seen) return null;
-          frame = seen;
-        }
         return await chatRuntime?.filterFrame(clientId, frame) ?? null;
       } catch { return null; }
-    })),
+    }))),
     plugins: [
       dmNotifyPlugin(router),
       channelNotifyPlugin(router),
