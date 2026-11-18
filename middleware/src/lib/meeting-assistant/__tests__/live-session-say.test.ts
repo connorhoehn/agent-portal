@@ -158,8 +158,8 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
-  it('a line waits while a person is speaking, and goes out once their turn is over', async () => {
-    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+  it('a line waits while a person is speaking, and goes out once their turn is over and no reply began', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, replyWaitMs: 20 });
     await s.start(START);
     frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'So I was thinking that' });
     await tick(10);
@@ -168,6 +168,66 @@ describe('sayVerbatim on the live session', () => {
     expect(received.filter((e) => e['type'] === 'session.commentary.append')).toEqual([]);
     await tick(60); // the person's turn ends (idle flush)
     expect(received.filter((e) => e['type'] === 'session.commentary.append').length).toBe(1);
+    await s.close();
+  });
+
+  it('a line asked as a person\'s turn is flushed waits out the voice\'s reply to it (no provider event announces one)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, replyWaitMs: 60 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'Milo, can you repeat the question?' });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(20);
+    // The turn is flushed (a sentence end); the voice begins its own reply 30 ms later. Nothing was sent into that window.
+    expect(commentaries()).toBe(0);
+    audio(3000); words('Sure.', 400);
+    await tick(10);
+    expect(commentaries()).toBe(0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(80);
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
+  it('a turn with no reply: the line goes once the reply wait has passed', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, replyWaitMs: 60 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'That is my answer.' });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(20);
+    expect(commentaries()).toBe(0);
+    await tick(70);
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
+  it('delegated work keeps a line waiting: from the delegation until its responses are over (a continuation included)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, replyWaitMs: 20 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    const env = (event: Record<string, unknown>) => frame({ type: 'response.event', delegation_id: 'item_1', event });
+    frame({ type: 'session.delegation.created', offset_ms: 100, delegation: { id: 'item_1', type: 'delegation', target: 'responses', response_id: 'resp_1' } });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(40);
+    expect(commentaries()).toBe(0);
+    env({ type: 'response.created', response: { id: 'resp_1' } });
+    env({ type: 'response.output_item.done', item: { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{"query":"x"}' } });
+    env({ type: 'response.completed', response: { id: 'resp_1', usage: { input_tokens: 1, output_tokens: 1 } } });
+    await tick(40);
+    expect(commentaries()).toBe(0); // the call awaits its output
+    s.answerToolCall('call_1', '{"ok":true}');
+    await tick(40);
+    expect(commentaries()).toBe(0); // the continuation is asked for and not yet created
+    env({ type: 'response.created', response: { id: 'resp_2' } });
+    await tick(20);
+    expect(commentaries()).toBe(0);
+    env({ type: 'response.completed', response: { id: 'resp_2', usage: { input_tokens: 1, output_tokens: 1 } } });
+    await tick(20);
+    expect(commentaries()).toBe(1);
     await s.close();
   });
 
