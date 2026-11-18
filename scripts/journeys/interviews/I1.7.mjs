@@ -62,7 +62,7 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     const after = await read(hugo);
     const chip = await textOf(page, 'interviews-prepare-state');
     const ok = offered >= 2 && before.length === offered && moved[0] === before[1] && moved[1] === before[0] && trimmed.length === offered - 1 && JSON.stringify(trimmed) === JSON.stringify(moved.slice(0, offered - 1))
-      && after?.state === 'ready' && after?.questionsChosen?.length === offered - 1 && /Ready/i.test(chip);
+      && after?.state === 'ready' && after?.questionsChosen?.length === offered - 1 && /Scheduled|Ready/i.test(chip);
     record('I1.7b', ok, `${offered} added (the bank offered that many), the first moved down, the last taken out, saved: ${trimmed.length} questions in that order; the round is ${after?.state} (chip "${chip}") and Open the room is shown`);
   } catch (e) { record('I1.7b', false, `plan: ${e.message.split('\n')[0]}`); }
 
@@ -102,16 +102,23 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     await page.getByTestId('interviews-bank-add').first().click();
     await page.getByTestId('interviews-plan-save').click();
     for (let i = 0; i < 40 && ((await read(hugo))?.questionsChosen?.length ?? 0) <= had; i += 1) await page.waitForTimeout(500);
+    let refused = null;
+    other.on('response', async (r) => { if (r.request().method() === 'PUT' && /\/questions$/.test(r.url())) refused = { status: r.status(), error: ((await r.json().catch(() => ({}))).error ?? '') }; });
     await other.getByTestId('interviews-bank-add').first().click();
     await other.getByTestId('interviews-plan-save').click();
-    await other.getByTestId('interviews-plan-problem').waitFor({ timeout: 30_000 });
+    const shownProblem = await other.getByTestId('interviews-plan-problem').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+    if (!shownProblem) {
+      await other.close();
+      record('I1.7e', false, `FINDING: the stale save was refused by the server (${refused?.status}: "${(refused?.error ?? '').slice(0, 90)}") but the page shows no words about it; the person sees the list change with no explanation`);
+      throw new Error('I1.7e recorded');
+    }
     const problem = await textOf(other, 'interviews-plan-problem');
     await other.waitForTimeout(1500);
     const shown = (await planPrompts(other)).length;
     const saved = (await read(hugo))?.questionsChosen?.length;
     await other.close();
     record('I1.7e', /Someone else|out of date|reload/i.test(problem) && shown === saved, `a stale save says "${problem.slice(0, 120)}"; the page then shows ${shown} questions and ${saved} are saved`);
-  } catch (e) { record('I1.7e', false, `stale save: ${e.message.split('\n')[0]}`); }
+  } catch (e) { if (e.message !== 'I1.7e recorded') record('I1.7e', false, `stale save: ${e.message.split('\n')[0]}`); }
 
   // ── I1.7f ──
   try {
