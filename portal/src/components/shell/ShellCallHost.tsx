@@ -8,7 +8,7 @@ import { useInterviewRoomNameFor } from './InterviewRoomFooter';
 import { useCallback, useEffect, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useSession } from '../../lib/auth';
-import { CallHostProvider, CallMediaOutlet, useCallHost, type OnCallHostEvent } from '../../lib/conversationCall';
+import { CallHostProvider, CallMediaOutlet, useCallBlockPlacement, useCallHost, type OnCallHostEvent } from '../../lib/conversationCall';
 import { realtimeTokenSource } from '../../lib/realtimeToken';
 import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
@@ -197,8 +197,10 @@ export function ShellCallMedia({ id }: { id?: string }) {
   const navigate = useNavigate();
   const meeting = useCallMeeting();
   const react = useHuddleReact();
+  // A page that claims the pane (the interview room) draws the recording note itself, with its own gutter.
+  const paneClaimed = useCallBlockPlacement() === 'pane';
   return <>
-    <CallMediaOutlet {...(id ? { id } : {})} overlay={<HuddleReactionOverlay />} header={<ShellMeetingStage />}
+    <CallMediaOutlet {...(id ? { id } : {})} {...(paneClaimed ? { recordingConsent: false as const } : {})} overlay={<HuddleReactionOverlay />} header={<ShellMeetingStage />}
       extras={<MeetingStageActions react={react} />}
       onOpenPeople={(lobby, tenant) => { if (meeting) { meeting.toggle('people'); return; } const href = callPeopleHref(lobby.channel, tenant); if (href) navigate(href); }}
       onOpenDocument={doc => { if (doc.href) navigate(doc.href); }}

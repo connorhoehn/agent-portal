@@ -190,7 +190,12 @@ function InterviewRoom({ id }: { id: string }) {
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {drawn
-      ? <CallBlock placement="pane" fit="contain" className="h-full min-h-0 min-w-0 flex-1 justify-center bg-surface" />
+      // The recording note is drawn here, not by the library's pane (ShellCallMedia turns that one off): its banner ran edge to
+      // edge with no gutter and the tile's centring left a gap under it. The note takes the tiles' gutter and the page's stack gap.
+      ? <Stack gap="sm" className="h-full min-h-0 min-w-0 flex-1 bg-surface" data-testid="interview-room-stage">
+        {host?.recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{host.recordingNote}</Inline>}
+        <CallBlock placement="pane" fit="contain" className={host?.recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
+      </Stack>
       : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)} />}
     <RoomPane room={room} here={call.here} />
   </Stack>;
