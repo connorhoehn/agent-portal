@@ -1,7 +1,8 @@
 // The detector's limits (lib/interviews/speak `candidateRequestOf`; row I3.8, decision 10; OWED O-224, lane H8). The candidate
 // may ask Milo for two things only: the question again, or the time left. Everything else must be `other` (the one fixed
-// sentence). This pins, as a table, what the two patterns detect and what they let through; a line decision 10 says must be
-// `other` and is not is an `it.failing` here and a finding in the lane's report, never a change to the patterns. Whatever is
+// sentence). This pins, as a table, what the two patterns detect and what they let through. The patterns read the whole
+// utterance (a short request with at most a greeting, Milo's name, "can you" and "please" around it), so a sentence that only
+// contains one of the phrases is `other`. Whatever is
 // detected is still answered only from held text (the last approved question, or the time left), so a misread repeats the
 // question or reads the clock; it never reaches a model.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, cloudwatch: true, guardrails: true, agentcore: true } } }));
@@ -53,25 +54,32 @@ describe('anything else asks for help, and gets the fixed sentence (other)', () 
   });
 });
 
-// Decision 10 says these must be `other`; the patterns read them as one of the two requests today. Each is harmless in what is
-// said (the last approved question, or the time left), but it is not the fixed sentence. Reported, not changed.
-describe('decision 10 says other; the detector reads a request (findings)', () => {
-  it.failing('a hint asked as "repeat the answer" is other', () => {
-    expect(candidateRequestOf('Repeat the answer')).toBe('other');
+// Decision 10 says these are `other`: each contains a request's words but is not the request (closed 18 November).
+describe('decision 10: a sentence that only contains the words is other', () => {
+  it.each([
+    'Repeat the answer',
+    'Can you repeat what the expected output is?',
+    'How much time complexity does my solution have?',
+    'How long should the function be in minutes?',
+    'I would repeat the request with backoff',
+    'I spent a long time on this, how much is left to cover',
+    'I would repeat it with exponential backoff',
+    'so the time left over goes to the queue',
+  ])('"%s" is other', (text) => {
+    expect(candidateRequestOf(text)).toBe('other');
   });
-  it.failing('"can you repeat what the expected output is?" (a hint) is other', () => {
-    expect(candidateRequestOf('Can you repeat what the expected output is?')).toBe('other');
-  });
-  it.failing('"how much time complexity does my solution have?" (a hint) is other', () => {
-    expect(candidateRequestOf('How much time complexity does my solution have?')).toBe('other');
-  });
-  it.failing('"how long should the function be in minutes?" is other', () => {
-    expect(candidateRequestOf('How long should the function be in minutes?')).toBe('other');
-  });
-  it.failing('the phrase inside a longer answer ("I would repeat the request with backoff") is other', () => {
-    expect(candidateRequestOf('I would repeat the request with backoff')).toBe('other');
-  });
-  it.failing('"I spent a long time on this, how much is left to cover" is other', () => {
-    expect(candidateRequestOf('I spent a long time on this, how much is left to cover')).toBe('other');
+});
+
+describe('the requests as people say them, with the words around them', () => {
+  it.each([
+    ['Sorry, Milo, can you repeat the question?', 'repeat'],
+    ['Milo, could you please repeat that?', 'repeat'],
+    ['Repeat the last question, please.', 'repeat'],
+    ['Um, what was the question again?', 'repeat'],
+    ['Milo, how much time is left in this round?', 'time'],
+    ["Hey Milo, how much time do we have left?", 'time'],
+    ['How long do I have left?', 'time'],
+  ])('"%s" is %s', (text, want) => {
+    expect(candidateRequestOf(text)).toBe(want);
   });
 });

@@ -185,7 +185,7 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 - ~~Decision 6: the coach guard and the Ask pre-check let through some paraphrased or non-English judgements ("Should we hire them?").~~ Closed 17 November by the judgement detector (see decision 6); the pins are plain tests now.
 - ~~Milo's speech reserves no money against the interview's cap.~~ Closed 18 November: every line said aloud (approved words, the candidate's buttons, a spoken request's held answer) first holds $0.01 under part `speech` and releases it after, since the listening period's minutes book the audio; a refused hold keeps the line in the chat, unsaid (`speak-money.test.ts`).
 - ~~Past 20,000 pad events the snapshots stop with the edits, so the record's playback freezes.~~ Closed 18 November: past the event cap edits and other kinds are refused while snapshots keep landing under their own cap of 400, so a log holds at most 20,400 rows (`store.h8.test.ts`).
-- The candidate's request detector reads six phrases as "repeat" or "time" (harmless: held text only).
+- ~~The candidate's request detector reads six phrases as "repeat" or "time" (harmless: held text only).~~ Closed 18 November: the detector reads the whole utterance (a request with at most a greeting, Milo's name, "can you" and "please" around it), so a sentence that only contains the words gets the fixed sentence (`detector-limits.test.ts`).
 - A "starting soon" bell can repeat after a restart on the real notification store (O-043).
 - Seed ids for candidates, applications and scorecards wait on the reseed script (O-189).
 - A candidate who accepts the transcript but declines Milo is not listened to; the consent rules would allow the listener. The stricter rule stands until decided.
