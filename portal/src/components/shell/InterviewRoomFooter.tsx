@@ -15,6 +15,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { INTERVIEWS_API } from '../../lib/interviews';
 import { issueInvite, roomLinkControl, type InviteStatus } from '../../lib/interviewsUpcoming';
 import { hasJoinedCall } from './callShellModel';
+import { introduceMilo, miloSettingsPath, type MiloSettingsView } from '../../lib/interviewsMilo';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -153,7 +154,30 @@ export function InterviewRoomReturn({ lobbyName, joined }: { lobbyName: string |
   return <Button size="sm" variant="secondary" onClick={() => void navigate(roomHref(id))} data-testid="interview-open-room">Open the room</Button>;
 }
 
-/** In the call bar's extras: time left, the consent chip, and the lead's End interview. */
+/**
+ * The lead's "Introduce Milo": Milo says its fixed introduction once an interview, on the approved speaking path (the server
+ * refuses a second one). The lead may also just say it ("Milo, introduce yourself").
+ */
+function MiloIntroControl({ interviewId }: { interviewId: string }) {
+  const { data, refresh } = useFetch<MiloSettingsView>(miloSettingsPath(interviewId));
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
+  if (!data) return null;
+  const done = data.introduced;
+  const press = async () => {
+    setBusy(true); setNote(null);
+    const out = await introduceMilo(interviewId);
+    setBusy(false);
+    setNote(out.ok ? { text: out.line, error: false } : { text: out.error, error: true });
+    refresh();
+  };
+  return <Inline gap="xs" align="center" wrap={false}>
+    <Button size="sm" variant="secondary" disabled={busy || done} onClick={() => void press()} data-testid="interview-milo-intro">{done ? 'Milo introduced' : 'Introduce Milo'}</Button>
+    {note && <T size="xs" tone={note.error ? 'danger' : 'secondary'} role={note.error ? 'alert' : 'status'} data-testid="interview-milo-intro-note">{note.text}</T>}
+  </Inline>;
+}
+
+/** In the call bar's extras: time left, the consent chip, the lead's Introduce Milo and End interview. */
 export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName: string | null | undefined; callStartedAt: number | string | null | undefined }) {
   const room = useRoomFor(lobbyName);
   const now = useNow(15_000);
@@ -169,6 +193,7 @@ export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName:
       <Chip size="sm" tone={room.consent.tone} aria-label={room.consent.tooltip} data-testid="interview-consent">{room.consent.label}</Chip>
     </Tooltip>}
     {room.lead && room.admission?.state !== 'admitted' && <CandidateLinkControl interviewId={room.interviewId} candidateName={room.candidateName} />}
+    {room.lead && <MiloIntroControl interviewId={room.interviewId} />}
     {room.lead && <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>}
   </Inline>;
 }

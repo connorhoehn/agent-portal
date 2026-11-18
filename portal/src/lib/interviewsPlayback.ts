@@ -9,8 +9,9 @@ import type { RunView } from './interviewsPad.ts';
 
 /** The pad log's read (contract U3), as the panel's route answers it. */
 export interface PadLogEvent {
-  seq: number; kind: 'edit' | 'paste' | 'snapshot' | 'language' | 'insert'; at: string;
-  who: { id: string; name: string; side: 'panel' | 'candidate' };
+  /** `tests`, `imports` and `helper`: Milo's own edits (its interview tools), written by the server on side `milo`. */
+  seq: number; kind: 'edit' | 'paste' | 'snapshot' | 'language' | 'insert' | 'tests' | 'imports' | 'helper'; at: string;
+  who: { id: string; name: string; side: 'panel' | 'candidate' | 'milo' };
   inserted?: number; lines?: number; via?: 'paste' | 'drop'; language?: string; questionId?: string; text?: string;
 }
 export interface PadLogPage { events: PadLogEvent[]; lastSeq: number; more: boolean }
@@ -34,6 +35,11 @@ export async function readWholePadLog(readPage: (after: number) => Promise<PadLo
   }
   return events;
 }
+
+/** Milo's own edits on the playback (marker kind `milo`, the letter M). */
+export const MILO_EDIT_LABEL: Readonly<Record<'tests' | 'imports' | 'helper', string>> = {
+  tests: 'Milo added test cases', imports: 'Milo added an import', helper: 'Milo added a helper',
+};
 
 export const padLogUrl = (interviewId: string, after: number): string =>
   `/api/interviews/interviews/${encodeURIComponent(interviewId)}/pad/log?after=${after}`;
@@ -86,6 +92,8 @@ export function markersOf(input: {
       out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'question', label: prompt ? clip(prompt) : 'A question was put in the pad', detail: prompt ? `Put in the pad: ${prompt}` : 'A question was put in the pad' });
     } else if (e.kind === 'paste') {
       out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'paste', label: pasteLabel(e), detail: `${e.who.name}: ${pasteLabel(e)}` });
+    } else if (e.kind === 'tests' || e.kind === 'imports' || e.kind === 'helper') {
+      out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'milo', label: MILO_EDIT_LABEL[e.kind], detail: `${MILO_EDIT_LABEL[e.kind]} (${e.lines ?? 0} line${e.lines === 1 ? '' : 's'})` });
     }
   }
   input.runs.forEach((r, i) => {
