@@ -189,7 +189,8 @@ export default function JoinPage() {
       )}
       {step === 'waiting' && (
         <WaitingStep meeting={meetingLine(interview.panel)} when={when(interview.scheduledAt)} minutes={interview.round.minutes}
-          onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onHeld={onHeld} onChangeAnswers={() => go('consents')} />
+          onAdmitted={onAdmitted} onAnswersNeeded={onAnswersNeeded} onHeld={onHeld} onLinkDead={() => setView({ kind: 'dead' })}
+          onChangeAnswers={() => go('consents')} />
       )}
       {step === 'held' && <HeldStep declined={declinedRequired(consents.answers, consents.required)} onChangeAnswers={() => go('consents')} />}
       {step === 'ended' && <InterviewEnded />}

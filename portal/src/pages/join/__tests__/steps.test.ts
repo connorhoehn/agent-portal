@@ -1,7 +1,7 @@
 // The candidate's step model (pages/join/steps.ts; docs/interviews-tenant-plan.md row I2.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NOTHING_ANSWERED, allAnswered, choose, landingStep, miloLocked, stepAfterConsents, waitingView, type Admission, type ConsentChoices } from '../steps.ts';
+import { NOTHING_ANSWERED, allAnswered, choose, landingStep, miloLocked, stepAfterConsents, waitingAfterKnock, waitingAfterRead, waitingView, type Admission, type ConsentChoices } from '../steps.ts';
 
 const ALL: ConsentChoices = { recording: true, transcription: true, milo: true };
 const adm = (state: Admission['state']): Admission => ({ state, knockedAt: null, decidedAt: null });
@@ -152,4 +152,28 @@ test('the bar counts from the interview\'s start or the join, never from the set
   assert.equal(guestCallStartMs('not a time', 1234), 1234);
   assert.equal(guestCallStartMs(null, null), null);
   assert.equal(guestCallStartMs(undefined, Number.NaN), null);
+});
+
+test('the waiting page says the interviewer was told only when the server holds the knock', () => {
+  assert.deepEqual(waitingAfterKnock({ kind: 'knocked', admission: adm('waiting') }), { kind: 'wait', knocked: true });
+  // A knock with no answer (network, 5xx) may not have landed: keep waiting and knock again on the next tick.
+  assert.deepEqual(waitingAfterKnock({ kind: 'failed' }), { kind: 'wait', knocked: false });
+  // A 200 that still reads not-knocked is not a knock the server holds.
+  assert.deepEqual(waitingAfterKnock({ kind: 'knocked', admission: adm('not-knocked') }), { kind: 'wait', knocked: false });
+});
+
+test('a knock leaves the waiting page for admitted, turned away, held, answers needed and a dead link', () => {
+  assert.deepEqual(waitingAfterKnock({ kind: 'knocked', admission: adm('admitted') }), { kind: 'admitted' });
+  assert.deepEqual(waitingAfterKnock({ kind: 'knocked', admission: adm('turned-away') }), { kind: 'turned-away' });
+  assert.deepEqual(waitingAfterKnock({ kind: 'held' }), { kind: 'held' });
+  assert.deepEqual(waitingAfterKnock({ kind: 'refused' }), { kind: 'answers-needed' });
+  assert.deepEqual(waitingAfterKnock({ kind: 'dead' }), { kind: 'dead' });
+});
+
+test('an admission read after the knock: no answer changes nothing; not-knocked means knock again', () => {
+  assert.deepEqual(waitingAfterRead(null), { kind: 'wait', knocked: true });
+  assert.deepEqual(waitingAfterRead(adm('waiting')), { kind: 'wait', knocked: true });
+  assert.deepEqual(waitingAfterRead(adm('not-knocked')), { kind: 'wait', knocked: false });
+  assert.deepEqual(waitingAfterRead(adm('admitted')), { kind: 'admitted' });
+  assert.deepEqual(waitingAfterRead(adm('turned-away')), { kind: 'turned-away' });
 });

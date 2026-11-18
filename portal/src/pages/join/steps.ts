@@ -118,6 +118,52 @@ export function waitingView(admission: Admission | null): 'waiting' | 'turned-aw
   return 'waiting';
 }
 
+/**
+ * What one knock answered (C2's POST /knock). `knocked`: the server took it and holds this admission. `held` and
+ * `refused`: a 409 (row I6.4's declined required part, or answers that no longer stand). `dead`: not-found, the link
+ * was taken back. `failed`: no answer at all (the network, a 5xx); the server may not hold the knock.
+ */
+export type KnockOutcome =
+  | { kind: 'knocked'; admission: Admission }
+  | { kind: 'held' } | { kind: 'refused' } | { kind: 'dead' } | { kind: 'failed' };
+
+/**
+ * What the waiting page does after a knock or an admission read. `wait` carries whether the server holds the knock:
+ * the page says the interviewer has been told only when it does, and while it does not, the next tick of the waiting
+ * poll knocks again instead of reading (the server's knock is idempotent: a second knock while waiting answers the
+ * same admission, lib/interviews/invite/admission.ts nextAdmission). The other kinds leave the poll.
+ */
+export type WaitingNext =
+  | { kind: 'wait'; knocked: boolean }
+  | { kind: 'admitted' } | { kind: 'turned-away' } | { kind: 'held' } | { kind: 'answers-needed' } | { kind: 'dead' };
+
+function fromAdmission(admission: Admission): WaitingNext {
+  const view = waitingView(admission);
+  if (view !== 'waiting') return { kind: view };
+  return { kind: 'wait', knocked: admission.state === 'waiting' };
+}
+
+/** After a knock: its 409s and not-found leave the waiting page; no answer means the server may not hold it, knock again. */
+export function waitingAfterKnock(outcome: KnockOutcome): WaitingNext {
+  switch (outcome.kind) {
+    case 'knocked': return fromAdmission(outcome.admission);
+    case 'held': return { kind: 'held' };
+    case 'refused': return { kind: 'answers-needed' };
+    case 'dead': return { kind: 'dead' };
+    case 'failed': return { kind: 'wait', knocked: false };
+  }
+}
+
+/**
+ * After an admission read, made only once the server holds the knock. No answer changes nothing (the next read
+ * decides). `not-knocked` means the server no longer holds it (another window opened the link, starting a fresh
+ * session): the page stops saying the interviewer was told and knocks again.
+ */
+export function waitingAfterRead(admission: Admission | null): WaitingNext {
+  if (!admission) return { kind: 'wait', knocked: true };
+  return fromAdmission(admission);
+}
+
 // ── The room (row I2.4, the candidate's side; contract D1) ─────────────────────────────────────────────────────
 
 /** D1's answer to GET /api/interview-invite/room. */

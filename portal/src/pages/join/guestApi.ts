@@ -1,6 +1,6 @@
 // The guest's calls (docs/interviews-tenant-plan.md row I2.3): the consents (C4) and the waiting room (C2), all
 // under /api/interview-invite, on the guest cookie only. No Referer, nothing cached.
-import type { Admission, ConsentChoices, GuestConsents, GuestRoom, RoomRead } from './steps.ts';
+import type { Admission, ConsentChoices, GuestConsents, GuestRoom, KnockOutcome, RoomRead } from './steps.ts';
 
 export const GUEST_API = '/api/interview-invite';
 const INIT: RequestInit = { credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer' };
@@ -40,24 +40,21 @@ export async function readAdmission(): Promise<Admission | null> {
   return ((await res.json()) as { admission: Admission }).admission;
 }
 
-/** What a knock answered: the admission, or why the server would not take it. */
-export interface KnockAnswer {
-  admission: Admission | null;
-  /** The answers no longer stand (the notice changed). */
-  refused: boolean;
-  /** Row I6.4: the answers say no to a part this interview needs; the page shows the held page. */
-  held: boolean;
-}
-
-/** C2. A 409 is `held` when the server says a required part was declined, else `refused`. */
-export async function knock(): Promise<KnockAnswer> {
-  const res = await fetch(`${GUEST_API}/knock`, { ...INIT, method: 'POST' });
-  if (res.status === 409) {
-    const body = (await res.json().catch(() => ({}))) as { reason?: string };
-    return body.reason === 'declined-required' ? { admission: null, refused: false, held: true } : { admission: null, refused: true, held: false };
+/** C2. A 409 is `held` when the server says a required part was declined, else `refused`; not-found is a dead link. */
+export async function knock(): Promise<KnockOutcome> {
+  try {
+    const res = await fetch(`${GUEST_API}/knock`, { ...INIT, method: 'POST' });
+    if (res.status === 404) return { kind: 'dead' };
+    if (res.status === 409) {
+      const body = (await res.json().catch(() => ({}))) as { reason?: string };
+      return body.reason === 'declined-required' ? { kind: 'held' } : { kind: 'refused' };
+    }
+    if (!res.ok) return { kind: 'failed' };
+    const admission = ((await res.json()) as { admission?: Admission }).admission;
+    return admission ? { kind: 'knocked', admission } : { kind: 'failed' };
+  } catch {
+    return { kind: 'failed' };
   }
-  if (!res.ok) return { admission: null, refused: false, held: false };
-  return { admission: ((await res.json()) as { admission: Admission }).admission, refused: false, held: false };
 }
 
 /** D1. The room while the lead has let the guest in (or `ended` after); not-found otherwise. */
