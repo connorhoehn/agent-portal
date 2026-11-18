@@ -10,8 +10,9 @@
 //
 // Statuses: `compiling` at the start for compiled languages, `running` when the script prints the run's marker (just
 // before the program starts). Then: exit 0 `succeeded`; exit 137 that the runner did not cause `memory_exceeded`;
-// any other exit `failed`; the runner's timer `timed_out` (the compile step has the row's `prepareMs`, the program the
-// run's `wallMs`); a cancel `cancelled`; exit 97 before the marker `compile_error`; Docker unreachable, an image
+// any other exit `failed`; the program's own `wallMs` running out `timed_out`; the runner's timer running out BEFORE the marker (the container
+// or its compile step never got the program started: a slow daemon or image start, `prepareMs`) `runner_timeout`, which is the
+// runner's failure and not the candidate's, with a plain sentence on stderr; a cancel `cancelled`; exit 97 before the marker `compile_error`; Docker unreachable, an image
 // missing or anything else before the marker `internal_error`, with a plain sentence on stderr. Output: the first
 // `maxOutputBytes` of each stream are kept and streamed; past that it is cut and flagged and the run goes on; past four
 // times that the run is stopped as an output flood and ends `failed`. Every stop removes the container by name.
@@ -36,6 +37,7 @@ export const DOCKER_SENTENCES = {
   unreachable: 'Code runs use Docker on this machine, and Docker is not reachable, so the run could not start.\n',
   noImage: (lang: string, image: string) => `The ${lang} image (${image}) is not on this machine, so the run could not start. Pull it once with: docker pull ${image}\n`,
   failedStart: 'The code runner could not start this run.\n',
+  slowStart: 'The code runner did not get this program started in time, so it never ran. This is the runner, not your code. Try again.\n',
   flood: (max: number) => `The program printed more than ${FLOOD_FACTOR} times the ${Math.round(max / 1024)} KB output limit, so it was stopped.\n`,
 } as const;
 
@@ -234,7 +236,14 @@ export class DockerExecutor implements Executor {
       if (done) return;
       for (const s of ['stdout', 'stderr'] as const) if (past[s]) write(s, decoders[s].decode());
       if (stopReason === 'cancel') return finish('cancelled', null);
-      if (stopReason === 'timeout') return finish('timed_out', null);
+      if (stopReason === 'timeout') {
+        // Before the marker the program never started: the runner's failure, said in a sentence, and not the candidate's timeout.
+        if (runningAt === null) {
+          if (Buffer.byteLength(out.stderr) + Buffer.byteLength(DOCKER_SENTENCES.slowStart) <= maxOut) { out.stderr += DOCKER_SENTENCES.slowStart; event('stderr', DOCKER_SENTENCES.slowStart); }
+          return finish('runner_timeout', null);
+        }
+        return finish('timed_out', null);
+      }
       if (stopReason === 'flood') {
         const s = DOCKER_SENTENCES.flood(maxOut);
         if (Buffer.byteLength(out.stderr) + Buffer.byteLength(s) <= maxOut) { out.stderr += s; event('stderr', s); }

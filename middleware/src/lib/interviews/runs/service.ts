@@ -7,7 +7,8 @@
 //   * one run at a time per interview: a run waits as `queued` until the one before it ends, oldest first;
 //   * money (decision 18): each run is held against the opening as part `run` BEFORE it is queued; a refused hold queues
 //     nothing. When it ends the hold is settled at the run's price, except that a run cancelled before it reached
-//     `running` (while queued or compiling) and a run that ended in `internal_error` give the money back;
+//     `running` (while queued or compiling) and a run that ended in `internal_error` or `runner_timeout` give the money back (both
+//     are the runner's failure: the candidate's program never started, so nobody is charged for it);
 //   * cancel while queued (never reaches the executor), compiling or running (the executor is asked to stop; if it does
 //     not answer within CANCEL_GRACE_MS the service writes `cancelled` itself);
 //   * the wall-time safeguard: a run that outlives the wall time plus the compile allowance and a grace is stopped and
@@ -337,7 +338,7 @@ function begin(row: RunRecord): void {
       await store.finishRun(interviewId, runId, result, iso(d.now()), [last]);
       stored(interviewId, [last]);
       try {
-        const giveBack = result.status === 'internal_error' || (result.status === 'cancelled' && !reachedRunning);
+        const giveBack = result.status === 'internal_error' || result.status === 'runner_timeout' || (result.status === 'cancelled' && !reachedRunning);
         if (giveBack || !row.spendSourceId) await d.release([row.holdId]);
         else await d.settle({ sourceId: row.spendSourceId, costUsd: d.priceUsd(), basis: 'estimated', model: `${executor.backend}-executor`, actorId: row.startedBy.side === 'panel' ? row.startedBy.id : null, provider: 'local' });
       } catch (e) {

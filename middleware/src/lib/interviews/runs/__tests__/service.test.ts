@@ -138,6 +138,16 @@ describe('the queue', () => {
     expect(await lastRun('iv-none')).toBeNull();
   });
 
+  it('a runner_timeout (the program never started) is the runner\'s failure: the money goes back, nothing is settled', async () => {
+    await startRun(IV, HUGO, body());
+    await flush();
+    ex.runs[0]!.emit({ type: 'result', result: ex.result('runner_timeout', ex.runs[0]!.request) });
+    await runsSettled(IV);
+    expect((await row('run-0001')).result?.status).toBe('runner_timeout');
+    expect(money.release).toHaveBeenCalledWith(['h-run-0001']);
+    expect(money.settle).not.toHaveBeenCalled();
+  });
+
   it('a start that throws is an internal_error, and the queue moves on', async () => {
     ex.throwOnStart = true;
     await startRun(IV, HUGO, body());

@@ -265,11 +265,20 @@ describe('the Docker runner: statuses and output', () => {
     expect(fake.removes()[0]!.command).toBe('docker');
   });
 
-  it('timed_out when the compile outlasts its own limit', async () => {
+  it('runner_timeout when the container never prints its marker: the runner\'s failure, said in a sentence, not the candidate\'s timeout', async () => {
+    const fake = fakeDocker();
+    const r = start(fake, request('python'), { prepareMs: 20 });
+    const res = await r.result;
+    expect(res).toMatchObject({ status: 'runner_timeout', exitCode: null, stderr: DOCKER_SENTENCES.slowStart, stdout: '' });
+    expect(r.statuses()).toEqual([]);
+    expect(fake.removes()[0]!.args[0]).toBe('rm');
+  });
+
+  it('runner_timeout when the compile step outlasts its limit before the program starts', async () => {
     const fake = fakeDocker();
     const r = start(fake, request('cpp'), { prepareMs: 20 });
     const res = await r.result;
-    expect(res.status).toBe('timed_out');
+    expect(res.status).toBe('runner_timeout');
     expect(r.statuses()).toEqual(['compiling']);
     expect(fake.removes().length).toBeGreaterThanOrEqual(1);
   });

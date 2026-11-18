@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EMPTY_RUNS, PAD_LOG_FLUSH_MS, PAD_LOG_MAX_PER_POST, PAD_LOG_SNAPSHOT_MS, PadLogBatcher, RUN_ENTRYPOINTS, RUN_STATUSES, cancellableRun, editEvent,
-  entryStatus, insertEvent, languageEvent, latestRun, newRunId, parseRunEvent, pasteEvent, runNeedsRead, runOutputModel, runRequest, runsReducer,
+  entryStatus, insertEvent, languageEvent, latestRun, newRunId, parseRunEvent, pasteEvent, paneStatusOf, runNeedsRead, runOutputModel, runRequest, runsReducer,
   snapshotEvent, staffPadBase, GUEST_PAD_BASE, type PadEventIn, type RunEvent, type RunView, type RunsAction, type RunsState,
 } from '../interviewsPad.ts';
 import { PAD_LANGUAGES } from '../interviewsKit.ts';
@@ -26,6 +26,13 @@ const result = (over: Partial<NonNullable<RunView['result']>> = {}): NonNullable
 
 test('the statuses are the server\'s, by value', () => {
   assert.deepEqual([...RUN_STATUSES], [...executor.RUN_STATUSES]);
+});
+
+test('a runner_timeout shows in the pane as the runner\'s failure, never as the candidate\'s timed_out', () => {
+  assert.equal(paneStatusOf('runner_timeout'), 'internal_error');
+  assert.equal(paneStatusOf('timed_out'), 'timed_out');
+  const s = fold([ev('r1', 1, 'status', 'queued'), ev('r1', 2, 'status', 'runner_timeout')]);
+  assert.equal(runOutputModel(latestRun(s)).status, 'internal_error');
 });
 
 test('the entrypoint is one file named for each language, and the request carries the pad\'s text as it', () => {

@@ -18,9 +18,9 @@
 export type RunLanguage = 'python' | 'swift' | 'javascript' | 'typescript' | 'java' | 'go' | 'cpp';
 export const RUN_LANGUAGES: readonly RunLanguage[] = ['python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp'];
 
-export type RunStatus = 'queued' | 'compiling' | 'running' | 'succeeded' | 'failed' | 'compile_error' | 'timed_out' | 'memory_exceeded' | 'cancelled' | 'internal_error';
-export const RUN_STATUSES: readonly RunStatus[] = ['queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'memory_exceeded', 'cancelled', 'internal_error'];
-export const TERMINAL_STATUSES: readonly RunStatus[] = ['succeeded', 'failed', 'compile_error', 'timed_out', 'memory_exceeded', 'cancelled', 'internal_error'];
+export type RunStatus = 'queued' | 'compiling' | 'running' | 'succeeded' | 'failed' | 'compile_error' | 'timed_out' | 'runner_timeout' | 'memory_exceeded' | 'cancelled' | 'internal_error';
+export const RUN_STATUSES: readonly RunStatus[] = ['queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error'];
+export const TERMINAL_STATUSES: readonly RunStatus[] = ['succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error'];
 export const isTerminal = (s: RunStatus): boolean => TERMINAL_STATUSES.includes(s);
 
 export interface RunLimits { wallMs: number; memoryMb: number; maxOutputBytes: number }

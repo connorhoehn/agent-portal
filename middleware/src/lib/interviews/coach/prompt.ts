@@ -127,7 +127,7 @@ export const coachSystemPrompt = (input: Pick<CoachInput, 'code'>): string => (i
 
 const STATUS_WORDS: Record<string, string> = {
   queued: 'waiting to run', compiling: 'compiling', running: 'running', succeeded: 'finished', failed: 'ended with an error',
-  compile_error: 'did not compile', timed_out: 'ran out of time', memory_exceeded: 'ran out of memory', cancelled: 'was cancelled', internal_error: 'could not be run',
+  compile_error: 'did not compile', timed_out: 'ran out of time', runner_timeout: 'could not be started by the runner (not the code)', memory_exceeded: 'ran out of memory', cancelled: 'was cancelled', internal_error: 'could not be run',
 };
 
 function codeText(code: CoachCode, fence: Fence): string {

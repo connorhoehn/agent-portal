@@ -63,7 +63,7 @@ export function pasteLabel(e: Pick<PadLogEvent, 'lines' | 'inserted' | 'via'>): 
 const clip = (text: string, max = 56): string => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 
 const RUN_ENDING: Partial<Record<RunView['status'], string>> = {
-  succeeded: 'passed', failed: 'failed', compile_error: 'did not compile', timed_out: 'ran out of time', memory_exceeded: 'ran out of memory', cancelled: 'was cancelled', internal_error: 'could not finish',
+  succeeded: 'passed', failed: 'failed', compile_error: 'did not compile', timed_out: 'ran out of time', runner_timeout: 'could not be started', memory_exceeded: 'ran out of memory', cancelled: 'was cancelled', internal_error: 'could not finish',
 };
 
 /**

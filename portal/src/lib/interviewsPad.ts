@@ -6,6 +6,7 @@
 // The names mirror middleware/src/lib/interviews/pad/channel.ts (the server's), and a unit test pins them by
 // value: document `ivpad:<interviewId>` on channel `doc:ivpad:<interviewId>`, text `code`, and the pad's own
 // map `pad` whose `language` key every pad on that document follows.
+import type { CodeRunStatus } from '@connorhoehn/ui-components/code-pad';
 import type * as Y from 'yjs';
 import { PAD_LANGUAGES, type PadLanguage } from './interviewsKit.ts';
 
@@ -170,8 +171,8 @@ export function questionLabel(q: Pick<PadQuestion, 'prompt'>, max = 64): string 
 export const staffPadBase = (interviewId: string): string => `/api/interviews/interviews/${encodeURIComponent(interviewId)}`;
 export const GUEST_PAD_BASE = '/api/interview-invite';
 
-export type RunStatus = 'queued' | 'compiling' | 'running' | 'succeeded' | 'failed' | 'compile_error' | 'timed_out' | 'memory_exceeded' | 'cancelled' | 'internal_error';
-export const RUN_STATUSES: readonly RunStatus[] = ['queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'memory_exceeded', 'cancelled', 'internal_error'];
+export type RunStatus = 'queued' | 'compiling' | 'running' | 'succeeded' | 'failed' | 'compile_error' | 'timed_out' | 'runner_timeout' | 'memory_exceeded' | 'cancelled' | 'internal_error';
+export const RUN_STATUSES: readonly RunStatus[] = ['queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error'];
 const IN_FLIGHT: readonly RunStatus[] = ['queued', 'compiling', 'running'];
 export const isRunStatus = (s: unknown): s is RunStatus => typeof s === 'string' && (RUN_STATUSES as readonly string[]).includes(s);
 export const runInFlightStatus = (s: RunStatus): boolean => IN_FLIGHT.includes(s);
@@ -288,9 +289,16 @@ export const cancellableRun = (state: RunsState): RunEntry | null => runsNewestF
 /** A run needs its view read: never read, or ended on the stream with no result held yet. */
 export const runNeedsRead = (entry: RunEntry): boolean => !entry.view || (!runInFlightStatus(entryStatus(entry)) && !entry.view.result);
 
+/**
+ * The library's run pane knows ten statuses and not `runner_timeout` (the runner never got the program started). It shows
+ * that one as the runner's own failure, "could not run", and the run's stderr carries the server's sentence saying it was the
+ * runner and not the code (queued in docs/ui-components-queue.md for a status of its own). Never as `timed_out`.
+ */
+export const paneStatusOf = (s: RunStatus): CodeRunStatus => (s === 'runner_timeout' ? 'internal_error' : s);
+
 /** The output's model: exactly `CodeRunOutput`'s fields. */
 export interface RunOutputModel {
-  status: RunStatus | null;
+  status: CodeRunStatus | null;
   stdout: string; stderr: string; compileOutput: string;
   truncated: { stdout: boolean; stderr: boolean };
   exitCode: number | null; timeMs: number | null; peakMemoryMb: number | null;
@@ -320,7 +328,7 @@ export function runOutputModel(entry: RunEntry | null, selfId: string | null = n
   const text = (stream: 'stdout' | 'stderr') => events.filter((e) => e.stream === stream).map((e) => e.data).join('');
   const language = entry.view?.language;
   return {
-    status: entryStatus(entry),
+    status: paneStatusOf(entryStatus(entry)),
     stdout: r ? r.stdout : text('stdout'),
     stderr: r ? r.stderr : text('stderr'),
     compileOutput: r?.compileOutput ?? '',
