@@ -16,7 +16,7 @@ import { defineFixture } from './core/index.js';
 import { seedAt } from './interviews-days.js';
 import type { RecapAttempt, RecapOpen, RecapRecord } from '../lib/interviews/recap/store.js';
 
-const PROMPT_VERSION = 'recap-2026-11-17.1';
+const PROMPT_VERSION = 'recap-2026-11-18.1';
 const MODEL = 'scripted-recap';
 
 /** Working days from today at an hour UTC (mock/interviews-days.ts). */

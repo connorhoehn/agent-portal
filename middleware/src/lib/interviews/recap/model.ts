@@ -11,6 +11,7 @@ import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
 import { converseOnce, type ConverseSend } from '../bedrock.js';
 import { COACH_TIMEOUT_MS, coachModelId, makeCoachModel, type CoachModelResult, type TokenCounts } from '../coach/model.js';
 import { buildRecapRequest, MAX_CLAIMS_PER_COMPETENCY, MAX_QUOTE_CHARS, RECAP_SYSTEM_PROMPT, recapUserText, type RecapInput } from './prompt.js';
+import { addressesMilo } from './parse.js';
 
 export const SCRIPTED_RECAP_MODEL_ID = 'scripted-recap';
 /**
@@ -49,7 +50,8 @@ export class BedrockRecapModel implements RecapModel {
 // Deterministic from its input, never from meaning, and honest: it invents nothing.
 //   For each competency in the kit's order: the panel lines that contain the opening words (the first six) of one of the
 //   asked questions tied to that competency; after each such line, the candidate lines that follow it until the next
-//   panel line. Each becomes one statement, ANSWER_TEXT, beside the line's own words as its quote (its first
+//   panel line. A question Milo said aloud is no line of anyone's: the candidate lines after its `afterSeq` count the same
+//   way. A candidate line that speaks to Milo (a repeat or time request) is a request, not an answer, and never counts. Each becomes one statement, ANSWER_TEXT, beside the line's own words as its quote (its first
 //   MAX_QUOTE_CHARS characters, cut at a word) and the line's number: a stand-in cannot restate a line in fewer words
 //   without inventing, so it says only that the line answered the question and lets the quote speak (the screen shows
 //   the statement and the quote once each). At most MAX_CLAIMS_PER_COMPETENCY.
@@ -73,19 +75,26 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
   const competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[] = [];
   const notCovered: string[] = [];
   for (const c of input.competencies) {
-    const openings = input.questions.filter((q) => q.competencyId === c.id).map((q) => opening(q.text)).filter((o) => o.length > 0);
+    const asked = input.questions.filter((q) => q.competencyId === c.id);
+    const openings = asked.map((q) => opening(q.text)).filter((o) => o.length > 0);
+    // Questions Milo said aloud are no line of anyone's: they are placed after the line said before them.
+    const after = asked.flatMap((q) => (q.afterSeq !== undefined ? [q.afterSeq] : []));
     const evidence: { text: string; seq: number; quote: string }[] = [];
     const used = new Set<number>();
-    input.lines.forEach((l, n) => {
-      if (l.side !== 'panel' || !openings.some((o) => words(l.text).includes(o))) return;
-      for (let k = n + 1; k < input.lines.length && input.lines[k]!.side === 'candidate'; k += 1) {
+    const answersFrom = (k: number) => {
+      for (; k < input.lines.length && input.lines[k]!.side === 'candidate'; k += 1) {
         const line = input.lines[k]!;
-        if (used.has(line.seq) || evidence.length >= MAX_CLAIMS_PER_COMPETENCY) continue;
+        if (used.has(line.seq) || evidence.length >= MAX_CLAIMS_PER_COMPETENCY || addressesMilo(line.text)) continue;
         const quote = quoteOf(line.text);
         if (!quote) continue;
         used.add(line.seq);
         evidence.push({ text: ANSWER_TEXT, seq: line.seq, quote });
       }
+    };
+    for (const a of after) answersFrom(input.lines.findIndex((l) => l.seq > a) === -1 ? input.lines.length : input.lines.findIndex((l) => l.seq > a));
+    input.lines.forEach((l, n) => {
+      if (l.side !== 'panel' || !openings.some((o) => words(l.text).includes(o))) return;
+      answersFrom(n + 1);
     });
     if (evidence.length) competencies.push({ id: c.id, evidence });
     else notCovered.push(c.id);

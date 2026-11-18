@@ -58,6 +58,7 @@ beforeEach(() => {
     consents: jest.fn(async () => consent),
     transcript: jest.fn(async () => transcript),
     taken: jest.fn(async () => []),
+    said: jest.fn(async () => []),
     model: jest.fn(() => new ScriptedRecapModel()),
     reserve: jest.fn(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `iv:op:${IV}:coach:${i.key}`, amountUsd: i.estimateUsd })),
     settle: jest.fn(async () => undefined),
@@ -68,6 +69,41 @@ beforeEach(() => {
   setRecapDeps(deps as unknown as RecapDeps);
 });
 afterAll(() => setRecapDeps(null));
+
+describe('a question Milo asked aloud (Have Milo ask): its answer is evidence', () => {
+  it('the candidate\'s answer after the said time counts, a request to Milo does not, and the model is told where it was asked', async () => {
+    const q = firstQuestion();
+    // The round chose no question; the lead took a suggestion and pressed "Have Milo ask". Milo's voice is no transcript line.
+    const ref = refOf();
+    ref.interview = { ...ref.interview, questionIds: [] };
+    const at = (min: number) => new Date(Date.UTC(2026, 11, 1, 15, min)).toISOString();
+    transcript = { callId: 'call-1', lastSeq: 4, lines: [
+      { seq: 1, side: 'panel', text: 'Okay, let us get into the main question.', at: at(1) },
+      { seq: 2, side: 'candidate', text: 'Milo, can you repeat the question?', at: at(3) },
+      { seq: 3, side: 'candidate', text: 'Sure. I would set up a weekly one-to-one and agree a plan with them.', at: at(4) },
+      { seq: 4, side: 'panel', text: 'Great, thanks.', at: at(5) },
+    ] } as unknown as CoachTranscript;
+    deps.taken.mockResolvedValue([{ id: 'sug-1', text: q.prompt, competencyId: q.competencyId, answer: 'milo-ask' }]);
+    deps.said.mockResolvedValue([{ questionId: null, suggestionId: 'sug-1', saidAt: at(2) }]);
+    const input = recapInput(ref, (transcript as CoachTranscript).lines, await deps.taken(IV), await deps.said(IV));
+    expect(input.questions).toEqual([expect.objectContaining({ how: 'milo-ask', afterSeq: 1 })]);
+    expect(input.lines.every((l) => !('at' in l))).toBe(true);
+    const body = await openRecap(ref, WEN, ratings(3));
+    expect(body.competencies).toEqual([expect.objectContaining({
+      id: q.competencyId,
+      evidence: [{ text: 'The candidate said this in answer to the question.', source: { kind: 'transcript', seq: 3, quote: 'Sure. I would set up a weekly one-to-one and agree a plan with them.' } }],
+    })]);
+  });
+
+  it('without the said log (or lines without times) nothing is placed: the old reading, a Milo-asked question with no panel line finds nothing', async () => {
+    const q = firstQuestion();
+    const ref = refOf();
+    ref.interview = { ...ref.interview, questionIds: [] };
+    const input = recapInput(ref, [{ seq: 1, side: 'candidate', text: 'An answer.' }], [{ id: 's', text: q.prompt, competencyId: q.competencyId, answer: 'milo-ask' }],
+      [{ questionId: null, suggestionId: 's', saidAt: '2026-12-01T15:00:00.000Z' }]);
+    expect(input.questions[0]!.afterSeq).toBeUndefined();
+  });
+});
 
 describe('the first open', () => {
   it('stores the ratings, then writes the recap once from the scripted stand-in, held and settled at zero', async () => {
@@ -85,7 +121,7 @@ describe('the first open', () => {
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'recap-1-abcd' }));
     expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0, provider: 'local' }));
     const row = await store.getRecap(IV);
-    expect(row).toMatchObject({ state: 'ready', attempts: 1, droppedCodes: [], modelId: 'scripted-recap', promptVersion: 'recap-2026-11-17.1' });
+    expect(row).toMatchObject({ state: 'ready', attempts: 1, droppedCodes: [], modelId: 'scripted-recap', promptVersion: 'recap-2026-11-18.1' });
   });
 
   it('a later open stores that person\'s ratings, never changes the first, and makes no second call', async () => {

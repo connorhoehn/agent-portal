@@ -27,11 +27,12 @@ import { coachConsents } from '../coach/service.js';
 import { suggestionStore } from '../coach/store.js';
 import { assistantTranscript, type TranscriptSource } from '../coach/transcript.js';
 import { recordTranscript } from '../record/transcript.js';
+import { saidStore } from '../speak/store.js';
 
 /** E1: the recap reads the interview record's transcript (which holds the mock world's seeded lines), else Milo's call record. */
 const recordOrAssistantTranscript: TranscriptSource = async (i) => {
   const r = await recordTranscript(i);
-  return r ? { callId: r.callId, lastSeq: r.lines.at(-1)?.seq ?? 0, lines: r.lines.map(({ seq, side, text }) => ({ seq, side, text })) } : assistantTranscript(i);
+  return r ? { callId: r.callId, lastSeq: r.lines.at(-1)?.seq ?? 0, lines: r.lines.map(({ seq, side, text, at }) => ({ seq, side, text, at })) } : assistantTranscript(i);
 };
 import type { CoachLine } from '../coach/prompt.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
@@ -59,7 +60,9 @@ export interface RecapDeps {
   consents: (interviewId: string) => Promise<{ transcription: boolean; milo: boolean } | null>;
   transcript: TranscriptSource;
   /** The suggestions the lead took (asked, or had Milo ask), read from the coach's log. */
-  taken: (interviewId: string) => Promise<{ text: string; competencyId: string; answer: 'ask' | 'milo-ask' }[]>;
+  taken: (interviewId: string) => Promise<{ id?: string; text: string; competencyId: string; answer: 'ask' | 'milo-ask' }[]>;
+  /** The questions Milo put in the call (the said log, decision 9): which kit question or suggestion, and when. */
+  said: (interviewId: string) => Promise<SaidQuestion[]>;
   model: () => RecapModel;
   reserve: (i: InterviewReserveInput) => Promise<InterviewReserveOutcome>;
   settle: (i: InterviewSettleInput) => Promise<void>;
@@ -71,7 +74,15 @@ export interface RecapDeps {
 const defaultTaken: RecapDeps['taken'] = async (interviewId) => {
   const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => suggestionStore().listSuggestions(interviewId));
   return rows.filter((r) => r.dropped === null && r.competencyId !== null && (r.answer === 'ask' || r.answer === 'milo-ask'))
-    .map((r) => ({ text: r.text, competencyId: r.competencyId!, answer: r.answer as 'ask' | 'milo-ask' }));
+    .map((r) => ({ id: r.id, text: r.text, competencyId: r.competencyId!, answer: r.answer as 'ask' | 'milo-ask' }));
+};
+
+/** A question Milo put in the call: a kit question (`questionId`) or a suggestion (`suggestionId`), at `saidAt`. */
+export interface SaidQuestion { questionId: string | null; suggestionId: string | null; saidAt: string }
+
+const defaultSaid: RecapDeps['said'] = async (interviewId) => {
+  const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interviewId));
+  return rows.filter((r) => r.kind === 'question').map((r) => ({ questionId: r.questionId, suggestionId: r.suggestionId, saidAt: r.saidAt }));
 };
 
 const DEFAULTS: RecapDeps = {
@@ -79,6 +90,7 @@ const DEFAULTS: RecapDeps = {
   consents: coachConsents,
   transcript: recordOrAssistantTranscript,
   taken: defaultTaken,
+  said: defaultSaid,
   model: makeRecapModel,
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
@@ -136,18 +148,36 @@ export function recapBody(row: RecapRecord | null, opening: Opening, interview?:
 }
 
 /** What the recap reads: the kit, the questions asked (chosen first, then the suggestions taken), the lines. */
-export function recapInput(ref: RecapRef, lines: readonly CoachLine[], taken: Awaited<ReturnType<RecapDeps['taken']>>): RecapInput {
+export function recapInput(
+  ref: RecapRef, lines: readonly RecapSourceLine[], taken: Awaited<ReturnType<RecapDeps['taken']>>, said: readonly SaidQuestion[] = [],
+): RecapInput {
   const kit = ref.opening.kit;
   const bank = new Map(kit.questions.map((q) => [q.id, q]));
+  const kept = lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES);
+  // A question Milo said aloud is no line of anyone's (Milo's voice is never stored as a line): it is placed after the last line
+  // stored before it was said, so its answer can be found. The first time it was said counts. Lines without a time place nothing.
+  const afterOf = (saidAt: string | undefined): number | undefined => {
+    if (saidAt === undefined || !kept.length || kept.some((l) => l.at === undefined)) return undefined;
+    return kept.filter((l) => l.at! <= saidAt).reduce((m, l) => Math.max(m, l.seq), 0);
+  };
+  const firstSaid = (pick: (s: SaidQuestion) => boolean) => said.filter(pick).map((s) => s.saidAt).sort()[0];
+  const placed = (q: RecapQuestion, saidAt: string | undefined): RecapQuestion => {
+    const after = afterOf(saidAt);
+    return after === undefined ? q : { ...q, afterSeq: after };
+  };
   const chosen: RecapQuestion[] = ref.interview.questionIds.map((id) => bank.get(id)).filter((q): q is NonNullable<typeof q> => !!q)
-    .map((q) => ({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }));
+    .map((q) => placed({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }, firstSaid((s) => s.questionId === q.id)));
   const round = new Set(roundCompetencyIds(ref.interview, ref.opening, taken));
   return {
     competencies: kit.competencies.filter((c) => round.has(c.id)).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
-    questions: [...chosen, ...taken.map((t): RecapQuestion => ({ text: t.text, competencyId: t.competencyId, how: t.answer }))],
-    lines: lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES),
+    questions: [...chosen, ...taken.map((t): RecapQuestion => placed({ text: t.text, competencyId: t.competencyId, how: t.answer },
+      t.answer === 'milo-ask' && t.id ? firstSaid((s) => s.suggestionId === t.id) : undefined))],
+    lines: kept.map(({ seq, side, text }) => ({ seq, side, text })),
   };
 }
+
+/** A transcript line as the recap's source gives it: the record's lines carry when they were stored. */
+export type RecapSourceLine = CoachLine & { at?: string };
 
 /** What one attempt may cost, in dollars: the request's estimated tokens at the model's price (Nova Pro's for the stand-in). */
 export function recapEstimateUsd(model: Pick<RecapModel, 'modelId'>, input: RecapInput): number {
@@ -181,7 +211,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   if (!consent?.transcription) return emptyBody('no-transcript');
   if (!consent.milo) return emptyBody('none');
   const transcript = await d.transcript({ id: interview.id, callId: interview.callId });
-  const input = recapInput(ref, transcript?.lines ?? [], await d.taken(interview.id));
+  const input = recapInput(ref, transcript?.lines ?? [], await d.taken(interview.id), await d.said(interview.id).catch(() => []));
   if (!input.lines.length) return emptyBody('no-transcript');
 
   const model = d.model();

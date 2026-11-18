@@ -35,9 +35,10 @@
 //                              are added to that competency, in order, as the candidate's own words beside a fixed
 //                              statement, so a recap cannot show the line that sounds best and leave out the rest of
 //                              the same answer. They fill up to the cap of four per competency; lines touching a
-//                              personal trait stay out. What remains: which ANSWERS a competency cites is still the
+//                              personal trait, or speaking to Milo (a repeat or time request), stay out. What remains: which ANSWERS a competency cites is still the
 //                              writer's choice, and the cap can cut a long answer short. That is why every statement is
 //                              shown beside its quote, and why the person rates before they read it.
+import { findAddress } from '../../meeting-assistant/detector.js';
 import { extractJson } from '../../meeting-assistant/decision-prompt.js';
 import { guardSuggestion, PERSONAL, quotedFrom } from '../coach/parse.js';
 import type { CoachLine } from '../coach/prompt.js';
@@ -133,6 +134,9 @@ export function grounded(words: string, line: string): boolean {
 /** The fixed statement beside a line the guard adds from the rest of a cited answer. */
 export const SAME_ANSWER_TEXT = 'The candidate also said this in the same answer.';
 
+/** A candidate line that addresses Milo ("Milo, can you repeat the question?") is a request to Milo, not part of an answer (the detector's own test). */
+export const addressesMilo = (text: string): boolean => findAddress(text)?.addressed === true;
+
 function quoteOfLine(text: string): string {
   const t = squash(text);
   if (t.length <= MAX_QUOTE_CHARS) return t;
@@ -218,7 +222,7 @@ export function parseRecapAnswer(raw: string | null, ctx: { competencyIds: reado
       if (list.length >= MAX_CLAIMS_PER_COMPETENCY) break;
       const line = bySeq.get(seq)!;
       const quote = quoteOfLine(line.text);
-      if (cited.has(seq) || !quote || PERSONAL.some((r) => r.test(quote))) continue;
+      if (cited.has(seq) || !quote || PERSONAL.some((r) => r.test(quote)) || addressesMilo(line.text)) continue;
       list.push({ text: SAME_ANSWER_TEXT, seq, quote });
       cited.add(seq);
     }
