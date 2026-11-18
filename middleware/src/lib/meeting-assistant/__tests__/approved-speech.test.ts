@@ -30,7 +30,7 @@ import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type S
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { NOT_SAID_ALOUD, numberWords, ordinalWords, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
+import { APPROVED_STREAM_LAG_MS, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -148,6 +148,12 @@ describe('the words check (approved-speech.ts)', () => {
     expect(saidVerbatim('Take the 1st case.', 'Take the third case.')).toBe(false);
     expect(saidVerbatim(QUESTION, 'Walk me through how you would build a rate limiter for a public API.')).toBe(false);
   });
+  it('the words so far: a start of the text counts (a word cut part way too); a changed, added or run-on word does not', () => {
+    const T = 'About 59 minutes are left in this round.';
+    for (const ok of ['About', 'about fif', 'About fifty-nine minutes', 'About fifty nine minutes are left in this round.']) expect(saidSoFar(T, ok)).toBe(true);
+    for (const no of ['', 'Around', 'About sixty', 'About fifty-nine minutes are left in this round. Good luck', 'About fifty-nine hours']) expect(saidSoFar(T, no)).toBe(false);
+  });
+
   it('the bound grows with the words and is capped', () => {
     expect(sayBoundMs('x')).toBeGreaterThanOrEqual(8000);
     expect(sayBoundMs('x'.repeat(5000))).toBe(45_000);
@@ -396,6 +402,60 @@ describe('4. while an approved utterance is outstanding, no other response is re
     req.ended(QUESTION);
     expect(await p).toBe('spoken');
     expect(sent).toHaveLength(9);
+  });
+
+  // The voice starts as the words are checked, not once the whole utterance has streamed in (2 to 3 s in the 18 November film).
+  const streamed = (s: FakeSession, say: string) => {
+    let seq = 0;
+    return {
+      frames: (n: number, last = false) => { for (let i = 0; i < n; i += 1) s.fire('outputAudio', { pcm: Buffer.alloc(4800, 9), seq: ++seq, say, ...(last && i === n - 1 ? { last: true as const } : {}) }); },
+      words: (text: string) => s.fire('outputTranscript', { text, final: false, say }),
+    };
+  };
+
+  it('streams: frames go out once APPROVED_STREAM_LAG_MS old while the words so far are the start of the text; the rest once complete', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:stream');
+    const s = fake();
+    const p = runtime.sayHeldText(CALL, QUESTION, ALICE);
+    await flush();
+    const req = s.asked[0]!;
+    const u = streamed(s, req.id);
+    u.frames(4); u.words('Walk me through');
+    await flush();
+    expect(sent).toEqual([]); // too new to be covered by the words checked
+    now += APPROVED_STREAM_LAG_MS;
+    u.words('Walk me through how you would');
+    await flush();
+    expect(sent).toHaveLength(4); // heard before the utterance is complete
+    u.frames(3); now += APPROVED_STREAM_LAG_MS; u.words('Walk me through how you would design a rate limiter for a public');
+    await flush();
+    expect(sent).toHaveLength(7);
+    u.frames(2, true);
+    req.ended(QUESTION);
+    expect(await p).toBe('spoken');
+    expect(sent).toHaveLength(9);
+    expect(voiceTrace().at(-1)).toMatchObject({ ev: 'voice.approved', decision: 'relayed', frames: 9 });
+  });
+
+  it('a word that is not the text\'s stops the voice there: nothing more of the utterance goes out, and the line is chat only', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:runon');
+    const s = fake();
+    const p = runtime.sayHeldText(CALL, QUESTION, ALICE);
+    await flush();
+    const req = s.asked[0]!;
+    const u = streamed(s, req.id);
+    u.frames(4); now += APPROVED_STREAM_LAG_MS; u.words('Walk me through how you');
+    await flush();
+    expect(sent).toHaveLength(4);
+    u.frames(3); u.words(`${QUESTION} Good luck`);
+    now += 2 * APPROVED_STREAM_LAG_MS; u.frames(2, true);
+    await flush();
+    expect(sent).toHaveLength(4);
+    req.ended(`${QUESTION} Good luck!`);
+    expect(await p).toBe('posted');
+    expect(sent).toHaveLength(4);
   });
 });
 

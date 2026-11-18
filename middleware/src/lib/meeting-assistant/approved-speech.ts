@@ -1,11 +1,16 @@
 // Approved speech: words the server holds, said aloud on the call's own live session (docs/interviews-tenant-plan.md decision 9).
 //
 // The one gate and the one relay stay as they are (voice-gate.ts, voice.ts). What this adds is the check in front of them for ONE
-// kind of utterance: the session is asked to say a text verbatim (session.ts `sayVerbatim`), and the utterance it produces is held
-// WHOLE, in memory, until the session's own transcript of it is complete. Only when that transcript is the same words as the text
-// (case, punctuation and spacing aside) are its frames handed to the gate, which opens for them with the reason `approved`. On any
-// difference, no words, no audio, or nothing complete inside `sayBoundMs`, the utterance is withheld whole: nothing of it is sent.
-// Nothing is ever relayed frame by frame as it arrives.
+// kind of utterance: the session is asked to say a text verbatim (session.ts `sayVerbatim`), and the utterance it produces is held,
+// in memory, and checked against the session's own transcript of it. Only frames whose words the transcript has already shown to be
+// the text's own words, in order, go to the gate, which opens for them with the reason `approved`: a frame goes out once it is
+// APPROVED_STREAM_LAG_MS old and the transcript so far is still the start of the text (`saidSoFar`). The provider writes a word down
+// before its audio arrives (measured in the 18 November film: the first words 90 to 390 ms ahead of the first voiced frame), so
+// a frame that old is covered by the words checked. The moment the transcript stops being the start of the text (a word changed,
+// added or run on) nothing more of the utterance is sent; once it is complete, the rest goes out only when it is the same words as
+// the text (case, punctuation and spacing aside). No words, no audio, or nothing complete inside `sayBoundMs`: nothing more is sent.
+// The voice starts within about half a second of the provider's first voiced frame, instead of after the whole utterance has
+// streamed in (2 to 3 s for a one-sentence answer, measured in the same film).
 //
 // Pure: no clock, no session, no relay; the orchestrator (`sayHeldText`) does the holding and the sending.
 
@@ -84,6 +89,16 @@ export function spokenWords(text: string | null | undefined): string {
   return words.filter((w, i) => !(w === 'and' && NUMBER_WORDS.has(words[i - 1] ?? '') && NUMBER_WORDS.has(words[i + 1] ?? ''))).join(' ');
 }
 
+/**
+ * Is what the session has said so far the start of these words? Its letters, word breaks ignored, are a non-empty prefix of the
+ * text's (both sides normalised by spokenWords), so a word cut part way ("fif") still counts and anything changed or added does not.
+ */
+export function saidSoFar(asked: string, transcript: string | null | undefined): boolean {
+  const b = spokenWords(transcript).replace(/ /g, '');
+  return b.length > 0 && spokenWords(asked).replace(/ /g, '').startsWith(b);
+}
+/** How old a held frame of approved speech must be before it goes out, while the transcript so far is the start of the text. */
+export const APPROVED_STREAM_LAG_MS = 400;
 /**
  * Did the session say these words? The same words in the same order once both sides are normalised (spokenWords), or, failing
  * that, the same letters with the word breaks ignored ("failover" said as "fail over"). Any word added, dropped or changed still
