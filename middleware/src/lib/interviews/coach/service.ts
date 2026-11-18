@@ -25,7 +25,7 @@ import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type TranscriptSource } from './transcript.js';
 import { interviewsNowMs } from '../clock.js';
-import { logSaid, sayLogged, type NotAloudWhy } from '../speak/index.js';
+import { logAndPost, sayLogged, type NotAloudWhy } from '../speak/index.js';
 
 /** D7's view of a suggestion. */
 export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
@@ -40,19 +40,11 @@ export interface CoachDeps {
   reserve: (i: InterviewReserveInput) => Promise<InterviewReserveOutcome>;
   settle: (i: InterviewSettleInput) => Promise<void>;
   release: (holdIds: readonly (string | null)[]) => Promise<void>;
-  /** Put Milo's approved words in the call's chat; false when Milo is not in the call. */
-  postApproved: (callId: string, text: string, lead: { userId: string }) => Promise<boolean>;
-  /** Row I3.5: log the words in the said log, then (after the post) say them aloud; absent in a test means the defaults. */
-  speak?: { log: typeof logSaid; say: typeof sayLogged };
+  /** Row I3.5: log, post and mark the words (speak/index.ts `logAndPost`), then say them aloud; absent in a test means the defaults. */
+  speak?: { post: typeof logAndPost; say: typeof sayLogged };
   now: () => number;
   newId: () => string;
 }
-
-const defaultPost: CoachDeps['postApproved'] = async (callId, text) => {
-  // E9: a plain question with the server's approved mark (no asker named), the one kind of Milo's message the candidate reads.
-  const { postApprovedQuestion } = await import('../../meeting-assistant/chat.js');
-  return (await postApprovedQuestion(callId, text)) !== null;
-};
 
 /**
  * D4: the coach runs only when the candidate accepted the transcript and Milo. The same read and rule as
@@ -73,7 +65,6 @@ const DEFAULTS: CoachDeps = {
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,
-  postApproved: defaultPost,
   now: interviewsNowMs,
   newId: () => `sg-${Date.now().toString(36)}${randomBytes(5).toString('hex')}`,
 };
@@ -272,9 +263,11 @@ export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }
   try {
     const t = await d.transcript({ id: interview.id, callId: interview.callId });
     if (!t) return { kind: 'ok', said: 'none', why: 'not-in-call' };
-    const speak = d.speak ?? { log: logSaid, say: sayLogged };
-    const row = await speak.log({ id: interview.id, callId: t.callId }, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
-    posted = await d.postApproved(t.callId, written.row.text, viewer);
+    const speak = d.speak ?? { post: logAndPost, say: sayLogged };
+    // E9: a plain question with the server's approved mark (no asker named), the one kind of Milo's message the candidate reads.
+    const out = await speak.post(interview.id, t.callId, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
+    posted = out.posted;
+    const row = out.row;
     if (!posted) return { kind: 'ok', said: 'none', why: 'not-in-call' };
     const aloud = await speak.say(interview.id, row, t.callId);
     if (!aloud.spoken) return { kind: 'ok', said: 'chat', why: aloud.why };

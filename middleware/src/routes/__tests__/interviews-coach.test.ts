@@ -48,6 +48,7 @@ import { spendEntries } from '../../mock/spend-ledger.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import { setConsentStore } from '../../lib/interviews/consent/store.js';
 import { setCoachDeps, setSuggestionStore } from '../../lib/interviews/coach/index.js';
+import { setSpeakDeps } from '../../lib/interviews/speak/index.js';
 import { ScriptedCoachModel } from '../../lib/interviews/coach/model.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -94,7 +95,7 @@ const PRIYA = who('u-priya', 'access');
 const IV = 'iv-n5z9f2cq';
 const OTHER_ROUND = 'iv-m8t3h6ng';
 const GIVEN = '2026-11-16T09:00:00.000Z';
-const postApproved = jest.fn(async () => true);
+const postApproved = jest.fn(async (_callId: string, _text: string, _kind: string) => true);
 
 function live(id = IV) { interviewsFixture.rows().find((i) => i.id === id)!.state = 'live'; }
 function accept(id = IV, milo = true) {
@@ -114,18 +115,18 @@ beforeEach(() => {
   postApproved.mockClear();
   setSuggestionStore(null);
   setConsentStore(null);
+  setSpeakDeps({ post: postApproved });
   setCoachDeps({
     model: () => new ScriptedCoachModel(),
     transcript: async () => ({ callId: 'call-1', lastSeq: 2, lines: [
       { seq: 1, side: 'panel', text: 'Tell me about someone on your team who was struggling. What did you do, and what happened?' },
       { seq: 2, side: 'candidate', text: 'One engineer kept missing reviews, so I set up a weekly one-to-one.' },
     ] }),
-    postApproved,
   });
   live();
   accept();
 });
-afterAll(() => setCoachDeps(null));
+afterAll(() => { setCoachDeps(null); setSpeakDeps(null); });
 
 const read = (as: ReturnType<typeof who>, id = IV) => as.get(`/interviews/${id}/suggestion`);
 const answer = (as: ReturnType<typeof who>, sid: string, body: unknown, id = IV) => as.post(`/interviews/${id}/suggestion/${sid}/answer`, body);
@@ -153,7 +154,7 @@ describe('the lead', () => {
     // Posted to the call chat; no meeting assistant runs here to say it, so the receipt's reason is that Milo is not in the call.
     expect(ok.body).toEqual({ suggestion: null, said: 'chat', why: 'not-in-call', line: 'Milo could not say it aloud. The question is in the call chat.' });
     expect(interviewSuggestionsFixture.rows().find((r) => r.id === sid)).toMatchObject({ answer: 'milo-ask', spoken: false });
-    expect(postApproved).toHaveBeenCalledWith('call-1', body.suggestion.text, { userId: 'u-wen' });
+    expect(postApproved).toHaveBeenCalledWith('call-1', body.suggestion.text, 'question');
     expect((await answer(WEN, sid, { answer: 'skip' })).status).toBe(409);
     expect((await read(WEN)).body).toMatchObject({ suggestion: null });
   });

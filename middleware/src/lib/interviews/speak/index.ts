@@ -206,17 +206,28 @@ export async function sayLogged(interviewId: string, row: SaidRecord, callId: st
   return { spoken: true };
 }
 
+/**
+ * Log, post, mark: the one way approved words reach the call chat (a kit question, a candidate's button, the coach's "Have Milo
+ * ask"). The row is written first; with no call, or a post refused, it stays unposted (asked of nobody). A log failure throws.
+ */
+export async function logAndPost(interviewId: string, callId: string | null, input: SayInput): Promise<{ row: SaidRecord; posted: boolean }> {
+  const d = deps();
+  const row = await logSaid({ id: interviewId, callId }, input);
+  if (!callId) return { row, posted: false };
+  const posted = await d.post(callId, input.text, input.kind).catch(() => false);
+  if (!posted) return { row, posted: false };
+  await d.store().markPosted(interviewId, row.id).catch(() => null);
+  return { row: { ...row, posted: true }, posted: true };
+}
+
 /** Log, post, then say: the one path for approved words in an interview call. Never throws for the voice; a log failure throws. */
 export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, input: SayInput): Promise<{ said: Said; row: SaidRecord }> {
   const d = deps();
   const callId = await d.callOf(interview).catch(() => interview.callId);
-  const row = await logSaid({ id: interview.id, callId }, input);
-  if (!callId) return { said: 'none', row };
-  const posted = await d.post(callId, input.text, input.kind).catch(() => false);
-  if (!posted) return { said: 'none', row };
-  await d.store().markPosted(interview.id, row.id).catch(() => null);
+  const { row, posted } = await logAndPost(interview.id, callId, input);
+  if (!posted || !callId) return { said: 'none', row };
   const aloud = await sayLogged(interview.id, row, callId);
-  return { said: aloud.spoken ? 'spoken' : 'chat', row: { ...row, posted: true, spoken: aloud.spoken } };
+  return { said: aloud.spoken ? 'spoken' : 'chat', row: { ...row, spoken: aloud.spoken } };
 }
 
 /** The words for a candidate's request, from what the server holds (no model). */

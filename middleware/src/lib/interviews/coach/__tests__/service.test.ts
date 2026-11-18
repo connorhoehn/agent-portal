@@ -10,6 +10,7 @@ import { MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS } from '../rules.js';
 import { MODEL_FAILURES_BEFORE_PAUSE, MODEL_FAILURES_KEPT, answerSuggestion, modelFailuresOf, noteModelCall, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
+import { MemorySaidStore, setSaidStore, setSpeakDeps } from '../../speak/index.js';
 
 const IV = 'iv-n5z9f2cq';
 const WEN = { userId: 'u-wen' };
@@ -51,13 +52,16 @@ beforeEach(() => {
     reserve: jest.fn(async (i) => ({ ok: true, holdId: `h-${i.key}`, sourceId: `iv:op-em:${IV}:coach:${i.key}`, amountUsd: i.estimateUsd })),
     settle: jest.fn(async () => undefined),
     release: jest.fn(async () => undefined),
-    postApproved: jest.fn(async () => true),
     now: jest.fn(() => now),
     newId: jest.fn(() => `sg-${++n}`),
   };
   setCoachDeps(deps as unknown as CoachDeps);
+  post = jest.fn(async () => true);
+  setSpeakDeps({ post });
 });
-afterAll(() => setCoachDeps(null));
+afterAll(() => { setCoachDeps(null); setSpeakDeps(null); });
+/** The call chat post behind speak/index.ts `logAndPost` (the coach posts through it). */
+let post: jest.Mock;
 
 const read = async (viewer = WEN, ref = refOf()) => {
   const out = await suggestionFor(ref, viewer);
@@ -245,14 +249,28 @@ describe('the lead\'s answer', () => {
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat', why: 'not-in-call' });
     const [row] = await store.listSuggestions(IV);
     expect(row).toMatchObject({ answer: 'milo-ask', spoken: false, answeredAt: new Date(now).toISOString() });
-    expect(deps.postApproved).toHaveBeenCalledWith('call-1', suggestion!.text, WEN);
+    expect(post).toHaveBeenCalledWith('call-1', suggestion!.text, 'question');
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'skip')).toEqual({ kind: 'answered' });
+  });
+
+  it('Have Milo ask marks its said-log row posted once the chat has it, so the recap keeps the question', async () => {
+    const said = new MemorySaidStore();
+    setSaidStore(said);
+    const posts: string[] = [];
+    setSpeakDeps({ post: async (_c, text) => { posts.push(text); return true; } });
+    setCoachDeps(deps as unknown as CoachDeps);
+    try {
+      const { suggestion } = await read();
+      expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toMatchObject({ kind: 'ok', said: 'chat' });
+      expect(posts).toEqual([suggestion!.text]);
+      expect(await said.list(IV)).toEqual([expect.objectContaining({ kind: 'question', source: 'suggestion', suggestionId: suggestion!.id, posted: true })]);
+    } finally { setSaidStore(null); }
   });
 
   it('I will ask it and Skip post nothing', async () => {
     const { suggestion } = await read();
     await answerSuggestion(refOf(), WEN, suggestion!.id, 'skip');
-    expect(deps.postApproved).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('only the lead, only while live, only a suggestion of this interview', async () => {
@@ -284,14 +302,13 @@ describe('Have Milo ask, said aloud (I3.5)', () => {
     const steps: string[] = [];
     let out: { spoken: true } | { spoken: false; why: string } = { spoken: true };
     const speak = {
-      log: jest.fn(async (_i: unknown, input: { text: string }) => { steps.push('log'); return { id: 'said-1', text: input.text, askedBy: 'u-wen' } as never; }),
+      post: jest.fn(async (_i: unknown, _c: unknown, input: { text: string }) => { steps.push('log, post, mark'); return { row: { id: 'said-1', text: input.text, askedBy: 'u-wen' }, posted: true } as never; }),
       say: jest.fn(async () => { steps.push('say'); return out; }),
     };
-    (deps.postApproved as jest.Mock).mockImplementation(async () => { steps.push('post'); return true; });
     setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
     let { suggestion } = await read();
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'spoken' });
-    expect(steps).toEqual(['log', 'post', 'say']);
+    expect(steps).toEqual(['log, post, mark', 'say']);
     expect((await store.listSuggestions(IV)).find((r) => r.id === suggestion!.id)).toMatchObject({ answer: 'milo-ask', spoken: true });
     out = { spoken: false, why: 'budget' }; now += 10 * 60_000;
     ({ suggestion } = await read());
@@ -302,8 +319,7 @@ describe('Have Milo ask, said aloud (I3.5)', () => {
   });
 
   it('nothing posted (Milo not in the call, or no call found) answers `said: none` with why, never a chat claim', async () => {
-    const speak = { log: jest.fn(async () => ({ id: 'said-1' }) as never), say: jest.fn() };
-    (deps.postApproved as jest.Mock).mockImplementation(async () => false);
+    const speak = { post: jest.fn(async () => ({ row: { id: 'said-1' }, posted: false }) as never), say: jest.fn() };
     setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
     const { suggestion } = await read();
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'none', why: 'not-in-call' });
@@ -311,12 +327,11 @@ describe('Have Milo ask, said aloud (I3.5)', () => {
   });
 
   it('a failure after the chat post still says the words are in the chat; one before it says nothing was posted', async () => {
-    const speak = { log: jest.fn(async () => ({ id: 'said-1' }) as never), say: jest.fn(async () => { throw new Error('boom'); }) };
-    (deps.postApproved as jest.Mock).mockImplementation(async () => true);
+    const speak = { post: jest.fn(async () => ({ row: { id: 'said-1' }, posted: true }) as never), say: jest.fn(async () => { throw new Error('boom'); }) };
     setCoachDeps({ ...(deps as unknown as CoachDeps), speak: speak as unknown as CoachDeps['speak'] });
     let { suggestion } = await read();
     expect(await answerSuggestion(refOf(), WEN, suggestion!.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'chat', why: 'not-said' });
-    speak.log.mockImplementation(async () => { throw new Error('log down'); });
+    speak.post.mockImplementation(async () => { throw new Error('log down'); });
     now += 10 * 60_000;
     ({ suggestion } = await read());
     if (suggestion) expect(await answerSuggestion(refOf(), WEN, suggestion.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'none', why: 'not-said' });
