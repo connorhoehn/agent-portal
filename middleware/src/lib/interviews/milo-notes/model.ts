@@ -61,9 +61,10 @@ export class BedrockMiloModel implements MiloModel {
 // ---- the scripted stand-in --------------------------------------------------------------------------------------------------------
 //
 // Deterministic, from the words, never from meaning: the question's content words (four letters or more, common words
-// left out, one common ending dropped); the candidate's lines that share at least one of them, oldest first, at most three;
-// one sentence per line naming its number, each with the line quoted (its first 200 characters, cut at a word). No line
-// shares a word: NOT_SAID.
+// left out, one common ending dropped), each pair of neighbouring words also read as one ("fail over" meets "failover",
+// "on call" meets "oncall"); the candidate's lines that share at least one of them, read the same way, oldest first, at
+// most three; one sentence naming their numbers ("in lines 4 and 7"), each line quoted (its first 200 characters, cut
+// at a word). No line shares a word: NOT_SAID.
 
 const STOP = new Set(('what that this with about they them their there have said does didn when where which were been from your would could '
   + 'should tell talk mention mentioned says anything something candidate candidates interview line lines think more much some them then than '
@@ -72,7 +73,6 @@ const STOP = new Set(('what that this with about they them their there have said
 const words = (s: string): string[] => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').split(/\s+/).filter(Boolean);
 /** A light stem, so "page", "paged" and "paging" meet: one common ending off, three letters kept. */
 const stem = (w: string): string => { const t = w.replace(/(?:ing|ed|es|s|e)$/, ''); return t.length >= 3 ? t : w; };
-const tokens = (s: string): string[] => words(s).map(stem);
 
 export const contentWords = (s: string): string[] => [...new Set(words(s).filter((w) => w.length >= 4 && !STOP.has(w)).map(stem))];
 
@@ -84,12 +84,30 @@ function quoteOf(text: string): string {
   return space > 40 ? cut.slice(0, space) : cut;
 }
 
+/** The words of `s` as tokens, plus each neighbouring pair joined ("fail over" → "failover"), all stemmed. */
+const withJoins = (s: string): string[] => {
+  const w = words(s);
+  return [...w.map(stem), ...w.slice(1).map((b, i) => stem(`${w[i]}${b}`))];
+};
+
+/** The question's content words, plus each neighbouring pair of its words joined, so "fail over" also finds "failover". */
+const wantedOf = (question: string): Set<string> => {
+  const w = words(question);
+  const content = (x: string) => x.length >= 4 && !STOP.has(x);
+  // A pair counts when one of its words is a content word: "fail over" does, "about the" does not.
+  const joined = w.slice(1).flatMap((b, i) => (content(w[i]!) || content(b) ? [stem(`${w[i]}${b}`)] : []));
+  return new Set([...contentWords(question), ...joined]);
+};
+
+const listOf = (ns: number[]): string => (ns.length === 1 ? `line ${ns[0]}` : `lines ${ns.slice(0, -1).join(', ')} and ${ns[ns.length - 1]}`);
+
 export function scriptedAnswer(input: Pick<AskInput, 'lines' | 'question'>): { answer: string; sources: Array<{ seq: number; quote: string }> } {
-  const want = new Set(contentWords(input.question));
-  const hits = want.size ? input.lines.filter((l: CoachLine) => l.side === 'candidate' && tokens(l.text).some((w) => want.has(w))).slice(0, 3) : [];
+  const want = wantedOf(input.question);
+  const hits = contentWords(input.question).length
+    ? input.lines.filter((l: CoachLine) => l.side === 'candidate' && withJoins(l.text).some((w) => want.has(w))).slice(0, 3) : [];
   if (!hits.length) return { answer: NOT_SAID, sources: [] };
   return {
-    answer: hits.map((l) => `The candidate spoke of it in line ${l.seq}.`).join(' '),
+    answer: `The candidate spoke of it in ${listOf(hits.map((l) => l.seq))}.`,
     sources: hits.map((l) => ({ seq: l.seq, quote: quoteOf(l.text) })),
   };
 }

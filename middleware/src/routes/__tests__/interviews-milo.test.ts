@@ -214,7 +214,7 @@ describe('the private question (I3.6)', () => {
     const res = await ask(WEN, 'What did she do about the missed reviews?');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ refused: null, line: null, paused: null });
-    expect(res.body.answer).toMatchObject({ question: 'What did she do about the missed reviews?', text: 'The candidate spoke of it in line 2. The candidate spoke of it in line 4.' });
+    expect(res.body.answer).toMatchObject({ question: 'What did she do about the missed reviews?', text: 'The candidate spoke of it in lines 2 and 4.' });
     expect(res.body.answer.sources).toEqual([
       { seq: 2, quote: LINES[1]!.text, speaker: 'Nadia Petrova', at: new Date(START + 90_000).toISOString() },
       { seq: 4, quote: LINES[2]!.text, speaker: 'Nadia Petrova', at: new Date(START + 150_000).toISOString() },
