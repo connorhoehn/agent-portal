@@ -1722,14 +1722,15 @@ export class AssistantRuntime {
   // Tool calls
 
   /** The one place a tool call is answered. True when this call sent the answer. */
-  private answer(run: CallRun, modelCallId: string, output: unknown, reply: { asker: string; visibility: 'public'; card?: true } | null = null): boolean {
+  private answer(run: CallRun, modelCallId: string, output: unknown, reply: { asker: string; visibility: 'public'; card?: true } | null = null, opts: { continue?: boolean } = {}): boolean {
     if (run.calls.get(modelCallId) !== 'open') return false;
     run.calls.set(modelCallId, 'answered');
     run.holding.delete(modelCallId);
     const answeredAt = this.now();
     const times = run.callTimes.get(modelCallId);
     if (times) times.answeredAt = answeredAt;
-    const sent = run.session?.answerToolCall(modelCallId, typeof output === 'string' ? output : JSON.stringify(output)) ?? false;
+    const body = typeof output === 'string' ? output : JSON.stringify(output);
+    const sent = (opts.continue === false ? run.session?.answerToolCall(modelCallId, body, { continue: false }) : run.session?.answerToolCall(modelCallId, body)) ?? false;
     trace('call.answered', { call: modelCallId, sent, visibility: reply ? reply.visibility : 'muted', asker: reply?.asker ?? null, refused: !!(output && typeof output === 'object' && 'refused' in output) });
     // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
     if (sent) {
@@ -1889,10 +1890,11 @@ export class AssistantRuntime {
    */
   private async runServerTool(run: CallRun, e: SessionEvents['toolCall'], asker: string, key: string): Promise<void> {
     const runs = (run.serverRuns ??= new Set());
-    if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }); return; }
+    // Answered with no continuation: the server says what was done, so the model is not asked to go on (no reply to wait for).
+    if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }, null, { continue: false }); return; }
     runs.add(key);
     if (runs.size > 200) runs.delete(runs.values().next().value as string);
-    this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' });
+    this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' }, null, { continue: false });
     const line = await run.policy.runTool!(run.call, { askedBy: asker, name: e.name, args: e.args }).catch((err: unknown) => {
       console.warn('[meeting-assistant] server tool failed', (err as Error).message);
       return null;

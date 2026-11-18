@@ -333,6 +333,38 @@ describe('tool calls', () => {
     await s.close();
   });
 
+  it('a server tool\'s answer asks for no continuation: nothing is waited for, and a held line goes out at once', async () => {
+    const { s } = make();
+    await s.start(START);
+    frame(callEvent('call_s', 'pad_add_tests', '{"cases":[]}'));
+    await tick();
+    let sent = 0;
+    s.sayVerbatim('held-1', 'Added twelve test cases at the bottom of the pad.', () => undefined, () => { sent += 1; });
+    await tick();
+    expect(sent).toBe(0); // a function call awaits its output: busy
+    expect(s.answerToolCall('call_s', '{"status":"done"}', { continue: false })).toBe(true);
+    await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(0);
+    expect(received.filter((e) => e['type'] === 'response.item.create')).toHaveLength(1);
+    expect(sent).toBe(1); // busy cleared with no answer-wait: the line was sent at once
+    expect(received.filter((e) => e['type'] === 'session.commentary.append')).toHaveLength(1);
+    await s.close();
+  });
+
+  it('a round with one call that asks to continue still gets exactly one continuation', async () => {
+    const { s } = make();
+    await s.start(START);
+    frame(callEvent('call_x', 'pad_add_tests', '{}')); frame(callEvent('call_y', 'search', '{"query":"y"}'));
+    await tick();
+    s.answerToolCall('call_x', '{}', { continue: false }); s.answerToolCall('call_y', '{}'); await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
+    // The next round starts clean: a server tool alone asks for none.
+    frame(callEvent('call_z', 'pad_add_import', '{}')); await tick();
+    s.answerToolCall('call_z', '{}', { continue: false }); await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
+    await s.close();
+  });
+
   it('sends silent context as session.thinking.append with no delegation id', async () => {
     const { s } = make();
     await s.start(START);

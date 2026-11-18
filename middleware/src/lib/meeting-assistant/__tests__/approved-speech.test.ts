@@ -585,6 +585,7 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
     const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
     try {
       await startCall('orgiq:servertools:r1');
+      const answered = jest.spyOn(ScriptedSession.prototype, 'answerToolCall');
       expect(scripted().startInput?.tools.map((t) => t.name)).toContain('pad_add_tests');
       await ask('Milo, it would be helpful to have another dozen test cases');
       await new Promise((r) => setTimeout(r, 400)); await flush();
@@ -593,6 +594,9 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       expect(ran[0]!.bytes).toBeGreaterThan(1500);
       expect(mockPosts.approved).toEqual([LINE]);
       expect(mockTrace.some((t) => t.ev === 'call.turn')).toBe(false);
+      // Answered with no continuation: the model is not asked to go on after a server tool.
+      expect(answered.mock.calls[0]?.[2]).toEqual({ continue: false });
+      answered.mockRestore();
       await ask('Milo, a huge batch of test cases please');
       await new Promise((r) => setTimeout(r, 400)); await flush();
       expect(ran).toHaveLength(1); // over the family's cap: refused before it runs

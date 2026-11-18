@@ -66,8 +66,12 @@ export interface LiveMeetingSession {
   appendAudio(pcm24kMono: Buffer): void;
   /** A typed request from `userId`. Throws SessionTextUnsupported when `acceptsText` is false. */
   sendText(userId: string, text: string): void;
-  /** The result of a tool call. True when it was sent; false when the call was unknown, already answered, or the session is closed. */
-  answerToolCall(callId: string, output: string): boolean;
+  /**
+   * The result of a tool call. True when it was sent; false when the call was unknown, already answered, or the session is closed.
+   * `continue: false`: the server says what was done (a family's server tool, policy.ts `runTool`), so the model is not asked to go
+   * on after the output: no continuation is requested, and nothing of the model's follows. The default asks it to continue.
+   */
+  answerToolCall(callId: string, output: string, opts?: { continue?: boolean }): boolean;
   /** Silent context for the model ("the card was declined"). False when the session cannot take it. */
   appendContext(text: string): boolean;
   /**

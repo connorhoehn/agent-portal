@@ -164,8 +164,9 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
     return callId;
   }
 
-  answerToolCall(callId: string, output: string): boolean {
+  answerToolCall(callId: string, output: string, opts: { continue?: boolean } = {}): boolean {
     if (this.ended || !this.open.delete(callId)) return false;
+    if (opts.continue === false) return true; // the server says what was done; the scripted model adds nothing
     const text = scriptedSpeech(output);
     queueMicrotask(() => { if (!this.ended) this.speak(text, callId); });
     return true;

@@ -228,11 +228,19 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
 
   sendText(_userId: string, _text: string): void { throw new SessionTextUnsupported(); }
 
-  answerToolCall(callId: string, output: string): boolean {
+  answerToolCall(callId: string, output: string, opts: { continue?: boolean } = {}): boolean {
     if (this.ended || !this.open.delete(callId)) return false;
     this.send({ type: 'response.item.create', event_id: this.eventId(), item: { type: 'function_call_output', call_id: callId, output } });
-    // One continuation per round: only when no other call of the round is still waiting (spec, "Outbound result").
-    if (this.open.size === 0) { this.send({ type: 'response.create', event_id: this.eventId() }); this.waitForAnswer(); }
+    if (opts.continue !== false) this.continueOwed = true;
+    // One continuation per round: only when no other call of the round is still waiting (spec, "Outbound result"), and only
+    // when a call of the round asked for one. A round of server tools only (the server says what was done) asks for none: the
+    // model has nothing to add, so no reply is waited for and a line the server holds goes out at once (measured 18 November:
+    // the continuation cost about 1 s of answer-wait before the held line, and the model's own words after the output).
+    if (this.open.size === 0) {
+      const owed = this.continueOwed;
+      this.continueOwed = false;
+      if (owed) { this.send({ type: 'response.create', event_id: this.eventId() }); this.waitForAnswer(); } else this.pumpSay();
+    }
     return true;
   }
 
@@ -268,6 +276,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
    * claimed one not yet over), a line already sent has not been claimed yet, a response of the second model is running or a
    * function call awaits its output, or the provider may be about to answer and the wait for its evidence is not over.
    */
+  /** A call answered in this round asked the model to continue (`answerToolCall`). */
+  private continueOwed = false;
+
   private busy(): boolean {
     return this.input !== null || this.answerWait !== null || this.output !== null || this.tailLeft > 0 || this.saying !== null || this.sayQueue.length > 0
       || this.open.size > 0 || this.responses.size > 0;
@@ -376,7 +387,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.clearOutputTimer();
     this.endAnswerWait();
     this.responseOver(null);
-    this.input = null; this.output = null; this.open.clear(); this.awaitingItem = false;
+    this.input = null; this.output = null; this.open.clear(); this.awaitingItem = false; this.continueOwed = false;
     this.sayQueue = []; this.sayWaiting = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
