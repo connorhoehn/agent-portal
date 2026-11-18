@@ -122,7 +122,7 @@ const INGRID_CODE_SAID: Said[] = [
   [6, 20, INGRID_CODE, "I'm writing the constructor now: capacity, rate, tokens start full."],
   [8, 40, INGRID_CODE, 'Then allow: add elapsed time times the rate, cap at capacity, and take one token if there is one.'],
   [12, 30, INGRID_CODE, "Let me run it with a burst of five and see what comes back."],
-  [13, 5, INGRID_CODE, "That's a mistake of mine: I forgot the key argument, so the call is wrong. Fixing the signature."],
+  [13, 5, INGRID_CODE, "That's a mistake of mine: I called allow without the time, so the call is wrong. Fixing the call."],
   [14, 10, HUGO, 'While you fix it, what would you do if two threads called allow at once?'],
   [14, 50, INGRID_CODE, 'A lock around the refill and the take. I would keep it per key so different keys do not wait on each other.'],
   [15, 50, INGRID_CODE, 'Running it again.'],

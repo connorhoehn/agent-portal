@@ -15,6 +15,8 @@
 // Snapshots and the hot cache are the library's memory stores: a pad lives as
 // long as the process. Row I4.3 keeps the durable record (the pad log).
 import { collabDocs, type CRDTDocumentAction, type RealtimeFeature } from '@connorhoehn/realtime-modules/server';
+import { config } from '../../../config.js';
+import { seededPadSnapshots } from '../../../mock/interviews-pad-seed.js';
 import { padInterviewId } from './channel.js';
 
 const PAD_ACTIONS: ReadonlySet<CRDTDocumentAction> = new Set<CRDTDocumentAction>(['read', 'update', 'awareness']);
@@ -24,7 +26,7 @@ export function padDocumentAuthz(_clientId: string, channel: string, _service: u
   return PAD_ACTIONS.has(action) && padInterviewId(channel) !== null;
 }
 
-/** The gateway feature that carries interview pads. */
+/** The gateway feature that carries interview pads. In the mock world the live seeded round's pad opens with its code. */
 export function interviewPads(): RealtimeFeature {
-  return collabDocs({ authz: padDocumentAuthz });
+  return collabDocs({ authz: padDocumentAuthz, ...(config.mock?.aurora ? { snapshotStore: seededPadSnapshots() } : {}) });
 }

@@ -288,7 +288,7 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
         submittedAt: at(-9, 16, 20),
         summary: 'The strongest coding round on this opening so far. Finished both problems with time to spare and found her own bug from the first run.',
         ratings: [
-          rate('problem-solving', 4, 'Had the bucket passing in about sixteen minutes, fixed her own missing-argument bug from the run, and kept the lock per key.'),
+          rate('problem-solving', 4, 'Had the bucket passing in about sixteen minutes, fixed her own missing-argument call from the run, and kept the lock per key.'),
           rate('code-quality', 4, 'Named the fake-clock refill test unprompted; one idempotency key per charge, kept for a day, and only safe errors retried.'),
         ] },
       { id: 'sc-ju3s5t85', interviewId: 'iv-f2b6t5zh', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,

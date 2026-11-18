@@ -91,9 +91,9 @@ const RAVI_ROWS: Row[] = [
 
 // ── Kwame's coding round (LIVE_INTERVIEW_ID, live now, Hugo leads): the limiter, first with the off-by-one, then fixed ──
 const KWAME = `guest:${LIVE_INTERVIEW_ID}`;
-const K_BUCKET = 'class RateLimiter:\n    def __init__(self, capacity: int, refill_per_second: float):\n        self.capacity = capacity\n        self.rate = refill_per_second\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now: float) -> bool:\n        self.tokens += (now - self.last) * self.rate\n        self.last = now\n        if self.tokens > 1:\n            self.tokens -= 1\n            return True\n        return False\n';
+export const K_BUCKET = 'class RateLimiter:\n    def __init__(self, capacity: int, refill_per_second: float):\n        self.capacity = capacity\n        self.rate = refill_per_second\n        self.tokens = capacity\n        self.last = 0.0\n\n    def allow(self, now: float) -> bool:\n        self.tokens += (now - self.last) * self.rate\n        self.last = now\n        if self.tokens > 1:\n            self.tokens -= 1\n            return True\n        return False\n';
 const K_CLAMP = '\ndef clamp(value, low, high):\n    return max(low, min(high, value))\n';
-const K_FIXED = K_BUCKET.replace('self.tokens += (now - self.last) * self.rate', 'self.tokens = clamp(self.tokens + (now - self.last) * self.rate, 0, self.capacity)').replace('self.tokens > 1', 'self.tokens >= 1') + K_CLAMP;
+export const K_FIXED = K_BUCKET.replace('self.tokens += (now - self.last) * self.rate', 'self.tokens = clamp(self.tokens + (now - self.last) * self.rate, 0, self.capacity)').replace('self.tokens > 1', 'self.tokens >= 1') + K_CLAMP;
 const KWAME_ROWS: Row[] = [
   { ...none, s: 45, whoId: HUGO, side: 'panel', kind: 'insert', questionId: 'q-be-ratelimit', from: 0, inserted: STARTER.length, length: STARTER.length, language: 'python' },
   { ...none, s: 47, whoId: HUGO, side: 'panel', kind: 'language', language: 'python' },

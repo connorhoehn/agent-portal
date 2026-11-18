@@ -9,6 +9,7 @@ import { defineFixture } from './core/index.js';
 import { seedAt } from './interviews-days.js';
 import type { RunRecord } from '../lib/interviews/runs/store.js';
 import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
+import { K_BUCKET, K_FIXED } from './interviews-pad-log.js';
 import type { RunLanguage, RunResult, RunStatus } from '../lib/interviews/runs/executor.js';
 
 /** Seconds after a round's start (`days` working days from today, at `hour` UTC). */
@@ -45,6 +46,13 @@ const LIMITER_FAILS = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow("
 const LIMITER_PASSES = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow("key-a", 0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint(results)\nprint("ok")\n';
 const LIMITER_KEYLESS = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow(0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint("ok")\n';
 const LIMITER_KEYLESS_OK = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow(0.0) for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint(results)\nprint("ok")\n';
+const INGRID_NO_TIME = 'limiter = RateLimiter(3, 1.0)\nresults = [limiter.allow() for _ in range(5)]\nassert results == [True, True, True, False, False], results\nprint("ok")\n';
+/** The line of `needle` in `text`, 1-based: where a traceback points. */
+const lineOf = (text: string, needle: string): number => text.split('\n').findIndex((l) => l.includes(needle)) + 1;
+// Kwame's live pad (mock/interviews-pad-log.ts K_BUCKET, K_FIXED; the gateway's pad opens on K_FIXED): each run is the pad
+// as it then was, with the five-call check under it.
+const KWAME_FIRST = `${K_BUCKET}\n${LIMITER_KEYLESS}`;
+const KWAME_SECOND = `${K_FIXED}\n${LIMITER_KEYLESS_OK}`;
 const RETRY_CHECK = 'provider = FlakyProvider(fail_first=2)\nprint(charge_with_retry(provider, 4200, "tok_test"))\nprint(provider.calls)\n';
 
 export const interviewRunsFixture = defineFixture<RunRecord>({
@@ -58,9 +66,9 @@ export const interviewRunsFixture = defineFixture<RunRecord>({
         stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 150, version: PY, source: LIMITER_PASSES }),
       // Ingrid's coding round (-9d 14:00).
       run({ interviewId: 'iv-d7q4n9xe', days: -9, hour: 14, runId: 'run-ingrid-01', language: 'python', entrypoint: 'main.py', by: cand('iv-d7q4n9xe', 'Ingrid'), s: 770, status: 'failed',
-        stdout: '', stderr: 'Traceback (most recent call last):\n  File "main.py", line 1, in <module>\n    limiter = RateLimiter(3, 1.0)\nTypeError: RateLimiter.allow() missing 1 required positional argument: \'now\'\n', exitCode: 1, timeMs: 120, version: PY, source: LIMITER_FAILS }),
+        stdout: '', stderr: `Traceback (most recent call last):\n  File "main.py", line 2, in <module>\n    results = [limiter.allow() for _ in range(5)]\nTypeError: RateLimiter.allow() missing 1 required positional argument: 'now'\n`, exitCode: 1, timeMs: 120, version: PY, source: INGRID_NO_TIME }),
       run({ interviewId: 'iv-d7q4n9xe', days: -9, hour: 14, runId: 'run-ingrid-02', language: 'python', entrypoint: 'main.py', by: HUGO, s: 960, status: 'succeeded',
-        stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 140, version: PY, source: LIMITER_PASSES }),
+        stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 140, version: PY, source: LIMITER_KEYLESS_OK }),
       run({ interviewId: 'iv-d7q4n9xe', days: -9, hour: 14, runId: 'run-ingrid-03', language: 'python', entrypoint: 'main.py', by: cand('iv-d7q4n9xe', 'Ingrid'), s: 2090, status: 'succeeded',
         stdout: 'ch_4200_ok\n3\n', stderr: '', exitCode: 0, timeMs: 410, version: PY, source: RETRY_CHECK }),
       // Ravi's coding round (-2d 15:00), in Swift.
@@ -71,10 +79,10 @@ export const interviewRunsFixture = defineFixture<RunRecord>({
       // Kwame's coding round, live now (mock/interviews.ts LIVE_INTERVIEW_ID): the first run fails the five-call check
       // (the bucket lets only two through), the second passes after the one-character fix.
       run({ interviewId: LIVE_INTERVIEW_ID, days: 0, hour: 0, base: liveStart(), runId: 'run-kwame-01', language: 'python', entrypoint: 'main.py', by: cand(LIVE_INTERVIEW_ID, 'Kwame'), s: 270, status: 'failed',
-        stdout: '', stderr: 'Traceback (most recent call last):\n  File "main.py", line 3, in <module>\n    assert results == [True, True, True, False, False], results\nAssertionError: [True, True, False, False, False]\n',
-        exitCode: 1, timeMs: 130, version: PY, source: LIMITER_KEYLESS }),
+        stdout: '', stderr: `Traceback (most recent call last):\n  File "main.py", line ${lineOf(KWAME_FIRST, 'assert results')}, in <module>\n    assert results == [True, True, True, False, False], results\nAssertionError: [True, True, False, False, False]\n`,
+        exitCode: 1, timeMs: 130, version: PY, source: KWAME_FIRST }),
       run({ interviewId: LIVE_INTERVIEW_ID, days: 0, hour: 0, base: liveStart(), runId: 'run-kwame-02', language: 'python', entrypoint: 'main.py', by: cand(LIVE_INTERVIEW_ID, 'Kwame'), s: 470, status: 'succeeded',
-        stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 140, version: PY, source: LIMITER_KEYLESS_OK }),
+        stdout: '[True, True, True, False, False]\nok\n', stderr: '', exitCode: 0, timeMs: 140, version: PY, source: KWAME_SECOND }),
     ],
     empty: () => [],
   },
