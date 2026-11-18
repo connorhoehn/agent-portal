@@ -7,7 +7,7 @@ import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggest
 import { ScriptedCoachModel, type CoachModel } from '../model.js';
 import type { CoachLine } from '../prompt.js';
 import { MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS } from '../rules.js';
-import { MODEL_FAILURES_BEFORE_PAUSE, answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
+import { MODEL_FAILURES_BEFORE_PAUSE, MODEL_FAILURES_KEPT, answerSuggestion, modelFailuresOf, noteModelCall, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
 
@@ -208,6 +208,17 @@ describe('a failing model', () => {
     expect(await read()).toEqual({ suggestion: null, paused: 'model', retryAfterMs: SUGGESTION_GAP_MS });
     now += 1_000;
     expect((await read()).paused).toBe('model'); // inside the gap: no call, still paused
+  });
+
+  it(`holds counts for at most ${MODEL_FAILURES_KEPT} interviews, the least recently failed dropped first`, () => {
+    noteModelCall('iv-first', true);
+    noteModelCall('iv-kept', true);
+    for (let i = 0; i < MODEL_FAILURES_KEPT - 2; i += 1) noteModelCall(`iv-round-${i}`, true);
+    noteModelCall('iv-kept', true); // failed again: now the most recent
+    noteModelCall('iv-one-more', true);
+    expect([modelFailuresOf('iv-first'), modelFailuresOf('iv-kept'), modelFailuresOf('iv-one-more')]).toEqual([0, 2, 1]);
+    noteModelCall('iv-kept', false);
+    expect(modelFailuresOf('iv-kept')).toBe(0);
   });
 
   it('a success clears the count', async () => {

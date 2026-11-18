@@ -110,10 +110,25 @@ const inFlight = new Set<string>();
  * Consecutive calls per interview that the model failed (an error or a timeout, not an answer the parser dropped). At this many
  * the read says `paused: 'model'`, the same shape as the budget's pause, so the lead sees the coach is down instead of an
  * empty panel. The coach still tries again at the usual gap; the first call the model answers clears the count.
+ *
+ * Held in this process for at most MODEL_FAILURES_KEPT interviews, the least recently failed dropped first: a round that ended
+ * while its model was down is never read again, and its count would otherwise stay for the life of the process. Dropping a
+ * live round's count only delays its pause notice.
  */
 export const MODEL_FAILURES_BEFORE_PAUSE = 3;
+export const MODEL_FAILURES_KEPT = 200;
 const modelFailures = new Map<string, number>();
 const modelPaused = (interviewId: string): boolean => (modelFailures.get(interviewId) ?? 0) >= MODEL_FAILURES_BEFORE_PAUSE;
+/** Count a failed model call for the interview (`failed`), or clear its count when the model answered. */
+export function noteModelCall(interviewId: string, failed: boolean): void {
+  const before = modelFailures.get(interviewId) ?? 0;
+  modelFailures.delete(interviewId);
+  if (!failed) return;
+  modelFailures.set(interviewId, before + 1);
+  if (modelFailures.size > MODEL_FAILURES_KEPT) modelFailures.delete(modelFailures.keys().next().value!);
+}
+/** Tests: the interview's consecutive failures as this process holds them. */
+export function modelFailuresOf(interviewId: string): number { return modelFailures.get(interviewId) ?? 0; }
 
 /** The interview and the opening that holds its kit, found in the viewer's scope by the route. */
 export interface CoachRef { interview: Interview; opening: Opening }
@@ -210,8 +225,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
       console.warn('[interviews] coach model failed', (e as Error)?.name ?? 'error');
       result = { raw: null, code: 'error', sent: false, usage: null };
     }
-    if (result.code === 'error' || result.code === 'timeout') modelFailures.set(interview.id, (modelFailures.get(interview.id) ?? 0) + 1);
-    else modelFailures.delete(interview.id);
+    noteModelCall(interview.id, result.code === 'error' || result.code === 'timeout');
     await book(d, model, input, held, result, viewer.userId);
     const parsed: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
       ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
