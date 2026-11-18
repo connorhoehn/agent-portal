@@ -9,8 +9,7 @@
 // round's minutes and its start. It is logged, posted in the call chat with the approved mark and said aloud as approved words
 // when Milo is in the call with its voice on; with Milo not listening it is chat only, and with Milo not in the call it is only
 // this answer's `line`. At most one request every 10 seconds per interview: within that, `line` is a plain sentence and nothing
-// is logged, posted or said. The voice is the listening period's own session; each spoken line first holds a little under the
-// interview's cap (speak/index.ts, part `speech`), and a reached cap leaves the line in the chat, unsaid.
+// is logged, posted or said. Each spoken line holds a little under the interview's cap (speak `speech`); at the cap: chat only.
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { admissionOf } from '../lib/interviews/invite/admission.js';
