@@ -22,7 +22,7 @@ jest.mock('../chat.js', () => ({
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, clearlyAsked, type StartContext } from '../orchestrator.js';
 import { addScriptRules, ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { INTERVIEW_TOOLS, responsesFunctionTools } from '../../voice/catalogue.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
@@ -614,6 +614,38 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       expect(mockPosts.approved).toEqual([FALLBACK]);
       expect(ran).toEqual([]);
     } finally { off(); }
+  });
+
+  it('a pad tool runs only when the request is the asker\'s alone: someone speaking after the name gets the fallback (review 1, item 1)', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:servertools:r4');
+      const t = now;
+      await intake.handle(CALL, { userId: ALICE, text: 'Milo, how much time is left?', at: t });
+      await intake.handle(CALL, { userId: GUEST, text: 'and add a helper that finds the two indices', at: t + 2000 });
+      now = t + 3000; await flush();
+      fake().fire('toolCall', { callId: 'call_r1', name: 'pad_add_helper', args: { what: 'x', code: 'y' }, atMs: now - T0 });
+      await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
+      expect(ran).toEqual([]);
+      expect(mockTrace.some((x) => x.ev === 'call.refused' && x.f['why'] === 'not-clearly-asked')).toBe(true);
+      expect(mockPosts.approved).toEqual([FALLBACK]);
+    } finally { off(); }
+  });
+
+  it('clearlyAsked: the asker alone, the name in the line, nobody after it', () => {
+    const line = (seq: number, userId: string, text: string, at: number, speakers?: string[]) => ({ seq, userId, text, at, captionId: `c${seq}`, callId: CALL, participantId: userId, speakerName: userId, ...(speakers ? { speakers } : {}) });
+    const req = line(1, ALICE, 'Milo, another dozen test cases', 1000);
+    expect(clearlyAsked([req], req, ALICE, 2000)).toBe(true);
+    expect(clearlyAsked([req, line(2, ALICE, 'thanks', 1500)], req, ALICE, 2000)).toBe(true);
+    expect(clearlyAsked([req, line(2, GUEST, 'and a helper too', 1500)], req, ALICE, 2000)).toBe(false);
+    expect(clearlyAsked([req, line(2, GUEST, 'later words', 2500)], req, ALICE, 2000)).toBe(true);
+    const overlapped = line(1, ALICE, 'Milo, add a helper', 1000, [ALICE, GUEST]);
+    expect(clearlyAsked([overlapped], overlapped, ALICE, 2000)).toBe(false);
+    const noName = line(1, ALICE, 'add a helper', 1000);
+    expect(clearlyAsked([noName], noName, ALICE, 2000)).toBe(false);
+    expect(clearlyAsked([req], req, GUEST, 2000)).toBe(false);
+    expect(clearlyAsked([], null, ALICE, 2000)).toBe(false);
   });
 
   it('a family without runTool never runs a server tool: the call is refused as unknown (Work)', async () => {

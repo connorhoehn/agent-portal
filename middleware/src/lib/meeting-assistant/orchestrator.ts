@@ -1842,7 +1842,19 @@ export class AssistantRuntime {
       return;
     }
     if (!argsOk) { await this.refuse(run, e.callId, 'invalid arguments'); return; }
-    if (onServer) { await this.runServerTool(run, e, asker, `${requestKey}|${name}`); return; }
+    if (onServer) {
+      // A server tool that writes runs with no confirm card, so the request must be the asker's beyond doubt (review 1, item 1).
+      if (serverTool(name)?.who === 'pad' && !clearlyAsked(lines, addressing ?? null, asker, atMs)) {
+        trace('call.refused', { call: e.callId, why: 'not-clearly-asked' });
+        this.answer(run, e.callId, { refused: 'not clearly asked' }, null, { continue: false });
+        await this.store.bumpRefused(callId);
+        const line = run.policy.heldFallback ? await run.policy.heldFallback(run.call, { askedBy: asker, text: addressing?.text ?? '' }).catch(() => null) : null;
+        if (line) await this.sayHeld(run, asker, line);
+        return;
+      }
+      await this.runServerTool(run, e, asker, `${requestKey}|${name}`);
+      return;
+    }
     // (d) Read or write; private tools are decision 6's list.
     const kind = classifyCall(name, e.args);
     if (!kind) { await this.refuse(run, e.callId, 'unknown tool'); return; }
@@ -2393,3 +2405,16 @@ export function startTurnSweep(everyMs = 30_000, runtimeOf: () => AssistantRunti
 /** The process's runtime if one was ever made; never makes one (shutdown must not create what it is about to stop). */
 export function peekAssistantRuntime(): AssistantRuntime | null { return runtime; }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; if (next) hookProposals(); }
+
+/**
+ * Is `request` (the line that addressed Milo, as the asker's) beyond doubt the asker's own request at `atMs` (when the model
+ * began the work)? A server tool that writes (an interview's pad tools) has no confirm card, so: the line is heard from the asker
+ * alone (no overlapped speech), it carries Milo's name itself, and nobody else spoke between it and `atMs`. Anything else is
+ * not run: someone else's words after the name (a candidate's "and add a helper…" after the lead's question) could be what the
+ * model is acting on.
+ */
+export function clearlyAsked(lines: readonly TranscriptLine[], request: TranscriptLine | null, asker: string, atMs: number): boolean {
+  if (!request || request.userId !== asker || findAddress(request.text) === null) return false;
+  if (request.speakers && request.speakers.some((u) => u !== asker)) return false;
+  return !lines.some((l) => l.seq > request.seq && l.at <= atMs && (l.userId !== asker || (l.speakers ?? []).some((u) => u !== asker)));
+}
