@@ -181,6 +181,18 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 
 **17 November, hardening wave 3 (in progress).** The gated SQL suites run against a real Postgres (the live run found an insert that named `started_at` without a value, which only a real database would refuse), the four small model callers fold into one seam (O-182), and the isolation sweep (E2) covers every route, channel, the pad, Milo's call routes, the export and the record for other tenants and for a guest. The lines in platform-api, realtime-examples and realtime-modules are fixed in worktrees of those repositories by this pass (no other session owns them). Then E1 and E4.
 
+**18 November, E4 lane C (who may read what; findings 29 to 38).**
+- 29: an interviewer's profile read carries no stage history, so never the hiring decision or its reason (scope.ts `mayReadStageHistory`: recruiter, the opening's hiring manager, admin); the page hides the empty section.
+- 30: a scorecard requires only its round's competencies: those its chosen questions gather, else its round type's bank, else the kit (scorecard.ts `roundCompetencyIds`); the rest are optional, "Not seen in this round"; the recap open follows the same rule.
+- 31: the candidate's header is "<role> interview" ("Interview" before the role is known), never the staff tenant's name; no company name exists in the data, so none is shown.
+- 32: the candidate reads the lead's name and nobody else's: waiting page, the lead's tile and the roster (the room's read carries the lead's call id, which the call's frames already carry), the call chat (the server renames another panel member "Interviewer" for a guest reader) and the pad.
+- 33: in an interview Milo's notices say "writes notes for the interview panel only" (a policy's `minutesWording`); the acknowledgement is still asked of someone who read the panel notice (it consents to this call's transcription, not to the notice).
+- 34: Milo's line on the candidate's side is one line that wraps; a repeat re-announces the question instead of adding a copy.
+- 35: inside the 10 s limit a request is still answered in text; only the voice, the log and the chat post are held.
+- 36: the ended page draws no step strip.
+- 37: the lead's idle room shows one fact row "Off for this interview: recording, transcript, Milo" listing only what is off (decision 5); lane B places it in InterviewRoomPage.
+- 38: a recap answer's source reads the record's clock ("at 0:07"), linking to the record with `?at=<seconds>`; the record page's seek on that parameter is lane B's.
+
 **Open after wave 2 (pinned as failing tests or findings, not yet repaired).**
 - ~~Decision 6: the coach guard and the Ask pre-check let through some paraphrased or non-English judgements ("Should we hire them?").~~ Closed 17 November by the judgement detector (see decision 6); the pins are plain tests now.
 - ~~Milo's speech reserves no money against the interview's cap.~~ Closed 18 November: every line said aloud (approved words, the candidate's buttons, a spoken request's held answer) first holds $0.01 under part `speech` and releases it after, since the listening period's minutes book the audio; a refused hold keeps the line in the chat, unsaid (`speak-money.test.ts`).
