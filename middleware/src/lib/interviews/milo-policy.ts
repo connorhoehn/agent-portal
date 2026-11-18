@@ -35,6 +35,7 @@ import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT, type Interview } from './types.js';
 import { interviewRunsWith } from './consent/effects.js';
+import { MILO_CAN_DO } from './speak/index.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
@@ -170,11 +171,13 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     if (!isGuestId(request.askedBy)) return null;
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
-    const { logCandidateLine, MILO_CAN_DO } = await import('./speak/index.js');
+    const { logCandidateLine } = await import('./speak/index.js');
     // A guest's request never reaches a model: with no live interview of its own behind the call, the fixed sentence (not logged).
     if (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false))) return MILO_CAN_DO;
     return logCandidateLine(interview, request.text, request.askedBy).catch(() => MILO_CAN_DO);
   },
+  // The same fixed sentence for a request heard again (looping audio) is posted once a minute per asker (orchestrator.ts).
+  heldRefusal: MILO_CAN_DO,
   heldTextSaid: async (call, said) => {
     const interviewId = interviewOfLobby(call.lobby);
     if (!interviewId || !said.spoken) return;

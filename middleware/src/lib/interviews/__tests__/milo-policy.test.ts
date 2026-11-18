@@ -255,6 +255,13 @@ describe('relaysLiveSpeech and fixed requests', () => {
   });
 });
 
+describe('the fixed refusal', () => {
+  it('declares its one fixed refusal, so a request heard again is refused once a minute', async () => {
+    const { MILO_CAN_DO } = await import('../speak/index.js');
+    expect(P.heldRefusal).toBe(MILO_CAN_DO);
+  });
+});
+
 describe('listeningLimitMinutes: the round plus 15, no extension past it', () => {
   beforeEach(() => { registerInterviewsMiloPolicy({ INTERVIEWS_ENABLED: 'true' }); });
 

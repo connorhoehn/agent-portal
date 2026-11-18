@@ -5,13 +5,13 @@
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}, cognito: {}, mock: { aurora: true }, meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } } }));
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () => null) }));
 jest.mock('../../social-notify.js', () => ({ notify: jest.fn(async () => []) }));
-const mockPosts = { replies: [] as string[], notices: [] as string[], approved: [] as string[] };
+const mockPosts = { replies: [] as string[], notices: [] as string[], approved: [] as string[], approvedNames: [] as string[] };
 const mockTrace: Array<{ ev: string; f: Record<string, unknown> }> = [];
 jest.mock('../trace.js', () => ({ trace: (ev: string, f: Record<string, unknown> = {}) => { mockTrace.push({ ev, f }); } }));
 jest.mock('../chat.js', () => ({
   nameOf: async (id: string) => id,
   postReply: async (_c: string, r: { text: string }) => { mockPosts.replies.push(r.text); return { id: 'm' }; },
-  postApprovedAnswer: async (_c: string, text: string) => { mockPosts.approved.push(text); return { id: 'a' }; },
+  postApprovedAnswer: async (_c: string, text: string, _o?: unknown, by?: { askedByName?: string }) => { mockPosts.approved.push(text); mockPosts.approvedNames.push(by?.askedByName ?? ''); return { id: 'a' }; },
   postPrivately: async () => true,
   postNoticeQuietly: async (_c: string, text: string) => { mockPosts.notices.push(text); },
   noticeText: (jest.requireActual('../chat.js') as typeof import('../chat.js')).noticeText,
@@ -22,7 +22,7 @@ jest.mock('../chat.js', () => ({
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, HELD_REFUSAL_REPEAT_MS, type StartContext } from '../orchestrator.js';
 import { ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -87,7 +87,7 @@ beforeAll(() => { unregister = registerMeetingAssistantPolicy('orgiq:saytest', N
 afterAll(() => { unregister?.(); });
 beforeEach(() => {
   now = T0; sent = []; mockTrace.length = 0;
-  mockPosts.replies.length = 0; mockPosts.notices.length = 0; mockPosts.approved.length = 0;
+  mockPosts.replies.length = 0; mockPosts.notices.length = 0; mockPosts.approved.length = 0; mockPosts.approvedNames.length = 0;
   store = new MemoryAssistantStore(); setAssistantStore(store);
   const source = new MockTranscriptSource();
   intake = new LineIntake(store, { clock: () => now, tickMs: 0, source: () => source });
@@ -294,6 +294,33 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
       expect(mockPosts.replies).toEqual([]);
       expect(noted).toEqual([{ text: 'About 20 minutes are left in this round.', spoken: true }]);
       expect(sent).toHaveLength(TONE);
+    } finally { off(); }
+  });
+});
+
+describe('7. the fixed refusal for a request heard again', () => {
+  const REFUSAL = 'I can repeat the question or tell you how much time is left.';
+  const HELD: MeetingAssistantPolicy = {
+    ...NO_RELAY, id: 'refusal-test', heldRefusal: REFUSAL,
+    answerFromHeldText: async (_c, r) => (r.askedBy === GUEST ? (/time/.test(r.text) ? 'About 20 minutes are left in this round.' : REFUSAL) : null),
+  };
+
+  it('the same refusal for the same asker inside the window is posted once; after it, again; other answers are not held back', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:refusaltest', HELD);
+    try {
+      await startCall('orgiq:refusaltest:r1');
+      const ask = async (text: string) => { await intake.handle(CALL, { userId: GUEST, text, at: now }); now += 5000; await intake.tick(); await flush(); };
+      await ask('Milo, what is two plus two?');
+      now += 25_000;
+      await ask('Milo, what is two plus two?'); // the same audio, looped 30 s later
+      expect(mockPosts.approved).toEqual([REFUSAL]);
+      expect(mockTrace.some((t) => t.ev === 'held.repeat')).toBe(true);
+      await ask('Milo, how much time is left?');
+      await ask('Milo, how much time is left?');
+      expect(mockPosts.approved.filter((t) => t !== REFUSAL)).toHaveLength(2);
+      now += HELD_REFUSAL_REPEAT_MS;
+      await ask('Milo, what is two plus two?');
+      expect(mockPosts.approved.filter((t) => t === REFUSAL)).toHaveLength(2);
     } finally { off(); }
   });
 });

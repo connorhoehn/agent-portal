@@ -99,6 +99,11 @@ export interface MeetingAssistantPolicy {
    */
   heldTextSaid?(call: PolicyCall, said: { askedBy: string; text: string; spoken: boolean }): Promise<void>;
   /**
+   * The one fixed sentence `answerFromHeldText` answers a request it will not serve with. The same sentence for the same asker is
+   * posted (and said) once per `HELD_REFUSAL_REPEAT_MS`: a request heard again (audio that loops, a repeat) is not refused twice.
+   */
+  readonly heldRefusal?: string;
+  /**
    * The family keeps its calls' stored words for its own period and removes them itself (the interviews retention: media 90 days,
    * or a deletion request). True: the meeting assistant's age sweep leaves the call's lines, minutes, turns, actions, record and
    * chat alone; the abandoned-call ending and the proposals' expiry still apply. Absent or false: the sweep removes them (Work).
