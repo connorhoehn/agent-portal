@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
   interview_id    TEXT NOT NULL REFERENCES interviews(id),
   call_id         TEXT,
   kind            TEXT NOT NULL CHECK (kind IN ('question', 'answer')),
-  source          TEXT NOT NULL CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports')),
+  source          TEXT NOT NULL CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack')),
   question_id     TEXT,
   suggestion_id   TEXT,
   text            TEXT NOT NULL,
@@ -304,11 +304,11 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
   spoken          BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_log (interview_id, said_at);
--- Milo's introduction (`intro`) and its line after one of its interview tools wrote into the pad (`tests`, `imports`), 18 November. Tables made before
+-- Milo's introduction (`intro`) and its line after one of its interview tools wrote into the pad (`tests`, `imports`, `helper`), and "On it." while a slow one works (`ack`), 18 November. Tables made before
 -- carry the five-source list; replace it by name.
 ALTER TABLE interview_said_log DROP CONSTRAINT IF EXISTS interview_said_log_source_check;
 ALTER TABLE interview_said_log ADD CONSTRAINT interview_said_log_source_check
-  CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports'));
+  CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack'));
 -- `posted`: the words reached the call chat (the candidate read them). A row is written before that, so one whose post never
 -- happened (Milo not in the call, the post refused) stays false and is no question the candidate was asked.
 -- Rows written before the column are backfilled once, as the column is added (the DO block makes it repeatable without
@@ -414,7 +414,7 @@ CREATE TABLE IF NOT EXISTS interview_pad_events (
   client_at     TIMESTAMPTZ NOT NULL,
   who_id        TEXT NOT NULL,
   side          TEXT NOT NULL CHECK (side IN ('panel', 'candidate', 'milo')),
-  kind          TEXT NOT NULL CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports')),
+  kind          TEXT NOT NULL CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper')),
   from_pos      INTEGER CHECK (from_pos >= 0),
   inserted      INTEGER CHECK (inserted >= 0),
   deleted       INTEGER CHECK (deleted >= 0),
@@ -429,13 +429,13 @@ CREATE TABLE IF NOT EXISTS interview_pad_events (
 );
 CREATE INDEX IF NOT EXISTS interview_pad_events_snapshot_idx ON interview_pad_events (interview_id, seq) WHERE kind = 'snapshot';
 -- Milo's own edits (18 November): what its interview tools write into the pad, by the server (side `milo`): test cases (kind
--- `tests`) or import lines (kind `imports`), with where the text starts, its characters and lines, and the snapshot taken as
+-- `tests`), import lines (kind `imports`) or a helper (kind `helper`), with where the text starts, its characters and lines, and the snapshot taken as
 -- it wrote them. Tables made before carry the older lists.
 ALTER TABLE interview_pad_events DROP CONSTRAINT IF EXISTS interview_pad_events_side_check;
 ALTER TABLE interview_pad_events ADD CONSTRAINT interview_pad_events_side_check CHECK (side IN ('panel', 'candidate', 'milo'));
 ALTER TABLE interview_pad_events DROP CONSTRAINT IF EXISTS interview_pad_events_kind_check;
 ALTER TABLE interview_pad_events ADD CONSTRAINT interview_pad_events_kind_check
-  CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports'));
+  CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper'));
 
 -- ── what the lead lets Milo do for the candidate (18 November) ─────────────
 -- One row per interview once the lead has changed a setting; no row reads as the defaults (off). `candidate_may_ask`: the

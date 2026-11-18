@@ -1,28 +1,35 @@
-// Milo's test cases as text in the pad (docs/interviews-tenant-plan.md, "Milo writes test cases"). Pure.
+// Milo's test cases as text in the pad (docs/interviews-tenant-plan.md, "Milo's interview tools", `pad_add_tests`). Pure.
 //
-// The model answers with data only: each case's arguments and expected value as JSON. The words in the pad are written here,
-// never by the model, so nothing it says reaches the pad as code: a case is JSON values turned into the language's literals.
+// The cases arrive as data only (the live session's background agent writes each case's arguments and expected value as JSON:
+// milo-tools/tests.ts checks them). The words in the pad are written here, never by a model, so nothing a model says reaches the
+// pad as code: a case is JSON values turned into the language's literals.
 //
-// The block is marked ("Test cases from Milo") and says what the cases are: inputs and expected values written from the
-// question alone, not checked, and not a judgement of the candidate's code. Where the pad's language runs as a script
-// (Python, JavaScript, TypeScript) and the pad defines a top-level function, the block also runs each case through that
-// function and prints ok or DIFF per case, so the round's Run button tries them as they are; elsewhere (Swift, Java, Go,
-// C++, or no function found) the cases are comments, one per line, in the call's notation.
+// The block is marked ("Test cases from Milo") and says what the cases are. An expected value is written only when the question's
+// reference agreed with it (`checked`); a question with no reference gets inputs only, and the expected values are the coder's to
+// fill in. Never a judgement of the candidate's code. Where the pad's language runs as a script (Python, JavaScript, TypeScript)
+// and the pad defines a top-level function, the block also runs each case through that function (ok or DIFF per case when
+// checked, the result when not), so the round's Run button tries them as they are; elsewhere (Swift, Java, Go, C++, or no
+// function found) the cases are comments, one per line, in the call's notation.
 import type { PadLanguage } from '../types.js';
 
-/** One case: the arguments in order, and the value the question says the call returns. JSON values only. */
-export interface TestCase { args: unknown[]; expected: unknown }
+/** One case: the arguments in order, and (checked against the question's reference) the value the call returns. JSON values only. */
+export interface TestCase { args: unknown[]; expected?: unknown }
 
 /** The block's first line in every language, after the comment marker: how a reader (and the record) finds Milo's block. */
 export const TEST_CASES_TITLE = 'Test cases from Milo';
 
 const COMMENT: Readonly<Record<PadLanguage, string>> = { python: '#', swift: '//', javascript: '//', typescript: '//', java: '//', go: '//', cpp: '//' };
 
-/** The note under the title: what the cases are and are not. */
+/** The note under the title: what the cases are and are not. With expected values, each one agreed with the question's reference. */
 export const TEST_CASES_NOTE = [
-  'Inputs and expected values Milo wrote from the question alone.',
-  'Milo did not run or check your code, and the expected values are',
-  'unchecked: edit or delete any case.',
+  'Inputs Milo wrote for the question; each expected value was checked',
+  'against the question\'s reference. Milo did not run or judge your code:',
+  'edit or delete any case.',
+];
+/** The note for inputs only (no reference to check expected values against). */
+export const TEST_INPUTS_NOTE = [
+  'Inputs Milo wrote for the question. The expected values are yours to',
+  'fill in. Milo did not run or judge your code: edit or delete any case.',
 ];
 
 /**
@@ -68,32 +75,49 @@ export function scriptLiteral(v: unknown): string {
   return JSON.stringify(v);
 }
 
-function header(language: PadLanguage, count: number): string[] {
+function header(language: PadLanguage, count: number, checked: boolean): string[] {
   const c = COMMENT[language];
-  return [`${c} --- ${TEST_CASES_TITLE} (${count}) ---`, ...TEST_CASES_NOTE.map((l) => `${c} ${l}`)];
+  return [`${c} --- ${TEST_CASES_TITLE} (${count}) ---`, ...(checked ? TEST_CASES_NOTE : TEST_INPUTS_NOTE).map((l) => `${c} ${l}`)];
 }
 
-/** The block for `cases` in `language`, calling `fn` where the language can; it ends with a newline. */
+/**
+ * The block for `cases` in `language`, calling `fn` where the language can; it ends with a newline. Checked (expected values
+ * written) only when every case carries one; otherwise inputs only.
+ */
 export function renderTestCases(cases: readonly TestCase[], language: PadLanguage, fn: string | null): string {
   const c = COMMENT[language];
-  const lines = header(language, cases.length);
+  const checked = cases.length > 0 && cases.every((t) => t.expected !== undefined);
+  const lines = header(language, cases.length, checked);
   const runs = fn !== null && RUNS_AS_SCRIPT.has(language);
+  const py = (t: TestCase) => `(${t.args.map(pythonLiteral).join(', ')}${t.args.length === 1 ? ',' : ''})`;
   if (runs && language === 'python') {
-    lines.push('milo_test_cases = [', '    # (arguments, expected)');
-    for (const t of cases) lines.push(`    ((${t.args.map(pythonLiteral).join(', ')}${t.args.length === 1 ? ',' : ''}), ${pythonLiteral(t.expected)}),`);
-    lines.push(']', 'for args, expected in milo_test_cases:', `    got = ${fn}(*args)`,
-      '    print("ok  " if got == expected else "DIFF", args, "->", got, "| expected", expected)');
+    if (checked) {
+      lines.push('milo_test_cases = [', '    # (arguments, expected)');
+      for (const t of cases) lines.push(`    (${py(t)}, ${pythonLiteral(t.expected)}),`);
+      lines.push(']', 'for args, expected in milo_test_cases:', `    got = ${fn}(*args)`,
+        '    print("ok  " if got == expected else "DIFF", args, "->", got, "| expected", expected)');
+    } else {
+      lines.push('milo_test_inputs = [', '    # arguments');
+      for (const t of cases) lines.push(`    ${py(t)},`);
+      lines.push(']', 'for args in milo_test_inputs:', `    print(args, "->", ${fn}(*args))`);
+    }
   } else if (runs) {
     const typed = language === 'typescript';
-    lines.push(`const miloTestCases${typed ? ': Array<[unknown[], unknown]>' : ''} = [`, '  // [arguments, expected]');
-    for (const t of cases) lines.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
     const call = typed ? `(${fn} as unknown as (...a: unknown[]) => unknown)(...args)` : `${fn}(...args)`;
-    lines.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
-      '  console.log(JSON.stringify(got) === JSON.stringify(expected) ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
-      '}');
+    if (checked) {
+      lines.push(`const miloTestCases${typed ? ': Array<[unknown[], unknown]>' : ''} = [`, '  // [arguments, expected]');
+      for (const t of cases) lines.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
+      lines.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
+        '  console.log(JSON.stringify(got) === JSON.stringify(expected) ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
+        '}');
+    } else {
+      lines.push(`const miloTestInputs${typed ? ': unknown[][]' : ''} = [`, '  // arguments');
+      for (const t of cases) lines.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
+      lines.push('];', 'for (const args of miloTestInputs) {', `  console.log(JSON.stringify(args), "->", JSON.stringify(${call}));`, '}');
+    }
   } else {
     const name = fn ?? 'f';
-    for (const t of cases) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')}) -> ${scriptLiteral(t.expected)}`);
+    for (const t of cases) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')})${checked ? ` -> ${scriptLiteral(t.expected)}` : ''}`);
   }
   return `${lines.join('\n')}\n`;
 }

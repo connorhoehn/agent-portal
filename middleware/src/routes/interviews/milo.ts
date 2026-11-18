@@ -16,9 +16,9 @@
 //   POST /interviews/:id/milo-intro               the lead only, ConductInterview, while `live` → { said, line }. Milo says its
 //                                                  fixed introduction (lib/interviews/speak/intro.ts) on the same path, once an
 //                                                  interview: 409 { error } once it has, or while Milo is not in the call.
-//   GET  /interviews/:id/milo-settings            the seats of that interview → { settings: { testCases }, introduced }
-//   PUT  /interviews/:id/milo-settings            the lead only, ConductInterview, before the round ends, body { testCases }
-//                                                  → { settings }: whether the candidate may ask Milo for test cases
+//   GET  /interviews/:id/milo-settings            the seats of that interview → { settings: { candidateMayAsk }, introduced }
+//   PUT  /interviews/:id/milo-settings            the lead only, ConductInterview, before the round ends, body { candidateMayAsk }
+//                                                  → { settings }: whether the candidate may ask Milo to change the pad (test cases, imports, a helper)
 //                                                  (lib/interviews/milo-settings.ts; off by default).
 //
 // Everyone outside gets the tenant's one not-found, whatever the reason: a guest (who also holds no ViewInterviews and is
@@ -130,14 +130,14 @@ miloRouter.post('/interviews/:id/milo-intro', asyncHandler(async (req, res) => {
 
 /** The states after the call: nothing of Milo's is set any more. */
 const CLOSED = new Set(['ended', 'scored', 'reviewed', 'declined', 'cancelled']);
-const BAD_SETTINGS = 'Send { "testCases": true } or { "testCases": false }.';
+const BAD_SETTINGS = 'Send { "candidateMayAsk": true } or { "candidateMayAsk": false }.';
 
 miloRouter.get('/interviews/:id/milo-settings', asyncHandler(async (req, res) => {
   const p = await panelSide(req);
   if (!p || !seatOf(p.ref.interview, p.userId)) throw new NotFoundError(NOTHING_HERE);
   res.setHeader('Cache-Control', 'no-store');
   const [settings, rows] = await Promise.all([miloSettingsStore().get(p.ref.interview.id), saidStore().list(p.ref.interview.id)]);
-  res.json({ settings: { testCases: settings.testCases }, introduced: introduced(rows, interviewsNowMs(), false) });
+  res.json({ settings: { candidateMayAsk: settings.candidateMayAsk }, introduced: introduced(rows, interviewsNowMs(), false) });
 }));
 
 miloRouter.put('/interviews/:id/milo-settings', asyncHandler(async (req, res) => {
@@ -146,8 +146,8 @@ miloRouter.put('/interviews/:id/milo-settings', asyncHandler(async (req, res) =>
   const p = await panelSide(req);
   if (!p || p.ref.interview.leadId !== p.userId || CLOSED.has(p.ref.interview.state)) throw new NotFoundError(NOTHING_HERE);
   res.setHeader('Cache-Control', 'no-store');
-  const testCases = (req.body as Record<string, unknown> | undefined)?.['testCases'];
-  if (typeof testCases !== 'boolean') { res.status(400).json({ error: BAD_SETTINGS }); return; }
-  const settings = await miloSettingsStore().setTestCases(p.ref.interview.id, testCases, p.userId, new Date(interviewsNowMs()).toISOString());
-  res.json({ settings: { testCases: settings.testCases } });
+  const on = (req.body as Record<string, unknown> | undefined)?.['candidateMayAsk'];
+  if (typeof on !== 'boolean') { res.status(400).json({ error: BAD_SETTINGS }); return; }
+  const settings = await miloSettingsStore().setCandidateMayAsk(p.ref.interview.id, on, p.userId, new Date(interviewsNowMs()).toISOString());
+  res.json({ settings: { candidateMayAsk: settings.candidateMayAsk } });
 }));

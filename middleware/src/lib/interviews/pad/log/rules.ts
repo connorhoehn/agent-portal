@@ -22,11 +22,11 @@ export const PAD_EVENT_KINDS = ['edit', 'paste', 'snapshot', 'language', 'insert
 export type PostedPadEventKind = typeof PAD_EVENT_KINDS[number];
 /**
  * Every kind the log holds: the posted ones, and Milo's own edits, which only the server writes (side `milo`;
- * lib/interviews/milo-tools): `tests` (test cases) and `imports` (import lines), with from, inserted, length and lines. No
- * post may carry either.
+ * lib/interviews/milo-tools): `tests` (test cases), `imports` (import lines) and `helper` (a helper block), with from, inserted,
+ * length and lines. No post may carry any of them.
  */
-export type PadEventKind = PostedPadEventKind | 'tests' | 'imports';
-export const MILO_PAD_EVENT_KINDS = ['tests', 'imports'] as const;
+export type PadEventKind = PostedPadEventKind | 'tests' | 'imports' | 'helper';
+export const MILO_PAD_EVENT_KINDS = ['tests', 'imports', 'helper'] as const;
 /** `milo`: the server writing for Milo (its tools' edits, and the snapshot taken as it wrote them); never set by a post. */
 export type PadSide = 'panel' | 'candidate' | 'milo';
 

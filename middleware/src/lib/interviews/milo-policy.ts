@@ -13,7 +13,13 @@
 //                         the recruiter and the opening's hiring manager, by the tenant's one scope rule (scope.ts). A seat in
 //                         the call gives nothing by itself; a guest reads nothing; the admin gets no exception (as by default).
 //   payer                 the opening, under the `interviews` source, within the cap per interview (spend.ts, I0.6).
-//   sessionTools          none; mayUseTool: never (no tools and no data for anyone in an interview).
+//   sessionTools          Milo's interview tools (milo-tools/, voice/catalogue.ts INTERVIEW_TOOLS) for a LIVE interview: the
+//                         spoken ones (time left, repeat the question, introduce) in every round, the pad tools (test cases,
+//                         imports, a helper) in a coding round; the background agent is told the round's coding questions as
+//                         the thing not to solve, and the pad as it was when the session started. No data tools, ever.
+//   mayUseTool / runTool  only those tools, for the interview's own people (lead, panel, candidate), run on the server
+//                         (milo-tools/index.ts `runMiloTool`: who may ask, the checks, the pad write as Milo, the line logged);
+//                         the orchestrator posts and says the line. Pad tools' arguments may be up to 12 KB.
 //   acknowledgement       the panel side acknowledges with the notice in the call; the candidate (a guest, `guest:<inviteId>`)
 //                         acknowledged in the portal's consent (row I2.3), which `acknowledgedElsewhere` asks through
 //                         `setInterviewConsentSource`: the transcript accepted is enough. With no source set, nobody has,
@@ -23,16 +29,15 @@
 //                         the private answers, the recap and the notes already refuse or read the panel's lines only.
 //   rings, listsMeeting   the panel side only, never a guest (a guest has no bell and no Meetings list).
 //   relaysLiveSpeech      never (decision 9: nothing the live model says reaches an interview, by voice or in chat).
-//   answerFromHeldText    row I3.8 (decision 10): a request from the CANDIDATE is answered only with text the server holds,
-//                         never by a model: "repeat the question" is the last approved question, "how much time is left"
-//                         a sentence from the round's minutes and its start, anything else one fixed sentence naming those
-//                         two (speak/index.ts). The line is logged here; the orchestrator posts it with the approved mark and
-//                         says it as approved words; `heldTextSaid` marks the log row spoken. Two more (18 November): the
-//                         candidate asking for test cases, when the lead turned them on, has Milo write them into the pad
-//                         (testcases/service.ts) and the line says so ("Added twelve test cases at the bottom of the pad"),
-//                         or one fixed sentence saying why not; and the LEAD introducing Milo ("Milo's here as our AI
-//                         support") is answered with Milo's fixed introduction, once an interview (speak/intro.ts). Any other
-//                         panel request: null.
+//   answerFromHeldText    row I3.8 (decision 10), now trigger (a) of Milo's tools: an exact phrase for a tool that takes no
+//                         arguments ("how much time is left", "repeat the question", "Milo, introduce yourself", the lead's
+//                         "Milo's here as our AI support") runs it at once through the same path as a call, no model. The
+//                         line is logged there; the orchestrator posts it with the approved mark and says it as approved
+//                         words; `heldTextSaid` marks the log row spoken. An empty answer: handled, nothing to say (a repeat).
+//                         A guest of no live interview: the fixed sentence. Anything else: null, for the live model's call.
+//   heldFallback          no call in time: the fixed sentence of what THIS asker may ask (milo-tools `fallbackLine`); the
+//                         candidate without pad help gets MILO_CAN_DO as before; a panel member nothing.
+//   heldAcknowledgement   "On it." while a slow pad tool's call is on its way (test cases, a helper; not an import).
 //   holdHeldSpeech        the speech's money (decision 18): a held answer said aloud first holds a little under the interview's
 //                         cap (speak/index.ts `holdSpeechMoney`); refused, the answer stays in the chat and nothing is said.
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
@@ -52,6 +57,9 @@ import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
+
+/** The largest arguments a pad tool's call may carry (a dozen cases or a 60-line helper); every other tool keeps 4 KB. */
+export const PAD_TOOL_ARGS_BYTES = 12_288;
 
 /** Refused to everyone but the interview's lead who tries to invite Milo, turn its voice on or add time. */
 export const LEAD_ONLY = 'Only the lead interviewer of this interview can invite Milo, turn its voice on or add time.';
@@ -164,8 +172,25 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     return panel ? { record: true, transcript: true, minutes: true } : NONE;
   },
   payer: (_call, period) => interviewsPayer(period),
-  sessionTools: () => ({ tools: [], backendInstructions: '' }),
-  mayUseTool: () => false,
+  sessionTools: async (call) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId || call.tenant !== INTERVIEWS_TENANT) return { tools: [], backendInstructions: '' };
+    const { sessionToolsFor } = await import('./milo-tools/index.js');
+    return sessionToolsFor(interviewId).catch(() => ({ tools: [], backendInstructions: '' }));
+  },
+  mayUseTool: async (call, asker, tool) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId || call.tenant !== INTERVIEWS_TENANT) return false;
+    const { mayAsk } = await import('./milo-tools/index.js');
+    return mayAsk(interviewId, asker.userId, tool).catch(() => false);
+  },
+  runTool: async (call, request) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId) return null;
+    const { runMiloTool } = await import('./milo-tools/index.js');
+    return runMiloTool(interviewId, request.askedBy, request.name, request.args);
+  },
+  maxToolArgsBytes: (_call, tool) => (tool.startsWith('pad_') ? PAD_TOOL_ARGS_BYTES : 4096),
   acknowledgement: (_call, userId) => (isGuestId(userId) ? 'elsewhere' : 'in-call-notice'),
   acknowledgedElsewhere: async (call, userIds) => {
     const interviewId = interviewOfLobby(call.lobby);
@@ -198,25 +223,27 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   answerFromHeldText: async (call, request) => {
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
-    if (!isGuestId(request.askedBy)) {
-      // The lead introducing Milo aloud ("Milo's here as our AI support"): its fixed introduction, once an interview (speak/intro.ts).
-      // Anything else a panel member asks is not held text.
-      if (!interview || interview.state !== 'live' || interview.leadId !== request.askedBy) return null;
-      const { isIntroduction, logIntroduction } = await import('./speak/intro.js');
-      if (!isIntroduction(request.text)) return null;
-      return logIntroduction(interview, request.askedBy, interviewsNowMs, () => `said-${randomBytes(8).toString('hex')}`).catch(() => null);
-    }
-    const { logCandidateLine } = await import('./speak/index.js');
-    // A guest's request never reaches a model: with no live interview of its own behind the call, the fixed sentence (not logged).
-    if (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false))) return MILO_CAN_DO;
-    // Test cases (testcases/service.ts): written into the pad as Milo when the lead turned them on; the line says what was done.
-    const { testCaseRequestOf } = await import('./testcases/request.js');
-    const tests = testCaseRequestOf(request.text);
-    if (tests) {
-      const { answerTestCaseRequest, TESTS_FAILED } = await import('./testcases/service.js');
-      return (await answerTestCaseRequest(interview, request.askedBy, tests.count).catch(() => ({ line: TESTS_FAILED }))).line;
-    }
-    return logCandidateLine(interview, request.text, request.askedBy).catch(() => MILO_CAN_DO);
+    // A guest's request never reaches a model without a live interview of its own behind the call: the fixed sentence (not logged).
+    if (isGuestId(request.askedBy) && (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false)))) return MILO_CAN_DO;
+    if (!interview || interview.state !== 'live') return null;
+    const { runMiloTool, toolOfPhrase } = await import('./milo-tools/index.js');
+    const tool = await toolOfPhrase(request.text);
+    // Only the lead's words introduce Milo; anyone else saying them is left to the model (which may call `introduce`, refused).
+    if (!tool || (tool === 'introduce' && request.askedBy !== interview.leadId)) return null;
+    return (await runMiloTool(interview.id, request.askedBy, tool, {}).catch(() => null)) ?? '';
+  },
+  heldFallback: async (call, request) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId) return null;
+    const { fallbackLine } = await import('./milo-tools/index.js');
+    return fallbackLine(interviewId, request.askedBy, MILO_CAN_DO).catch(() => null);
+  },
+  heldFallbackWait: { quietMs: 4_000, delegatedMs: 15_000 },
+  heldAcknowledgement: async (call, request) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId) return null;
+    const { acknowledgementLine } = await import('./milo-tools/index.js');
+    return acknowledgementLine(interviewId, request.askedBy, request.text).catch(() => null);
   },
   // The same fixed sentence for a request heard again (looping audio) is posted once per asker until Milo answers them something else (orchestrator.ts).
   heldRefusal: MILO_CAN_DO,

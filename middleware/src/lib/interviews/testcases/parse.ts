@@ -1,12 +1,11 @@
-// Reading the model's test cases (docs/interviews-tenant-plan.md, "Milo writes test cases"). Pure. The same for the model and
-// the stand-in. What is kept is data of bounded size and nothing else; the rest is dropped without a word.
+// Reading the test cases a `pad_add_tests` call carries (docs/interviews-tenant-plan.md, "Milo's interview tools"). Pure. What
+// is kept is data of bounded size and nothing else; the rest is dropped without a word.
 //
-//   * the answer is one JSON object `{ cases: [...] }` (a code fence around it is allowed); anything else is `unreadable`;
-//   * a case is `{ args: [...], expected }` with at most MAX_ARGS arguments of JSON values: no value deeper than MAX_DEPTH,
-//     no list longer than MAX_LIST, no string longer than MAX_STRING characters (room for an input, not for prose), and the
-//     case written out at most MAX_CASE_CHARS characters;
-//   * a case whose call is already in the pad (the candidate's own, or Milo's earlier) and a repeat within the answer are
-//     dropped; the first `count` of the rest are kept. None left is `empty`.
+//   * a case is `{ args: '<JSON array>', expected: '<JSON>' }`, each readable JSON: at most MAX_ARGS arguments of JSON values, no
+//     value deeper than MAX_DEPTH, no list longer than MAX_LIST, no string longer than MAX_STRING characters (room for an input,
+//     not for prose), and the case written out at most MAX_CASE_CHARS characters;
+//   * a case whose call is already in the pad (the candidate's own, or Milo's earlier) and a repeat within the call are
+//     dropped; the first `max` of the rest are kept. None left is `empty`.
 import { pythonLiteral, scriptLiteral, type TestCase } from './render.js';
 
 export const MAX_ARGS = 6;
@@ -34,28 +33,34 @@ function boundedValue(v: unknown, depth = 0): boolean {
 const callForms = (args: readonly unknown[]): string[] => [args.map(pythonLiteral).join(', '), args.map(scriptLiteral).join(', ')];
 const squash = (s: string): string => s.replace(/\s+/g, '');
 
-export function parseTestCases(raw: string | null, opts: { pad: string; count: number }): TestCaseParse {
-  if (!raw) return { ok: false, code: 'unreadable' };
-  const body = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  let parsed: unknown;
-  try { parsed = JSON.parse(body); } catch { return { ok: false, code: 'unreadable' }; }
-  const list = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>)['cases'] : undefined;
+/**
+ * The cases a `pad_add_tests` call carries (`[{ args: '<JSON array>', expected: '<JSON>' }]`, catalogue.ts), as data: each
+ * readable, bounded, not a duplicate and not a call the pad already makes; at most `max`. Unreadable ones are dropped.
+ */
+export function parseToolCases(list: unknown, opts: { pad: string; max: number }): TestCaseParse {
   if (!Array.isArray(list)) return { ok: false, code: 'unreadable' };
+  const json = (v: unknown): { ok: true; value: unknown } | { ok: false } => {
+    if (typeof v !== 'string' || v.length > MAX_CASE_CHARS) return { ok: false };
+    try { return { ok: true, value: JSON.parse(v) }; } catch { return { ok: false }; }
+  };
   const pad = squash(opts.pad);
   const seen = new Set<string>();
   const kept: TestCase[] = [];
   for (const c of list) {
-    if (kept.length >= opts.count) break;
+    if (kept.length >= opts.max) break;
     if (!c || typeof c !== 'object' || Array.isArray(c)) continue;
-    const { args, expected } = c as Record<string, unknown>;
-    if (!Array.isArray(args) || args.length > MAX_ARGS || !('expected' in (c as object))) continue;
-    if (!args.every((a) => boundedValue(a)) || !boundedValue(expected)) continue;
+    const a = json((c as Record<string, unknown>)['args']);
+    const e = json((c as Record<string, unknown>)['expected']);
+    if (!a.ok || !e.ok) continue;
+    const args = a.value;
+    const expected = e.value;
+    if (!Array.isArray(args) || args.length > MAX_ARGS || !args.every((x) => boundedValue(x)) || !boundedValue(expected)) continue;
     const key = JSON.stringify(args);
     if (seen.has(key) || key.length + JSON.stringify(expected).length > MAX_CASE_CHARS) continue;
-    // A call `f(<args>)` in any notation, or a scripted block's row `[[<args>], …]`, is already in the pad.
+    // A call `f(<args>)` in any notation, or a block's row `[[<args>], …]` / `[<args>],`, is already in the pad.
     if (args.length && (callForms(args).some((f) => pad.includes(`(${squash(f)})`)) || pad.includes(`[[${squash(callForms(args)[1]!)}],`))) continue;
     seen.add(key);
-    kept.push({ args: structuredClone(args), expected: structuredClone(expected) });
+    kept.push({ args, expected });
   }
   return kept.length ? { ok: true, cases: kept } : { ok: false, code: 'empty' };
 }

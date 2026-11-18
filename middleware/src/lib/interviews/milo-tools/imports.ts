@@ -1,10 +1,11 @@
-// `pad_add_import`: Milo adds standard-library imports at the top of the pad (docs/interviews-tenant-plan.md, "Milo's
-// interview tools"). Pure.
+// `pad_add_import`, and the import half of `pad_add_helper`: standard-library imports at the top of the pad
+// (docs/interviews-tenant-plan.md, "Milo's interview tools"). Pure.
 //
-// The policy is enforced here, on the text, not in the prompt: the tool's arguments are a module and the names to import from
-// it, never a line of code. Each module must be in the pad language's standard library (an allowlist below), each name an
-// identifier, and the server writes the import line itself in the language's own form. So whatever the model or the person
-// asked for, what reaches the pad is import lines and nothing else: no solution logic, no third-party package, no comment.
+// The policy is enforced here, on the text, not in the prompt. Each line a call carries is read by the pad language's import
+// grammar (`parseImportLine`) into a module and the names it takes; the module must be in that language's standard library
+// (an allowlist below) and each name an identifier; then the server writes the import line itself in the language's own form
+// (`importLines`). So whatever the model or the person asked for, what reaches the pad is import lines and nothing else: no
+// logic, no third-party package, no comment. The language is the pad's at the moment of writing, never the model's idea of it.
 //
 // Where: at the top of the pad, after what already leads it (a Go package line, a shebang, the imports already there), so the
 // new line sits with the others. A line the pad already has is not written again; nothing new means nothing is written.
@@ -15,7 +16,7 @@ export const MAX_IMPORTS = 5;
 /** At most this many names from one module. */
 export const MAX_NAMES = 8;
 
-/** One import as the tool takes it: a module, and the names to take from it (none: the module itself). */
+/** One import: a module, and the names to take from it (none: the module itself). */
 export interface ImportRequest { module: string; names?: string[] }
 
 const PYTHON_STDLIB = new Set(('abc argparse array asyncio base64 bisect builtins calendar cmath collections contextlib copy csv dataclasses '
@@ -31,9 +32,6 @@ const CPP_HEADERS = new Set(('algorithm array bitset cassert climits cmath cstdi
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const JAVA_CLASS = /^(?:[A-Z][A-Za-z0-9_]{0,63}|\*)$/;
-
-/** Why a request was refused, in a sentence Milo can say. */
-export const NOT_STANDARD = 'Milo only adds imports from the standard library, at the top of the pad.';
 
 /** The import lines for these requests in `language`, or null when any of them is not a standard-library import. */
 export function importLines(requests: readonly ImportRequest[], language: PadLanguage): string[] | null {
@@ -59,8 +57,9 @@ function lineFor(module: string, names: string[], language: PadLanguage): string
     case 'typescript': {
       const bare = module.replace(/^node:/, '');
       if (!NODE_BUILTINS.has(bare) || !names.every((n) => IDENT.test(n))) return null;
-      if (language === 'javascript') return names.length ? `const { ${names.join(', ')} } = require("node:${bare}");` : `const ${bare.replace(/[^A-Za-z0-9_]/g, '_')} = require("node:${bare}");`;
-      return names.length ? `import { ${names.join(', ')} } from "node:${bare}";` : `import * as ${bare.replace(/[^A-Za-z0-9_]/g, '_')} from "node:${bare}";`;
+      const alias = bare.replace(/[^A-Za-z0-9_]/g, '_');
+      if (language === 'javascript') return names.length ? `const { ${names.join(', ')} } = require("node:${bare}");` : `const ${alias} = require("node:${bare}");`;
+      return names.length ? `import { ${names.join(', ')} } from "node:${bare}";` : `import * as ${alias} from "node:${bare}";`;
     }
     case 'java':
       if (!JAVA_PACKAGE.test(module) || !names.every((n) => JAVA_CLASS.test(n))) return null;
@@ -76,7 +75,56 @@ function lineFor(module: string, names: string[], language: PadLanguage): string
   }
 }
 
-/** A line that already leads the pad: blank, a shebang, a package clause, an import or include, or a comment. */
+const NAMES = String.raw`([A-Za-z_$][\w$]*(?: ?, ?[A-Za-z_$][\w$]*)*)`;
+
+/**
+ * One import line as a `pad_add_import` call carries it, read by `language`'s import grammar into a module and its names; null
+ * when the line is not exactly one import in that language (anything after it, a second statement, a comment: null).
+ */
+export function parseImportLine(line: unknown, language: PadLanguage): ImportRequest | null {
+  const t = typeof line === 'string' ? line.trim().replace(/\s+/g, ' ') : '';
+  if (!t || t.length > 120) return null;
+  const list = (s: string) => s.split(',').map((n) => n.trim());
+  let m: RegExpExecArray | null;
+  switch (language) {
+    case 'python':
+      if ((m = /^from ([A-Za-z_][\w.]*) import ([A-Za-z_]\w*(?: ?, ?[A-Za-z_]\w*)*)$/.exec(t))) return { module: m[1]!, names: list(m[2]!) };
+      if ((m = /^import ([A-Za-z_][\w.]*)$/.exec(t))) return { module: m[1]! };
+      return null;
+    case 'javascript':
+      if ((m = new RegExp(String.raw`^const \{ ?${NAMES} ?\} = require\((["'])(?:node:)?([\w/]+)\2\);?$`).exec(t))) return { module: m[3]!, names: list(m[1]!) };
+      if ((m = /^const [A-Za-z_$][\w$]* = require\((["'])(?:node:)?([\w/]+)\1\);?$/.exec(t))) return { module: m[2]! };
+      if ((m = new RegExp(String.raw`^import \{ ?${NAMES} ?\} from (["'])(?:node:)?([\w/]+)\2;?$`).exec(t))) return { module: m[3]!, names: list(m[1]!) };
+      return null;
+    case 'typescript':
+      if ((m = new RegExp(String.raw`^import \{ ?${NAMES} ?\} from (["'])(?:node:)?([\w/]+)\2;?$`).exec(t))) return { module: m[3]!, names: list(m[1]!) };
+      if ((m = /^import \* as [A-Za-z_$][\w$]* from (["'])(?:node:)?([\w/]+)\1;?$/.exec(t))) return { module: m[2]! };
+      return null;
+    case 'java':
+      if ((m = /^import (java(?:x)?(?:\.[a-z]+)+)\.([A-Z]\w*|\*);$/.exec(t))) return { module: m[1]!, names: m[2] === '*' ? [] : [m[2]!] };
+      return null;
+    case 'go':
+      if ((m = /^import "([\w/]+)"$/.exec(t))) return { module: m[1]! };
+      return null;
+    case 'swift':
+      if ((m = /^import (\w+)$/.exec(t))) return { module: m[1]! };
+      return null;
+    case 'cpp':
+      if ((m = /^#include ?<([\w.]+)>$/.exec(t))) return { module: m[1]! };
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** The lines a call carries, checked and rewritten as the server's own; null when any one is not a standard-library import. */
+export function checkedImportLines(lines: unknown, language: PadLanguage): string[] | null {
+  if (!Array.isArray(lines) || !lines.length || lines.length > MAX_IMPORTS) return null;
+  const requests = lines.map((l) => parseImportLine(l, language));
+  return requests.every((r): r is ImportRequest => r !== null) ? importLines(requests, language) : null;
+}
+
+/** A line that may lead the pad: blank, a shebang, a package clause, an import or include, or a comment. */
 const LEADING: Readonly<Record<PadLanguage, RegExp>> = {
   python: /^(?:\s*$|#|from\s+\S+\s+import\b|import\s)/,
   javascript: /^(?:\s*$|\/\/|#!|import\s|const\s+\{?[\w\s,]*\}?\s*=\s*require\()/,
@@ -91,6 +139,14 @@ const IMPORT_LINE: Readonly<Record<PadLanguage, RegExp>> = {
   java: /^(?:package|import)\s/, go: /^(?:package|import)\s/, swift: /^import\s/, cpp: /^#include\s/,
 };
 
+/** Where the pad's leading import (or package) lines end: the index just after the last one's newline, or 0 when there are none. */
+export function afterImports(current: string, language: PadLanguage): number {
+  const rows = current.split('\n');
+  let after = -1;
+  for (let i = 0; i < rows.length && LEADING[language].test(rows[i]!); i += 1) if (IMPORT_LINE[language].test(rows[i]!)) after = i;
+  return after < 0 ? 0 : Math.min(rows.slice(0, after + 1).join('\n').length + 1, current.length);
+}
+
 /**
  * Where the import lines go in `current` and the text to insert there: after the last import (or package) line of the pad's
  * leading lines, else at the very top; lines the pad already has are left out. Null when there is nothing new to write.
@@ -99,10 +155,9 @@ export function placeImports(current: string, lines: readonly string[], language
   const have = new Set(current.split('\n').map((l) => l.trim()));
   const fresh = lines.flatMap((l) => l.split('\n')).filter((l) => !have.has(l.trim()));
   if (!fresh.length) return null;
-  const rows = current.split('\n');
-  let after = -1;
-  for (let i = 0; i < rows.length && LEADING[language].test(rows[i]!); i += 1) if (IMPORT_LINE[language].test(rows[i]!)) after = i;
-  if (after < 0) return { index: 0, text: `${fresh.join('\n')}\n${current && !/^\s*\n/.test(current) && language !== 'go' ? '\n' : ''}` };
-  const index = rows.slice(0, after + 1).join('\n').length + 1;
-  return { index: Math.min(index, current.length), text: `${current.length < index ? '\n' : ''}${fresh.join('\n')}\n` };
+  const index = afterImports(current, language);
+  if (index === 0) return { index: 0, text: `${fresh.join('\n')}\n${current && !/^\s*\n/.test(current) ? '\n' : ''}` };
+  // The last import line ended the pad with no newline after it.
+  const lead = current.length < index || !current.slice(0, index).endsWith('\n') ? '\n' : '';
+  return { index, text: `${lead}${fresh.join('\n')}\n` };
 }

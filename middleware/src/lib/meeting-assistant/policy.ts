@@ -97,6 +97,11 @@ export interface MeetingAssistantPolicy {
   heldFallback?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
   readonly heldFallbackWait?: { quietMs: number; delegatedMs: number };
   /**
+   * While waiting for that call: once the model has handed the request to its background agent, a short line to say at once (a
+   * slow tool's "On it."), logged by the family like its other held lines; null: nothing. Asked once a request. Absent: nothing.
+   */
+  heldAcknowledgement?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
+  /**
    * Where this person's acknowledgement that Milo transcribes them comes from: the notice in the call (they press it; the inviter
    * acknowledges by inviting), or somewhere else, which `acknowledgedElsewhere` answers. Until a person has acknowledged, nothing they
    * say is stored or heard.
@@ -125,7 +130,8 @@ export interface MeetingAssistantPolicy {
   relaysLiveSpeech(call: PolicyCall): boolean;
   /**
    * A request answered from text the server holds, never by a model: the sentence to post for it, or null when it is not one of
-   * the policy's fixed requests (it then goes to the model as usual). Absent: there are none.
+   * the policy's fixed requests (it then goes to the model as usual). An empty string: one of them, handled, with nothing to say.
+   * Absent: there are none.
    */
   answerFromHeldText?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
   /**

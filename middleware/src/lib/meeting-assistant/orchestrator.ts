@@ -1655,7 +1655,8 @@ export class AssistantRuntime {
       if (e.type === 'request') {
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
-        if (held !== null) { await this.sayHeld(run, e.askedBy, held); continue; }
+        // An empty held answer: one of the family's requests, handled, with nothing to say (a request heard twice).
+        if (held !== null) { if (held) await this.sayHeld(run, e.askedBy, held); continue; }
         // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
         this.awaitToolCallOrFallback(run, e.askedBy, e.text);
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
@@ -1931,19 +1932,26 @@ export class AssistantRuntime {
    */
   private awaitToolCallOrFallback(run: CallRun, askedBy: string, text: string): void {
     const policy = run.policy;
-    if (!policy.heldFallback) return;
+    if (!policy.heldFallback && !policy.heldAcknowledgement) return;
     const wait = policy.heldFallbackWait ?? { quietMs: 4_000, delegatedMs: 15_000 };
     const askedAt = this.now();
     const called = () => (run.toolCallAt?.get(askedBy) ?? -Infinity) >= askedAt;
+    const delegated = () => run.delegations.some((d) => d.at >= askedAt - 1_000);
+    const step = 250;
     void (async () => {
-      await this.wait(wait.quietMs);
-      if (called() || run.finished) return;
-      if (run.delegations.some((d) => d.at >= askedAt - 1_000 && d.callId === null)) {
-        const step = 250;
-        for (let left = wait.delegatedMs - wait.quietMs; left > 0 && !called() && !run.finished; left -= step) await this.wait(step);
-        if (called() || run.finished) return;
+      let acknowledged = false;
+      // Polled, so the acknowledgement follows the delegation at once (it lands 1 to 2 s after the words, measured 18 November).
+      for (let waited = 0; !called() && !run.finished && waited < (acknowledged ? wait.delegatedMs : wait.quietMs); waited += step) {
+        if (!acknowledged && delegated()) {
+          acknowledged = true;
+          // A slow tool's call is on its way: the family's short acknowledgement now, not after the call lands.
+          const ack = policy.heldAcknowledgement ? await policy.heldAcknowledgement(run.call, { askedBy, text }).catch(() => null) : null;
+          if (ack !== null && !called()) void this.sayHeld(run, askedBy, ack).catch(() => undefined);
+        }
+        await this.wait(step);
       }
-      const line = await policy.heldFallback!(run.call, { askedBy, text }).catch(() => null);
+      if (called() || run.finished) return;
+      const line = policy.heldFallback ? await policy.heldFallback(run.call, { askedBy, text }).catch(() => null) : null;
       if (line !== null && !called() && !run.finished) await this.sayHeld(run, askedBy, line);
     })().catch((err: unknown) => console.warn('[meeting-assistant] fallback failed', (err as Error).message));
   }
