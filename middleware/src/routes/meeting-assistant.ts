@@ -130,7 +130,11 @@ async function attendOnce(callId: string, userId: string): Promise<void> {
 
 const seatOf = async (req: Request): Promise<{ session: Session; callId: string }> => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  await callChatRuntime().assertMember(callId, session, false);
+  // An interview's call (only an interviews session reaches one, `callTenantAgrees`): no seat is the tenant's 404, never 403.
+  // Work's calls keep the call chat's own refusal.
+  await callChatRuntime().assertMember(callId, session, false).catch((e: unknown) => {
+    throw session.tenant === INTERVIEWS && e instanceof AppError && e.status === 403 ? new NotFoundError('Not found') : e;
+  });
   // A connected seat while the assistant is in the call is attendance (the store ignores it once the assistant has left, audit M1).
   await attendOnce(callId, session.sub).then(() => ackElsewhere(callId, session.sub)).catch(() => undefined); // and an acknowledgement given elsewhere (policy.ts)
   return { session, callId };

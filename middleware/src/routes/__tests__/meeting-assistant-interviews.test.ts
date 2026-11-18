@@ -48,6 +48,7 @@ const WORK_CALL = 'call-work'; const WORK_LOBBY = 'orgiq:dm:u-alice:u-wen';
 const PEOPLE: Record<string, [tenant: string, role: string]> = {
   'u-wen': ['interviews', 'interviewer'], 'u-hugo': ['interviews', 'interviewer'], 'u-greta': ['interviews', 'recruiter'],
   'u-amara': ['interviews', 'hiring-manager'], 'u-otto': ['interviews', 'hiring-manager'], 'u-alice': ['orgiq', 'member'],
+  'u-bo': ['orgiq', 'member'], // a Work member seated in no call
 };
 const mk = (sub: string): Session => {
   const [tenant, role] = PEOPLE[sub]!;
@@ -193,6 +194,20 @@ describe('in the interview\'s call', () => {
     for (const u of ['u-wen', 'u-hugo', 'u-greta', 'u-amara']) expect([u, (await send('get', IV_CALL, 'transcript', u)).status]).toEqual([u, 200]);
     expect((await send('get', IV_CALL, 'transcript', 'u-otto')).status).toBe(404);
     expect((await send('get', IV_CALL, 'proposals', 'u-otto')).status).toBe(404);
+  });
+});
+
+describe('no seat in the interview\'s call (I3.2d)', () => {
+  it('an interviews member without a seat gets the tenant\'s 404 on the call\'s state, never the call chat\'s 403; a Work call keeps its 403', async () => {
+    expect((await send('post', IV_CALL, 'invite', 'u-wen')).status).toBe(201);
+    expect((await send('get', IV_CALL, 'state', 'u-wen')).status).toBe(200);
+    for (const u of ['u-greta', 'u-amara', 'u-otto']) {
+      const res = await send('get', IV_CALL, 'state', u);
+      expect([u, res.status, res.body.error]).toEqual([u, 404, 'Not found']);
+    }
+    expect((await send('post', WORK_CALL, 'invite', 'u-alice')).status).toBe(201);
+    const work = await send('get', WORK_CALL, 'state', 'u-bo');
+    expect([work.status, work.body.error]).toEqual([403, 'Join this call before opening its conversation']);
   });
 });
 
