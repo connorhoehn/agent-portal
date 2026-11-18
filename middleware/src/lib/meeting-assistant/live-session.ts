@@ -33,12 +33,15 @@
 // may still be about to give to a turn that just ended), one line at a time: the provider does not speak a commentary that lands
 // while its own response is running (measured 18 November, the spoken repeat: the model had begun its own answer to "can you
 // repeat the question?", which policy drops, and the line sent meanwhile was never said). A request made while the session is
-// busy waits, unsent, for the next quiet. The Live API gives no event when the voice begins its own reply (no response.created or
-// input-committed for the voice: spec §1, "There is no thinking event"; only silent frames for the 100 to 314 ms between the person's
-// last words and its first), so after a person's turn is flushed the session counts as busy for `replyWaitMs`, ended early by
-// the reply's first words or voice or by a delegation. Delegated work does have a lifecycle: the delegation's `response_id`, the
-// nested `response.created` / `response.completed` (or failed, cancelled), the function calls awaiting their output, and a
-// continuation asked for (`response.create`) and not yet created. The provider acknowledges a commentary (`session.commentary.appended`, with the
+// busy waits, unsent, for the next quiet. Busy counts only what there is evidence of. Where the provider MAY be about to answer and
+// no event says it will, the session waits `answerWaitMs` (one timer) for the evidence: after a person's turn is flushed (the Live
+// API sends no response.created or input-committed for the voice's own reply: spec §1, "There is no thinking event"), after a
+// delegation (recorded, docs/voice/live-events.jsonl: one the provider answers gets its nested response.created 0 to 3 ms later;
+// in the 18 November interview film two delegations got no response.event at all, and only input deltas and usage followed),
+// and after a continuation is asked for with response.create (recorded: its response.created 123 to 427 ms later). The wait
+// ends early at the evidence (a response.created, the voice's first words or voice) or at the next input delta (a new turn). The
+// evidence itself keeps it busy for as long as it lasts: a response created and not yet completed, failed or cancelled, an output
+// utterance, a function call awaiting its output. The provider acknowledges a commentary (`session.commentary.appended`, with the
 // provider-timeline `start_ms` it was taken in at): a line that is spoken is taken in as its utterance begins; one taken in
 // part way through an utterance already running was ABSORBED into it and will not be said, so the request ends there with no
 // words (the caller posts it in the chat only) instead of waiting out its bound. `cancelSay` forgets a request the caller gave
@@ -74,8 +77,11 @@ export interface OpenAiLiveSessionOptions {
   sayGapMs?: number;
   /** Quiet that ends a claimed utterance whose words already equal the ones asked for (default 600 ms). */
   saySettleMs?: number;
-  /** After a person's turn is flushed, how long the voice may still begin its reply before the session counts as quiet (default 1000 ms). */
-  replyWaitMs?: number;
+  /**
+   * How long the session waits for evidence that the provider is answering, after a person's turn, a delegation or a continuation
+   * asked for, before it counts as quiet (default 1000 ms).
+   */
+  answerWaitMs?: number;
   /** Timer functions, injectable so a test can move time by hand. */
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void };
   clock?: () => number;
@@ -153,11 +159,10 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private outputTimer: unknown = null;
   /** A delegation began and its work has not produced its first message or function call yet. */
   private awaitingItem = false;
-  /** The second model's responses running (by id), and continuations asked for and not yet created: the voice speaks what they produce. */
+  /** The second model's responses running (by id, from their response.created): the voice speaks what they produce. */
   private readonly responses = new Set<string>();
-  private continuationsAsked = 0;
-  /** A person's turn was just flushed and the voice may still begin its reply (no provider event says it will). */
-  private replyWait: ReturnType<typeof setTimeout> | null = null;
+  /** The provider may be about to answer (a turn, a delegation, a continuation) and no event has said it is yet. */
+  private answerWait: ReturnType<typeof setTimeout> | null = null;
   /** Input transcripts emitted so far. */
   private inputCount = 0;
   private idle: ReturnType<typeof setTimeout> | null = null;
@@ -222,7 +227,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (this.ended || !this.open.delete(callId)) return false;
     this.send({ type: 'response.item.create', event_id: this.eventId(), item: { type: 'function_call_output', call_id: callId, output } });
     // One continuation per round: only when no other call of the round is still waiting (spec, "Outbound result").
-    if (this.open.size === 0) { this.send({ type: 'response.create', event_id: this.eventId() }); this.continuationsAsked += 1; }
+    if (this.open.size === 0) { this.send({ type: 'response.create', event_id: this.eventId() }); this.waitForAnswer(); }
     return true;
   }
 
@@ -254,18 +259,25 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   }
 
   /**
-   * Not quiet: a person's turn is being heard or was just flushed (the voice may still answer it), the provider is saying something
-   * (an utterance open, its voice still running, a claimed one not yet over), a line already sent has not been claimed yet, or
-   * delegated work is under way (its response running or asked for, a function call awaiting its output, its first item not yet out).
+   * Not quiet: a person's turn is being heard, the provider is saying something (an utterance open, its voice still running, a
+   * claimed one not yet over), a line already sent has not been claimed yet, a response of the second model is running or a
+   * function call awaits its output, or the provider may be about to answer and the wait for its evidence is not over.
    */
   private busy(): boolean {
-    return this.input !== null || this.replyWait !== null || this.output !== null || this.tailLeft > 0 || this.saying !== null || this.sayQueue.length > 0
-      || this.awaitingItem || this.open.size > 0 || this.responses.size > 0 || this.continuationsAsked > 0;
+    return this.input !== null || this.answerWait !== null || this.output !== null || this.tailLeft > 0 || this.saying !== null || this.sayQueue.length > 0
+      || this.open.size > 0 || this.responses.size > 0;
   }
 
-  /** The voice's reply to the turn just flushed has begun, or will not come now: stop waiting for it. */
-  private endReplyWait(): void {
-    if (this.replyWait) { clearTimeout(this.replyWait); this.replyWait = null; }
+  /** The provider may be about to answer: count as busy for `answerWaitMs` unless its evidence comes first. */
+  private waitForAnswer(): void {
+    this.endAnswerWait();
+    this.answerWait = setTimeout(() => { this.answerWait = null; this.pumpSay(); }, this.opts.answerWaitMs ?? 1000);
+    this.answerWait.unref?.();
+  }
+
+  /** The evidence came (or a new turn began): the wait is over. */
+  private endAnswerWait(): void {
+    if (this.answerWait) { clearTimeout(this.answerWait); this.answerWait = null; }
   }
 
   /** At quiet: send the oldest waiting `say` line (the next goes at the next quiet, after this one is over). */
@@ -357,8 +369,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.ended = true;
     if (this.idle) { clearTimeout(this.idle); this.idle = null; }
     this.clearOutputTimer();
-    this.endReplyWait();
-    this.input = null; this.output = null; this.open.clear(); this.responses.clear(); this.continuationsAsked = 0; this.awaitingItem = false;
+    this.endAnswerWait();
+    this.input = null; this.output = null; this.open.clear(); this.responses.clear(); this.awaitingItem = false;
     this.sayQueue = []; this.sayWaiting = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
@@ -399,10 +411,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       case 'session.output_transcript.delta': this.onDelta('output', ev); return;
       case 'session.delegation.created': {
         this.flushInput('delegation');
-        this.endReplyWait();
         this.awaitingItem = true;
-        const responseId = (ev['delegation'] as { response_id?: unknown } | undefined)?.response_id;
-        if (typeof responseId === 'string' && responseId) this.responses.add(responseId);
+        this.waitForAnswer();
         this.emit('delegation', { atMs: this.sinceStart() });
         return;
       }
@@ -455,7 +465,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     for (let at = 0; at < usable; at += OUTPUT_FRAME_BYTES) {
       const pcm = whole.subarray(at, Math.min(usable, at + OUTPUT_FRAME_BYTES));
       if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) {
-        if (this.tailLeft === 0) { trace('voice.start', { t: this.sinceStart() }); this.endReplyWait(); if (!this.output) this.claimSay(); }
+        if (this.tailLeft === 0) { trace('voice.start', { t: this.sinceStart() }); this.endAnswerWait(); if (!this.output) this.claimSay(); }
         this.tailLeft = OUTPUT_TAIL_FRAMES;
         // A claimed utterance's voice still running: its words are not over yet, whatever their pace.
         if (this.output?.say && this.outputTimer !== null) this.armOutput();
@@ -504,7 +514,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const startMs = num(ev['start_ms']), endMs = Math.max(startMs, num(ev['end_ms']));
     const gapMs = this.opts.gapMs ?? 1000;
     if (side === 'input') {
-      // Input never ends or splits an utterance of Milo's: only output quiet does.
+      // A new turn: whatever answer was awaited did not come before it. Input never ends or splits an utterance of Milo's: only output quiet does.
+      this.endAnswerWait();
       if (this.input && startMs - this.input.endMs > gapMs) this.flushInput('gap');
       const part = { text: delta, startMs, endMs };
       this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs, parts: [...this.input.parts, part] } : { text: delta, startMs, endMs, parts: [part] };
@@ -522,7 +533,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       }
       if (!this.output) {
         this.flushInput('output');
-        this.endReplyWait();
+        this.endAnswerWait();
         // From quiet (no voice running): this utterance may be the one a `say` asked for. With the voice already running under a claim,
         // these are that utterance's words.
         if (this.tailLeft === 0) this.claimSay();
@@ -579,14 +590,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}) });
     }
     // The person's turn is over. Not when Milo's own output or a delegation is what ended it: the provider is answering then. A turn
-    // that ended on its own may still get the voice's reply, which no event announces: the line waits `replyWaitMs` for it first.
+    // that ended on its own may still get the voice's reply, which no event announces: the line waits `answerWaitMs` for it first.
     if (why === 'output' || why === 'delegation') return;
-    if (p && text && why !== 'closed') {
-      this.endReplyWait();
-      this.replyWait = setTimeout(() => { this.replyWait = null; this.pumpSay(); }, this.opts.replyWaitMs ?? 1000);
-      this.replyWait.unref?.();
-      return;
-    }
+    if (p && text && why !== 'closed') { this.waitForAnswer(); return; }
     this.pumpSay();
   }
 
@@ -604,8 +610,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const e = raw as Record<string, unknown>;
     if (e['type'] === 'response.created') {
       const id = (e['response'] as { id?: unknown } | undefined)?.id;
-      if (this.continuationsAsked > 0) this.continuationsAsked -= 1;
       if (typeof id === 'string' && id) this.responses.add(id);
+      this.endAnswerWait();
       return;
     }
     if (e['type'] === 'response.failed' || e['type'] === 'response.cancelled') {
@@ -649,8 +655,6 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private responseOver(raw: unknown): void {
     const id = (raw as { id?: unknown } | undefined)?.id;
     if (typeof id === 'string') this.responses.delete(id);
-    // A delegation that ended with no message or call of its own produced nothing more to wait for.
-    if (this.responses.size === 0 && this.continuationsAsked === 0) this.awaitingItem = false;
     this.pumpSay();
   }
 
