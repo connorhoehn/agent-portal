@@ -316,6 +316,7 @@ async function typeLine(page, text, first = false) {
 }
 /** The starter's `pass` replaced by the body, typed line by line. */
 async function replaceStarterBody(page, body) {
+  await focusPadEnd(page);
   const lines = await padLines(page);
   await caretToLine(page, lines.lastIndexOf('    pass'));
   await page.keyboard.press('End');
@@ -323,13 +324,14 @@ async function replaceStarterBody(page, body) {
   for (let i = 0; i < body.length; i += 1) await typeLine(page, i === 0 ? body[i].trimStart() : body[i], i === 0);
 }
 async function typeAtEnd(page, text) {
-  await page.keyboard.press('ControlOrMeta+End');
+  await focusPadEnd(page);
   const last = (await padLines(page)).at(-1) ?? '';
   if (last.trim()) await page.keyboard.press('Enter');
   await page.keyboard.type(text, { delay: 55 });
 }
 /** The fix: the line that stores the number goes below the check (deleted where it was, typed again after the return). */
 async function moveSeenAfterReturn(page) {
+  await focusPadEnd(page); // the Run button had the focus
   const lines = await padLines(page);
   const at = lines.indexOf(MOVED_LINE);
   if (at < 0) { note('the fix: the line to move is not in the pad'); return; }
@@ -491,7 +493,6 @@ try {
   // 5. Clarifying question, brute force, then the hash map typed with narration; the time asked mid-coding.
   scene(5, 'Thinking out loud', 'The candidate asks a clarifying question, names the brute force, then types a hash-map solution while explaining it.');
   await say(cand, 'c05', 1500); await say(lead, 'h07', 1300); await say(cand, 'c06', 1300);
-  await focusPadEnd(cp);
   const narr = say(cand, 'c07', 1300);
   await replaceStarterBody(cp, BUGGY_BODY);
   await narr;
