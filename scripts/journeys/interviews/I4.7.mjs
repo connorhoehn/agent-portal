@@ -57,8 +57,9 @@ export default async function run(ctx) {
     const lead = await until(async () => ((await shown(L.page, 'interview-room-call-lost')) ? true : null), 45_000, 500);
     const restart = lead ? await shown(L.page, 'interview-room-restart-call') : false;
     const cand = await until(async () => ((await shown(G.page, 'join-room-call-lost')) ? true : null), 30_000, 500);
-    const leadInCall = await inCall(L.page);
-    if (process.env.I47_DEBUG_DIR) { await L.page.screenshot({ path: `${process.env.I47_DEBUG_DIR}/lead.png` }); await G.page.screenshot({ path: `${process.env.I47_DEBUG_DIR}/cand.png` }); }
+    // Leaving the dead call shows the library's ended notice in the footer for its hold (realtime-modules `endedHoldMs`, 4 s), with no
+    // clock; the lead no longer holds the call once it clears.
+    const leadInCall = lead ? !(await until(async () => ((await inCall(L.page)) ? null : true), 10_000, 500)) : await inCall(L.page);
     const row = (await api(L.context, 'GET', `/api/interviews/interviews/${iv}`)).body?.interview;
     return { ok: !!lead && restart && !!cand && !leadInCall && row?.state === 'live',
       detail: `sockets hung up ${JSON.stringify(cut)} for ${SLEEP_MS / 1000} s; the lead reads the call lost=${!!lead} with Restart=${restart}; the candidate reads it=${!!cand}; the lead still holds the call=${leadInCall}; the interview ${row?.state}` };
