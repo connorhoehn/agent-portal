@@ -77,10 +77,12 @@ export default async function run(ctx) {
     await L.page.waitForTimeout(1500);
     await G.page.waitForTimeout(3000);
     await hear(ctx, L, callId, guestId, 'Hey Milo, it would be helpful to have another dozen test cases.');
-    const written = await until(async () => ((await padOf(G.page)).includes(BLOCK) ? true : null), 30_000);
-    const leadPad = await padOf(L.page);
+    // Typed in a few chunks: the loop that runs the cases is the last one.
+    const whole = (t) => t.includes(BLOCK) && t.includes('for args, expected in milo_test_cases:');
+    const written = await until(async () => (whole(await padOf(G.page)) ? true : null), 30_000);
+    const leadPad = (await until(async () => { const t = await padOf(L.page); return whole(t) ? t : null; }, 10_000)) ?? await padOf(L.page);
     const said = await chatHas(G.page, TESTS_ADDED);
-    const rows = count(leadPad, '), [');
+    const rows = count(leadPad, '), [') + count(leadPad, '),), [');
     return { ok: !!written && leadPad.includes(BLOCK) && said, detail: `the block on the candidate's pad ${!!written}, the lead's ${leadPad.includes(BLOCK)} (${rows} rows); "${TESTS_ADDED}" ${said}` };
   });
 
