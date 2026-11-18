@@ -69,6 +69,28 @@ describe('pushRecordingDecision', () => {
     expect(sent.map((b) => [b.record, b.decisionVersion])).toEqual([[true, 3], [false, 4]]);
   });
 
+  it('a decision the store could not read is tried again, never taken as a refusal', async () => {
+    decide.mockRejectedValueOnce(new Error('connection reset')).mockResolvedValue(consented);
+    const warn = jest.fn();
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200 }) as Response) as unknown as typeof fetch;
+    expect(await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn, sleep: noSleep })).toBe(true);
+    expect(decide).toHaveBeenCalledTimes(2);
+    expect(decide.mock.calls[0]![2]).toEqual({ storeErrors: 'throw' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('a store that stays down gives up with one warning', async () => {
+    decide.mockRejectedValue(new Error('connection reset'));
+    const warn = jest.fn();
+    const fetchMock = jest.fn() as unknown as typeof fetch;
+    expect(await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn, sleep: noSleep })).toBe(false);
+    expect(decide).toHaveBeenCalledTimes(4);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/could not be read.*after 4 tries/);
+  });
+
   it('gives up on a 503 that does not clear with one warning and no throw', async () => {
     decide.mockResolvedValue(consented);
     const warn = jest.fn();

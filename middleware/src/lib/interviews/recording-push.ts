@@ -19,6 +19,11 @@ const BUDGET_MS = 20_000;
 const ATTEMPTS = 4;
 const BACKOFF_MS = 500;
 
+/** The decision's own read failed (the store), as opposed to platform-api's answer: tried again like a 5xx. */
+class ReadFailed extends Error {
+  constructor(cause: unknown) { super(`the decision could not be read (${cause instanceof Error ? cause.name : 'error'})`); }
+}
+
 export interface PushDeps {
   env: NodeJS.ProcessEnv;
   fetch: typeof fetch;
@@ -40,16 +45,18 @@ export async function pushRecordingDecision(interviewId: string, deps: Partial<P
     const started = now();
     for (let attempt = 1; ; attempt += 1) {
       // Every try decides afresh, and the version is read with the answer: a retry sends the row as it is now, never an old answer under a newer version.
-      const decision = await decideRecording(lobbyName, async () => true);
-      // A call that is not open has nothing to switch.
-      if (decision.status !== 200 || decision.body.reason === 'interview-not-open') return false;
-      const { record, transcribe, reason, decisionVersion } = decision.body;
-      const body = { lobbyName, purpose: 'interview-decision', record, transcribe, reason, decisionVersion };
-      const headers = signedRecordingHeaders(body, env);
-      if (!headers) return false;
-      const left = BUDGET_MS - (now() - started);
+      // A store that fails to read is tried again here, as a platform-api that fails to answer is.
       let failure: string;
       try {
+        const decision = await decideRecording(lobbyName, async () => true, { storeErrors: 'throw' })
+          .catch((err: unknown) => { throw new ReadFailed(err); });
+        // A call that is not open has nothing to switch.
+        if (decision.status !== 200 || decision.body.reason === 'interview-not-open') return false;
+        const { record, transcribe, reason, decisionVersion } = decision.body;
+        const body = { lobbyName, purpose: 'interview-decision', record, transcribe, reason, decisionVersion };
+        const headers = signedRecordingHeaders(body, env);
+        if (!headers) return false;
+        const left = BUDGET_MS - (now() - started);
         const res = await (deps.fetch ?? fetch)(`${base}${RECORDING_DECISION_PATH}`, {
           method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(Math.max(1, Math.min(PUSH_TIMEOUT_MS, left))),
         });

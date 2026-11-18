@@ -86,16 +86,19 @@ const findInterview = (interviewId: string): Promise<Interview | null> =>
  * D2 for a lobby, once the caller has decided whether the bearer is seated (the route asks the gateway's own admission). A lobby
  * that is not an interview's is refused before anything is read.
  */
-export async function decideRecording(lobbyName: string, seated: () => Promise<boolean>): Promise<RecordingDecision> {
+export async function decideRecording(lobbyName: string, seated: () => Promise<boolean>,
+  opts: { storeErrors?: 'refuse' | 'throw' } = {}): Promise<RecordingDecision> {
   const interviewId = interviewOfLobby(lobbyName);
   if (!interviewId || !interviewsEnabled()) return RECORDING_REFUSED;
   if (!await seated().catch(() => false)) return RECORDING_REFUSED;
-  // A store that fails is the refusal (fail closed), never a 500: nothing records on a read that did not happen.
+  // A store that fails is the refusal (fail closed), never a 500: nothing records on a read that did not happen. A caller that
+  // can try again (the server's own push) asks for the failure itself instead, so it is not mistaken for a decided refusal.
   try {
     const interview = await findInterview(interviewId);
     const record = interview ? await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId)) : null;
     return recordingDecision({ seated: true, state: interview?.state ?? null, answers: interview ? usableAnswers(record, interview.state) : null, version: record?.revision ?? 0 });
-  } catch {
+  } catch (err) {
+    if (opts.storeErrors === 'throw') throw err;
     return RECORDING_REFUSED;
   }
 }
