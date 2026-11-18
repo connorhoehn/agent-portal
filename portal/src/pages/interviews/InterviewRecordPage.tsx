@@ -28,8 +28,7 @@ import {
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
-import { NO_SEAT_NOT_FOUND, roomHref } from '../../lib/interviewsRoom';
-import { roomPath } from '../../lib/interviewsPrepare';
+import { NO_SEAT_NOT_FOUND, roomHref, roomPath } from '../../lib/interviewsRoom';
 import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;

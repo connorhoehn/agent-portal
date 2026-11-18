@@ -187,11 +187,11 @@ export default async function run(ctx) {
       await lead.getByTestId('interview-end').click();
       await lead.getByTestId('interview-room').getByRole('button', { name: /^End interview$/ }).last().click().catch(() => lead.getByRole('button', { name: /^End interview$/ }).last().click());
       const ended = await until(async () => (await readState(api, hugo, iv)) === 'ended', 20_000);
-      const onDesk = await until(async () => /my-interviews/.test(lead.url()), 20_000);
-      const trailBack = await lead.getByText('My interviews', { exact: true }).count();
+      const onDesk = await until(async () => /\/scorecard/.test(lead.url()), 20_000);
+      const noJoin = !/Join the call/.test(await lead.locator('footer').innerText());
       const guestEnded = await seen(guest.page, 'join-ended');
-      return { ok: confirm && stillLive && stillLive2 && ended && onDesk && trailBack > 0 && guestEnded,
-        detail: `the confirm ${confirm}; Esc keeps it live ${stillLive}; Keep going keeps it live ${stillLive2}; End → ended ${ended}, My interviews ${onDesk}; the candidate's ended page ${guestEnded}` };
+      return { ok: confirm && stillLive && stillLive2 && ended && onDesk && noJoin && guestEnded,
+        detail: `the confirm ${confirm}; Esc keeps it live ${stillLive}; Keep going keeps it live ${stillLive2}; End → ended ${ended}, the scorecard ${onDesk}, no "Join the call" left in the footer ${noJoin}; the candidate's ended page ${guestEnded}` };
     });
   } else {
     for (const s of ['I2.4i both in the call, 2 joined, tiles named, the chrome folded', 'I2.4j the chat both ways', 'I2.4k Leave → "You left the call" → Join',

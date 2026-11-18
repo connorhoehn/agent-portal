@@ -143,11 +143,16 @@ function InterviewRoom({ id }: { id: string }) {
   }, [id]);
 
   const leave = host?.call.leave;
+  // The host value is a new object each render: read through a ref so the footer's registration does not change with it.
+  const hostRef = useRef(host);
+  hostRef.current = host;
   const end = useCallback(async (): Promise<{ error?: string }> => {
     if (!room) return { error: 'The room is still loading.' };
     const out = await endInterview(room.id, room.revision);
     if (!out.ok) { if (out.stale) refresh(); return { error: out.error }; }
-    if (call.here) void leave?.();
+    // The page's own unbind is ignored while the call runs, so the lobby is dropped here once the call is left: the footer stops offering "Join the call" for a round that has ended.
+    if (call.here) await leave?.();
+    hostRef.current?.unbind(room.lobbyName);
     // The scorecard is what is due next: the lead lands on it, not on the desk.
     navigate(scorecardPath(room.id));
     return {};
