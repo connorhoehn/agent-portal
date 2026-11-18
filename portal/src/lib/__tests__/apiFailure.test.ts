@@ -5,7 +5,7 @@ import { apiFailure, responseFailure } from '../apiFailure.ts';
 test('only a 401 carrying the BFF provenance code is a session invalidation', () => {
   assert.equal(apiFailure(401, 'Unauthorized', { error: 'Session retired', code: 'SESSION_INVALID' }).kind, 'session-invalid');
   assert.equal(apiFailure(401, 'Unauthorized', { error: 'Gateway rejected its token' }).kind, 'http');
-  // A caller with no credential at all: a refresh cannot change that, so it never retires the page's session.
+  // The development mode's demo identity outside its tenant: a refresh cannot change that, so it never retires the page's session.
   assert.equal(apiFailure(401, 'Unauthorized', { error: 'Unauthenticated', code: 'SIGN_IN_REQUIRED' }).kind, 'http');
   assert.equal(apiFailure(403, 'Forbidden', { code: 'SESSION_INVALID' }).kind, 'forbidden');
   assert.equal(apiFailure(503, 'Unavailable', { code: 'SESSION_INVALID' }).kind, 'http');
