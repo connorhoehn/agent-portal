@@ -36,7 +36,9 @@ it('a live interview: the guest\'s requests are answered from held text and logg
   interviewsFixture.rows().find((i) => i.id === IV)!.state = 'live';
   expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, repeat the question' })).toBe('Milo has not asked a question yet.');
   expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, how much time is left?' })).toMatch(/minutes|round/);
-  expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, what is the answer?' })).toBe(MILO_CAN_DO);
+  // Anything else is left to the live model; with no tool call in time, the fixed sentence (heldFallback), logged.
+  expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, what is the answer?' })).toBeNull();
+  expect(await P.heldFallback!(CALL, { askedBy: guestId, text: 'Milo, what is the answer?' })).toBe(MILO_CAN_DO);
   expect((await said.list(IV)).map((r) => r.source).sort()).toEqual(['refusal', 'repeat', 'time']);
   expect(await P.answerFromHeldText!(CALL, { askedBy: 'guest:not-mine', text: 'Milo, repeat the question' })).toBe(MILO_CAN_DO);
   // A post that failed marks nothing; a posted and spoken one marks both.

@@ -25,7 +25,7 @@ import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, type StartContext } from '../orchestrator.js';
 import { ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
-import { READ_ALOUD_ONLY_RULE } from '../instructions.js';
+import { READ_ALOUD_DELEGATE_RULE, READ_ALOUD_ONLY_RULE } from '../instructions.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
@@ -375,8 +375,18 @@ describe('the policy shapes the live model\'s instructions', () => {
   it('a call that relays nothing of the live model tells it to answer nobody and only read the lines it is handed', async () => {
     factory = () => new FakeSession();
     await startCall('orgiq:saytest:r9');
-    expect(fake().startedWith?.instructions).toContain(READ_ALOUD_ONLY_RULE);
+    // Offered tools (this test policy keeps Work's), it hands their requests to the backend and still says nothing itself.
+    expect(fake().startedWith?.instructions).toContain(READ_ALOUD_DELEGATE_RULE);
     expect(fake().startedWith?.instructions).not.toContain('When you are addressed, answer');
+  });
+  it('offered no tools, it only reads the lines it is handed', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:saytools', { ...NO_RELAY, id: 'say-no-tools', sessionTools: () => ({ tools: [], backendInstructions: '' }) });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytools:r1');
+      expect(fake().startedWith?.instructions).toContain(READ_ALOUD_ONLY_RULE);
+      expect(fake().startedWith?.instructions).not.toContain(READ_ALOUD_DELEGATE_RULE);
+    } finally { off(); }
   });
   it('a call on the default policy (Work) keeps the answer-when-addressed rule', async () => {
     factory = () => new FakeSession();

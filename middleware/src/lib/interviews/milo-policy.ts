@@ -55,6 +55,8 @@ import { interviewRunsWith } from './consent/effects.js';
 import { MILO_CAN_DO } from './speak/index.js';
 import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
+import { addScriptRules } from '../meeting-assistant/scripted-session.js';
+import { INTERVIEW_SCRIPT_RULES } from '../../mock/interviews-testcases.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
@@ -288,7 +290,10 @@ let unregister: (() => void) | null = null;
 export function registerInterviewsMiloPolicy(env: NodeJS.ProcessEnv = process.env): boolean {
   if (unregister) return true;
   if (!interviewsEnabled(env)) return false;
-  unregister = registerMeetingAssistantPolicy(INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY);
+  const policy = registerMeetingAssistantPolicy(INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY);
+  // The scripted session's stand-in for the tools' background agent (only a session offered an interview's tools follows them).
+  const rules = addScriptRules(INTERVIEW_SCRIPT_RULES);
+  unregister = () => { policy(); rules(); };
   return true;
 }
 

@@ -1,12 +1,12 @@
-// Milo introduces itself (speak/intro.ts), and the interviews policy's two new held answers (milo-policy.ts answerFromHeldText):
-// the lead's spoken introduction, and the candidate's request for test cases while the lead has not turned them on.
+// Milo introduces itself (speak/intro.ts): the lead's button, and the lead's spoken introduction, which is trigger (a) of Milo's
+// `introduce` tool (milo-policy.ts answerFromHeldText); a request with arguments (test cases) is left to the live model.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, cloudwatch: true, guardrails: true, agentcore: true } } }));
 import { fixtureRegistry } from '../../../../mock/core/index.js';
 import { MemoryInviteStore, setInviteStore } from '../../invite/store.js';
 import { INTERVIEWS_MILO_POLICY as P } from '../../milo-policy.js';
 import { MemoryMiloSettingsStore, setMiloSettingsStore } from '../../milo-settings.js';
 import { setInterviewConsentSource } from '../../milo-policy.js';
-import { TESTS_OFF } from '../../testcases/service.js';
+import { resetMiloTools } from '../../milo-tools/index.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps, SPEECH_HOLD_USD } from '../index.js';
 import { ALREADY_INTRODUCED, introduceMilo, isIntroduction, MILO_INTRO } from '../intro.js';
 
@@ -22,6 +22,7 @@ beforeEach(() => {
   setMiloSettingsStore(new MemoryMiloSettingsStore());
   said = new MemorySaidStore(); setSaidStore(said);
   order = []; holds = [];
+  resetMiloTools();
   setSpeakDeps({
     callOf: async () => CALL.callId,
     post: async (_c, _t, kind) => { order.push(`post:${kind}`); return true; },
@@ -68,15 +69,15 @@ describe('the policy\'s held answers', () => {
     // The orchestrator posted and said it; heard again, it is no held answer any more.
     await P.heldTextSaid!(CALL, { askedBy: 'u-hugo', text: MILO_INTRO, posted: true, spoken: true });
     expect((await said.list(IV))[0]).toMatchObject({ posted: true, spoken: true });
-    expect(await P.answerFromHeldText!(CALL, { askedBy: 'u-hugo', text: 'introduce yourself' })).toBeNull();
+    // Heard again: handled, nothing to say.
+    expect(await P.answerFromHeldText!(CALL, { askedBy: 'u-hugo', text: 'introduce yourself' })).toBe('');
   });
 
-  it('the candidate asking for test cases while the lead has not turned them on: the polite refusal, logged, no model', async () => {
+  it('the candidate asking for test cases is not held text: it goes to the live model (its tool call is judged in milo-tools)', async () => {
     setInterviewConsentSource(async () => ({ transcription: true, milo: true }));
     const { inviteStore } = await import('../../invite/store.js');
     const inv = await inviteStore().issueInvite({ interviewId: IV, tokenHash: 'c'.repeat(64), issuedBy: 'u-greta', issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
-    const guest = `guest:${inv.id}`;
-    expect(await P.answerFromHeldText!(CALL, { askedBy: guest, text: 'Hey Milo, can you generate another dozen test cases for me?' })).toBe(TESTS_OFF);
-    expect((await said.list(IV)).map((r) => [r.source, r.text, r.askedBy])).toEqual([['refusal', TESTS_OFF, guest]]);
+    expect(await P.answerFromHeldText!(CALL, { askedBy: `guest:${inv.id}`, text: 'Hey Milo, can you generate another dozen test cases for me?' })).toBeNull();
+    expect(await said.list(IV)).toEqual([]);
   });
 });

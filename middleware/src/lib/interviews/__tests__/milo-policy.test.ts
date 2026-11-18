@@ -208,10 +208,10 @@ describe('payer: the opening pays (decision 18, row I0.6)', () => {
   });
 });
 
-describe('tools: none, for anyone', () => {
-  it('offers the live session no tools and lets nobody run one', () => {
-    expect(P.sessionTools(CALL).tools).toEqual([]);
-    for (const p of Object.values(PEOPLE)) for (const tool of ['create_work_item', 'search', 'navigate', 'anything']) expect(P.mayUseTool(CALL, { userId: p.userId, roles: [p.role] }, tool)).toBe(false);
+describe('tools: only Milo\'s interview tools, only in a live interview (milo-tools.test.ts runs them)', () => {
+  it('offers this round (not live yet) no tools, and nobody may run a data tool or an interview tool in it', async () => {
+    expect((await P.sessionTools(CALL)).tools).toEqual([]);
+    for (const p of Object.values(PEOPLE)) for (const tool of ['create', 'search', 'open', 'anything', 'pad_add_tests', 'time_left']) expect(await P.mayUseTool(CALL, { userId: p.userId, roles: [p.role] }, tool)).toBe(false);
   });
 });
 

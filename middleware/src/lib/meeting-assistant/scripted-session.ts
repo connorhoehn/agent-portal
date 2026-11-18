@@ -35,8 +35,24 @@ export const SCRIPT_RULES: readonly ScriptRule[] = [
   { id: 'search', match: /^(?:find|search for|search) (.+)$/i, run: (m) => ({ call: { name: 'search', args: { query: m[1]!.trim().slice(0, 200) } } }) },
 ];
 
-export function scriptFor(text: string): ScriptStep {
+/**
+ * Rules a family adds for its own tools (the interviews tenant's: mock/interviews-testcases.ts), tried before the table above. A
+ * session follows one only when it was offered the tool the rule calls, so another family's call never sees it.
+ */
+const familyRules: ScriptRule[] = [];
+export function addScriptRules(rules: readonly ScriptRule[]): () => void {
+  familyRules.push(...rules);
+  return () => { for (const r of rules) { const i = familyRules.indexOf(r); if (i >= 0) familyRules.splice(i, 1); } };
+}
+
+export function scriptFor(text: string, offered: ReadonlySet<string> | null = null): ScriptStep {
   const t = text.trim().replace(/[.!?\s]+$/, '').replace(/^please[,\s]+/i, '').trim();
+  for (const rule of familyRules) {
+    const m = rule.match.exec(t);
+    if (!m) continue;
+    const step = rule.run(m);
+    if (!('call' in step) || offered?.has(step.call.name)) return step;
+  }
   for (const rule of SCRIPT_RULES) {
     const m = rule.match.exec(t);
     if (m) return rule.run(m);
@@ -96,7 +112,7 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
 
   sendText(userId: string, text: string): void {
     if (this.ended) return;
-    const step = scriptFor(text);
+    const step = scriptFor(text, new Set((this.startInput?.tools ?? []).map((t) => t.name)));
     queueMicrotask(() => {
       if (this.ended) return;
       if ('say' in step) { this.speak(step.say); return; }
