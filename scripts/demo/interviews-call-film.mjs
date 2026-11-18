@@ -392,8 +392,13 @@ async function waitSuggestion(page, re, ms) {
     return null;
   }, ms, 1500);
 }
-const miloPosts = async () => ((await (await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=400`)).json().catch(() => ({}))).messages ?? [])
-  .filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => squash(m.message ?? m.text ?? ''));
+// The call chat's read takes at most 100 messages (routes/call-chat.ts); a refused read is noted, never read as "no posts".
+const miloPosts = async () => {
+  const r = await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`);
+  if (!r.ok()) { note(`call chat read answered ${r.status()}`); return []; }
+  return ((await r.json().catch(() => ({}))).messages ?? [])
+    .filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => squash(m.message ?? m.text ?? ''));
+};
 
 let lead; let cand; let greta; let callId = null;
 const REHEARSE = args.includes('--rehearse');
