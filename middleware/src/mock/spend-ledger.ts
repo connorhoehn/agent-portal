@@ -21,6 +21,7 @@
 
 import { clock, defineFixture } from './core/index.js';
 import { seededFleet } from './devbox-fleet.js';
+import { interviewSpendEntries } from './interviews-money.js';
 import type { SpendEntry } from '../providers/spend-ledger.js';
 
 /** The one task each seeded computer finished before the demo opened, in dollars. */
@@ -73,7 +74,7 @@ function seededLocalEntries(): SpendEntry[] {
 }
 
 function seededEntries(): SpendEntry[] {
-  return [...seededBoxEntries(), ...seededLocalEntries()];
+  return [...seededBoxEntries(), ...seededLocalEntries(), ...interviewSpendEntries()];
 }
 
 function seededBoxEntries(): SpendEntry[] {

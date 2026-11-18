@@ -96,7 +96,25 @@ beforeEach(() => {
   fixtureRegistry.resetAll('default');
   spendHolds.reset();
   spendEntries.reset();
+  // These tests count money from nothing: the seed's settled spend for the finished rounds (mock/interviews-money.ts)
+  // is read once, below, and taken out here.
+  seeded = spendEntries.rows().filter((e) => e.source === 'interviews').length;
+  const rows = spendEntries.rows();
+  for (let k = rows.length - 1; k >= 0; k -= 1) if (rows[k]!.source === 'interviews') rows.splice(k, 1);
   delete process.env['INTERVIEWS_INTERVIEW_CAP_USD'];
+});
+let seeded = 0;
+
+describe('the seeded world', () => {
+  it('holds settled spend for each finished round, so an opening with rounds behind it is not at $0.00', async () => {
+    expect(seeded).toBeGreaterThan(0);
+    spendEntries.reset();
+    const money = (await spendOf(GRETA, 'op-backend')).body.spend;
+    // Three finished rounds: two 60-minute technical ones at about $3.08 each and a 45-minute behavioural one at about $2.34.
+    expect(money.spentUsd).toBeGreaterThan(8);
+    expect(money.spentUsd).toBeLessThan(9);
+    expect(money.leftUsd).toBeCloseTo(150 - money.spentUsd, 4);
+  });
 });
 
 

@@ -28,6 +28,7 @@ import { clock, defineFixture } from './core/index.js';
 import { socialChannelMembersFixture, socialChannelMessagesFixture } from './social-channels.js';
 import { CAST } from './social-history.js';
 import { approvalRequests } from './observability.js';
+import { interviewBells } from './interviews-money.js';
 
 export interface MockNotificationRow {
   id: string;
@@ -146,6 +147,7 @@ function seedNotifications(): MockNotificationRow[] {
   return [
     ...socialNotifications(),
     ...miaNotifications(),
+    ...interviewBells(),
     {
       id: 'mock-notif-reply-farah', userId: 'u-farah', tenant: 'assessment', type: 'reply',
       title: 'Jonas Lindqvist replied to your comment',

@@ -51,7 +51,8 @@ export default async function run(ctx) {
   try {
     const hugoCard = await api(hugo, 'POST', `/api/interviews/interviews/${KWAME}/scorecard`, await scorecardBody(ctx, hugo, KWAME, { summary: SUMMARY_HUGO, recommendation: 'strong-no' }));
     const first = await ring('greta', /submitted a scorecard/i, [SUMMARY_HUGO, 'Strong no', 'strong-no']);
-    const early = await bells(pages.amara, /Every scorecard is in/i, { ms: 3000, absent: true });
+    // The seed already holds an "every scorecard is in" bell for another round (mock/interviews-money.ts): only this round's counts.
+    const early = await bells(pages.amara, /Every scorecard is in: Coding/i, { ms: 3000, absent: true });
     await pages.amara.keyboard.press('Escape').catch(() => undefined);
     const wenCard = await api(wen, 'POST', `/api/interviews/interviews/${KWAME}/scorecard`, await scorecardBody(ctx, wen, KWAME, { summary: SUMMARY_WEN, recommendation: 'strong-yes' }));
     const all = await ring('amara', /Every scorecard is in/i, [SUMMARY_WEN, SUMMARY_HUGO, 'Strong yes', 'strong-yes']);
