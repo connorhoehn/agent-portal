@@ -18,7 +18,11 @@
 //       mock:memory          `memory_exceeded` at the memory limit, exit 137
 //       mock:flood           output past the limit: cut, flagged, and the run goes on to its own end (`succeeded`)
 //       mock:internal        `internal_error`, as an injected service failure
-//   * no literal output and no marker: "ran, no output", `succeeded`, exit 0.
+//   * an output call of a plain value (a number, true/false, None/null/nil) prints that value as the language would;
+//   * an output call of anything else (a variable, a function call, an expression) is not simulated, and the run says so
+//     on stdout in one line after the prints (E4 finding 43), rather than leaving "printed nothing" under a program that
+//     plainly prints: "[demo workspace] print(post(1)) is not simulated here: this runner prints literal values only.";
+//   * no output call and no marker: "ran, no output", `succeeded`, exit 0.
 // A pinned `runtimeVersion` per language and `backend: 'mock'` on every result. Times are scripted (the result's
 // `timeMs` is the sum of the script's pauses, not a clock), and the pause itself is injected so tests run instantly.
 import {
@@ -95,6 +99,61 @@ export function literalPrints(language: RunLanguage, text: string): string[] {
       out.push(`${body}\n`);
     }
   }
+  return out;
+}
+
+const OUTPUT_CALL: Readonly<Record<RunLanguage, string | null>> = {
+  python: 'print(', swift: 'print(', javascript: 'console.log(', typescript: 'console.log(', java: 'System.out.println(', go: 'fmt.Println(', cpp: null,
+};
+
+/** The argument text of each output call, in order (to its matching parenthesis on the same line); cpp has none here. */
+function outputCalls(language: RunLanguage, text: string): Array<{ call: string; arg: string }> {
+  const head = OUTPUT_CALL[language];
+  if (!head) return [];
+  const out: Array<{ call: string; arg: string }> = [];
+  for (let at = text.indexOf(head); at >= 0; at = text.indexOf(head, at + head.length)) {
+    if (at > 0 && /[\w.$]/.test(text[at - 1]!)) continue;
+    let depth = 1; let quote: string | null = null; let i = at + head.length;
+    for (; i < text.length && depth > 0 && text[i] !== '\n'; i++) {
+      const ch = text[i]!;
+      if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
+      if (ch === '"' || ch === '\'' || ch === '`') quote = ch;
+      else if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+    }
+    if (depth === 0) out.push({ call: text.slice(at, i), arg: text.slice(at + head.length, i - 1).trim() });
+  }
+  return out;
+}
+
+const PLAIN_VALUES: Readonly<Record<RunLanguage, Readonly<Record<string, string>>>> = {
+  python: { True: 'True', False: 'False', None: 'None' },
+  swift: { true: 'true', false: 'false', nil: 'nil' },
+  javascript: { true: 'true', false: 'false', null: 'null', undefined: 'undefined' },
+  typescript: { true: 'true', false: 'false', null: 'null', undefined: 'undefined' },
+  java: { true: 'true', false: 'false', null: 'null' },
+  go: { true: 'true', false: 'false', nil: '<nil>' },
+  cpp: {},
+};
+
+/**
+ * What the run prints, in order: each literal string, each plain value (a number, a boolean, a null), and, when some
+ * output call prints anything else, one line after them saying that call is not simulated. Read as text only.
+ */
+export function simulatedOutput(language: RunLanguage, text: string): string[] {
+  if (language === 'cpp') return literalPrints(language, text);
+  const quotes = language === 'python' ? '"\'' : language === 'javascript' || language === 'typescript' ? '"\'`' : '"';
+  const out: string[] = [];
+  let unsimulated: string | null = null;
+  for (const { call, arg } of outputCalls(language, text)) {
+    const q = arg[0];
+    if (q && quotes.includes(q) && arg.length >= 2 && arg.endsWith(q) && new RegExp(`^${STRING}$`).test(arg)) { out.push(`${unescape(arg.slice(1, -1))}\n`); continue; }
+    if (/^-?\d+(?:\.\d+)?$/.test(arg)) { out.push(`${arg}\n`); continue; }
+    const plain = PLAIN_VALUES[language][arg];
+    if (plain !== undefined) { out.push(`${plain}\n`); continue; }
+    unsimulated ??= call;
+  }
+  if (unsimulated) out.push(`[demo workspace] ${unsimulated} is not simulated here: this runner prints literal values only.\n`);
   return out;
 }
 
@@ -254,7 +313,7 @@ export class MockExecutor implements Executor {
         }
         return finish('succeeded', 0);
       }
-      const prints = literalPrints(lang, text);
+      const prints = simulatedOutput(lang, text);
       // A few timed chunks: at most four, the prints shared out among them in order.
       const chunks = Math.min(4, prints.length);
       for (let c = 0; c < chunks; c++) {

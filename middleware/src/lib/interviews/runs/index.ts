@@ -13,7 +13,7 @@ import { INTERVIEWS_TENANT } from '../types.js';
 import { eraseRunRows, lastRunRecord, runView, type RunView } from './service.js';
 
 export * from './executor.js';
-export { createMockExecutor, MockExecutor, MOCK_MARKERS, MOCK_RUNTIME_VERSIONS, literalPrints, markerOf, type MockMarker } from './mock-executor.js';
+export { createMockExecutor, MockExecutor, MOCK_MARKERS, MOCK_RUNTIME_VERSIONS, literalPrints, markerOf, simulatedOutput, type MockMarker } from './mock-executor.js';
 export { createDockerExecutor, DockerExecutor, DOCKER_BACKEND, DOCKER_RUNTIME_VERSIONS, DOCKER_SENTENCES } from './docker-executor.js';
 export { DOCKER_RUNTIMES, DOCKER_IMAGES } from './docker-runtimes.js';
 export { createRunExecutor, runBackendChoice, RUN_BACKEND_SETTING } from './backend.js';

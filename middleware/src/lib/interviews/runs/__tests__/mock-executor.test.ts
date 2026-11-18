@@ -3,7 +3,7 @@
 // The mock's pauses are injected at a hundredth of their length, so the contract's waits take milliseconds.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import { DEFAULT_RUN_LIMITS, type Executor, type RunLanguage } from '../executor.js';
-import { createMockExecutor, literalPrints, markerOf, MOCK_RUNTIME_VERSIONS, type MockExecutorOptions } from '../mock-executor.js';
+import { createMockExecutor, literalPrints, markerOf, simulatedOutput, MOCK_RUNTIME_VERSIONS, type MockExecutorOptions } from '../mock-executor.js';
 import { collect, executorContract, requestOf, type ContractProgram } from './executor-contract.js';
 
 const fast: MockExecutorOptions = { wait: (ms) => new Promise((r) => setTimeout(r, ms / 100)) };
@@ -65,6 +65,16 @@ describe('the mock executor, its own behaviour', () => {
     expect(a.result.stderr).toMatch(/^panic: mock failure/);
     expect(a.result.exitCode).toBe(2);
     expect(a.result.stdout).toBe('hello\nworld\n');
+  });
+
+  it('prints plain values as the language would, and says plainly when a print is not simulated (E4 finding 43)', async () => {
+    expect(simulatedOutput('python', 'print("a")\nprint(42)\nprint(True)\nprint(None)')).toEqual(['a\n', '42\n', 'True\n', 'None\n']);
+    expect(simulatedOutput('javascript', 'console.log(`b`); console.log(false)')).toEqual(['b\n', 'false\n']);
+    expect(simulatedOutput('python', 'def post(n):\n    return n\nprint("start")\nprint(post(1))\nprint(x)')).toEqual([
+      'start\n', '[demo workspace] print(post(1)) is not simulated here: this runner prints literal values only.\n',
+    ]);
+    const c = await collect(make(), requestOf('python', { entrypoint: 'main.py', files: [{ path: 'main.py', content: 'print(post(1))\n' }] }, DEFAULT_RUN_LIMITS));
+    expect(c.result).toMatchObject({ status: 'succeeded', exitCode: 0, stdout: '[demo workspace] print(post(1)) is not simulated here: this runner prints literal values only.\n' });
   });
 
   it('never runs what it is given: code that would exit, read the disk or open a socket just "ran, no output"', async () => {
