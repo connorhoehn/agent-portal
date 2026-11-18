@@ -2,8 +2,9 @@
 // bounded work per tick, safe to run twice. It does nothing while the interviews flag is off.
 //
 // Once only: each ring has a key (round, person, scheduled instant) kept in memory, and the bell's own id is derived from the same
-// three (social-notify.ts), so a second tick or a second task in this process cannot ring twice. A restart forgets the keys: a
-// round whose bell rang before the restart and still starts within the window rings again, at most once more per restart. No table.
+// three (social-notify.ts), so a second tick or a second task in this process cannot ring twice. A restart forgets the keys; the
+// bell's id is then the dedupe key in the notification store itself: a person whose inbox already holds that id is not rung
+// again (O-043). No table.
 import { interviewsEnabled } from './flag.js';
 import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';

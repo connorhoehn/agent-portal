@@ -156,11 +156,9 @@ describe('a busy tick and a restart', () => {
     expect(new Set(told).size).toBe(450);
   });
 
-  // The set of what was rung lives in memory, so a restart inside the window rings the same person for the same time
-  // again under the SAME bell id. The ledger says the real notification store drops that repeat. It does not: the
-  // store (realtime-modules RedisNotificationStore) keeps each record as its own sorted-set member, and a record's
-  // timestamp differs between the two rings. Left failing so the checklist stays honest (a finding for the lead).
-  it.failing('after a restart the real notification store holds one bell for one person and one time (O-043)', async () => {
+  // The set of what was rung lives in memory, so a restart inside the window would ring the same person for the same time
+  // again; the bell's id (round, person, instant) is the dedupe key read back from the person's inbox, so it does not (O-043).
+  it('after a restart the real notification store holds one bell for one person and one time (O-043)', async () => {
     const { RedisNotificationStore } = await import('@connorhoehn/realtime-modules/notification');
     const zsets = new Map<string, Map<string, number>>();
     const redis = {
@@ -170,12 +168,19 @@ describe('a busy tick and a restart', () => {
     };
     const store = new RedisNotificationStore({ redisClient: redis as never, logger: { error() {}, warn() {}, info() {}, debug() {} } as never });
     let tick = Date.parse('2026-12-01T10:00:00.000Z');
-    setNotificationSink({ notifyUser: async (userId, input) => { await store.append(userId, { ...input, type: 'system', timestamp: new Date(tick++).toISOString() } as never); return {}; } });
+    setNotificationSink({
+      notifyUser: async (userId, input) => { await store.append(userId, { ...input, type: 'system', timestamp: new Date(tick++).toISOString() } as never); return {}; },
+      listForUser: (userId) => store.list(userId) as never,
+    });
     try {
       const deps = { now: () => NOW, load: async () => ({ openings: [], applications: [], interviews: [iv({ leadId: 'u-hugo', panelIds: [] })] }) as never, enabled: () => true };
       await runSoonTick(deps, new Set<string>());   // the first run
       await runSoonTick(deps, new Set<string>());   // the process restarted: nothing remembered
       expect((await store.list('u-hugo')).filter((r) => /starts in/.test(r.title))).toHaveLength(1);
+      // A moved time is a new bell.
+      const moved = { ...deps, load: async () => ({ openings: [], applications: [], interviews: [iv({ leadId: 'u-hugo', panelIds: [], scheduledAt: at(12) })] }) as never };
+      await runSoonTick(moved, new Set<string>());
+      expect((await store.list('u-hugo')).filter((r) => /starts in/.test(r.title))).toHaveLength(2);
     } finally { setNotificationSink(null); }
   });
 });

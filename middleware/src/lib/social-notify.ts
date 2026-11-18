@@ -865,9 +865,14 @@ export async function notifyInterviewStartingSoon(ev: InterviewStartingSoonEvent
   try {
     if (!sink) return [];
     const sent: string[] = [];
+    const inbox = notificationInbox();
     for (const userId of new Set(ev.userIds)) {
+      const id = `interview-soon:${roundKey(ev.interviewId)}:${userId}:${roundKey(ev.scheduledAt)}`;
+      // Idempotent in the store (O-043): the bell's id is its dedupe key (round, person, instant). One already in the person's
+      // inbox (rung before a restart) is not rung again. An inbox that cannot be read rings: a second bell beats a missing one.
+      if (inbox && (await inbox.listForUser(userId).catch(() => [])).some((r) => r.id === id)) continue;
       sent.push(...await notify([userId], {
-        id: `interview-soon:${roundKey(ev.interviewId)}:${userId}:${roundKey(ev.scheduledAt)}`,
+        id,
         type: 'system',
         title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} starts in ${ev.minutes} minutes`,
         body: 'Open My interviews to get ready.',
