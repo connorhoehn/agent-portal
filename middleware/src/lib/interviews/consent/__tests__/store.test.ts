@@ -10,7 +10,7 @@ import type { SqlExec } from '../../store-sql.js';
 import { consentsAnswered, consentsFor } from '../index.js';
 import { CONSENT_NOTICE } from '../notice.js';
 import { fixtureRegistry } from '../../../../mock/core/index.js';
-import { interviewConsentsFixture } from '../../../../mock/interviews-consents.js';
+import { interviewConsentsFixture, noticeAt } from '../../../../mock/interviews-consents.js';
 import { interviewsFixture } from '../../../../mock/interviews.js';
 
 const ts = (iso: string) => iso.replace('T', ' ').replace('Z', '');
@@ -89,12 +89,18 @@ describe.each([
 });
 
 describe('the seed', () => {
+  it('the live round answered the current notice', () => {
+    expect(interviewConsentsFixture.rows('default').find((r) => r.interviewId === 'iv-s4e8u2zk')!.noticeVersion).toBe(CONSENT_NOTICE.version);
+  });
+
   it('holds consents for the finished interviews and the one live now, and none for the upcoming ones', () => {
     const finished = interviewsFixture.rows('default').filter((i) => ['ended', 'scored', 'reviewed', 'live'].includes(i.state)).map((i) => i.id).sort();
     const rows = interviewConsentsFixture.rows('default');
     expect(rows.map((r) => r.interviewId).sort()).toEqual(finished);
     for (const r of rows) {
-      expect(r).toMatchObject({ noticeVersion: CONSENT_NOTICE.version, recording: true, transcription: true, milo: true });
+      // Under the notice in force when it was given: never one dated after the answer (E4 finding 45).
+      expect(r).toMatchObject({ noticeVersion: noticeAt(r.answeredAt), recording: true, transcription: true, milo: true });
+      expect(Date.parse(`${r.noticeVersion.slice(0, 10)}T00:00:00Z`)).toBeLessThanOrEqual(Date.parse(r.answeredAt));
       const start = interviewsFixture.rows('default').find((i) => i.id === r.interviewId)!.scheduledAt!;
       expect(Date.parse(r.answeredAt)).toBeLessThan(Date.parse(start));
     }
@@ -103,17 +109,17 @@ describe('the seed', () => {
 
 describe('the module\'s reads (C4)', () => {
   it('consentsAnswered: only a set under the current notice counts', async () => {
-    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(true);
+    expect(await consentsAnswered('iv-s4e8u2zk')).toBe(true);
     expect(await consentsAnswered('iv-k1p5w8ra')).toBe(false);
-    interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-j6x2d9sb')!.noticeVersion = 'older';
-    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(false);
+    interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-s4e8u2zk')!.noticeVersion = 'older';
+    expect(await consentsAnswered('iv-s4e8u2zk')).toBe(false);
   });
 
   it('consentsFor: the stored answers, Milo held off without the transcript, null when nothing was answered', async () => {
-    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: true, transcription: true, milo: true });
+    expect(await consentsFor('iv-s4e8u2zk')).toEqual({ recording: true, transcription: true, milo: true });
     expect(await consentsFor('iv-k1p5w8ra')).toBeNull();
-    Object.assign(interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-j6x2d9sb')!, { transcription: false, milo: true });
-    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: true, transcription: false, milo: false });
+    Object.assign(interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-s4e8u2zk')!, { transcription: false, milo: true });
+    expect(await consentsFor('iv-s4e8u2zk')).toEqual({ recording: true, transcription: false, milo: false });
   });
 });
 
