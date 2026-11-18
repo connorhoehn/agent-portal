@@ -49,6 +49,7 @@ export default async function run(ctx) {
     const end = Date.now() + 10_000;
     while (Date.now() < end && /Milo suggests/.test(await deckText(page))) await sleep(300);
   };
+  const CANDIDATE_LINE = 'I paired with him every morning, and we could tell it was working when his reviews got faster.';
   let seq = 0;
   const say = (room, who, text) => inject(ctx, room.callId, [{ userId: who, text }]).then((r) => { seq += 1; return r; });
 
@@ -65,8 +66,11 @@ export default async function run(ctx) {
     let first = null;
 
     await step('I3.3a', async () => {
-      const inj = await say(room, WEN, 'Tell me about a time you led a team through a hard deadline.');
-      await say(room, room.guest.guestId, 'We had six weeks to move payments, so I split the team into two streams and met daily.');
+      // Wen asks the round's chosen question and the candidate's answer meets one of its follow-ups, so the coach's first
+      // suggestion is that follow-up keyed to (and quoting) the candidate's line (E4 #41: a suggestion not keyed to a line
+      // quotes none, so an off-plan question would get the next chosen question with no quote).
+      const inj = await say(room, WEN, 'Tell me about someone on your team who was struggling. What did you do, and what happened?');
+      await say(room, room.guest.guestId, CANDIDATE_LINE);
       const t0 = Date.now();
       const text = await awaitDeck(room.leadPage, 160_000);
       const waited = Math.round((Date.now() - t0) / 1000);
@@ -74,7 +78,7 @@ export default async function run(ctx) {
       first = read.body?.suggestion ?? null;
       const shots = text ? await shootPage(room.leadPage, 'I3.3a-suggestion') : [];
       // The candidate's line is the quote: their words were kept (they joined the call before Milo, all three answers yes).
-      const quoted = first?.basedOn === 'We had six weeks to move payments, so I split the team into two streams and met daily.';
+      const quoted = first?.basedOn === CANDIDATE_LINE;
       const ok = inj.status === 202 && inj.listeners >= 1 && !!first && quoted && text.includes(first.text.slice(0, 40)) && /I’ll ask it/.test(text)
         && /Have Milo ask/.test(text) && /Skip/.test(text) && shots.every((s) => s.ok);
       return { ok, detail: `deck after ${waited} s (bounded at 160 s): "${text.slice(0, 140)}"; based on the candidate's line ${quoted}; listeners ${inj.listeners}; read ${read.status}; shots ${shots.map((s) => s.width).join(', ')}` };
