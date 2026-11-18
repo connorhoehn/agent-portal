@@ -71,11 +71,9 @@ export default async function run(ctx) {
     try {
       await inject(ctx, r.callId, [{ userId: HUGO, text: PANEL_LINE }, { userId: r.guest.guestId, text: CAND_LINE }]);
       const tabs = (await r.leadPage.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
-      // The room page that was open before Milo was invited (I3.7d), then a page opened now (what this step judges).
-      const before = await transcriptOn(r.leadPage, CAND_LINE, 15_000);
-      staleView = { has: before.text.includes(CAND_LINE), text: before.text.slice(0, 120) };
+      // A page opened after Milo joined (an earlier piece may have left Milo's earlier record in this running call: I3.7d).
       const fresh = await r.lead.newPage();
-      await fresh.goto(`${ctx.portal}/interviews/rounds/${SEED.panelInterview}/room`, { waitUntil: 'domcontentloaded' });
+      await fresh.goto(`${ctx.portal}/interviews/rounds/${iv}/room`, { waitUntil: 'domcontentloaded' });
       await fresh.getByTestId('interview-room-pane').waitFor({ timeout: 30_000 });
       const lead = await transcriptOn(fresh, CAND_LINE);
       const rec = await api(r.recruiter, 'GET', `/api/interviews/interviews/${iv}/transcript`);
