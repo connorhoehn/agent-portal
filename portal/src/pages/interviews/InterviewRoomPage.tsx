@@ -41,7 +41,7 @@ import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
-  suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
+  suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
@@ -127,7 +127,7 @@ function InterviewRoom({ id }: { id: string }) {
 
   // D7: Milo's suggestion, for the lead only, read on the server's wait while the interview is live and the lead is in the call.
   const [suggestion, setSuggestion] = useState<SuggestionView | null>(null);
-  const [paused, setPaused] = useState<'budget' | null>(null);
+  const [paused, setPaused] = useState<SuggestionPause | null>(null);
   const asking = pollsSuggestion(room?.seat ?? null, room?.state ?? null, joined, suggestion);
   const roundMinutes = room?.round.minutes ?? 0;
   const suggestionDeadline = useRef<number | null>(null);

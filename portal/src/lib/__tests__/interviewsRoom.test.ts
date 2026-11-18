@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
-  SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
+  SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, SUGGESTIONS_MODEL_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
   suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, pollsConsents,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
@@ -112,6 +112,8 @@ test('reading a suggestion: the shape, a budget pause, and not-found or failure 
   const paused = await readSuggestion('iv-1', reply(200, { suggestion: null, paused: 'budget', retryAfterMs: 1 }));
   assert.equal(paused.paused, 'budget');
   assert.equal(paused.retryAfterMs, 10_000);
+  assert.equal((await readSuggestion('iv-1', reply(200, { suggestion: null, paused: 'model', retryAfterMs: 1 }))).paused, 'model');
+  assert.equal((await readSuggestion('iv-1', reply(200, { suggestion: null, paused: 'other', retryAfterMs: 1 }))).paused, null);
   assert.equal((await readSuggestion('iv-1', reply(404))).suggestion, null);
   assert.equal((await readSuggestion('iv-1', (async () => { throw new Error('x'); }) as unknown as typeof fetch)).suggestion, null);
   assert.equal((await readSuggestion('iv-1', reply(200, { suggestion: { id: 1 } }))).suggestion, null);
@@ -121,6 +123,8 @@ test('a panel member never sees a paused line; the lead sees it only for the bud
   assert.equal(pausedLine('lead', 'budget'), SUGGESTIONS_PAUSED_LINE);
   assert.equal(pausedLine('panel', 'budget'), null);
   assert.equal(pausedLine('lead', null), null);
+  assert.equal(pausedLine('lead', 'model'), SUGGESTIONS_MODEL_PAUSED_LINE);
+  assert.equal(pausedLine('panel', 'model'), null);
   assert.equal(SUGGESTION_RECEIPTS['milo-ask'], 'Sent to the call chat');
   assert.equal(readsConsents('panel', true), true);
   assert.equal(readsConsents('lead', false), false);

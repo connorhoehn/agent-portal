@@ -7,7 +7,7 @@ import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggest
 import { ScriptedCoachModel, type CoachModel } from '../model.js';
 import type { CoachLine } from '../prompt.js';
 import { MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS } from '../rules.js';
-import { answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
+import { MODEL_FAILURES_BEFORE_PAUSE, answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
 
@@ -181,6 +181,49 @@ describe('a dropped answer', () => {
     await read();
     expect(deps.release).toHaveBeenCalledWith(['h-sg-1']);
     expect(deps.settle).not.toHaveBeenCalled();
+  });
+});
+
+describe('a failing model', () => {
+  const failing = (code: 'error' | 'timeout' = 'error') => ({ kind: 'bedrock', modelId: 'amazon.nova-pro-v1:0', suggest: async () => ({ raw: null, code, sent: true, usage: null }) });
+
+  it('a thrown error is logged by its name only, never its message', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const boom = Object.assign(new Error('secret prompt text'), { name: 'ThrottlingException' });
+    deps.model.mockReturnValue({ kind: 'bedrock', modelId: 'm', suggest: async () => { throw boom; } });
+    await read();
+    expect(warn).toHaveBeenCalledWith('[interviews] coach model failed', 'ThrottlingException');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
+    warn.mockRestore();
+  });
+
+  it(`pauses with reason model after ${MODEL_FAILURES_BEFORE_PAUSE} failures in a row, and keeps saying so between attempts`, async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    deps.model.mockReturnValue(failing());
+    for (let i = 1; i < MODEL_FAILURES_BEFORE_PAUSE; i += 1) {
+      expect((await read()).paused).toBeNull();
+      now += SUGGESTION_GAP_MS + 1;
+      say('candidate', `Another point ${i}.`);
+    }
+    expect(await read()).toEqual({ suggestion: null, paused: 'model', retryAfterMs: SUGGESTION_GAP_MS });
+    now += 1_000;
+    expect((await read()).paused).toBe('model'); // inside the gap: no call, still paused
+  });
+
+  it('a success clears the count', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    deps.model.mockReturnValue(failing('timeout'));
+    for (let i = 0; i < MODEL_FAILURES_BEFORE_PAUSE; i += 1) { await read(); now += SUGGESTION_GAP_MS + 1; say('candidate', `Point ${i}.`); }
+    deps.model.mockReturnValue(new ScriptedCoachModel());
+    const ok = await read();
+    expect(ok.suggestion).not.toBeNull();
+    expect(ok.paused).toBeNull();
+    deps.model.mockReturnValue(failing());
+    now += SUGGESTION_GAP_MS + 1;
+    await answerSuggestion(refOf(), WEN, ok.suggestion!.id, 'skip');
+    now += SUGGESTION_GAP_MS + 1;
+    say('candidate', 'More to say here.');
+    expect((await read()).paused).toBeNull(); // one failure after the success is not a pause
   });
 });
 

@@ -173,7 +173,9 @@ export interface SuggestionView {
   basedOn: string | null;
   shownAt: string;
 }
-export interface SuggestionRead { suggestion: SuggestionView | null; paused: 'budget' | null; retryAfterMs: number }
+/** Why Milo's suggestions are paused: the interview's budget, or the model failing several times in a row. */
+export type SuggestionPause = 'budget' | 'model';
+export interface SuggestionRead { suggestion: SuggestionView | null; paused: SuggestionPause | null; retryAfterMs: number }
 const SUGGESTION_RETRY_DEFAULT = 30_000;
 export const NO_SUGGESTION: SuggestionRead = { suggestion: null, paused: null, retryAfterMs: SUGGESTION_RETRY_DEFAULT };
 /** The wait between reads is the server's, held between 10 seconds and 2 minutes. */
@@ -239,7 +241,7 @@ export async function readSuggestion(interviewId: string, fetcher: typeof fetch 
     const valid = !!s && typeof s.id === 'string' && typeof s.text === 'string' && !!s.competency && typeof s.competency.name === 'string';
     return {
       suggestion: valid ? { id: s.id, text: s.text, competency: s.competency, basedOn: s.basedOn ?? null, shownAt: s.shownAt ?? '' } : null,
-      paused: body.paused === 'budget' ? 'budget' : null,
+      paused: body.paused === 'budget' || body.paused === 'model' ? body.paused : null,
       retryAfterMs: suggestionWaitMs(body.retryAfterMs),
     };
   } catch {
@@ -275,8 +277,9 @@ export const SUGGESTION_RECEIPTS: Record<SuggestionAnswerId, string> = {
 
 /** The one quiet line when the budget has paused suggestions: the lead's only. */
 export const SUGGESTIONS_PAUSED_LINE = 'Milo’s suggestions are paused: this interview has reached its budget.';
-export const pausedLine = (seat: 'lead' | 'panel' | null, paused: 'budget' | null | undefined): string | null =>
-  seat === 'lead' && paused === 'budget' ? SUGGESTIONS_PAUSED_LINE : null;
+export const SUGGESTIONS_MODEL_PAUSED_LINE = 'Milo’s suggestions are paused: the model has not answered the last few times. Milo will try again on its own.';
+export const pausedLine = (seat: 'lead' | 'panel' | null, paused: SuggestionPause | null | undefined): string | null =>
+  seat !== 'lead' ? null : paused === 'budget' ? SUGGESTIONS_PAUSED_LINE : paused === 'model' ? SUGGESTIONS_MODEL_PAUSED_LINE : null;
 
 /** The consents line is for any seat on the interview (decision 5). */
 export const readsConsents = (seat: 'lead' | 'panel' | null, open: boolean): boolean => seat !== null && open;

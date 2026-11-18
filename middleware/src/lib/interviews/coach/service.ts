@@ -30,7 +30,7 @@ import { logSaid, sayLogged } from '../speak/index.js';
 /** D7's view of a suggestion. */
 export interface SuggestionView { id: string; text: string; competency: { id: string; name: string }; basedOn: string | null; shownAt: string }
 /** D7's answer to the read. */
-export interface SuggestionBody { suggestion: SuggestionView | null; paused: null | 'budget'; retryAfterMs: number }
+export interface SuggestionBody { suggestion: SuggestionView | null; paused: null | 'budget' | 'model'; retryAfterMs: number }
 
 export interface CoachDeps {
   store: () => SuggestionStore;
@@ -80,7 +80,7 @@ const DEFAULTS: CoachDeps = {
 
 let overrides: Partial<CoachDeps> = {};
 /** Tests: replace some of the coach's dependencies; `null` puts every default back. */
-export function setCoachDeps(next: Partial<CoachDeps> | null): void { overrides = next ?? {}; }
+export function setCoachDeps(next: Partial<CoachDeps> | null): void { overrides = next ?? {}; modelFailures.clear(); }
 const deps = (): CoachDeps => ({ ...DEFAULTS, ...overrides });
 
 /** I4.5: what the coach reads of an interview's code: the pad's current text and the last run. */
@@ -105,6 +105,15 @@ export async function coachCodeFor(interview: Pick<Interview, 'id' | 'type'>): P
 }
 
 const inFlight = new Set<string>();
+
+/**
+ * Consecutive calls per interview that the model failed (an error or a timeout, not an answer the parser dropped). At this many
+ * the read says `paused: 'model'`, the same shape as the budget's pause, so the lead sees the coach is down instead of an
+ * empty panel. The coach still tries again at the usual gap; the first call the model answers clears the count.
+ */
+export const MODEL_FAILURES_BEFORE_PAUSE = 3;
+const modelFailures = new Map<string, number>();
+const modelPaused = (interviewId: string): boolean => (modelFailures.get(interviewId) ?? 0) >= MODEL_FAILURES_BEFORE_PAUSE;
 
 /** The interview and the opening that holds its kit, found in the viewer's scope by the route. */
 export interface CoachRef { interview: Interview; opening: Opening }
@@ -178,7 +187,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     inFlight: inFlight.has(interview.id), nowMs,
   });
   if (decision.kind === 'not-found') return { kind: 'not-found' };
-  if (decision.kind === 'none') return { kind: 'ok', body: { suggestion: null, paused: null, retryAfterMs: decision.retryAfterMs } };
+  if (decision.kind === 'none') return { kind: 'ok', body: { suggestion: null, paused: ready && modelPaused(interview.id) ? 'model' : null, retryAfterMs: decision.retryAfterMs } };
   if (decision.kind === 'show') {
     const shown = (await store.markShown(interview.id, decision.suggestion.id, iso(nowMs))) ?? decision.suggestion;
     return { kind: 'ok', body: { suggestion: suggestionView(shown, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
@@ -196,7 +205,13 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     });
     if (!held.ok) return { kind: 'ok', body: { suggestion: null, paused: 'budget', retryAfterMs: SUGGESTION_GAP_MS } };
     let result: CoachModelResult;
-    try { result = await model.suggest(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
+    try { result = await model.suggest(input); } catch (e) {
+      // The name only: a message could quote the request.
+      console.warn('[interviews] coach model failed', (e as Error)?.name ?? 'error');
+      result = { raw: null, code: 'error', sent: false, usage: null };
+    }
+    if (result.code === 'error' || result.code === 'timeout') modelFailures.set(interview.id, (modelFailures.get(interview.id) ?? 0) + 1);
+    else modelFailures.delete(interview.id);
     await book(d, model, input, held, result, viewer.userId);
     const parsed: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
       ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
@@ -212,7 +227,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     await store.appendSuggestion(row);
     if (!parsed.ok) {
       console.warn('[interviews] coach suggestion dropped', parsed.code);
-      return { kind: 'ok', body: { suggestion: null, paused: null, retryAfterMs: SUGGESTION_GAP_MS } };
+      return { kind: 'ok', body: { suggestion: null, paused: modelPaused(interview.id) ? 'model' : null, retryAfterMs: SUGGESTION_GAP_MS } };
     }
     return { kind: 'ok', body: { suggestion: suggestionView(row, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
   } finally {
