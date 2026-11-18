@@ -4,6 +4,10 @@
 // other version is refused, so the page shows the text again (rules.ts). Changing a word here means a new
 // `version`: a candidate who answered the old text is asked again before they can knock.
 //
+// Every version ever shown is kept, text and all (NOTICE_VERSIONS, append-only): an answer names the version it was
+// given under, and the export prints that version's text, so a new version never leaves older answers pointing at a
+// notice nobody can read (E4 #45). To change the notice, append a new entry; never edit or remove a published one.
+//
 // Plain words, nothing the product cannot keep. The periods are decision 17's defaults; a deployment may set
 // others (and the deletion log and the periods themselves are row I6.3). No provider is named.
 
@@ -13,7 +17,7 @@ export interface ConsentNotice {
   paragraphs: string[];
 }
 
-export const CONSENT_NOTICE: ConsentNotice = Object.freeze({
+const NOTICE_2026_11_16_1: ConsentNotice = Object.freeze({
   version: '2026-11-16.1',
   title: 'Before your interview: recording, transcript and Milo',
   paragraphs: Object.freeze([
@@ -28,3 +32,14 @@ export const CONSENT_NOTICE: ConsentNotice = Object.freeze({
     'Asking for deletion. To have your recording and transcript deleted, ask the person who sent you your interview link. They are removed within 30 days; a note that they were removed is kept, and the record of your answers stays for its period with your contact details taken out.',
   ]) as string[],
 }) as ConsentNotice;
+
+/** Every notice version shown to a candidate, oldest first. Append-only: the last entry is the current notice. */
+export const NOTICE_VERSIONS: readonly ConsentNotice[] = Object.freeze([NOTICE_2026_11_16_1]);
+
+/** The notice candidates read now. */
+export const CONSENT_NOTICE: ConsentNotice = NOTICE_VERSIONS[NOTICE_VERSIONS.length - 1]!;
+
+/** The notice an answer was given under, by its version; null for a version this deployment never showed. */
+export function noticeOfVersion(version: string, versions: readonly ConsentNotice[] = NOTICE_VERSIONS): ConsentNotice | null {
+  return versions.find((n) => n.version === version) ?? null;
+}

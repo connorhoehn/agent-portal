@@ -3,7 +3,7 @@
 import { exportRecap } from '../recap/index.js';
 import { exportCoachLog } from '../milo-notes/index.js';
 import { exportPanelNotices } from '../consent/panel-notice.js';
-import { CONSENT_NOTICE } from '../consent/notice.js';
+import { noticeOfVersion } from '../consent/notice.js';
 import { consentStore } from '../consent/store.js';
 import { suggestionStore, type SuggestionRecord } from '../coach/store.js';
 import { saidStore } from '../speak/store.js';
@@ -29,7 +29,8 @@ export async function exportSuggestions(interviewId: string): Promise<unknown> {
 export async function exportNotices(interviewId: string): Promise<unknown> {
   const c = await consentStore().getConsent(interviewId);
   if (!c) return { notice: null, answers: null };
-  const text = c.noticeVersion === CONSENT_NOTICE.version ? { title: CONSENT_NOTICE.title, paragraphs: CONSENT_NOTICE.paragraphs } : null;
+  const given = noticeOfVersion(c.noticeVersion);
+  const text = given ? { title: given.title, paragraphs: given.paragraphs } : null;
   return {
     notice: { version: c.noticeVersion, ...(text ?? { title: null, paragraphs: null }), textKept: text !== null },
     answeredAt: c.answeredAt,
