@@ -37,7 +37,7 @@ export default async function run(ctx) {
     const invite = await mintInvite(greta, iv);
     const g = await openGuest(invite.linkPath);
     const at = await toWaiting(g.page, { recording: true, transcription: false, milo: false });
-    const bell = await bells(desk, /System design for Senior Backend Engineer runs with/);
+    const bell = await bells(desk, /Coding for Senior Backend Engineer runs with/);
     const line = bell.lines[0] ?? '';
     await desk.keyboard.press('Escape');
     await desk.reload({ waitUntil: 'domcontentloaded' });

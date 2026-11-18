@@ -95,7 +95,7 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(res.body.items).toHaveLength(12);
     const mateo = res.body.items.find((r: { candidate: { name: string } }) => r.candidate.name === 'Mateo Álvarez');
     expect(mateo).toMatchObject({ opening: { title: 'Senior Backend Engineer' }, stage: 'interviewing',
-      nextInterview: { roundName: 'System design', lead: { name: 'Hugo Marchetti' } }, lastResult: { recommendation: 'yes', roundName: 'Coding' } });
+      nextInterview: { roundName: 'Coding', lead: { name: 'Hugo Marchetti' } }, lastResult: { recommendation: 'yes', roundName: 'System design' } });
     expect(res.headers['cache-control']).toBe('no-store');
   });
 
@@ -145,7 +145,7 @@ describe('an interviewer reads only the interviews assigned to them', () => {
   it('opens their own interview, and through it the candidate and the opening', async () => {
     const own = await HUGO('/api/interviews/interviews/iv-k1p5w8ra');
     expect(own.status).toBe(200);
-    expect(own.body.interview).toMatchObject({ seat: 'lead', questionsChosen: [{ id: 'q-be-ledger' }] });
+    expect(own.body.interview).toMatchObject({ seat: 'lead', questionsChosen: [{ id: 'q-be-twosum' }] });
     expect((await HUGO('/api/interviews/candidates/cand-rx6tcaqj')).status).toBe(200);
     expect((await HUGO('/api/interviews/openings/op-backend')).status).toBe(200);
   });

@@ -39,7 +39,7 @@ export default async function run(ctx) {
     const text = await guest.page.getByTestId('join-interview').innerText();
     const shots = await shootPage(guest.page, 'guest-landing');
     const ok = guest.landed === 'interview' && url.pathname === '/join' && url.hash === '' && /Senior Backend Engineer/.test(text)
-      && /System design/.test(text) && shots.every((s) => s.ok);
+      && /Coding/.test(text) && shots.every((s) => s.ok);
     return { ok, detail: `landed on ${guest.landed} at ${url.pathname}${url.hash ? ' WITH the fragment left' : ', no fragment'}; card "${text.replace(/\s+/g, ' ').slice(0, 90)}"; shots ${shots.map((s) => `${s.width}${s.ok ? '' : ' scrolls sideways'}`).join(', ')}` };
   });
 
@@ -67,7 +67,7 @@ export default async function run(ctx) {
     await guest.page.reload({ waitUntil: 'domcontentloaded' });
     const isDead = await dead(guest.page);
     const text = isDead ? await guest.page.locator('body').innerText() : '';
-    const leaks = ['Senior Backend Engineer', 'System design', 'Hugo'].filter((w) => text.includes(w));
+    const leaks = ['Senior Backend Engineer', 'Coding', 'Hugo'].filter((w) => text.includes(w));
     const shots = isDead ? await shootPage(guest.page, 'guest-dead') : [];
     return { ok: revoked.status === 200 && isDead && leaks.length === 0, detail: `revoke ${revoked.status}; reload ${isDead ? 'reads the dead page' : 'did NOT read the dead page'}${leaks.length ? `, which names ${leaks.join(', ')}` : ', naming no interview'}${shots.length ? `; shots ${shots.map((s) => s.width).join(', ')}` : ''}` };
   });

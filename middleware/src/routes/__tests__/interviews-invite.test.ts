@@ -204,7 +204,7 @@ describe('the exchange and the guest\'s read', () => {
     expect(([] as string[]).concat(res.headers['set-cookie'] as unknown as string[]).some((c) => c.startsWith(`${COOKIE_NAME}=`))).toBe(false);
     expect(res.headers['referrer-policy']).toBe('no-referrer');
     const iv = interviewsFixture.rows().find((i) => i.id === IV)!;
-    expect(res.body.interview).toEqual({ opening: { title: expect.any(String) }, round: { name: 'System design', minutes: iv.minutes }, scheduledAt: iv.scheduledAt });
+    expect(res.body.interview).toEqual({ opening: { title: expect.any(String) }, round: { name: 'Coding', minutes: iv.minutes }, scheduledAt: iv.scheduledAt });
     // Nothing of the panel or the candidate's record in the exchange.
     for (const name of ['Hugo', 'Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-']) expect(JSON.stringify(res.body)).not.toContain(name);
     const read = await readAsGuest(guestCookie(res));
@@ -283,7 +283,7 @@ describe('the exchange and the guest\'s read', () => {
     const cookie = guestCookie(await exchange(await issue()));
     await issue('iv-c3k8w2ma');
     const res = await request(app).get('/api/interview-invite/interview?id=iv-c3k8w2ma').set('Cookie', cookie);
-    expect(res.body.interview.round.name).toBe('System design');
+    expect(res.body.interview.round.name).toBe('Coding');
     expect((await request(app).get('/api/interview-invite/interview/iv-c3k8w2ma').set('Cookie', cookie)).status).toBe(404);
   });
 

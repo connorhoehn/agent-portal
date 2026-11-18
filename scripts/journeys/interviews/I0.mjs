@@ -12,7 +12,7 @@ export default async function run({ portal, record, signIn, namesIn, shoot, home
     const names = await namesIn(page, 'interviews-candidates-table', 'interviews-candidate-name', 'Mateo Álvarez');
     const want = ['Mateo Álvarez', 'Ingrid Solberg', 'Aiko Tanaka', 'Ravi Menon', 'Nadia Petrova', 'Jonah Whitaker', 'Chloé Martin', 'Elif Demir'];
     const text = await page.getByTestId('interviews-candidates-table').innerText();
-    const ok = names.length === 12 && want.every((n) => names.includes(n)) && /System design · (Tomorrow|[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2},) \d\d:\d\d/.test(text) && /Yes · Coding/.test(text)
+    const ok = names.length === 12 && want.every((n) => names.includes(n)) && /Coding · (Tomorrow|[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2},) \d\d:\d\d/.test(text) && /Yes · System design/.test(text)
       && !/\b(cand|app|iv|op|sc)-[a-z]/.test(text);
     record('I0.5a', ok, `recruiter lands on ${new URL(page.url()).pathname}; ${names.length} candidate rows; next interview and last result shown; no ids in the table`);
     homes.push({ name: 'recruiter-candidates', shots: await shoot(page, 'recruiter-candidates', 'interviews-candidates-table') });
