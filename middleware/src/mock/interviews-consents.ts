@@ -1,7 +1,7 @@
 // The consents fixture (docs/interviews-tenant-plan.md decision 5, row I2.3): the mock world's interview_consents.
 //
 // The five finished interviews in mock/interviews.ts carry a consent record (all three accepted under the
-// notice in force that day, given twenty minutes before the call); the upcoming ones carry none, so the staff read shows
+// current notice, given twenty minutes before the call); the upcoming ones carry none, so the staff read shows
 // both cases. Registered from its own module (lib/interviews/consent/store.ts imports it), so mock/interviews.ts
 // is untouched. Times follow mock/interviews.ts's `at()`: working days from today (mock/interviews-days.ts), computed on read.
 import { defineFixture } from './core/index.js';
@@ -13,19 +13,8 @@ import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 /** Working days from today at an hour UTC (mock/interviews-days.ts). */
 const at = seedAt;
 
-/**
- * The notice an answer was given under (E4 finding 45): the current one from its day on; before that, the one it
- * replaced. An answer is never shown under a notice dated after it. Only rounds still open read the version (an answer
- * under an older notice is asked again); the finished rounds' answers stand as given.
- */
-export const PREVIOUS_NOTICE_VERSION = '2026-10-26.1';
-export function noticeAt(given: string): string {
-  const day = Date.parse(`${CONSENT_NOTICE.version.slice(0, 10)}T00:00:00Z`);
-  return Number.isNaN(day) || Date.parse(given) >= day ? CONSENT_NOTICE.version : PREVIOUS_NOTICE_VERSION;
-}
-
 function accepted(interviewId: string, given: string): ConsentRecord {
-  const version = noticeAt(given);
+  const version = CONSENT_NOTICE.version;
   return {
     interviewId, noticeVersion: version,
     recording: true, recordingAt: given, transcription: true, transcriptionAt: given, milo: true, miloAt: given,

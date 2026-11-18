@@ -55,7 +55,7 @@ describe('declinedRequired', () => {
 
 describe('the knock\'s precondition over the stored answers', () => {
   const before = process.env[REQUIRED_CONSENTS_SETTING];
-  const row = () => interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-s4e8u2zk')!;
+  const row = () => interviewConsentsFixture.rows().find((r) => r.interviewId === 'iv-j6x2d9sb')!;
   beforeEach(() => fixtureRegistry.resetAll('default'));
   afterEach(() => {
     if (before === undefined) delete process.env[REQUIRED_CONSENTS_SETTING]; else process.env[REQUIRED_CONSENTS_SETTING] = before;
@@ -65,33 +65,33 @@ describe('the knock\'s precondition over the stored answers', () => {
   it('the default deployment is unchanged: a declined part still knocks, consentsAnswered and consentsFor read as before', async () => {
     delete process.env[REQUIRED_CONSENTS_SETTING];
     Object.assign(row(), { recording: false });
-    expect(await knockCheck('iv-s4e8u2zk')).toBe(true);
-    expect(await knockPrecondition('iv-s4e8u2zk')).toBe(true);
-    expect(await consentsAnswered('iv-s4e8u2zk')).toBe(true);
-    expect(await consentsFor('iv-s4e8u2zk')).toEqual({ recording: false, transcription: true, milo: true });
+    expect(await knockCheck('iv-j6x2d9sb')).toBe(true);
+    expect(await knockPrecondition('iv-j6x2d9sb')).toBe(true);
+    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(true);
+    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: false, transcription: true, milo: true });
     expect(await knockCheck('iv-k1p5w8ra')).toBe('unanswered');
   });
 
   it('a declined required part refuses the knock with its own reason; changing the answer lets it through', async () => {
     process.env[REQUIRED_CONSENTS_SETTING] = 'recording';
     Object.assign(row(), { recording: false });
-    expect(await knockPrecondition('iv-s4e8u2zk')).toBe('declined-required');
+    expect(await knockPrecondition('iv-j6x2d9sb')).toBe('declined-required');
     // Milo's policy and the answered check keep their meaning: the answers are complete and stand as given.
-    expect(await consentsAnswered('iv-s4e8u2zk')).toBe(true);
-    expect(await consentsFor('iv-s4e8u2zk')).toEqual({ recording: false, transcription: true, milo: true });
+    expect(await consentsAnswered('iv-j6x2d9sb')).toBe(true);
+    expect(await consentsFor('iv-j6x2d9sb')).toEqual({ recording: false, transcription: true, milo: true });
     Object.assign(row(), { recording: true });
-    expect(await knockPrecondition('iv-s4e8u2zk')).toBe(true);
+    expect(await knockPrecondition('iv-j6x2d9sb')).toBe(true);
   });
 
   it('unanswered comes first: a set under an older notice is unanswered, whatever is required', async () => {
     process.env[REQUIRED_CONSENTS_SETTING] = 'recording';
     Object.assign(row(), { recording: false, noticeVersion: 'older' });
-    expect(await knockPrecondition('iv-s4e8u2zk')).toBe('unanswered');
+    expect(await knockPrecondition('iv-j6x2d9sb')).toBe('unanswered');
   });
 
   it('milo required: a declined transcript refuses the knock', async () => {
     process.env[REQUIRED_CONSENTS_SETTING] = 'milo';
     Object.assign(row(), { transcription: false, milo: false });
-    expect(await knockPrecondition('iv-s4e8u2zk')).toBe('declined-required');
+    expect(await knockPrecondition('iv-j6x2d9sb')).toBe('declined-required');
   });
 });
