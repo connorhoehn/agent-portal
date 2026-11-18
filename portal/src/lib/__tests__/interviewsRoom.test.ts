@@ -301,3 +301,20 @@ test('after a lost call the room says Milo left with it only when Milo\'s record
   assert.equal(miloLostLine({ phase: 'listening', leftReason: null }, 'lead'), null);
   assert.equal(miloLostLine(null, 'lead'), null);
 });
+
+test('the lost call: the server\'s lobby report is the answer a waking client always gets; it seats the call, then says when it is gone', async () => {
+  const { nextCallLoss, seatConfirmed } = await import('../interviewsRoom.ts');
+  // The lobby reports this client's own call: it is seated (also while its media still reads "connecting").
+  assert.equal(seatConfirmed('c-1', 'c-1'), true);
+  assert.equal(seatConfirmed(null, 'c-1'), false);
+  assert.equal(seatConfirmed('c-2', 'c-1'), false);
+  assert.equal(seatConfirmed('c-1', null), false);
+  // Seated in c-1 and still holding it: the reconnect's snapshot says no call, or another call, so c-1 is gone.
+  assert.deepEqual(nextCallLoss(null, { kind: 'lobby', callId: null, held: 'c-1' }, 'c-1'), { callId: 'c-1' });
+  assert.deepEqual(nextCallLoss(null, { kind: 'lobby', callId: 'c-2', held: 'c-1' }, 'c-1'), { callId: 'c-1' });
+  assert.equal(nextCallLoss(null, { kind: 'lobby', callId: 'c-1', held: 'c-1' }, 'c-1'), null);
+  // A call being started and not yet seated (a stale empty report), or a call this client already left, is not lost.
+  assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: 'c-3' }, 'c-1'), null);
+  assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: 'c-3' }, null), null);
+  assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: null }, 'c-1'), null);
+});

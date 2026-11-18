@@ -650,6 +650,11 @@ export type CallLossEvent =
   | { kind: 'refused'; callId: string }
   /** The library tore the call down, for `reason` (its own `left`, or a server end such as `peer-disconnected`). */
   | { kind: 'ended'; callId: string; reason: string | null }
+  /**
+   * The call service's answer about the lobby (its `lobby-occupancy` frame: the snapshot every (re)connecting client's `watch` gets,
+   * and each change after it): the lobby's live call, or null for none, while this client holds `held`.
+   */
+  | { kind: 'lobby'; callId: string | null; held: string | null }
   /** This viewer is in a call of the interview's lobby. */
   | { kind: 'joined'; callId: string }
   /** The interview is no longer live (ended, or the room closed): nothing is lost any more. */
@@ -674,9 +679,18 @@ export function nextCallLoss(prev: CallLoss | null, event: CallLossEvent, joined
     case 'closed': return null;
     case 'joined': return prev && event.callId !== prev.callId ? null : prev;
     case 'refused': return event.callId === joinedCallId ? (prev?.callId === event.callId ? prev : { callId: event.callId }) : prev;
+    // The server says the lobby has no call, or another one, while this client still holds the call it was in: that call is gone.
+    // This is the answer a waking client always gets (its reconnect re-sends `watch`), whatever happened to its own frames.
+    case 'lobby': return event.held && event.held === joinedCallId && event.callId !== event.held ? (prev?.callId === event.held ? prev : { callId: event.held }) : prev;
     case 'ended': return event.callId === joinedCallId && !!event.reason && SERVER_ENDS.has(event.reason) ? (prev?.callId === event.callId ? prev : { callId: event.callId }) : prev;
   }
 }
+
+/**
+ * The server's lobby report seats this client in the call it holds (`lobbyCallId` is the lobby's live call, `held` this client's): from
+ * then on that call can be lost, also while the client's media has not come up (the library still reads "connecting").
+ */
+export const seatConfirmed = (lobbyCallId: string | null, held: string | null): boolean => !!held && lobbyCallId === held;
 
 /** This client still holds the lost call (its clock runs, its tiles show): it leaves it. */
 export const holdsLostCall = (loss: CallLoss | null, activeCallId: string | null): boolean => !!loss && activeCallId === loss.callId;
