@@ -14,7 +14,7 @@
 //          no transcript line, no receipt
 //   I3.5g  after the end, the said log (the recruiter's export of what Milo showed): one row per approved ask, oldest first,
 //          spoken true for the two said aloud and false for the chat-only one
-import { staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, framesOf, speakingOn, letSound, chatText, padTab, suggestion } from './h8-room.mjs';
+import { askedMarker, catchText, staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, framesOf, speakingOn, letSound, chatText, padTab, suggestion } from './h8-room.mjs';
 
 export default async function run(ctx) {
   const { SEED, record, resetMock, endInterview, api, guestApi } = ctx;
@@ -68,8 +68,9 @@ export default async function run(ctx) {
     basedOn = ((await H.page.getByTestId('interview-suggestion-based-on').first().getAttribute('title').catch(() => null)) ?? '').trim();
     const before = await frames();
     await H.page.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i }).click();
+    const receiptP = catchText(H.page, 'interview-room-ask', /asked it aloud/, 6000);
     const marks = await watchSpeaking(6000);
-    const receipt = (await H.page.getByTestId('interview-room-ask').innerText().catch(() => '')).replace(/\s+/g, ' ');
+    const receipt = await receiptP;
     const after = await until(async () => { const f = await frames(); return f.candidate > before.candidate && f.lead > before.lead && f.panel > before.panel ? f : null; }, 12_000) ?? await frames();
     // The suggestion's words: what the candidate's line now holds (the last question Milo asked).
     suggestionText = ((await C.page.getByTestId('guest-milo-question').first().innerText().catch(() => '')) ?? '').trim();
@@ -87,9 +88,8 @@ export default async function run(ctx) {
     await H.page.getByTestId('interview-room-pane').getByRole('tab', { name: /questions/i }).click();
     const room = (await api(H.context, 'GET', `/api/interviews/interviews/${iv}/room`)).body;
     const q = (room?.room ?? room)?.questions?.[1] ?? (room?.room ?? room)?.questions?.[0];
-    await H.page.getByTestId('interview-room-milo-ask').nth((room?.room ?? room)?.questions?.length > 1 ? 1 : 0).click();
-    const said = await until(async () => H.page.getByTestId('interview-room-milo-said').first().getAttribute('data-said'), 10_000);
-    const line = await H.page.getByTestId('interview-room-milo-said').first().innerText().catch(() => '');
+    await H.page.getByRole('button', { name: /have milo ask/i }).nth((room?.room ?? room)?.questions?.length > 1 ? 1 : 0).click();
+    const { said, line } = await askedMarker(H.page);
     const after = await until(async () => { const f = await frames(); return f.candidate > before.candidate ? f : null; }, 12_000) ?? await frames();
     const key = String(q?.prompt ?? '').trim().slice(0, 40);
     const cand = await chatText(C.page);

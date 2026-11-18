@@ -12,7 +12,7 @@
 //   I4.2f  "Have Milo ask" on a kit question (Milo invited into the call) puts the question in the pad once, for both people
 //   I4.2g  a behavioural round has no Pad tab: the lead's room (Plan, Milo, Chat) and the candidate's pane (no tabs, the chat)
 //   I4.2h  the pad's text is the gateway's memory, not the mock world's: resetMock leaves it (pinned; only a restart empties it)
-import { staffRoom, joinCall, guestRoom, pad, synced, padText, carets, typeInPad, languageOf, chooseLanguage, until, why, inviteMilo } from './h8-room.mjs';
+import { askedMarker, staffRoom, joinCall, guestRoom, pad, synced, padText, carets, typeInPad, languageOf, chooseLanguage, until, why, inviteMilo } from './h8-room.mjs';
 
 export default async function run(ctx) {
   const { SEED, record, resetMock, startInterview, shootPage, api } = ctx;
@@ -116,8 +116,8 @@ export default async function run(ctx) {
       await H.page.getByTestId('interview-room-pane').getByRole('tab', { name: /questions/i }).click({ timeout: 5000 });
       const room = (await api(H.context, 'GET', `/api/interviews/interviews/${live}/room`)).body;
       const prompt = String((room?.room ?? room)?.questions?.[0]?.prompt ?? '').trim();
-      await H.page.getByTestId('interview-room-milo-ask').first().click({ timeout: 5000 });
-      const said = await until(async () => H.page.getByTestId('interview-room-milo-said').first().getAttribute('data-said'), 10_000);
+      await H.page.getByRole('button', { name: /have milo ask/i }).first().click({ timeout: 5000 });
+      const { said } = await askedMarker(H.page);
       await H.page.getByTestId('interview-room-pane').getByRole('tab', { name: /^pad$/i }).click({ timeout: 5000 }).catch(() => undefined);
       const after = await until(async () => { const t = await padText(H.page); return t && t !== before ? t : null; }, 15_000);
       const cand = after ? await until(async () => ((await padText(C.page)) === after ? after : null), 10_000) : null;

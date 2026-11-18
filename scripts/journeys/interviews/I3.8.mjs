@@ -9,7 +9,7 @@
 //   I3.8d  a second press inside 10 s gets "Milo just answered…" and nothing more is posted
 //   I3.8e  a spoken request for a hint ("Milo, can you give me a hint?") gets the one fixed sentence in the chat on both sides;
 //          a typed one in the candidate's chat is written in the detail (the fixed sentence, or nothing, never anything else)
-import { staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, framesOf, letSound, chatText, padTab } from './h8-room.mjs';
+import { askedMarker, staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, framesOf, letSound, chatText, padTab } from './h8-room.mjs';
 
 const NO_QUESTION_YET = 'Milo has not asked a question yet.';
 const TOO_SOON = 'Milo just answered. Ask again in a few seconds.';
@@ -62,7 +62,7 @@ export default async function run(ctx) {
     prompt = String((room?.room ?? room)?.questions?.[0]?.prompt ?? '').trim();
     await L.page.getByTestId('interview-room-pane').getByRole('tab', { name: /questions/i }).click();
     await L.page.getByRole('button', { name: /have milo ask/i }).first().click();
-    const said = await until(async () => L.page.getByTestId('interview-room-milo-said').first().getAttribute('data-said'), 10_000);
+    const { said } = await askedMarker(L.page);
     await G.page.waitForTimeout(3000);
     const before = await framesOf(G.page);
     const l = await press('repeat', /\S/);

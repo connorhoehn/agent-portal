@@ -17,7 +17,12 @@ export const STAND_IN_SFU = 'http://interviews-h8.test';
 const PANEL_KEY = 'orgiq.call-prejoin.v1';
 const GUEST_KEY = 'interviews.guest-prejoin.v1';
 
-export const why = (e) => (e instanceof Error ? e.message.split('\n')[0] : String(e)).slice(0, 220);
+export const why = (e) => {
+  const lines = (e instanceof Error ? e.message : String(e)).split('\n').map((l) => l.trim()).filter(Boolean);
+  // A timeout names the locator on its second line ("waiting for …"): keep it, it is what says which wait gave up.
+  const wait = lines.find((l) => /waiting for/.test(l));
+  return `${lines[0] ?? ''}${wait ? ` (${wait.replace(/\u001b\[\d+m/g, '')})` : ''}`.slice(0, 300);
+};
 export const until = async (fn, ms = 15_000, step = 400) => {
   const end = Date.now() + ms;
   let v = await fn().catch(() => null);
@@ -105,8 +110,19 @@ export async function guestRoom(ctx, interviewId, lead, { width = 1440 } = {}) {
   const page = await context.newPage();
   const calls = watchCalls(page);
   await page.goto(`${ctx.portal}${invite.linkPath}`, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('join-interview').first().waitFor({ timeout: 30_000 });
-  const step = await ctx.toWaiting(page);
+  // A candidate whose answers are already on record (the seeded live round) lands on the device check, not the landing card.
+  const seenId = (id) => page.getByTestId(id).first().waitFor({ timeout: 30_000 }).then(() => id);
+  const first = await Promise.any(['join-interview', 'join-consents', 'join-devices', 'join-waiting', 'join-room'].map(seenId)).catch(async () => {
+    throw new Error(`the invite page did not show a first step at ${new URL(page.url()).pathname.replace(/[0-9a-f-]{20,}/g, ':token')}; it reads "${((await page.locator('body').innerText().catch(() => '')) || '').replace(/\s+/g, ' ').slice(0, 220)}"`);
+  });
+  let step = null;
+  if (first === 'join-interview' || first === 'join-consents') step = await ctx.toWaiting(page);
+  else {
+    if (first === 'join-devices') {
+      await page.getByTestId('join-devices-continue').click();
+      step = await Promise.any(['join-waiting', 'join-room', 'join-held'].map(seenId)).then((id) => id.replace('join-', '')).catch(() => null);
+    } else step = first.replace('join-', '');
+  }
   if (step !== 'waiting' && step !== 'room') throw new Error(`the candidate stopped at ${step}`);
   const a = await ctx.admit(lead, interviewId, true);
   if (a.status !== 200) throw new Error(`admit answered ${a.status}`);
@@ -208,4 +224,33 @@ export async function padTab(page) {
 export async function suggestion(page, ms = 160_000) {
   const deck = page.getByTestId('interview-room-ask');
   return until(async () => ((await deck.getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? (await deck.innerText()).replace(/\s+/g, ' ').trim() : null), ms, 2500);
+}
+
+/**
+ * What the lead's "Have Milo ask" on a question card says. The line is shown only until the pane moves: in a technical round
+ * a question Milo said aloud opens the Pad tab (InterviewRoomPage `onAsked`), so a line that never shows while the Pad tab is
+ * selected is the built behaviour, read as spoken. → { said: 'spoken' | …| null, line, padOpened }
+ */
+export async function askedMarker(page, ms = 10_000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const el = page.getByTestId('interview-room-milo-said').first();
+    if (await el.count()) return { said: await el.getAttribute('data-said').catch(() => null), line: await el.innerText().catch(() => ''), padOpened: false };
+    const padSelected = await page.getByTestId('interview-room-pane').getByRole('tab', { name: /^pad/i }).first().getAttribute('aria-selected').catch(() => null);
+    if (padSelected === 'true') return { said: 'spoken', line: 'Milo asked it aloud (the Pad tab opened on the question).', padOpened: true };
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return { said: null, line: '', padOpened: false };
+}
+
+/** Sample an element's text until it matches `re` (a receipt that stays only a moment), bounded. → the text that matched, or the last text read */
+export async function catchText(page, testId, re, ms = 8000) {
+  const end = Date.now() + ms;
+  let last = '';
+  while (Date.now() < end) {
+    last = ((await page.getByTestId(testId).first().innerText({ timeout: 500 }).catch(() => '')) || '').replace(/\s+/g, ' ');
+    if (re.test(last)) return last;
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return last;
 }
