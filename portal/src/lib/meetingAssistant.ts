@@ -152,6 +152,8 @@ export interface MeetingAssistantHandle {
   ask: BudgetAsk | null;
   /** Yes sends the held action again past the budget; no drops it. */
   answerAsk(yes: boolean): Promise<boolean>;
+  /** Puts the refusal sentence away (its deck prompt's OK). */
+  clearError(): void;
   invite(): Promise<boolean>;
   pause(): Promise<boolean>;
   resume(): Promise<boolean>;
@@ -218,6 +220,7 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
       if (!yes || !ask || !callId) { publish(slot, { ask: null }); return Promise.resolve(false); }
       return actOnAssistant(callId, ask.action, { confirmOverUserBudget: true });
     },
+    clearError: () => publish(slot, { error: null }),
     controls: assistantControls({ enabled, inCall: !!callId, canInvite: can('InviteMeetingAssistant'), view }),
     invite: () => run('invite'), pause: () => run('pause'), resume: () => run('resume'),
     dismiss: () => run('dismiss'),

@@ -137,6 +137,14 @@ export function rejoinRefusedWords(v: AssistantView): string | null {
   return null;
 }
 
+/**
+ * A refusal or failure (Milo could not start, say, with the provider's cause) as a deck prompt above the footer row: the sentence in
+ * full, which the footer's one line used to clip, and OK to put it away. One prompt per sentence, so a new refusal is asked anew.
+ */
+export function assistantErrorAsk(callId: string, error: string): { id: string; title: string; question: string; okLabel: string } {
+  return { id: `assistant-error:${callId}:${error}`, title: `${ASSISTANT_NAME} could not do that`, question: error, okLabel: 'OK' };
+}
+
 /** The invite-again button: while the invitation back waits for Milo's earlier leave to finish, it says so. */
 export const LEAVING_LABEL = `${ASSISTANT_NAME} is leaving…`;
 export const inviteAgainLabel = (v: AssistantView, busy: boolean): string => (busy && v.leaving ? LEAVING_LABEL : INVITE_AGAIN_LABEL);

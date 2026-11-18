@@ -122,7 +122,7 @@ export default async function run(ctx) {
       const btn = panelSeat.page.getByTestId('assistant-invite');
       if (await btn.count()) {
         await btn.first().click();
-        ui = (await panelSeat.page.getByTestId('assistant-error-text').first().innerText({ timeout: 10_000 }).catch(() => '')).trim() || 'no line';
+        ui = (await panelSeat.page.getByTestId('assistant-error').first().innerText({ timeout: 10_000 }).catch(() => '')).trim() || 'no line';
       }
       const st = await api(r.lead, 'GET', assistant(r.callId, 'state'));
       const ok = a.status === 403 && a.body?.error === LEAD_ONLY && (ui === 'no Invite on the panel bar' || ui.includes(LEAD_ONLY)) && st.body?.state !== 'listening';

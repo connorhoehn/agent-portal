@@ -6,15 +6,15 @@
 //   useAssistantRosterEntry  the "Milo (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Badge, Button, CheckIcon, Chip, CloseIcon, DocumentIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Badge, Button, CheckIcon, Chip, CloseIcon, DocumentIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useAssistantVoice } from '../../lib/assistantVoice';
 import { soundPromptShown } from '../../lib/assistantVoiceModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
-  assistantPresent, assistantStateWords, dismissQuestion, extendWords, inviteAgainLabel, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
+  assistantErrorAsk, assistantPresent, assistantStateWords, dismissQuestion, extendWords, inviteAgainLabel, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
   ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, INVITE_HINT,
 } from '../../lib/meetingAssistantModel';
 import { proposalCountWords, waitingCount } from '../../lib/meetingProposals';
@@ -72,8 +72,6 @@ export function AssistantBarControls() {
   const canSetVoice = assistant.canSetVoice && !panelSeat;
   const noticeClosed = useAssistantNoticeHidden(noticeKey(callId, view.period));
   const voice = useAssistantVoice(callId, assistant.view);
-  const errorRef = useRef<HTMLButtonElement | null>(null);
-  const [errorOpen, setErrorOpen] = useState(false);
   // Only proposals that wait on this person count; a bystander's optional prompt is in the deck but not in the badge.
   const owed = waitingCount(useProposalQueue().queue);
   const chat = useHuddleChatToggle({ behavior: 'focus' });
@@ -95,7 +93,7 @@ export function AssistantBarControls() {
   // Before any reply: as soon as the voice is on and the browser still waits for a click (unless this person muted Milo).
   const soundPrompt = soundPromptShown({ present: !!words && !controls.left, voiceOn: view.voice, muted: voice.muted, needsGesture: voice.needsGesture });
   // Someone who cannot invite, with no Milo in the call, gets no bar at all (not an empty ruled slot).
-  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !assistant.error && !waiting) return null;
+  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !waiting) return null;
   const why = controls.left ? `${leftWords(view)}.` : null;
   // A standing reason Milo can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
   const refused = controls.left ? rejoinRefusedWords(view) : null;
@@ -146,21 +144,24 @@ export function AssistantBarControls() {
       </Button>
     </Tooltip>}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="assistant-enable-sound">Click to hear {ASSISTANT_NAME}</Button>}
-    {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
-    {assistant.error && <>
-      <Button ref={errorRef} variant="ghost" size="sm" className="max-w-[12rem] truncate text-danger" onClick={() => setErrorOpen((v) => !v)} aria-expanded={errorOpen} title={assistant.error} data-testid="assistant-error">{assistant.error}</Button>
-      <InlinePopover trigger={errorRef} open={errorOpen} onClose={() => setErrorOpen(false)} placement="top-end" className="max-w-sm p-3" aria-label={`Why ${ASSISTANT_NAME} could not do that`} data-testid="assistant-error-full">
-        <T size="sm" tone="danger" wrap role="alert" data-testid="assistant-error-text">{assistant.error}</T>
-      </InlinePopover>
-    </>}
+    {/* A refusal or a failed start is not drawn on this line (one row clipped it): it is a deck prompt above the row (AssistantBudgetAsk). */}
   </Inline>;
 }
 
-/** The server's over-budget refusal, asked as a deck prompt above the footer row (no dialog): the refusal sentence, then Go ahead or Cancel. */
+/**
+ * Milo's questions and refusals as deck prompts above the footer row (no dialog): the server's over-budget refusal (the sentence,
+ * then Go ahead or Cancel), the dismissal's one confirmation, and any other refusal or failed start in full with OK.
+ */
 export function AssistantBudgetAsk() {
   const callId = useLiveCallId();
   const assistant = useMeetingAssistant(callId);
-  const { ask, answerAsk, confirmingDismiss, answerDismiss } = assistant;
+  const { ask, answerAsk, confirmingDismiss, answerDismiss, error, clearError } = assistant;
+  const errorPrompts = useMemo<ComposerPrompt[]>(() => {
+    if (!error || !callId) return [];
+    const words = assistantErrorAsk(callId, error);
+    return [{ id: words.id, scope: `assistant-error:${callId}`, kind: 'choice', eyebrow: ASSISTANT_NAME, title: words.title, question: words.question,
+      options: [{ id: 'ok', label: words.okLabel, emphasis: 'primary' }], onAnswer: () => { clearError(); }, onDismiss: clearError }];
+  }, [error, callId, clearError]);
   const prompts = useMemo<ComposerPrompt[]>(() => ask ? [{
     id: `assistant-budget:${callId}:${ask.action}:${ask.detail}`, scope: `assistant-budget:${callId}`, kind: 'choice', eyebrow: ASSISTANT_NAME, title: ask.title,
     question: ask.detail,
@@ -178,6 +179,7 @@ export function AssistantBudgetAsk() {
   return <>
     {ask && <ComposerPromptDeck prompts={prompts} scope={`assistant-budget:${callId}`} className="mx-4 my-1" data-testid="assistant-budget-ask" />}
     {confirmingDismiss && <ComposerPromptDeck prompts={dismissPrompts} scope={`assistant-dismiss:${callId}`} className="mx-4 my-1" data-testid="assistant-dismiss-ask" />}
+    {error && callId && <ComposerPromptDeck prompts={errorPrompts} scope={`assistant-error:${callId}`} className="mx-4 my-1" data-testid="assistant-error" />}
   </>;
 }
 

@@ -252,3 +252,16 @@ test('an interview\'s notice says the notes are the panel\'s only; a meeting\'s 
   assert.match(noticeText(view('listening', { youMustAck: true })).body, /Milo writes minutes for the people in the call\.$/);
   assert.match(noticeText(view('listening', { youMustAck: true, minutesWording: { writes: '' } })).body, /minutes for the people in the call\.$/);
 });
+
+test('a refusal or a failed start is asked in full above the footer row, once per sentence, with OK', async () => {
+  const { assistantErrorAsk } = await import('../meetingAssistantModel.ts');
+  const cause = 'Milo could not start: the live session refused the connection (HTTP 401). Check the provider key and try again.';
+  const ask = assistantErrorAsk('c1', cause);
+  // The whole sentence is the question: nothing is clipped to the footer's one line.
+  assert.equal(ask.question, cause);
+  assert.equal(ask.title, 'Milo could not do that');
+  assert.equal(ask.okLabel, 'OK');
+  assert.equal(assistantErrorAsk('c1', cause).id, ask.id);
+  assert.notEqual(assistantErrorAsk('c1', 'Another refusal.').id, ask.id);
+  assert.notEqual(assistantErrorAsk('c2', cause).id, ask.id);
+});
