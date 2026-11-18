@@ -24,7 +24,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { ROUND_TYPE_LABELS, roundStatus, whenLabel } from '../../lib/interviews';
 import {
-  MARKER_LABELS, MEDIA_SAVING_RETRY_MS, atFromSearch, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf,
+  MARKER_LABELS, atFromSearch, nextMediaAsk, clockOf, codeEmptyLine, lengthOf, loadInterviewMedia, markerTime, offsetMs, recordApi, recordingLine, segmentsOf,
   transcriptLine,
   type InterviewMedia, type InterviewRecordView,
 } from '../../lib/interviewsRecord';
@@ -61,25 +61,35 @@ function RecordMissing({ id, onHome, onRoom }: { id: string; onHome(): void; onR
 }
 
 /** Media from platform-api, asked only when the server says a real recording may be there; asked again every few seconds
- *  while its video is still being saved (as a huddle's recording page does). */
-function useInterviewMedia(record: InterviewRecordView): InterviewMedia | null {
+ *  while its video is still being saved (as a huddle's recording page does) up to a cap, and while a `none` may only mean
+ *  the interview ended a moment ago (nextMediaAsk). Past the cap it is `stalled`, and `retry` asks afresh. */
+function useInterviewMedia(record: InterviewRecordView): { media: InterviewMedia | null; stalled: boolean; retry: () => void } {
   const ask = record.recording.state === 'available' && !record.recording.standIn;
+  const endedAt = record.interview.endedAt;
   const [media, setMedia] = useState<InterviewMedia | null>(null);
+  const [stalled, setStalled] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!ask) return undefined;
     const ctl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const firstAt = Date.now();
+    setStalled(false);
     const load = (): void => {
       void loadInterviewMedia(record.interview.id, ctl.signal).then((m) => {
         if (ctl.signal.aborted) return;
         setMedia(m);
-        if (m.state === 'saving') timer = setTimeout(load, MEDIA_SAVING_RETRY_MS);
+        const now = Date.now();
+        const wait = nextMediaAsk(m.state, now - firstAt, endedAt ? now - Date.parse(endedAt) : null);
+        if (wait !== null) timer = setTimeout(load, wait);
+        else if (m.state === 'saving') setStalled(true);
       });
     };
     load();
     return () => { ctl.abort(); if (timer) clearTimeout(timer); };
-  }, [ask, record.interview.id]);
-  return ask ? media : null;
+  }, [ask, record.interview.id, endedAt, attempt]);
+  const retry = useCallback(() => setAttempt((n) => n + 1), []);
+  return { media: ask ? media : null, stalled: ask && stalled, retry };
 }
 
 /** The pad log, read to its end; null while it loads or when the panel's read does not answer. */
@@ -102,7 +112,7 @@ function usePadLog(interviewId: string, technical: boolean): { events: PadLogEve
 function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail: Trail }) {
   const { interview, recording, transcript, markers } = record;
   const technical = interview.round.type === 'technical';
-  const media = useInterviewMedia(record);
+  const { media, stalled: mediaStalled, retry: retryMedia } = useInterviewMedia(record);
   const playing = media?.state === 'playable' && media.url ? media.url : null;
   // The record counts from the interview's start; a real recording from its own. `shift` is how far the recording's clock is ahead.
   const shift = playing ? offsetMs(interview.startedAt, media!.startedAt) : 0;
@@ -136,7 +146,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const status = roundStatus(interview.state);
   const lengthSeconds = recording.durationSeconds
     ?? (interview.startedAt && interview.endedAt ? Math.max(0, (Date.parse(interview.endedAt) - Date.parse(interview.startedAt)) / 1000) : null);
-  const recordingNote = recordingLine(recording, media?.state ?? null);
+  const recordingNote = recordingLine(recording, mediaStalled ? 'stalled' : media?.state ?? null);
   // A stand-in recording (the demo workspace keeps no video) is one meta line, not a section, so the code and the transcript start higher.
   const standIn = recording.state === 'available' && recording.standIn;
   const transcriptNote = transcriptLine(transcript.state);
@@ -146,6 +156,11 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
       onTimeUpdate={(seconds) => setTimeMs(Math.max(0, seconds * 1000 - shift))} />
   ) : recording.state === 'available' && !recording.standIn && !media ? (
     <LoadingState label="Looking for the recording…" />
+  ) : mediaStalled ? (
+    <Inline gap="sm" align="center" wrap>
+      <T size="sm" tone="secondary" wrap data-testid="interviews-record-recording-line">{recordingNote}</T>
+      <Button size="sm" variant="secondary" onClick={retryMedia} data-testid="interviews-record-recording-retry">Check again</Button>
+    </Inline>
   ) : (
     <T size="sm" tone="secondary" wrap data-testid="interviews-record-recording-line">{recordingNote}</T>
   );

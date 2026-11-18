@@ -76,7 +76,7 @@ export function codeEmptyLine(r: Pick<InterviewRecordView, 'codeRemoved'>): stri
 }
 
 /** The one plain line the recording shows when there is no player. Null when a player shows. */
-export function recordingLine(r: InterviewRecordView['recording'], media: InterviewMedia['state'] | null = null): string | null {
+export function recordingLine(r: InterviewRecordView['recording'], media: MediaView | null = null): string | null {
   if (r.state === 'declined') return 'The candidate chose not to be recorded, so there is no recording of this interview.';
   if (r.state === 'deleted') return 'The recording of this interview has been deleted.';
   if (r.state === 'none') return 'There is no recording of this interview.';
@@ -86,6 +86,7 @@ export function recordingLine(r: InterviewRecordView['recording'], media: Interv
   }
   if (media === 'none') return 'There is no recording of this interview.';
   if (media === 'saving') return 'Saving the video…';
+  if (media === 'stalled') return 'The video is taking longer than usual to save. Check again in a little while.';
   if (media === 'unreachable') return 'The recording could not be reached just now. Try again in a moment.';
   return null;
 }
@@ -169,6 +170,24 @@ export interface InterviewMedia { state: 'playable' | 'saving' | 'none' | 'unrea
 
 /** How long the record page waits before asking again about a recording still being saved (the huddle recordings' own pace). */
 export const MEDIA_SAVING_RETRY_MS = 5000;
+/** The most the page keeps asking about a video still being saved; past it, it stops and offers to check again. */
+export const MEDIA_SAVING_POLL_CAP_MS = 10 * 60_000;
+/** Right after the interview ends platform-api may not list the recording yet: a `none` is asked again for this long after the end. */
+export const MEDIA_NONE_REASK_MS = 2 * 60_000;
+
+/** What the page shows for the media: platform-api's answer, or `stalled` once a video still being saved outlasted the poll's cap. */
+export type MediaView = InterviewMedia['state'] | 'stalled';
+
+/**
+ * When the page asks platform-api again after an answer: the wait, or null to stop. `saving` is asked again until
+ * MEDIA_SAVING_POLL_CAP_MS after the first ask (then the page offers a retry), `none` while the interview ended under
+ * MEDIA_NONE_REASK_MS ago, anything else never.
+ */
+export function nextMediaAsk(state: InterviewMedia['state'], sinceFirstAskMs: number, sinceEndedMs: number | null): number | null {
+  if (state === 'saving') return sinceFirstAskMs < MEDIA_SAVING_POLL_CAP_MS ? MEDIA_SAVING_RETRY_MS : null;
+  if (state === 'none') return sinceEndedMs !== null && sinceEndedMs < MEDIA_NONE_REASK_MS ? MEDIA_SAVING_RETRY_MS : null;
+  return null;
+}
 
 /** The lobby an interview's call runs in (the middleware's lib/interviews/lobby.ts). */
 export const interviewLobby = (interviewId: string): string => `interviews:interview:${interviewId}`;

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  atFromSearch, clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, sentencesOf, transcriptLine,
+  MEDIA_NONE_REASK_MS, MEDIA_SAVING_POLL_CAP_MS, MEDIA_SAVING_RETRY_MS, atFromSearch, clockOf, codeEmptyLine, hasRecord, lengthOf, loadInterviewMedia, markerTime, nextMediaAsk, offsetMs, playFrom, recordPath, recordingLine, segmentsOf, sentencesOf, transcriptLine,
   type RecordLine,
 } from '../interviewsRecord.ts';
 
@@ -157,4 +157,16 @@ test('?at is seconds from the start, read as ms; anything else is no seek (E4 #3
   assert.equal(atFromSearch(''), null);
   assert.equal(atFromSearch('abc'), null);
   assert.equal(atFromSearch('-3'), null);
+});
+
+test('the media poll stops: a video still saving is asked again up to the cap, then offered as a retry; a none right after End is asked again briefly', () => {
+  assert.equal(nextMediaAsk('saving', 0, null), MEDIA_SAVING_RETRY_MS);
+  assert.equal(nextMediaAsk('saving', MEDIA_SAVING_POLL_CAP_MS - 1, null), MEDIA_SAVING_RETRY_MS);
+  assert.equal(nextMediaAsk('saving', MEDIA_SAVING_POLL_CAP_MS, null), null);
+  assert.equal(nextMediaAsk('none', 0, 10_000), MEDIA_SAVING_RETRY_MS);
+  assert.equal(nextMediaAsk('none', 0, MEDIA_NONE_REASK_MS), null);
+  assert.equal(nextMediaAsk('none', 0, null), null);
+  assert.equal(nextMediaAsk('playable', 0, 0), null);
+  assert.equal(nextMediaAsk('unreachable', 0, 0), null);
+  assert.match(recordingLine({ state: 'available', playbackUrl: null, durationSeconds: null }, 'stalled')!, /taking longer than usual/);
 });
