@@ -1,6 +1,6 @@
 # Row I3.2: Milo's policy in an interview call. The Work assistant's routes and the meetings list are Work's: a candidate's
 # guest cookie and a caller with no session are refused before any record is read, so a call id that names no record is
-# enough here. GET /api/meetings is the walk's step I3.2g (a guest gets 200 with an empty list today, a finding; anon in the
+# enough here. GET /api/meetings is the walk's step I3.2g (the guest cookie is not sent there: the candidate gets the anonymous answer; anon in the
 # mock world resolves to the default Work persona, so it is no test of a caller with no session) (the walk's I3.2 steps use the interview's own call record for the Work-session-against-interview checks,
 # which a table cannot name: its id exists only once the call starts). Statuses are what the routes give today.
 GET /api/calls/h3-no-such-call/assistant/state | guest guest:kwameLive anon

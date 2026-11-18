@@ -7,7 +7,7 @@
 //   I3.2e  a Work session (Theo) on the interview's call record gets not-found; the reverse, an interviews session (Greta) on a
 //          Work call's record, gets not-found
 //   I3.2f  the candidate's guest cookie on that call's assistant routes is refused (the statuses today: not-found)
-//   I3.2g  the candidate's guest cookie on the meetings list is refused (today it answers 200 with an empty list: a finding)
+//   I3.2g  the candidate's browser on the meetings list gets the anonymous caller's answer and nothing of the interview
 import { liveRoom, inject, sleep, stubCallMedia, joinRoomCall, seen } from './h3-call.mjs';
 
 export default async function run(ctx) {
@@ -46,11 +46,20 @@ export default async function run(ctx) {
       return { ok: refused, detail: `the candidate's cookie on the call's assistant routes: ${got.join(', ')} (the build notes said 401; the call's tenant check answers not-found first)` };
     });
 
-    // The meetings list: a guest is refused everything (RULES), so a 200 is recorded as a finding even with nothing in it.
+    // The meetings list. The guest cookie is scoped to /api/interview-invite, so the candidate's browser sends nothing here and is the
+    // same caller as any anonymous browser: in production a 401 (meeting-assistant-interviews.test.ts pins it), in the mock world the
+    // demo identity (a Work person), which lists only that identity's meetings. Decision (W2P): not a guest leak, nothing to refuse
+    // by the guest; the step holds that the candidate's browser gets exactly the anonymous answer and nothing of the interview.
     await step('I3.2g', async () => {
       const meetings = await api(room.guest.context, 'GET', '/api/meetings');
-      const body = JSON.stringify(meetings.body ?? null).slice(0, 80);
-      return { ok: [401, 403, 404].includes(meetings.status), detail: `the candidate's cookie on GET /api/meetings: ${meetings.status} ${body} (FINDING when 200: not a refusal, though the list is empty; the build notes said 401)` };
+      const anonCtx = await ctx.browser.newContext();
+      try {
+        const anon = await api(anonCtx, 'GET', '/api/meetings');
+        const body = JSON.stringify(meetings.body ?? null);
+        const same = meetings.status === anon.status && body === JSON.stringify(anon.body ?? null);
+        const leaks = body.includes(room.callId) || body.includes(iv) || /interviews:interview:/.test(body);
+        return { ok: same && !leaks, detail: `the candidate's browser on GET /api/meetings: ${meetings.status} ${body.slice(0, 80)}; an anonymous browser: ${anon.status}; the same answer ${same}; the interview in it ${leaks}` };
+      } finally { await anonCtx.close(); }
     });
 
     await step('I3.2d', async () => {
