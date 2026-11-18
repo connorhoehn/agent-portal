@@ -59,6 +59,7 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
     await page.getByRole('button', { name: /^\s*\d?\s*Delete recordings\s*$/ }).first().click();
     const recordingsReceipt = page.getByText(/^Removed .*recording/).first();
     await recordingsReceipt.waitFor({ timeout: 15_000 });
+    const recordsLine = (await recordingsReceipt.innerText()).replace(/\s+/g, ' ').trim();
     // Once done it is not offered again, and the personal data is still there to ask for.
     await page.getByTestId('interviews-deletion-ask-recordings').waitFor({ state: 'detached', timeout: 15_000 });
     stage = 'the personal data ask';
@@ -98,8 +99,8 @@ export default async function run({ portal, out, record, signIn, api, SEED, cloc
       && shots.every((s) => s.ok);
     record('I6.3a', ok, `receipt "${receipt}"; table "${tableText.slice(-160)}"; prompt ${/stay for four years/.test(asked) ? 'states the record period' : 'MISSING the period'}; place "${place}"; résumé "${resume}"; ${reasons} reasons replaced; Mateo's coding round: runs ${beforeRuns}→${afterRuns}, pad events ${beforePad}→${afterPad}; second ask created=${again.body?.created}, ${second.length} log row`);
     // I6.3h: the log names what went in plain words (portal lib/interviewsRetention.ts KIND_LABELS).
-    const named = !/other records/i.test(receipt + tableText) && /code/i.test(receipt) && /run/i.test(receipt);
-    record('I6.3h', named, `the receipt and the Deletions table name the pad log and the runs: ${named ? 'yes' : `NO, they read "${receipt}" (finding for the lead: the page has no words for the kinds pad-log, runs, said-log, recaps, coach-log)`}`);
+    const named = !/other records/i.test(receipt + recordsLine + tableText) && /code/i.test(recordsLine) && /run/i.test(recordsLine);
+    record('I6.3h', named, `the receipt and the Deletions table name the pad log and the runs: ${named ? 'yes' : `NO, they read "${recordsLine}" (finding for the lead: the page has no words for the kinds pad-log, runs, said-log, recaps, coach-log)`}`);
     await greta.close();
   } catch (e) {
     if (failPage) await failPage.screenshot({ path: `${out}/interviews-I6.3a-failed.png` }).catch(() => undefined);

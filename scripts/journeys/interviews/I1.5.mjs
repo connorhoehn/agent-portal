@@ -1,6 +1,6 @@
 // Piece I1.5: the time on a round, and Upcoming (row I1.5). It writes, so it puts the mock world back to its seeds first and again
 // at the end. The round whose time moves is Aiko's coding round (ready, Wen leads); the live round is Kwame's (Hugo leads).
-//   I1.5a  Upcoming at 1440 and 1280: every column, no sideways scroll, the table above the fold; the live row has Join and nothing to edit
+//   I1.5a  Upcoming at 1440 and 1280: every column, no sideways scroll, the table above the fold; the live row says Live now, with no Join for a recruiter who holds no seat on it, and nothing to edit
 //   I1.5b  the Set time strip: Cancel closes it; a time chosen and then Cancelled at the prompt changes nothing
 //   I1.5c  a time chosen and confirmed is Saved, the round keeps its state, the lead is told; Clear the time clears it
 //   I1.5d  a candidate who answered "no transcript" shows "No transcript, no Milo" in the State and consent column
@@ -37,7 +37,7 @@ export default async function run({ portal, SEED, record, signIn, shoot, resetMo
     const live = await kwame.getByTestId('interviews-upcoming-live').count();
     const inFive = new Date(Math.ceil((Date.now() + 5 * 86_400_000) / 60_000) * 60_000).toISOString();
     const refused = await api(greta, 'PUT', `/api/interviews/interviews/${SEED.interviews.kwameLive}/time`, { revision: (await readInterview(greta, SEED.interviews.kwameLive)).revision, scheduledAt: inFive });
-    const ok = COLUMNS.every((c) => heads.some((h) => h.toLowerCase().startsWith(c.toLowerCase()))) && !clipped && shots.every((s) => s.ok) && join === 1 && menu === 0 && live === 1 && refused.status === 400;
+    const ok = COLUMNS.every((c) => heads.some((h) => h.toLowerCase().startsWith(c.toLowerCase()))) && !clipped && shots.every((s) => s.ok) && join === 0 && menu === 0 && live === 1 && refused.status === 400;
     record('I1.5a', ok, `columns ${JSON.stringify(heads)}; ${shots.map((s) => `@${s.width}: first row at ${s.firstRowTop}px${s.horizontalScroll ? ', scrolls sideways' : ''}`).join('; ')}${clipped ? '; the table scrolls inside itself at 1280' : '; every column fits at 1280'}; the live row has Join ${join}, an Actions menu ${menu}; a time written to it answers ${refused.status} "${(refused.body?.error ?? '').slice(0, 80)}"`);
   } catch (e) { record('I1.5a', false, `Upcoming: ${e.message.split('\n')[0]}`); }
 

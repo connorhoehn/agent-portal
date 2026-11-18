@@ -59,8 +59,10 @@ export default async function run({ portal, SEED, record, signIn, resetMock, api
   try {
     await open();
     await fill('Pellam Ashgrove', 'not-an-email');
-    await submit();
+    // An address without an @ is refused on the page, before any prompt is asked.
+    await g.getByTestId('interviews-new-candidate-create').click();
     await g.waitForTimeout(800);
+    if (await g.getByText(/Add .* as a candidate/).count() > 0) throw new Error('the prompt was asked for a bad address');
     const stillThere = g.url().includes('/candidates/new');
     const rows = ((await api(greta, 'GET', '/api/interviews/candidates')).body?.items ?? []).filter((r) => r.candidate?.name === 'Pellam Ashgrove').length;
     const problem = await g.getByTestId('interviews-new-candidate-form').innerText();

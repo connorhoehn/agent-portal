@@ -266,12 +266,12 @@ function StageSection({ app, several, candidateId }: { app: ProfileApplication; 
   );
 }
 
-/** A declined round needs a new interviewer: that stays a button. Any other round keeps Reassign in the row's menu. */
+/** A round that lost an interviewer (declined, or a seat declined) needs a new one: that stays a button. Any other round keeps Reassign in the row's menu. */
 function ReassignAction({ round: r, candidateId }: { round: ProfileRound; candidateId: string }) {
   const navigate = useNavigate();
   if (!canReassign(r.state)) return null;
   const reassign = () => navigate(assignHref(candidateId, { round: r.id }));
-  return r.state === 'declined'
+  return r.state === 'declined' || declineLines(r).length > 0
     ? <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>
     : <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions"
       sections={[{ items: [{ label: 'Reassign…', onSelect: reassign }] }]} />;

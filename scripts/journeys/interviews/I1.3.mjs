@@ -62,13 +62,13 @@ export default async function run({ portal, out, path, record, signIn, shoot, re
       shots.push({ width, firstRowTop: 'n/a', ...g });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    const unsaved = (await page.getByTestId('interviews-opening-editor').innerText()).includes('Unsaved changes');
+    const unsaved = (await page.getByTestId('interviews-opening-frame').innerText()).includes('Unsaved changes');
     await page.getByTestId('interviews-opening-save').click();
     const deck = page.getByTestId('collection-command-composer-prompts');
     await deck.getByText(/Save these changes\?/).waitFor({ timeout: 10_000 });
     const asked = await deck.innerText();
     await deck.getByRole('button', { name: /\bSave\b/ }).first().click();
-    await page.getByTestId('interviews-opening-editor').getByText('Saved', { exact: true }).waitFor({ timeout: 15_000 });
+    await page.getByTestId('interviews-opening-frame').getByText('Saved', { exact: true }).waitFor({ timeout: 15_000 });
     // Reload the opening as anyone would: the question is in the saved kit.
     await page.goto(`${portal}/interviews/openings/op-backend`, { waitUntil: 'domcontentloaded' });
     const technical = page.getByTestId('interviews-kit-technical-questions');

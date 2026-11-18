@@ -38,7 +38,7 @@ export default async function run({ portal, SEED, record, signIn, resetMock, api
     const deck = g.getByTestId('collection-command-composer-prompts');
     await deck.getByText(/Save these changes\?/).waitFor({ timeout: 10_000 });
     await deck.getByRole('button', { name: /\bSave\b/ }).first().click();
-    await g.getByTestId('interviews-opening-editor').getByText('Saved', { exact: true }).waitFor({ timeout: 15_000 });
+    await g.getByTestId('interviews-opening-frame').getByText('Saved', { exact: true }).waitFor({ timeout: 15_000 });
     const text = await line(g);
     record('I0.6b', !!text && /Spending cap \$240/.test(text) && /\$12(\.00)? per interview/.test(text) && !/the default/.test(text), `after a reload the recruiter reads: ${JSON.stringify(text)}`);
   } catch (e) { record('I0.6b', false, `editing the caps: ${e.message.split('\n')[0]}`); }
