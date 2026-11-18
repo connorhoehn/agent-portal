@@ -5,9 +5,10 @@
 // Rules kept here, as lib/meeting-assistant/decision-model.ts keeps them:
 //   * a short timeout and at most one retry; a failure is a code, never an exception to the caller;
 //   * nothing of the transcript, the prompt or the answer is logged: only codes;
+//   * the call itself goes through the tenant's one Bedrock seam (../bedrock.ts);
 //   * the model returns raw text; parse.ts reads it, the same way for both models, so the stand-in walks the real path.
-import { BedrockRuntimeClient, ConverseCommand, type ConverseCommandInput, type ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime';
-import { config } from '../../../config.js';
+import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
+import { converseOnce, refusedBeforeRunning, type ConverseSend } from '../bedrock.js';
 import { liveForced } from '../../meeting-assistant/live-flag.js';
 import { mockTranscriptEnabled } from '../../meeting-assistant/transcript-source.js';
 import { buildCoachRequest, coachUserText, COACH_SYSTEM_PROMPT, MAX_BASED_ON_CHARS, type CoachInput } from './prompt.js';
@@ -48,57 +49,20 @@ export function estimateCoachTokens(input: CoachInput): TokenCounts {
   return { inputTokens: Math.ceil(chars / 4), outputTokens: 120 };
 }
 
-/** Errors that mean the provider refused the request without running the model (nothing billed). */
-const REFUSED_NAMES = new Set(['AccessDeniedException', 'UnrecognizedClientException', 'ValidationException', 'ThrottlingException',
-  'ServiceQuotaExceededException', 'ResourceNotFoundException', 'ExpiredTokenException', 'InvalidSignatureException',
-  'CredentialsProviderError', 'IncompleteSignatureException', 'MissingAuthenticationTokenException']);
-
-/** Did the provider (or the SDK, before sending) refuse the call outright: a client fault, a 4xx, or a known refusal? */
-export function refusedBeforeRunning(e: unknown): boolean {
-  const err = e as { name?: unknown; $fault?: unknown; $metadata?: { httpStatusCode?: unknown } } | null;
-  if (!err || typeof err !== 'object') return false;
-  if (typeof err.name === 'string' && REFUSED_NAMES.has(err.name)) return true;
-  if (err.$fault === 'client') return true;
-  const status = Number(err.$metadata?.httpStatusCode);
-  return Number.isFinite(status) && status >= 400 && status < 500;
-}
-
-type Send = (cmd: ConverseCommand, opts: { abortSignal: AbortSignal }) => Promise<ConverseCommandOutput>;
-
-let client: BedrockRuntimeClient | null = null;
-const defaultSend: Send = (cmd, opts) => {
-  // One retry at most: the SDK's attempts count the first try.
-  client ??= new BedrockRuntimeClient({ region: config.region, maxAttempts: 2 });
-  return client.send(cmd, opts);
-};
+export { refusedBeforeRunning };
 
 export class BedrockCoachModel implements CoachModel {
   readonly kind = 'bedrock' as const;
   readonly modelId: string;
-  constructor(private readonly opts: { send?: Send; timeoutMs?: number; modelId?: string } = {}) {
+  constructor(private readonly opts: { send?: ConverseSend; timeoutMs?: number; modelId?: string } = {}) {
     this.modelId = opts.modelId ?? coachModelId();
   }
 
-  async suggest(input: CoachInput): Promise<CoachModelResult> {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), this.opts.timeoutMs ?? COACH_TIMEOUT_MS);
-    timer.unref?.();
-    try {
-      const resp = await (this.opts.send ?? defaultSend)(new ConverseCommand(buildCoachRequest(this.modelId, input) as ConverseCommandInput), { abortSignal: abort.signal });
-      const usage = resp.usage && Number.isFinite(resp.usage.inputTokens) && Number.isFinite(resp.usage.outputTokens)
-        ? { inputTokens: Number(resp.usage.inputTokens), outputTokens: Number(resp.usage.outputTokens) } : null;
-      const text = (resp.output?.message?.content ?? []).map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('');
-      return { raw: text || null, code: 'ok', sent: true, usage };
-    } catch (e) {
-      // The error's name only: its message could quote the request.
-      const timedOut = abort.signal.aborted;
-      console.warn('[interviews] coach call failed', timedOut ? 'timeout' : (e as Error)?.name ?? 'error');
-      // A refusal (no access, bad credentials, a throttle, a bad request) ran no model and bills nothing, so no spend is
-      // booked for it; a timeout or a server-side failure may have run, so it is booked at the estimate as before.
-      return { raw: null, code: timedOut ? 'timeout' : 'error', sent: timedOut || !refusedBeforeRunning(e), usage: null };
-    } finally {
-      clearTimeout(timer);
-    }
+  suggest(input: CoachInput): Promise<CoachModelResult> {
+    // A refusal (no access, bad credentials, a throttle, a bad request) ran no model and bills nothing, so no spend is
+    // booked for it; a timeout or a server-side failure may have run, so it is booked at the estimate as before.
+    return converseOnce(buildCoachRequest(this.modelId, input) as ConverseCommandInput,
+      { send: this.opts.send, timeoutMs: this.opts.timeoutMs ?? COACH_TIMEOUT_MS, label: 'coach', refusalBooksNothing: true });
   }
 }
 

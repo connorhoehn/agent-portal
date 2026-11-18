@@ -8,9 +8,9 @@
 //   * the model returns raw text; parse.ts reads it the same way for both models, so the stand-in walks the real path.
 //
 // `BedrockMiloModel.converse(request)` sends any Converse request built as data, so the question plan (row I3.10)
-// sends its own request through this class rather than a third copy of it.
-import { BedrockRuntimeClient, ConverseCommand, type ConverseCommandInput, type ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime';
-import { config } from '../../../config.js';
+// sends its own request through this class. The call itself goes through the tenant's one Bedrock seam (../bedrock.ts).
+import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
+import { converseOnce, type ConverseSend } from '../bedrock.js';
 import { COACH_TIMEOUT_MS, coachModelId, makeCoachModel } from '../coach/model.js';
 import type { CoachLine } from '../coach/prompt.js';
 import { ASK_MAX_TOKENS, ASK_SYSTEM_PROMPT, askUserText, buildAskRequest, NOT_SAID, type AskInput } from './prompt.js';
@@ -39,14 +39,7 @@ export function estimateAskTokens(input: AskInput): MiloTokenCounts {
   return { inputTokens: Math.ceil(chars / 4), outputTokens: ASK_MAX_TOKENS };
 }
 
-export type MiloSend = (cmd: ConverseCommand, opts: { abortSignal: AbortSignal }) => Promise<ConverseCommandOutput>;
-
-let client: BedrockRuntimeClient | null = null;
-const defaultSend: MiloSend = (cmd, opts) => {
-  // One retry at most: the SDK's attempts count the first try.
-  client ??= new BedrockRuntimeClient({ region: config.region, maxAttempts: 2 });
-  return client.send(cmd, opts);
-};
+export type MiloSend = ConverseSend;
 
 export class BedrockMiloModel implements MiloModel {
   readonly kind = 'bedrock' as const;
@@ -56,24 +49,8 @@ export class BedrockMiloModel implements MiloModel {
   }
 
   /** Send one Converse request built as data (its `modelId` should be this model's). */
-  async converse(request: ConverseCommandInput): Promise<MiloModelResult> {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), this.opts.timeoutMs ?? COACH_TIMEOUT_MS);
-    timer.unref?.();
-    try {
-      const resp = await (this.opts.send ?? defaultSend)(new ConverseCommand(request), { abortSignal: abort.signal });
-      const usage = resp.usage && Number.isFinite(resp.usage.inputTokens) && Number.isFinite(resp.usage.outputTokens)
-        ? { inputTokens: Number(resp.usage.inputTokens), outputTokens: Number(resp.usage.outputTokens) } : null;
-      const text = (resp.output?.message?.content ?? []).map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('');
-      return { raw: text || null, code: 'ok', sent: true, usage };
-    } catch (e) {
-      // The error's name only: its message could quote the request.
-      const timedOut = abort.signal.aborted;
-      console.warn('[interviews] milo call failed', timedOut ? 'timeout' : (e as Error)?.name ?? 'error');
-      return { raw: null, code: timedOut ? 'timeout' : 'error', sent: true, usage: null };
-    } finally {
-      clearTimeout(timer);
-    }
+  converse(request: ConverseCommandInput): Promise<MiloModelResult> {
+    return converseOnce(request, { send: this.opts.send, timeoutMs: this.opts.timeoutMs ?? COACH_TIMEOUT_MS, label: 'milo' });
   }
 
   ask(input: AskInput): Promise<MiloModelResult> {

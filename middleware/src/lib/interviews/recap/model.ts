@@ -5,9 +5,10 @@
 // Rules kept here, as the coach's model.ts keeps them:
 //   * a timeout and at most one retry (the SDK's attempts count the first try); a failure is a code, never an exception;
 //   * nothing of the transcript, the prompt or the answer is logged: only the error's name;
-//   * the model returns raw text; parse.ts reads it the same way for both models, so the stand-in walks the real path.
-import { BedrockRuntimeClient, ConverseCommand, type ConverseCommandInput, type ConverseCommandOutput } from '@aws-sdk/client-bedrock-runtime';
-import { config } from '../../../config.js';
+//   * the model returns raw text; parse.ts reads it the same way for both models, so the stand-in walks the real path;
+//   * the call itself goes through the tenant's one Bedrock seam (../bedrock.ts).
+import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
+import { converseOnce, type ConverseSend } from '../bedrock.js';
 import { COACH_TIMEOUT_MS, coachModelId, makeCoachModel, type CoachModelResult, type TokenCounts } from '../coach/model.js';
 import { buildRecapRequest, MAX_CLAIMS_PER_COMPETENCY, MAX_QUOTE_CHARS, RECAP_SYSTEM_PROMPT, recapUserText, type RecapInput } from './prompt.js';
 
@@ -30,38 +31,16 @@ export function estimateRecapTokens(input: RecapInput): TokenCounts {
   return { inputTokens: Math.ceil(chars / 4), outputTokens: 1000 };
 }
 
-type Send = (cmd: ConverseCommand, opts: { abortSignal: AbortSignal }) => Promise<ConverseCommandOutput>;
-
-let client: BedrockRuntimeClient | null = null;
-const defaultSend: Send = (cmd, opts) => {
-  client ??= new BedrockRuntimeClient({ region: config.region, maxAttempts: 2 });
-  return client.send(cmd, opts);
-};
-
 export class BedrockRecapModel implements RecapModel {
   readonly kind = 'bedrock' as const;
   readonly modelId: string;
-  constructor(private readonly opts: { send?: Send; timeoutMs?: number; modelId?: string } = {}) {
+  constructor(private readonly opts: { send?: ConverseSend; timeoutMs?: number; modelId?: string } = {}) {
     this.modelId = opts.modelId ?? coachModelId();
   }
 
-  async write(input: RecapInput): Promise<CoachModelResult> {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), this.opts.timeoutMs ?? RECAP_TIMEOUT_MS);
-    timer.unref?.();
-    try {
-      const resp = await (this.opts.send ?? defaultSend)(new ConverseCommand(buildRecapRequest(this.modelId, input) as ConverseCommandInput), { abortSignal: abort.signal });
-      const usage = resp.usage && Number.isFinite(resp.usage.inputTokens) && Number.isFinite(resp.usage.outputTokens)
-        ? { inputTokens: Number(resp.usage.inputTokens), outputTokens: Number(resp.usage.outputTokens) } : null;
-      const text = (resp.output?.message?.content ?? []).map((c) => ('text' in c && typeof c.text === 'string' ? c.text : '')).join('');
-      return { raw: text || null, code: 'ok', sent: true, usage };
-    } catch (e) {
-      const timedOut = abort.signal.aborted;
-      console.warn('[interviews] recap call failed', timedOut ? 'timeout' : (e as Error)?.name ?? 'error');
-      return { raw: null, code: timedOut ? 'timeout' : 'error', sent: true, usage: null };
-    } finally {
-      clearTimeout(timer);
-    }
+  write(input: RecapInput): Promise<CoachModelResult> {
+    return converseOnce(buildRecapRequest(this.modelId, input) as ConverseCommandInput,
+      { send: this.opts.send, timeoutMs: this.opts.timeoutMs ?? RECAP_TIMEOUT_MS, label: 'recap' });
   }
 }
 
