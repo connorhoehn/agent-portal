@@ -9,6 +9,7 @@
 //   2. compiled languages: compile into /work/.bin; on failure exit 97 (the executor reads `compile_error`);
 //   3. print the marker on stdout and on stderr, so the executor can tell compile output from the program's;
 //   4. `exec` the program in /work/src with /work/.stdin as its input.
+// The compile and the program each run under `timeout -s KILL 120`, a backstop for a middleware that died mid-run.
 // Anything before the marker is the runner's or the compiler's; everything after is the program's.
 import type { RunLanguage } from './executor.js';
 
@@ -41,7 +42,11 @@ export interface DockerRuntime {
 // directory at /work and refuses absolute names on its own; the executor writes only `src/<plain name>` and `.stdin`.
 const UNPACK = 'umask 077; cd /work || exit 96; tar -x -f - || exit 96; mkdir -p /work/.bin /work/.tmp /work/.cache || exit 96; cd /work/src || exit 96';
 const MARK = 'printf \'%s\\n\' "$1"; printf \'%s\\n\' "$1" >&2';
-const compile = (cmd: string): string => `${cmd} || exit 97`;
+// A backstop of the container's own: if the middleware dies mid-run, nothing it started outlives two minutes. The
+// runner's timers (the compile limit, then `wallMs`) always end a run long before it.
+export const BACKSTOP_SECONDS = 120;
+const BACKSTOP = `timeout -s KILL ${BACKSTOP_SECONDS}`;
+const compile = (cmd: string): string => `${BACKSTOP} ${cmd} || exit 97`;
 
 const NODE_IMAGE = 'node:22.11.0-bookworm-slim';
 
@@ -49,42 +54,42 @@ export const DOCKER_RUNTIMES: Readonly<Record<RunLanguage, DockerRuntime>> = {
   python: {
     image: 'python:3.12.7-slim-bookworm', version: 'Python 3.12.7', compiled: false,
     // -I: no user site, no PYTHON* variables, no script directory on the path; -B: no .pyc files.
-    script: `${UNPACK}; ${MARK}; exec python3 -I -B "$2" < /work/.stdin`,
+    script: `${UNPACK}; ${MARK}; exec ${BACKSTOP} python3 -I -B "$2" < /work/.stdin`,
     env: { PYTHONUNBUFFERED: '1' }, minMemoryMb: 0, cpus: 1, pidsLimit: 64, prepareMs: 10_000,
   },
   javascript: {
     image: NODE_IMAGE, version: 'Node.js 22.11.0', compiled: false,
-    script: `${UNPACK}; ${MARK}; exec node "$2" < /work/.stdin`,
+    script: `${UNPACK}; ${MARK}; exec ${BACKSTOP} node "$2" < /work/.stdin`,
     env: {}, minMemoryMb: 0, cpus: 1, pidsLimit: 64, prepareMs: 10_000,
   },
   typescript: {
     // Node's own type stripping (with enums and namespaces transformed): no compiler to install and no network.
     image: NODE_IMAGE, version: 'Node.js 22.11.0 (TypeScript by type stripping)', compiled: false,
-    script: `${UNPACK}; ${MARK}; exec node --experimental-transform-types --disable-warning=ExperimentalWarning "$2" < /work/.stdin`,
+    script: `${UNPACK}; ${MARK}; exec ${BACKSTOP} node --experimental-transform-types --disable-warning=ExperimentalWarning "$2" < /work/.stdin`,
     env: {}, minMemoryMb: 0, cpus: 1, pidsLimit: 64, prepareMs: 10_000,
   },
   go: {
     image: 'golang:1.23.3-alpine3.20', version: 'Go 1.23.3', compiled: true,
     // The standard library is compiled into a fresh cache on every run (nothing is shared between runs).
-    script: `${UNPACK}; ${compile('go build -o /work/.bin/main ./*.go')}; ${MARK}; exec /work/.bin/main < /work/.stdin`,
+    script: `${UNPACK}; ${compile('go build -o /work/.bin/main ./*.go')}; ${MARK}; exec ${BACKSTOP} /work/.bin/main < /work/.stdin`,
     env: { GOCACHE: '/work/.cache/go', GOPATH: '/work/.cache/gopath', GOTMPDIR: '/work/.tmp', GOTOOLCHAIN: 'local', GOPROXY: 'off', CGO_ENABLED: '0' },
     minMemoryMb: 512, cpus: 2, pidsLimit: 128, prepareMs: 30_000,
   },
   cpp: {
     image: 'gcc:14.2.0', version: 'g++ 14.2.0 (C++20)', compiled: true,
-    script: `${UNPACK}; ${compile('g++ -std=c++20 -O2 -pipe -o /work/.bin/main ./*.cpp')}; ${MARK}; exec /work/.bin/main < /work/.stdin`,
+    script: `${UNPACK}; ${compile('g++ -std=c++20 -O2 -pipe -o /work/.bin/main ./*.cpp')}; ${MARK}; exec ${BACKSTOP} /work/.bin/main < /work/.stdin`,
     env: {}, minMemoryMb: 512, cpus: 2, pidsLimit: 64, prepareMs: 20_000,
   },
   java: {
     image: 'eclipse-temurin:21.0.5_11-jdk-alpine', version: 'OpenJDK 21.0.5 (Temurin)', compiled: true,
     // The class to run is the entrypoint's name without `.java` (the pad's file is Main.java). A full heap is the
     // memory limit: the JVM kills itself (exit 137, `memory_exceeded`) rather than print an OutOfMemoryError.
-    script: `${UNPACK}; ${compile('javac -J-XX:-UsePerfData -d /work/.bin ./*.java')}; ${MARK}; c="\${2##*/}"; exec java -XX:-UsePerfData -XX:MaxRAMPercentage=75 '-XX:OnOutOfMemoryError=kill -9 %p' -cp /work/.bin "\${c%.java}" < /work/.stdin`,
+    script: `${UNPACK}; ${compile('javac -J-XX:-UsePerfData -d /work/.bin ./*.java')}; ${MARK}; c="\${2##*/}"; exec ${BACKSTOP} java -XX:-UsePerfData -XX:MaxRAMPercentage=75 '-XX:OnOutOfMemoryError=kill -9 %p' -cp /work/.bin "\${c%.java}" < /work/.stdin`,
     env: {}, minMemoryMb: 512, cpus: 2, pidsLimit: 128, prepareMs: 20_000,
   },
   swift: {
     image: 'swift:6.0.2-jammy', version: 'Swift 6.0.2', compiled: true,
-    script: `${UNPACK}; ${compile('swiftc -module-cache-path /work/.cache/swift -o /work/.bin/main ./*.swift')}; ${MARK}; exec /work/.bin/main < /work/.stdin`,
+    script: `${UNPACK}; ${compile('swiftc -module-cache-path /work/.cache/swift -o /work/.bin/main ./*.swift')}; ${MARK}; exec ${BACKSTOP} /work/.bin/main < /work/.stdin`,
     env: {}, minMemoryMb: 1024, cpus: 2, pidsLimit: 128, prepareMs: 25_000,
   },
 };
