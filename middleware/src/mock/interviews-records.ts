@@ -14,15 +14,11 @@
 // The words line up with mock/interviews-suggestions.ts (the quotes those suggestions were based on, and the questions the
 // lead asked once they were answered). Seeded names only. Times follow mock/interviews.ts's `at()`: days from today's UTC
 // midnight, computed on read.
-import { clock, defineFixture } from './core/index.js';
+import { defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function at(days: number, hour: number, minute = 0, second = 0): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000).toISOString();
-}
+/** Working days from today at an hour UTC (mock/interviews-days.ts). */
+const at = seedAt;
 
 /** What the media server would have kept for one interview's call: when it started and how long it ran. No media. */
 export interface RecordingStandIn { interviewId: string; startedAt: string; durationSeconds: number }

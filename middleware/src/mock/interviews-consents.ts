@@ -3,19 +3,15 @@
 // The five finished interviews in mock/interviews.ts carry a consent record (all three accepted under the
 // current notice, given twenty minutes before the call); the upcoming ones carry none, so the staff read shows
 // both cases. Registered from its own module (lib/interviews/consent/store.ts imports it), so mock/interviews.ts
-// is untouched. Times follow mock/interviews.ts's `at()`: days from today's UTC midnight, computed on read.
-import { clock, defineFixture } from './core/index.js';
+// is untouched. Times follow mock/interviews.ts's `at()`: working days from today (mock/interviews-days.ts), computed on read.
+import { defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 import { CONSENT_NOTICE } from '../lib/interviews/consent/notice.js';
 import type { ConsentRecord } from '../lib/interviews/consent/store.js';
 import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function at(days: number, hour: number, minute = 0): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + (hour * 60 + minute) * 60_000).toISOString();
-}
+/** Working days from today at an hour UTC (mock/interviews-days.ts). */
+const at = seedAt;
 
 function accepted(interviewId: string, given: string): ConsentRecord {
   const version = CONSENT_NOTICE.version;

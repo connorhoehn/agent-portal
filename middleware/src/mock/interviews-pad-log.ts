@@ -4,21 +4,17 @@
 // in mock/interviews-records.ts: Hugo inserts the rate-limiter question and sets the language, Mateo types the bucket,
 // pastes a small helper of his own (a paste is an event, not an accusation), and the pad is snapshotted twice. The
 // candidate's id is the records stand-in's (`guest:iv-j6x2d9sb`). Registered from its own module
-// (lib/interviews/pad/log/store.ts imports it). Times follow mock/interviews.ts's `at()`: days from today's UTC midnight.
-import { clock, defineFixture } from './core/index.js';
+// (lib/interviews/pad/log/store.ts imports it). Times follow mock/interviews.ts's `at()`: working days from today (mock/interviews-days.ts).
+import { defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 import type { PadEventRecord } from '../lib/interviews/pad/log/store.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const HUGO = 'u-hugo';
 const WEN = 'u-wen';
 
-/** Seconds after a round's start (`days` from today's UTC midnight, at `hour`). */
-function atFor(days: number, hour: number, seconds: number): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + hour * 60 * 60 * 1000 + seconds * 1000).toISOString();
-}
+/** Seconds after a round's start (`days` working days from today, at `hour` UTC). */
+const atFor = (days: number, hour: number, seconds: number): string => seedAt(days, hour, 0, seconds);
 
 type Row = Omit<PadEventRecord, 'interviewId' | 'seq' | 'at' | 'clientAt'> & { s: number };
 const none = { from: null, inserted: null, deleted: null, length: null, lines: null, via: null, language: null, questionId: null, text: null } as const;

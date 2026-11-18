@@ -5,18 +5,14 @@
 // (mock/interviews-pad-log.ts) and the transcript (mock/interviews-records.ts). A walk that starts a run in a live
 // round adds to this and resets the world after. Registered from its own module (lib/interviews/runs/store.ts imports
 // it), so mock/interviews.ts is untouched. `POST /api/__mock/reset` resets it like every other fixture.
-import { clock, defineFixture } from './core/index.js';
+import { defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 import type { RunRecord } from '../lib/interviews/runs/store.js';
 import { LIVE_INTERVIEW_ID, liveStart } from './interviews.js';
 import type { RunLanguage, RunResult, RunStatus } from '../lib/interviews/runs/executor.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-function atFor(days: number, hour: number, seconds: number): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + hour * 60 * 60 * 1000 + seconds * 1000).toISOString();
-}
+/** Seconds after a round's start (`days` working days from today, at `hour` UTC). */
+const atFor = (days: number, hour: number, seconds: number): string => seedAt(days, hour, 0, seconds);
 
 interface Seed {
   interviewId: string; days: number; hour: number; /** When set, `s` counts from this instant instead of `days` / `hour`. */ base?: string; runId: string; language: RunLanguage; entrypoint: string;

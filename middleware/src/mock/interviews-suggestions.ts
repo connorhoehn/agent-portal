@@ -4,19 +4,16 @@
 // asked, one Milo was asked to put (not spoken: speech is row I3.5), one skipped, and one dropped attempt (a code, no text).
 // Each quotes words a candidate could have said in that round; none rates or judges anyone. Registered from its own module
 // (lib/interviews/coach/store.ts imports it), so mock/interviews.ts is untouched. Times follow mock/interviews.ts's
-// `at()`: days from today's UTC midnight, computed on read.
-import { clock, defineFixture } from './core/index.js';
+// `at()`: working days from today (mock/interviews-days.ts), computed on read.
+import { defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 import type { SuggestionRecord } from '../lib/interviews/coach/store.js';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const PROMPT_VERSION = 'coach-2026-11-16.1';
 const MODEL = 'scripted-coach';
 
-function at(days: number, hour: number, minute = 0, second = 0): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + ((hour * 60 + minute) * 60 + second) * 1000).toISOString();
-}
+/** Working days from today at an hour UTC (mock/interviews-days.ts). */
+const at = seedAt;
 
 type Seed = Pick<SuggestionRecord, 'id' | 'interviewId' | 'text' | 'competencyId' | 'basedOn' | 'answer' | 'throughSeq'> & { made: string; answeredAfterS?: number };
 
