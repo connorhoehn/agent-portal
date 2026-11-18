@@ -112,6 +112,7 @@ ROWS=(
   "I3.8|I3|the candidate's two fixed requests"
   "I3.9|I3|what an interview costs; a listener on Amazon Transcribe"
   "I3.10|I3|the coach drafts a question plan"
+  "I3.11|I3|Milo's interview tools: introduce, test cases, an import, refusals"
   "I4.1|I4|library: a collaborative code editor"
   "I4.2|I4|the pad in the room"
   "I4.3|I4|the pad log"
