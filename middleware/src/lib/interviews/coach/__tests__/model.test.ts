@@ -2,7 +2,7 @@
 // no test reaches a provider.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import type { ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { BedrockCoachModel, coachModelId, DEFAULT_COACH_MODEL_ID, ScriptedCoachModel, scriptedSuggestion } from '../model.js';
+import { BedrockCoachModel, coachModelChoice, coachModelId, DEFAULT_COACH_MODEL_ID, ScriptedCoachModel, scriptedSuggestion } from '../model.js';
 import type { CoachInput } from '../prompt.js';
 import { FIXED_INPUT } from './fixed-input.js';
 
@@ -80,5 +80,17 @@ describe('the scripted stand-in', () => {
     const out = await new ScriptedCoachModel().suggest(FIXED_INPUT);
     expect(out.code).toBe('ok');
     expect(JSON.parse(out.raw!)).toEqual(scriptedSuggestion(FIXED_INPUT));
+  });
+});
+
+describe('INTERVIEWS_COACH_MODEL', () => {
+  const live = { MEETING_ASSISTANT_LIVE: '1' } as NodeJS.ProcessEnv;
+  it('scripted keeps the stand-in even with the live session forced on (a developer\'s machine)', () => {
+    expect(coachModelChoice({ ...live, INTERVIEWS_COACH_MODEL: 'scripted' })).toBe('scripted');
+  });
+  it('a production process ignores scripted; bedrock asks for the model', () => {
+    const prod = { NODE_ENV: 'production', ...live } as NodeJS.ProcessEnv;
+    expect(coachModelChoice({ ...prod, INTERVIEWS_COACH_MODEL: 'scripted' })).toBe(coachModelChoice(prod));
+    expect(coachModelChoice({ INTERVIEWS_COACH_MODEL: 'bedrock' } as NodeJS.ProcessEnv)).toBe('bedrock');
   });
 });

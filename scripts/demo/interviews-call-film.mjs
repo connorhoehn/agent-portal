@@ -12,7 +12,7 @@
 // each line (a WAV synthesised beforehand, see --voices) is played into it when the story reaches it, never over another
 // line, with at least 1.8 s of silence between turns (overlapping speech is not credited to either speaker). Milo hears the call
 // through the media server's taps, as in production. The interviews coach (and with it Milo's private answers and the recap)
-// stays on the mock world's scripted stand-in (film-scripted-coach.mjs), so no Bedrock is called.
+// stays on the mock world's scripted stand-in (the product setting INTERVIEWS_COACH_MODEL=scripted), so no Bedrock is called.
 //
 // The story, on the seeded design round iv-k1p5w8ra (Hugo leads; the candidate is the mock world's Mateo Alvarez):
 //   1 Hugo opens the room and starts the call; the recruiter (Greta, by the API) makes the invite link
@@ -157,9 +157,9 @@ start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modul
   MEETING_ASSISTANT_SINK_BASE_URL: MIDDLEWARE, MEETING_ASSISTANT_SINK_SECRET: need('IVFILM_SINK_SECRET'),
   // No Bedrock: the coach is scripted (the preload); anything else that reaches for it is refused by these keys.
   AWS_ACCESS_KEY_ID: 'film-blocks-bedrock', AWS_SECRET_ACCESS_KEY: 'film-blocks-bedrock', AWS_EC2_METADATA_DISABLED: 'true',
-  NODE_OPTIONS: `--require ${path.join(ROOT, 'scripts', 'meeting-assistant', 'lib', 'deadman.cjs')} --import ${pathToFileURL(path.join(ROOT, 'scripts', 'demo', 'film-scripted-coach.mjs')).href}`,
+  NODE_OPTIONS: `--require ${path.join(ROOT, 'scripts', 'meeting-assistant', 'lib', 'deadman.cjs')}`,
   MA_DEADMAN_MS: String(25 * 60_000),
-  FILM_COACH_MODULE: path.join(ROOT, 'middleware', 'src', 'lib', 'interviews', 'coach', 'model.ts'),
+  INTERVIEWS_COACH_MODEL: 'scripted',
 }, path.join(WORK, 'middleware.log'));
 start('portal', process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
   VITE_GATEWAY_URL: `http://localhost:${MW_PORT}`, API_PROXY_TARGET: MIDDLEWARE,

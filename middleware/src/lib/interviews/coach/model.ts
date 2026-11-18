@@ -171,9 +171,23 @@ export class ScriptedCoachModel implements CoachModel {
   }
 }
 
+/**
+ * `INTERVIEWS_COACH_MODEL=scripted` keeps the coach (and with it Milo's private answers, the recap and the plan, which follow its
+ * kind) on the scripted stand-in even when Milo's live session is forced on, for a developer's machine (the recorded film runs the
+ * live voice against the mock world without Bedrock). `bedrock` asks for the model. Anything else, or nothing: the default rule
+ * (the stand-in under the mock transcript, unless the live session is forced). A production process ignores `scripted`.
+ */
+export const COACH_MODEL_SETTING = 'INTERVIEWS_COACH_MODEL';
+export function coachModelChoice(env: NodeJS.ProcessEnv = process.env): 'scripted' | 'bedrock' {
+  const raw = (env[COACH_MODEL_SETTING] ?? '').trim().toLowerCase();
+  if (raw === 'scripted' && env['NODE_ENV'] !== 'production') return 'scripted';
+  if (raw === 'bedrock') return 'bedrock';
+  return mockTranscriptEnabled() && !liveForced(env) ? 'scripted' : 'bedrock';
+}
+
 export type CoachModelFactory = () => CoachModel;
 export const defaultCoachModelFactory: CoachModelFactory = () =>
-  (mockTranscriptEnabled() && !liveForced() ? new ScriptedCoachModel() : new BedrockCoachModel());
+  (coachModelChoice() === 'scripted' ? new ScriptedCoachModel() : new BedrockCoachModel());
 
 let factory: CoachModelFactory | null = null;
 export function setCoachModelFactory(next: CoachModelFactory | null): void { factory = next; }
