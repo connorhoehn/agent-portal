@@ -12,7 +12,10 @@
 //   insert    questionId; from, inserted, length, language optional
 //
 // The caps (`capPost`): at most 400 snapshots and 20,000 events an interview. Past either, the post is still
-// accepted and the extra events are dropped (counted as not accepted); the interview goes on.
+// accepted and the extra events are dropped (counted as not accepted); the interview goes on. The event cap stops every
+// kind but snapshots: past it, snapshots (the page sends one every 30 seconds and one per run) still land under their own
+// cap, so the record's playback and the coach's code view keep up while edits, pastes and the rest are refused. A log
+// therefore holds at most 20,000 + 400 rows.
 
 export const PAD_EVENT_KINDS = ['edit', 'paste', 'snapshot', 'language', 'insert'] as const;
 export type PadEventKind = typeof PAD_EVENT_KINDS[number];
@@ -124,11 +127,10 @@ export function capPost(events: readonly PadEventIn[], stored: { events: number;
   let snapshots = stored.snapshots;
   const kept: PadEventIn[] = [];
   for (const e of events) {
-    if (total >= MAX_EVENTS_PER_INTERVIEW) break;
     if (e.kind === 'snapshot') {
       if (snapshots >= MAX_SNAPSHOTS_PER_INTERVIEW) continue;
       snapshots += 1;
-    }
+    } else if (total >= MAX_EVENTS_PER_INTERVIEW) continue;
     total += 1;
     kept.push(e);
   }
