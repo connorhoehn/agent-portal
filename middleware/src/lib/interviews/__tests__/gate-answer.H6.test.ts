@@ -1,0 +1,56 @@
+// Lane H6 (row E2; the plan's "open item 3"): what the interviews tenant gate answers a caller with no session and a
+// candidate, in the product and in the development mode the mock world runs.
+//
+// A candidate's cookie is scoped to /api/interview-invite (lib/interviews/invite/guest.ts GUEST_COOKIE_PATH), so the
+// candidate's browser sends nothing on /api/interviews/*: there it is a caller with no session. The product (no
+// INSECURE_DEV_MODE) answers that caller 401 (lib/authz.ts denyUnauthenticated). The development mode hands a cookie-less
+// caller the demo identity, an orgiq session, which the interviews gate refuses with 403: the 403 the walk's tables record
+// is the mode's. A guest cookie carried onto the route by hand is never the demo identity (lib/session.ts), so it is 401 in
+// both. Nothing here changes a gate; it pins what each world answers.
+jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true } } }));
+
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import request from 'supertest';
+import { sessionMiddleware } from '../../session.js';
+import { requireTenant } from '../../authz.js';
+import { GUEST_COOKIE_PATH } from '../invite/guest.js';
+
+function app() {
+  const a = express();
+  a.use(cookieParser());
+  a.use(sessionMiddleware());
+  a.get('/api/interviews/interviews', requireTenant('interviews'), (_req, res) => { res.json({ ok: true }); });
+  return a;
+}
+
+const saved = { dev: process.env['INSECURE_DEV_MODE'], node: process.env['NODE_ENV'] };
+afterEach(() => {
+  if (saved.dev === undefined) delete process.env['INSECURE_DEV_MODE']; else process.env['INSECURE_DEV_MODE'] = saved.dev;
+  if (saved.node === undefined) delete process.env['NODE_ENV']; else process.env['NODE_ENV'] = saved.node;
+});
+beforeEach(() => { jest.spyOn(console, 'log').mockImplementation(() => undefined); jest.spyOn(console, 'warn').mockImplementation(() => undefined); });
+afterEach(() => jest.restoreAllMocks());
+
+describe('the interviews tenant gate: no session and a guest', () => {
+  it('scopes the candidate\'s cookie to its own routes', () => {
+    expect(GUEST_COOKIE_PATH).toBe('/api/interview-invite');
+  });
+
+  it('the product: a caller with no session, and so a candidate\'s browser, is 401; a guest cookie by hand is 401', async () => {
+    process.env['INSECURE_DEV_MODE'] = 'false';
+    const anon = await request(app()).get('/api/interviews/interviews');
+    expect([anon.status, anon.body.code]).toEqual([401, 'SESSION_INVALID']);
+    const guest = await request(app()).get('/api/interviews/interviews').set('Cookie', 'interviews.guest=any.value');
+    expect(guest.status).toBe(401);
+  });
+
+  it('the development mode: no session is the demo identity, another tenant\'s session, so 403; a guest cookie by hand stays 401', async () => {
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    process.env['NODE_ENV'] = 'development';
+    const anon = await request(app()).get('/api/interviews/interviews');
+    expect([anon.status, anon.body.requiredTenant]).toEqual([403, 'interviews']);
+    const guest = await request(app()).get('/api/interviews/interviews').set('Cookie', 'interviews.guest=any.value');
+    expect(guest.status).toBe(401);
+  });
+});
