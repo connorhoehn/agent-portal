@@ -82,6 +82,13 @@ export interface MeetingAssistantPolicy {
   acknowledgement(call: PolicyCall, userId: string): 'in-call-notice' | 'elsewhere';
   /** For people whose acknowledgement comes from elsewhere: which of `userIds` gave it. Absent: none did. */
   acknowledgedElsewhere?(call: PolicyCall, userIds: readonly string[]): Promise<string[]>;
+  /**
+   * Whose stored lines Milo's models may read: the live session's context when it opens, the minutes and the decision checks. A
+   * predicate on a line's speaker (null: a line with no single speaker). Lines it refuses stay stored, and people still read them
+   * under `reads`; only the models never see them. Absent: every line. (Interviews: a candidate who accepted the transcript and
+   * declined Milo is transcribed, and Milo uses none of their lines.)
+   */
+  modelReadsSpeaker?(call: PolicyCall): Promise<(userId: string | null) => boolean>;
   /** Whether this person is told about the call outside it (the bell: private answers, proposals that need them, minutes ready). */
   rings(call: PolicyCall, userId: string): boolean;
   /** Whether this meeting is in this person's Meetings list. */
@@ -195,6 +202,17 @@ export async function policyOfCall(callId: string, tenant: string): Promise<{ po
   if (!policies.size) return { policy: DEFAULT_POLICY, call: { callId, lobby: null, tenant } };
   const record = await assistantStore().get(callId).catch(() => null);
   return { policy: policyForLobby(record?.lobby), call: record ? policyCallOf(record) : { callId, lobby: null, tenant } };
+}
+
+/** The lines Milo's models may read of this call (`modelReadsSpeaker`): all of them by default; none when the policy cannot answer. */
+export async function linesForModels<L extends { userId: string | null; speakers?: readonly string[] }>(
+  record: Pick<AssistantRecord, 'callId' | 'lobby' | 'tenant'>, lines: readonly L[],
+): Promise<L[]> {
+  const policy = policyForLobby(record.lobby);
+  if (!policy.modelReadsSpeaker) return [...lines];
+  const may = await policy.modelReadsSpeaker(policyCallOf(record)).catch(() => null);
+  if (!may) return [];
+  return lines.filter((l) => may(l.userId) && (l.speakers ?? []).every((u) => may(u)));
 }
 
 /** The call a record is about, as the policy sees it. */

@@ -1,5 +1,5 @@
 // Milo's policy for an interview call (lib/interviews/milo-policy.ts, row I3.2), the edges hardening lane H3 owes:
-//   O-099  the candidate's audio is admitted only when they accepted the transcript AND Milo, shown on the seat itself: the
+//   O-099  the candidate's audio is admitted only when they accepted the transcript (Milo or not), shown on the seat itself: the
 //          policy's answer becomes the record's acknowledgement (as routes/meeting-assistant.ts does at the invite and when a
 //          seat is taken), and the audio intake then mixes or drops the guest's chunks;
 //   O-101  the decision watcher's checks are booked on the opening, never on the lead's budget;
@@ -117,7 +117,6 @@ describe('O-099: the candidate\'s audio and their answers', () => {
   it.each([
     ['nothing answered', null],
     ['the transcript declined', { transcription: false, milo: false }],
-    ['Milo declined with the transcript accepted', { transcription: true, milo: false }],
   ])('with %s the guest\'s audio is never admitted, at the invite or on taking a seat', async (_l, answer) => {
     setInterviewConsentSource(async () => answer);
     await inviteWith([guestId]);
@@ -129,6 +128,13 @@ describe('O-099: the candidate\'s audio and their answers', () => {
     expect(speak('pid-lead')).toBe('mixed');
     await audio.flush(CALL_ID);
     expect(sessionOf((await store.get(CALL_ID))!).unackedChunks).toBe(2);
+  });
+
+  it('with the transcript accepted and Milo declined the guest is transcribed (admitted at the invite and on the seat)', async () => {
+    setInterviewConsentSource(async () => ({ transcription: true, milo: false }));
+    await inviteWith([guestId]);
+    expect((await store.get(CALL_ID))!.acked).toEqual([LEAD, guestId]);
+    expect(speak('pid-guest')).toBe('mixed');
   });
 
   it('with both accepted the guest present at the invite is admitted at once', async () => {

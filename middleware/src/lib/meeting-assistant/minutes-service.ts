@@ -29,7 +29,7 @@ import {
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSourceId, minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
-import { payerFields, policyCallOf, policyForLobby } from './policy.js';
+import { linesForModels, payerFields, policyCallOf, policyForLobby } from './policy.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 import { sessionOf, type AssistantRecord, type AssistantTurn, type MinutesRecord, type MinutesWriterKind, type TranscriptLine } from './types.js';
 
@@ -260,7 +260,8 @@ interface Composed { minutes: MinutesRecord; draft: MinutesDraft | null; proposa
 /** Run the writer over the call's transcript and shape the minutes; `attempts` is the run this is. Null when nothing was recorded. */
 async function composeMinutes(callId: string, record: AssistantRecord, attempts: number, createdAt: number): Promise<Composed | null> {
   const store = assistantStore();
-  const lines = await allLines(callId);
+  // Only the lines the call's policy lets Milo's models read (an interview candidate who declined Milo: none of theirs).
+  const lines = await linesForModels(record, await allLines(callId));
   if (!lines.length) return null;
   const attendees = [...new Set([...record.attendees, ...lines.flatMap((l) => (l.userId ? [l.userId] : []))])];
   const roster: RosterEntry[] = await Promise.all(attendees.map(async (userId) => ({ userId, name: await nameOf(userId) })));
@@ -428,7 +429,7 @@ const ADDED_PLAIN = `${ASSISTANT_NAME} added the later part of the call to the m
 async function addToMinutes(callId: string, record: AssistantRecord, current: MinutesRecord, attempt: number, fromLeave: boolean): Promise<MinutesRecord | null> {
   const store = assistantStore();
   const expect = current.throughSeq ?? null;
-  const lines = await allLines(callId);
+  const lines = await linesForModels(record, await allLines(callId));
   const fresh = expect !== null ? lines.filter((l) => l.seq > expect) : lines.filter((l) => l.at > current.endedAt);
   // Where the stored minutes end: their last line. Not `endedAt`, which an owed addition already moved to the later leave, so a retry
   // that read it would find no later period and leave out what was done in the call then.

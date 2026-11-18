@@ -1,8 +1,9 @@
 // Where the coach reads an interview's words (row I3.3): the meeting assistant's transcript of the interview's call.
 //
 // The call is the interview's `callId` when it is set, else the newest assistant record still listening or paused in the
-// interview's lobby (`interviews:interview:<id>`). Only lines the store already holds are read, and the store holds a
-// guest's words only when the transcript and Milo were accepted (lib/interviews/milo-policy.ts `acknowledgedElsewhere`).
+// interview's lobby (`interviews:interview:<id>`). Only lines the store already holds are read; the store holds a guest's
+// words when the transcript was accepted (lib/interviews/milo-policy.ts `acknowledgedElsewhere`), and the coach runs only
+// when Milo was accepted too (rules.ts), so it never reads a candidate who declined Milo.
 // Each line becomes its side and its words: `candidate` for a guest identity, `panel` for anyone else. Unattributed lines
 // (nobody's audio was voiced) are left out: the coach never guesses who spoke. No names, times or audio reach the coach.
 import { assistantStore } from '../../meeting-assistant/store-select.js';

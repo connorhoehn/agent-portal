@@ -10,8 +10,10 @@
 //                     hears every microphone in the room, the candidate's included, whoever invites it. So with the
 //                     transcript declined nobody may invite Milo into the call at all: the stricter reading of "the
 //                     interview runs without that part", since a listener that only "ignores" the candidate would still
-//                     hear them. With the transcript accepted and Milo declined, the listener may run for the transcript
-//                     while the coach stays off (the candidate accepted being transcribed, not being advised on).
+//                     hear them. With the transcript accepted and Milo declined, the listener runs and transcribes the
+//                     candidate while nothing of Milo's uses their lines: the coach, the private answers and the recap are
+//                     off, and the meeting assistant's models skip them (milo-policy.ts `modelReadsSpeaker`). The candidate
+//                     accepted being transcribed, not being advised on.
 //   no answers        nothing runs: no recording, no transcript, no coach, and Milo may not be invited (decision 5:
 //                     nothing of the candidate is recorded or transcribed before consent).
 //

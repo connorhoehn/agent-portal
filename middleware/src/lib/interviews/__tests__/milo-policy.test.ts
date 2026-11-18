@@ -214,13 +214,13 @@ describe('acknowledgement: the panel in the call, the candidate in the portal', 
     expect(await P.acknowledgedElsewhere!(CALL, [guestId, LEAD])).toEqual([]);
   });
 
-  it('a guest counts only when BOTH transcription and Milo were accepted, for this interview, by its own invite', async () => {
+  it('a guest counts when the transcript was accepted (Milo or not), for this interview, by its own invite', async () => {
     const asked: string[] = [];
     let answer: { transcription: boolean; milo: boolean } | null = null;
     setInterviewConsentSource(async (iv) => { asked.push(iv); return answer; });
     expect(await P.acknowledgedElsewhere!(CALL, [guestId])).toEqual([]); // not answered yet
     answer = { transcription: true, milo: false };
-    expect(await P.acknowledgedElsewhere!(CALL, [guestId])).toEqual([]);
+    expect(await P.acknowledgedElsewhere!(CALL, [guestId])).toEqual([guestId]); // transcribed; Milo's models skip them (below)
     answer = { transcription: false, milo: true };
     expect(await P.acknowledgedElsewhere!(CALL, [guestId])).toEqual([]);
     answer = { transcription: true, milo: true };
@@ -233,6 +233,39 @@ describe('acknowledgement: the panel in the call, the candidate in the portal', 
   it('a consent source that fails counts as no answer', async () => {
     setInterviewConsentSource(async () => { throw new Error('down'); });
     expect(await P.acknowledgedElsewhere!(CALL, [guestId])).toEqual([]);
+  });
+});
+
+describe('modelReadsSpeaker: Milo uses the candidate\'s lines only when Milo was accepted', () => {
+  const line = (userId: string | null, speakers?: string[]) => ({ userId, ...(speakers ? { speakers } : {}) });
+  const REC = { callId: CALL.callId, lobby: LOBBY, tenant: 'interviews' };
+  beforeAll(() => registerInterviewsMiloPolicy({ INTERVIEWS_ENABLED: 'true' }));
+
+  it('both accepted: every line, the candidate\'s included', async () => {
+    setInterviewConsentSource(async () => ({ transcription: true, milo: true }));
+    const may = await P.modelReadsSpeaker!(CALL);
+    expect([may(LEAD), may(guestId), may(null)]).toEqual([true, true, true]);
+    const { linesForModels } = await import('../../meeting-assistant/policy.js');
+    expect(await linesForModels(REC, [line(LEAD), line(guestId)])).toHaveLength(2);
+  });
+
+  it('the transcript accepted, Milo declined: the panel\'s lines only; a line the candidate shares or nobody owns is left out', async () => {
+    setInterviewConsentSource(async () => ({ transcription: true, milo: false }));
+    const may = await P.modelReadsSpeaker!(CALL);
+    expect([may(LEAD), may(guestId), may(null)]).toEqual([true, false, false]);
+    const { linesForModels } = await import('../../meeting-assistant/policy.js');
+    expect(await linesForModels(REC, [line(LEAD), line(guestId), line(LEAD, [LEAD, guestId]), line(null)])).toEqual([line(LEAD)]);
+  });
+
+  it('answers that cannot be read count as Milo declined', async () => {
+    setInterviewConsentSource(async () => { throw new Error('down'); });
+    expect((await P.modelReadsSpeaker!(CALL))(guestId)).toBe(false);
+  });
+
+  it('Work\'s calls (the default policy) are untouched: every line', async () => {
+    const { linesForModels } = await import('../../meeting-assistant/policy.js');
+    expect(DEFAULT_POLICY.modelReadsSpeaker).toBeUndefined();
+    expect(await linesForModels({ ...REC, lobby: 'initiative:x', tenant: 'orgiq' }, [line('u-a'), line('guest:x'), line(null)])).toHaveLength(3);
   });
 });
 

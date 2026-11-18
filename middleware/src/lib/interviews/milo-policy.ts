@@ -7,8 +7,8 @@
 //                         the candidate's answers allow Milo in the call at all (row I2.5, consent/effects.ts
 //                         `miloMayBeInvited`): Milo's live session is the listener that makes the transcript and it hears
 //                         every microphone, so with the transcript declined, or nothing answered, the lead is refused with
-//                         one plain sentence. With the transcript accepted and Milo declined the listener may run; the
-//                         coach stays off (COACH's own check).
+//                         one plain sentence. With the transcript accepted and Milo declined the listener runs and
+//                         transcribes the candidate; nothing of Milo's uses their lines (`modelReadsSpeaker`, COACH's check).
 //   reads                 the record, the transcript and the minutes are the panel side's (decision 4): the lead, the panel,
 //                         the recruiter and the opening's hiring manager, by the tenant's one scope rule (scope.ts). A seat in
 //                         the call gives nothing by itself; a guest reads nothing; the admin gets no exception (as by default).
@@ -16,8 +16,11 @@
 //   sessionTools          none; mayUseTool: never (no tools and no data for anyone in an interview).
 //   acknowledgement       the panel side acknowledges with the notice in the call; the candidate (a guest, `guest:<inviteId>`)
 //                         acknowledged in the portal's consent (row I2.3), which `acknowledgedElsewhere` asks through
-//                         `setInterviewConsentSource`. With no source set, nobody has, so nothing the candidate says is
-//                         stored or heard.
+//                         `setInterviewConsentSource`: the transcript accepted is enough. With no source set, nobody has,
+//                         so nothing the candidate says is stored or heard.
+//   modelReadsSpeaker     with Milo declined (the transcript accepted), the candidate is transcribed but Milo's models (the
+//                         live session's context, the minutes, the decision checks) read none of their lines; the coach,
+//                         the private answers, the recap and the notes already refuse or read the panel's lines only.
 //   rings, listsMeeting   the panel side only, never a guest (a guest has no bell and no Meetings list).
 //   relaysLiveSpeech      never (decision 9: nothing the live model says reaches an interview, by voice or in chat).
 //   answerFromHeldText    row I3.8 (decision 10): a request from the CANDIDATE is answered only with text the server holds,
@@ -164,9 +167,18 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     const guests = userIds.filter(isGuestId);
     if (!guests.length) return [];
     const answer = await source(interviewId).catch(() => null);
-    if (!answer?.transcription || !answer.milo) return [];
+    // The transcript accepted is enough to be transcribed (decision 5); Milo declined is held by `modelReadsSpeaker` below.
+    if (!answer?.transcription) return [];
     const mine = await Promise.all(guests.map(async (u) => ((await guestOfInterview(u, interviewId)) ? u : null)));
     return mine.filter((u): u is string => u !== null);
+  },
+  // Milo declined (or unreadable answers): Milo's models read none of the candidate's lines, and no line without one speaker.
+  modelReadsSpeaker: async (call) => {
+    const interviewId = interviewOfLobby(call.lobby);
+    const source = consentSource ?? storedAnswers;
+    const answer = interviewId ? await source(interviewId).catch(() => null) : null;
+    if (answer?.transcription && answer.milo) return () => true;
+    return (userId) => userId !== null && !isGuestId(userId);
   },
   rings: (_call, userId) => !isGuestId(userId),
   listsMeeting: (_minutes, userId) => !isGuestId(userId),

@@ -173,7 +173,7 @@ it('a request while one is still being said: the plain sentence, not logged, not
   expect([(await said.list(IV)).length, posts.length, spoken.length]).toEqual([1, 1, 1]);
 });
 
-it('the transcript declined: the button still answers from held text (the route reads no consent), logged once', async () => {
+it('the transcript declined: the button still answers from held text (decided: the candidate\'s own two requests are not Milo reading them, so no consent gates them), logged once', async () => {
   interviewConsentsFixture.rows().push({
     interviewId: IV, noticeVersion: CONSENT_NOTICE.version, recording: true, recordingAt: GIVEN, transcription: false, transcriptionAt: GIVEN, milo: false, miloAt: GIVEN,
     answeredAt: GIVEN, changedAt: GIVEN, history: [], revision: 1,

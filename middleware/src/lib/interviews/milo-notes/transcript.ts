@@ -3,7 +3,8 @@
 // Read from the meeting assistant's transcript of the interview's call, as the coach reads it (lib/interviews/coach/
 // transcript.ts), with what the panel needs and the coach must not have: each line's time and who said it. The call is
 // the interview's `callId` when it is set, else the newest assistant record in the interview's lobby. Only lines the
-// store already holds are read, and the store holds a guest's words only when the transcript and Milo were accepted.
+// store already holds are read; the store holds a guest's words when the transcript was accepted, and Milo's private
+// answers read them only when Milo was accepted too (rules.ts `no-consent`); the panel's transcript view reads them either way.
 // A line nobody's audio was attributed to is left out, as the coach leaves it out: Milo never guesses who spoke.
 //
 // Who said it, for a person to read: a staff member by their display name; the candidate (a guest identity) by the name

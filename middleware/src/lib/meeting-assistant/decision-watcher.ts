@@ -30,7 +30,7 @@ import { DECISION_MODEL_ID, type CheckLine, type DecisionAnswer } from './decisi
 import { makeDecisionModel, type DecisionModel, type ModelCheckResult } from './decision-model.js';
 import { watcherSpend, type WatcherSpend } from './spend.js';
 import { ASSISTANT_NAME } from './chat-types.js';
-import { payerFields } from './policy.js';
+import { linesForModels, payerFields } from './policy.js';
 import type { AssistantStore } from './store.js';
 import { periodOf, type AssistantRecord, type Proposal, type ProposalOutcome, type TranscriptLine } from './types.js';
 
@@ -269,7 +269,8 @@ export class DecisionWatcher {
   /** The window: the last WINDOW_MS of stored lines, at most WINDOW_LINES, attributed and not Milo's echo. */
   private async windowOf(record: AssistantRecord, now: number): Promise<TranscriptLine[]> {
     const recent = await this.deps.store().lines(record.callId, Math.max(0, record.nextSeq - 1 - WINDOW_LINES), WINDOW_LINES);
-    return recent.filter((l) => l.at >= now - WINDOW_MS && l.userId !== null && !this.deps.isEcho?.(record.callId, l)).slice(-WINDOW_LINES);
+    const window = recent.filter((l) => l.at >= now - WINDOW_MS && l.userId !== null && !this.deps.isEcho?.(record.callId, l)).slice(-WINDOW_LINES);
+    return linesForModels(record, window);
   }
 
   /** Everyone who held a seat while Milo was in the call, and everyone seated now, by display name. */

@@ -23,7 +23,7 @@ import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { isPrivateRead, meetingInstructions } from './instructions.js';
-import { limitsOfCall, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
+import { limitsOfCall, linesForModels, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
 import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
@@ -818,8 +818,8 @@ export class AssistantRuntime {
     if (!record) return [];
     const lines = await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - RECENT_TRANSCRIPT_LINES), RECENT_TRANSCRIPT_LINES);
     const floor = this.now() - RECENT_TRANSCRIPT_MS;
-    // The context shows people by display name, whatever the source put in `speakerName`.
-    const recent = lines.filter((l) => l.at >= floor);
+    // The context shows people by display name, whatever the source put in `speakerName`; only lines the policy lets models read.
+    const recent = await linesForModels(record, lines.filter((l) => l.at >= floor));
     return Promise.all(recent.map(async (l) => (l.userId && (!l.speakerName || l.speakerName === l.userId) ? { ...l, speakerName: await nameOf(l.userId) } : l)));
   }
 
