@@ -49,6 +49,8 @@ beforeEach(async () => {
   fixtureRegistry.resetAll('default');
   spendHolds.reset();
   spendEntries.reset();
+  // Count from nothing: take out the seed's settled spend for the finished rounds (mock/interviews-money.ts).
+  { const rows = spendEntries.rows(); for (let k = rows.length - 1; k >= 0; k -= 1) if (rows[k]!.source === 'interviews') rows.splice(k, 1); }
   interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.hiringManagerId = OTHER_HM;
   setInviteStore(new MemoryInviteStore());
   const { inviteStore } = await import('../invite/store.js');
