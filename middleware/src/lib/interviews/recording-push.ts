@@ -30,14 +30,16 @@ export async function pushRecordingDecision(interviewId: string, deps: Partial<P
     const base = recordingServiceUrl(env);
     if (!base) return false;
     const lobbyName = interviewLobby(interviewId);
-    const decision = await decideRecording(lobbyName, async () => true);
-    // A call that is not open has nothing to switch.
-    if (decision.status !== 200 || decision.body.reason === 'interview-not-open') return false;
-    const body = { lobbyName, purpose: 'interview-decision', record: decision.body.record, transcribe: decision.body.transcribe, reason: decision.body.reason };
-    const headers = signedRecordingHeaders(body, env);
-    if (!headers) return false;
     const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     for (let attempt = 1; ; attempt += 1) {
+      // Every try decides afresh, and the version is read with the answer: a retry sends the row as it is now, never an old answer under a newer version.
+      const decision = await decideRecording(lobbyName, async () => true);
+      // A call that is not open has nothing to switch.
+      if (decision.status !== 200 || decision.body.reason === 'interview-not-open') return false;
+      const { record, transcribe, reason, decisionVersion } = decision.body;
+      const body = { lobbyName, purpose: 'interview-decision', record, transcribe, reason, decisionVersion };
+      const headers = signedRecordingHeaders(body, env);
+      if (!headers) return false;
       const res = await (deps.fetch ?? fetch)(`${base}${RECORDING_DECISION_PATH}`, {
         method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
       });

@@ -109,12 +109,13 @@ const COMBOS = yn.flatMap((recording) => yn.flatMap((transcription) => yn.map((m
 describe('the rules, pure', () => {
   it('D2: no seat is refused; a call not open, no answers and a declined recording each say so', () => {
     expect(recordingDecision({ seated: false, state: 'live', answers: COMBOS[0]! })).toEqual({ status: 403, body: REFUSED });
-    expect(recordingDecision({ seated: true, state: 'ended', answers: COMBOS[0]! }).body).toEqual({ ...REFUSED, reason: 'interview-not-open' });
-    expect(recordingDecision({ seated: true, state: 'live', answers: null }).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing' });
+    expect(recordingDecision({ seated: true, state: 'ended', answers: COMBOS[0]! }).body).toEqual({ ...REFUSED, reason: 'interview-not-open', decisionVersion: 0 });
+    expect(recordingDecision({ seated: true, state: 'live', answers: null }).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing', decisionVersion: 0 });
     for (const a of COMBOS) {
       expect(recordingDecision({ seated: true, state: 'live', answers: a }).body).toEqual({
-        record: a.recording, transcribe: a.transcription, reason: a.recording ? 'interview-consented' : 'interview-recording-declined' });
+        record: a.recording, transcribe: a.transcription, reason: a.recording ? 'interview-consented' : 'interview-recording-declined', decisionVersion: 0 });
     }
+    expect(recordingDecision({ seated: true, state: 'live', answers: COMBOS[0]!, version: 7 }).body).toMatchObject({ decisionVersion: 7 });
   });
 
   it('usable answers: the current notice before the call, whatever notice once it has started', () => {
@@ -137,7 +138,7 @@ describe('the rules, pure', () => {
 describe('POST /recording-decision (D2)', () => {
   it.each(COMBOS)('the lead and the admitted candidate get the same answer for %j', async (a) => {
     setConsent(a);
-    const want = { record: a.recording, transcribe: a.transcription, reason: a.recording ? 'interview-consented' : 'interview-recording-declined' };
+    const want = { record: a.recording, transcribe: a.transcription, reason: a.recording ? 'interview-consented' : 'interview-recording-declined', decisionVersion: 1 };
     for (const token of [await staffToken('u-wen'), await staffToken('u-hugo'), await guestToken(IV)]) {
       const res = await ask('recording-decision', token);
       expect([res.status, res.body]).toEqual([200, want]);
@@ -148,11 +149,11 @@ describe('POST /recording-decision (D2)', () => {
   it('with nothing answered, or answers under an older notice before the call, nothing records', async () => {
     const lead = await staffToken('u-wen');
     setConsent(null);
-    expect((await ask('recording-decision', lead)).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing' });
+    expect((await ask('recording-decision', lead)).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing', decisionVersion: 0 });
     setConsent({ recording: true, transcription: true, milo: true }, '2020-01-01.1');
-    expect((await ask('recording-decision', lead)).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing' });
+    expect((await ask('recording-decision', lead)).body).toEqual({ ...REFUSED, reason: 'interview-consent-missing', decisionVersion: 1 });
     setState('live');
-    expect((await ask('recording-decision', lead)).body).toEqual({ record: true, transcribe: true, reason: 'interview-consented' });
+    expect((await ask('recording-decision', lead)).body).toEqual({ record: true, transcribe: true, reason: 'interview-consented', decisionVersion: 1 });
   });
 
   it('refuses everyone without a seat: the recruiter, the hiring manager, the admin, another round\'s interviewer, a Work session', async () => {

@@ -7,7 +7,7 @@ import { RECORDING_DECISION_PATH, pushRecordingDecision } from '../recording-pus
 
 const decide = decideRecording as jest.Mock;
 const ENV = { PLATFORM_API_URL: 'http://platform.test/', SERVICE_AUTH_SECRET: 's3cret' } as NodeJS.ProcessEnv;
-const consented = { status: 200, body: { record: true, transcribe: false, reason: 'interview-consented' } };
+const consented = { status: 200, body: { record: true, transcribe: false, reason: 'interview-consented', decisionVersion: 3 } };
 
 const noSleep = async () => {};
 beforeEach(() => decide.mockReset());
@@ -22,7 +22,7 @@ describe('pushRecordingDecision', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe(`http://platform.test${RECORDING_DECISION_PATH}`);
     const body = JSON.parse(String(calls[0]!.init.body));
-    expect(body).toEqual({ lobbyName: 'interviews:interview:iv-1', purpose: 'interview-decision', record: true, transcribe: false, reason: 'interview-consented' });
+    expect(body).toEqual({ lobbyName: 'interviews:interview:iv-1', purpose: 'interview-decision', record: true, transcribe: false, reason: 'interview-consented', decisionVersion: 3 });
     const header = (calls[0]!.init.headers as Record<string, string>)[SERVICE_AUTH_HEADER]!;
     expect(verifyEnvelope(header, { secret: 's3cret', allowedServices: ['aws-agentcore'], payload: body }).ok).toBe(true);
   });
@@ -46,6 +46,27 @@ describe('pushRecordingDecision', () => {
     expect(await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn: jest.fn(), sleep: async (ms) => { waits.push(ms); } })).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(waits).toEqual([500, 1000]);
+  });
+
+  it('resends the same decision and version on a retry while the row is unchanged', async () => {
+    decide.mockResolvedValue(consented);
+    const sent: unknown[] = [];
+    const answers = [503, 200];
+    const fetchMock = (async (_u: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); const s = answers.shift()!; return { ok: s === 200, status: s } as Response; }) as unknown as typeof fetch;
+    await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn: jest.fn(), sleep: noSleep });
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual(sent[1]);
+    expect((sent[0] as { decisionVersion: number }).decisionVersion).toBe(3);
+  });
+
+  it('recomputes from the current row when it changed, never an old yes under a new version', async () => {
+    decide.mockResolvedValueOnce(consented)
+      .mockResolvedValueOnce({ status: 200, body: { record: false, transcribe: false, reason: 'interview-recording-declined', decisionVersion: 4 } });
+    const sent: Array<{ record: boolean; decisionVersion: number }> = [];
+    const answers = [503, 200];
+    const fetchMock = (async (_u: string, init: RequestInit) => { sent.push(JSON.parse(String(init.body))); const s = answers.shift()!; return { ok: s === 200, status: s } as Response; }) as unknown as typeof fetch;
+    await pushRecordingDecision('iv-1', { env: ENV, fetch: fetchMock, warn: jest.fn(), sleep: noSleep });
+    expect(sent.map((b) => [b.record, b.decisionVersion])).toEqual([[true, 3], [false, 4]]);
   });
 
   it('gives up on a 503 that does not clear with one warning and no throw', async () => {

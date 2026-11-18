@@ -26,7 +26,7 @@ import { INTERVIEWS_TENANT, type Interview, type InterviewState } from './types.
 
 export type RecordingReason = 'interview-consented' | 'interview-recording-declined' | 'interview-consent-missing' | 'interview-not-open';
 export type RecordingDecision =
-  | { status: 200; body: { record: boolean; transcribe: boolean; reason: RecordingReason } }
+  | { status: 200; body: { record: boolean; transcribe: boolean; reason: RecordingReason; decisionVersion: number } }
   | { status: 403; body: { record: false; transcribe: false } };
 
 export const RECORDING_REFUSED: RecordingDecision = Object.freeze({ status: 403, body: Object.freeze({ record: false, transcribe: false }) }) as RecordingDecision;
@@ -46,15 +46,18 @@ export interface RecordingDecisionFacts {
   state: InterviewState | null;
   /** The usable answers (usableAnswers). */
   answers: ConsentAnswers | null;
+  /** The consent row's revision (monotonic in the mock and SQL stores), 0 when there is no row: platform-api orders decisions by it. */
+  version?: number;
 }
 
 /** D2, pure. */
 export function recordingDecision(f: RecordingDecisionFacts): RecordingDecision {
   if (!f.seated) return RECORDING_REFUSED;
-  if (!f.state || !CALL_STATES.includes(f.state)) return { status: 200, body: { record: false, transcribe: false, reason: 'interview-not-open' } };
-  if (!f.answers) return { status: 200, body: { record: false, transcribe: false, reason: 'interview-consent-missing' } };
+  const decisionVersion = f.version ?? 0;
+  if (!f.state || !CALL_STATES.includes(f.state)) return { status: 200, body: { record: false, transcribe: false, reason: 'interview-not-open', decisionVersion } };
+  if (!f.answers) return { status: 200, body: { record: false, transcribe: false, reason: 'interview-consent-missing', decisionVersion } };
   const runs = interviewRunsWith(f.answers);
-  return { status: 200, body: { record: runs.recording, transcribe: runs.transcript, reason: runs.recording ? 'interview-consented' : 'interview-recording-declined' } };
+  return { status: 200, body: { record: runs.recording, transcribe: runs.transcript, reason: runs.recording ? 'interview-consented' : 'interview-recording-declined', decisionVersion } };
 }
 
 export interface RecordingAccessFacts {
@@ -91,7 +94,7 @@ export async function decideRecording(lobbyName: string, seated: () => Promise<b
   try {
     const interview = await findInterview(interviewId);
     const record = interview ? await runWithDbTenant(INTERVIEWS_TENANT, () => consentStore().getConsent(interviewId)) : null;
-    return recordingDecision({ seated: true, state: interview?.state ?? null, answers: interview ? usableAnswers(record, interview.state) : null });
+    return recordingDecision({ seated: true, state: interview?.state ?? null, answers: interview ? usableAnswers(record, interview.state) : null, version: record?.revision ?? 0 });
   } catch {
     return RECORDING_REFUSED;
   }
