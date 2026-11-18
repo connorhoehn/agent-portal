@@ -24,6 +24,7 @@ import { consentStore, type ConsentRecord } from '../lib/interviews/consent/stor
 import type { Interview } from '../lib/interviews/types.js';
 import { interviewsFlagGate } from './interviews.js';
 import { consentsSaved } from '../lib/interviews/consent-bell.js';
+import { pushRecordingDecision } from '../lib/interviews/recording-push.js';
 import { interviewsNow } from '../lib/interviews/clock.js';
 
 export const consentGuestRouter: Router = Router();
@@ -99,5 +100,6 @@ consentGuestRouter.put('/consents', interviewsFlagGate, requireGuest(), asyncHan
     return;
   }
   void consentsSaved(interview.id, before, result.row);
+  void pushRecordingDecision(interview.id);
   res.json(guestConsentsView(result.row));
 }));
