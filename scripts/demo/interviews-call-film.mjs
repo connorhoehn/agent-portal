@@ -453,6 +453,14 @@ try {
   const cams = async (pg) => pg.evaluate(() => [...document.querySelectorAll('video')].filter((v) => v.videoWidth > 0 && v.readyState >= 2).length).catch(() => 0);
   const tiles = await until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 1000);
   step('2 both in the call with cameras', !!tiles, `live camera tiles: lead ${await cams(hp)}, candidate ${await cams(cp)}`);
+  // From here until the lead ends the interview, the call must hold: the room's own lost-call notice on either side is a failure the
+  // report names with its time (the product says a call dropped in interview-room-call-lost and join-room-call-lost).
+  const lostSeen = { lead: null, cand: null };
+  const watchLost = setInterval(() => {
+    for (const [who, page, id] of [['lead', hp, 'interview-room-call-lost'], ['cand', cp, 'join-room-call-lost']]) {
+      if (lostSeen[who] === null) void page.getByTestId(id).first().isVisible().then((v) => { if (v && lostSeen[who] === null) lostSeen[who] = Date.now(); }, () => undefined);
+    }
+  }, 2000);
 
   // 3. Milo in, voice on (not in a rehearsal: nothing is spent); small talk; the warm-up question.
   scene(3, 'Small talk', 'Hugo invites Milo and turns its voice on, says good morning and asks about data structures and algorithms.');
@@ -585,6 +593,9 @@ try {
   if (A) await miloState().catch((e) => note(`Milo's state at the end: ${String(e).slice(0, 120)}`));
   scene(11, 'Scorecard and recap', 'The candidate sees the ended page; Hugo lands on the scorecard, rates and opens Milo\'s recap: every statement sourced to what the candidate said.');
   await hp.getByTestId('interview-end').click();
+  clearInterval(watchLost);
+  const at = (t) => (t === null ? 'never' : `${Math.round((t - timeline.film.fromMs) / 1000)} s into the film`);
+  step('C the call held', lostSeen.lead === null && lostSeen.cand === null, `the lead's room said the call dropped: ${at(lostSeen.lead)}; the candidate's page: ${at(lostSeen.cand)}`);
   await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }).click({ timeout: 10_000 });
   const endedAt = Date.now();
   const candEnded = await cp.getByTestId('join-ended').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
