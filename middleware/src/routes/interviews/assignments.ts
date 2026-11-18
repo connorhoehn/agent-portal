@@ -112,6 +112,12 @@ assignmentsRouter.post('/interviews', assign, asyncHandler(async (req, res) => {
   const id = interviewIdFor(new Set((await store.listInterviews()).map((i) => i.id)));
   const created = await store.createInterview(newInterview(checked.value, opening, id, session.sub, interviewsNow().toISOString()));
   if (!created) { res.status(409).json({ error: 'Another round was assigned at the same moment. Try again.' }); return; }
+  // A candidate still at `applied` or `screening` moves to `interviewing` when their first round is assigned, so the
+  // debrief can decide on them once the rounds are in (decisionMove refuses the two early stages). A stale history
+  // (someone moved them at the same moment) leaves the stage as that move set it.
+  if (app.stage === 'applied' || app.stage === 'screening') {
+    await store.decideStage(app.id, { stage: 'interviewing', at: interviewsNow().toISOString(), by: session.sub, reason: 'First round assigned' }, app.history.length);
+  }
   const after = await answerWrite(req, res, { ok: true, row: created }, 201);
   if (after) void notifyInterviewSeated({ interviewId: created.id, ...bellWords(after, created), userIds: [created.leadId, ...created.panelIds], actorId: session.sub, reassigned: false });
 }));

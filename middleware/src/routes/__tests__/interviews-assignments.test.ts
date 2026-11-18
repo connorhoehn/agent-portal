@@ -45,7 +45,7 @@ import { admitTenantNotification, setNotificationSink, type NotificationInputLik
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewPanelNoticesFixture } from '../../mock/interviews-panel-notices.js';
-import { interviewsFixture } from '../../mock/interviews.js';
+import { interviewApplicationsFixture, interviewsFixture } from '../../mock/interviews.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import type { Session } from '../../lib/session.js';
 
@@ -157,6 +157,25 @@ describe('assigning a round', () => {
     expect((await GRETA.get('/interviewers')).body.items.map((p: { id: string }) => p.id)).toEqual(['u-hugo', 'u-third', 'u-wen']);
     await flush();
     expect(sent).toEqual([]);
+  });
+});
+
+describe('the first round moves the candidate on (E1t)', () => {
+  const app = () => interviewApplicationsFixture.rows().find((a) => a.id === LUCIA.applicationId)!;
+  it('an applied candidate is interviewing once their first round is assigned, with the move in the history', async () => {
+    app().stage = 'applied';
+    const before = app().history.length;
+    expect((await assign()).status).toBe(201);
+    expect(app().stage).toBe('interviewing');
+    expect(app().history.length).toBe(before + 1);
+    expect(app().history.at(-1)).toMatchObject({ stage: 'interviewing', by: 'u-greta', reason: 'First round assigned' });
+  });
+  it('a candidate already past screening keeps their stage', async () => {
+    app().stage = 'debrief';
+    const before = app().history.length;
+    expect((await assign()).status).toBe(201);
+    expect(app().stage).toBe('debrief');
+    expect(app().history.length).toBe(before);
   });
 });
 
