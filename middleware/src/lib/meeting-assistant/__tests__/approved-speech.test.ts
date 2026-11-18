@@ -63,7 +63,7 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   async close() { this.emit('closed', { reason: 'close_requested' }); }
   fire<K extends keyof SessionEvents>(type: K, event: SessionEvents[K]) { this.emit(type, event); }
   /** `n` voiced frames, tagged for a say request or not. */
-  frames(n: number, say?: string) { for (let i = 0; i < n; i += 1) this.emit('outputAudio', { pcm: Buffer.alloc(4800, 9), seq: i + 1, ...(i === n - 1 ? { last: true as const } : {}), ...(say ? { say } : {}) }); }
+  frames(n: number, say?: string, fill = 9) { for (let i = 0; i < n; i += 1) this.emit('outputAudio', { pcm: Buffer.alloc(4800, fill), seq: i + 1, ...(i === n - 1 ? { last: true as const } : {}), ...(say ? { say } : {}) }); }
 }
 
 const NO_RELAY: MeetingAssistantPolicy = { ...DEFAULT_POLICY, id: 'say-test', relaysLiveSpeech: () => false };
@@ -73,6 +73,8 @@ let store: MemoryAssistantStore;
 let intake: LineIntake;
 let runtime: AssistantRuntime;
 let sent: Array<{ seq: number; last?: boolean }>;
+/** The first byte of each relayed frame, in the order the relay sent them (the test fills each line's frames with its own byte). */
+let sentBytes: number[];
 let factory: () => LiveMeetingSession;
 
 async function startCall(lobby: string): Promise<void> {
@@ -84,7 +86,7 @@ async function startCall(lobby: string): Promise<void> {
   const ctx: StartContext = { callId: CALL, tenant: 'orgiq', inviterId: ALICE, roster: ['Alice'], recordName: 'Round' };
   runtime = new AssistantRuntime({
     store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async () => ['member'],
-    voiceSink: (_ch, frame) => { sent.push({ seq: frame.data.seq, ...(frame.data.last ? { last: true } : {}) }); return true; },
+    voiceSink: (_ch, frame) => { sent.push({ seq: frame.data.seq, ...(frame.data.last ? { last: true } : {}) }); sentBytes.push(Buffer.from(frame.data.pcm, 'base64')[0]!); return true; },
   }, { tickMs: 0 });
   await runtime.start(ctx);
   await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
@@ -96,7 +98,7 @@ const voiceTrace = (): Array<Record<string, unknown>> => mockTrace.filter((t) =>
 beforeAll(() => { unregister = registerMeetingAssistantPolicy('orgiq:saytest', NO_RELAY); });
 afterAll(() => { unregister?.(); });
 beforeEach(() => {
-  now = T0; sent = []; mockTrace.length = 0;
+  now = T0; sent = []; sentBytes = []; mockTrace.length = 0;
   mockPosts.replies.length = 0; mockPosts.notices.length = 0; mockPosts.approved.length = 0; mockPosts.approvedNames.length = 0;
   store = new MemoryAssistantStore(); setAssistantStore(store);
   const source = new MockTranscriptSource();
@@ -306,6 +308,24 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
       expect(s.cancelled).toEqual([]);
     } finally { jest.useRealTimers(); }
   });
+
+  it('two lines never play at once: the second is released only once the first one\'s frames have gone out', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:r7s');
+    const s = fake();
+    const first = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+    const second = runtime.sayHeldTextWhy(CALL, 'Another question?', ALICE);
+    await flush();
+    // The first line's utterance ends; its release paces 40 frames at playout speed. The second's utterance ends meanwhile.
+    s.frames(40, s.asked[0]!.id, 1);
+    s.asked[0]!.ended(QUESTION);
+    await flush();
+    s.frames(6, s.asked[1]!.id, 2);
+    s.asked[1]!.ended('Another question?');
+    expect(await first).toEqual({ outcome: 'spoken', why: null });
+    expect(await second).toEqual({ outcome: 'spoken', why: null });
+    expect(sentBytes).toEqual([...Array(40).fill(1), ...Array(6).fill(2)]);
+  }, 20_000);
 
   it('a queued line whose turn never comes within the quiet wait after the first is over stays in the chat', async () => {
     jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });

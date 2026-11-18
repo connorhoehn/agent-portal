@@ -366,7 +366,8 @@ interface CallRun {
   /**
    * Approved lines asked of the session and not yet over, oldest first (approved-speech.ts). The session says them one at a time in
    * this order (its own queue holds the unsent ones), so the first is the one in flight; each later one's quiet wait starts when
-   * the one before it is over.
+   * the one before it is over. Only the first is ever released: a later line whose utterance is complete waits, held, until the
+   * one before it has finished going out through the gate and the relay (`releaseNext`), so two lines never play at once.
    */
   approvals: ApprovedHold[];
   /** What Milo last answered each asker in the chat (held text or a reply): the fixed refusal is not posted twice in a row (`heldRefusal`). */
@@ -598,6 +599,8 @@ interface ApprovedHold {
   timer: ReturnType<typeof setTimeout> | null;
   /** Checked and going out (the bound no longer applies). */
   releasing: boolean;
+  /** Its utterance is complete (the session's transcript of it), waiting for its turn to be released. */
+  heard?: { transcript: string | null };
   /** Start the wait for quiet (SAY_QUIET_WAIT_MS): at once, or when the line before it is over. */
   waitForQuiet: () => void;
   finish: (outcome: SayOutcome, why: SayWithheldWhy | 'relayed') => void;
@@ -1232,9 +1235,12 @@ export class AssistantRuntime {
           trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : 'withheld', why, frames: hold.frames.length, chars: words.length });
           hold.frames = [];
           resolve({ outcome, why: why === 'relayed' ? null : why });
-          // The next line is now first: its wait for quiet starts (unless the session already sent it).
+          if (at !== 0) return;
+          // The next line is now first: released at once if its utterance is complete, else its wait for quiet starts (unless the
+          // session already sent it).
+          this.releaseNext(run);
           const next = run.approvals[0];
-          if (at === 0 && next && next.timer === null) next.waitForQuiet();
+          if (next && !next.heard && next.timer === null) next.waitForQuiet();
         },
       };
       // Before the line goes to the model it may wait SAY_QUIET_WAIT_MS for quiet, counted once the lines before it are over; once
@@ -1251,16 +1257,29 @@ export class AssistantRuntime {
       // Sent with numbers spelled out, so the session reads them as written; the check compares against the approved text itself.
       try {
         asked = session.sayVerbatim!(id, speakableText(words),
-          (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); },
+          (transcript) => {
+            if (!run.approvals.includes(hold) || hold.heard) return;
+            hold.heard = { transcript };
+            // Complete: its own bound is over; a line ahead of it still going out is bounded by its own frames.
+            if (hold.timer) { clearTimeout(hold.timer); hold.timer = null; }
+            this.releaseNext(run);
+          },
           () => bound(sayBoundMs(words), 'timeout'));
       } catch { asked = false; }
       if (!asked) hold.finish('posted', 'refused');
     });
   }
 
+  /** Release the first approved line when its utterance is complete and nothing of it is going out yet (the one serial release). */
+  private releaseNext(run: CallRun): void {
+    const head = run.approvals[0];
+    if (!head || head.releasing || !head.heard) return;
+    void this.releaseApproved(run, head, head.heard.transcript).catch(() => head.finish('posted', 'not-relayed'));
+  }
+
   /**
-   * The session's utterance for an approved request is complete: check it whole, then let it through the call's gate and relay, or
-   * withhold it. Released at the pace it plays (the relay drops what runs more than 3 s ahead), so a long question is heard whole;
+   * The session's utterance for an approved request is complete and it is first in line: check it whole, then let it through the
+   * call's gate and relay, or withhold it. Released at the pace it plays (the relay drops what runs more than 3 s ahead), so a long question is heard whole;
    * while it goes out nothing else the session says is relayed. `spoken` once the relay has sent its frames.
    */
   private async releaseApproved(run: CallRun, hold: ApprovedHold, transcript: string | null): Promise<void> {
