@@ -212,8 +212,11 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   return recapBody(kept.row, opening);
 }
 
-/** Every competency of the kit rated once, 1 to 4, and nothing else: the ratings an open stores; null when they are not. */
-export function checkOpenRatings(body: unknown, opening: Opening): OpenRating[] | null {
+/**
+ * Each competency of `required` (default: the whole kit) rated once, 1 to 4, any other kit competency at most once, and
+ * nothing else: the ratings an open stores, in the kit's order; null when they are not (E4 #30: the round's own).
+ */
+export function checkOpenRatings(body: unknown, opening: Opening, required: readonly string[] = opening.kit.competencies.map((k) => k.id)): OpenRating[] | null {
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>)['ratings'] : undefined;
   if (!Array.isArray(raw)) return null;
   const kit = opening.kit.competencies;
@@ -225,8 +228,8 @@ export function checkOpenRatings(body: unknown, opening: Opening): OpenRating[] 
     if (rating !== 1 && rating !== 2 && rating !== 3 && rating !== 4) return null;
     seen.set(competencyId, rating);
   }
-  if (seen.size !== kit.length) return null;
-  return kit.map((k) => ({ competencyId: k.id, rating: seen.get(k.id)! }));
+  if (required.some((id) => !seen.has(id))) return null;
+  return kit.filter((k) => seen.has(k.id)).map((k) => ({ competencyId: k.id, rating: seen.get(k.id)! }));
 }
 
 /**

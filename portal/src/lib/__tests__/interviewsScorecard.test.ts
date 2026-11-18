@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, nextStep, openBodyOf, othersLine,
+  SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, roundCompetencies, nextStep, openBodyOf, othersLine,
   previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
@@ -150,4 +150,15 @@ test('a reviewed round says why its scorecard has no "Correct it"; any other sta
   assert.equal(reviewedLine('reviewed', true), 'This round has been reviewed, so its scorecards can no longer be corrected.');
   assert.equal(reviewedLine('reviewed', false), null);
   assert.equal(reviewedLine('scored', true), null);
+});
+
+test('a round requires only its own competencies; an optional one left unseen is neither missing nor sent (E4 #30)', () => {
+  const round = roundCompetencies({ competencies: KIT, required: ['clarity'] });
+  assert.deepEqual(round.required.map((c) => c.id), ['clarity']);
+  assert.deepEqual(round.optional.map((c) => c.id), ['ownership']);
+  const d = { ...emptyDraft(), ratings: { clarity: 3 as const }, notes: { ownership: 'stray' }, recommendation: 'yes' as const, summary: 'Good.' };
+  assert.equal(allRated(d, round.required), true);
+  assert.deepEqual(missingFrom(d, KIT, LIMITS, false, round.required), []);
+  assert.deepEqual(bodyOf(d, KIT, 0).ratings, [{ competencyId: 'clarity', rating: 3, note: '' }]);
+  assert.deepEqual(openBodyOf(d, KIT), { ratings: [{ competencyId: 'clarity', rating: 3 }] });
 });

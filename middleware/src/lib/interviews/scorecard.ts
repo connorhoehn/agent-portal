@@ -6,8 +6,8 @@
 //            always the signed-in person: the body has no field naming one, so nobody submits for someone else.
 //            Milo never writes one (decision 6): there is no route, no field and no default a model could fill.
 //   when     once the interview is `ended`; a correction also while it is `scored` (and nothing after review).
-//   what     every competency of the opening's kit rated 1 to 4 against its anchors, a note per competency
-//            allowed, a recommendation (strong no, no, yes, strong yes) and a summary. SCORECARD_LIMITS says how long.
+//   what     the round's own competencies rated 1 to 4 against their anchors (roundCompetencyIds, E4 #30), the
+//            kit's others optional ("Not seen in this round"), a note per rated competency allowed, a recommendation (strong no, no, yes, strong yes) and a summary. SCORECARD_LIMITS says how long.
 //   versions a submitted scorecard is never edited: a correction is a new version with a reason, made against the
 //            latest version the page read (stale otherwise). Every version stays and is read by whoever may read
 //            the scorecard.
@@ -21,7 +21,7 @@
 // first version and for every correction alike. Never opened: null, and it stays false.
 
 import { seatOf } from './assign.js';
-import type { CompetencyRating, Interview, InterviewState, KitCompetency, Recommendation, Scorecard } from './types.js';
+import type { CompetencyRating, Interview, InterviewState, KitCompetency, OpeningKit, Recommendation, Scorecard } from './types.js';
 import { RECOMMENDATIONS } from './types.js';
 
 export const SCORECARD_LIMITS = {
@@ -95,8 +95,24 @@ export function submitMove(i: Pick<Interview, 'leadId' | 'panelIds' | 'state'>, 
   return { ok: true, version: latest + 1 };
 }
 
-/** Check a submit's body against the kit. A correction must carry a reason; a first version must not. */
-export function checkScorecard(body: unknown, competencies: readonly KitCompetency[]): Checked<ScorecardInput & { reason: string | null; basedOn: number }> {
+/**
+ * The competencies a round's scorecard requires, in the kit's order (E4 #30): those its chosen questions gather
+ * evidence for; with none chosen, those its round type's questions gather; with no such question, every one. The
+ * kit's other competencies stay optional, so a behavioural round never demands "System design".
+ */
+export function roundCompetencyIds(i: Pick<Interview, 'questionIds' | 'type'>, kit: Pick<OpeningKit, 'competencies' | 'questions'>): string[] {
+  const of = (qs: readonly { competencyId: string }[]) => new Set(qs.map((q) => q.competencyId));
+  const chosen = of(kit.questions.filter((q) => i.questionIds.includes(q.id)));
+  const pick = chosen.size ? chosen : of(kit.questions.filter((q) => q.roundType === i.type));
+  const ids = kit.competencies.map((c) => c.id).filter((id) => pick.has(id));
+  return ids.length ? ids : kit.competencies.map((c) => c.id);
+}
+
+/**
+ * Check a submit's body against the kit: every competency in `required` rated (default: all of them), any other
+ * competency of the kit optional. A correction must carry a reason; a first version must not.
+ */
+export function checkScorecard(body: unknown, competencies: readonly KitCompetency[], required: readonly string[] = competencies.map((c) => c.id)): Checked<ScorecardInput & { reason: string | null; basedOn: number }> {
   const fields: FieldProblem[] = [];
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, fields: [{ field: 'body', message: 'Send the scorecard as a form.' }] };
   const b = body as Record<string, unknown>;
@@ -109,7 +125,7 @@ export function checkScorecard(body: unknown, competencies: readonly KitCompeten
   const known = new Map(competencies.map((c) => [c.id, c]));
   const ratings: CompetencyRating[] = [];
   const raw = Array.isArray(b['ratings']) ? (b['ratings'] as unknown[]) : null;
-  if (!raw) fields.push({ field: 'ratings', message: 'Rate every competency.' });
+  if (!raw) fields.push({ field: 'ratings', message: 'Rate the competencies this round judges.' });
   const seen = new Set<string>();
   for (const r of raw ?? []) {
     const o = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
@@ -126,7 +142,7 @@ export function checkScorecard(body: unknown, competencies: readonly KitCompeten
     ratings.push({ competencyId: id, rating, note: note.trim() });
   }
   if (raw) {
-    for (const c of competencies) if (!seen.has(c.id)) fields.push({ field: `ratings.${c.id}`, message: `Rate ${c.name}.` });
+    for (const c of competencies) if (required.includes(c.id) && !seen.has(c.id)) fields.push({ field: `ratings.${c.id}`, message: `Rate ${c.name}.` });
   }
 
   const recommendation = b['recommendation'];

@@ -2,7 +2,7 @@
 // Mounted in routes/interviews.ts with one line, after the router's ViewInterviews gate.
 //
 //   POST /interviews/:id/recap/open   ConductInterview plus a seat on the interview, once it has ended. Body
-//                                     `{ ratings: [{ competencyId, rating 1..4 }] }`, every competency of the kit rated.
+//                                     `{ ratings: [{ competencyId, rating 1..4 }] }`, the round's own competencies rated (scorecard.ts roundCompetencyIds).
 //                                     Stores the ratings for (interview, this person) the first time only, writes the
 //                                     recap when it is not there yet, and answers `{ recap: RecapBody }`.
 //   GET  /interviews/:id/recap        `{ recap: RecapBody }`, never writing:
@@ -24,7 +24,7 @@
 // Everyone else (another round's interviewer otherwise, another opening's hiring manager, a guest, another tenant) gets
 // the tenant's not-found: 404, never 403, as phase 0 does. A role without ConductInterview posting an open is refused at
 // the action (403), as the scorecard's submit is. An open before the interview has ended is 409; ratings that do not
-// rate every competency once from 1 to 4 are 400.
+// rate the round's own competencies once from 1 to 4 are 400.
 
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
@@ -36,6 +36,7 @@ import { askMiloAfterCall, checkQuestion } from '../../lib/interviews/milo-notes
 import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
+import { roundCompetencyIds } from '../../lib/interviews/scorecard.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
 import type { Interview, InterviewsWorld } from '../../lib/interviews/types.js';
@@ -46,7 +47,7 @@ const conduct = requireAction('ConductInterview');
 const NO_RECAP = 'There is no recap here that you can open.';
 const NOT_ENDED = 'Milo\'s recap opens once the interview has ended.';
 const BAD_QUESTION = `Type a question of at most ${MAX_QUESTION_CHARS} characters.`;
-const RATE_ALL = 'Rate every competency from 1 to 4 before you open Milo\'s recap.';
+const RATE_ALL = 'Rate this round\'s competencies from 1 to 4 before you open Milo\'s recap.';
 
 const ENDED: ReadonlySet<Interview['state']> = new Set(['ended', 'scored', 'reviewed']);
 
@@ -103,7 +104,7 @@ recapRouter.post('/interviews/:id/recap/open', conduct, asyncHandler(async (req,
   if (!ref || !seatOf(ref.interview, session.sub)) throw new NotFoundError(NO_RECAP);
   res.setHeader('Cache-Control', 'no-store');
   if (!ENDED.has(ref.interview.state)) { res.status(409).json({ error: NOT_ENDED }); return; }
-  const ratings = checkOpenRatings(req.body, ref.opening);
+  const ratings = checkOpenRatings(req.body, ref.opening, roundCompetencyIds(ref.interview, ref.opening.kit));
   if (!ratings) { res.status(400).json({ error: RATE_ALL, fields: [{ field: 'ratings', message: RATE_ALL }] }); return; }
   res.json({ recap: forInterviewer(await openRecap(ref, { userId: session.sub }, ratings)) });
 }));

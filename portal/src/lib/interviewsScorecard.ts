@@ -38,6 +38,8 @@ export interface ScorecardPageView {
     seat: 'lead' | 'panel' | null;
   };
   competencies: KitCompetency[];
+  /** The competencies this round requires (its chosen questions'); the kit's others are optional, "Not seen in this round" (E4 #30). */
+  required: string[];
   mine: ScorecardView | null;
   canSubmit: boolean;
   refusal: string | null;
@@ -92,8 +94,14 @@ export function draftFrom(card: ScorecardView): Draft {
   };
 }
 
-/** Every competency rated: what "Continue to the recap" needs. */
-export const allRated = (d: Pick<Draft, 'ratings'>, competencies: readonly KitCompetency[]): boolean => competencies.every((c) => !!d.ratings[c.id]);
+/** Every competency the round requires rated: what "Continue to the recap" needs. Pass the required ones only. */
+export const allRated = (d: Pick<Draft, 'ratings'>, required: readonly KitCompetency[]): boolean => required.every((c) => !!d.ratings[c.id]);
+
+/** The round's required competencies first, then the kit's optional others, each group in the kit's order (E4 #30). */
+export function roundCompetencies(view: Pick<ScorecardPageView, 'competencies' | 'required'>): { required: KitCompetency[]; optional: KitCompetency[] } {
+  const need = new Set(view.required ?? view.competencies.map((c) => c.id));
+  return { required: view.competencies.filter((c) => need.has(c.id)), optional: view.competencies.filter((c) => !need.has(c.id)) };
+}
 
 /** The scale's labels for one competency: its anchors, lowest first. */
 export const scaleOf = (c: KitCompetency): Array<{ value: number; label: string }> => ([1, 2, 3, 4] as const).map((n) => ({ value: n, label: c.anchors[n] }));
@@ -105,9 +113,9 @@ export const recommendationVerdict = (r: Recommendation): string => `${r === 'ye
 export const SCORECARD_STEP_LABELS: Readonly<Record<ScorecardStep, string>> = { rate: 'Rate each competency', recap: "Read Milo's recap", decide: 'Recommend' };
 
 /** What still stands between the draft and Submit, one plain sentence each, in the form's order. Empty when complete. */
-export function missingFrom(d: Draft, competencies: readonly KitCompetency[], limits: ScorecardPageView['limits'], correcting: boolean): string[] {
+export function missingFrom(d: Draft, competencies: readonly KitCompetency[], limits: ScorecardPageView['limits'], correcting: boolean, required: readonly KitCompetency[] = competencies): string[] {
   const out: string[] = [];
-  const unrated = competencies.filter((c) => !d.ratings[c.id]);
+  const unrated = required.filter((c) => !d.ratings[c.id]);
   if (unrated.length) out.push(`Rate ${unrated.map((c) => c.name).join(', ')}.`);
   for (const c of competencies) if ((d.notes[c.id] ?? '').trim().length > limits.noteChars) out.push(`Keep the note on ${c.name} under ${limits.noteChars} characters.`);
   if (!d.recommendation) out.push('Choose your recommendation.');
@@ -121,7 +129,8 @@ export function missingFrom(d: Draft, competencies: readonly KitCompetency[], li
 /** The body POST …/scorecard takes. There is no author in it: the server always uses the signed-in person. */
 export function bodyOf(d: Draft, competencies: readonly KitCompetency[], basedOn: number): Record<string, unknown> {
   return {
-    ratings: competencies.map((c) => ({ competencyId: c.id, rating: d.ratings[c.id], note: (d.notes[c.id] ?? '').trim() })),
+    // Only what was rated: an optional competency left "Not seen in this round" is not sent.
+    ratings: competencies.filter((c) => !!d.ratings[c.id]).map((c) => ({ competencyId: c.id, rating: d.ratings[c.id], note: (d.notes[c.id] ?? '').trim() })),
     recommendation: d.recommendation, summary: d.summary.trim(), basedOn,
     ...(basedOn > 0 ? { reason: d.reason.trim() } : {}),
   };
@@ -190,7 +199,7 @@ export const recapUrl = (interviewId: string): string => `${INTERVIEWS_API}/inte
 
 /** What "Continue to the recap" posts: the ratings as they stand, nothing else (no notes, no recommendation). */
 export function openBodyOf(d: Pick<Draft, 'ratings'>, competencies: readonly KitCompetency[]): { ratings: Array<{ competencyId: string; rating: Rating }> } {
-  return { ratings: competencies.map((c) => ({ competencyId: c.id, rating: d.ratings[c.id]! })) };
+  return { ratings: competencies.filter((c) => !!d.ratings[c.id]).map((c) => ({ competencyId: c.id, rating: d.ratings[c.id]! })) };
 }
 
 /** Why a seat's submitted scorecard has no "Correct it": the round was reviewed. Null otherwise. */

@@ -37,16 +37,19 @@ export default async function run(ctx) {
     const read = (await scorecardApi(wen, JONAH)).body.scorecard;
     competencies = read.competencies.length;
     const groups = await ratingGroups(page).count();
+    // E4 #30: the round's own competencies are required, the kit's others optional ("Not seen in this round").
+    const required = await page.getByTestId('interviews-scorecard-required').count();
+    const optional = await page.getByTestId('interviews-scorecard-optional').count();
     const continueDisabled = await page.getByTestId('interviews-scorecard-to-recap').isDisabled();
     const header = squash(await page.getByTestId('interviews-scorecard').innerText());
     const shots = await shootPage(page, 'scorecard-rate');
     await page.getByTestId('interviews-scorecard-tab-others').click();
     const hiddenLine = squash(await page.getByTestId('interviews-scorecard-others-line').innerText());
     await page.getByTestId('interviews-scorecard-tab-mine').click();
-    const ok = groups === competencies && competencies > 0 && continueDisabled && /Your scorecard is due/.test(header) && read.canSubmit === true
+    const ok = groups === competencies && competencies > 0 && required === read.required.length && required > 0 && required + optional === competencies && continueDisabled && /Your scorecard is due/.test(header) && read.canSubmit === true
       && read.othersHidden === true && read.others.length === 0 && /stay hidden until yours is in/.test(hiddenLine) && !consentIn(header)
       && shots.every((s) => s.ok);
-    record('I5.3a', ok, `${groups} competencies to rate, Continue disabled ${continueDisabled}, "${hiddenLine.slice(0, 70)}", route othersHidden=${read.othersHidden}; ${widths(shots)}`);
+    record('I5.3a', ok, `${groups} competencies (${required} required by the round, ${optional} optional), Continue disabled ${continueDisabled}, "${hiddenLine.slice(0, 70)}", route othersHidden=${read.othersHidden}; ${widths(shots)}`);
   } catch (e) { record('I5.3a', false, `the form: ${why(e)}`); }
 
   // ── I5.3b: rate, the recap, a reload ──────────────────────────────────────────────────────────────────────────────────

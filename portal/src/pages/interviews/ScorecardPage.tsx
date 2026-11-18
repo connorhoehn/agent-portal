@@ -30,7 +30,7 @@ import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/in
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
-  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
+  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
@@ -68,7 +68,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   // A draft saved while correcting reopens the correction.
   useEffect(() => { if (mine && view.canSubmit && loadDraft(interview.id, basedOn)?.reason) setCorrecting(true); }, [mine, view.canSubmit, interview.id, basedOn]);
 
-  const missing = missingFrom(draft, competencies, limits, basedOn > 0);
+  const round = useMemo(() => roundCompetencies(view), [view]);
+  const missing = missingFrom(draft, competencies, limits, basedOn > 0, round.required);
   const status = roundStatus(interview.state);
 
   const prompts = useMemo<ComposerPrompt[]>(() => {
@@ -137,7 +138,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const setRating = (cid: string, v: number | null) => setDraft((d) => ({ ...d, ratings: { ...d.ratings, [cid]: (v as Rating | null) } }));
   const setNote = (cid: string, v: string) => setDraft((d) => ({ ...d, notes: { ...d.notes, [cid]: v } }));
 
-  const rated = allRated(draft, competencies);
+  const rated = allRated(draft, round.required);
   const deck = <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />;
   const correctingLine = draft.reason && basedOn > 0
     ? <T size="sm" tone="secondary" data-testid="interviews-scorecard-reason">{`Correcting version ${basedOn}. Your reason: ${draft.reason}`}</T> : null;
@@ -146,18 +147,22 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const rateStep = (
     <Stack gap="md" data-testid="interviews-scorecard-form">
       {correctingLine}
-      <T size="sm" tone="secondary">Rate each competency from your own judgement first. Milo&apos;s recap comes next, then your recommendation.</T>
-      {competencies.map((c) => (
-        <DetailSection key={c.id} variant="heading" as="h2" title={c.name} hint={c.lookFor}>
+      <T size="sm" tone="secondary">Rate each competency this round judges from your own judgement first. Milo&apos;s recap comes next, then your recommendation.</T>
+      {[...round.required.map((c) => ({ c, optional: false })), ...round.optional.map((c) => ({ c, optional: true }))].map(({ c, optional }) => (
+        <DetailSection key={c.id} variant="heading" as="h2" title={c.name} hint={optional ? `Optional in this round. ${c.lookFor}` : c.lookFor}
+          data-testid={optional ? 'interviews-scorecard-optional' : 'interviews-scorecard-required'}>
           <Stack gap="sm">
-            <RatingInput label={`Your rating for ${c.name}`} required value={draft.ratings[c.id] ?? null} onChange={(v) => setRating(c.id, v)} options={scaleOf(c)}
-              data-testid="interviews-scorecard-rating" />
-            <FormField label={`Note on ${c.name}`} hint="Optional: what you saw or heard that supports the rating.">
-              {({ labelId: _labelId, ...wiring }) => (
-                <Textarea {...wiring} minRows={2} autoResize value={draft.notes[c.id] ?? ''} maxLength={limits.noteChars}
-                  onChange={(e) => setNote(c.id, e.target.value)} data-testid="interviews-scorecard-note" />
-              )}
-            </FormField>
+            <RatingInput label={`Your rating for ${c.name}`} required={!optional} value={draft.ratings[c.id] ?? null} onChange={(v) => setRating(c.id, v)} options={scaleOf(c)}
+              {...(optional ? { notRatedLabel: 'Not seen in this round' } : {})} data-testid="interviews-scorecard-rating" />
+            {/* A note goes with a rating: an optional competency left unseen has none to support. */}
+            {(!optional || !!draft.ratings[c.id]) && (
+              <FormField label={`Note on ${c.name}`} hint="Optional: what you saw or heard that supports the rating.">
+                {({ labelId: _labelId, ...wiring }) => (
+                  <Textarea {...wiring} minRows={2} autoResize value={draft.notes[c.id] ?? ''} maxLength={limits.noteChars}
+                    onChange={(e) => setNote(c.id, e.target.value)} data-testid="interviews-scorecard-note" />
+                )}
+              </FormField>
+            )}
           </Stack>
         </DetailSection>
       ))}

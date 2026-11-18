@@ -27,7 +27,7 @@ import { indexFor, param } from '../../lib/interviews/request.js';
 import { ratingsAtRecap } from '../../lib/interviews/recap/index.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
 import {
-  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, roundCompetencyIds, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
 } from '../../lib/interviews/scorecard.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
@@ -53,6 +53,8 @@ export interface ScorecardPageView {
   };
   /** What each competency is judged on and what each point of the scale means, in the kit's order. */
   competencies: KitCompetency[];
+  /** The ids of the competencies this round requires (its chosen questions'), in the kit's order; the rest are optional (E4 #30). */
+  required: string[];
   /** The viewer's own latest scorecard with the versions before it; null before they submit (and for readers). */
   mine: ScorecardView | null;
   /** Whether the viewer may submit (or correct) now, and if not, why in one sentence. */
@@ -97,6 +99,7 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
       seat,
     },
     competencies: structuredClone(opening.kit.competencies),
+    required: roundCompetencyIds(i, opening.kit),
     mine,
     canSubmit: refusal === null,
     refusal,
@@ -142,7 +145,7 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
   if (!opening) throw new NotFoundError(NO_SCORECARD_HERE);
 
   res.setHeader('Cache-Control', 'no-store');
-  const checked = checkScorecard(req.body, opening.kit.competencies);
+  const checked = checkScorecard(req.body, opening.kit.competencies, roundCompetencyIds(i, opening.kit));
   if (!checked.ok) { res.status(400).json({ error: checked.fields[0]!.message, fields: checked.fields }); return; }
   const { reason, basedOn, ...input } = checked.value;
 

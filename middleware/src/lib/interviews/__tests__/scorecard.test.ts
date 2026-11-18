@@ -3,7 +3,7 @@
 import { interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import {
-  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, latestByAuthor, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, roundCompetencyIds, latestByAuthor, newScorecardVersion, stateRefusal, submitMove, versionsOf,
 } from '../scorecard.js';
 import { othersRevealed, visibleWorld } from '../scope.js';
 import type { Interview, InterviewsWorld, KitCompetency, Scorecard } from '../types.js';
@@ -53,6 +53,36 @@ describe('what a complete scorecard is', () => {
 
   it('states its limits', () => {
     expect(SCORECARD_LIMITS).toEqual({ noteChars: 2000, summaryChars: 4000, reasonChars: 1000 });
+  });
+});
+
+describe('a round requires only its own competencies (E4 #30)', () => {
+  it('the chosen questions\' competencies; with none chosen, its type\'s bank; with no such question, the whole kit', () => {
+    const backend = interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.kit;
+    expect(roundCompetencyIds({ type: 'behavioural', questionIds: ['q-be-incident', 'q-be-disagree'] }, backend)).toEqual(['communication', 'collaboration']);
+    expect(roundCompetencyIds({ type: 'technical', questionIds: ['q-be-ledger'] }, backend)).toEqual(['system-design']);
+    expect(roundCompetencyIds({ type: 'technical', questionIds: [] }, backend)).toEqual(['problem-solving', 'code-quality', 'system-design']);
+    expect(roundCompetencyIds({ type: 'behavioural', questionIds: [] }, { competencies: KIT, questions: [] })).toEqual(['ownership', 'clarity']);
+  });
+
+  it('the rest are optional, and may still be rated', () => {
+    const one = { ...GOOD, ratings: [{ competencyId: 'clarity', rating: 3 }] };
+    expect(checkScorecard(one, KIT, ['clarity']).ok).toBe(true);
+    expect(checkScorecard(one, KIT, ['ownership'])).toMatchObject({ ok: false, fields: [{ field: 'ratings.ownership', message: 'Rate Ownership.' }] });
+    expect(checkScorecard(GOOD, KIT, ['clarity']).ok).toBe(true);
+  });
+
+  it('every seeded scorecard passes its round\'s check', () => {
+    const openings = interviewOpeningsFixture.rows();
+    const ivs = interviewsFixture.rows();
+    const cards = interviewScorecardsFixture.rows();
+    expect(cards.length).toBeGreaterThan(0);
+    for (const c of cards) {
+      const i = ivs.find((x) => x.id === c.interviewId)!;
+      const kit = openings.find((o) => o.kit.rounds.some((r) => r.id === i.roundId) && o.kit.questions.some((q) => i.questionIds.includes(q.id)))!.kit;
+      const body = { ratings: c.ratings, recommendation: c.recommendation, summary: c.summary, basedOn: 0 };
+      expect([c.id, checkScorecard(body, kit.competencies, roundCompetencyIds(i, kit)).ok]).toEqual([c.id, true]);
+    }
   });
 });
 
