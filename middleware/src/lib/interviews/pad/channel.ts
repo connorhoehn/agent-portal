@@ -31,3 +31,9 @@ export function padInterviewId(channel: string): string | null {
 
 /** Every document channel on this gateway: the pad's authority decides all of them (and refuses all but pads). */
 export const inDocumentNamespace = (base: string): boolean => base.startsWith(DOC);
+
+// Inside the document (mirrored by portal/src/lib/interviewsPad.ts, whose test pins them): the code is the Y.Text `code`, and
+// the pad's map `pad` holds the shared `language` every pad on the document follows (python until someone picks one).
+export const PAD_TEXT_NAME = 'code';
+export const PAD_META_NAME = 'pad';
+export const PAD_LANGUAGE_KEY = 'language';

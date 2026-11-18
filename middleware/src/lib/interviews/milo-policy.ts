@@ -27,7 +27,12 @@
 //                         never by a model: "repeat the question" is the last approved question, "how much time is left"
 //                         a sentence from the round's minutes and its start, anything else one fixed sentence naming those
 //                         two (speak/index.ts). The line is logged here; the orchestrator posts it with the approved mark and
-//                         says it as approved words; `heldTextSaid` marks the log row spoken. A panel member's request: null.
+//                         says it as approved words; `heldTextSaid` marks the log row spoken. Two more (18 November): the
+//                         candidate asking for test cases, when the lead turned them on, has Milo write them into the pad
+//                         (testcases/service.ts) and the line says so ("Added twelve test cases at the bottom of the pad"),
+//                         or one fixed sentence saying why not; and the LEAD introducing Milo ("Milo's here as our AI
+//                         support") is answered with Milo's fixed introduction, once an interview (speak/intro.ts). Any other
+//                         panel request: null.
 //   holdHeldSpeech        the speech's money (decision 18): a held answer said aloud first holds a little under the interview's
 //                         cap (speak/index.ts `holdSpeechMoney`); refused, the answer stays in the chat and nothing is said.
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
@@ -44,6 +49,7 @@ import { INTERVIEWS_TENANT, type Interview } from './types.js';
 import { interviewRunsWith } from './consent/effects.js';
 import { MILO_CAN_DO } from './speak/index.js';
 import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
+import { interviewsNowMs } from './clock.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
@@ -190,12 +196,26 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,
   answerFromHeldText: async (call, request) => {
-    if (!isGuestId(request.askedBy)) return null;
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
+    if (!isGuestId(request.askedBy)) {
+      // The lead introducing Milo aloud ("Milo's here as our AI support"): its fixed introduction, once an interview (speak/intro.ts).
+      // Anything else a panel member asks is not held text.
+      if (!interview || interview.state !== 'live' || interview.leadId !== request.askedBy) return null;
+      const { isIntroduction, logIntroduction } = await import('./speak/intro.js');
+      if (!isIntroduction(request.text)) return null;
+      return logIntroduction(interview, request.askedBy, interviewsNowMs, () => `said-${randomBytes(8).toString('hex')}`).catch(() => null);
+    }
     const { logCandidateLine } = await import('./speak/index.js');
     // A guest's request never reaches a model: with no live interview of its own behind the call, the fixed sentence (not logged).
     if (!interview || interview.state !== 'live' || !(await guestOfInterview(request.askedBy, interview.id).catch(() => false))) return MILO_CAN_DO;
+    // Test cases (testcases/service.ts): written into the pad as Milo when the lead turned them on; the line says what was done.
+    const { testCaseRequestOf } = await import('./testcases/request.js');
+    const tests = testCaseRequestOf(request.text);
+    if (tests) {
+      const { answerTestCaseRequest, TESTS_FAILED } = await import('./testcases/service.js');
+      return (await answerTestCaseRequest(interview, request.askedBy, tests.count).catch(() => ({ line: TESTS_FAILED }))).line;
+    }
     return logCandidateLine(interview, request.text, request.askedBy).catch(() => MILO_CAN_DO);
   },
   // The same fixed sentence for a request heard again (looping audio) is posted once per asker until Milo answers them something else (orchestrator.ts).

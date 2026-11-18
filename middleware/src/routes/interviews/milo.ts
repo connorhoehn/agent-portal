@@ -13,6 +13,13 @@
 //                                                  then said aloud as approved words (lib/interviews/speak). 400 for a missing
 //                                                  question id, 404 for a question not in this round, 409 with a sentence when
 //                                                  Milo is not in the call.
+//   POST /interviews/:id/milo-intro               the lead only, ConductInterview, while `live` → { said, line }. Milo says its
+//                                                  fixed introduction (lib/interviews/speak/intro.ts) on the same path, once an
+//                                                  interview: 409 { error } once it has, or while Milo is not in the call.
+//   GET  /interviews/:id/milo-settings            the seats of that interview → { settings: { testCases }, introduced }
+//   PUT  /interviews/:id/milo-settings            the lead only, ConductInterview, before the round ends, body { testCases }
+//                                                  → { settings }: whether the candidate may ask Milo for test cases
+//                                                  (lib/interviews/milo-settings.ts; off by default).
 //
 // Everyone outside gets the tenant's one not-found, whatever the reason: a guest (who also holds no ViewInterviews and is
 // refused at the router's gate first), another round's interviewer, the admin (no exception, as the record), and every
@@ -29,7 +36,10 @@ import { isGuestId } from '../../lib/interviews/milo-policy.js';
 import { askMilo, checkQuestion, notesFor, transcriptFor, type MiloRef } from '../../lib/interviews/milo-notes/index.js';
 import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
-import { sayApproved } from '../../lib/interviews/speak/index.js';
+import { sayApproved, saidStore } from '../../lib/interviews/speak/index.js';
+import { ALREADY_INTRODUCED, introduceMilo, introduced } from '../../lib/interviews/speak/intro.js';
+import { miloSettingsStore } from '../../lib/interviews/milo-settings.js';
+import { interviewsNowMs } from '../../lib/interviews/clock.js';
 import { NOT_SAID_ALOUD } from '../../lib/meeting-assistant/approved-speech.js';
 
 export const miloRouter = Router();
@@ -101,4 +111,43 @@ miloRouter.post('/interviews/:id/say', asyncHandler(async (req, res) => {
   const { said } = await sayApproved(interview, { kind: 'question', source: 'kit', text: question.prompt.trim(), askedBy: p.userId, questionId: question.id });
   if (said === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
   res.json({ said, line: said === 'spoken' ? SAID_ALOUD : NOT_SAID_ALOUD });
+}));
+
+/** The lead reads one of these after "Introduce Milo". */
+export const INTRODUCED_ALOUD = 'Milo introduced itself aloud. The words are in the call chat too.';
+
+miloRouter.post('/interviews/:id/milo-intro', asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  if (!(await isAllowed(session, 'ConductInterview'))) throw new NotFoundError(NOTHING_HERE);
+  const p = await panelSide(req);
+  if (!p || p.ref.interview.leadId !== p.userId || p.ref.interview.state !== 'live') throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  const out = await introduceMilo(p.ref.interview, p.userId);
+  if (out === 'already') { res.status(409).json({ error: ALREADY_INTRODUCED }); return; }
+  if (out.said === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
+  res.json({ said: out.said, line: out.said === 'spoken' ? INTRODUCED_ALOUD : NOT_SAID_ALOUD });
+}));
+
+/** The states after the call: nothing of Milo's is set any more. */
+const CLOSED = new Set(['ended', 'scored', 'reviewed', 'declined', 'cancelled']);
+const BAD_SETTINGS = 'Send { "testCases": true } or { "testCases": false }.';
+
+miloRouter.get('/interviews/:id/milo-settings', asyncHandler(async (req, res) => {
+  const p = await panelSide(req);
+  if (!p || !seatOf(p.ref.interview, p.userId)) throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  const [settings, rows] = await Promise.all([miloSettingsStore().get(p.ref.interview.id), saidStore().list(p.ref.interview.id)]);
+  res.json({ settings: { testCases: settings.testCases }, introduced: introduced(rows, interviewsNowMs(), false) });
+}));
+
+miloRouter.put('/interviews/:id/milo-settings', asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  if (!(await isAllowed(session, 'ConductInterview'))) throw new NotFoundError(NOTHING_HERE);
+  const p = await panelSide(req);
+  if (!p || p.ref.interview.leadId !== p.userId || CLOSED.has(p.ref.interview.state)) throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  const testCases = (req.body as Record<string, unknown> | undefined)?.['testCases'];
+  if (typeof testCases !== 'boolean') { res.status(400).json({ error: BAD_SETTINGS }); return; }
+  const settings = await miloSettingsStore().setTestCases(p.ref.interview.id, testCases, p.userId, new Date(interviewsNowMs()).toISOString());
+  res.json({ settings: { testCases: settings.testCases } });
 }));

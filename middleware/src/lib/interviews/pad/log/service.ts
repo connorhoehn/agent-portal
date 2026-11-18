@@ -6,6 +6,9 @@ import { padLogStore, type PadEventRecord } from './store.js';
 
 /** The name a guest carries everywhere (lib/interviews/invite/realtime.ts GUEST_DISPLAY_NAME). */
 export const CANDIDATE_NAME = 'Candidate';
+/** The writer of the server's own edits for Milo (side `milo`), on every reader's page. */
+export const MILO_NAME = 'Milo';
+export const MILO_WRITER_ID = 'milo';
 /** A read's page: at most this many events, and snapshot text up to READ_TEXT_BUDGET (at least one event a page). */
 export const READ_PAGE_EVENTS = 500;
 export const READ_TEXT_BUDGET = 2 * 1024 * 1024;
@@ -33,7 +36,7 @@ export async function appendPadEvents(interviewId: string, writer: PadWriter, ev
 export function padEventView(r: PadEventRecord, nameOf: (id: string) => string): PadEvent {
   const out: PadEvent = {
     kind: r.kind, clientAt: r.clientAt, seq: r.seq, at: r.at,
-    who: { id: r.whoId, name: r.side === 'candidate' ? CANDIDATE_NAME : nameOf(r.whoId), side: r.side },
+    who: { id: r.whoId, name: r.side === 'candidate' ? CANDIDATE_NAME : r.side === 'milo' ? MILO_NAME : nameOf(r.whoId), side: r.side },
   };
   if (r.from !== null) out.from = r.from;
   if (r.inserted !== null) out.inserted = r.inserted;

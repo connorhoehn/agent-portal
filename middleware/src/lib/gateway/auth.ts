@@ -22,6 +22,7 @@ import { upgradeScheme } from '../trusted-proxy.js';
 import { claimableAvatarUrl, realtimeSigningSecret, verifyRealtimeToken, type RealtimeTokenClaims } from '../realtime-token.js';
 import { GUEST_ROLE } from '../interviews/invite/guest.js';
 import { guestRealtimeEnabled } from '../interviews/invite/realtime.js';
+import { claimsMiloPad, miloPadClaimOf, miloPadGrantOpen } from '../interviews/pad/milo-seat.js';
 
 export interface RealtimeGatewayAuth {
   userId: string;
@@ -68,6 +69,12 @@ const bearerAuth = bearerSubprotocolAuth<RealtimeGatewayAuth>({
     // is on (lib/interviews/invite/realtime.ts guestRealtimeEnabled), and its socket is then loaded from its
     // invite, never the directory, by every decision lib/gateway/authority.ts makes.
     if ((auth.role === GUEST_ROLE || auth['guest'] !== undefined) && !guestRealtimeEnabled()) throw new Error('guest realtime is off');
+    // Milo's pad writer (lib/interviews/pad/milo-seat.ts): only the socket this process opens to itself for one write, while
+    // that write's grant is open. A token that claims to be Milo's in any way without an open grant is refused at the door.
+    if (claimsMiloPad(auth)) {
+      const claim = miloPadClaimOf(auth);
+      if (!claim || !miloPadGrantOpen(claim.grant, claim.interviewId)) throw new Error('no open Milo pad grant');
+    }
     return auth;
   },
 });
@@ -102,6 +109,8 @@ export function gatewayAuthFromClaims(claims: RealtimeTokenClaims): RealtimeGate
     // An interview guest's claim (lib/interviews/invite/realtime.ts), as signed: the gateway's authority loads
     // such a context from its invite (lib/interviews/lobby.ts guestOfContext) and refuses it everything else.
     ...(guestClaim(claims) ? { guest: guestClaim(claims) } : {}),
+    // Milo's pad writer's claim (lib/interviews/pad/milo-seat.ts), as signed: the pad's authority reads it and refuses it all else.
+    ...(miloPadClaimOf(claims as unknown as Record<string, unknown>) ? { miloPad: miloPadClaimOf(claims as unknown as Record<string, unknown>) } : {}),
   };
 }
 

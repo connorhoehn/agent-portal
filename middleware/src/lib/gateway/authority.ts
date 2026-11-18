@@ -49,6 +49,7 @@ import { isSocialTeamMember } from '../../providers/social-platform.js';
 import { pageResourceVisible, type PageResourceKind } from '../page-resources.js';
 import { inDocumentNamespace } from '../interviews/pad/channel.js';
 import { admitPadChannel } from '../interviews/pad/authority.js';
+import { claimsMiloPad, miloPadContextCurrent } from '../interviews/pad/milo-seat.js';
 import {
   claimsGuest, guestCallSession, guestContextCurrent, guestHoldsInterviewSeat, guestOfContext, interviewLobbyName, interviewOfLobby,
   sessionHoldsInterviewSeat, staffHoldsInterviewSeat,
@@ -345,6 +346,17 @@ async function admitInterviewLobbyChannel(args: LiveChannelAuthorization, base: 
 // call in that lobby, the huddle runtime's seat rule on top), and the pad in a technical round
 // (lib/interviews/pad/authority.ts). Everything else is false without a line of its own gate changing.
 
+// ── Milo writing into a pad (lib/interviews/pad/milo-seat.ts) ─────────────────────────────────────────────────────
+//
+// The server's own socket, for one write of Milo's test cases: answered here before the guest's rules and the engine, and
+// only the exact pad channel of its grant's interview can pass (the pad's authority decides it). No call frame, lobby read,
+// conversation, upload or other channel ever does.
+async function miloChannel(args: LiveChannelAuthorization): Promise<boolean> {
+  if (!args || (args.kind !== 'subscribe' && args.kind !== 'publish') || typeof args.channel !== 'string') return false;
+  const base = baseChannel(args.channel);
+  return inDocumentNamespace(base) && args.channel === base ? admitPadChannel(args, base) : false;
+}
+
 /** Call frames a guest never sends: it joins and leaves a call, it does not run one. */
 const GUEST_REFUSED_CALL_ACTIONS: ReadonlySet<string> = new Set([
   'invite', 'mute-participant', 'remove-participant', 'transfer-host', 'set-title', 'set-documents', 'present', 'forget',
@@ -449,6 +461,7 @@ export type LobbyReadVerdict = LobbyVerdict;
  * the family's Cedar action and page resource, a second reload.
  */
 export function admitChannel(args: LiveChannelAuthorization): Promise<boolean> {
+  if (claimsMiloPad(args?.ctx)) return miloChannel(args);
   if (claimsGuest(args?.ctx)) return guestChannel(args);
   return AUTHORITY.authorizeChannel(args);
 }
@@ -480,6 +493,7 @@ export function admitCursor(ctx: Context, channel: string, kind: ChannelKind, op
  */
 export async function admitCall(ctx: Context, action: string, payload: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
   const flat = normalizeCallPayload(payload);
+  if (claimsMiloPad(ctx)) return false;
   if (claimsGuest(ctx)) return guestCall(ctx, action, payload, guards.getLobby, false);
   const lobby = typeof flat['lobbyName'] === 'string' ? flat['lobbyName'] : '';
   const room = splitMeetingRoom(lobby);
@@ -501,6 +515,7 @@ export async function admitCall(ctx: Context, action: string, payload: Record<st
  * principal is reloaded here; any failure is "participant".
  */
 export async function meetingOrganizer(ctx: Context, meetingId: string, call: { callerId: string; lobbyName: string } | null): Promise<boolean> {
+  if (claimsMiloPad(ctx)) return false;
   try {
     if (splitMeetingRoom(meetingId) !== null) return false;
     const { session } = await getLivePrincipal(ctx);
@@ -516,6 +531,7 @@ export async function meetingOrganizer(ctx: Context, meetingId: string, call: { 
 
 /** A call frame about to be DELIVERED to this socket: the recipient's own fresh authority. */
 export function admitCallRecipient(ctx: Context, data: Record<string, unknown>, guards: LiveCallGuards): Promise<boolean> {
+  if (claimsMiloPad(ctx)) return Promise.resolve(false);
   if (claimsGuest(ctx)) return guestCall(ctx, 'receive', data, guards.getLobby, true);
   return AUTHORITY.authorizeCallRecipient(ctx, data, { getLobby: guards.getLobby });
 }
@@ -526,6 +542,7 @@ export function admitCallRecipient(ctx: Context, data: Record<string, unknown>, 
  * partition rule. `'not-a-lobby'` is a name no tenant family lists as a lobby.
  */
 export async function admitLobbyRead(ctx: Context, lobby: string): Promise<LobbyReadVerdict> {
+  if (claimsMiloPad(ctx)) return 'denied';
   if (claimsGuest(ctx)) {
     const guest = guestOfContext(ctx);
     return guest && lobby === interviewLobbyName(guest.interviewId) && await guestHoldsInterviewSeat(ctx, guest.interviewId) ? 'ok' : 'denied';
@@ -572,6 +589,7 @@ export async function admitLobbyReadFor(session: Session, lobby: string, opts: {
  * (they keep `admitSocialConversation` / routes/chat-pins.ts chatAccess).
  */
 export function admitConversationChat(args: { ctx: Context; channel: string; kind: ChannelKind; clientId: string; scope?: AuthorityScope }): Promise<boolean> {
+  if (claimsMiloPad(args.ctx)) return Promise.resolve(false);
   return authorizeConversationChat(args, engineGuards);
 }
 
@@ -592,6 +610,7 @@ export async function admitSocialConversation(userId: string, conversation: stri
  * conversation now and whose history floor is older than the file.
  */
 export function admitUploadRead(found: FileUploadRow, ctx: Record<string, unknown>): Promise<boolean> {
+  if (claimsMiloPad(ctx)) return Promise.resolve(false);
   return mayReadUpload(found, ctx, engineGuards);
 }
 
@@ -613,6 +632,8 @@ export function admitReader(userId: string, channel: string, scope?: AuthoritySc
 export function admitPrincipal(ctx: Context): Promise<boolean> {
   // A guest is current while its invite and guest session are, admitted or still waiting (lib/interviews/lobby.ts).
   if (claimsGuest(ctx)) return guestContextCurrent(ctx);
+  // Milo's pad writer is current while its one write's grant is open (lib/interviews/pad/milo-seat.ts).
+  if (claimsMiloPad(ctx)) return Promise.resolve(miloPadContextCurrent(ctx));
   return AUTHORITY.current(ctx);
 }
 

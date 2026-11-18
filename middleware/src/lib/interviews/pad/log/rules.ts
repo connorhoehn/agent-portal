@@ -17,9 +17,18 @@
 // cap, so the record's playback and the coach's code view keep up while edits, pastes and the rest are refused. A log
 // therefore holds at most 20,000 + 400 rows.
 
+/** What a person's pad may post. */
 export const PAD_EVENT_KINDS = ['edit', 'paste', 'snapshot', 'language', 'insert'] as const;
-export type PadEventKind = typeof PAD_EVENT_KINDS[number];
-export type PadSide = 'panel' | 'candidate';
+export type PostedPadEventKind = typeof PAD_EVENT_KINDS[number];
+/**
+ * Every kind the log holds: the posted ones, and Milo's own edits, which only the server writes (side `milo`;
+ * lib/interviews/milo-tools): `tests` (test cases) and `imports` (import lines), with from, inserted, length and lines. No
+ * post may carry either.
+ */
+export type PadEventKind = PostedPadEventKind | 'tests' | 'imports';
+export const MILO_PAD_EVENT_KINDS = ['tests', 'imports'] as const;
+/** `milo`: the server writing for Milo (its tools' edits, and the snapshot taken as it wrote them); never set by a post. */
+export type PadSide = 'panel' | 'candidate' | 'milo';
 
 /** U3's `PadEventIn`, as checked. */
 export interface PadEventIn {
@@ -49,7 +58,7 @@ const QUESTION_ID = /^[A-Za-z0-9._:-]{1,100}$/;
 export const BAD_POST = 'The pad log could not read these events. Nothing was stored.';
 
 type Fields = 'from' | 'inserted' | 'deleted' | 'length' | 'lines';
-const NEEDS: Record<PadEventKind, { counts: Fields[]; optional: Fields[] }> = {
+const NEEDS: Record<PostedPadEventKind, { counts: Fields[]; optional: Fields[] }> = {
   edit: { counts: ['from', 'inserted', 'deleted', 'length'], optional: [] },
   paste: { counts: ['from', 'inserted', 'lines'], optional: ['length'] },
   snapshot: { counts: [], optional: ['length'] },
@@ -71,7 +80,7 @@ export function checkPadEvent(raw: unknown): PadEventIn | null {
   const r = raw as Record<string, unknown>;
   const kind = r['kind'];
   if (typeof kind !== 'string' || !(PAD_EVENT_KINDS as readonly string[]).includes(kind)) return null;
-  const k = kind as PadEventKind;
+  const k = kind as PostedPadEventKind;
   const clientAt = clientAtOf(r['clientAt']);
   if (!clientAt) return null;
   if (r['text'] !== undefined && k !== 'snapshot') return null;

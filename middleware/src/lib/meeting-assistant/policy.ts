@@ -70,10 +70,32 @@ export interface MeetingAssistantPolicy {
    * invited Milo into that period; `initiativeId` is the call's initiative, when it has one.
    */
   payer(call: PolicyCall, period: { inviterId: string; initiativeId: string | null }): Payer;
-  /** The tools the live session of this call is offered. An empty list offers none. */
-  sessionTools(call: PolicyCall): SessionTools;
-  /** May Milo run `tool` for this asker (their roles in the call's tenant)? Never for anyone is "no tools"; never for one person is "none for them". */
-  mayUseTool(call: PolicyCall, asker: { userId: string; roles: readonly string[] }, tool: string): boolean;
+  /**
+   * The tools the live session of this call is offered, and what its background agent is told. An empty list offers none. Asked
+   * when a session starts (a family that tells the agent about the call's state answers with a promise; a new session asks again).
+   */
+  sessionTools(call: PolicyCall): SessionTools | Promise<SessionTools>;
+  /**
+   * May Milo run `tool` for this asker (their roles in the call's tenant)? Never for anyone is "no tools"; never for one person is
+   * "none for them". A family that decides from its own records (an interview: lead, panel, candidate) answers with a promise.
+   */
+  mayUseTool(call: PolicyCall, asker: { userId: string; roles: readonly string[] }, tool: string): boolean | Promise<boolean>;
+  /**
+   * Run one of the family's SERVER tools (voice/catalogue.ts INTERVIEW_TOOLS) for this asker, after every check the orchestrator
+   * makes of a call: no browser turn and no confirm card. The answer is the line to post with the approved mark and say as approved
+   * words (logged by the family, unposted, as `answerFromHeldText` logs its own), or null for nothing to say. Absent: the family
+   * has no server tools, and a call naming one is refused as unknown.
+   */
+  runTool?(call: PolicyCall, request: { askedBy: string; name: string; args: unknown }): Promise<string | null>;
+  /** The largest arguments, in bytes, a call to `tool` may carry in this family's calls. Absent: MAX_ARGS_BYTES (orchestrator.ts). */
+  maxToolArgsBytes?(call: PolicyCall, tool: string): number;
+  /**
+   * A request `answerFromHeldText` did not answer goes to the live model, which may answer it with a tool call. When no call from
+   * that asker arrives in time (`heldFallbackWait`: before any delegation, and once the model has handed the request to its
+   * background agent), this is asked for the fixed line to post and say instead; null: nothing. Absent: nothing is said.
+   */
+  heldFallback?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
+  readonly heldFallbackWait?: { quietMs: number; delegatedMs: number };
   /**
    * Where this person's acknowledgement that Milo transcribes them comes from: the notice in the call (they press it; the inviter
    * acknowledges by inviting), or somewhere else, which `acknowledgedElsewhere` answers. Until a person has acknowledged, nothing they

@@ -43,7 +43,7 @@ const MANIFEST = JSON.parse(read('manifest.json')) as { entries: Array<{ file: s
 const SCHEMA_FILES = MANIFEST.entries.filter((e) => e.kind === 'repeatable').map((e) => e.file)
   .flatMap((f) => (f === 'identity_schema.sql' ? [f, 'seed_demo_identities.sql'] : [f]));
 const INTERVIEW_TABLES = [
-  'interview_runs', 'interview_pad_events', 'interview_panel_notices', 'interview_deletions', 'interview_invites', 'interview_said_log',
+  'interview_runs', 'interview_pad_events', 'interview_panel_notices', 'interview_deletions', 'interview_invites', 'interview_said_log', 'interview_milo_settings',
   'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recap_attempts', 'interview_recaps', 'interview_suggestions', 'interview_consents',
   'interviews', 'interview_applications', 'interview_resumes', 'interview_candidates', 'interview_openings',
 ];

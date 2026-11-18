@@ -21,7 +21,7 @@
 //     name which it was, and a stall the recovery does not end leaves through giveUp (`checkHearing`).
 import { randomBytes } from 'node:crypto';
 import { getUser, listUsers } from '../../providers/identity.js';
-import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
+import { hashToolArgs, serverTool, voiceTool } from '../voice/catalogue.js';
 import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE, NO_WORDS_NOTICE } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
@@ -372,6 +372,10 @@ interface CallRun {
   approvals: ApprovedHold[];
   /** What Milo last answered each asker in the chat (held text or a reply): the fixed refusal is not posted twice in a row (`heldRefusal`). */
   lastAnswerTo?: Map<string, string>;
+  /** When each asker's latest tool call reached the server: a request the held text left to the model waits for one (`heldFallback`). */
+  toolCallAt?: Map<string, number>;
+  /** The server tools already run, by request (`asker|addressing seq|tool`): one request runs a tool once however often it is called. */
+  serverRuns?: Set<string>;
   /** True only while the held frames of a checked approved utterance are being handed to the gate (its reason is then `approved`). */
   releasingApproved?: boolean;
   /** When the provider says the open session ends (epoch ms), or null when it did not say. */
@@ -890,11 +894,13 @@ export class AssistantRuntime {
     run.expiresAt = null;
     this.wire(run, session);
     run.sessionKind = session.kind;
+    const tools = await run.policy.sessionTools(run.call);
     await session.start({
       // A call whose policy relays nothing the model says on its own (an interview) tells the model so: it never answers anyone,
-      // it only reads the lines the system hands it. Otherwise its own reply to a request runs over the line handed it to read.
-      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent, readAloudOnly: !run.policy.relaysLiveSpeech(run.call) }),
-      ...run.policy.sessionTools(run.call),
+      // it only reads the lines the system hands it (and, offered tools, hands what they do to its backend and says nothing).
+      // Otherwise its own reply to a request runs over the line handed it to read.
+      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent, readAloudOnly: !run.policy.relaysLiveSpeech(run.call), delegates: tools.tools.length > 0 }),
+      ...tools,
     });
     run.session = session;
     run.sessionStartedAt = this.now();
@@ -1649,24 +1655,9 @@ export class AssistantRuntime {
       if (e.type === 'request') {
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
-        if (held !== null) {
-          // The fixed refusal for an asker whose last answer from Milo was already that refusal (the same request heard again, however
-          // long after): not posted or said again. Once Milo has answered that asker something else, the refusal is posted again.
-          if (run.policy.heldRefusal !== undefined && held === run.policy.heldRefusal && run.lastAnswerTo?.get(e.askedBy) === held) { trace('held.repeat', {}); continue; }
-          (run.lastAnswerTo ??= new Map()).set(e.askedBy, held);
-          // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
-          const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await this.nameIn(run, e.askedBy) }).catch(() => null);
-          // The family's money check for the speech (interviews: a hold under the interview's cap); refused, the answer stays in the chat.
-          const speechHold = posted && run.policy.holdHeldSpeech
-            ? await run.policy.holdHeldSpeech(run.call, { askedBy: e.askedBy, text: held }).catch(() => null)
-            : posted ? { release: async () => undefined } : null;
-          let said: SayOutcome = 'posted';
-          if (speechHold) {
-            try { said = await this.sayHeldText(callId, held, e.askedBy); } finally { await speechHold.release().catch(() => undefined); }
-          }
-          await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, posted: posted !== null, spoken: said === 'spoken' }).catch(() => undefined);
-          continue;
-        }
+        if (held !== null) { await this.sayHeld(run, e.askedBy, held); continue; }
+        // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
+        this.awaitToolCallOrFallback(run, e.askedBy, e.text);
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
         // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
         const record = await this.store.get(callId);
@@ -1778,7 +1769,7 @@ export class AssistantRuntime {
     // Without a delegation the call is judged when it arrived; on the lines' clock that is no earlier than the last line stored.
     const judgeAt = delegation?.judgeAt ?? (run.session?.kind === 'scripted' ? null : Math.max(run.sessionStartedAt + e.atMs, run.lastLineAt));
     run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null, acknowledged: delegation?.acknowledged ?? false });
-    trace('call', { call: id, name: voiceTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
+    trace('call', { call: id, name: voiceTool(e.name) || serverTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).
     await run.lineChain;
     // The lines that addressed Milo up to that moment are this call's request: its context answers them, and a plain answer
@@ -1814,6 +1805,7 @@ export class AssistantRuntime {
       return;
     }
     trace('call.asker', { call: e.callId, asker, judgedAt: atMs });
+    (run.toolCallAt ??= new Map()).set(asker, this.now());
     if (!canSpeakOnRecord(record, asker)) { await this.refuse(run, e.callId, 'not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
@@ -1829,12 +1821,15 @@ export class AssistantRuntime {
     if (made > MAX_CALLS_PER_REQUEST) { await this.refuse(run, e.callId, 'too many steps'); return; }
     const askerName = await nameOf(asker);
     const name = e.name;
-    if (!voiceTool(name)) { await this.refuse(run, e.callId, 'unknown tool'); return; }
-    // The arguments are model output: an object, and small.
-    const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && Buffer.byteLength(JSON.stringify(e.args)) <= MAX_ARGS_BYTES;
+    // A server tool (voice/catalogue.ts INTERVIEW_TOOLS) runs only in a family that runs them (`runTool`).
+    const onServer = !voiceTool(name) && !!serverTool(name) && !!run.policy.runTool;
+    if (!voiceTool(name) && !onServer) { await this.refuse(run, e.callId, 'unknown tool'); return; }
+    // The arguments are model output: an object, and small (the family may allow more for its own tools: a pad's test cases).
+    const maxArgs = run.policy.maxToolArgsBytes?.(run.call, name) ?? MAX_ARGS_BYTES;
+    const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && Buffer.byteLength(JSON.stringify(e.args)) <= maxArgs;
     // (c) The asker's own role.
     const roles = await this.deps.rolesOf(asker, tenant);
-    const allowed = run.policy.mayUseTool(run.call, { userId: asker, roles }, name);
+    const allowed = await run.policy.mayUseTool(run.call, { userId: asker, roles }, name);
     if (!allowed) {
       trace('call.refused', { call: e.callId, why: 'role' });
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
@@ -1845,6 +1840,7 @@ export class AssistantRuntime {
       return;
     }
     if (!argsOk) { await this.refuse(run, e.callId, 'invalid arguments'); return; }
+    if (onServer) { await this.runServerTool(run, e, asker, `${requestKey}|${name}`); return; }
     // (d) Read or write; private tools are decision 6's list.
     const kind = classifyCall(name, e.args);
     if (!kind) { await this.refuse(run, e.callId, 'unknown tool'); return; }
@@ -1883,6 +1879,73 @@ export class AssistantRuntime {
     }
     run.turnCalls.set(turnId, e.callId);
     run.holding.add(e.callId);
+  }
+
+  /**
+   * A server tool (policy.ts `runTool`): no turn and no card. One request runs a tool once. The model is answered first, told the
+   * system says what was done, so whatever it says about the call (an interview drops it: `relaysLiveSpeech`) is over sooner; then
+   * the family runs the tool and its line is posted and said as approved words, as a held answer is.
+   */
+  private async runServerTool(run: CallRun, e: SessionEvents['toolCall'], asker: string, key: string): Promise<void> {
+    const runs = (run.serverRuns ??= new Set());
+    if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }); return; }
+    runs.add(key);
+    if (runs.size > 200) runs.delete(runs.values().next().value as string);
+    this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' });
+    const line = await run.policy.runTool!(run.call, { askedBy: asker, name: e.name, args: e.args }).catch((err: unknown) => {
+      console.warn('[meeting-assistant] server tool failed', (err as Error).message);
+      return null;
+    });
+    trace('call.server', { call: e.callId, said: line !== null });
+    if (line !== null) await this.sayHeld(run, asker, line);
+  }
+
+  /**
+   * A line the family holds (a held answer, a server tool's line, a fallback), for one asker: posted with the approved mark, then
+   * said as approved words behind the family's money check, and the family told how it went. The family's fixed refusal is not
+   * posted twice in a row to the same asker.
+   */
+  private async sayHeld(run: CallRun, askedBy: string, held: string): Promise<void> {
+    const callId = run.ctx.callId;
+    // The fixed refusal for an asker whose last answer from Milo was already that refusal (the same request heard again, however
+    // long after): not posted or said again. Once Milo has answered that asker something else, the refusal is posted again.
+    if (run.policy.heldRefusal !== undefined && held === run.policy.heldRefusal && run.lastAnswerTo?.get(askedBy) === held) { trace('held.repeat', {}); return; }
+    (run.lastAnswerTo ??= new Map()).set(askedBy, held);
+    // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
+    const posted = await postApprovedAnswer(callId, held, {}, { askedBy, askedByName: await this.nameIn(run, askedBy) }).catch(() => null);
+    // The family's money check for the speech (interviews: a hold under the interview's cap); refused, the answer stays in the chat.
+    const speechHold = posted && run.policy.holdHeldSpeech
+      ? await run.policy.holdHeldSpeech(run.call, { askedBy, text: held }).catch(() => null)
+      : posted ? { release: async () => undefined } : null;
+    let said: SayOutcome = 'posted';
+    if (speechHold) {
+      try { said = await this.sayHeldText(callId, held, askedBy); } finally { await speechHold.release().catch(() => undefined); }
+    }
+    await run.policy.heldTextSaid?.(run.call, { askedBy, text: held, posted: posted !== null, spoken: said === 'spoken' }).catch(() => undefined);
+  }
+
+  /**
+   * A request the held text left to the model (policy.ts `heldFallback`): wait for a tool call from its asker, `quietMs` while the
+   * model has not handed anything to its background agent and `delegatedMs` once it has (a call that writes a dozen test cases takes
+   * seconds to arrive); with none, the family's fixed line. Never blocks the detector.
+   */
+  private awaitToolCallOrFallback(run: CallRun, askedBy: string, text: string): void {
+    const policy = run.policy;
+    if (!policy.heldFallback) return;
+    const wait = policy.heldFallbackWait ?? { quietMs: 4_000, delegatedMs: 15_000 };
+    const askedAt = this.now();
+    const called = () => (run.toolCallAt?.get(askedBy) ?? -Infinity) >= askedAt;
+    void (async () => {
+      await this.wait(wait.quietMs);
+      if (called() || run.finished) return;
+      if (run.delegations.some((d) => d.at >= askedAt - 1_000 && d.callId === null)) {
+        const step = 250;
+        for (let left = wait.delegatedMs - wait.quietMs; left > 0 && !called() && !run.finished; left -= step) await this.wait(step);
+        if (called() || run.finished) return;
+      }
+      const line = await policy.heldFallback!(run.call, { askedBy, text }).catch(() => null);
+      if (line !== null && !called() && !run.finished) await this.sayHeld(run, askedBy, line);
+    })().catch((err: unknown) => console.warn('[meeting-assistant] fallback failed', (err as Error).message));
   }
 
   /** Everyone who held a seat while Milo was in the call, everyone seated now and the inviter, by display name. */

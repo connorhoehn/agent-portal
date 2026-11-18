@@ -14,9 +14,12 @@ import { SqlSaidStore } from './store-sql.js';
 
 /** `question`: words the lead approved to be asked. `answer`: Milo's answer to the candidate, from text the server holds. */
 export type SaidKind = 'question' | 'answer';
-/** Where the words came from. */
-export type SaidSource = 'suggestion' | 'kit' | 'repeat' | 'time' | 'refusal';
-export const SAID_SOURCES: readonly SaidSource[] = ['suggestion', 'kit', 'repeat', 'time', 'refusal'];
+/**
+ * Where the words came from. `intro`: Milo's fixed introduction, once an interview, asked for by the lead. `tests` and
+ * `imports`: Milo's line after one of its interview tools wrote into the pad (milo-tools: test cases, import lines).
+ */
+export type SaidSource = 'suggestion' | 'kit' | 'repeat' | 'time' | 'refusal' | 'intro' | 'tests' | 'imports';
+export const SAID_SOURCES: readonly SaidSource[] = ['suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports'];
 
 export interface SaidRecord {
   id: string;
