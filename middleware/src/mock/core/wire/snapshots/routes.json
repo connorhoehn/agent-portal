@@ -3,62 +3,62 @@
     {
       "method": "POST",
       "path": "/api/__mock/identity/clone",
-      "source": "src/routes/mock-control.ts:801"
+      "source": "src/routes/mock-control.ts:804"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/identity/clone/:id",
-      "source": "src/routes/mock-control.ts:820"
+      "source": "src/routes/mock-control.ts:823"
     },
     {
       "method": "GET",
       "path": "/api/__mock/identity/clones",
-      "source": "src/routes/mock-control.ts:816"
+      "source": "src/routes/mock-control.ts:819"
     },
     {
       "method": "POST",
       "path": "/api/__mock/interviews/clock",
-      "source": "src/routes/mock-control.ts:559"
+      "source": "src/routes/mock-control.ts:562"
     },
     {
       "method": "POST",
       "path": "/api/__mock/reset",
-      "source": "src/routes/mock-control.ts:503"
+      "source": "src/routes/mock-control.ts:504"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scenario",
-      "source": "src/routes/mock-control.ts:400"
+      "source": "src/routes/mock-control.ts:401"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scenarios",
-      "source": "src/routes/mock-control.ts:378"
+      "source": "src/routes/mock-control.ts:379"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:777"
+      "source": "src/routes/mock-control.ts:780"
     },
     {
       "method": "POST",
       "path": "/api/__mock/scope",
-      "source": "src/routes/mock-control.ts:713"
+      "source": "src/routes/mock-control.ts:716"
     },
     {
       "method": "DELETE",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:787"
+      "source": "src/routes/mock-control.ts:790"
     },
     {
       "method": "GET",
       "path": "/api/__mock/scope/:id",
-      "source": "src/routes/mock-control.ts:781"
+      "source": "src/routes/mock-control.ts:784"
     },
     {
       "method": "GET",
       "path": "/api/__mock/state",
-      "source": "src/routes/mock-control.ts:581"
+      "source": "src/routes/mock-control.ts:584"
     },
     {
       "method": "POST",
