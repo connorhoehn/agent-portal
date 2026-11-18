@@ -89,12 +89,13 @@ export default async function run(ctx) {
       await typeInPad(H.page, '# Hugo');
       await typeInPad(W.page, '\n# Wen');
       await typeInPad(C.page, '\nprint("Kwame")');
-      const want = { H: ['Candidate', wenName], W: ['Candidate', leadName], C: [leadName] };
+      // The candidate reads the lead's name and a neutral "Interviewer" for the panel member (the gateway renames that caret).
+      const want = { H: ['Candidate', wenName], W: ['Candidate', leadName], C: [leadName, 'Interviewer'] };
       const seen = async () => ({ H: await carets(H.page), W: await carets(W.page), C: await carets(C.page) });
       const got = await until(async () => { const s = await seen(); return Object.entries(want).every(([k, names]) => names.every((n) => s[k].includes(n))) ? s : null; }, 12_000) ?? await seen();
-      const leak = got.C.filter((n) => n !== leadName && n !== 'Candidate');
+      const leak = got.C.filter((n) => n !== leadName && n !== 'Candidate' && n !== 'Interviewer');
       const ok = Object.entries(want).every(([k, names]) => names.every((n) => got[k].includes(n))) && leak.length === 0;
-      return { ok, detail: `carets: lead ${JSON.stringify(got.H)}, panel ${JSON.stringify(got.W)}, candidate ${JSON.stringify(got.C)}${leak.length ? `; FINDING: the candidate reads a panel member's name on a pad caret: ${JSON.stringify(leak)} (the contract gives the candidate the lead's name only)` : ''}` };
+      return { ok, detail: `carets: lead ${JSON.stringify(got.H)}, panel ${JSON.stringify(got.W)}, candidate ${JSON.stringify(got.C)}${leak.length ? `; the candidate reads a panel member's name on a pad caret: ${JSON.stringify(leak)} (the contract gives the candidate the lead's name only)` : ''}` };
     });
     await step('I4.2e', async () => {
       const inserts = { lead: await H.page.getByTestId('interview-pad-insert').count(), panel: await W.page.getByTestId('interview-pad-insert').count(), candidate: await C.page.getByTestId('interview-pad-insert').count() };

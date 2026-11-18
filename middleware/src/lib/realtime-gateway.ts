@@ -85,6 +85,7 @@ import { authorityCacheEnabled, authorityCacheMaxAgeMs, inboundRateLimit, peerOp
 import { captureCallReaction, configuredCallReactionCapture, type CallReactionCapture } from './call-reactions.js';
 import { recordOwnerSender } from './record-owner.js';
 import { interviewPads } from './interviews/pad/feature.js';
+import { isPadNamedFrame, padFrameForGuest } from './interviews/pad/guest-view.js';
 
 // Everything the pre-split file exported, from where it lives now.
 export { lobbyGuard, channelGuard } from './gateway/authority.js';
@@ -297,10 +298,16 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
     // Recipient checks are never shared. A peer skips only its redundant
     // publisher re-check for a frame whose origin proof is this fresh.
     publishProofMaxAgeMs: publishProofMaxAgeMs(),
-    filterClientMessage: revalidatedRecipientFilter(directRecipientFilter(callGuards(getLobby), async ({ clientId, message }) => {
+    filterClientMessage: revalidatedRecipientFilter(directRecipientFilter(callGuards(getLobby), async ({ clientId, message, ctx }) => {
       try {
-        const frame = message as Record<string, unknown>;
+        let frame = message as Record<string, unknown>;
         if (frame.type === 'call-page') return isCallPageSnapshot(frame) ? await pageRuntime?.filterSnapshot(clientId, frame) ?? null : null;
+        // A candidate reads the lead's name on the pad and nobody else's (row I4.2).
+        if (isPadNamedFrame(frame)) {
+          const seen = await padFrameForGuest(ctx as Record<string, unknown> | null, frame, { senderContext: getCtx });
+          if (!seen) return null;
+          frame = seen;
+        }
         return await chatRuntime?.filterFrame(clientId, frame) ?? null;
       } catch { return null; }
     })),
