@@ -61,7 +61,7 @@ async function found(interview: { id: string; callId: string | null }): Promise<
 }
 
 /** The candidate's name as the interview's own record holds it; null when it cannot be read. */
-async function candidateName(interviewId: string): Promise<string | null> {
+export async function candidateName(interviewId: string): Promise<string | null> {
   const world = await runWithDbTenant(INTERVIEWS_TENANT, () => loadWorld(interviewsStore()));
   const i = world.interviews.find((x) => x.id === interviewId);
   const app = i ? world.applications.find((a) => a.id === i.applicationId) : undefined;

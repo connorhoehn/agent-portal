@@ -298,11 +298,12 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
   });
 });
 
-describe('7. the fixed refusal for a request heard again', () => {
+describe('7. the fixed refusal for a request heard again, and the asker\'s name', () => {
   const REFUSAL = 'I can repeat the question or tell you how much time is left.';
   const HELD: MeetingAssistantPolicy = {
     ...NO_RELAY, id: 'refusal-test', heldRefusal: REFUSAL,
     answerFromHeldText: async (_c, r) => (r.askedBy === GUEST ? (/time/.test(r.text) ? 'About 20 minutes are left in this round.' : REFUSAL) : null),
+    displayName: async (_c, userId) => (userId === GUEST ? 'Jordan Lee' : null),
   };
 
   it('the same refusal for the same asker inside the window is posted once; after it, again; other answers are not held back', async () => {
@@ -321,6 +322,16 @@ describe('7. the fixed refusal for a request heard again', () => {
       now += HELD_REFUSAL_REPEAT_MS;
       await ask('Milo, what is two plus two?');
       expect(mockPosts.approved.filter((t) => t === REFUSAL)).toHaveLength(2);
+    } finally { off(); }
+  });
+
+  it('the asker is named by the policy (the candidate\'s name), never by the raw guest id', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:refusaltest', HELD);
+    try {
+      await startCall('orgiq:refusaltest:r2');
+      await intake.handle(CALL, { userId: GUEST, text: 'Milo, what is two plus two?', at: now });
+      now += 5000; await intake.tick(); await flush();
+      expect(mockPosts.approvedNames).toEqual(['Jordan Lee']);
     } finally { off(); }
   });
 });

@@ -1213,6 +1213,12 @@ export class AssistantRuntime {
     hold.finish(sent ? 'spoken' : 'posted', why ?? (sent ? 'relayed' : 'not-relayed'));
   }
 
+  /** A person's name in Milo's chat: the call family's own name for someone the directory does not know, else the directory's. */
+  private async nameIn(run: CallRun, userId: string): Promise<string> {
+    const own = run.policy.displayName ? await run.policy.displayName(run.call, userId).catch(() => null) : null;
+    return own ?? nameOf(userId);
+  }
+
   /** Is Milo answering in this call: its voice going out now, or one of its tool calls still open? (The watcher waits while it is.) */
   assistantAnswering(callId: string): boolean {
     const run = this.runs.get(callId);
@@ -1471,7 +1477,7 @@ export class AssistantRuntime {
     // The call's policy may keep everything the live model says out of the call (an interview: only approved words are said).
     if (!run.policy.relaysLiveSpeech(run.call)) { decide('drop.policy'); return; }
     if (asker === null) { await postNoticeQuietly(run.ctx.callId, e.text.slice(0, 1500)); return; }
-    await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await nameOf(asker) });
+    await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await this.nameIn(run, asker) });
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1493,7 +1499,7 @@ export class AssistantRuntime {
             seen.set(e.askedBy, this.now());
           }
           // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
-          const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await nameOf(e.askedBy) }).catch(() => null);
+          const posted = await postApprovedAnswer(callId, held, {}, { askedBy: e.askedBy, askedByName: await this.nameIn(run, e.askedBy) }).catch(() => null);
           const said = posted ? await this.sayHeldText(callId, held, e.askedBy) : 'posted';
           await run.policy.heldTextSaid?.(run.call, { askedBy: e.askedBy, text: held, spoken: said === 'spoken' }).catch(() => undefined);
           continue;
@@ -1547,14 +1553,14 @@ export class AssistantRuntime {
     if (record.state === 'paused') {
       if (run.typedPausedNoticed.has(userId)) return;
       run.typedPausedNoticed.add(userId);
-      await postReply(callId, { text: TYPED_PAUSED_REPLY, askedBy: userId, askedByName: await nameOf(userId) });
+      await postReply(callId, { text: TYPED_PAUSED_REPLY, askedBy: userId, askedByName: await this.nameIn(run, userId) });
       return;
     }
     if (!run.session || record.state !== 'listening') return;
     if (run.session.acceptsText) { await this.deps.intake().handle(callId, { userId, text, at: this.now() }); return; }
     if (run.typedNoticed.has(userId)) return;
     run.typedNoticed.add(userId);
-    await postReply(callId, { text: TYPED_UNSUPPORTED_REPLY, askedBy: userId, askedByName: await nameOf(userId) });
+    await postReply(callId, { text: TYPED_UNSUPPORTED_REPLY, askedBy: userId, askedByName: await this.nameIn(run, userId) });
   }
 
   // -------------------------------------------------------------------------------------------------------------

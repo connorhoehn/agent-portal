@@ -36,6 +36,7 @@ import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT, type Interview } from './types.js';
 import { interviewRunsWith } from './consent/effects.js';
 import { MILO_CAN_DO } from './speak/index.js';
+import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
@@ -178,6 +179,14 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   },
   // The same fixed sentence for a request heard again (looping audio) is posted once a minute per asker (orchestrator.ts).
   heldRefusal: MILO_CAN_DO,
+  // The candidate is not in the directory: Milo's chat names them by the interview's own record (seated as "Candidate" otherwise).
+  displayName: async (call, userId) => {
+    if (!isGuestId(userId)) return null;
+    const interviewId = interviewOfLobby(call.lobby);
+    if (!interviewId || !(await guestOfInterview(userId, interviewId).catch(() => false))) return GUEST_DISPLAY_NAME;
+    const { candidateName } = await import('./record/transcript.js');
+    return (await candidateName(interviewId).catch(() => null)) ?? GUEST_DISPLAY_NAME;
+  },
   heldTextSaid: async (call, said) => {
     const interviewId = interviewOfLobby(call.lobby);
     if (!interviewId || !said.spoken) return;

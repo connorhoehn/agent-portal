@@ -255,7 +255,16 @@ describe('relaysLiveSpeech and fixed requests', () => {
   });
 });
 
-describe('the fixed refusal', () => {
+describe('how Milo\'s chat names the candidate, and the fixed refusal', () => {
+  it('names this interview\'s guest by the candidate\'s name on the record; a stranger guest is "Candidate"; staff are left to the directory', async () => {
+    const name = await P.displayName!(CALL, guestId);
+    expect(name).toBeTruthy();
+    expect(name).not.toMatch(/^guest:/);
+    expect(name).not.toBe('Candidate');
+    expect(await P.displayName!(CALL, 'guest:inv-unknown')).toBe('Candidate');
+    expect(await P.displayName!(CALL, LEAD)).toBeNull();
+  });
+
   it('declares its one fixed refusal, so a request heard again is refused once a minute', async () => {
     const { MILO_CAN_DO } = await import('../speak/index.js');
     expect(P.heldRefusal).toBe(MILO_CAN_DO);

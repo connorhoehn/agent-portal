@@ -103,6 +103,8 @@ export interface MeetingAssistantPolicy {
    * posted (and said) once per `HELD_REFUSAL_REPEAT_MS`: a request heard again (audio that loops, a repeat) is not refused twice.
    */
   readonly heldRefusal?: string;
+  /** How Milo's chat names a person this family knows and the directory does not (an interview's candidate); null: the directory's name. */
+  displayName?(call: PolicyCall, userId: string): Promise<string | null>;
   /**
    * The family keeps its calls' stored words for its own period and removes them itself (the interviews retention: media 90 days,
    * or a deletion request). True: the meeting assistant's age sweep leaves the call's lines, minutes, turns, actions, record and
