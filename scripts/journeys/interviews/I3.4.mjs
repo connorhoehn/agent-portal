@@ -99,7 +99,9 @@ export default async function run(ctx) {
       // A later suggestion: the gap moved past and a new line said; it comes back by itself.
       await clock.advance(91_000);
       await say(room, WEN, 'How did you split the work between the two streams?');
-      const back = await awaitDeck(room.leadPage, /Milo suggests/, 60_000);
+      // The page's next read waits the server's retry (the gap left at the skip, real time, at most 2 minutes): it is not woken by
+      // the mock clock's move, so this waits past that bound.
+      const back = await awaitDeck(room.leadPage, /Milo suggests/, 140_000);
       sgAfterEsc = await readSuggestion(room.lead);
       const fresh = !!sgAfterEsc && sgAfterEsc.id !== sg1.id;
       const ok = hidden && let_go && /Milo suggests/.test(back) && fresh;
@@ -111,6 +113,9 @@ export default async function run(ctx) {
       const waiting = sgAfterEsc ?? await readSuggestion(room.lead);
       if (!waiting) return { ok: false, detail: 'no suggestion waiting to answer from the other tab' };
       const a = await api(room.lead, 'POST', `${sgPath}/${waiting.id}/answer`, { answer: 'ask' });
+      // The next one needs the gap after this one and a new line.
+      await clock.advance(91_000);
+      await say(room, WEN, 'Which of those two streams would you staff first next time?');
       await room.leadPage.close();
       room.leadPage = (await joinRoomCall(ctx, room.lead, iv)).page;
       const next = await awaitDeck(room.leadPage, /Milo suggests/, 160_000);
