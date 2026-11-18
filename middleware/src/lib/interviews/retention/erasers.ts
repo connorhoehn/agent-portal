@@ -3,8 +3,8 @@
 //
 //   recording               media   platform-api's `POST /internal/recordings/erase` (contract D5), service-signed as
 //                                   `/internal/video-sessions/*` is: the body-only envelope in SERVICE_AUTH_HEADER, the
-//                                   SERVICE_AUTH_SECRET, the service id WORK_GRAPH_GATEWAY_SERVICE_ID (else
-//                                   `realtime-examples`). Where no platform-api is configured (the plain mock world) there
+//                                   SERVICE_AUTH_SECRET, the service id RECORDING_ERASE_SERVICE_ID (else
+//                                   `aws-agentcore`, platform-api's default RECORDING_ERASE_SERVICE_IDS). Where no platform-api is configured (the plain mock world) there
 //                                   is nothing to call: EraserSkipped, which the log records as such. A configured URL
 //                                   without the secret, a refusal or a timeout is a failure the next sweep retries.
 //   transcript-and-minutes  media   every call Milo kept for the interview's lobby, through the meeting assistant's own
@@ -92,7 +92,8 @@ export function recordingEraser(deps: Partial<RecordingDeps> = {}): Eraser {
       }
       const secret = env['SERVICE_AUTH_SECRET']?.trim();
       if (!secret) throw new Error('SERVICE_AUTH_SECRET is not set, so recordings cannot be erased.');
-      const serviceId = env['WORK_GRAPH_GATEWAY_SERVICE_ID']?.trim() || 'realtime-examples';
+      // platform-api accepts a recording erase only from the services in its RECORDING_ERASE_SERVICE_IDS (default `aws-agentcore`).
+      const serviceId = env['RECORDING_ERASE_SERVICE_ID']?.trim() || 'aws-agentcore';
       const doFetch = deps.fetch ?? fetch;
       let erased = standIns;
       for (const id of interviewIds) {

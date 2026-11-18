@@ -177,7 +177,7 @@ function recordingFetch(answer: (lobby: string) => number) {
   const f = (async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body)) as { lobbyName: string };
     const header = (init.headers as Record<string, string>)[SERVICE_AUTH_HEADER]!;
-    sent.push({ url, lobby: body.lobbyName, verified: verifyEnvelope(header, { secret: 'test-secret', allowedServices: ['realtime-examples'], payload: body }).ok });
+    sent.push({ url, lobby: body.lobbyName, verified: verifyEnvelope(header, { secret: 'test-secret', allowedServices: ['aws-agentcore'], payload: body }).ok });
     return new Response(JSON.stringify({ erased: answer(body.lobbyName) }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as unknown as typeof fetch;
   return { f, sent };

@@ -24,9 +24,19 @@ describe('the recording eraser (D5)', () => {
       seen.push([body, verifyEnvelope(header, { secret: 's', allowedServices: ['bff'], payload: body }).ok]);
       return new Response(JSON.stringify({ erased: 2 }), { status: 200 });
     }) as unknown as typeof fetch;
-    const e = recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's', WORK_GRAPH_GATEWAY_SERVICE_ID: 'bff' }, fetch: f });
+    const e = recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's', RECORDING_ERASE_SERVICE_ID: 'bff' }, fetch: f });
     expect(await e.erase(['iv-1', 'iv-2'])).toBe(4);
     expect(seen).toEqual([[{ lobbyName: 'interviews:interview:iv-1' }, true], [{ lobbyName: 'interviews:interview:iv-2' }, true]]);
+  });
+  it('signs as aws-agentcore by default, the only service platform-api accepts an erase from unless told otherwise', async () => {
+    let ok = false;
+    const f = (async (_url: string, init: RequestInit) => {
+      const header = (init.headers as Record<string, string>)[SERVICE_AUTH_HEADER];
+      ok = verifyEnvelope(header, { secret: 's', allowedServices: ['aws-agentcore'], payload: JSON.parse(String(init.body)) }).ok;
+      return new Response(JSON.stringify({ erased: 1 }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's', WORK_GRAPH_GATEWAY_SERVICE_ID: 'realtime-examples' }, fetch: f }).erase(['iv-1']);
+    expect(ok).toBe(true);
   });
   it('fails (to be retried) on a refusal, or a configured URL without the secret', async () => {
     await expect(recordingEraser({ env: { PLATFORM_API_URL: 'http://p', SERVICE_AUTH_SECRET: 's' }, fetch: answer(400, { error: 'x' }) }).erase(['iv-1'])).rejects.toThrow(/400/);
