@@ -13,13 +13,16 @@
 //   no-lines    nothing attributed has been said yet: there is nothing to search, so no call;
 //   think       otherwise.
 //
-// The pre-check is the first line, the answer's guard (parse.ts, the coach's JUDGES and PERSONAL) the second. What the
-// pre-check catches: the English patterns below and the coach's JUDGES and PERSONAL lists, as whole words, any case.
-// What it cannot catch, said plainly: a judgement asked in other words ("anything I should worry about?", "convince
-// me"), a judgement wrapped in a fair-looking search ("find where she was weakest"), any other language, and a question
-// that is fair in words but leading in what it picks out. The model is told to answer those with NOT_SAID and its
-// answer is guarded; neither is proof. The person decides (decision 6).
+// The pre-check is the first line, the answer's guard (parse.ts, the coach's `guardSuggestion`) the second. What the
+// pre-check catches: the English patterns below, the coach's JUDGES and PERSONAL lists, and the judgement detector's
+// ask rules (../judgement.ts `judgeAsk`: paraphrased judgements such as "anything I should worry about?" or "convince
+// me", judgements wrapped as a search such as "find where she was weakest", the manner, and any question that does not
+// read as English, which is refused with FIXED_ANSWER and logged `refused-judgement` rather than translated). What it
+// cannot catch, said plainly: a judgement in English words none of the rules name, and a question that is fair in words
+// but leading in what it picks out. The model is told to answer those with NOT_SAID and its answer is guarded; neither
+// is proof. The person decides (decision 6).
 import { JUDGES, PERSONAL } from '../coach/parse.js';
+import { judgeAsk } from '../judgement.js';
 import type { CoachLogRecord } from './store.js';
 import { MAX_QUESTION_CHARS } from './prompt.js';
 
@@ -62,7 +65,8 @@ export type PrecheckCode = 'refused-judgement' | 'refused-personal';
 export function precheckQuestion(question: string): PrecheckCode | null {
   if (ASK_JUDGES.some((r) => r.test(question))) return 'refused-judgement';
   if (ASK_PERSONAL.some((r) => r.test(question))) return 'refused-personal';
-  return null;
+  const detected = judgeAsk(question);
+  return detected === 'personal' ? 'refused-personal' : detected === 'judges' ? 'refused-judgement' : null;
 }
 
 /** The body's question, squashed; null when it is missing, empty or over MAX_QUESTION_CHARS. */

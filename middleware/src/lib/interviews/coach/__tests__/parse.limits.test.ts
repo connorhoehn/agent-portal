@@ -1,9 +1,7 @@
 // The coach guard's limits (lib/interviews/coach/parse.ts; row I3.3; OWED O-109), pinned on a fixed transcript: for each
-// kind of answer the guard's own comment says it cannot catch, what it does TODAY. The guard is not changed here.
-//   it(...)          what holds today: the guard drops it, or lets through something decision 6 allows.
-//   it.failing(...)  the guard lets it through, and decision 6 (docs/interviews-tenant-plan.md: Milo never rates, ranks or
-//                    recommends, and never infers anything from a face, a voice or a tone) says it must not reach the lead.
-//                    Each asserts the drop it should make; it passes while the gap is open and fails the day the guard closes it.
+// kind of answer the guard's own comment once said it could not catch, what it does now. The last block was a set of
+// `it.failing` pins (decision 6: Milo never rates, ranks or recommends, and never infers anything from a face, a voice or
+// a tone); the judgement detector (lib/interviews/judgement.ts) closed them, so each is now a plain test of the drop.
 import { parseCoachAnswer, type ParseResult } from '../parse.js';
 import { FIXED_INPUT } from './fixed-input.js';
 
@@ -42,8 +40,8 @@ describe('lets through today, and decision 6 allows it', () => {
   });
 });
 
-describe('lets through today, and decision 6 says it must not (the open gaps)', () => {
-  it.failing.each([
+describe('dropped since the judgement detector (the gaps once open)', () => {
+  it.each([
     ['a paraphrased ranking', 'That was the most convincing story so far. Who did you bring in, and when?'],
     ['a paraphrased rating', 'That account was thin. Ask for one concrete example of the split.'],
     ['indirect praise', 'Exactly what we hope to hear from someone at this level. What happened next?'],

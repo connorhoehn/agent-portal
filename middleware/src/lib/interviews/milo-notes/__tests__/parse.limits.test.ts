@@ -1,10 +1,9 @@
 // The private question's pre-check limits (lib/interviews/milo-notes/rules.ts `precheckQuestion`; row I3.6; OWED O-123),
-// pinned: for each kind of question the pre-check's own comment says it cannot catch, what it does TODAY. Not changed here.
-//   it(...)          what holds today: refused before any model, or let through as a fair search.
-//   it.failing(...)  let through today, yet it asks Milo for what decision 6 forbids (a rating, a ranking, a recommendation,
-//                    or a reading of a face, a voice or a manner). Each asserts the refusal it should get; it passes while the
-//                    gap is open. The model is told to answer such a question with NOT_SAID and its answer is guarded
-//                    (parse.ts), so this is the first line of two, not the only one.
+// pinned: for each kind of question the pre-check's own comment once said it could not catch, what it does now. The last
+// block was a set of `it.failing` pins (each asks Milo for what decision 6 forbids: a rating, a ranking, a recommendation,
+// or a reading of a face, a voice or a manner); the judgement detector (lib/interviews/judgement.ts) closed them, so each
+// is now a plain test of the refusal. The model is still told to answer such a question with NOT_SAID and its answer is
+// guarded (parse.ts), so this is the first line of two, not the only one.
 import { precheckQuestion } from '../rules.js';
 
 describe('refused today, before any model', () => {
@@ -24,8 +23,8 @@ describe('let through today, and a fair search', () => {
   ])('%s', (_l, q) => expect(precheckQuestion(q)).toBeNull());
 });
 
-describe('let through today, though it asks for what decision 6 forbids (the open gaps)', () => {
-  it.failing.each([
+describe('refused since the judgement detector (the gaps once open)', () => {
+  it.each([
     ['a paraphrased judgement', 'Anything I should worry about with her?'],
     ['a paraphrased judgement asking to be persuaded', 'Convince me she can lead a team.'],
     ['a judgement wrapped as a search', 'Find where she was weakest.'],

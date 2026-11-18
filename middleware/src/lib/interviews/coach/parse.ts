@@ -11,12 +11,14 @@
 //                  another personal trait rather than of what was said.
 // A dropped answer is logged as its code only; its text is never kept or logged.
 //
-// What the guard (`guardSuggestion`) catches: the words and phrases in JUDGES and PERSONAL below, in English, as whole
-// words, case-insensitive. What it cannot catch, said plainly: a judgement in other words ("that was the strongest
-// answer today" without one of the listed words), praise or doubt phrased indirectly, any other language, a question
-// that is fair in words but leading in effect, and bias that lives in which competency is probed rather than how. The
-// system prompt asks for none of these; the guard is the floor under it, not proof. The person decides (decision 6).
+// What the guard (`guardSuggestion`) catches: the words and phrases in JUDGES and PERSONAL below, then the judgement
+// detector (../judgement.ts): paraphrased ratings, rankings and verdicts on normalised text (pronouns, contractions,
+// case), readings of the manner, and any text that does not read as English (dropped, never translated). What it
+// cannot catch, said plainly: a judgement in English words none of the rules name, a question that is fair in words but
+// leading in effect, and bias that lives in which competency is probed rather than how. The system prompt asks for none
+// of these; the guard is the floor under it, not proof. The person decides (decision 6).
 import { extractJson } from '../../meeting-assistant/decision-prompt.js';
+import { judgeOutput } from '../judgement.js';
 import { MAX_BASED_ON_CHARS, MAX_SUGGESTION_CHARS, type CoachLine } from './prompt.js';
 
 export interface CoachSuggestion { text: string; competencyId: string; basedOn: string | null }
@@ -55,11 +57,14 @@ export const PERSONAL: readonly RegExp[] = [
 
 export type GuardCode = 'judges' | 'personal';
 
-/** The first rule the text breaks, or null when it breaks none. */
+/**
+ * The first rule the text breaks, or null when it breaks none: the lists above, then the judgement detector
+ * (judgement.ts `judgeOutput`: the wider rules on normalised text, and text that does not read as English).
+ */
 export function guardSuggestion(text: string): GuardCode | null {
   if (JUDGES.some((r) => r.test(text))) return 'judges';
   if (PERSONAL.some((r) => r.test(text))) return 'personal';
-  return null;
+  return judgeOutput(text);
 }
 
 const KEYS = ['text', 'competencyId', 'basedOn'];
