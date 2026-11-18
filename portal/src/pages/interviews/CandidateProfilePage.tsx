@@ -266,6 +266,17 @@ function StageSection({ app, several, candidateId }: { app: ProfileApplication; 
   );
 }
 
+/** A declined round needs a new interviewer: that stays a button. Any other round keeps Reassign in the row's menu. */
+function ReassignAction({ round: r, candidateId }: { round: ProfileRound; candidateId: string }) {
+  const navigate = useNavigate();
+  if (!canReassign(r.state)) return null;
+  const reassign = () => navigate(assignHref(candidateId, { round: r.id }));
+  return r.state === 'declined'
+    ? <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>
+    : <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions"
+      sections={[{ items: [{ label: 'Reassign…', onSelect: reassign }] }]} />;
+}
+
 function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApplication; several: boolean; candidateId: string; assigns: boolean }) {
   const navigate = useNavigate();
   const rounds = [...app.interviews].sort((a, b) => (a.scheduledAt ?? '9999').localeCompare(b.scheduledAt ?? '9999'));
@@ -280,15 +291,7 @@ function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApp
         keyField={(r) => r.id} staticRows="Each round with its status and result; its record opens from the Record column" emptyMessage="No round has been assigned yet."
         {...(assigns ? {
           rowActionsHeader: 'Actions', rowActionsHeaderHidden: true,
-          rowActions: (r: ProfileRound) => {
-            if (!canReassign(r.state)) return null;
-            const reassign = () => navigate(assignHref(candidateId, { round: r.id }));
-            // A declined round needs a new interviewer: that stays a button. Any other round keeps it in the row's menu.
-            return r.state === 'declined'
-              ? <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>
-              : <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions"
-                sections={[{ items: [{ label: 'Reassign…', onSelect: reassign }] }]} />;
-          },
+          rowActions: (r: ProfileRound) => <ReassignAction round={r} candidateId={candidateId} />,
         } : {})} />
     </DetailSection>
   );
