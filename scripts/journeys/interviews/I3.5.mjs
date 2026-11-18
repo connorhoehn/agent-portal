@@ -82,7 +82,7 @@ export default async function run(ctx) {
     const rest = after.candidate > before.candidate && after.lead > before.lead && after.panel > before.panel
       && !!key && deckText.includes(key.slice(0, 25)) && leadChat.includes(key) && candChat.includes(key);
     const ok = receiptShown && rest;
-    return { ok, detail: `${rest && !receiptShown ? 'FINDING: everything happened (Milo said it, the chat and the candidate hold it) but the prompt never showed its receipt "Milo asked it aloud" in 20 s; ' : ''}receipt "${receiptShown ? receipt.match(/Milo asked it aloud/)[0] : 'not shown'}"; frames ${JSON.stringify(before)} → ${JSON.stringify(after)}; speaking seen ${JSON.stringify(marks)}; the candidate's line "${key}"; in the lead's chat ${leadChat.includes(key)}, the candidate's ${candChat.includes(key)}` };
+    return { ok, detail: `${rest && !receiptShown ? 'everything happened (Milo said it, the chat and the candidate hold it) but the prompt never showed its receipt "Milo asked it aloud" in 20 s; ' : ''}receipt "${receiptShown ? receipt.match(/Milo asked it aloud/)[0] : 'not shown'}"; frames ${JSON.stringify(before)} → ${JSON.stringify(after)}; speaking seen ${JSON.stringify(marks)}; the candidate's line "${key}"; in the lead's chat ${leadChat.includes(key)}, the candidate's ${candChat.includes(key)}` };
   });
 
   await step('I3.5b', async () => {

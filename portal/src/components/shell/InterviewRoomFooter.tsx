@@ -180,7 +180,9 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
   useEffect(() => { if (suggestionId && deck.collapsed) deck.setCollapsed(false); }, [suggestionId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Esc on the End question is "Keep going".
   useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);
-  if (!room || !deck.active || deck.collapsed) return null;
+  // `visible`, not `active`: an answered prompt leaves the list (a suggestion answered is gone from the room), and its receipt
+  // ("Milo asked it aloud", "Admitted") is the deck's own answered row, drawn only while the deck is mounted.
+  if (!room || !deck.visible || deck.collapsed) return null;
   // The compact form (plain buttons, no key-hint row, facts on one line each): the room's pad and its output keep their height at 1280.
   return <ComposerPromptDeck deck={deck} presentation="prompt" className="mx-4 my-1" data-testid="interview-room-ask" />;
 }
