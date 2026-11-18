@@ -47,7 +47,7 @@ export function OpeningDetailsForm({ details, onChange, problems, defaultIntervi
       </Inline>
       <Inline gap="sm" align="start">
         <FormField label="Spending cap for the opening" error={problems.get('budgetCapUsd')} className="min-w-[16rem] flex-1"
-          hint="In US dollars, across all its interviews: Milo listening, the coach, speech and code runs. Nothing that costs money starts until a cap is set.">
+          hint="In US dollars, across all its interviews: Milo listening, Milo's written answers, speech and code runs. Nothing that costs money starts until a cap is set.">
           {(w) => <NumberInput id={w.id} size="sm" value={details.budgetCapUsd ?? undefined} min={0} max={5000} step={10} unit="$"
             data-testid="interviews-opening-budget-cap" onChange={(v) => set({ budgetCapUsd: v })} onClear={() => set({ budgetCapUsd: null })} />}
         </FormField>

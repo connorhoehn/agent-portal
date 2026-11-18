@@ -38,9 +38,9 @@ interface RailModel { rows: OpeningListRow[]; query: string; setQuery: (q: strin
 const RailContext = createContext<RailModel | null>(null);
 
 /**
- * The opening as a record: beside the list rail the frame's header already carries the page's one title
- * ("Openings"), so the opening's name is a heading section with its tabs under it (the profile's shape); on its own
- * it is the library's DetailPage.
+ * The opening as a record: beside the list rail the frame's header carries the opening's name, its state and its
+ * actions as the page's one title (the list's name and tagline are in the rail and the trail), so what is left here is
+ * its facts and its tabs; on its own it is the library's DetailPage.
  */
 function OpeningHeadTabs({ testId, title, badge, meta, actions, trail, tabs, activeTab, onTabChange }: {
   testId: string; title: string; badge: ReactNode; meta: ReactNode; actions: ReactNode; trail: BreadcrumbItem[] | undefined;
@@ -55,7 +55,7 @@ function OpeningHeadTabs({ testId, title, badge, meta, actions, trail, tabs, act
   }
   return (
     <Stack gap="md" data-testid={testId}>
-      <DetailSection variant="heading" as="h2" first title={title} hint={badge} actions={actions}>{meta}</DetailSection>
+      {meta}
       <Tabs idPrefix={testId} aria-label={`${title} sections`} variant="underline" size="sm" value={current}
         onValueChange={(v) => (onTabChange ?? setOwn)(v)} getItemTestId={(i) => tabs.find((t) => t.id === i.id)?.testId ?? `${testId}-tab-${i.id}`}
         items={tabs.map(({ id, label, badge: b }) => ({ id, label, ...(b !== undefined ? { badge: b } : {}) }))} />
@@ -85,14 +85,14 @@ export default function OpeningPage({ editing = false }: { editing?: boolean }) 
 }
 
 /** The opening inside the Openings list rail (the frame draws the one trail); without a rail, the page and its footer as they were. */
-function OpeningFrame({ id, title, guard, footer, children }: { id: string; title: string | null; guard?: (to: string) => boolean; footer?: ReactNode; children: ReactNode }) {
+function OpeningFrame({ id, title, head, guard, footer, children }: { id: string; title: string | null; head?: { badge?: ReactNode; actions?: ReactNode }; guard?: (to: string) => boolean; footer?: ReactNode; children: ReactNode }) {
   const rail = useContext(RailContext);
   const navigate = useNavigate();
   useCrumbLabel(rail ? id : undefined, title);
   if (!rail) return <>{children}{footer}</>;
   const model = openingRail(rail.rows, rail.query);
   return (
-    <CollectionRecordFrame title="Openings" listTitle="Openings" listLabel="openings" data-testid="interviews-opening-frame"
+    <CollectionRecordFrame title={title ?? 'Openings'} {...(head?.badge ? { badge: head.badge } : {})} {...(head?.actions ? { actions: head.actions } : {})} listTitle="Openings" listLabel="openings" data-testid="interviews-opening-frame"
       {...(rail.loading ? {} : { count: rail.rows.length })}
       search={{ value: rail.query, onChange: rail.setQuery, placeholder: 'Find an opening' }}
       groups={model.groups} rows={model.rows} currentId={id}
@@ -163,14 +163,16 @@ function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; mon
   const navigate = useNavigate();
   const { can } = useCapabilities();
   const editable = can('ManageCandidates');
+  const badge = <Chip tone={stateTone(o.state)} size="sm">{OPENING_STATE_LABELS[o.state]}</Chip>;
+  const actions = editable
+    ? <Button size="sm" variant="secondary" data-testid="interviews-opening-edit" onClick={() => void navigate(`/interviews/openings/${encodeURIComponent(o.id)}/edit`)}>Edit kit</Button>
+    : <T size="xs" tone="tertiary" data-testid="interviews-opening-readonly">Read only: the recruiter edits this kit.</T>;
   return (
-    <OpeningFrame id={o.id} title={o.title}>
+    <OpeningFrame id={o.id} title={o.title} head={{ badge, actions }}>
     <OpeningHeadTabs testId="interviews-opening" title={o.title} trail={trail}
-      badge={<Chip tone={stateTone(o.state)} size="sm">{OPENING_STATE_LABELS[o.state]}</Chip>}
+      badge={badge}
       meta={<OpeningMeta o={o} money={money} />}
-      actions={editable
-        ? <Button size="sm" variant="secondary" data-testid="interviews-opening-edit" onClick={() => void navigate(`/interviews/openings/${encodeURIComponent(o.id)}/edit`)}>Edit kit</Button>
-        : <T size="xs" tone="tertiary" data-testid="interviews-opening-readonly">Read only: the recruiter edits this kit.</T>}
+      actions={actions}
       tabs={[
         { id: 'kit', label: 'Kit', testId: 'interviews-opening-tab-kit', content: <KitView o={o} /> },
         { id: 'candidates', label: 'Candidates', badge: o.candidates || undefined, testId: 'interviews-opening-tab-candidates', content: <Pipeline o={o} /> },
@@ -385,18 +387,20 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
     scopeNote: 'Refresh reloads the saved opening. Saving and discarding the kit are asked here and never done by a typed command.',
   }), [onSaved]);
 
+  const badge = <Chip tone={changes ? 'caution' : 'neutral'} size="sm">{changes ? 'Unsaved changes' : 'Saved'}</Chip>;
+  const actions = (
+    <Inline gap="xs" wrap={false}>
+      <Button size="sm" variant="ghost" data-testid="interviews-opening-close" onClick={() => (changes ? raise('close') : void navigate(view))}>Close</Button>
+      <Button size="sm" variant="secondary" data-testid="interviews-opening-discard" disabled={!changes} onClick={() => raise('discard')}>Discard…</Button>
+      <Button size="sm" variant="primary" data-testid="interviews-opening-save" disabled={!changes} onClick={() => raise('save')}>Save…</Button>
+    </Inline>
+  );
   return (
-    <OpeningFrame id={base.id} title={base.title} guard={guard} footer={<CollectionCommandHost adapter={adapter} prompts={prompts} />}>
+    <OpeningFrame id={base.id} title={base.title} head={{ badge, actions }} guard={guard} footer={<CollectionCommandHost adapter={adapter} prompts={prompts} />}>
       <OpeningHeadTabs testId="interviews-opening-editor" title={base.title} trail={trail}
-        badge={<Chip tone={changes ? 'caution' : 'neutral'} size="sm">{changes ? 'Unsaved changes' : 'Saved'}</Chip>}
+        badge={badge}
         meta={<OpeningMeta o={base} money={money} />}
-        actions={(
-          <Inline gap="xs" wrap={false}>
-            <Button size="sm" variant="ghost" data-testid="interviews-opening-close" onClick={() => (changes ? raise('close') : void navigate(view))}>Close</Button>
-            <Button size="sm" variant="secondary" data-testid="interviews-opening-discard" disabled={!changes} onClick={() => raise('discard')}>Discard…</Button>
-            <Button size="sm" variant="primary" data-testid="interviews-opening-save" disabled={!changes} onClick={() => raise('save')}>Save…</Button>
-          </Inline>
-        )}
+        actions={actions}
         activeTab={tab} onTabChange={setTab}
         tabs={[
           { id: 'kit', label: 'Kit', testId: 'interviews-opening-tab-kit', badge: kitDiff.length ? '•' : undefined,

@@ -129,6 +129,18 @@ describe('assigning a round', () => {
     expect(await rowOf(WEN, iv.id)).toMatchObject({ seat: 'panel', bucket: 'to-accept', myAnswer: 'to-answer' });
   });
 
+  it('the first round moves a screening application to Interviewing, once, in its history', async () => {
+    const stageOf = async () => interviewApplicationsFixture.rows().find((a) => a.id === 'app-g393z287')!;
+    expect((await stageOf()).stage).toBe('screening');
+    await assign();
+    const after = await stageOf();
+    expect(after.stage).toBe('interviewing');
+    expect(after.history.at(-1)).toMatchObject({ stage: 'interviewing', reason: 'A round was assigned.' });
+    const n = after.history.length;
+    await assign({ ...LUCIA, roundId: 'rd-working' });
+    expect((await stageOf()).history).toHaveLength(n);
+  });
+
   it('rings the lead and the panel, with the opening and the round and nothing about the candidate', async () => {
     await assign();
     await flush();
@@ -168,7 +180,7 @@ describe('the first round moves the candidate on (E1t)', () => {
     expect((await assign()).status).toBe(201);
     expect(app().stage).toBe('interviewing');
     expect(app().history.length).toBe(before + 1);
-    expect(app().history.at(-1)).toMatchObject({ stage: 'interviewing', by: 'u-greta', reason: 'First round assigned' });
+    expect(app().history.at(-1)).toMatchObject({ stage: 'interviewing', by: 'u-greta', reason: 'A round was assigned.' });
   });
   it('a candidate already past screening keeps their stage', async () => {
     app().stage = 'debrief';

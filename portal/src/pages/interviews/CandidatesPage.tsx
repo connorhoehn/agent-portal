@@ -14,9 +14,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { ofTotal } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import {
-  INTERVIEWS_API, STAGE_LABELS, candidateHref, STAGE_ORDER, lastResultLine, matches, nextInterviewLine, whenLabel,
+  INTERVIEWS_API, STAGE_LABELS, candidateHref, STAGE_ORDER, lastResultLine, matches, nextInterviewLine, whenLabel, dateLabel,
   type CandidateRow, type ItemsResponse,
 } from '../../lib/interviews';
 import { Dash, DebriefResultCell, PersonCell, StageChip } from './interviewsCells';
@@ -41,7 +40,7 @@ const COLUMNS: DataTableColumn<CandidateRow>[] = [
   { key: 'result', header: 'Last result', width: '176px', render: (r) => <DebriefResultCell candidateId={r.candidate.id} result={r.lastResult} due={r.scorecardDue} /> },
   {
     key: 'applied', header: 'Applied', numeric: true, sortable: true, compare: (a, b) => a.appliedAt.localeCompare(b.appliedAt),
-    render: (r) => <T size="sm" title={new Date(r.appliedAt).toLocaleString()}>{relativeTime(r.appliedAt)}</T>,
+    render: (r) => <T size="sm" title={new Date(r.appliedAt).toLocaleString()}>{dateLabel(r.appliedAt)}</T>,
   },
 ];
 

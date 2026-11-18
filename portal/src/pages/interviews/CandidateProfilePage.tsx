@@ -22,7 +22,7 @@
 // shows its no-file line and the contact fields show what the redaction left.
 
 import {
-  Avatar, Button, Chip, DataTable, DetailSection, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, Tabs, WorkflowStepper,
+  Avatar, Button, Chip, DataTable, DetailSection, DropdownMenu, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, Tabs, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -37,13 +37,13 @@ import { useSession } from '../../lib/auth';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { DebriefLink } from './interviewsCells';
 import { plural } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import {
-  INTERVIEWS_API, candidateHref, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, stageSteps, whenLabel,
+  INTERVIEWS_API, candidateHref, dateLabel, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, stageSteps, whenLabel,
   type ApplicationStage, type CandidateProfile, type CandidateRow, type ItemsResponse, type OpeningRow, type ProfileApplication, type ProfileRound, type StageMove,
 } from '../../lib/interviews';
 import { candidateCrumbLabel, entriesFromCandidates, entriesFromOpenings, railKindFor, railModel, railNames } from '../../lib/interviewsCandidateRail';
 import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
+import { isFinishedRound } from '../../lib/interviewsDesk';
 import { hasRecord, recordPath } from '../../lib/interviewsRecord';
 import { AppLink } from './interviewsCells';
 import { RESUME_MAX_BYTES, removeResume, resumePath, sizeLabel, uploadResume, type ResumeRecord } from '../../lib/interviewsResume';
@@ -104,7 +104,7 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
 
 const MOVE_COLUMNS: DataTableColumn<StageMove>[] = [
   { key: 'stage', header: 'Stage', width: '176px', render: (m) => <StageChip stage={m.stage} /> },
-  { key: 'at', header: 'Reached', numeric: true, width: '144px', render: (m) => <T size="sm" title={new Date(m.at).toLocaleString()}>{relativeTime(m.at)}</T> },
+  { key: 'at', header: 'Reached', numeric: true, width: '144px', render: (m) => <T size="sm" title={new Date(m.at).toLocaleString()}>{dateLabel(m.at)}</T> },
   { key: 'by', header: 'By', render: (m) => (m.byName ? <T size="sm">{m.byName}</T> : <T size="sm" tone="secondary">The candidate</T>) },
   { key: 'reason', header: 'Note', render: (m) => (m.reason ? <T size="sm" tone="secondary" wrap>{m.reason}</T> : <Dash />) },
 ];
@@ -127,7 +127,7 @@ function homeFor(role: string | undefined): { to: string; label: string } {
  * candidate, a hiring manager the candidates on their openings. An interviewer has no candidates list (theirs is
  * rounds) and My interviews' read names no candidates, so they keep the page without a rail.
  */
-function ProfileFrame({ id, role, footer, listVersion = 0, children }: { id: string; role: string; footer?: ReactNode; listVersion?: number; children: ReactNode }) {
+function ProfileFrame({ id, role, footer, listVersion = 0, head, children }: { id: string; role: string; footer?: ReactNode; listVersion?: number; head?: { name: string; headline: string; stage: ApplicationStage | undefined }; children: ReactNode }) {
   const navigate = useNavigate();
   const kind = railKindFor(role);
   const [query, setQuery] = useState('');
@@ -146,7 +146,8 @@ function ProfileFrame({ id, role, footer, listVersion = 0, children }: { id: str
   const names = railNames(kind);
   return (
     <CollectionRecordFrame
-      title={names.title} description={names.description} listTitle={names.listTitle} listLabel={names.listLabel}
+      title={head?.name ?? names.title} {...(head ? (head.headline ? { description: head.headline } : {}) : { description: names.description })}
+      {...(head?.stage ? { badge: <StageChip stage={head.stage} /> } : {})} listTitle={names.listTitle} listLabel={names.listLabel}
       {...(source.data ? { count: model.total } : {})}
       search={{ value: query, onChange: setQuery, placeholder: names.placeholder }}
       groups={model.groups} rows={model.rows} currentId={id}
@@ -199,15 +200,15 @@ function CandidateProfile({ id }: { id: string }) {
   const rounds = applications.flatMap((a) => a.interviews);
   const recorded = recordedRounds(applications);
   return (
-    <ProfileFrame id={id} role={role} footer={dock} listVersion={deletions.done}>
+    <ProfileFrame id={id} role={role} footer={dock} listVersion={deletions.done} head={{ name: candidate.name, headline: candidate.headline, stage: first?.stage }}>
       {!framed && <PageHeader density="compact" title={candidate.name} description={candidate.headline} badge={first ? <StageChip stage={first.stage} /> : undefined} />}
       <Stack gap="md" className={framed ? 'pb-56' : 'px-[var(--ui-page-gutter)] pb-4'} data-testid="interviews-candidate-profile">
-        <ProfileHead framed={framed} name={candidate.name} headline={candidate.headline} stage={first?.stage}>
+        <ProfileHead>
           <Inline gap="md" align="start" wrap={false} data-testid="interviews-profile-header">
             <Avatar name={candidate.name} size={48} />
             <KeyValue layout="grid" items={[
               { label: 'Applied for', value: <T size="sm" data-testid="interviews-profile-opening">{applications.length ? applications.map((a) => `${a.opening.title}, ${a.opening.team}`).join(' · ') : '—'}</T> },
-              { label: 'Applied', value: <T size="sm" data-testid="interviews-profile-applied" title={first?.history[0] ? new Date(first.history[0].at).toLocaleString() : undefined}>{first?.history[0] ? relativeTime(first.history[0].at) : '—'}</T> },
+              { label: 'Applied', value: <T size="sm" data-testid="interviews-profile-applied" title={first?.history[0] ? new Date(first.history[0].at).toLocaleString() : undefined}>{first?.history[0] ? dateLabel(first.history[0].at) : '—'}</T> },
               { label: 'Came from', value: <T size="sm" data-testid="interviews-profile-source">{candidate.source || '—'}</T> },
               { label: 'Based in', value: <T size="sm" data-testid="interviews-profile-location">{redacted ? 'Removed' : candidate.location || '—'}</T> },
             ]} />
@@ -245,14 +246,9 @@ function CandidateProfile({ id }: { id: string }) {
   );
 }
 
-/** The name and its facts. Beside the rail the frame's title is the h1, so the name is the first section; without a rail the page header carries it. */
-function ProfileHead({ framed, name, headline, stage, children }: { framed: boolean; name: string; headline: string; stage: ApplicationStage | undefined; children: ReactNode }) {
-  if (!framed) return <>{children}</>;
-  return (
-    <DetailSection variant="heading" as="h2" first title={name} hint={stage ? <StageChip stage={stage} /> : undefined} {...(headline ? { description: headline } : {})}>
-      {children}
-    </DetailSection>
-  );
+/** The candidate's facts. The name and the stage are the title above (the frame's beside the rail, the page header's without one). */
+function ProfileHead({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
 type ProfileTab = 'rounds' | 'resume' | 'recordings' | 'activity';
@@ -262,9 +258,9 @@ const CLOSED_STAGES = new Set(['rejected', 'withdrawn', 'hired']);
 
 /** The stage tracker, above the tabs: where the application stands and the way to its debrief. */
 function StageSection({ app, several, candidateId }: { app: ProfileApplication; several: boolean; candidateId: string }) {
-  const steps = stageSteps(app.stage, app.history, relativeTime);
+  const steps = stageSteps(app.stage, app.history, dateLabel);
   return (
-    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={<DebriefLink candidateId={candidateId} />}>
+    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={<DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} />}>
       <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
     </DetailSection>
   );
@@ -279,14 +275,20 @@ function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApp
         <Button size="sm" variant="secondary" data-testid="interviews-profile-assign"
           onClick={() => navigate(assignHref(candidateId, { application: app.applicationId }))}>Assign a round</Button>
       ) : undefined}>
-      <DataTable narrow rowHeight="content" data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds} columns={ROUND_COLUMNS}
+      <DataTable narrow rowHeight="content" data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds}
+        columns={rounds.some((r) => declineLines(r).length > 0) ? ROUND_COLUMNS : ROUND_COLUMNS.filter((c) => c.key !== 'declined')}
         keyField={(r) => r.id} staticRows="Each round with its status and result; its record opens from the Record column" emptyMessage="No round has been assigned yet."
         {...(assigns ? {
-          rowActionsHeader: 'Change', rowActionsHeaderHidden: true,
-          rowActions: (r: ProfileRound) => (canReassign(r.state) ? (
-            <Button size="sm" variant={r.state === 'declined' ? 'primary' : 'ghost'} data-testid="interviews-profile-reassign"
-              onClick={() => navigate(assignHref(candidateId, { round: r.id }))}>Reassign</Button>
-          ) : null),
+          rowActionsHeader: 'Actions', rowActionsHeaderHidden: true,
+          rowActions: (r: ProfileRound) => {
+            if (!canReassign(r.state)) return null;
+            const reassign = () => navigate(assignHref(candidateId, { round: r.id }));
+            // A declined round needs a new interviewer: that stays a button. Any other round keeps it in the row's menu.
+            return r.state === 'declined'
+              ? <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>
+              : <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions"
+                sections={[{ items: [{ label: 'Reassign…', onSelect: reassign }] }]} />;
+          },
         } : {})} />
     </DetailSection>
   );
@@ -394,7 +396,7 @@ function ResumeSection({ candidateId, manages, state }: { candidateId: string; m
             <Stack gap="xs">
               {resume && (
                 <T size="sm" tone="secondary" data-testid="interviews-resume-facts">
-                  {`Added ${relativeTime(resume.uploadedAt)}${resume.uploadedBy ? ` by ${resume.uploadedBy.name}` : ''}.`}
+                  {`Added ${dateLabel(resume.uploadedAt)}${resume.uploadedBy ? ` by ${resume.uploadedBy.name}` : ''}.`}
                 </T>
               )}
               <FileUploadDrop accept="application/pdf,.pdf" maxSize={RESUME_MAX_BYTES} disabled={busy} data-testid="interviews-resume-upload"
@@ -413,7 +415,7 @@ function ResumeSection({ candidateId, manages, state }: { candidateId: string; m
 }
 
 const DELETION_COLUMNS: DataTableColumn<DeletionView>[] = [
-  { key: 'at', header: 'When', numeric: true, width: '144px', render: (r) => <T size="sm" title={new Date(r.requestedAt).toLocaleString()}>{relativeTime(r.requestedAt)}</T> },
+  { key: 'at', header: 'When', numeric: true, width: '144px', render: (r) => <T size="sm" title={new Date(r.requestedAt).toLocaleString()}>{dateLabel(r.requestedAt)}</T> },
   {
     key: 'what', header: 'Removed',
     render: (r) => <T size="sm" wrap data-testid="interviews-deletion-removed">{removedLine(r)}</T>,

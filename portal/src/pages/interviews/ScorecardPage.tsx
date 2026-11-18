@@ -27,7 +27,7 @@ import { recordPath } from '../../lib/interviewsRecord';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
+import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import { MILO_QUESTION_MAX, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
 import {
@@ -282,7 +282,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
 /** One submitted scorecard, read-only: the three steps it went through, then each competency's rating (1 to 4) beside its anchor sentence and note, the summary and the decision in words. */
 function ScorecardReadout({ card, competencies, round, testId }: { card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; testId: string }) {
   const kit = new Map(competencies.map((c) => [c.id, c]));
-  const when = new Date(card.submittedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const when = dateLabel(card.submittedAt, Date.now(), undefined, true);
   return (
     <DetailSection variant="heading" as="h2" title={round ? `${card.interviewer.name}, ${round}` : card.interviewer.name} data-testid={testId}
       hint={<MetaLine size="sm" items={[`Version ${card.version}`, `Submitted ${when}`, ...(card.correctionReason ? [`Corrected: ${card.correctionReason}`] : [])]} />}>

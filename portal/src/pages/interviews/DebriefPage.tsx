@@ -28,14 +28,13 @@ import { candidateCrumbLabel } from '../../lib/interviewsCandidateRail';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, type InterviewRow } from '../../lib/interviews';
+import { INTERVIEWS_API, RECOMMENDATION_LABELS, dateLabel, whenLabel, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, type InterviewRow } from '../../lib/interviews';
 import {
   DECISION_CHOICES, DECISION_DONE, confirmQuestion, debriefApi, debriefHref, decideStage, decisionTone, dueLine, missingLine, reasonProblem, recapLine,
   roundEmptyLine, scorecardNotes, applicationSideBySide,
   type DebriefApplication, type DebriefMove, type DebriefRound, type DebriefView, type Decision, type RecapBody, type SideCell, type SideRow,
 } from '../../lib/interviewsDebrief';
 import { plural } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import { Dash, PanelCell, StageChip } from './interviewsCells';
 
 export default function DebriefPage() {
@@ -194,7 +193,7 @@ function RoundBlock({ round, nested }: { round: DebriefRound; nested: boolean })
     <DetailSection variant="heading" as={nested ? 'h3' : 'h2'} title={round.name} data-testid="interviews-debrief-round"
       hint={<MetaLine size="sm" items={[
         `${ROUND_TYPE_LABELS[round.type]}, ${round.minutes} minutes`,
-        round.endedAt ? `Ended ${relativeTime(round.endedAt)}` : round.scheduledAt ? `Set for ${new Date(round.scheduledAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'No time set',
+        round.endedAt ? `Ended ${dateLabel(round.endedAt)}` : round.scheduledAt ? `Set for ${whenLabel(round.scheduledAt)}` : 'No time set',
       ]} />}
       actions={(
         <Inline gap="sm" align="center" wrap={false}>
@@ -270,7 +269,7 @@ function RecapInPlace({ path }: { path: string }) {
 
 const MOVE_COLUMNS: DataTableColumn<DebriefMove>[] = [
   { key: 'stage', header: 'Stage', width: '176px', render: (m) => <StageChip stage={m.stage} /> },
-  { key: 'at', header: 'When', numeric: true, width: '144px', render: (m) => <T size="sm" title={new Date(m.at).toLocaleString()}>{relativeTime(m.at)}</T> },
+  { key: 'at', header: 'When', numeric: true, width: '144px', render: (m) => <T size="sm" title={new Date(m.at).toLocaleString()}>{dateLabel(m.at)}</T> },
   { key: 'by', header: 'By', render: (m) => (m.byName ? <T size="sm">{m.byName}</T> : <T size="sm" tone="secondary">The candidate</T>) },
   {
     key: 'decision', header: 'Decision', width: '176px',

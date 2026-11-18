@@ -5,8 +5,8 @@
 import { DataTable, DetailSection, DownloadIcon, IconButton, LoadingState, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useFetch } from '../../hooks/useFetch';
+import { dateLabel } from '../../lib/interviews';
 import { plural } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import { EMPTY_LINE, consentsPath, downloadExport, noticeLabel, yesNo, type ConsentRecordItem, type ConsentRecords } from '../../lib/interviewsRecords';
 import { Dash } from './interviewsCells';
 
@@ -33,7 +33,7 @@ export default function ProfileConsents({ candidateId }: { candidateId: string }
   const columns: DataTableColumn<ConsentRecordItem>[] = [
     { key: 'round', header: 'Round', render: (r) => <T size="sm" data-testid="interviews-consent-round">{r.roundName}</T> },
     { key: 'notice', header: 'Notice', render: (r) => (r.answered ? <T size="sm" title={r.noticeVersion ?? undefined}>{noticeLabel(r.noticeVersion)}</T> : <Dash />) },
-    { key: 'at', header: 'Answered', numeric: true, width: '120px', render: (r) => (r.answeredAt ? <T size="sm" title={new Date(r.answeredAt).toLocaleString()}>{relativeTime(r.answeredAt)}</T> : <Dash />) },
+    { key: 'at', header: 'Answered', numeric: true, width: '120px', render: (r) => (r.answeredAt ? <T size="sm" title={new Date(r.answeredAt).toLocaleString()}>{dateLabel(r.answeredAt)}</T> : <Dash />) },
     ...(answers ? [
       { key: 'recording', header: 'Recording', width: '96px', render: answerCell((r) => r.answers?.recording) },
       { key: 'transcript', header: 'Transcript', width: '96px', render: answerCell((r) => r.answers?.transcription) },

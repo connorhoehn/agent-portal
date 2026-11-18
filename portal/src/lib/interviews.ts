@@ -165,7 +165,7 @@ export function roundStatus(state: InterviewState): { label: string; tone: ChipT
     case 'assigned': return { label: 'To accept', tone: 'warning' };
     case 'accepted': return { label: 'Accepted', tone: 'info' };
     case 'ready': return { label: 'Scheduled', tone: 'info' };
-    case 'live': return { label: 'In progress', tone: 'info' };
+    case 'live': return { label: 'Live now', tone: 'info' };
     case 'ended': return { label: 'Scorecard due', tone: 'caution' };
     case 'scored': case 'reviewed': return { label: 'Done', tone: 'success' };
     case 'declined': return { label: 'Declined', tone: 'neutral' };
@@ -180,7 +180,7 @@ export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>):
   if (row.bucket === 'scorecard-due') return 'Scorecard due';
   if (row.bucket === 'done') return 'Scorecard in';
   if (row.bucket === 'closed') return row.state === 'declined' ? 'Declined' : 'Cancelled';
-  if (row.state === 'live') return 'In progress';
+  if (row.state === 'live') return 'Live now';
   if (row.seat === 'panel') return 'On the panel';
   return row.state === 'ready' ? 'Prepared' : 'Choose questions';
 }
@@ -243,10 +243,33 @@ export function whenLabel(iso: string | null, nowMs: number = Date.now(), timeZo
   return `${date.replace(',', '')}, ${time}`;
 }
 
+/**
+ * A past or recent instant, one way everywhere: "just now", "5m ago", "3h ago", "6d ago" under a week (the exact time
+ * belongs in the cell's title), else the date, "9 Nov 2026". With `withTime`, the date carries its 24-hour time.
+ */
+export function dateLabel(iso: string | null | undefined, nowMs: number = Date.now(), timeZone?: string, withTime = false): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const diff = nowMs - ms;
+  const abs = Math.abs(diff);
+  if (abs < 7 * DAY_MS && !withTime) {
+    const mins = Math.floor(abs / 60_000);
+    if (mins < 2) return 'just now';
+    const say = (n: number, u: string) => (diff < 0 ? `in ${n}${u}` : `${n}${u} ago`);
+    if (mins < 60) return say(mins, 'm');
+    const hrs = Math.floor(mins / 60);
+    return hrs < 24 ? say(hrs, 'h') : say(Math.floor(hrs / 24), 'd');
+  }
+  const date = new Intl.DateTimeFormat('en-GB', { timeZone, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(ms));
+  if (!withTime) return date;
+  return `${date}, ${new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms))}`;
+}
+
 /** "Coding with Hugo Marchetti, tomorrow 10:00" — the next interview in one line. */
 export function nextInterviewLine(next: InterviewBrief | null, nowMs: number = Date.now(), timeZone?: string): string {
   if (!next) return '';
-  return `${next.roundName} · ${whenLabel(next.scheduledAt, nowMs, timeZone)}`;
+  return `${next.roundName} · ${next.state === 'live' ? 'Live now' : whenLabel(next.scheduledAt, nowMs, timeZone)}`;
 }
 
 /** "Yes · Coding" — the last result in one line. */

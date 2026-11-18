@@ -20,6 +20,8 @@ export interface CollectionRecordFrameProps {
   /** The view's title — the collection's name, so it does not jump between records (rule 3). */
   title: string;
   description?: string;
+  /** A chip beside the title (the open record's state or stage). */
+  badge?: ReactNode;
   /** The rail's caption and accessible label. */
   listTitle: string;
   listLabel: string;
@@ -76,7 +78,7 @@ export interface CollectionRecordFrameProps {
 }
 
 export function CollectionRecordFrame({
-  title, description, listTitle, listLabel, count, search, filter, empty, actions, groups, rows, currentId, onOpen,
+  title, description, badge, listTitle, listLabel, count, search, filter, empty, actions, groups, rows, currentId, onOpen,
   loading = false, error = null, onRetry, footer, children, conversation, railType = 'rail', countStyle, narrow, 'data-testid': testId,
 }: CollectionRecordFrameProps) {
   const trail = useShellBreadcrumbItems();
@@ -90,7 +92,7 @@ export function CollectionRecordFrame({
     <ViewportFillRegion bottomGap={0} {...(testId ? { 'data-testid': testId } : {})}>
       <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush>
         <ListRailLayout
-          header={<SectionHeader breadcrumbs={trail} title={title} {...(description ? { description } : {})} {...(actions ? { actions } : {})} />}
+          header={<SectionHeader breadcrumbs={trail} title={title} {...(description ? { description } : {})} {...(badge ? { badge } : {})} {...(actions ? { actions } : {})} />}
           list={{
             // The app rail's 14/600 group headings already carry their counts; a 12px
             // caption above them would be a second heading size in one rail.

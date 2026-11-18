@@ -12,9 +12,8 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { plural } from '../../lib/plural';
-import { relativeTime } from '../../lib/relativeTime';
 import {
-  INTERVIEWS_API, STAGE_LABELS, byStageLine, lastResultLine, matches, nextInterviewLine, whenLabel,
+  INTERVIEWS_API, STAGE_LABELS, byStageLine, lastResultLine, matches, nextInterviewLine, whenLabel, dateLabel,
   type ApplicationStage, type ItemsResponse, type OpeningRow, type PipelineEntry,
 } from '../../lib/interviews';
 import { Dash, DebriefResultCell, PersonCell, StageChip } from './interviewsCells';
@@ -41,7 +40,7 @@ const COLUMNS: DataTableColumn<Row>[] = [
   { key: 'result', header: 'Last result', width: '176px', render: (r) => <DebriefResultCell candidateId={r.candidate.id} result={r.lastResult} due={r.scorecardDue} ready={r.debriefReady} /> },
   {
     key: 'since', header: 'In stage since', numeric: true, sortable: true, compare: (a, b) => a.stageChangedAt.localeCompare(b.stageChangedAt),
-    render: (r) => <T size="sm" title={new Date(r.stageChangedAt).toLocaleString()}>{relativeTime(r.stageChangedAt)}</T>,
+    render: (r) => <T size="sm" title={new Date(r.stageChangedAt).toLocaleString()}>{dateLabel(r.stageChangedAt)}</T>,
   },
 ];
 

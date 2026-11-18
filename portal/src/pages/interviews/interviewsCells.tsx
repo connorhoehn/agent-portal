@@ -70,11 +70,11 @@ export function ResultChip({ result, due = false }: { result: ResultBrief | null
 
 export const Dash = () => <T size="xs" tone="tertiary">—</T>;
 
-/** The way into a candidate's debrief (rows I5.4, I5.5) for the people who read one; nothing for an interviewer. */
-export function DebriefLink({ candidateId }: { candidateId: string }) {
+/** The way into a candidate's debrief (rows I5.4, I5.5) for the people who read one once a round has ended (`show`); nothing for an interviewer. */
+export function DebriefLink({ candidateId, show = true }: { candidateId: string; show?: boolean }) {
   const { session } = useSession();
   const navigate = useNavigate();
-  if (!readsDebrief(session?.role)) return null;
+  if (!show || !readsDebrief(session?.role)) return null;
   return <Button size="sm" variant="secondary" data-testid="interviews-profile-debrief" onClick={() => navigate(debriefHref(candidateId))}>Open the debrief</Button>;
 }
 
