@@ -6,7 +6,8 @@
 // The row's bar, in code:
 //   every claim has a source   a claim is DROPPED (and counted) when its `seq` is not a line it was given, when that line
 //                              is not the candidate's (stricter reading: evidence of what the candidate said rests on
-//                              the candidate's own words, not on a question), when `quotedFrom` does not find its quote
+//                              the candidate's own words, not on a question), when the line addresses Milo (a repeat
+//                              or time request is not an answer), when `quotedFrom` does not find its quote
 //                              in THAT line (stricter than "in the given lines"), when it is empty or too long, or when
 //                              its quote touches a personal trait (PERSONAL: the candidate's own words about their
 //                              family or health are kept out of the recap). A competency left with no claim moves to
@@ -198,7 +199,7 @@ export function parseRecapAnswer(raw: string | null, ctx: { competencyIds: reado
       const quote = squash(e.quote);
       const line = bySeq.get(e.seq);
       const keep = text.length > 0 && text.length <= MAX_CLAIM_CHARS && quote.length > 0 && quote.length <= MAX_QUOTE_CHARS
-        && !!line && line.side === 'candidate' && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote))
+        && !!line && line.side === 'candidate' && !addressesMilo(line.text) && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote))
         && grounded(withoutQuote(text, quote), line.text);
       const list = found.get(c.id) ?? [];
       const repeat = list.some((x) => x.seq === e.seq && x.text.toLowerCase() === text.toLowerCase());

@@ -37,11 +37,7 @@ export const RECAP_MAX_LINE_CHARS = 600;
 
 /** How a question came to be asked: the lead chose it, or the lead took Milo's suggestion (asking it, or having Milo ask). */
 export type AskedHow = 'chosen' | 'ask' | 'milo-ask';
-export interface RecapQuestion {
-  text: string; competencyId: string; how: AskedHow;
-  /** Milo said it aloud (it is no transcript line of anyone's): the number of the last line said before it, 0 when none was. */
-  afterSeq?: number;
-}
+export interface RecapQuestion { text: string; competencyId: string; how: AskedHow }
 
 export interface RecapInput {
   competencies: readonly Pick<KitCompetency, 'id' | 'name' | 'lookFor' | 'anchors'>[];
@@ -56,7 +52,7 @@ export const RECAP_SYSTEM_PROMPT = [
   'You read only the words said in the interview (the transcript, each line numbered and marked as the candidate\'s or the panel\'s), the interview kit (the competencies and what to look for in each), and the questions that were asked.',
   'For each competency, list short, plain statements of what the candidate said or did that bears on it. Each statement rests on exactly one transcript line spoken by the candidate: give that line\'s number as "seq" and quote, word for word, the piece of the line it rests on as "quote".',
   `At most ${MAX_CLAIMS_PER_COMPETENCY} statements per competency, each at most ${MAX_CLAIM_CHARS} characters; each quote at most ${MAX_QUOTE_CHARS} characters.`,
-  'A question Milo said aloud is not a transcript line: its "after" attribute is the number of the last line said before it, and the candidate\'s lines that follow it may answer it.',
+  'A panel line with a negative number is a question Milo said aloud in the interview; it is never evidence. A line in which the candidate speaks to Milo (asking it to repeat the question, or how much time is left) is a request to Milo, not an answer.',
   'List, by id, the competencies nothing in the transcript bears on, in "notCovered". Do not guess to fill a competency.',
   'Describe only what was said, in neutral words, for example: "The candidate described rolling back the release before paging the team." Refer to the person only as "the candidate".',
   'Never rate, score, rank, grade or compare the candidate, never place them on a level or an anchor, never say whether an answer was good, bad, strong, weak, clear or complete, never praise or doubt what they said, and never recommend hiring, advancing or rejecting anyone. The anchors are given only so you know what each competency covers.',
@@ -74,7 +70,7 @@ export function recapUserText(input: RecapInput, fence: Fence = new Fence()): st
     `  Anchors (what the competency covers; never place the candidate on them): 1 ${c.anchors[1]} 2 ${c.anchors[2]} 3 ${c.anchors[3]} 4 ${c.anchors[4]}`,
   ].join('\n')).join('\n');
   const questions = input.questions.map((q) =>
-    fence.wrap(q.text, { kind: 'question', inline: true, maxChars: RECAP_MAX_LINE_CHARS, attrs: { competency: q.competencyId, how: howLabel(q.how), ...(q.afterSeq !== undefined ? { after: String(q.afterSeq) } : {}) } })).join('\n');
+    fence.wrap(q.text, { kind: 'question', inline: true, maxChars: RECAP_MAX_LINE_CHARS, attrs: { competency: q.competencyId, how: howLabel(q.how) } })).join('\n');
   const lines = input.lines.map((l) =>
     fence.wrap(l.text, { kind: 'line', inline: true, maxChars: RECAP_MAX_LINE_CHARS, attrs: { n: String(l.seq), side: l.side } })).join('\n');
   return [

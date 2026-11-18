@@ -120,14 +120,14 @@ describe('recordTranscript', () => {
     await store.create(call());
     await store.appendLine(line('u-hugo', 'Tell me about a rate limiter.', 10, 'c1'));
     await store.appendLine(line(null, 'crosstalk', 12, 'c2'));
-    await store.appendLine(line('guest:inv-1', 'I would use a token bucket.', 20, 'c3'));
+    await store.appendLine({ ...line('guest:inv-1', 'I would use a token bucket.', 20, 'c3'), startMs: 4000, endMs: 6500 }); // said over 2.5 s, ending at 20 s
     await store.transition('call-1', { from: ['listening'], to: 'left', by: 'u-hugo', at: NOW + 3_600_000 });
     const t = await recordTranscript({ id: 'iv-j6x2d9sb', callId: null });
     expect(t).toEqual({
       callId: 'call-1', startedAt: '2026-11-10T14:00:00.000Z',
       lines: [
-        { seq: 1, at: '2026-11-10T14:00:10.000Z', side: 'panel', speaker: 'Hugo Marchetti', text: 'Tell me about a rate limiter.' },
-        { seq: 3, at: '2026-11-10T14:00:20.000Z', side: 'candidate', speaker: 'Mateo Álvarez', text: 'I would use a token bucket.' },
+        { seq: 1, at: '2026-11-10T14:00:10.000Z', startAt: '2026-11-10T14:00:10.000Z', side: 'panel', speaker: 'Hugo Marchetti', text: 'Tell me about a rate limiter.' },
+        { seq: 3, at: '2026-11-10T14:00:20.000Z', startAt: '2026-11-10T14:00:17.500Z', side: 'candidate', speaker: 'Mateo Álvarez', text: 'I would use a token bucket.' },
       ],
     });
     expect(linesFrom(t!, t!.startedAt).map((l) => l.atMs)).toEqual([10_000, 20_000]);

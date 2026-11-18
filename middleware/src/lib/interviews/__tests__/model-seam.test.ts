@@ -51,7 +51,7 @@ const bodyHash = (cmd: ConverseCommand): string =>
 const PINNED_BODY: Record<Caller, string> = {
   coach: 'f46ba9a8693e9fc17da408b06e283b848ca3f65e8dd9a3c15c51d27be9134f38',
   milo: 'dd1eee6db4d09b67b2aab9cc9fb7ed32671cdd4a74d018eebeaf073252686e62',
-  recap: 'e83462fc8834a300f1f254060f7cd9d098755568426b1c697ff4e15fd0dfb246',
+  recap: 'bdb6d60900b55c0bfb9991bd6250a26bb70d533711853806d251ed6a7ab603dc',
   plan: '912751dcaf1bf7c6c70401aa4bd7988cf316f31fa4179b65a4e6c7dd001bdf78',
 };
 const LABEL: Record<Caller, string> = { coach: 'coach', milo: 'milo', recap: 'recap', plan: 'milo' };

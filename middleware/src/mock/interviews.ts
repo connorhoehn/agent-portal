@@ -108,6 +108,22 @@ const BACKEND_KIT: OpeningKit = {
       prompt: 'Describe a time you disagreed with a technical decision your team had already made. What did you do?',
       followUps: ['How did you raise it, and with whom?', 'What happened afterwards?'],
     },
+    {
+      id: 'q-be-twosum', competencyId: 'problem-solving', roundType: 'technical',
+      prompt: 'Given an array of integers and a target, return the indices of the two numbers that add up to the target. Each input has exactly one answer, and the same element may not be used twice.',
+      followUps: [
+        'What is the runtime complexity of your solution, in time and in space?',
+        'How would you test this function?',
+        'What would you change if the array were already sorted?',
+      ],
+      starter: {
+        python: 'def two_sum(nums: list[int], target: int) -> list[int]:\n    pass\n\n\nprint(two_sum([2, 7, 11, 15], 9))\n',
+        javascript: 'function twoSum(nums, target) {\n}\n\nconsole.log(twoSum([2, 7, 11, 15], 9));\n',
+        typescript: 'function twoSum(nums: number[], target: number): number[] {\n  return [];\n}\n\nconsole.log(twoSum([2, 7, 11, 15], 9));\n',
+        java: 'import java.util.*;\n\nclass Main {\n    static int[] twoSum(int[] nums, int target) {\n        return new int[0];\n    }\n\n    public static void main(String[] args) {\n        System.out.println(Arrays.toString(twoSum(new int[]{2, 7, 11, 15}, 9)));\n    }\n}\n',
+        go: 'package main\n\nimport "fmt"\n\nfunc twoSum(nums []int, target int) []int {\n\treturn nil\n}\n\nfunc main() {\n\tfmt.Println(twoSum([]int{2, 7, 11, 15}, 9))\n}\n',
+      },
+    },
   ],
 };
 

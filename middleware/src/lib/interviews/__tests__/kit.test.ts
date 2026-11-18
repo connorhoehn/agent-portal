@@ -89,7 +89,7 @@ describe('a question probes a competency in the kit, for a round the kit has', (
     kit.questions.push({ ...structuredClone(kit.questions[0]!) });
     expect(checkKit(kit).ok ? [] : (checkKit(kit) as { problems: unknown[] }).problems).toEqual([
       { path: 'competencies.5.name', message: 'Two competencies are called "problem SOLVING"; rename one.' },
-      { path: 'questions.6.id', message: 'Question 7 repeats question 1; remove one of them.' },
+      { path: 'questions.7.id', message: 'Question 8 repeats question 1; remove one of them.' },
     ]);
   });
 });

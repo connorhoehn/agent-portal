@@ -20,7 +20,8 @@ import { loadWorld } from '../store.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 
 export type RecordSide = 'candidate' | 'panel';
-export interface RecordLine { seq: number; at: string; side: RecordSide; speaker: string; text: string }
+/** `at`: when the line ended (it was stored); `startAt`: when it began to be said (its audio span before `at`; `at` when unknown). */
+export interface RecordLine { seq: number; at: string; startAt: string; side: RecordSide; speaker: string; text: string }
 export interface RecordTranscript { callId: string; startedAt: string | null; lines: RecordLine[] }
 
 /** How many lines are read from the store; an hour's interview is a few hundred. */
@@ -29,7 +30,7 @@ const LISTED_CALLS = 500;
 /** The label of a line whose candidate cannot be named (the interview's record is gone). */
 export const CANDIDATE_LABEL = 'Candidate';
 
-interface RawLine { seq: number; atMs: number; userId: string | null; text: string }
+interface RawLine { seq: number; atMs: number; startAtMs: number; userId: string | null; text: string }
 interface Found { callId: string; startedAtMs: number | null; lines: RawLine[] }
 
 async function storedCall(interview: { id: string; callId: string | null }): Promise<AssistantRecord | null> {
@@ -47,7 +48,7 @@ async function found(interview: { id: string; callId: string | null }): Promise<
   const record = await storedCall(interview);
   if (record) {
     const lines = await assistantStore().lines(record.callId, 0, RECORD_FETCH_LIMIT);
-    return { callId: record.callId, startedAtMs: record.invitedAt, lines: lines.map((l) => ({ seq: l.seq, atMs: l.at, userId: l.userId, text: l.text })) };
+    return { callId: record.callId, startedAtMs: record.invitedAt, lines: lines.map((l) => ({ seq: l.seq, atMs: l.at, startAtMs: l.startMs !== undefined && l.endMs !== undefined && l.endMs >= l.startMs ? l.at - (l.endMs - l.startMs) : l.at, userId: l.userId, text: l.text })) };
   }
   if (!config.mock?.aurora) return null;
   const seeded = interviewRecordLinesFixture.rows().filter((l) => l.interviewId === interview.id);
@@ -56,7 +57,7 @@ async function found(interview: { id: string; callId: string | null }): Promise<
   return {
     callId: `stand-in:${interview.id}`,
     startedAtMs: rec ? Date.parse(rec.startedAt) : null,
-    lines: seeded.map((l) => ({ seq: l.seq, atMs: Date.parse(l.at), userId: l.userId, text: l.text })),
+    lines: seeded.map((l) => ({ seq: l.seq, atMs: Date.parse(l.at), startAtMs: Date.parse(l.at), userId: l.userId, text: l.text })),
   };
 }
 
@@ -79,7 +80,7 @@ export async function recordTranscript(interview: { id: string; callId: string |
     startedAt: f.startedAtMs !== null ? new Date(f.startedAtMs).toISOString() : null,
     lines: attributed.map((l) => {
       const guest = isGuestId(l.userId!);
-      return { seq: l.seq, at: new Date(l.atMs).toISOString(), side: guest ? 'candidate' : 'panel', speaker: guest ? candidate ?? CANDIDATE_LABEL : people(l.userId!).name, text: l.text };
+      return { seq: l.seq, at: new Date(l.atMs).toISOString(), startAt: new Date(l.startAtMs).toISOString(), side: guest ? 'candidate' : 'panel', speaker: guest ? candidate ?? CANDIDATE_LABEL : people(l.userId!).name, text: l.text };
     }),
   };
 }

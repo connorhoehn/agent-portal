@@ -32,7 +32,7 @@ import { saidStore } from '../speak/store.js';
 /** E1: the recap reads the interview record's transcript (which holds the mock world's seeded lines), else Milo's call record. */
 const recordOrAssistantTranscript: TranscriptSource = async (i) => {
   const r = await recordTranscript(i);
-  return r ? { callId: r.callId, lastSeq: r.lines.at(-1)?.seq ?? 0, lines: r.lines.map(({ seq, side, text, at }) => ({ seq, side, text, at })) } : assistantTranscript(i);
+  return r ? { callId: r.callId, lastSeq: r.lines.at(-1)?.seq ?? 0, lines: r.lines.map(({ seq, side, text, startAt }) => ({ seq, side, text, startAt })) } : assistantTranscript(i);
 };
 import type { CoachLine } from '../coach/prompt.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
@@ -61,7 +61,7 @@ export interface RecapDeps {
   transcript: TranscriptSource;
   /** The suggestions the lead took (asked, or had Milo ask), read from the coach's log. */
   taken: (interviewId: string) => Promise<{ id?: string; text: string; competencyId: string; answer: 'ask' | 'milo-ask' }[]>;
-  /** The questions Milo put in the call (the said log, decision 9): which kit question or suggestion, and when. */
+  /** The questions Milo put in the call (the said log, decision 9): its words and when. */
   said: (interviewId: string) => Promise<SaidQuestion[]>;
   model: () => RecapModel;
   reserve: (i: InterviewReserveInput) => Promise<InterviewReserveOutcome>;
@@ -77,12 +77,12 @@ const defaultTaken: RecapDeps['taken'] = async (interviewId) => {
     .map((r) => ({ id: r.id, text: r.text, competencyId: r.competencyId!, answer: r.answer as 'ask' | 'milo-ask' }));
 };
 
-/** A question Milo put in the call: a kit question (`questionId`) or a suggestion (`suggestionId`), at `saidAt`. */
-export interface SaidQuestion { questionId: string | null; suggestionId: string | null; saidAt: string }
+/** A question Milo put in the call (an approved question, or its repeat): its words, and when the server put them in. */
+export interface SaidQuestion { text: string; saidAt: string }
 
 const defaultSaid: RecapDeps['said'] = async (interviewId) => {
   const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interviewId));
-  return rows.filter((r) => r.kind === 'question').map((r) => ({ questionId: r.questionId, suggestionId: r.suggestionId, saidAt: r.saidAt }));
+  return rows.filter((r) => r.kind === 'question' || r.source === 'repeat').map((r) => ({ text: r.text, saidAt: r.saidAt }));
 };
 
 const DEFAULTS: RecapDeps = {
@@ -153,31 +153,40 @@ export function recapInput(
 ): RecapInput {
   const kit = ref.opening.kit;
   const bank = new Map(kit.questions.map((q) => [q.id, q]));
-  const kept = lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES);
-  // A question Milo said aloud is no line of anyone's (Milo's voice is never stored as a line): it is placed after the last line
-  // stored before it was said, so its answer can be found. The first time it was said counts. Lines without a time place nothing.
-  const afterOf = (saidAt: string | undefined): number | undefined => {
-    if (saidAt === undefined || !kept.length || kept.some((l) => l.at === undefined)) return undefined;
-    return kept.filter((l) => l.at! <= saidAt).reduce((m, l) => Math.max(m, l.seq), 0);
-  };
-  const firstSaid = (pick: (s: SaidQuestion) => boolean) => said.filter(pick).map((s) => s.saidAt).sort()[0];
-  const placed = (q: RecapQuestion, saidAt: string | undefined): RecapQuestion => {
-    const after = afterOf(saidAt);
-    return after === undefined ? q : { ...q, afterSeq: after };
-  };
   const chosen: RecapQuestion[] = ref.interview.questionIds.map((id) => bank.get(id)).filter((q): q is NonNullable<typeof q> => !!q)
-    .map((q) => placed({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }, firstSaid((s) => s.questionId === q.id)));
+    .map((q) => ({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }));
   const round = new Set(roundCompetencyIds(ref.interview, ref.opening, taken));
   return {
     competencies: kit.competencies.filter((c) => round.has(c.id)).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
-    questions: [...chosen, ...taken.map((t): RecapQuestion => placed({ text: t.text, competencyId: t.competencyId, how: t.answer },
-      t.answer === 'milo-ask' && t.id ? firstSaid((s) => s.suggestionId === t.id) : undefined))],
-    lines: kept.map(({ seq, side, text }) => ({ seq, side, text })),
+    questions: [...chosen, ...taken.map((t): RecapQuestion => ({ text: t.text, competencyId: t.competencyId, how: t.answer }))],
+    lines: withMiloQuestions(lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES), said),
   };
 }
 
-/** A transcript line as the recap's source gives it: the record's lines carry when they were stored. */
-export type RecapSourceLine = CoachLine & { at?: string };
+/** A transcript line as the recap's source gives it: the record's lines carry when they began to be said. */
+export type RecapSourceLine = CoachLine & { startAt?: string };
+
+/**
+ * One timeline of what was said: the transcript's lines and, as panel lines, the questions Milo said aloud (Milo's voice is never
+ * stored as a line, so without them an answer to Milo's question would run on from whatever the candidate said before it). Each
+ * question goes after the last line that began before the server put it in the call; its number is negative (-1, -2, ...), so it
+ * is never a line anyone can cite. Lines with no start time cannot be placed against it: the questions are left out then.
+ */
+export function withMiloQuestions(lines: readonly RecapSourceLine[], said: readonly SaidQuestion[]): CoachLine[] {
+  const plain = lines.map(({ seq, side, text }) => ({ seq, side, text }));
+  if (!said.length || !lines.length || lines.some((l) => l.startAt === undefined)) return plain;
+  const asked = [...said].sort((a, b) => a.saidAt.localeCompare(b.saidAt));
+  const out: CoachLine[] = [];
+  let q = 0;
+  const miloLine = (s: SaidQuestion): CoachLine => ({ seq: -(q += 1), side: 'panel', text: s.text });
+  let k = 0;
+  lines.forEach((l, n) => {
+    while (k < asked.length && asked[k]!.saidAt < l.startAt!) { out.push(miloLine(asked[k]!)); k += 1; }
+    out.push(plain[n]!);
+  });
+  while (k < asked.length) { out.push(miloLine(asked[k]!)); k += 1; }
+  return out;
+}
 
 /** What one attempt may cost, in dollars: the request's estimated tokens at the model's price (Nova Pro's for the stand-in). */
 export function recapEstimateUsd(model: Pick<RecapModel, 'modelId'>, input: RecapInput): number {
@@ -211,7 +220,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   if (!consent?.transcription) return emptyBody('no-transcript');
   if (!consent.milo) return emptyBody('none');
   const transcript = await d.transcript({ id: interview.id, callId: interview.callId });
-  const input = recapInput(ref, transcript?.lines ?? [], await d.taken(interview.id), await d.said(interview.id).catch(() => []));
+  const input = recapInput(ref, transcript?.lines ?? [], await d.taken(interview.id), await d.said(interview.id));
   if (!input.lines.length) return emptyBody('no-transcript');
 
   const model = d.model();

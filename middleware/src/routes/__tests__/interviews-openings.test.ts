@@ -105,11 +105,11 @@ describe('the recruiter writes', () => {
     kit.questions.push({ id: 'q-new-cache', prompt: 'Design a cache in front of the card-token lookup.', followUps: ['What do you do on a miss storm?'], competencyId: 'system-design', roundType: 'technical' });
     const res = await GRETA.put('/openings/op-backend/kit', { revision, kit });
     expect(res.status).toBe(200);
-    expect(res.body.opening).toMatchObject({ id: 'op-backend', revision: 2, kitSize: { competencies: 5, questions: { technical: 5, behavioural: 2 } } });
+    expect(res.body.opening).toMatchObject({ id: 'op-backend', revision: 2, kitSize: { competencies: 5, questions: { technical: 6, behavioural: 2 } } });
     expect(res.headers['cache-control']).toBe('no-store');
     const again = await GRETA.get('/openings/op-backend');
     expect(again.body.opening.questions.map((q: { id: string }) => q.id)).toContain('q-new-cache');
-    expect((await GRETA.get('/openings')).body.items.find((o: { id: string }) => o.id === 'op-backend').kitSize.questions.technical).toBe(5);
+    expect((await GRETA.get('/openings')).body.items.find((o: { id: string }) => o.id === 'op-backend').kitSize.questions.technical).toBe(6);
   });
 
   it('reorders the questions and edits a follow-up: the order saved is the order read', async () => {
@@ -169,9 +169,9 @@ describe('the input is checked: 400, one plain sentence per field, nothing writt
     expect(res.body).toEqual({
       error: 'The kit was not saved: 3 things need fixing.',
       fields: [
-        { path: 'questions.6.prompt', message: 'Question 7 needs the words the interviewer will ask.' },
-        { path: 'questions.6.competencyId', message: 'Question 7 needs a competency from this kit to gather evidence for.' },
-        { path: 'questions.6.starter', message: 'Question 7 is for a behavioural round, which has no code pad, so it cannot carry starter code.' },
+        { path: 'questions.7.prompt', message: 'Question 8 needs the words the interviewer will ask.' },
+        { path: 'questions.7.competencyId', message: 'Question 8 needs a competency from this kit to gather evidence for.' },
+        { path: 'questions.7.starter', message: 'Question 8 is for a behavioural round, which has no code pad, so it cannot carry starter code.' },
       ],
     });
     expect((await kitOf('op-backend')).revision).toBe(1);

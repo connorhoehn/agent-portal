@@ -162,3 +162,27 @@ describe('the guard\'s limits, closed', () => {
       .toEqual({ ok: true, droppedClaims: 1, recap: { competencies: [], notCovered: ['communication', 'collaboration'] } });
   });
 });
+
+describe('a question Milo said aloud ends an answer, and a request to Milo is no evidence', () => {
+  // The timeline service.ts `withMiloQuestions` builds: Milo's question is a panel line with a negative number.
+  const lines = [
+    { seq: 1, side: 'panel' as const, text: 'Tell me about the outage.' },
+    { seq: 2, side: 'candidate' as const, text: 'I paged the on-call lead and we rolled back.' },
+    { seq: -1, side: 'panel' as const, text: 'How did you tell the customers?' },
+    { seq: 3, side: 'candidate' as const, text: 'Milo, can you repeat the question?' },
+    { seq: 4, side: 'candidate' as const, text: 'We posted on the status page within ten minutes.' },
+  ];
+  const lctx = { competencyIds: ['communication', 'collaboration'], lines };
+  it('the rest of a cited answer stops at Milo\'s question: the line after it is not added to the earlier answer', () => {
+    const out = parseRecapAnswer(answer([{ id: 'collaboration', evidence: [claim('The candidate described paging the on-call lead.', 2, 'I paged the on-call lead')] }]), lctx);
+    expect(out.ok && out.recap.competencies).toEqual([{ id: 'collaboration', evidence: [expect.objectContaining({ seq: 2 })] }]);
+  });
+  it('a claim citing the candidate\'s request to Milo is dropped, and the request is never added as the same answer', () => {
+    const out = parseRecapAnswer(answer([{ id: 'communication', evidence: [
+      claim('The candidate asked for the question again.', 3, 'can you repeat the question'),
+      claim('The candidate described posting on the status page.', 4, 'We posted on the status page'),
+    ] }]), lctx);
+    expect(out.ok && out.recap.competencies).toEqual([{ id: 'communication', evidence: [expect.objectContaining({ seq: 4 })] }]);
+    expect(out.ok && out.droppedClaims).toBe(1);
+  });
+});

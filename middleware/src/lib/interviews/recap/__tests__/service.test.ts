@@ -70,38 +70,40 @@ beforeEach(() => {
 });
 afterAll(() => setRecapDeps(null));
 
-describe('a question Milo asked aloud (Have Milo ask): its answer is evidence', () => {
-  it('the candidate\'s answer after the said time counts, a request to Milo does not, and the model is told where it was asked', async () => {
-    const q = firstQuestion();
-    // The round chose no question; the lead took a suggestion and pressed "Have Milo ask". Milo's voice is no transcript line.
-    const ref = refOf();
-    ref.interview = { ...ref.interview, questionIds: [] };
-    const at = (min: number) => new Date(Date.UTC(2026, 11, 1, 15, min)).toISOString();
-    transcript = { callId: 'call-1', lastSeq: 4, lines: [
-      { seq: 1, side: 'panel', text: 'Okay, let us get into the main question.', at: at(1) },
-      { seq: 2, side: 'candidate', text: 'Milo, can you repeat the question?', at: at(3) },
-      { seq: 3, side: 'candidate', text: 'Sure. I would set up a weekly one-to-one and agree a plan with them.', at: at(4) },
-      { seq: 4, side: 'panel', text: 'Great, thanks.', at: at(5) },
-    ] } as unknown as CoachTranscript;
-    deps.taken.mockResolvedValue([{ id: 'sug-1', text: q.prompt, competencyId: q.competencyId, answer: 'milo-ask' }]);
-    deps.said.mockResolvedValue([{ questionId: null, suggestionId: 'sug-1', saidAt: at(2) }]);
-    const input = recapInput(ref, (transcript as CoachTranscript).lines, await deps.taken(IV), await deps.said(IV));
-    expect(input.questions).toEqual([expect.objectContaining({ how: 'milo-ask', afterSeq: 1 })]);
-    expect(input.lines.every((l) => !('at' in l))).toBe(true);
-    const body = await openRecap(ref, WEN, ratings(3));
-    expect(body.competencies).toEqual([expect.objectContaining({
-      id: q.competencyId,
-      evidence: [{ text: 'The candidate said this in answer to the question.', source: { kind: 'transcript', seq: 3, quote: 'Sure. I would set up a weekly one-to-one and agree a plan with them.' } }],
-    })]);
+describe('a question Milo asked aloud (Have Milo ask): its answer is evidence, under its own question', () => {
+  const at = (sec: number) => new Date(Date.UTC(2026, 11, 1, 15, 0, sec)).toISOString();
+  const slip = () => refOf().opening.kit.questions.find((q) => q.id === 'q-em-slip')!;
+  // The lead asked the chosen people-leadership question; the candidate answered; Milo then asked the delivery question (a
+  // suggestion, "Have Milo ask"); the candidate asked Milo to repeat it and answered. Milo's voice is no transcript line.
+  const lines = () => [
+    { seq: 1, side: 'panel' as const, text: firstQuestion().prompt, startAt: at(0) },
+    { seq: 2, side: 'candidate' as const, text: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.', startAt: at(10) },
+    { seq: 3, side: 'candidate' as const, text: 'Milo, can you repeat the question?', startAt: at(40) },
+    { seq: 4, side: 'candidate' as const, text: 'We cut the scope to the payments flow, told the client on day one and shipped that part on time.', startAt: at(50) },
+  ];
+  const said = () => [{ text: slip().prompt, saidAt: at(30) }, { text: slip().prompt, saidAt: at(45) }];
+  const taken = () => [{ id: 'sug-1', text: slip().prompt, competencyId: slip().competencyId, answer: 'milo-ask' as const }];
+
+  it('the timeline holds Milo\'s question (and its repeat) as panel lines with negative numbers, placed by when the lines began', () => {
+    const input = recapInput(refOf(), lines(), taken(), said());
+    expect(input.lines.map((l) => [l.seq, l.side])).toEqual([[1, 'panel'], [2, 'candidate'], [-1, 'panel'], [3, 'candidate'], [-2, 'panel'], [4, 'candidate']]);
+    expect(input.lines.every((l) => !('startAt' in l))).toBe(true);
   });
 
-  it('without the said log (or lines without times) nothing is placed: the old reading, a Milo-asked question with no panel line finds nothing', async () => {
-    const q = firstQuestion();
-    const ref = refOf();
-    ref.interview = { ...ref.interview, questionIds: [] };
-    const input = recapInput(ref, [{ seq: 1, side: 'candidate', text: 'An answer.' }], [{ id: 's', text: q.prompt, competencyId: q.competencyId, answer: 'milo-ask' }],
-      [{ questionId: null, suggestionId: 's', saidAt: '2026-12-01T15:00:00.000Z' }]);
-    expect(input.questions[0]!.afterSeq).toBeUndefined();
+  it('the scripted recap puts each answer under its own question: the answers no longer run on across Milo\'s question', async () => {
+    transcript = { callId: 'call-1', lastSeq: 4, lines: lines() } as unknown as CoachTranscript;
+    deps.taken.mockResolvedValue(taken());
+    deps.said.mockResolvedValue(said());
+    const body = await openRecap(refOf(), WEN, ratings(3));
+    const by = Object.fromEntries(body.competencies.map((c) => [c.id, c.evidence.map((e) => e.source.seq)]));
+    expect(by).toEqual({ 'people-leadership': [2], delivery: [4] });
+  });
+
+  it('lines without start times place nothing (the questions are left out), and a failing said log is not hidden', async () => {
+    const plain = lines().map(({ startAt: _s, ...l }) => l);
+    expect(recapInput(refOf(), plain, taken(), said()).lines.map((l) => l.seq)).toEqual([1, 2, 3, 4]);
+    deps.said.mockRejectedValue(new Error('said store down'));
+    await expect(openRecap(refOf(), WEN, ratings(3))).rejects.toThrow('said store down');
   });
 });
 
