@@ -260,14 +260,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   }
 
   /**
-   * The provider took a commentary in. Its request is the one whose event id it names, else the oldest sent and not yet
-   * acknowledged. Taken in part way through an utterance already running (claimed for it or not), it was absorbed there: the
-   * request ends with no words, and the utterance's remaining frames are nobody's.
+   * The provider took a commentary in. Its request is the one whose event id it names; only an acknowledgement that names no id
+   * falls to the oldest sent and not yet acknowledged (one naming an id no line was sent with is some other commentary's).
+   * Taken in part way through an utterance already running (claimed for it or not), it was absorbed there: the request ends with
+   * no words, and the utterance's remaining frames are nobody's.
    */
   private onCommentaryAppended(ev: Record<string, unknown>): void {
     const id = typeof ev['client_event_id'] === 'string' ? ev['client_event_id'] : null;
     const all = [...this.sayQueue, ...(this.saying ? [this.saying] : [])];
-    const r = (id ? all.find((x) => x.eventId === id) : undefined) ?? all.find((x) => x.eventId !== undefined && !x.acked);
+    const r = id !== null ? all.find((x) => x.eventId === id) : all.find((x) => x.eventId !== undefined && !x.acked);
     if (!r) return;
     r.acked = true;
     const o = this.output;

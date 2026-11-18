@@ -209,6 +209,21 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('an acknowledgement naming an event id no line was sent with is nobody\'s: it never ends the line waiting to be said', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
+    await tick(20);
+    audio(3000); words('Sure, the question was about', 1000);
+    await tick(10);
+    // Some other commentary's acknowledgement (not this line's id), taken in two seconds into the running utterance.
+    frame({ type: 'session.commentary.appended', client_event_id: 'ma_999', start_ms: 3000, end_ms: 3000 });
+    await tick(10);
+    expect(ended).toEqual([]);
+    await s.close();
+  });
+
   it('a line taken in as its utterance begins is spoken as usual (the acknowledgement does not end it)', async () => {
     const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);
