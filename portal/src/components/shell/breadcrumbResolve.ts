@@ -125,7 +125,9 @@ const PROMPT_PAGES: Record<string, string> = {
 };
 // The module header prints the three tabs; the crumb names the one open.
 /** Where a round's trail starts for the viewer's role (U6): an interviewer's desk, the recruiter's week, the hiring manager's openings. */
-export function interviewsRoundHome(role: string | null | undefined): Crumb[] {
+export function interviewsRoundHome(role: string | null | undefined, finished = false): Crumb[] {
+  // A finished round (its record, its scorecard) is not coming up: the recruiter and the admin read it under Candidates.
+  if (finished && (role === 'recruiter' || role === 'admin')) return [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }];
   if (role === 'interviewer') return [{ label: 'Interview' }, { label: 'My interviews', path: '/interviews/my-interviews' }];
   if (role === 'hiring-manager') return [{ label: 'Hire' }, { label: 'My openings', path: '/interviews/my-openings' }];
   return [{ label: 'Hire' }, { label: 'Upcoming', path: '/interviews/upcoming' }];
@@ -139,8 +141,8 @@ export function interviewsCandidateHome(role: string | null | undefined): Crumb[
 }
 
 /** `<group> › <home> › <candidate, round> › <page>`; the third crumb's label is what the round's page registers under its id. */
-export function interviewsRoundTrail(id: string, pageLabel: string, role: string | null | undefined): Crumb[] {
-  return [...interviewsRoundHome(role), { label: 'Round', path: `/interviews/rounds/${encodeURIComponent(id)}`, id }, { label: pageLabel }];
+export function interviewsRoundTrail(id: string, pageLabel: string, role: string | null | undefined, finished = false): Crumb[] {
+  return [...interviewsRoundHome(role, finished), { label: 'Round', path: `/interviews/rounds/${encodeURIComponent(id)}`, id }, { label: pageLabel }];
 }
 
 function shortId(s: string): string {
@@ -363,7 +365,7 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
         : [...trail, opening, { label: shortId(b), id: b }];
     }
     // A round's page (U6): the viewer's group and home, the round (its page registers "candidate, round"), then the page.
-    if (page === 'rounds' && b && c && INTERVIEWS_LABELS[`round:${c}`]) return interviewsRoundTrail(b, INTERVIEWS_LABELS[`round:${c}`]!, role);
+    if (page === 'rounds' && b && c && INTERVIEWS_LABELS[`round:${c}`]) return interviewsRoundTrail(b, INTERVIEWS_LABELS[`round:${c}`]!, role, c === 'record' || c === 'scorecard');
     return [...trail, { label: INTERVIEWS_LABELS[page] ?? page }];
   }
 

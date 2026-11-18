@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  byStageLine, candidateHref, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, upcomingOrder, whenLabel, whenWithZone,
+  byStageLine, candidateHref, dateLabel, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, upcomingOrder, whenLabel, whenWithZone,
   type InterviewRow,
 } from '../interviews.ts';
 
@@ -116,4 +116,15 @@ test('Upcoming sorts by time, rounds without a time last, and names the zone', (
   assert.deepEqual(sorted.map((x) => x.id), ['soon', 'late', 'none']);
   assert.equal(whenWithZone(null), 'No time set');
   assert.match(whenWithZone('2026-12-01T10:00:00Z', Date.parse('2026-11-16T00:00:00Z'), 'UTC'), /^Tue 1 Dec, 10:00 UTC$/);
+});
+
+test('dateLabel is relative under a week and a plain date after, one shape everywhere; a live round reads Live now', () => {
+  assert.equal(dateLabel('2026-11-16T11:59:00Z', NOW, TZ), 'just now');
+  assert.equal(dateLabel('2026-11-16T09:00:00Z', NOW, TZ), '3h ago');
+  assert.equal(dateLabel('2026-11-10T12:00:00Z', NOW, TZ), '6d ago');
+  assert.equal(dateLabel('2026-11-09T11:00:00Z', NOW, TZ), '9 Nov 2026');
+  assert.equal(dateLabel('2026-11-09T11:10:00Z', NOW, TZ, true), '9 Nov 2026, 11:10');
+  assert.equal(dateLabel(null, NOW, TZ), '');
+  assert.equal(roundStatus('live').label, 'Live now');
+  assert.equal(nextInterviewLine({ id: 'iv-1', roundName: 'Coding', type: 'technical', scheduledAt: '2026-11-16T00:28:00Z', state: 'live', lead: { id: 'u-hugo', name: 'Hugo Marchetti' } }, NOW, TZ), 'Coding · Live now');
 });

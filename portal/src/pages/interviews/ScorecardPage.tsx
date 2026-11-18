@@ -266,7 +266,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
     : [{ id: 'others', label: 'Scorecards', badge: view.others.length || undefined, testId: 'interviews-scorecard-tab-others', content: othersTab }];
 
   return (
-    <DetailPage data-testid="interviews-scorecard" title={`${interview.candidate.name}, ${interview.round.name}`} breadcrumbs={trail}
+    <DetailPage data-testid="interviews-scorecard" title={seated ? `${interview.candidate.name}, ${interview.round.name}` : interview.candidate.name} breadcrumbs={trail}
       badge={<Chip tone={status.tone} size="sm" data-testid="interviews-scorecard-state">{status.label}</Chip>}
       meta={<MetaLine size="sm" items={[
         interview.opening.title, `${ROUND_TYPE_LABELS[interview.round.type]}, ${interview.round.minutes} minutes`,

@@ -145,6 +145,9 @@ test('a round page reads <group> › <home> › <the round> › <page> by the vi
   for (const [page, label] of [['prepare', 'Prepare'], ['record', 'Record'], ['debrief', 'Debrief']] as const) {
     assert.equal(resolveBreadcrumbs(`/interviews/rounds/${id}/${page}`, 'admin').at(-1)!.label, label);
   }
+  // A finished round's record and scorecard hang under Candidates for the recruiter, not under Upcoming.
+  assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/record`, 'recruiter'),
+    [{ label: 'Hire' }, { label: 'Candidates', path: '/interviews/candidates' }, round, { label: 'Record' }]);
   // An unknown round page keeps the old trail rather than inventing a crumb.
   assert.deepEqual(resolveBreadcrumbs(`/interviews/rounds/${id}/elsewhere`, 'interviewer').map((c) => c.label), ['Hire', 'Round']);
 });
