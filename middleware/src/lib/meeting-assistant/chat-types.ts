@@ -25,6 +25,8 @@ export const DELETED_RECORD_LINE = `This record was deleted by the person who in
 export const LEGACY_DELETED_RECORD_LINES: readonly string[] = ['This record was deleted by the person who invited Nova.'];
 /** Said when no audio reaches Milo: by the tap armer when the tap cannot be made (media.ts), and by the deaf watchdog (orchestrator.ts). */
 export const CANNOT_HEAR_NOTICE = `${ASSISTANT_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
+/** The call's audio reaches Milo but its listening session gives no words for it: a different fault from audio not arriving. */
+export const NO_WORDS_NOTICE = `${ASSISTANT_NAME} is getting this call's audio but no words from it, so it is reconnecting its listening.`;
 export const ASSISTANT_KIND_PREFIX = 'assistant-';
 
 export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action' | 'assistant-proposal';

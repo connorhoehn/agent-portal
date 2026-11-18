@@ -17,11 +17,12 @@
 //     carrying the last minutes of the transcript. An unexpected close is replaced the same way, at most 3 times per call.
 //   * DEAF. A session can stay open and hear nothing: the tap stops posting, or audio flows and no transcript ever comes back. While
 //     people who may be heard hold seats, a minute of either is one stall: the tap is armed again or the session replaced (through
-//     the paths above), the call is told once, and a stall the recovery does not end leaves through giveUp (`checkHearing`).
+//     the paths above, a transcript stall on its own budget, never the dropped-socket one), the call is told once in words that
+//     name which it was, and a stall the recovery does not end leaves through giveUp (`checkHearing`).
 import { randomBytes } from 'node:crypto';
 import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
-import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE } from './chat-types.js';
+import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE, NO_WORDS_NOTICE } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
@@ -71,7 +72,10 @@ const TYPED_MENTION = new RegExp(`(^|[^\\w])@(?:${NAME_ALTERNATION})\\b`, 'i');
  * so the typed path and the spoken one share one rule ("Milo grain prices are up" typed is not a request; "Hey Milo, ..." is).
  */
 export const addressesAssistant = (text: string): boolean => TYPED_MENTION.test(text) || findAddress(text) !== null;
+/** Replacements after an unexpected close (a dropped socket, a provider close) per call. */
 export const MAX_REPLACEMENTS = 3;
+/** Replacements for a transcript stall (`checkHearing`) per call: their own budget, so a stall never spends a dropped socket's. */
+export const MAX_STALL_REPLACEMENTS = 2;
 /** The provider's session is replaced this long before its `expires_at` (about two hours after it starts). */
 export const SESSION_EXPIRY_MARGIN_MS = 5 * 60_000;
 /** A failed replacement is retried after each of these delays; when they are spent Milo leaves (audit B9). */
@@ -341,6 +345,8 @@ interface CallRun {
   tokens: { input: number; output: number; cached: number };
   totals: { seconds: number; input: number; output: number; cached: number };
   replacements: number;
+  /** Replacements spent on transcript stalls (MAX_STALL_REPLACEMENTS), apart from `replacements`. */
+  stallReplacements: number;
   /** Milo speaks aloud in this call (the record's `voice`, cached so a frame does not read the store). */
   voice: boolean;
   /** Set the moment a pause begins and cleared when a session is open again, so no frame is relayed in between. */
@@ -696,7 +702,7 @@ export class AssistantRuntime {
       ctx, call, policy: policyForLobby(call.lobby), period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
-      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false, approvals: [],
+      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
     run.gate = this.makeGate(run);
@@ -990,22 +996,27 @@ export class AssistantRuntime {
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
     await this.expireOpenTurns(run, true, 'replaced');
-    await this.reopen(run, reason, true);
+    await this.reopen(run, reason, 'drop');
   }
 
   /**
    * Milo has no session and the call still wants one: open a replacement with the last minutes as context. An unexpected close
-   * counts against MAX_REPLACEMENTS; the planned replacement before the provider's expiry does not.
+   * (`drop`) counts against MAX_REPLACEMENTS, a transcript stall (`stall`) against MAX_STALL_REPLACEMENTS; the planned replacement
+   * before the provider's expiry (null) against neither. A spent budget leaves through giveUp.
    */
-  private async reopen(run: CallRun, reason: string, counted: boolean): Promise<void> {
+  private async reopen(run: CallRun, reason: string, budget: 'drop' | 'stall' | null): Promise<void> {
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state !== 'listening') return;
-    if (counted) {
+    if (budget === 'drop') {
       if (run.replacements >= MAX_REPLACEMENTS) { await this.giveUp(run); return; }
       run.replacements += 1;
       await this.store.patchSession(run.ctx.callId, { replacements: run.replacements });
+    } else if (budget === 'stall') {
+      if (run.stallReplacements >= MAX_STALL_REPLACEMENTS) { await this.giveUp(run); return; }
+      run.stallReplacements += 1;
     }
-    console.warn(`[meeting-assistant] replacing session for ${run.ctx.callId} (${reason})${counted ? `, replacement ${run.replacements}` : ''}`);
+    const count = budget === 'drop' ? `, replacement ${run.replacements}` : budget === 'stall' ? `, stall replacement ${run.stallReplacements}` : '';
+    console.warn(`[meeting-assistant] replacing session for ${run.ctx.callId} (${reason})${count}`);
     // The first attempt is at once; a failed one is retried after 1, 3 and 9 seconds (audit B9). The waits run OUTSIDE the
     // serial chain, so a pause or a dismiss is never held up behind them, and each attempt re-checks that it is still wanted.
     for (let attempt = 0; attempt <= REPLACEMENT_RETRY_MS.length; attempt += 1) {
@@ -1029,10 +1040,10 @@ export class AssistantRuntime {
 
   /**
    * Close the open session on purpose and open a fresh one with the same context, through the replacement path an unexpected close
-   * takes. Waiting reads expire, as for a pause. Before the provider's expiry it is planned and not counted against the cap; a deaf
-   * session (`checkHearing`) is a fault and is counted, so a session that keeps coming back deaf ends in giveUp.
+   * takes. Waiting reads expire, as for a pause. Before the provider's expiry it is planned and not counted; a deaf session
+   * (`checkHearing`) is a fault counted on the stall budget, so a session that keeps coming back deaf ends in giveUp.
    */
-  private async replaceSession(run: CallRun, reason: string, counted: boolean): Promise<void> {
+  private async replaceSession(run: CallRun, reason: string, budget: 'stall' | null): Promise<void> {
     let closed = false;
     await this.serial(run, async () => {
       const session = run.session;
@@ -1046,7 +1057,7 @@ export class AssistantRuntime {
       for (const off of run.unsubscribers.splice(0)) off();
       await this.expireOpenTurns(run, true, 'replaced');
     });
-    if (closed && !run.finished) await this.reopen(run, reason, counted);
+    if (closed && !run.finished) await this.reopen(run, reason, budget);
   }
 
   /** Milo has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
@@ -1954,7 +1965,7 @@ export class AssistantRuntime {
     if (now - run.heartbeatAt >= HEARTBEAT_EVERY_MS) await this.heartbeat(run);
     await this.checkCeiling(run);
     if (run.finished) return;
-    if (run.session && run.expiresAt !== null && now >= run.expiresAt - SESSION_EXPIRY_MARGIN_MS) await this.replaceSession(run, 'planned replacement before the provider expiry', false);
+    if (run.session && run.expiresAt !== null && now >= run.expiresAt - SESSION_EXPIRY_MARGIN_MS) await this.replaceSession(run, 'planned replacement before the provider expiry', null);
     if (run.finished) return;
     await this.checkHearing(run, now);
     if (run.finished) return;
@@ -1968,8 +1979,14 @@ export class AssistantRuntime {
    * session is open on real audio, Milo is not speaking, and someone who may be heard (the inviter, or a person who acknowledged)
    * holds an active seat; otherwise its minute starts again. A minute with no audio while the armer says the tap is up arms it again
    * (media.ts `rearm`; a tap still being made is the armer's own to report, after its own minute); a minute with no transcript that
-   * held DEAF_VOICED_MS of voice replaces the session, counted, so a session that keeps coming back deaf ends in
-   * giveUp through `reopen`. The call is told once per stall. A tap that still cannot be made a minute after it was armed again leaves
+   * held DEAF_VOICED_MS of voice replaces the session, counted on its own budget (MAX_STALL_REPLACEMENTS, never the dropped-socket
+   * one), so a session that keeps coming back deaf ends in giveUp through `reopen`. The call is told once per stall, in words that
+   * say which: audio not arriving (CANNOT_HEAR_NOTICE), or audio arriving with no words from it (NO_WORDS_NOTICE).
+   *
+   * "Voice" is the energy timeline (attribution.ts VoicedTimeline: frames over a slowly moving noise floor), not a speech detector:
+   * steady loud non-speech can count. No real speech signal is available here: the Live API sends no
+   * speech-started event (docs/voice/live-events.jsonl), and the media server's tap API reports no producer or voice activity.
+   * A client-muted microphone sends silent frames (the hangout disables the track), which keep `heardAt` fresh and add no voice. A tap that still cannot be made a minute after it was armed again leaves
    * through giveUp; a tap that exists and carries nothing is a quiet room (every microphone off), and Milo stays.
    */
   private async checkHearing(run: CallRun, now: number): Promise<void> {
@@ -2001,8 +2018,8 @@ export class AssistantRuntime {
       return;
     }
     run.deaf = { kind, at: now };
-    if (!told) await postNoticeQuietly(callId, CANNOT_HEAR_NOTICE);
-    await this.replaceSession(run, 'no transcript of the voices it hears', true);
+    if (!told) await postNoticeQuietly(callId, NO_WORDS_NOTICE);
+    await this.replaceSession(run, 'no transcript of the voices it hears', 'stall');
   }
 
   /** Does someone Milo may hear (the inviter, or a person who acknowledged) hold an active seat? False when the record is not listening or the roster cannot be read. */

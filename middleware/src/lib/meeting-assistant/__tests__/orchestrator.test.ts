@@ -35,7 +35,7 @@ import { voiceTool } from '../../voice/catalogue.js';
 import { meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { ASKER_WINDOW_MS, AssistantRuntime, DEAF_AFTER_MS, DEAF_VOICED_MS, MAX_REPLACEMENTS, startTurnSweep, TYPED_PAUSED_REPLY, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
+import { ASKER_WINDOW_MS, AssistantRuntime, DEAF_AFTER_MS, DEAF_VOICED_MS, MAX_REPLACEMENTS, MAX_STALL_REPLACEMENTS, startTurnSweep, TYPED_PAUSED_REPLY, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, MAX_DELEGATIONS, classifyCall, describeCall, callOffsets, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { VOICE_OPEN_TURN_GAP_MS, VOICE_PROMPT_WINDOW_MS } from '../voice-gate.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -43,7 +43,7 @@ import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.j
 import { setAssistantStore } from '../store-select.js';
 import { createProposal } from '../proposals.js';
 import type { AudioSink } from '../audio-intake.js';
-import { CANNOT_HEAR_NOTICE } from '../chat-types.js';
+import { CANNOT_HEAR_NOTICE, NO_WORDS_NOTICE } from '../chat-types.js';
 
 const CALL = 'call-1';
 const ALICE = 'u-alice', BOB = 'u-bob', CAROL = 'u-carol';
@@ -1989,6 +1989,7 @@ describe('a Milo that hears nothing (deaf watchdog)', () => {
   let seats: Array<{ userId: string; active: boolean }>;
   const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
   const cannotHear = () => mockPosts.notices.filter((n) => n === CANNOT_HEAR_NOTICE);
+  const noWords = () => mockPosts.notices.filter((n) => n === NO_WORDS_NOTICE);
   /** Provider sessions this describe's runtime opened (the outer setup's scripted one is not counted). */
   const opened = () => sessions.filter((x) => x.kind === 'openai').length;
   const lost = () => mockPosts.notices.filter((n) => /lost its connection/.test(n));
@@ -2057,19 +2058,33 @@ describe('a Milo that hears nothing (deaf watchdog)', () => {
     expect(tap.rearms).toEqual([CALL]);
   });
 
-  it('voice with no transcript for a minute replaces the session (counted), says so once, and a session that stays deaf ends in giveUp', async () => {
+  it('voice with no transcript for a minute replaces the session on the stall budget, says so once in its own words, and a session that stays deaf ends in giveUp', async () => {
     await speak(DEAF_VOICED_MS + 2000);
     await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000));
     expect(opened()).toBe(2);
-    expect(cannotHear()).toHaveLength(1);
-    expect(sessionOf((await store.get(CALL))!).replacements).toBe(1);
+    // Audio reached Milo: the notice says the words are missing, not that audio has not arrived.
+    expect(noWords()).toHaveLength(1);
+    expect(cannotHear()).toEqual([]);
+    // The dropped-socket budget is untouched.
+    expect(sessionOf((await store.get(CALL))!).replacements).toBe(0);
     expect(tap.rearms).toEqual([]); // audio flowed: the tap is not the problem
-    for (let i = 1; i < MAX_REPLACEMENTS; i += 1) { await speak(DEAF_VOICED_MS + 2000); await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000)); }
-    expect(opened()).toBe(1 + MAX_REPLACEMENTS);
-    expect(cannotHear()).toHaveLength(1);
+    for (let i = 1; i < MAX_STALL_REPLACEMENTS; i += 1) { await speak(DEAF_VOICED_MS + 2000); await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000)); }
+    expect(opened()).toBe(1 + MAX_STALL_REPLACEMENTS);
+    expect(noWords()).toHaveLength(1);
+    expect(sessionOf((await store.get(CALL))!).replacements).toBe(0);
     await speak(DEAF_VOICED_MS + 2000); await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000));
     expect((await store.get(CALL))!.state).toBe('left');
     expect(lost()).toHaveLength(1);
+  });
+
+  it('a transcript stall leaves the dropped-socket budget whole: a socket drop after it is still replaced', async () => {
+    await speak(DEAF_VOICED_MS + 2000);
+    await run(DEAF_AFTER_MS - (DEAF_VOICED_MS + 2000));
+    expect(opened()).toBe(2);
+    for (let i = 0; i < MAX_REPLACEMENTS; i += 1) { fake().drop(); await flush(); await run(1000); }
+    expect(opened()).toBe(2 + MAX_REPLACEMENTS);
+    expect((await store.get(CALL))!.state).toBe('listening');
+    expect(sessionOf((await store.get(CALL))!).replacements).toBe(MAX_REPLACEMENTS);
   });
 
   it('a transcript of what is heard keeps the watch quiet, and a cough is not a stall', async () => {
