@@ -145,11 +145,11 @@ describe.each([
 });
 
 describe('the seed and E7/E8', () => {
-  it('seeds recaps only on finished interviews, with every claim quoting itself', () => {
+  it('seeds recaps only on finished interviews, each claim beside its own quote, never repeating it', () => {
     const finished = new Set(interviewsFixture.rows().filter((i) => ['scored', 'reviewed'].includes(i.state)).map((i) => i.id));
     for (const r of interviewRecapsFixture.rows()) {
       expect([r.interviewId, finished.has(r.interviewId)]).toEqual([r.interviewId, true]);
-      for (const c of r.content.competencies) for (const e of c.evidence) expect(e.text).toContain(e.quote);
+      for (const c of r.content.competencies) for (const e of c.evidence) expect(e.text.includes(e.quote)).toBe(false);
     }
   });
 

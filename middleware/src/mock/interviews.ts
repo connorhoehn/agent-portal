@@ -21,23 +21,15 @@
 // providers/identity.ts FALLBACK_USERS with a grant only in `interviews`.
 
 import { clock, defineFixture } from './core/index.js';
+import { seedAt } from './interviews-days.js';
 import { EM_KIT } from './interviews-behavioural.js';
 import { seededResumeFileId } from './interviews-resumes.js';
 import type {
   Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, Scorecard, StageChange,
 } from '../lib/interviews/types.js';
 
-const DAY_MS = 86_400_000;
-
-/**
- * `days` from today's UTC midnight, at `hour:minute` UTC. Negative days are in the past. The seed keeps every
- * interview between 13:00 and 18:00 UTC: a working afternoon in Europe and a working morning on the US east coast.
- */
-function at(days: number, hour: number, minute = 0): string {
-  const now = clock.now().getTime();
-  const midnight = now - (now % DAY_MS);
-  return new Date(midnight + days * DAY_MS + (hour * 60 + minute) * 60_000).toISOString();
-}
+/** Working days from today at an hour UTC (mock/interviews-days.ts). */
+const at = seedAt;
 
 /** The round that is live now: Kwame's coding round with Hugo and Wen, started twelve minutes ago by the mock clock. */
 export const LIVE_INTERVIEW_ID = 'iv-s4e8u2zk'; // keep equal to the literal in `interviewsFixture` (the walk's seed check reads that one)
@@ -294,24 +286,24 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
     default: () => [
       { id: 'sc-szbsws4n', interviewId: 'iv-d7q4n9xe', interviewerId: HUGO, recommendation: 'strong-yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-9, 16, 20),
-        summary: 'The strongest coding round on this opening so far. Finished the limiter and the per-merchant follow-up with time to spare.',
+        summary: 'The strongest coding round on this opening so far. Finished both problems with time to spare and found her own bug from the first run.',
         ratings: [
-          rate('problem-solving', 4, 'Finished the token bucket in twenty minutes, then extended it to per-merchant limits without a hint.'),
-          rate('code-quality', 4, 'Wrote the tests first and kept the clock out of the limiter so it could be tested.'),
+          rate('problem-solving', 4, 'Had the bucket passing in about sixteen minutes, fixed her own missing-argument bug from the run, and kept the lock per key.'),
+          rate('code-quality', 4, 'Named the fake-clock refill test unprompted; one idempotency key per charge, kept for a day, and only safe errors retried.'),
         ] },
       { id: 'sc-ju3s5t85', interviewId: 'iv-f2b6t5zh', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-6, 15, 5),
         summary: 'Clear, honest examples. She owns her mistakes and follows up on disagreements with data rather than pressure.',
         ratings: [
-          rate('communication', 3, 'Walked through a settlement outage in order and named what she would do differently.'),
-          rate('collaboration', 3, 'Disagreed in a design review, accepted the call, and came back a month later with numbers.'),
+          rate('communication', 3, 'Walked through the authorisation outage in order, with updates every fifteen minutes, and named what changed afterwards.'),
+          rate('collaboration', 3, 'Brought failover numbers to the design review, accepted the call, then helped build it and wrote the runbook.'),
         ] },
       { id: 'sc-qadtme79', interviewId: 'iv-j6x2d9sb', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-3, 16, 10),
-        summary: 'A solid round. Correct and careful, a little slow to think about concurrency. Worth the system design round.',
+        summary: 'A solid round. Correct and careful; spoke to concurrency only once asked. Worth the system design round.',
         ratings: [
-          rate('problem-solving', 3, 'Reached a working limiter in about thirty minutes; handled the burst case once asked.'),
-          rate('code-quality', 3, 'Small functions and clear names. Reused the idempotency key correctly on retry.'),
+          rate('problem-solving', 3, 'Had a working limiter in about fifteen minutes; explained the fixed window\'s burst at the reset once asked.'),
+          rate('code-quality', 3, 'Passed the clock in so it could be tested without sleeping. Saved the idempotency key before the first call.'),
         ] },
       { id: 'sc-b75vwqbq', interviewId: 'iv-p2v7j4ye', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-2, 17, 40),

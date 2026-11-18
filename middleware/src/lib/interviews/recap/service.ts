@@ -103,19 +103,35 @@ const iso = (ms: number): string => new Date(ms).toISOString();
 
 const emptyBody = (state: RecapBody['state']): RecapBody => ({ state, paused: state === 'paused' ? 'budget' : null, writtenAt: null, competencies: [], notCovered: [] });
 
-/** The stored recap as E3's body, with the kit's names, in the kit's order. */
-export function recapBody(row: RecapRecord | null, opening: Opening): RecapBody {
+/**
+ * The round's competencies, in the kit's order (E4 finding 40): those of the questions the lead chose and of the
+ * suggestions taken in the round. A round with neither reads the whole kit. A recap reads, covers and lists as "not
+ * covered" only these: a coding round does not report that nothing was said about collaboration.
+ */
+export function roundCompetencyIds(interview: Pick<Interview, 'questionIds'>, opening: Opening, taken: readonly { competencyId: string }[] = []): string[] {
+  const kit = opening.kit;
+  const bank = new Map(kit.questions.map((q) => [q.id, q.competencyId]));
+  const want = new Set([...interview.questionIds.flatMap((id) => (bank.has(id) ? [bank.get(id)!] : [])), ...taken.map((t) => t.competencyId)]);
+  const ids = kit.competencies.map((c) => c.id);
+  return want.size ? ids.filter((id) => want.has(id)) : ids;
+}
+
+/**
+ * The stored recap as E3's body, with the kit's names, in the kit's order. Given the interview, "not covered" lists only
+ * the round's competencies (and any the stored recap listed itself); without it, every other competency of the kit.
+ */
+export function recapBody(row: RecapRecord | null, opening: Opening, interview?: Pick<Interview, 'questionIds'>): RecapBody {
   if (!row || row.state !== 'ready') return emptyBody('none');
   const kit = opening.kit.competencies;
   const byId = new Map(row.content.competencies.map((c) => [c.id, c]));
+  const round = interview ? new Set([...roundCompetencyIds(interview, opening), ...row.content.notCovered]) : null;
   return {
     state: 'ready', paused: null, writtenAt: row.writtenAt,
     competencies: kit.filter((k) => byId.get(k.id)?.evidence.length).map((k) => ({
       id: k.id, name: k.name,
       evidence: byId.get(k.id)!.evidence.map((e) => ({ text: e.text, source: { kind: 'transcript' as const, seq: e.seq, quote: e.quote } })),
     })),
-    // Every other competency of the kit: listed as not covered, left with no claim, or added to the kit afterwards.
-    notCovered: kit.filter((k) => !byId.get(k.id)?.evidence.length).map((k) => ({ id: k.id, name: k.name })),
+    notCovered: kit.filter((k) => !byId.get(k.id)?.evidence.length && (!round || round.has(k.id))).map((k) => ({ id: k.id, name: k.name })),
   };
 }
 
@@ -125,8 +141,9 @@ export function recapInput(ref: RecapRef, lines: readonly CoachLine[], taken: Aw
   const bank = new Map(kit.questions.map((q) => [q.id, q]));
   const chosen: RecapQuestion[] = ref.interview.questionIds.map((id) => bank.get(id)).filter((q): q is NonNullable<typeof q> => !!q)
     .map((q) => ({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }));
+  const round = new Set(roundCompetencyIds(ref.interview, ref.opening, taken));
   return {
-    competencies: kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
+    competencies: kit.competencies.filter((c) => round.has(c.id)).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
     questions: [...chosen, ...taken.map((t): RecapQuestion => ({ text: t.text, competencyId: t.competencyId, how: t.answer }))],
     lines: lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES),
   };
@@ -188,7 +205,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
     try { result = await model.write(input); } catch { result = { raw: null, code: 'error', sent: false, usage: null }; }
     await book(d, model, input, held, result, actor);
     const parsed = result.code === 'ok'
-      ? parseRecapAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines: input.lines })
+      ? parseRecapAnswer(result.raw, { competencyIds: input.competencies.map((c) => c.id), lines: input.lines })
       : { ok: false as const, code: (result.code === 'timeout' ? 'timeout' : 'error') as RecapAttemptCode };
     if (parsed.ok) {
       const row: RecapRecord = {
@@ -197,7 +214,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
       };
       const kept = await store.putRecap(row);
       await store.clearAttempts(interview.id);
-      return recapBody(kept.row, opening);
+      return recapBody(kept.row, opening, interview);
     }
     count.codes.push(parsed.code);
     await store.setAttemptCode(interview.id, attempt, parsed.code);
@@ -209,7 +226,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   };
   const kept = await store.putRecap(failed);
   await store.clearAttempts(interview.id);
-  return recapBody(kept.row, opening);
+  return recapBody(kept.row, opening, interview);
 }
 
 /**
@@ -241,7 +258,7 @@ export async function openRecap(ref: RecapRef, viewer: { userId: string }, ratin
   const store = d.store();
   await store.putOpen({ interviewId: ref.interview.id, interviewerId: viewer.userId, ratings: ratings.map((r) => ({ ...r })), openedAt: iso(d.now()) });
   const stored = await store.getRecap(ref.interview.id);
-  if (stored) return recapBody(stored, ref.opening);
+  if (stored) return recapBody(stored, ref.opening, ref.interview);
   // One writer per interview: a second open while the first is writing waits for the same answer.
   const running = inFlight.get(ref.interview.id);
   if (running) return running;
@@ -254,7 +271,7 @@ export async function openRecap(ref: RecapRef, viewer: { userId: string }, ratin
 export async function readRecap(ref: RecapRef): Promise<RecapBody> {
   const d = deps();
   const stored = await d.store().getRecap(ref.interview.id);
-  if (stored) return recapBody(stored, ref.opening);
+  if (stored) return recapBody(stored, ref.opening, ref.interview);
   const consent = await d.consents(ref.interview.id);
   return emptyBody(consent && !consent.transcription ? 'no-transcript' : 'none');
 }

@@ -76,10 +76,11 @@ describe('the first open', () => {
     expect(body.state).toBe('ready');
     expect(body.competencies).toEqual([{
       id: q.competencyId, name: refOf().opening.kit.competencies.find((c) => c.id === q.competencyId)!.name,
-      evidence: [{ text: 'The candidate said: “One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.”',
+      evidence: [{ text: 'The candidate said this in answer to the question.',
         source: { kind: 'transcript', seq: 2, quote: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.' } }],
     }]);
-    expect(body.notCovered.map((c) => c.id)).toEqual(refOf().opening.kit.competencies.map((c) => c.id).filter((id) => id !== q.competencyId));
+    // The round chose one question, so its one competency is the round's: nothing of the round is left uncovered.
+    expect(body.notCovered).toEqual([]);
     expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(3));
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'recap-1-abcd' }));
     expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0, provider: 'local' }));
@@ -311,14 +312,14 @@ describe('the kit gained a competency after the recap was written', () => {
     ...ref, opening: { ...ref.opening, kit: { ...ref.opening.kit, competencies: [...ref.opening.kit.competencies, { ...ref.opening.kit.competencies[0]!, id: 'added-later', name: 'Added later' }] } },
   });
 
-  it('the stored recap reads as before, with the new competency listed as not covered, in the kit\'s order', async () => {
+  it('the stored recap reads as before; the new competency is not the round\'s, so it is not listed as not covered', async () => {
     await openRecap(refOf(), WEN, ratings());
     const before = await readRecap(refOf());
     const after = await readRecap(plusOne(refOf()));
     expect(after.state).toBe('ready');
     expect(after.competencies).toEqual(before.competencies);
-    expect(after.notCovered.map((c) => c.id)).toEqual([...before.notCovered.map((c) => c.id), 'added-later']);
-    expect(after.notCovered.at(-1)).toEqual({ id: 'added-later', name: 'Added later' });
+    expect(after.notCovered).toEqual(before.notCovered);
+    expect(after.notCovered.some((c) => c.id === 'added-later')).toBe(false);
   });
 
   it('a later open must rate the new competency too; the first person\'s stored ratings stand as they were', async () => {

@@ -49,8 +49,10 @@ export class BedrockRecapModel implements RecapModel {
 // Deterministic from its input, never from meaning, and honest: it invents nothing.
 //   For each competency in the kit's order: the panel lines that contain the opening words (the first six) of one of the
 //   asked questions tied to that competency; after each such line, the candidate lines that follow it until the next
-//   panel line. Each becomes one statement, "The candidate said: “<quote>”", where the quote is the line's own words
-//   (its first MAX_QUOTE_CHARS characters, cut at a word), with the line's number. At most MAX_CLAIMS_PER_COMPETENCY.
+//   panel line. Each becomes one statement, ANSWER_TEXT, beside the line's own words as its quote (its first
+//   MAX_QUOTE_CHARS characters, cut at a word) and the line's number: a stand-in cannot restate a line in fewer words
+//   without inventing, so it says only that the line answered the question and lets the quote speak (the screen shows
+//   the statement and the quote once each). At most MAX_CLAIMS_PER_COMPETENCY.
 //   A competency with none is not covered.
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -63,6 +65,9 @@ function quoteOf(text: string): string {
   const space = cut.lastIndexOf(' ');
   return space > 40 ? cut.slice(0, space) : cut;
 }
+
+/** The stand-in's one statement: reporting words only, so the drift limit has nothing to check and nothing is invented. */
+export const ANSWER_TEXT = 'The candidate said this in answer to the question.';
 
 export function scriptedRecap(input: RecapInput): { competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[]; notCovered: string[] } {
   const competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[] = [];
@@ -79,7 +84,7 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
         const quote = quoteOf(line.text);
         if (!quote) continue;
         used.add(line.seq);
-        evidence.push({ text: `The candidate said: “${quote}”`, seq: line.seq, quote });
+        evidence.push({ text: ANSWER_TEXT, seq: line.seq, quote });
       }
     });
     if (evidence.length) competencies.push({ id: c.id, evidence });

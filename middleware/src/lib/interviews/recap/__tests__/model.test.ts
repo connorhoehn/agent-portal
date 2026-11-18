@@ -3,7 +3,7 @@
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import type { ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { ScriptedCoachModel, BedrockCoachModel, setCoachModelFactory } from '../../coach/model.js';
-import { BedrockRecapModel, makeRecapModel, ScriptedRecapModel, scriptedRecap } from '../model.js';
+import { ANSWER_TEXT, BedrockRecapModel, makeRecapModel, ScriptedRecapModel, scriptedRecap } from '../model.js';
 import { parseRecapAnswer } from '../parse.js';
 import { FIXED_INPUT } from './fixed-input.js';
 
@@ -13,8 +13,8 @@ describe('the scripted recap', () => {
   it('quotes each candidate line after an asked question, under that question\'s competency, and lists the rest as not covered', () => {
     expect(scriptedRecap(FIXED_INPUT)).toEqual({
       competencies: [{ id: 'communication', evidence: [
-        { text: 'The candidate said: “The payments queue backed up, so I paged the on-call lead and we split the work.”', seq: 2, quote: 'The payments queue backed up, so I paged the on-call lead and we split the work.' },
-        { text: 'The candidate said: “The database owner, about ten minutes in, once we saw the lock waits.”', seq: 4, quote: 'The database owner, about ten minutes in, once we saw the lock waits.' },
+        { text: ANSWER_TEXT, seq: 2, quote: 'The payments queue backed up, so I paged the on-call lead and we split the work.' },
+        { text: ANSWER_TEXT, seq: 4, quote: 'The database owner, about ten minutes in, once we saw the lock waits.' },
       ] }],
       notCovered: ['collaboration'],
     });

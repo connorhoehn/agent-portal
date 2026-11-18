@@ -215,7 +215,7 @@ describe('reading the recap', () => {
   it('an interviewer of another round of the same candidate follows the scorecards\' rule', async () => {
     // Wen's scorecard for Ingrid's "Working together" is in: she reads the recap of Hugo's coding round too.
     expect((await readAs(WEN, INGRID_CODING)).status).toBe(200);
-    expect((await readAs(HUGO, INGRID_TOGETHER)).body.recap.competencies.map((c: { id: string }) => c.id)).toEqual(['communication']);
+    expect((await readAs(HUGO, INGRID_TOGETHER)).body.recap.competencies.map((c: { id: string }) => c.id)).toEqual(['communication', 'collaboration']);
     // Without her own scorecard in, she reads nothing of the other round.
     const cards = interviewScorecardsFixture.rows();
     cards.splice(cards.findIndex((c) => c.interviewId === INGRID_TOGETHER && c.interviewerId === 'u-wen'), 1);
