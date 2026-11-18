@@ -4,7 +4,8 @@
 //   I1.7a  the lead opens Prepare from his To prepare tab; the résumé sits beside the questions; a round with no plan says what it waits for
 //   I1.7b  he adds three questions, moves one down, takes one out, saves: the round is Ready and "Open the room" appears
 //   I1.7c  the recruiter clears the time: the round goes back to Accepted and the page says it waits for a time
-//   I1.7d  a panel member reads the page and chooses nothing (no Save, no Add, no move buttons)
+//   I1.7d  a panel member reads the lead's plan and chooses nothing (no Save, no Add, no move buttons; a write is 403, since
+//          the round is in their scope)
 //   I1.7e  a stale save is refused in words and the page shows what was saved
 //   I1.7f  the plan and the round never show the opening's money; the breadcrumb leads back to My interviews
 export default async function run({ portal, SEED, record, signIn, shootPage, resetMock, api, setTime, clock }) {
@@ -83,11 +84,16 @@ export default async function run({ portal, SEED, record, signIn, shootPage, res
     const pp = await hugo.newPage();
     await pp.goto(`${portal}/interviews/rounds/${SEED.panelInterview}/prepare`, { waitUntil: 'domcontentloaded' });
     await ready(pp);
-    const line = await textOf(pp, 'interviews-prepare-readonly');
+    // A reader is not told to choose (E4 #17): the plan is titled with the lead's first name, and no line asks the
+    // panel member to pick or add questions.
+    const title = ((await pp.getByRole('heading', { name: /'s plan$/ }).first().innerText().catch(() => '')) || '').trim();
+    const body = (await pp.getByTestId('interviews-prepare').innerText()).replace(/\s+/g, ' ');
+    const asked = /Choose at least one question|Add questions from the list/.test(body);
+    const line = `${title}${asked ? ' (and is asked to choose)' : ''}`;
     const controls = (await pp.getByTestId('interviews-plan-save').count()) + (await pp.getByTestId('interviews-bank-add').count()) + (await pp.getByTestId('interviews-draft-ask').count());
     const write = await api(hugo, 'PUT', `/api/interviews/interviews/${SEED.panelInterview}/questions`, { revision: (await read(hugo, SEED.panelInterview)).revision, questionIds: [] });
     await pp.close();
-    record('I1.7d', /chooses the questions/.test(line) && controls === 0 && write.status === 403, `panel member reads "${line}"; ${controls} editing controls; a write answers ${write.status}`);
+    record('I1.7d', /^\S+'s plan$/.test(title) && !asked && controls === 0 && write.status === 403, `panel member reads "${line}"; ${controls} editing controls; a write answers ${write.status}`);
   } catch (e) { record('I1.7d', false, `panel member: ${e.message.split('\n')[0]}`); }
 
   // ── I1.7e ──
