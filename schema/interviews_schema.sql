@@ -305,10 +305,18 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
 );
 CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_log (interview_id, said_at);
 -- `posted`: the words reached the call chat (the candidate read them). A row is written before that, so one whose post never
--- happened (Milo not in the call, the post refused) stays false and is no question the candidate was asked. Rows written
--- before the column were spoken only after their post.
-ALTER TABLE interview_said_log ADD COLUMN IF NOT EXISTS posted BOOLEAN NOT NULL DEFAULT FALSE;
-UPDATE interview_said_log SET posted = TRUE WHERE spoken AND NOT posted;
+-- happened (Milo not in the call, the post refused) stays false and is no question the candidate was asked.
+-- Rows written before the column are backfilled once, as the column is added (the DO block makes it repeatable without
+-- touching later rows): the post was tried for every row that had a call and none without one, and those rows, spoken or
+-- only in the chat, were what the recap showed, so a row with a call (or spoken) is posted.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema = current_schema() AND table_name = 'interview_said_log' AND column_name = 'posted') THEN
+    ALTER TABLE interview_said_log ADD COLUMN posted BOOLEAN NOT NULL DEFAULT FALSE;
+    UPDATE interview_said_log SET posted = TRUE WHERE spoken OR call_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- ── invites (row I2.1) ──────────────────────────────────────────────────────
 -- The candidate's link. The token is 32 random bytes; only its SHA-256 is kept,
