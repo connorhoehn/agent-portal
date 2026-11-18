@@ -23,7 +23,8 @@ import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, type StartContext } from '../orchestrator.js';
-import { ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
+import { addScriptRules, ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
+import { INTERVIEW_TOOLS, responsesFunctionTools } from '../../voice/catalogue.js';
 import { OUTPUT_TAIL_FRAMES } from '../live-session.js';
 import { READ_ALOUD_DELEGATE_RULE, READ_ALOUD_ONLY_RULE } from '../instructions.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
@@ -551,6 +552,73 @@ describe('7. the fixed refusal for a request heard again, and the asker\'s name'
       await intake.handle(CALL, { userId: GUEST, text: 'Milo, what is two plus two?', at: now });
       now += 5000; await intake.tick(); await flush();
       expect(mockPosts.approvedNames).toEqual(['Jordan Lee']);
+    } finally { off(); }
+  });
+});
+
+describe('8. server tools (policy.ts runTool): no turn, no card, the line said as approved words', () => {
+  const ran: Array<{ askedBy: string; name: string; bytes: number }> = [];
+  const LINE = 'Added twelve test cases at the bottom of the pad.';
+  const FALLBACK = 'I can add test cases, imports or a helper to the pad.';
+  const TOOLS: MeetingAssistantPolicy = {
+    ...NO_RELAY, id: 'server-tools',
+    sessionTools: () => ({ tools: responsesFunctionTools(INTERVIEW_TOOLS), backendInstructions: 'interview' }),
+    mayUseTool: async (_c, asker, tool) => asker.userId === ALICE && INTERVIEW_TOOLS.some((t) => t.name === tool),
+    runTool: async (_c, r) => { ran.push({ askedBy: r.askedBy, name: r.name, bytes: JSON.stringify(r.args).length }); return LINE; },
+    maxToolArgsBytes: (_c, tool) => (tool.startsWith('pad_') ? 12_288 : 4096),
+    heldFallback: async () => FALLBACK,
+    heldFallbackWait: { quietMs: 300, delegatedMs: 600 },
+  };
+  const big = (n: number) => ({ cases: Array.from({ length: n }, (_, i) => ({ args: `[[${'1, '.repeat(40)}${i}], 9]`, expected: '[0, 1]' })) });
+  let rules: (() => void) | null = null;
+  beforeEach(() => {
+    ran.length = 0;
+    rules = addScriptRules([
+      { id: 't-tests', match: /dozen test cases/i, run: () => ({ call: { name: 'pad_add_tests', args: big(12) } }) },
+      { id: 't-huge', match: /huge/i, run: () => ({ call: { name: 'pad_add_tests', args: big(200) } }) },
+    ]);
+  });
+  afterEach(() => { rules?.(); });
+  const ask = async (text: string, by = ALICE) => { await intake.handle(CALL, { userId: by, text, at: now }); now += 5000; await intake.tick(); await flush(); };
+
+  it('the call runs on the server once, its arguments up to the family\'s cap, and its line is posted with the approved mark; no fallback', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      await startCall('orgiq:servertools:r1');
+      expect(scripted().startInput?.tools.map((t) => t.name)).toContain('pad_add_tests');
+      await ask('Milo, it would be helpful to have another dozen test cases');
+      await new Promise((r) => setTimeout(r, 400)); await flush();
+      expect(ran).toHaveLength(1);
+      expect(ran[0]).toMatchObject({ askedBy: ALICE, name: 'pad_add_tests' });
+      expect(ran[0]!.bytes).toBeGreaterThan(1500);
+      expect(mockPosts.approved).toEqual([LINE]);
+      expect(mockTrace.some((t) => t.ev === 'call.turn')).toBe(false);
+      await ask('Milo, a huge batch of test cases please');
+      await new Promise((r) => setTimeout(r, 400)); await flush();
+      expect(ran).toHaveLength(1); // over the family's cap: refused before it runs
+      expect(mockTrace.some((t) => t.ev === 'call.refused' && t.f['why'] === 'invalid-arguments')).toBe(true);
+    } finally { off(); }
+  });
+
+  it('a request no call answers gets the family\'s fallback line after the wait', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      await startCall('orgiq:servertools:r2');
+      await ask('Milo, what is the weather like');
+      expect(mockPosts.approved).toEqual([]);
+      await new Promise((r) => setTimeout(r, 500)); await flush();
+      expect(mockPosts.approved).toEqual([FALLBACK]);
+      expect(ran).toEqual([]);
+    } finally { off(); }
+  });
+
+  it('a family without runTool never runs a server tool: the call is refused as unknown (Work)', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', { ...TOOLS, runTool: undefined, mayUseTool: () => true });
+    try {
+      await startCall('orgiq:servertools:r3');
+      await ask('Milo, another dozen test cases');
+      expect(ran).toEqual([]);
+      expect(mockTrace.some((t) => t.ev === 'call.refused' && t.f['why'] === 'unknown-tool')).toBe(true);
     } finally { off(); }
   });
 });
