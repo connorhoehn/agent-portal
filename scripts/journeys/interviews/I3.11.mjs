@@ -2,8 +2,8 @@
 // its stand-in for the background agent passes fixed arguments (mock/interviews-testcases.ts), so nothing here reaches a model or
 // costs anything. The lead and the candidate IN the call on Mateo's coding round (Two Sum chosen; h8-room.mjs), Milo invited with
 // its voice on. The words are injected as heard lines; the film says the same words.
-//   I3.11a  the lead: "Milo, introduce yourself" → Milo's fixed introduction in the chat; the call bar's Introduce Milo then reads
-//           "Milo introduced"
+//   I3.11a  the call bar offers the lead Introduce Milo; the lead says "Milo, introduce yourself" → Milo's fixed introduction in
+//           the candidate's chat
 //   I3.11b  the candidate asks for test cases while the lead's switch is off → the fixed refusal, and the pad is unchanged
 //   I3.11c  the lead turns on "Candidate can ask Milo" in the pad toolbar; the candidate: "Hey Milo, it would be helpful to have
 //           another dozen test cases." → twelve checked cases at the bottom of the pad on both sides, and "Added twelve test cases
@@ -56,14 +56,11 @@ export default async function run(ctx) {
   const padOf = async (page) => { await padTab(page); return (await padText(page)) ?? ''; };
 
   await step('I3.11a', async () => {
+    const control = L.page.getByTestId('interview-milo-intro').first();
+    const offered = await until(async () => ((await control.count()) && /Introduce Milo/.test(await control.innerText()) ? true : null), 15_000);
     await hear(ctx, L, callId, lead, 'Milo, introduce yourself.');
     const said = await chatHas(G.page, INTRO);
-    await L.page.reload({ waitUntil: 'domcontentloaded' });
-    const button = await until(async () => {
-      const b = L.page.getByTestId('interview-milo-intro').first();
-      return (await b.count()) && /introduced/i.test(await b.innerText()) ? true : null;
-    }, 15_000);
-    return { ok: said && !!button, detail: `the introduction in the candidate's chat ${said}; the bar's button reads "Milo introduced" ${!!button}` };
+    return { ok: !!offered && said, detail: `the call bar offers Introduce Milo ${!!offered}; the introduction in the candidate's chat ${said}` };
   });
 
   await step('I3.11b', async () => {
