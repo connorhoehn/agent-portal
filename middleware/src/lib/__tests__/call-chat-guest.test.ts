@@ -142,3 +142,27 @@ describe('the resolver (get)', () => {
     expect(asGuest.messages.find(m => m.id === 'm-q')!.metadata).toEqual({ displayName: 'Milo' });
   });
 });
+
+describe('the panel\'s names a candidate reads (E4 #32)', () => {
+  const IV_CALL = 'iv-panel-call', IV_CHANNEL = callChatChannel(IV_CALL);
+  const said = (id: string, userId: string, name: string): ChatMessage =>
+    ({ id, clientId: 'c', userId, channel: IV_CHANNEL, message: 'hello', timestamp: at(1), metadata: { displayName: name } });
+  let named: CallChatRuntime;
+  beforeEach(async () => {
+    named = new CallChatRuntime({ calls, state, messages, router, lobbyAllowed: lobbyGuard, maintenanceIntervalMs: 0, now: () => Date.parse('2026-10-10T12:00:00Z'),
+      interviewLeadOf: async (id) => (id === 'iv-1' ? 'u-lead' : null) });
+    await calls.registerParticipant(IV_CALL, 'lead', 'u-lead', 'interviews:interview:iv-1', []); await named.registered(IV_CALL, 'lead');
+  });
+  afterEach(() => named.dispose());
+  const chat = (message: ChatMessage) => ({ type: 'chat', action: 'message', channel: IV_CHANNEL, message });
+
+  it('the lead keeps their name, another panel member is "Interviewer", the candidate is themselves; staff read every name', async () => {
+    const nameOf = async (reader: string, m: ChatMessage) => ((await named.filterFrame(reader, chat(m))) as { message: ChatMessage }).message.metadata?.['displayName'];
+    expect(await nameOf('guest', said('a', 'u-lead', 'Hugo Marchetti'))).toBe('Hugo Marchetti');
+    expect(await nameOf('guest', said('b', 'u-wen', 'Wen Zhao'))).toBe('Interviewer');
+    expect(await nameOf('guest', said('c', GUEST, 'Candidate'))).toBe('Candidate');
+    expect(await nameOf('lead', said('b', 'u-wen', 'Wen Zhao'))).toBe('Wen Zhao');
+    const history = await named.filterFrame('guest', { type: 'chat', action: 'history', channel: IV_CHANNEL, messages: [said('a', 'u-lead', 'Hugo Marchetti'), said('b', 'u-wen', 'Wen Zhao')] }) as { messages: ChatMessage[] };
+    expect(history.messages.map((m) => m.metadata?.['displayName'])).toEqual(['Hugo Marchetti', 'Interviewer']);
+  });
+});

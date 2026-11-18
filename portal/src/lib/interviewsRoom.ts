@@ -473,17 +473,20 @@ export function staffRoomNameFor(base: (userId: string) => CallName, candidateNa
 }
 
 /**
- * The candidate's names for the call's tiles. The guest's read names only the lead and counts the others (decision 3), with no
- * ids, so: the candidate is "Candidate" to themselves (the tile says "You"); with no other interviewer every staff id is the
- * lead; otherwise every interviewer reads "Interviewer". Never an id.
+ * The candidate's names for the call's tiles (E4 #32: the lead's name, and nobody else's, everywhere on the candidate's
+ * side). The guest's read names only the lead; the room's read (D1) says which call id is the lead's. So: the candidate
+ * is "Candidate" to themselves (the tile says "You"); the lead's id carries the lead's name; every other staff id reads
+ * "Interviewer". Without the lead's id (an older server) a call with no other interviewer names every staff id as the
+ * lead. Never an id.
  */
-export function guestRoomNameFor(selfId: string, panel: { lead: string | null; others: number } | null | undefined): (userId: string) => CallName {
+export function guestRoomNameFor(selfId: string, panel: { lead: string | null; others: number } | null | undefined, leadCallId?: string | null): (userId: string) => CallName {
   const lead = panel?.lead?.trim() || null;
   const alone = !!panel && !(panel.others > 0);
   return (userId) => {
     if (userId === selfId) return { displayName: 'Candidate' };
     if (userId.startsWith('agent:')) return null;
-    return { displayName: alone && lead ? lead : 'Interviewer' };
+    const isLead = leadCallId ? userId === leadCallId : alone;
+    return { displayName: isLead && lead ? lead : 'Interviewer' };
   };
 }
 

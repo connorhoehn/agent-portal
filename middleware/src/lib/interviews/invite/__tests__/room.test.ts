@@ -50,14 +50,14 @@ describe('when the guest may read its room', () => {
 });
 
 describe('what the read carries', () => {
-  it('the lobby, the guest\'s own call identity, the round, the time and the state; nothing of the panel or the questions', () => {
+  it('the lobby, the guest\'s own call identity, the round, the time, the state and the lead call id (E4 #32); no panel name, no questions', () => {
     const opening = { kit: { rounds: [{ id: 'rd-1', name: 'System design' }] } } as unknown as Pick<Opening, 'kit'>;
     const view = guestRoomView({ userId: 'guest:inv-1', displayName: 'Candidate' }, interview(), opening, 'open');
     expect(view).toEqual({
       interviewId: 'iv-1', lobbyName: 'interviews:interview:iv-1', self: { userId: 'guest:inv-1', displayName: 'Candidate' },
-      round: { name: 'System design', type: 'technical', minutes: 60 }, scheduledAt: at(HOUR).toISOString(), startedAt: null, state: 'open',
+      round: { name: 'System design', type: 'technical', minutes: 60 }, scheduledAt: at(HOUR).toISOString(), startedAt: null, state: 'open', leadCallId: 'u-lead',
     });
-    expect(JSON.stringify(view)).not.toMatch(/u-lead|u-panel|q-1/);
+    expect(JSON.stringify({ ...view, leadCallId: null })).not.toMatch(/u-lead|u-panel|q-1/);
     expect(guestRoomView({ userId: 'guest:inv-1', displayName: 'Candidate' }, interview({ type: 'behavioural' }), null, 'ended').round.name).toBe('Interview');
   });
 });

@@ -397,7 +397,10 @@ describe('the waiting room', () => {
       round: { type: 'technical', minutes: 60 }, startedAt: null, state: 'open',
     });
     expect(String(open.body.room.self.userId)).toMatch(/^guest:/);
-    expect(JSON.stringify(open.body)).not.toMatch(/u-hugo|Hugo|u-greta|Greta|Mateo/);
+    // The lead's call id names whose tile carries the lead's name (E4 #32; the call's frames carry it anyway); no name, no other id.
+    expect(open.body.room.leadCallId).toBe('u-hugo');
+    const { leadCallId: _lead, ...rest } = open.body.room as Record<string, unknown>;
+    expect(JSON.stringify(rest)).not.toMatch(/u-hugo|Hugo|u-greta|Greta|Mateo/);
     expect((await roomWrite('start')).status).toBe(200);
     expect((await room(cookie)).body.room.state).toBe('open');
     expect((await roomWrite('end')).status).toBe(200);

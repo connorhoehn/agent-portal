@@ -9,8 +9,10 @@
 //   null    everything else (not admitted, turned away, revoked, expired, cancelled, declined): the guest router's
 //           one not-found.
 // The view carries the lobby, the guest's own call identity (the token's: `guest:<inviteId>`, "Candidate"), the
-// round's name, type and length, and the set time. No panel names, no questions, nothing from the candidate's
-// record.
+// round's name, type and length, the set time, and the lead's call id, so the candidate's tiles can put the lead's
+// name (the one panel name they read, from GET /interview) on the lead's tile and "Interviewer" on every other
+// (E4 #32). The call's own frames already carry every seat's id, so this adds no one. No panel names, no
+// questions, nothing from the candidate's record.
 import type { Interview, InterviewState, Opening } from '../types.js';
 import type { Admission } from './admission.js';
 import { inviteDeadReason, inviteExpiresAt } from './rules.js';
@@ -42,6 +44,8 @@ export interface GuestRoomView {
   /** The interview record keeps no start instant (only `endedAt`), so this is null; the page counts from the call's start. */
   startedAt: string | null;
   state: GuestRoomState;
+  /** The lead's id in the call: whose tile carries the lead's name (E4 #32). */
+  leadCallId: string;
 }
 
 /** `self` is the guest's call identity as its realtime token names it (realtime.ts; passed in, since guest.ts imports this file). */
@@ -55,5 +59,6 @@ export function guestRoomView(self: GuestRoomView['self'], interview: Interview,
     scheduledAt: interview.scheduledAt,
     startedAt: null,
     state,
+    leadCallId: interview.leadId,
   };
 }

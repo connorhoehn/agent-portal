@@ -129,6 +129,8 @@ export interface GuestRoom {
   scheduledAt: string | null;
   startedAt: string | null;
   state: 'open' | 'ended';
+  /** The lead's id in the call: whose tile carries the lead's name (E4 #32). Missing from an older server. */
+  leadCallId?: string;
 }
 
 /** One read of the room: its answer, not-found (not let in now, or the link died), or no answer at all. */

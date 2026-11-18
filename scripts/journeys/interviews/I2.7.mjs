@@ -12,8 +12,8 @@
 //          (their three answers are seeded, so the link opens on the device check) knocks and is let in; the waiting
 //          page names Hugo and counts one other
 // Written, not run (the mock world has no platform-api, so no call starts): "3 joined" on all three bars; the panel
-// member has no Invite, End, admit, Have Milo ask or Dismiss in the call; the candidate sees both staff tiles, each read
-// as "Interviewer" (pinned as it is; naming the whole panel to the guest is the lead's decision, E4); the candidate
+// member has no Invite, End, admit, Have Milo ask or Dismiss in the call; the candidate sees both staff tiles: the lead's
+// with the lead's name, the panel member's as "Interviewer" (E4 #32: the lead's name only, everywhere); the candidate
 // leaves → "You left the call" with Join → joins again → 3 joined.
 export default async function run(ctx) {
   const { SEED, record, signIn, resetMock, mintInvite, openGuest, toWaiting, waiting, admit, shootPage, portal } = ctx;
@@ -100,7 +100,7 @@ export default async function run(ctx) {
     return { ok, detail: `Wen on the panel reads "${title}", tabs ${tabs.join('/')}, lead's controls ${JSON.stringify(controls)}; the candidate arriving after the start: ${at}, "${meeting}", admitted ${yes.status} → ${inRoom ? 'the room' : 'NOT the room'}` };
   });
 
-  console.log('NOT RUN I2.7e: three in the call: "3 joined" on all three bars, the panel member without Invite, End, admit, Have Milo ask or Dismiss, the candidate\'s two staff tiles each read "Interviewer", leave → "You left the call" → Join → 3 joined: the mock world has no platform-api, so no call starts (social profile only)');
+  console.log('NOT RUN I2.7e: three in the call: "3 joined" on all three bars, the panel member without Invite, End, admit, Have Milo ask or Dismiss, the candidate\'s lead tile reads the lead\'s name and the panel member\'s "Interviewer" (E4 #32), leave → "You left the call" → Join → 3 joined: the mock world has no platform-api, so no call starts (social profile only)');
 
   for (const c of opened) await c.close().catch(() => undefined);
   for (const c of [greta, hugo, wen]) await c.close().catch(() => undefined);

@@ -23,7 +23,7 @@ import { Button, EmptyState, Inline, LoadingState, Stack, T } from '@connorhoehn
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
-import { callTimeLabel, timeLeftTone } from '../../lib/interviewsRoom';
+import { callTimeLabel, guestRoomNameFor, timeLeftTone } from '../../lib/interviewsRoom';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
@@ -98,14 +98,14 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
   }
   if (!room || token.kind === 'loading') return <RoomFrame interview={interview}><LoadingState label="Opening the call" /></RoomFrame>;
 
-  return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self} panel={interview.panel ?? null}>
-    <GuestRoomCall room={room} over={over} onEnded={finish} />
+  return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self} panel={interview.panel ?? null} leadCallId={room.leadCallId ?? null}>
+    <GuestRoomCall room={room} role={interview.opening.title} panel={interview.panel ?? null} over={over} onEnded={finish} />
   </GuestCallHost>;
 }
 
 /** The steps' frame, while the call cannot draw yet. */
 function RoomFrame({ interview, children }: { interview: GuestInterview; children: ReactNode }) {
-  return <GuestStepFrame title="Your interview" description={`${interview.opening.title} · ${interview.round.name}`} step="admitted">
+  return <GuestStepFrame title="Your interview" description={`${interview.opening.title} · ${interview.round.name}`} step="admitted" role={interview.opening.title}>
     <Stack gap="md" data-testid="join-room">{children}</Stack>
   </GuestStepFrame>;
 }
@@ -131,7 +131,7 @@ function useNow(stepMs: number): number {
 }
 
 /** The call, inside the guest's call host: tiles, the chat pane, and the bar. */
-function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean; onEnded(): void }) {
+function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; role: string; panel: GuestPanel | null; over: boolean; onEnded(): void }) {
   const lobbyName = room.lobbyName;
   const title = room.round.name;
   // The interview's lobby, bound as the panel's page binds it: the bar's Join walks into the call that is on.
@@ -179,7 +179,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
   const [miloLine, setMiloLine] = useState<string | null>(null);
   useEffect(() => { if (!joined) setMiloLine(null); }, [joined]);
 
-  return <GuestShell bleed>
+  return <GuestShell bleed role={role}>
     <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 360, fitPrimaryPx: 480 }}>
       <Stack gap="none" className="h-full min-h-0 w-full bg-surface" data-testid="join-room">
         <SidePaneSplit paneTestId="join-room-pane-frame" dividerLabel="Resize the call and the pane" className="min-h-0 flex-1" data-testid="join-room-stage">
@@ -196,7 +196,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
         <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
           <CallMediaOutlet />
           <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
-            <GuestCallBar room={room} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloLine} />
+            <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloLine} />
           </Inline>
         </Stack>
       </Stack>
@@ -205,7 +205,7 @@ function GuestRoomCall({ room, over, onEnded }: { room: GuestRoom; over: boolean
 }
 
 /** The library's HuddleBar on the work-call model: Join before the call; microphone, camera, Message, Leave and the time left in it. */
-function GuestCallBar({ room, chatOpen, onToggleChat, onMiloLine }: { room: GuestRoom; chatOpen: boolean; onToggleChat(): void; onMiloLine(line: string | null): void }) {
+function GuestCallBar({ room, panel, chatOpen, onToggleChat, onMiloLine }: { room: GuestRoom; panel: GuestPanel | null; chatOpen: boolean; onToggleChat(): void; onMiloLine(line: string | null): void }) {
   const host = useCallHost();
   const now = useNow(15_000);
   const observedJoin = useRef<{ callId: string; at: number } | null>(null);
@@ -219,7 +219,8 @@ function GuestCallBar({ room, chatOpen, onToggleChat, onMiloLine }: { room: Gues
     // The call is on with people in it: Join walks in. Otherwise Join opens it (the lead's join starts the interview).
     const inLive = call.phase === 'idle' || call.phase === 'ended' ? (call.call?.participants ?? []).filter((p) => !p.isLocal && (p.state === 'in-call' || p.state === 'reconnecting')) : [];
     if (inLive.length > 0) return <HuddleBar name={title} showContext={false} phase="joinable"
-      liveParticipants={inLive.map((p) => ({ id: p.userId, displayName: p.displayName, ...(p.avatarUrl ? { avatarUrl: p.avatarUrl } : {}) }))}
+      // The roster names people as the tiles do (E4 #32): the lead by name, everyone else on the panel "Interviewer", no pictures.
+      liveParticipants={inLive.map((p) => ({ id: p.userId, displayName: guestRoomNameFor(room.self.userId, panel, room.leadCallId)(p.userId)?.displayName ?? p.displayName }))}
       participantCount={inLive.length} onJoin={() => { void call.rejoin(); }} joinLabel="Join the call"
       className={className} data-testid="join-room-bar" />;
     return <HuddleBar name={title} showContext={false} phase="idle" onStart={host.startBound ?? noop} startLabel="Join the call"

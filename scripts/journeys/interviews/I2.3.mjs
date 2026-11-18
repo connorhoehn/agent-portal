@@ -63,11 +63,14 @@ export default async function run(ctx) {
     const waitText = await guest.page.locator('body').innerText();
     leaks.push(...panelSide(waitText, [SEED.names[SEED.cast.interviewer]]));
     const waitShots = await shootPage(guest.page, 'guest-waiting');
+    // E4 #31: the header names the role's interview, never the staff tenant ("Candidates").
+    const brand = (await guest.page.locator('header').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
     const lead = await until(async () => (await waiting(hugo, iv))?.state === 'waiting');
     const shots = [...consentShots, ...deviceShots, ...waitShots];
     const ok = marks.landing === 'Invitation' && marks.consents === 'Your answers' && marks.devices === 'Camera and microphone' && marks.waiting === 'Waiting'
-      && meeting === 'You are meeting Hugo Marchetti.' && leaks.length === 0 && lead && shots.every((s) => s.ok);
-    return { ok, detail: `strip ${JSON.stringify(marks)}; waiting says "${meeting}"; the lead reads ${lead ? 'waiting' : 'NOT waiting'}; panel-side on the pages: ${leaks.join(', ') || 'none'}; shots ${shots.filter((s) => !s.ok).length} scroll sideways` };
+      && meeting === 'You are meeting Hugo Marchetti.' && leaks.length === 0 && lead && shots.every((s) => s.ok)
+      && / interview\b/.test(brand) && !/Candidates/.test(brand);
+    return { ok, detail: `strip ${JSON.stringify(marks)}; header "${brand}"; waiting says "${meeting}"; the lead reads ${lead ? 'waiting' : 'NOT waiting'}; panel-side on the pages: ${leaks.join(', ') || 'none'}; shots ${shots.filter((s) => !s.ok).length} scroll sideways` };
   });
 
   await step('I2.3b', async () => {

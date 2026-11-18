@@ -135,7 +135,8 @@ export default function JoinPage() {
     );
   }
 
-  if (view.kind === 'ended') return <GuestStepFrame title={STEP_TITLES.ended} step="ended"><InterviewEnded /></GuestStepFrame>;
+  // The ended page draws no strip: every step is behind the candidate (E4 #36).
+  if (view.kind === 'ended') return <GuestStepFrame title={STEP_TITLES.ended}><InterviewEnded /></GuestStepFrame>;
 
   if (view.kind === 'busy' || view.kind === 'failed') {
     return (
@@ -153,7 +154,7 @@ export default function JoinPage() {
   // The room fills the window (row I2.4, decision 21): no page frame around the call.
   if (step === 'admitted') return <JoinRoom interview={interview} onEnded={onEnded} />;
   return (
-    <GuestStepFrame title={STEP_TITLES[step]} description={`${interview.opening.title} · ${interview.round.name}`} step={step} fill={step === 'consents'}>
+    <GuestStepFrame title={STEP_TITLES[step]} description={`${interview.opening.title} · ${interview.round.name}`} {...(step === 'ended' ? {} : { step })} fill={step === 'consents'} role={interview.opening.title}>
       {step === 'landing' && (
         <Stack gap="md">
           <Card padding="lg" data-testid="join-interview">

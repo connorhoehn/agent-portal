@@ -142,5 +142,10 @@ test('the call’s tiles never show an id: the panel reads the candidate’s nam
   assert.deepEqual(panel('u-wen'), { displayName: 'Interviewer' });
   assert.deepEqual(panel('u-hugo'), { displayName: 'Interviewer' });
   assert.deepEqual(guestRoomNameFor('guest:inv-1', null)('u-wen'), { displayName: 'Interviewer' });
+  // With the lead's call id (D1, E4 #32): the lead's tile is named in a panel too; everyone else, even alone, is "Interviewer".
+  const named = guestRoomNameFor('guest:inv-1', { lead: 'Wen Zhao', others: 1 }, 'u-wen');
+  assert.deepEqual(named('u-wen'), { displayName: 'Wen Zhao' });
+  assert.deepEqual(named('u-hugo'), { displayName: 'Interviewer' });
+  assert.deepEqual(guestRoomNameFor('guest:inv-1', { lead: 'Hugo Marchetti', others: 0 }, 'u-hugo')('u-greta'), { displayName: 'Interviewer' });
   for (const id of ['u-wen', 'u-hugo', 'guest:inv-1']) for (const f of [alone, panel]) assert.doesNotMatch(f(id)?.displayName ?? '', /^u-|guest:/);
 });

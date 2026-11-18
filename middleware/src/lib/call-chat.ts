@@ -33,7 +33,7 @@ import { canonicalCallPage, type CallPageDescriptor, type CanonicalCallPage, typ
 import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';
 import { APPROVED_QUESTION_KEY, isAssistantUserId, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
-import { claimsGuest } from './interviews/lobby.js';
+import { claimsGuest, interviewOfLobby } from './interviews/lobby.js';
 import { GUEST_ROLE } from './interviews/invite/guest.js';
 import type { Session } from './session.js';
 import type { CallChatStateStore, CallChatState, CallChatMember } from './call-chat-state.js';
@@ -94,7 +94,15 @@ export interface CallChatRuntimeOptions extends CallAccessOptions {
    * no room chat at all.
    */
   meetingRoom?: (userId: string, roomLobby: string) => boolean;
+  /** An interview's lead (E4 #32: the one panel name a candidate reads). Default: the interviews store. */
+  interviewLeadOf?: (interviewId: string) => Promise<string | null>;
 }
+/** What a candidate reads as the author of a panel member's message other than the lead's (E4 #32; the pad's caret name). */
+export const GUEST_PANEL_AUTHOR = 'Interviewer';
+const defaultInterviewLeadOf = async (interviewId: string): Promise<string | null> => {
+  const { interviewsStore } = await import('./interviews/store-select.js');
+  return (await interviewsStore().getInterview(interviewId))?.leadId ?? null;
+};
 const clone = <T>(value: T): T => structuredClone(value);
 /** What a huddle message may carry. Anything else is dropped on send and never rendered. */
 export const METADATA_KEYS = ['displayName', 'clientDeliveryId', 'replyTo', 'attachments', 'summaryOf'] as const;
@@ -378,9 +386,13 @@ export class CallChatRuntime implements CallLifecycleObserver {
   }
   /** One reader's view of a stored message: allowlisted metadata, the page reference resolved now. */
   async render(callId: string, message: ChatMessage, pages = new Map<string, Promise<CallChatPageReference>>(),
-    channel = callChatChannel(callId), guest = false): Promise<ChatMessage> {
+    channel = callChatChannel(callId), guest = false, lead: Promise<string | null> | null = null): Promise<ChatMessage> {
     const metadata: Record<string, unknown> = {};
     for (const key of METADATA_KEYS) if (message.metadata?.[key] !== undefined) metadata[key] = clone(message.metadata[key]);
+    // A candidate reads the lead's name and nobody else's on the panel (E4 #32): another staff member's message is "Interviewer".
+    // Null: no interview's call, so nothing to rename.
+    const leadId = guest && lead ? await lead : null;
+    if (leadId !== null && personAuthored(message) && !message.userId!.startsWith('guest:') && message.userId !== leadId) metadata['displayName'] = GUEST_PANEL_AUTHOR;
     // The meeting assistant's kinds are shown only on a message its fixed identity authored: a person's message
     // that carries `assistant` or `assistant-…` keys never reaches a reader with them (call-chat-send.ts refuses
     // them on the way in; this is the second lock, on the way out).
@@ -404,6 +416,26 @@ export class CallChatRuntime implements CallLifecycleObserver {
    * Is the reader on this connection a guest? Its socket's claims when this replica holds them; otherwise its resolved Session, and
    * a reader that resolves to nothing is read as a guest (default-closed: it only ever narrows what a frame carries).
    */
+  /**
+   * For an interview's call, its lead (whose name a candidate reads); null for any other call, whose people's messages a
+   * guest never meets. One lookup per delivery.
+   */
+  private async interviewLead(callId: string): Promise<string | null> {
+    const call = await this.opts.calls.getCall(callId);
+    const interviewId = call ? interviewOfLobby(call.lobbyName) : null;
+    if (!interviewId) return null;
+    // A lead that cannot be read names nobody: every staff author is "Interviewer".
+    return (this.opts.interviewLeadOf ?? defaultInterviewLeadOf)(interviewId).catch(() => '');
+  }
+  /**
+   * Whether a reader is known to be a guest: for people's messages, where an unplaced reader is NOT read as a guest (the
+   * renaming below only narrows a name, and a staff reader must keep reading the names).
+   */
+  private async readerKnownGuest(clientId: string): Promise<boolean> {
+    const ctx = this.opts.router.getClientData?.(clientId)?.userContext as Record<string, unknown> | undefined;
+    if (ctx) return claimsGuest(ctx);
+    try { const session = await resolveConnectedCallSession(this.opts.router, clientId); return !!session && isGuestSession(session); } catch { return false; }
+  }
   private async readerIsGuest(clientId: string): Promise<boolean> {
     const ctx = this.opts.router.getClientData?.(clientId)?.userContext as Record<string, unknown> | undefined;
     if (ctx) return claimsGuest(ctx);
@@ -524,8 +556,9 @@ export class CallChatRuntime implements CallLifecycleObserver {
     }
     const pages = new Map<string, Promise<CallChatPageReference>>();
     const guest = isGuestSession(session);
+    const lead = guest ? this.interviewLead(callId) : null;
     const messages = await Promise.all(stored.filter(message => this.visible(message, floor) && (!guest || guestMaySee(message)))
-      .map(message => this.render(callId, message, pages, undefined, guest)));
+      .map(message => this.render(callId, message, pages, undefined, guest, lead)));
     const seats = await this.seats(callId);
     const canSend = await this.grant(session, actor.authority, 'PostMessage', actor.call.lobbyName);
     // Canonical/resource reads can outlive revocation, leave, or end.
@@ -556,15 +589,16 @@ export class CallChatRuntime implements CallLifecycleObserver {
       if ((frame.action === 'message' || frame.action === 'messageUpdated') && frame.message && typeof frame.message === 'object') {
         const message = frame.message as ChatMessage;
         // Only a frame holding something a person did not write asks who reads it (E9).
-        const guest = !personAuthored(message) && await this.readerIsGuest(clientId);
+        const guest = personAuthored(message) ? await this.readerKnownGuest(clientId) : await this.readerIsGuest(clientId);
         if (guest && !guestMaySee(message)) return null;
-        return { ...frame, message: await this.render(callId, message, pages, channel, guest) };
+        return { ...frame, message: await this.render(callId, message, pages, channel, guest, guest ? this.interviewLead(callId) : null) };
       }
       if (frame.action === 'history' && Array.isArray(frame.messages)) {
         const all = frame.messages as ChatMessage[];
-        const guest = all.some(message => !personAuthored(message)) && await this.readerIsGuest(clientId);
+        const guest = all.some(message => !personAuthored(message)) ? await this.readerIsGuest(clientId) : await this.readerKnownGuest(clientId);
         const shown = guest ? all.filter(guestMaySee) : all;
-        return { ...frame, messages: await Promise.all(shown.map(message => this.render(callId, message, pages, channel, guest))) };
+        const lead = guest ? this.interviewLead(callId) : null;
+        return { ...frame, messages: await Promise.all(shown.map(message => this.render(callId, message, pages, channel, guest, lead))) };
       }
       return frame;
     }
