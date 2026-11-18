@@ -36,20 +36,12 @@ const read = (name: string) => readFileSync(`${process.cwd()}/../schema/${name}`
 const NULL = '__PG_NULL__';
 const MARK = '__interviews_pg_rows__';
 
-/** The schema files in the order a cluster takes them: the spend parents (as spend-holds-postgres.test.ts loads them), the
- * meeting assistant's tables, the tenant's own file, then the roles and the row-level rules. */
-const SCHEMA_FILES = [
-  'orgiq_schema.sql', 'search_workspace_schema.sql', 'identity_schema.sql', 'seed_demo_identities.sql', 'social_schema.sql', 'observability_schema.sql',
-  'observability_authz_schema.sql', 'observability_sprint1_schema.sql', 'observability_sprint2_schema.sql',
-  'observability_sprint3_promote_schema.sql', 'observability_sprint4_calibration_schema.sql',
-  'observability_sprint4_memory_schema.sql', 'observability_sprint5_canary_schema.sql',
-  'observability_sprint6_prompt_history_schema.sql', 'prompt_contract_schema.sql', 'observability_approvals_schema.sql',
-  'orgiq_kb_registry_schema.sql', 'orgiq_work_items_schema.sql', 'work_item_key_schema.sql', 'work_item_documents_schema.sql',
-  'agentic_work_schema.sql', 'kb_upload_links_schema.sql', 'agent_projects_schema.sql', 'agent_sdlc_schema.sql',
-  'lab_loop_schema.sql', 'devbox_fleet_schema.sql', 'agent_bots_schema.sql', 'agent_budgets_schema.sql', 'program_schema.sql',
-  'spend_ledger_schema.sql', 'spend_ledger_provider_schema.sql', 'spend_holds_schema.sql',
-  'meeting_assistant_schema.sql', 'interviews_schema.sql',
-];
+/** The schema files in the order a cluster takes them: every repeatable entry of schema/manifest.json in its load order
+ * (what schema/load_schema.py applies), with the demo identities after the identity schema as the seed run puts them. A
+ * hand-picked subset hid that spend_holds.initiative_id is nullable only after user_budgets_schema.sql. */
+const MANIFEST = JSON.parse(read('manifest.json')) as { entries: Array<{ file: string; kind: string }> };
+const SCHEMA_FILES = MANIFEST.entries.filter((e) => e.kind === 'repeatable').map((e) => e.file)
+  .flatMap((f) => (f === 'identity_schema.sql' ? [f, 'seed_demo_identities.sql'] : [f]));
 const INTERVIEW_TABLES = [
   'interview_runs', 'interview_pad_events', 'interview_panel_notices', 'interview_deletions', 'interview_invites', 'interview_said_log',
   'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recap_attempts', 'interview_recaps', 'interview_suggestions', 'interview_consents',
@@ -211,7 +203,7 @@ async function seedWorld(): Promise<void> {
     for (const file of SCHEMA_FILES) {
       try { await psql(read(file)); } catch (e) { throw new Error(`${file} did not load: ${(e as Error).message.split('\n')[0]}`); }
     }
-    for (const file of ['service_roles.sql', 'row_level_security.sql']) {
+    for (const file of ['service_roles.sql', 'graph_readonly_role.sql', 'row_level_security.sql']) { // the seed's order (schema/apply_all_seed.py ROLE_FILES)
       try { await psql(read(file)); } catch (e) { throw new Error(`${file} did not load: ${(e as Error).message.split('\n')[0]}`); }
     }
     setInterviewsStore(interviews);
@@ -459,14 +451,36 @@ async function seedWorld(): Promise<void> {
       expect(REDACT_STAGE_REASONS_SQL).toContain('WITH ORDINALITY');
     });
     it('the middleware\'s role reads the tenant\'s rows only with the interviews tenant set, and cannot write them under another tenant', async () => {
-      const as = (tenant: string, sql: string) => psql(`BEGIN; SET LOCAL ROLE orgiq_app_middleware; SELECT set_config('app.tenant', ${literal(tenant)}, true); ${sql}; COMMIT;`);
+      // SET LOCAL, not SELECT set_config(...): psql would print set_config's own row first and the count after it.
+      const as = (tenant: string, sql: string) => psql(`BEGIN; SET LOCAL ROLE orgiq_app_middleware; SET LOCAL app.tenant = ${literal(tenant)}; ${sql}; COMMIT;`);
+      // A row in each store this suite writes, so the check below reads real rows and is not 0 = 0 on an empty table.
+      for (const r of interviewSuggestionsFixture.rows().slice(0, 1)) await suggestions.appendSuggestion(r);
+      for (const r of interviewCoachLogFixture.rows().slice(0, 1)) await coachLog.append(r);
+      await recaps.putRecap(interviewRecapsFixture.rows()[0]!);
+      await pad.append(MATEO_CODING, [{ ...interviewPadLogFixture.rows().find((r) => r.interviewId === MATEO_CODING)!, at: at(1), clientAt: at(1) }]);
+      await runs.insertRun({ ...interviewRunsFixture.rows()[0]!, interviewId: KWAME_LIVE, runId: 'run-pg-rls', status: 'queued', startedAt: null, endedAt: null, result: null, events: [] });
+      await said.append({ id: 'said-pg-rls', interviewId: KWAME_LIVE, callId: null, kind: 'question', source: 'kit', questionId: 'q-1', suggestionId: null,
+        text: 'Walk me through it.', askedBy: 'u-hugo', saidAt: at(1), spoken: false });
+      await invites.issueInvite({ interviewId: 'iv-k1p5w8ra', tokenHash: 'c'.repeat(64), issuedBy: 'u-greta', issuedAt: at(1), expiresAt: at(60) });
+      await deletions.insert({ id: 'del-pg-rls', candidateId: 'cand-mateo', interviewIds: [MATEO_CODING], reason: 'request', requestedAt: T0, requestedBy: 'u-greta',
+        dueBy: at(30 * 24 * 60), doneAt: null, removed: [], left: [], attempts: 0 });
+      const empty: string[] = [];
       for (const table of INTERVIEW_TABLES) {
+        // Every table: row-level security on, and the tenant policy for the middleware's role.
+        expect([table, await one(`SELECT c.relrowsecurity::text AS rls, (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname
+          AND p.policyname = 'tenant_isolation' AND 'orgiq_app_middleware' = ANY (p.roles))::text AS policies FROM pg_class c WHERE c.relname = ${literal(table)} AND c.relkind = 'r'`)])
+          .toEqual([table, { rls: 'true', policies: '1' }]);
         const seen = parseCsv(await as('interviews', `SELECT count(*) AS n FROM ${table}`)).find((r) => r['n'] !== undefined);
         const hidden = parseCsv(await as('orgiq', `SELECT count(*) AS n FROM ${table}`)).find((r) => r['n'] !== undefined);
         const total = await one(`SELECT count(*) AS n FROM ${table}`);
         expect([table, seen?.['n']]).toEqual([table, total['n']]);
         expect([table, hidden?.['n']]).toEqual([table, '0']);
+        if (total['n'] === '0') empty.push(table);
       }
+      // Only the tables no store here writes may be read empty (their rule is still checked in the catalog above).
+      expect(empty).toEqual(INTERVIEW_TABLES.filter((t) => ['interview_panel_notices', 'interview_recap_opens', 'interview_recap_attempts', 'interview_resumes', 'interview_consents'].includes(t))
+        .filter((t) => empty.includes(t)));
+      expect(INTERVIEW_TABLES.length - empty.length).toBeGreaterThanOrEqual(13);
       await expect(as('orgiq', `INSERT INTO interview_deletions (id, candidate_id, interview_ids, reason, requested_at, due_by, removed, left_behind, attempts, revision)
         VALUES ('del-pg-x', 'cand-mateo', '[]', 'request', now(), now(), '[]', '[]', 0, 1)`)).rejects.toThrow(/row-level security/);
     });
