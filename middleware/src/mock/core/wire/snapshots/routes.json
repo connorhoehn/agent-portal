@@ -2528,17 +2528,17 @@
     {
       "method": "DELETE",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:85"
+      "source": "src/routes/interviews/invite.ts:101"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:79"
+      "source": "src/routes/interviews/invite.ts:95"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/invite",
-      "source": "src/routes/interviews/invite.ts:61"
+      "source": "src/routes/interviews/invite.ts:77"
     },
     {
       "method": "POST",

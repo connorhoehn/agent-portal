@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-18T07:23:30.969Z",
-  "serverHandlerSha": "ff02394ce224dc65586ac1fb00cb8ab2981a0cf0dc27bc40ac5799510739ceea"
+  "capturedAt": "2026-11-18T14:31:23.541Z",
+  "serverHandlerSha": "7b0f0c520d7110806e400c4f4d42c4673a55d5d45a35e29cde00f2622fcb4c8e"
  },
  "summary": {
   "routes": 961,
@@ -526,17 +526,17 @@
    {
     "method": "DELETE",
     "path": "/api/interviews/interviews/:id/invite",
-    "source": "src/routes/interviews/invite.ts:85"
+    "source": "src/routes/interviews/invite.ts:101"
    },
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/invite",
-    "source": "src/routes/interviews/invite.ts:79"
+    "source": "src/routes/interviews/invite.ts:95"
    },
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/invite",
-    "source": "src/routes/interviews/invite.ts:61"
+    "source": "src/routes/interviews/invite.ts:77"
    },
    {
     "method": "POST",
@@ -4940,9 +4940,9 @@
   {"method":"POST","path":"/api/interviews/interviews/:id/answer","source":"src/routes/interviews/assignments.ts:124","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"accept or decline a seat on a round (ConductInterview)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/consents","source":"src/routes/interviews/consents.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/end","source":"src/routes/interviews/room.ts:81","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
-  {"method":"DELETE","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:85","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:79","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:61","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
+  {"method":"DELETE","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:95","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:77","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/milo-ask","source":"src/routes/interviews/milo.ts:70","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-export","source":"src/routes/interviews/records.ts:73","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-notes","source":"src/routes/interviews/milo.ts:63","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
