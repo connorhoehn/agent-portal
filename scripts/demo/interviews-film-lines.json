@@ -10,49 +10,113 @@
   }
  },
  "lines": {
-  "h1": [
+  "h01": [
    "hugo",
-   "Hey Mateo, thanks so much for joining! I'm Hugo, I'll be leading today, and Milo's here taking notes for us."
+   "Hey, good morning, Mateo!"
   ],
-  "h2": [
+  "c01": [
+   "cand",
+   "Morning! Thanks for having me."
+  ],
+  "h02": [
    "hugo",
-   "So, to kick things off... tell me about a project you're really proud of."
+   "Of course! I'm Hugo, I'll be running today's session, and Milo's here taking notes for us. How's your week going?"
   ],
-  "c1": [
+  "c02": [
    "cand",
-   "Yeah, sure! So, honestly, the one I'm proudest of is the checkout service we rebuilt last year."
+   "Pretty good, honestly! A little busy, but good."
   ],
-  "c2": [
-   "cand",
-   "We kept dropping orders whenever traffic spiked... so we added a queue and retries, and errors fell by about ninety percent!"
-  ],
-  "h3": [
+  "h03": [
    "hugo",
-   "Oh, nice, that's a great one. Okay, let's get into the main question."
+   "Great, let's get started. So, what's your experience with data structures and algorithms?"
   ],
-  "c3": [
+  "c03": [
    "cand",
-   "Milo, can you repeat the question?"
+   "Yeah, so... I use them every day, really. Mostly hash maps and queues in our payment services. And lately I've been tuning a cache, so I think about lookups a lot."
+  ],
+  "h04": [
+   "hugo",
+   "Nice, that's useful here. Okay, a coding problem. Given an array of integers and a target, return the indices of the two numbers that add up to the target."
+  ],
+  "h05": [
+   "hugo",
+   "We usually use Java here, but pick whatever you like. What language would you like to use?"
+  ],
+  "c04": [
+   "cand",
+   "Python, please."
+  ],
+  "h06": [
+   "hugo",
+   "Python it is. I'm dropping the problem into the pad now."
+  ],
+  "c05": [
+   "cand",
+   "Quick question... can I use the same number twice? And is there always exactly one answer?"
+  ],
+  "h07": [
+   "hugo",
+   "Good question. There's always exactly one answer, and you can't use the same element twice."
+  ],
+  "c06": [
+   "cand",
+   "Okay. So the brute force is to check every pair, that's O of n squared. But I think I can do better with a hash map."
+  ],
+  "c07": [
+   "cand",
+   "I'll use a dictionary to store what I've seen... and for each number, I check whether its complement is already in there."
   ],
   "c4": [
    "cand",
    "Milo, how much time is left?"
   ],
-  "c7": [
+  "c09": [
    "cand",
-   "Okay, cool, thanks! So for the ledger... I'd give every entry an idempotency key, and replicate the log before we acknowledge, so a failover never loses or duplicates a write."
+   "Okay, let me run it on a couple of cases."
   ],
-  "h4": [
-   "hugo",
-   "Great. Let's jump into the pad, I'm dropping a small exercise in there now."
-  ],
-  "c6": [
+  "c10": [
    "cand",
-   "Alright, let me write this out... and run it."
+   "Hmm, the three, three case gives zero, zero. Oh, I'm storing the number before I check it. Let me swap those two lines."
   ],
-  "h5": [
+  "c11": [
+   "cand",
+   "Okay. Zero, one... and zero, one. That looks right."
+  ],
+  "h08": [
    "hugo",
-   "That's all the time we've got. Thanks, Mateo, this was really fun!"
+   "Nice. What's the runtime complexity?"
+  ],
+  "c12": [
+   "cand",
+   "It's oh of en time, since we only pass through the list once... and oh of en space, for the map."
+  ],
+  "c3": [
+   "cand",
+   "Milo, can you repeat the question?"
+  ],
+  "c13": [
+   "cand",
+   "Sure! I'd test the example from the problem, a case with no valid pair, duplicates like three and three, and negative numbers. Maybe an empty list too."
+  ],
+  "h09": [
+   "hugo",
+   "Great, thanks. That's most of our time. Do you have any questions for me?"
+  ],
+  "c14": [
+   "cand",
+   "Yeah, actually. What does a typical week look like for the team?"
+  ],
+  "h10": [
+   "hugo",
+   "Lots of pairing, a design review on Tuesdays, and we ship most days. As for next steps, our recruiter will be in touch in a few days."
+  ],
+  "c15": [
+   "cand",
+   "Awesome. Thanks so much, Hugo, this was really fun!"
+  ],
+  "h11": [
+   "hugo",
+   "Thanks, Mateo! Take care."
   ]
  }
 }

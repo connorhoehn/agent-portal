@@ -2,7 +2,8 @@
 per person with a style `instruct`, three seeds per line, the take with the widest pitch movement kept (a plain autocorrelation F0
 track, its spread in semitones). Run with the mlx-audio environment's python:
     <venv>/bin/python scripts/demo/interviews-film-voices.py scripts/demo/interviews-film-lines.json <dir>
-Writes <dir>/takes/*.wav and <dir>/takes.json; the film script trims and resamples the kept takes (48 kHz mono PCM16)."""
+Writes <dir>/takes/*.wav and <dir>/takes.json; the film script trims and resamples the kept takes (48 kHz mono PCM16). A line already
+in <dir>/takes.json with the same speaker and words keeps its takes: only new or changed lines are generated."""
 import sys, json, os, numpy as np, soundfile as sf, mlx.core as mx
 from huggingface_hub import snapshot_download
 from mlx_audio.tts.utils import load_model
@@ -25,8 +26,11 @@ def score(a):
     if len(f0) < 10: return 0, 0, 0
     st = 12 * np.log2(f0 / np.median(f0))
     return float(np.std(st)), float(np.median(f0)), float(np.std(rms) / (np.mean(rms) + 1e-9))
+prev = json.load(open(f"{out}/takes.json")) if os.path.exists(f"{out}/takes.json") else {}
 res = {}
 for lid, (who, text) in spec["lines"].items():
+    if lid in prev and prev[lid]["who"] == who and prev[lid]["text"] == text:
+        res[lid] = prev[lid]; print(lid, "kept from before", flush=True); continue
     v = spec["voices"][who]; best = None; takes = []
     for s in range(3):
         seed = 100 + 7 * s + len(res)
