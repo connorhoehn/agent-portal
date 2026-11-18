@@ -34,6 +34,10 @@
    "cand",
    "Camera's on, and the mic is working. Good to go."
   ],
+  "p06": [
+   "cand",
+   "Okay. Now I just wait for Hugo to let me in."
+  ],
   "h01": [
    "hugo",
    "Oh, there's Mateo in the waiting room. Let me bring him in."
@@ -48,7 +52,7 @@
   ],
   "h03": [
    "hugo",
-   "Of course! I'm Hugo, and I'll be running today's session. I've also brought in Milo, our AI support for the interview. Milo, would you introduce yourself?"
+   "Of course! I'm Hugo, and I'll be running today's session. I've also brought in Milo, our AI support for the interview."
   ],
   "c02": [
    "cand",
@@ -140,11 +144,11 @@
   ],
   "c15": [
    "cand",
-   "Hey Milo, can you generate another dozen test cases for me?"
+   "Hey Milo, it would be helpful to have another dozen test cases."
   ],
   "c16": [
    "cand",
-   "Oh, nice, that's a lot of edge cases. Let me run those too."
+   "Oh, nice, twelve more. Let me run those too."
   ],
   "h13": [
    "hugo",
@@ -152,7 +156,7 @@
   ],
   "c17": [
    "cand",
-   "And they all pass. Nice!"
+   "Nice, that covers a lot of edge cases."
   ],
   "h14": [
    "hugo",
@@ -228,11 +232,19 @@
   ],
   "h23": [
    "hugo",
-   "Hey Milo, Mateo wants to use an LRU cache. Can you add the import at the top for him to save time?"
+   "Hey Milo, Mateo wants to use an LRU cache for his algorithm. Can you just add it for him at the top, to import and save time?"
   ],
   "c27": [
    "cand",
    "Oh, thanks, Milo!"
+  ],
+  "h24": [
+   "hugo",
+   "Milo, introduce yourself."
+  ],
+  "h25": [
+   "hugo",
+   "And Mateo, if you'd like more test cases at any point, feel free to ask Milo."
   ]
  }
 }

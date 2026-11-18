@@ -275,7 +275,7 @@ async function say(p, id, gapMs = 1800) {
   const atMs = Date.now();
   timeline.speech.push({ id, who: c.who, text: c.text, file: c.file ? path.relative(OUT, c.file) : null, atMs, durMs: c.durMs });
   busy.until = atMs + c.durMs;
-  console.log(`  ${c.who}: ${c.text}`);
+  console.log(`  [${timeline.film.fromMs ? ((atMs - timeline.film.fromMs) / 1000).toFixed(1) : '-'}] ${c.who}: ${c.text}`);
   if (!c.file) { await sleep(c.durMs); busy.until = Date.now(); return; } // a rehearsal without this take: its estimated length
   await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`).catch((e) => note(`line ${id} did not play: ${String(e).slice(0, 120)}`));
   busy.until = Date.now();
@@ -447,40 +447,60 @@ const CURSOR = () => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', put); else put();
 };
 const cursorAt = new Map();
-/** Moves the cursor to (x, y) at a hand's pace (eased, about `ms`), from where it last was. */
+/**
+ * Moves the cursor to (x, y) at a hand's pace (eased, `ms` long), from where it last was. Paced by the clock, not by a step count:
+ * a recording browser can take 100 ms or more to deliver one mouse move, so a fixed count of steps took ten times as long.
+ */
 async function moveTo(page, x, y, ms = 700) {
   const [x0, y0] = cursorAt.get(page) ?? [VIEW.width * 0.55, VIEW.height * 0.85];
-  const n = Math.max(10, Math.round(ms / 16));
-  for (let i = 1; i <= n; i += 1) {
-    const t = i / n; const e = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+  const t0 = Date.now();
+  for (;;) {
+    const t = Math.min(1, (Date.now() - t0) / ms); const e = t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
     await page.mouse.move(x0 + (x - x0) * e, y0 + (y - y0) * e);
+    if (t >= 1) break;
     await sleep(16);
   }
   cursorAt.set(page, [x, y]);
 }
 /** The cursor to the middle of `locator`, then a rest of `pause` ms (reading it). False when it has no box. */
 async function glide(page, locator, { pause = 450, ms = 700 } = {}) {
-  await locator.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => undefined);
-  const box = await locator.boundingBox({ timeout: 10_000 }).catch(() => null);
-  if (!box) return false;
+  const t0 = Date.now();
+  // Short waits: a control that keeps animating never counts as stable, and a long wait here was silent film.
+  await locator.scrollIntoViewIfNeeded({ timeout: 1500 }).catch(() => undefined);
+  const t1 = Date.now();
+  const box = await locator.boundingBox({ timeout: 3000 }).catch(() => null);
+  const t2 = Date.now();
+  if (!box) { note(`glide: no box for ${String(locator).slice(0, 90)} (${t2 - t0} ms)`); return false; }
   await moveTo(page, box.x + box.width / 2, box.y + Math.min(box.height / 2, 28), ms);
+  const t3 = Date.now();
+  if (t3 - t0 > ms + 1500) console.log(`  slow glide ${String(locator).slice(0, 80)}: view ${t1 - t0} box ${t2 - t1} move ${t3 - t2} ms`);
   await page.waitForTimeout(pause);
   return true;
 }
 /** The cursor travels to the control and rests on it, then it is pressed. */
 async function press(page, locator, { pause = 450, timeout = 30_000 } = {}) {
+  const t0 = Date.now();
   await locator.waitFor({ timeout });
+  const t1 = Date.now();
   await glide(page, locator, { pause });
+  const t2 = Date.now();
   await locator.click({ timeout });
-  const box = await locator.boundingBox().catch(() => null);
-  if (box) cursorAt.set(page, [box.x + box.width / 2, box.y + box.height / 2]);
+  const t3 = Date.now();
+  if (t3 - t0 > 3000) console.log(`  slow press ${String(locator).slice(0, 80)}: wait ${t1 - t0} glide ${t2 - t1} click ${t3 - t2} ms`);
+  // No look at the control after the click: it is often gone (the step moved on), and waiting for it was 30 s of silent film.
 }
 /** Reads a scrolling block: the cursor rests on it and the wheel takes it down to its end over about `ms`. */
 async function scrollThrough(page, locator, ms = 4000) {
   if (!(await glide(page, locator, { pause: 500 }))) return;
-  const left = await locator.evaluate((el) => Math.max(0, el.scrollHeight - el.clientHeight)).catch(() => 0);
-  const steps = Math.max(1, Math.round(ms / 120));
-  for (let i = 0; i < steps; i += 1) { await page.mouse.wheel(0, Math.ceil(left / steps)); await sleep(120); }
+  // Scrolled by the clock (smooth behaviour, a slice at a time): the page's own scroll, not the wheel, which a recording browser
+  // can deliver slowly.
+  const t0 = Date.now();
+  for (;;) {
+    const t = Math.min(1, (Date.now() - t0) / ms);
+    await locator.evaluate((el, f) => { el.scrollTop = f * Math.max(0, el.scrollHeight - el.clientHeight); }, t).catch(() => undefined);
+    if (t >= 1) break;
+    await sleep(60);
+  }
   await page.waitForTimeout(500);
 }
 /** Hugo starts (or joins) the room's call from the footer, as h8-room.mjs `joinCall` does, with the cursor. */
@@ -491,7 +511,8 @@ async function startCall(page) {
   await press(page, start);
   const confirm = page.getByRole('dialog').getByRole('button', { name: /join|start|continue/i }).last();
   if (await confirm.waitFor({ timeout: 3000 }).then(() => true, () => false)) await press(page, confirm);
-  await page.getByTestId('shell-call-dock').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+  // The interview turning live is the caller's check; the dock is only waited for briefly.
+  await page.getByTestId('shell-call-dock').first().waitFor({ timeout: 3000 }).catch(() => undefined);
 }
 /** The page's microphone stream runs a second of silence before its first line, so that line is not the one that wakes it. */
 async function warmMic(p) { await p.evaluate(() => window.__filmWarm?.()).catch((e) => note(`mic warm-up: ${String(e).slice(0, 80)}`)); }
@@ -537,9 +558,10 @@ try {
   const h00 = say(lead, 'h00', 0);
   await startCall(hp);
   await h00;
-  const live1 = await until(async () => ((await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}`)).json()).interview?.state === 'live' ? true : null), 20_000, 1000);
-  // Nothing happens on screen while the recruiter sends the link and the candidate's browser opens it: cut, and say so.
+  // Nothing happens on screen while the call goes live, the recruiter sends the link and the candidate's browser opens it: cut, and
+  // say so.
   const cutLink = skipFrom('Skipping ahead: the recruiter sends the link and the candidate opens it');
+  const live1 = await until(async () => ((await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}`)).json()).interview?.state === 'live' ? true : null), 20_000, 1000);
   const inv = await greta.api.post(`${PORTAL}/api/interviews/interviews/${IV}/invite`, { data: {} });
   const link = (await inv.json().catch(() => ({}))).linkPath;
   step('1 lead starts the call', !!live1 && !!link && /Coding/.test(roomHead), `interview live=${!!live1}; invite ${inv.status()} link=${!!link}; the room says Coding=${/Coding/.test(roomHead)}`);
@@ -581,6 +603,8 @@ try {
   await press(cp, cp.getByTestId('join-devices-continue'));
   await cp.getByTestId('join-waiting').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
   const admit = hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first();
+  // The lead's room reads the waiting room every few seconds: the candidate says so while Hugo's Admit arrives.
+  await say(cand, 'p06', 500);
   await admit.waitFor({ timeout: 30_000 });
   await say(lead, 'h01', 500);
   await press(hp, admit);
