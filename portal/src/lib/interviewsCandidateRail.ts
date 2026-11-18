@@ -68,3 +68,16 @@ export function railModel(entries: readonly RailEntry[], query: string, openId: 
     total: entries.length,
   };
 }
+
+/** What a not-found inside the candidate frame calls the page: never the id from the address (finding I1.2m). */
+export const CANDIDATE_NOT_FOUND = 'Candidate not found';
+
+/**
+ * The breadcrumb's label for a candidate page: the name once read, "Candidate not found" when the read is a not-found
+ * (`failure.status` 404, or an error that says so), else nothing yet (the trail waits for the name).
+ */
+export function candidateCrumbLabel(name: string | null | undefined, error: string | null | undefined, status?: number | null): string | undefined {
+  if (name) return name;
+  if (status === 404 || (error && /404|not found/i.test(error))) return CANDIDATE_NOT_FOUND;
+  return undefined;
+}

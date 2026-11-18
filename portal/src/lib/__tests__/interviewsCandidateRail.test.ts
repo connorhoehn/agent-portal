@@ -54,3 +54,13 @@ test('the find box matches every word over name, opening and stage, and never hi
   assert.equal(kept.rows.find((r) => r.id === 'c1')!.groupId, 'interviewing');
   assert.deepEqual(railModel([], '', null), { groups: [], rows: [], total: 0 });
 });
+
+test('I1.2m: a not-found inside the candidate frame is called "Candidate not found" in the trail, never the id', async () => {
+  const { candidateCrumbLabel, CANDIDATE_NOT_FOUND } = await import('../interviewsCandidateRail.ts');
+  assert.equal(candidateCrumbLabel('Aiko', null), 'Aiko');
+  assert.equal(candidateCrumbLabel(undefined, 'Not found'), CANDIDATE_NOT_FOUND);
+  assert.equal(candidateCrumbLabel(undefined, 'Request failed (404)'), CANDIDATE_NOT_FOUND);
+  assert.equal(candidateCrumbLabel(undefined, null, 404), CANDIDATE_NOT_FOUND);
+  assert.equal(candidateCrumbLabel(undefined, 'The service is unavailable'), undefined);
+  assert.equal(candidateCrumbLabel(undefined, null), undefined);
+});

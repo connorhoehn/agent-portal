@@ -42,7 +42,7 @@ import {
   INTERVIEWS_API, candidateHref, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, stageSteps, whenLabel,
   type ApplicationStage, type CandidateProfile, type CandidateRow, type ItemsResponse, type OpeningRow, type ProfileApplication, type ProfileRound, type StageMove,
 } from '../../lib/interviews';
-import { entriesFromCandidates, entriesFromOpenings, railKindFor, railModel, railNames } from '../../lib/interviewsCandidateRail';
+import { candidateCrumbLabel, entriesFromCandidates, entriesFromOpenings, railKindFor, railModel, railNames } from '../../lib/interviewsCandidateRail';
 import { assignHref, canReassign, declineLines } from '../../lib/interviewsAssign';
 import { hasRecord, recordPath } from '../../lib/interviewsRecord';
 import { AppLink } from './interviewsCells';
@@ -164,7 +164,7 @@ function CandidateProfile({ id }: { id: string }) {
   const { session } = useSession();
   const { data, error, isLoading, refresh } = useFetch<{ candidate: CandidateProfile }>(id ? `${INTERVIEWS_API}/candidates/${encodeURIComponent(id)}` : null);
   const profile = data?.candidate;
-  useCrumbLabel(id, profile?.candidate.name);
+  useCrumbLabel(id, candidateCrumbLabel(profile?.candidate.name, profile ? null : error));
   const role = String(session?.role);
   const manages = role === 'recruiter' || role === 'admin';
   // An interviewer's page has no list rail, so it keeps its own h1 (the name); beside a rail the frame's title is the h1.

@@ -8,6 +8,7 @@ import { Button, FormField, Inline, LoadingState, PageFrame, Select, Stack, T } 
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
+import { candidateCrumbLabel } from '../../lib/interviewsCandidateRail';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -28,7 +29,7 @@ export default function AssignRoundPage() {
   const profile = useFetch<{ candidate: CandidateProfile }>(id ? `${INTERVIEWS_API}/candidates/${encodeURIComponent(id)}` : null);
   const people = useFetch<ItemsResponse<PersonRef>>(`${INTERVIEWS_API}/interviewers`);
   const record = profile.data?.candidate;
-  useCrumbLabel(id, record?.candidate.name);
+  useCrumbLabel(id, candidateCrumbLabel(record?.candidate.name, record ? null : profile.error));
 
   const round = roundId ? record?.applications.flatMap((a) => a.interviews).find((r) => r.id === roundId) ?? null : null;
   const app = record?.applications.find((a) => a.applicationId === (round?.applicationId ?? params.get('application'))) ?? record?.applications[0];

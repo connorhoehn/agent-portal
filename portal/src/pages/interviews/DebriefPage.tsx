@@ -24,6 +24,7 @@ import { CollectionCommandHost } from '../../components/collections/CollectionCo
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
+import { candidateCrumbLabel } from '../../lib/interviewsCandidateRail';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -43,7 +44,7 @@ export default function DebriefPage() {
   const trail = useFlushTrailItems();
   const { data, error, failure, refresh } = useFetch<{ debrief: DebriefView }>(id ? debriefApi(id) : null);
   const view = data?.debrief ?? null;
-  useCrumbLabel(id, view?.candidate.name);
+  useCrumbLabel(id, candidateCrumbLabel(view?.candidate.name, null, failure?.status ?? null));
   if (failure?.status === 404) {
     return <RecordNotFound heading="Debrief" title="Debrief not found" body="There is no candidate here whose debrief you can open." backLabel="Home" onBack={() => navigate('/interviews')} />;
   }
