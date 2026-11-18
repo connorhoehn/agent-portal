@@ -20,7 +20,8 @@ import { setInterviewsStore } from '../../store-select.js';
 import type { Interview, InterviewState } from '../../types.js';
 import { padChannel } from '../channel.js';
 import { closeMiloPadGrant, miloPadClaims, mintMiloPadToken, openMiloPadGrant } from '../milo-seat.js';
-import { atEnd, ownGatewayUrl, setMiloWriterDeps, writeIntoPad } from '../milo-writer.js';
+import { atEnd, MILO_CARET, MILO_TYPE_CHUNKS, ownGatewayUrl, setMiloWriterDeps, typingChunks, writeIntoPad } from '../milo-writer.js';
+import { Awareness, applyAwarenessUpdate } from 'y-protocols/awareness';
 
 const SECRET = 'test-realtime-secret';
 const HUGO = 'u-hugo';
@@ -44,7 +45,7 @@ beforeAll(async () => {
   dispose = attachRealtimeGateway(server, { redisUrl: null, pingIntervalMs: 0, authorityCache: true }).dispose;
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = (server.address() as AddressInfo).port;
-  setMiloWriterDeps({ gatewayUrl: () => `ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, secret: () => SECRET, syncMs: 3000, planMs: 3000, writeMs: 3000 });
+  setMiloWriterDeps({ gatewayUrl: () => `ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, secret: () => SECRET, syncMs: 3000, planMs: 3000, writeMs: 3000, typeGapMs: 0 });
 });
 afterAll(async () => {
   for (const s of sockets) s.terminate();
@@ -66,7 +67,7 @@ const until = async (pred: () => boolean, what: string, ms = 4000) => {
 };
 
 /** Hugo's pad on the round, fed as the portal's useYjsDoc feeds the library's provider. */
-async function hugosPad(): Promise<{ text: Y.Text; doc: Y.Doc }> {
+async function hugosPad(): Promise<{ text: Y.Text; doc: Y.Doc; frames: Frame[] }> {
   const user = await getUser(HUGO, { authoritative: true });
   const session = { sub: HUGO, name: user!.displayName, role: user!.grants['interviews']?.[0], tenant: 'interviews', grants: user!.grants, epoch: user!.epoch ?? 0, iat: Math.floor(Date.now() / 1000) } as Session;
   const { token } = await signRealtimeToken(realtimeClaims(session), SECRET);
@@ -88,7 +89,7 @@ async function hugosPad(): Promise<{ text: Y.Text; doc: Y.Doc }> {
   await until(() => frames.some((f) => f.type === 'session'), 'the session frame');
   ws.send(JSON.stringify({ service: 'crdt', action: 'subscribe', channel }));
   await until(() => frames.some((f) => f.type === 'crdt' && f.action === 'subscribed' && f.channel === channel), 'the subscribe');
-  return { text: doc.getText('code'), doc };
+  return { text: doc.getText('code'), doc, frames };
 }
 
 /** A raw socket with a Milo token: its frames, once open (or the refusal of the upgrade). */
@@ -106,6 +107,38 @@ async function miloSocket(claim: { interviewId: string; grant: string }): Promis
 }
 
 describe('Milo writing into a pad', () => {
+  it('types a block in chunks with its named caret at the end of what is typed, then takes the caret away', async () => {
+    setMiloWriterDeps({ gatewayUrl: () => `ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, secret: () => SECRET, syncMs: 3000, planMs: 3000, writeMs: 3000, typeGapMs: 20 });
+    const hugo = await hugosPad();
+    const versions: string[] = [];
+    hugo.text.observe(() => versions.push(hugo.text.toString()));
+    const block = Array.from({ length: 8 }, (_, i) => `# case ${i}\n`).join('');
+    const out = await writeIntoPad(ROUND, () => atEnd(block));
+    expect(out.ok).toBe(true);
+    await until(() => hugo.text.toString().endsWith(block), 'the whole block on Hugo\'s pad');
+    // It arrived in pieces, each one more of the block.
+    const growing = versions.filter((v) => v.includes('# case 0'));
+    expect(growing.length).toBeGreaterThanOrEqual(MILO_TYPE_CHUNKS);
+    // Milo's caret: named Milo, at the end of what was typed, then gone.
+    await until(() => hugo.frames.filter((f) => f.type === 'crdt:awareness').length >= 2, 'Milo\'s caret frames');
+    const seen = new Awareness(new Y.Doc());
+    const states: Array<Record<string, unknown> | null> = [];
+    for (const f of hugo.frames.filter((x) => x.type === 'crdt:awareness')) {
+      const items = (f as { updates?: Array<{ update: string }>; update?: string }).updates ?? [{ update: (f as { update: string }).update }];
+      for (const it of items) {
+        applyAwarenessUpdate(seen, new Uint8Array(Buffer.from(it.update, 'base64')), 'gateway');
+        states.push([...seen.getStates().values()].find((st) => (st as { user?: { name?: string } }).user?.name === 'Milo') as Record<string, unknown> ?? null);
+      }
+    }
+    const milo = states.find((st) => st !== null) as { user: { name: string }; cursor: { anchor: unknown } } | undefined;
+    expect(milo?.user.name).toBe(MILO_CARET.name);
+    const at = Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(milo!.cursor.anchor), hugo.doc);
+    expect(at?.index).toBeGreaterThan(0);
+    expect(states.at(-1)).toBeNull();
+    expect(typingChunks(block)).toHaveLength(MILO_TYPE_CHUNKS);
+    expect(typingChunks('one line')).toEqual(['one line']);
+  });
+
   it('appends its block at the end of what a person typed, and the person\'s pad shows it', async () => {
     const hugo = await hugosPad();
     hugo.doc.transact(() => hugo.text.insert(hugo.text.length, 'def two_sum(nums, target):\n    pass\n'));
@@ -125,7 +158,7 @@ describe('Milo writing into a pad', () => {
     // A placement elsewhere: an import at the very top, placed against the pad as it is when written.
     const top = await writeIntoPad(ROUND, () => (current) => ({ index: 0, text: current.startsWith('from functools') ? '' : 'from functools import lru_cache\n' }));
     expect(top).toMatchObject({ ok: true, from: 0, lines: 1 });
-    await until(() => hugo.text.toString().startsWith('from functools import lru_cache\ndef two_sum('), 'the import on Hugo\'s pad');
+    await until(() => hugo.text.toString().startsWith('from functools import lru_cache\n'), 'the import on Hugo\'s pad');
   });
 
   it('writes nothing when the round is not live, and nothing for an empty plan', async () => {

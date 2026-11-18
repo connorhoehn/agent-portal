@@ -7,7 +7,8 @@ jest.mock('../../../../config.js', () => ({
 
 import * as Y from 'yjs';
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awareness';
-import { PANEL_CARET_NAME, padFrameForGuest, renameAwareness } from '../guest-view.js';
+import { encodeAwareness, PANEL_CARET_NAME, padFrameForGuest, renameAwareness } from '../guest-view.js';
+import { miloPadClaims } from '../milo-seat.js';
 
 const CHANNEL = 'doc:ivpad:iv-live';
 const LEAD = 'lead-user';
@@ -51,6 +52,14 @@ describe('the pad as the candidate reads it', () => {
     expect(names.map((n) => n?.name)).toEqual(['Lead Person', PANEL_CARET_NAME, 'Candidate', PANEL_CARET_NAME]);
     expect(names[1]?.cursor).toEqual({ anchor: 3 });
     expect(JSON.stringify(out)).not.toMatch(/Panel Person|Someone Gone/);
+  });
+
+  it('Milo\'s own seat keeps its name for the candidate, and its caret written by encodeAwareness reads back', async () => {
+    const miloCtx = miloPadClaims({ interviewId: 'iv-x', grant: 'g'.repeat(24) }) as unknown as Record<string, unknown>;
+    const update = encodeAwareness(42, 1, { user: { name: 'Milo' }, cursor: { anchor: 7 } });
+    const frame = { type: 'crdt:awareness', channel: CHANNEL, updates: [{ clientId: 'c-milo', update }] };
+    const out = await padFrameForGuest(guestCtx, frame, { ...deps, senderContext: (id: string) => (id === 'c-milo' ? miloCtx : null) }) as { updates: Array<{ update: string }> };
+    expect(namesIn(out.updates[0]!.update)[0]).toEqual({ name: 'Milo', cursor: { anchor: 7 } });
   });
 
   it('staff recipients get the frame unchanged', async () => {

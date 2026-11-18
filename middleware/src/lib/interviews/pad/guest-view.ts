@@ -13,6 +13,7 @@
 // dropped (null), never passed through unchanged.
 import { padInterviewId } from './channel.js';
 import { claimsGuest } from '../lobby.js';
+import { claimsMiloPad } from './milo-seat.js';
 import { interviewsStore } from '../store-select.js';
 
 type Context = Record<string, unknown> | null;
@@ -55,7 +56,8 @@ export async function padFrameForGuest(recipient: Context, frame: Frame, deps: P
       const { clientId, update } = item as { clientId?: unknown; update?: unknown };
       if (typeof clientId !== 'string' || typeof update !== 'string') return null;
       const sender = deps.senderContext(clientId);
-      const named = claimsGuest(sender) || (lead !== null && sender?.['userId'] === lead);
+      // Milo's own seat (milo-seat.ts) is named Milo to everyone: the candidate should see who is writing.
+      const named = claimsGuest(sender) || claimsMiloPad(sender) || (lead !== null && sender?.['userId'] === lead);
       const safe = named ? update : renameAwareness(update, PANEL_CARET_NAME);
       if (safe === null) return null;
       updates.push({ ...(item as object), update: safe });
@@ -98,6 +100,16 @@ function padDocument(entry: unknown): string | null {
 }
 
 // ── y-protocols awareness update: varUint count, then per client varUint id, varUint clock, varString JSON ──
+
+/** One client's awareness update (base64): its state, or null for "gone" (y-protocols writes the JSON `null`). */
+export function encodeAwareness(clientId: number, clock: number, state: Record<string, unknown> | null): string {
+  const out: number[] = [];
+  writeVarUint(out, 1);
+  writeVarUint(out, clientId);
+  writeVarUint(out, clock);
+  writeVarString(out, JSON.stringify(state));
+  return Buffer.from(out).toString('base64');
+}
 
 /** The update (base64) with every present state's `user.name` set to `name`; null when it cannot be read. */
 export function renameAwareness(base64: string, name: string): string | null {

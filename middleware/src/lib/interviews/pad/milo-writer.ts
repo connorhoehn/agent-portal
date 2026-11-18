@@ -13,8 +13,10 @@
 //   4. ask `plan` what to write for that text and language (it may take a while: the socket stays subscribed, so edits made
 //      meanwhile still arrive); its answer is a placement, which is asked where and what against the pad AS IT IS THEN (`atEnd`:
 //      at the end, on its own lines after a blank one, the rule `questionInsertion` follows in the portal; a tool may place
-//      text elsewhere, such as an import at the top); insert it as one Yjs transaction, send that update with an id and wait
-//      for it to be acknowledged (stored by the service, and on its way to everyone on the pad);
+//      text elsewhere, such as an import at the top); TYPE it in a few chunks (MILO_TYPE_CHUNKS, MILO_TYPE_GAP_MS apart), each
+//      its own Yjs transaction and update, so people see it arrive, with Milo's named caret (awareness, name "Milo") at the
+//      end of what is typed so far; the last chunk goes with an id and is waited for (stored by the service, and on its way
+//      to everyone on the pad); the caret is then taken away;
 //   5. close the socket and the grant, whatever happened. Connecting and syncing, the plan, and the write are each bounded
 //      (MILO_SYNC_TIMEOUT_MS, MILO_PLAN_TIMEOUT_MS, MILO_WRITE_TIMEOUT_MS), all inside the grant's life.
 // A refusal or an error frame, a closed socket, or the bound passing is a failure code; nothing is retried here.
@@ -27,6 +29,23 @@ import { realtimeSigningSecret } from '../../realtime-token.js';
 import { PAD_LANGUAGES, type PadLanguage } from '../types.js';
 import { PAD_LANGUAGE_KEY, PAD_META_NAME, PAD_TEXT_NAME, padChannel } from './channel.js';
 import { closeMiloPadGrant, MILO_PAD_GRANT_MS, mintMiloPadToken, openMiloPadGrant } from './milo-seat.js';
+import { encodeAwareness } from './guest-view.js';
+
+/** Milo's caret: its name and colour on everyone's pad (the library CodePad draws remote awareness `user` and `cursor`). */
+export const MILO_CARET = Object.freeze({ name: 'Milo', color: '#7c3aed', colorLight: 'color-mix(in srgb, #7c3aed 20%, transparent)' });
+/** A block is typed in at most this many chunks, this far apart. */
+export const MILO_TYPE_CHUNKS = 4;
+export const MILO_TYPE_GAP_MS = 150;
+
+/** The text in up to `n` chunks, split at line ends where it can (a short text is one chunk). */
+export function typingChunks(text: string, n = MILO_TYPE_CHUNKS): string[] {
+  const lines = text.split(/(?<=\n)/);
+  if (lines.length <= 1 || n <= 1) return [text];
+  const per = Math.ceil(lines.length / n);
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += per) out.push(lines.slice(i, i + per).join(''));
+  return out;
+}
 
 /** Connecting, subscribing and the sync barrier. */
 export const MILO_SYNC_TIMEOUT_MS = 6_000;
@@ -71,6 +90,8 @@ export interface MiloWriterDeps {
   syncMs: number;
   planMs: number;
   writeMs: number;
+  /** The pause between typed chunks (tests: 0). */
+  typeGapMs: number;
 }
 
 /** This process's gateway on the loopback (or the address it is bound to when that is one host). */
@@ -80,7 +101,7 @@ export function ownGatewayUrl(port = config.port, host = listenHost()): string {
 }
 
 const DEFAULTS: MiloWriterDeps = {
-  gatewayUrl: () => ownGatewayUrl(), secret: realtimeSigningSecret, syncMs: MILO_SYNC_TIMEOUT_MS, planMs: MILO_PLAN_TIMEOUT_MS, writeMs: MILO_WRITE_TIMEOUT_MS,
+  gatewayUrl: () => ownGatewayUrl(), secret: realtimeSigningSecret, syncMs: MILO_SYNC_TIMEOUT_MS, planMs: MILO_PLAN_TIMEOUT_MS, writeMs: MILO_WRITE_TIMEOUT_MS, typeGapMs: MILO_TYPE_GAP_MS,
 };
 let overrides: Partial<MiloWriterDeps> = {};
 /** Tests: point the writer at a test gateway; `null` puts the defaults back. */
@@ -141,17 +162,37 @@ function exchange(d: MiloWriterDeps, token: string, channel: string, plan: MiloP
       if (done) return;
       const placed = placement ? placement(text.toString()) : null;
       if (!placed || !placed.text) { finish({ ok: false, code: 'nothing' }); return; }
-      bound(d.writeMs);
+      bound(d.writeMs + MILO_TYPE_CHUNKS * d.typeGapMs);
       const index = Math.max(0, Math.min(placed.index, text.length));
-      let update: Uint8Array | null = null;
-      const take = (u: Uint8Array, origin: unknown) => { if (origin === 'milo') update = u; };
-      doc.on('update', take);
-      doc.transact(() => text.insert(index, placed.text), 'milo');
-      doc.off('update', take);
-      if (!update) { finish({ ok: false, code: 'nothing' }); return; }
-      const after = text.toString();
-      written = { ok: true, from: index, inserted: placed.text.length, length: after.length, lines: linesIn(placed.text), language, text: after };
-      send({ action: 'update', update: b64(update), updateId: writeId });
+      // Typed in: each chunk after the last one, wherever other people's edits have moved it meanwhile.
+      let end = Y.createRelativePositionFromTypeIndex(text, index, -1);
+      const chunks = typingChunks(placed.text);
+      for (let i = 0; i < chunks.length; i += 1) {
+        if (done) return;
+        const at = i === 0 ? index : (Y.createAbsolutePositionFromRelativePosition(end, doc)?.index ?? text.length);
+        let update: Uint8Array | null = null;
+        const take = (u: Uint8Array, origin: unknown) => { if (origin === 'milo') update = u; };
+        doc.on('update', take);
+        doc.transact(() => text.insert(at, chunks[i]!), 'milo');
+        doc.off('update', take);
+        if (!update) { finish({ ok: false, code: 'nothing' }); return; }
+        end = Y.createRelativePositionFromTypeIndex(text, at + chunks[i]!.length, -1);
+        caret(end);
+        const last = i === chunks.length - 1;
+        if (last) {
+          const after = text.toString();
+          written = { ok: true, from: index, inserted: placed.text.length, length: after.length, lines: linesIn(placed.text), language, text: after };
+        }
+        send({ action: 'update', update: b64(update), ...(last ? { updateId: writeId } : {}) });
+        if (!last) await new Promise((r) => setTimeout(r, d.typeGapMs));
+      }
+    };
+    // Milo's named caret (y-protocols awareness, the doc's own client id): at `at`, or taken away (null) before the socket closes.
+    let clock = 0;
+    const caret = (at: Y.RelativePosition | null) => {
+      clock += 1;
+      const state = at === null ? null : { user: MILO_CARET, cursor: { anchor: Y.relativePositionToJSON(at), head: Y.relativePositionToJSON(at) } };
+      try { send({ action: 'awareness', update: encodeAwareness(doc.clientID, clock, state) }); } catch { /* the socket is closing */ }
     };
     socket.on('open', () => send({ action: 'subscribe' }));
     socket.on('message', (raw) => {
@@ -167,7 +208,7 @@ function exchange(d: MiloWriterDeps, token: string, channel: string, plan: MiloP
       }
       if (m['type'] === 'crdt' && m['action'] === 'subscribed') { send({ action: 'update', update: b64(Y.encodeStateAsUpdate(new Y.Doc())), updateId: syncId }); return; }
       if (m['type'] === 'crdt:persisted' && m['updateId'] === syncId) { void write(); return; }
-      if (m['type'] === 'crdt:persisted' && m['updateId'] === writeId && written) { finish(written); return; }
+      if (m['type'] === 'crdt:persisted' && m['updateId'] === writeId && written) { if (clock) caret(null); finish(written); return; }
       if (m['type'] === 'crdt:persistence-error') finish({ ok: false, code: 'refused' });
     });
     socket.on('unexpected-response', () => finish({ ok: false, code: 'refused' }));
