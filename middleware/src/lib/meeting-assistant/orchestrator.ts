@@ -49,7 +49,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { saidVerbatim, sayBoundMs, speakableText, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
+import { saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -1157,17 +1157,30 @@ export class AssistantRuntime {
           run.approved = null;
           if (hold.timer) clearTimeout(hold.timer);
           if (outcome !== 'spoken') run.speech.forgetUnheard();
+          // Given up: the session forgets the request, so it cannot claim a later utterance (whose frames would then be dropped).
+          if (outcome !== 'spoken') { try { session.cancelSay?.(id); } catch { /* best effort */ } }
           trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : 'withheld', why, frames: hold.frames.length, chars: words.length });
           hold.frames = [];
           resolve(outcome);
         },
       };
       run.approved = hold;
-      hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', 'timeout'); }, sayBoundMs(words));
-      (hold.timer as { unref?: () => void }).unref?.();
+      // The bound counts from when the line actually goes to the model (`sent`); before that it may wait, unsent, for the session to
+      // finish its own reply (SAY_QUIET_WAIT_MS).
+      const bound = (ms: number) => {
+        if (hold.releasing || run.approved !== hold) return;
+        if (hold.timer) clearTimeout(hold.timer);
+        hold.timer = setTimeout(() => { if (!hold.releasing) hold.finish('posted', 'timeout'); }, ms);
+        (hold.timer as { unref?: () => void }).unref?.();
+      };
+      bound(sayBoundMs(words) + SAY_QUIET_WAIT_MS);
       let asked = false;
       // Sent with numbers spelled out, so the session reads them as written; the check compares against the approved text itself.
-      try { asked = session.sayVerbatim!(id, speakableText(words), (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); }); } catch { asked = false; }
+      try {
+        asked = session.sayVerbatim!(id, speakableText(words),
+          (transcript) => { void this.releaseApproved(run, hold, transcript).catch(() => hold.finish('posted', 'not-relayed')); },
+          () => bound(sayBoundMs(words)));
+      } catch { asked = false; }
       if (!asked) hold.finish('posted', 'refused');
     });
   }

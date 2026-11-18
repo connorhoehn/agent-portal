@@ -123,6 +123,56 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('the spoken repeat (18 November film): a line asked for during the model\'s own reply is held unsent until quiet, then sent and claimed', async () => {
+    // The provider, as measured: a commentary that lands while its own response runs is never spoken. This fake does the same.
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    let speaking = false;
+    const heard: string[] = [];
+    onClientEvent = (ev) => { if (ev['type'] === 'session.commentary.append') heard.push(speaking ? 'ignored' : 'read'); };
+    const ended: Array<string | null> = [];
+    const sentAt: number[] = [];
+    // The candidate asked "Milo, can you repeat the question?" and the live model starts its own answer (policy drops it).
+    speaking = true;
+    audio(3000); words('Sure, the question was', 0);
+    await tick(20);
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t), () => sentAt.push(Date.now()));
+    await tick(20);
+    audio(3000); words(' how you would shard it.', 200);
+    await tick(20);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append')).toEqual([]);
+    expect(sentAt).toEqual([]);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    speaking = false; // the provider's reply is over; the client learns it once its words flush and its voice tail ends
+    await tick(100);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append')).toEqual([expect.objectContaining({ content: readAloudContent(Q) })]);
+    expect(sentAt.length).toBe(1);
+    expect(heard).toEqual(['read']);
+    // The model's own reply was not claimed; the line it now reads is.
+    expect(seen.outputAudio.filter((f) => f.say).length).toBe(0);
+    audio(3000); words(Q, 2000);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    expect(seen.outputAudio.filter((f) => f.say === 'say_1').length).toBe(4);
+    expect(ended).toEqual([Q]);
+    await s.close();
+  });
+
+  it('cancelSay forgets a request the caller withheld: the next utterance is nobody\'s (it used to claim it)', async () => {
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
+    await tick(20);
+    s.cancelSay('say_1');
+    audio(3000); words('About 58 minutes are left.', 0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    expect(seen.outputAudio.every((f) => f.say === undefined)).toBe(true);
+    expect(ended).toEqual([]);
+    await s.close();
+  });
+
   it('a close forgets the request (the caller\'s bound withholds it)', async () => {
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150 });
     await s.start(START);

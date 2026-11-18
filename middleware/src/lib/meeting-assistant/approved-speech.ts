@@ -114,6 +114,9 @@ export const SAY_MAX_BOUND_MS = 45_000;
 /** Allowed per character on top of the minimum (speech runs at about 15 characters a second; this is half that speed). */
 export const SAY_MS_PER_CHAR = 70;
 
+/** How long an approved line may wait, unsent, for the session to finish what it is saying (its own reply) before the bound starts. */
+export const SAY_QUIET_WAIT_MS = 15_000;
+
 /** How long the orchestrator waits for the utterance of `text` before it withholds it whole. */
 export function sayBoundMs(text: string): number {
   return Math.min(SAY_MAX_BOUND_MS, SAY_MIN_BOUND_MS + SAY_MS_PER_CHAR * text.length);

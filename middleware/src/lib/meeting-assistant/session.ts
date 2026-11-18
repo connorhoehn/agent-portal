@@ -75,9 +75,13 @@ export interface LiveMeetingSession {
    * The utterance this produces is told apart from every other response: its frames and its final transcript carry `say: id`, and
    * `ended` is called once when it is complete (all its frames and its final transcript emitted; `transcript` null when the session
    * produced no words for it). The caller checks the transcript against `text` before anything is relayed. False when the session
-   * cannot take it now (closed, not open). Absent: the session cannot say anything verbatim.
+   * cannot take it now (closed, not open). Absent: the session cannot say anything verbatim. The session may hold the line until it
+   * is quiet (the live session does: a line sent into its own running response is never said); `sent` is called each time the line
+   * actually goes to the model, so the caller's bound can count from then.
    */
-  sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void): boolean;
+  sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean;
+  /** Forget a `say` request the caller gave up on, so it never claims a later utterance. Absent: nothing to forget. */
+  cancelSay?(id: string): void;
   /** What the session has heard of the current person-turn but not yet emitted as an `inputTranscript` ('' when nothing). Read-only, for the voice gate. */
   pendingInputText(): string;
   /** The provider's error events so far (codes only, bounded); absent on a session with no provider. */

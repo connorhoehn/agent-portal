@@ -28,6 +28,11 @@
 // ends once its words equal the words asked for and both sides have been quiet `saySettleMs`, or after `sayGapMs` of quiet on both
 // sides whatever it says. Words that arrive after its transcript closed but before its audio ended join it (a run-on fails the check).
 // The words are sent framed as a line to read aloud (`readAloudContent`), and the session's instructions say what such a line is.
+// The line is sent only from QUIET (no output utterance open, no voice running, no claimed utterance): the provider does not speak a
+// commentary that lands while its own response is running (measured 18 November, the spoken repeat: the model had begun its own
+// answer to "can you repeat the question?", which policy drops, and the line sent meanwhile was never said). A request made while
+// the session is busy waits, unsent, for the next quiet. `cancelSay` forgets a request the caller gave up on, so it never claims a
+// later, unrelated utterance (it used to: a withheld line's request stayed queued and took the next answer's frames).
 //
 // Transcripts arrive only as DELTAS (no "done" event is documented). Input is cut into pieces: at a sentence end, at a gap of
 // more than `gapMs`, at a delegation, at close, and after `idleFlushMs` of quiet. Output is cut into UTTERANCES: one runs from its
@@ -86,6 +91,7 @@ const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
+interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number }
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
@@ -134,7 +140,10 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private tailLeft = 0;
   private audioSeq = 0;
   /** `say` requests sent and not yet claimed by an utterance, oldest first. */
-  private sayQueue: Array<{ id: string; text: string; ended: (transcript: string | null) => void }> = [];
+  private sayQueue: SayRequest[] = [];
+  /** `say` requests made while the session was busy, not yet sent, oldest first (sent at the next quiet). */
+  private sayWaiting: SayRequest[] = [];
+
   /** The `say` request whose utterance is being emitted now. */
   private saying: { id: string; text: string; ended: (transcript: string | null) => void; textDone: boolean; audioDone: boolean; transcript: string | null } | null = null;
   private closing: Promise<void> | null = null;
@@ -196,13 +205,39 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     return true;
   }
 
-  /** Say the server's words aloud (session.ts `sayVerbatim`): sent as spoken commentary; the next utterance from quiet is claimed for it. */
-  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void): boolean {
+  /**
+   * Say the server's words aloud (session.ts `sayVerbatim`): sent as spoken commentary once the session is quiet (now, or after the
+   * response running now); the next utterance from quiet after it is sent is claimed for it. `sent` is called when it goes out.
+   */
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean {
     if (this.ended || !this.opened || !text.trim()) return false;
-    this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: readAloudContent(text.slice(0, 1800)) });
-    this.sayQueue.push({ id, text, ended });
-    trace('say.asked', { t: this.sinceStart(), queued: this.sayQueue.length });
+    this.sayWaiting.push({ id, text, ended, askedAt: this.sinceStart(), ...(sent ? { sent } : {}) });
+    trace('say.asked', { t: this.sinceStart(), queued: this.sayQueue.length, waiting: this.sayWaiting.length, busy: this.busy() });
+    this.pumpSay();
     return true;
+  }
+
+  /** Forget a `say` request the caller gave up on (withheld): unsent, or sent and not yet claimed. A claimed one runs out as it is. */
+  cancelSay(id: string): void {
+    const before = this.sayQueue.length + this.sayWaiting.length;
+    this.sayQueue = this.sayQueue.filter((r) => r.id !== id);
+    this.sayWaiting = this.sayWaiting.filter((r) => r.id !== id);
+    if (this.sayQueue.length + this.sayWaiting.length !== before) trace('say.cancelled', { t: this.sinceStart() });
+  }
+
+  /** Something the provider is saying now: an utterance open, its voice still running, or a claimed one not yet over. */
+  private busy(): boolean { return this.output !== null || this.tailLeft > 0 || this.saying !== null; }
+
+  /** At quiet: send the waiting `say` lines, oldest first. */
+  private pumpSay(): void {
+    if (this.ended || this.closing !== null || !this.opened || this.busy() || this.sayWaiting.length === 0) return;
+    const ready = this.sayWaiting; this.sayWaiting = [];
+    for (const r of ready) {
+      this.send({ type: 'session.commentary.append', event_id: this.eventId(), delegation_id: null, content: readAloudContent(r.text.slice(0, 1800)) });
+      this.sayQueue.push(r);
+      trace('say.sent', { t: this.sinceStart(), waitedMs: this.sinceStart() - r.askedAt });
+      try { r.sent?.(); } catch { /* the caller's bound stands */ }
+    }
   }
 
   close(): Promise<void> {
@@ -261,7 +296,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (this.idle) { clearTimeout(this.idle); this.idle = null; }
     this.clearOutputTimer();
     this.input = null; this.output = null; this.open.clear();
-    this.sayQueue = []; this.saying = null;
+    this.sayQueue = []; this.sayWaiting = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
   }
@@ -365,6 +400,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       const say = this.saying?.id;
       this.emit('outputAudio', { pcm: Buffer.from(pcm), seq: this.audioSeq, ...(last ? { last: true as const } : {}), ...(say ? { say } : {}) });
       if (this.saying) { this.saying.audioDone = last; this.endSayIfDone(); }
+      if (last) this.pumpSay();
     }
   }
 
@@ -382,6 +418,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (!s || !s.textDone || !s.audioDone) return;
     this.saying = null;
     try { s.ended(s.transcript); } catch (e) { console.warn('[meeting-assistant] say listener threw', (e as Error).message); }
+    this.pumpSay();
   }
 
   /** Report usage as the larger of the provider's last figure and the wall clock since `session.started`, rounded up. */
@@ -481,6 +518,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const text = p?.text.replace(/\s+/g, ' ').trim();
     if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt, inputsBefore: p.inputsBefore, ...(p.say ? { say: p.say } : {}) }); }
     if (p?.say && this.saying?.id === p.say) { this.saying.textDone = true; this.saying.transcript = text || null; this.endSayIfDone(); }
+    this.pumpSay();
   }
 
   private onResponseEvent(raw: unknown): void {

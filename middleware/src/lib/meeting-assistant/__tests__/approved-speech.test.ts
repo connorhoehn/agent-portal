@@ -29,7 +29,7 @@ import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type S
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { NOT_SAID_ALOUD, numberWords, ordinalWords, saidVerbatim, sayBoundMs, speakableText, spokenWords } from '../approved-speech.js';
+import { NOT_SAID_ALOUD, numberWords, ordinalWords, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -42,14 +42,22 @@ const TONE = SCRIPT_TONE_FRAMES + OUTPUT_TAIL_FRAMES;
 class FakeSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'openai' as const;
   readonly acceptsText = false;
-  readonly asked: Array<{ id: string; text: string; ended: (t: string | null) => void }> = [];
+  readonly asked: Array<{ id: string; text: string; ended: (t: string | null) => void; sent?: () => void }> = [];
+  readonly cancelled: string[] = [];
+  /** Busy (its own reply running): the line waits, unsent, until the test calls `sent` (as the live session does at quiet). */
+  busy = false;
   async start(_i: SessionStartInput) { /* nothing */ }
   pendingInputText() { return ''; }
   appendAudio() { /* nothing */ }
   sendText(): void { throw new SessionTextUnsupported(); }
   answerToolCall() { return false; }
   appendContext() { return true; }
-  sayVerbatim(id: string, text: string, ended: (t: string | null) => void) { this.asked.push({ id, text, ended }); return true; }
+  sayVerbatim(id: string, text: string, ended: (t: string | null) => void, sent?: () => void) {
+    this.asked.push({ id, text, ended, ...(sent ? { sent } : {}) });
+    if (!this.busy) sent?.();
+    return true;
+  }
+  cancelSay(id: string) { this.cancelled.push(id); }
   async close() { this.emit('closed', { reason: 'close_requested' }); }
   fire<K extends keyof SessionEvents>(type: K, event: SessionEvents[K]) { this.emit(type, event); }
   /** `n` voiced frames, tagged for a say request or not. */
@@ -210,6 +218,47 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
       await flush();
       expect(sent).toEqual([]);
       expect(voiceTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ ev: 'voice.approved', decision: 'withheld', why: 'timeout' })]));
+      expect(s.cancelled).toEqual([req.id]);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('3b. the line waits, unsent, while the model finishes its own reply: the bound counts from when it is sent, and it is spoken', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r5b');
+      const s = fake();
+      s.busy = true; // the live model is mid-way through its own answer to "can you repeat the question?" (policy drops it)
+      const pending = runtime.sayHeldText(CALL, QUESTION, ALICE);
+      await flush();
+      const req = s.asked[0]!;
+      // Its reply runs on longer than the bound alone would allow; the line is still waiting, not withheld.
+      jest.advanceTimersByTime(sayBoundMs(QUESTION) - 500);
+      await flush();
+      req.sent!(); // quiet: the session sends the line now
+      jest.advanceTimersByTime(sayBoundMs(QUESTION) - 500);
+      s.frames(12, req.id);
+      req.ended(QUESTION);
+      await jest.advanceTimersByTimeAsync(5000);
+      expect(await pending).toBe('spoken');
+      expect(sent.length).toBe(12);
+      expect(s.cancelled).toEqual([]);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('3b. a line never sent (the session never fell quiet) is withheld after the wait plus the bound, and the session forgets it', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r5c');
+      const s = fake();
+      s.busy = true;
+      const pending = runtime.sayHeldText(CALL, QUESTION, ALICE);
+      await flush();
+      jest.advanceTimersByTime(sayBoundMs(QUESTION) + SAY_QUIET_WAIT_MS + 1);
+      expect(await pending).toBe('posted');
+      expect(s.cancelled).toEqual([s.asked[0]!.id]);
+      expect(sent).toEqual([]);
     } finally { jest.useRealTimers(); }
   });
 

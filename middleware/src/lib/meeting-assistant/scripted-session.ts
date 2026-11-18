@@ -123,9 +123,10 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   sayAs: ((text: string) => string) | null = null;
 
   /** Say the server's words aloud (session.ts `sayVerbatim`): their transcript and the tone, tagged with the request's id. */
-  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void): boolean {
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean {
     if (this.ended) return false;
     const words = this.sayAs ? this.sayAs(text) : text;
+    sent?.();
     queueMicrotask(() => { if (!this.ended) this.speak(words, undefined, id, ended); });
     return true;
   }
