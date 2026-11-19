@@ -47,6 +47,8 @@ export const HANDSFREE = Object.freeze({
   replayBurstMs: 5_000,
   /** After Milo's answer finishes playing, the asker alone is still routed for this long without saying the name. */
   followUpMs: 10_000,
+  /** A second person's queued "Milo" is let go if the floor has not freed this long after it (their words are stale by then). */
+  queueKeepMs: 8_000,
   /** A held button routes for at most this long, then releases itself. */
   holdMaxMs: 30_000,
   /** `HandsfreeRules.admit` must settle within this; later (or a rejection) counts as `deny`. */
@@ -136,10 +138,11 @@ export interface ListeningSide {
   /** Close one person's lane, dropping their ring at once. Idempotent. */
   closeLane(userId: string): void;
   /**
-   * Frames of one person's ring from `fromMs` (rounded down to a frame) up to now, oldest first, gaps as silence. Clamped to the ring
-   * (never more than `HANDSFREE.ringMs`); empty when there is no lane. A copy: the caller may keep it.
+   * Frames of one person's ring from `fromMs` (rounded down to a frame) up to now, or only those starting before `toMs` (a finished
+   * sentence), oldest first, gaps as silence. Clamped to the ring (never more than `HANDSFREE.ringMs`); empty when there is no lane.
+   * A copy: the caller may keep it.
    */
-  preRoll(userId: string, fromMs: number): Buffer[];
+  preRoll(userId: string, fromMs: number, toMs?: number): Buffer[];
   on<K extends keyof ListeningEvents>(type: K, fn: (e: ListeningEvents[K]) => void): () => void;
   /** Close every lane and stream; resolves once all streams are closed (bounded). Idempotent. Emits no events after it resolves. */
   close(): Promise<void>;

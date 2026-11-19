@@ -59,15 +59,16 @@ export class PersonRing {
   }
 
   /**
-   * Frames from `fromMs` (rounded down to a frame) through the newest complete frame, oldest first, missing frames as silence,
-   * never reaching further back than `floorMs` or the ring. Copies.
+   * Frames from `fromMs` (rounded down to a frame) through the newest complete frame (or the last one starting before `toMs`),
+   * oldest first, missing frames as silence, never reaching further back than `floorMs` or the ring. Copies.
    */
-  read(fromMs: number, floorMs = -Infinity): Buffer[] {
+  read(fromMs: number, floorMs = -Infinity, toMs = Infinity): Buffer[] {
     if (this.newest < 0) return [];
     const lowest = Math.max(this.newest - RING_FRAMES + 1, 0, Number.isFinite(floorMs) ? Math.ceil(floorMs / HANDSFREE.frameMs) : 0);
     const from = Math.max(Math.floor(Math.max(0, fromMs) / HANDSFREE.frameMs), lowest);
+    const last = Number.isFinite(toMs) ? Math.min(this.newest, Math.ceil(toMs / HANDSFREE.frameMs) - 1) : this.newest;
     const out: Buffer[] = [];
-    for (let i = from; i <= this.newest; i += 1) {
+    for (let i = from; i <= last; i += 1) {
       const f = this.frames.get(i);
       out.push(f ? Buffer.from(f) : Buffer.alloc(FRAME_BYTES));
     }

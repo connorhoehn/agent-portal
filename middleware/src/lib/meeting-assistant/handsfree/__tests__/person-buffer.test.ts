@@ -31,6 +31,14 @@ describe('PersonRing', () => {
     expect(r.write(ms(100), 5_000).map((f) => f.atMs)).toEqual([100, 5_000]);
   });
 
+  it('stops at a sentence end when asked (frames starting before it)', () => {
+    const r = new PersonRing();
+    r.write(ms(1000), 0); // frames 0..900
+    expect(r.read(200, -Infinity, 650)).toHaveLength(5); // 200, 300, 400, 500, 600
+    expect(r.read(200, -Infinity, 600)).toHaveLength(4);
+    expect(r.read(200)).toHaveLength(8);
+  });
+
   it('never returns more than 10 s, nor below the floor, and copies', () => {
     const r = new PersonRing();
     for (let t = 0; t < 30_000; t += 100) r.write(ms(100), t);

@@ -311,10 +311,10 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       emit('lane', { userId, state: 'down', reason: 'left' });
     },
 
-    preRoll(userId, fromMs) {
+    preRoll(userId, fromMs, toMs) {
       const lane = lanes.get(userId);
       if (!lane) return [];
-      return lane.ring.read(fromMs, opts.clock.nowMs() - HANDSFREE.ringMs);
+      return lane.ring.read(fromMs, opts.clock.nowMs() - HANDSFREE.ringMs, toMs);
     },
 
     on(type, fn) {

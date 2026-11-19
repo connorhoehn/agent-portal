@@ -60,6 +60,7 @@ interface Turn {
 }
 
 type Listener<K extends keyof RouterEvents> = (e: RouterEvents[K]) => void;
+interface Queued { userId: string; sentenceId: string; sentenceStartMs: number; atMs: number; endMs?: number }
 
 export class Router {
   private st: RouteState = { phase: 'idle' };
@@ -93,7 +94,8 @@ export class Router {
   private verdicts = new Map<string, TriggerVerdict>();
   /** Sentences of people admitted only to fixed lines, named: their final text gets a verdict and maybe a server line. */
   private fixedSentences = new Set<string>();
-  private queued: { userId: string; sentenceId: string; sentenceStartMs: number } | null = null;
+  /** One queued sentence (latest wins): when it was queued, and where it ended once its final came. */
+  private queued: Queued | null = null;
   private admitting: string | null = null;
   private holder: string | null = null;
   private holdTimer: unknown = null;
@@ -111,7 +113,7 @@ export class Router {
       l.on('frame', (e) => this.onFrame(e.userId, e.pcm)),
       l.on('name', (e) => { void this.onName(e.userId, e.sentenceId, e.sentenceStartMs, e.nameEndMs, e.textSoFar); }),
       l.on('words', (e) => this.onWords(e.userId, e.sentenceId, e.delta)),
-      l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named, e.startMs)),
+      l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named, e.startMs, e.endMs)),
       l.on('lane', (e) => { if (e.state === 'down' && e.reason === 'left') this.personLeft(e.userId); }),
     ];
   }
@@ -178,19 +180,27 @@ export class Router {
     }
     // Someone else's follow-up window is not a held floor: a new name takes it (the window is a courtesy to the asker, not a hold).
     const busy = (): boolean => (this.st.phase !== 'idle' && this.st.phase !== 'follow-up') || !!this.holder;
-    if (busy() || (this.admitting && this.admitting !== userId)) {
-      this.queued = { userId, sentenceId, sentenceStartMs };
-      this.emit('queued', { userId, sentenceStartMs });
-      return;
-    }
+    if (busy() || (this.admitting && this.admitting !== userId)) { this.queue(userId, sentenceId, sentenceStartMs); return; }
     this.admitting = userId;
     let admission: Admission;
     try { admission = await this.admit(userId); } finally { this.admitting = null; }
     if (this.closed) return;
     if (admission === 'fixed-lines') { this.keepFixed(userId, sentenceId); return; }
     if (admission !== 'route') { this.trace('name.denied', { userId }); return; }
-    if (busy()) { this.queued = { userId, sentenceId, sentenceStartMs }; this.emit('queued', { userId, sentenceStartMs }); return; }
+    if (busy()) { this.queue(userId, sentenceId, sentenceStartMs); return; }
     this.startRoute(userId, 'name', sentenceId, Math.max(sentenceStartMs, nameEndMs - HANDSFREE.preRollMaxMs));
+  }
+
+  private queue(userId: string, sentenceId: string, sentenceStartMs: number): void {
+    this.queued = { userId, sentenceId, sentenceStartMs, atMs: this.deps.clock.nowMs() };
+    this.emit('queued', { userId, sentenceStartMs });
+  }
+
+  /** The queued sentence, unless it has waited past `queueKeepMs` (then it is let go: replaying it now would be stale words). */
+  private liveQueue(): Queued | null {
+    const q = this.queued;
+    if (q && this.deps.clock.nowMs() - q.atMs > HANDSFREE.queueKeepMs) { this.queued = null; this.trace('queue.expired', { userId: q.userId }); return null; }
+    return q;
   }
 
   /** The rules' admission within its budget; late or failed is `deny`. */
@@ -210,10 +220,10 @@ export class Router {
     // Their sentence may already be final (the admission is asked after the name's delta; the final can overtake it).
   }
 
-  private startRoute(userId: string, via: Via, sentenceId: string | null, fromMs: number | null): void {
+  private startRoute(userId: string, via: Via, sentenceId: string | null, fromMs: number | null, toMs = Infinity): void {
     this.clearWindow();
-    this.out = fromMs === null ? [] : this.deps.listening.preRoll(userId, fromMs).slice(-MAX_QUEUED_FRAMES);
-    this.live = true;
+    this.out = fromMs === null ? [] : this.deps.listening.preRoll(userId, fromMs, toMs).slice(-MAX_QUEUED_FRAMES);
+    this.live = !Number.isFinite(toMs);
     this.openTurn(userId, via, sentenceId);
     this.trace('route', { userId, via, preRollFrames: this.out.length });
   }
@@ -250,7 +260,7 @@ export class Router {
     else if (this.turn && this.turn.userId === userId && this.turn.via === 'follow-up' && this.turn.sentenceId === null) this.turn.sentenceId = sentenceId;
   }
 
-  private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number): void {
+  private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number, endMs: number): void {
     if (this.closed) return;
     this.heard.delete(`${userId}|${sentenceId}`);
     // Milo's own words coming back through this mic (it began while he played or just after): not a request of anyone's.
@@ -261,6 +271,7 @@ export class Router {
     const mine = t && t.userId === userId && (t.sentenceId === sentenceId || (t.sentenceId === null && t.via === 'follow-up'));
     const queuedMine = this.queued && this.queued.userId === userId && this.queued.sentenceId === sentenceId;
     if (!mine && !queuedMine) return;
+    if (queuedMine && this.queued) this.queued.endMs = endMs;
     if (t && mine && t.via === 'hold') { this.armGiveUp(); return; }
     const via: 'name' | 'follow-up' = mine && t?.via === 'follow-up' && !named ? 'follow-up' : 'name';
     if (mine) this.armGiveUp();
@@ -370,7 +381,7 @@ export class Router {
   private answerEnded(): void {
     const t = this.turn;
     if (!t || this.st.phase === 'idle') return;
-    if (this.queued) { this.toIdle(); return; }
+    if (this.liveQueue()) { this.toIdle(); return; }
     this.openWindow(t.userId, this.playingUntil + HANDSFREE.followUpMs, t.verdict);
   }
 
@@ -444,18 +455,20 @@ export class Router {
     this.out = []; this.live = false;
     this.turn = null;
     this.setState({ phase: 'idle' });
-    const q = this.queued;
+    const q = this.liveQueue();
     if (q) { this.queued = null; void this.dequeue(q); }
   }
 
-  private async dequeue(q: { userId: string; sentenceId: string; sentenceStartMs: number }): Promise<void> {
+  /** The queued sentence gets the floor: replayed from its start (within the ring) to its end once final, else on into live audio. */
+  private async dequeue(q: Queued): Promise<void> {
     const v = this.verdicts.get(`${q.userId}|${q.sentenceId}`);
     if (v && v.kind !== 'request') return;
     this.admitting = q.userId;
     let a: Admission;
     try { a = await this.admit(q.userId); } finally { this.admitting = null; }
     if (this.closed || a !== 'route' || this.st.phase !== 'idle' || this.holder) return;
-    this.startRoute(q.userId, 'name', q.sentenceId, Math.max(q.sentenceStartMs, this.deps.clock.nowMs() - HANDSFREE.ringMs + HANDSFREE.frameMs));
+    this.startRoute(q.userId, 'name', q.sentenceId, Math.max(q.sentenceStartMs, this.deps.clock.nowMs() - HANDSFREE.ringMs + HANDSFREE.frameMs), q.endMs ?? Infinity);
+    if (q.endMs !== undefined) this.armGiveUp();
   }
 
   private armGiveUp(): void {

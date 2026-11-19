@@ -248,6 +248,44 @@ describe('hands-free router', () => {
     for (const t of w.talking.ticks) expect(new Set(t.map((b) => b[0]).filter((x) => x !== 0)).size).toBeLessThanOrEqual(1);
   });
 
+  it("a queued sentence is replayed only to its end (not what its speaker says after it), then the session hears quiet", async () => {
+    const w = world();
+    const T_LATER = 7;
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, one'); await settle();
+    const hugoStart = w.clock.nowMs();
+    w.talk(HUGO, T_HUGO, 20);
+    w.name(HUGO, 'h1', hugoStart); await settle();
+    w.sentence(HUGO, 'h1', 'Milo, and the second thing?', true, hugoStart); await settle();
+    w.talk(HUGO, T_LATER, 30); // Hugo goes on talking to the room
+    w.milo(2); // Una's answer ends: the queued sentence gets the floor
+    await settle();
+    expect(w.router.state()).toMatchObject({ phase: 'routing', userId: HUGO });
+    const before = w.talking.ticks.length;
+    for (let i = 0; i < 30; i++) w.step([[HUGO, T_LATER]]);
+    const tags = w.talking.ticks.slice(before).flat().map((b) => b[0]);
+    // All of the sentence (the fake stamps a frame where its 100 ms ends, so the last one sits on the sentence's end), nothing after.
+    expect(tags.filter((t) => t === T_HUGO).length).toBeGreaterThanOrEqual(19);
+    expect(tags).not.toContain(T_LATER);
+    expect(tags.slice(-5).every((t) => t === 0)).toBe(true);
+  });
+
+  it('a queued "Milo" older than 8 s is let go when the floor frees (stale words are not replayed)', async () => {
+    const w = world();
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, tell me a long story'); await settle();
+    const hugoStart = w.clock.nowMs();
+    w.talk(HUGO, T_HUGO, 10);
+    w.name(HUGO, 'h1', hugoStart); await settle();
+    for (let i = 0; i < 85; i++) { w.router.outputAudio(frame(T_MILO), false); w.step(); } // 8.5 s of answer
+    w.router.outputAudio(frame(T_MILO), true);
+    await settle();
+    expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+    expect(w.talking.heard()).not.toContain(T_HUGO);
+  });
+
   it('barge-in clears the relay inside the frame that carried it; echo does not', async () => {
     const w = world();
     w.talk(UNA, T_UNA, 5);
