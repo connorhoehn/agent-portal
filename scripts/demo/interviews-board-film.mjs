@@ -5,7 +5,17 @@
 // each side shows the other's named pointer. No Milo and no model: nobody is listening, so the lines (interviews-board-film-
 // lines.json, synthesised beforehand by interviews-film-voices.py) are placed in the edit at the moment each was "said".
 //
-//   node scripts/demo/interviews-board-film.mjs --out <dir> --voices <dir> [--final <mp4>] [--rehearse] [--compose-only]
+//   node scripts/demo/interviews-board-film.mjs --out <dir> --voices <dir> [--final <mp4>] [--rehearse] [--compose-only] [--milo]
+//
+// --milo: Milo is in the call for real, on the meeting assistant's live session (the provider; spends money, capped by
+// --max-minutes, default 8). The provider key is read in this process from the file IVFILM_KEY_FILE names and handed only to the
+// middleware's environment; IVFILM_MEDIA_ADMIN_TOKEN and IVFILM_SINK_SECRET as for the coding film. Each line is then also played
+// into its speaker's microphone, so Milo hears the call, and a line that follows Milo starts when his voice ends (his audio frames
+// as the candidate's browser receives them). The Milo beats: Mateo asks Milo how much time is left (time_left, allowed for a
+// candidate); the coach's opening suggestion is answered "I'll ask it"; at "where to go deep" the coach's follow-up is in Hugo's
+// footer and he presses Have Milo ask, Milo asks it aloud and Mateo answers it at the board; after End, the scorecard: Hugo's
+// ratings, the red flags list, the recap with "Milo recommends" and its evidence (closed). Each Milo turn is measured in
+// report.json (`turns`: the asking line's end to Milo's first audio, Milo's words from the call chat).
 //
 // The story: the recruiter assigns Mateo's System design round (POST /interviews), Hugo accepts it, it gets a time and Hugo
 // chooses "Design Twitter" (q-be-twitter) in Prepare's route; Hugo starts the call, the candidate opens the link and is
@@ -43,6 +53,8 @@ if (args.includes('--compose-only')) process.exit(await py('compose', '--out', O
 const REHEARSE = args.includes('--rehearse');
 // --no-call (a check of the board alone, without a media server): the round is started by its route and nobody joins the call.
 const NO_CALL = args.includes('--no-call');
+const MILO = args.includes('--milo') && !NO_CALL;
+const MAX_MINUTES = Number(flag('--max-minutes') ?? 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const MW_PORT = Number(process.env.IVFILM_MW_PORT || 4180);
@@ -79,7 +91,7 @@ for (const [id, t] of Object.entries(takes)) {
 console.log(`film: ${Object.keys(CLIPS).length} of ${Object.keys(LINES).length} lines have a take`);
 if (!fs.existsSync(path.join(OUT, 'media', 'lead.y4m'))) { const c = await py('cameras', '--out', OUT); if (c) process.exit(c); }
 
-// ── This film's middleware (mock world, no Milo, no model) and portal ──
+// ── This film's middleware (mock world; Milo live only with --milo; the coach is the scripted stand-in) and portal ──
 const answers = (port, host) => new Promise((resolve) => {
   const sock = net.connect({ port, host }); sock.setTimeout(1000);
   sock.once('connect', () => { sock.destroy(); resolve(true); });
@@ -92,6 +104,23 @@ for (const port of [MW_PORT, PORTAL_PORT]) {
 const devMock = {};
 for (const tok of JSON.parse(fs.readFileSync(path.join(ROOT, 'middleware', 'package.json'), 'utf8')).scripts['dev:mock'].split(/\s+/)) {
   const m = /^([A-Z_][A-Z0-9_]*)=(.*)$/.exec(tok); if (!m) break; devMock[m[1]] = m[2].replace(/^\$\{[A-Z_]+:-(.*)\}$/, '$1');
+}
+/** --milo: the meeting assistant's settings, as the coding film's live take has them; the key read here, never printed. */
+function miloEnv() {
+  if (!MILO) return {};
+  const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film: --milo needs ${k}`); process.exit(2); } return v; };
+  const line = fs.readFileSync(need('IVFILM_KEY_FILE'), 'utf8').split('\n').find((l) => /^\s*OPENAI_API_KEY\s*=/.test(l)) ?? '';
+  const key = line.replace(/^\s*OPENAI_API_KEY\s*=\s*/, '').trim().replace(/^['"]|['"]$/g, '');
+  if (!key) { console.error('film: no provider key in IVFILM_KEY_FILE'); process.exit(2); }
+  return {
+    OPENAI_API_KEY: key, MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1',
+    MEETING_ASSISTANT_MAX_MINUTES: String(MAX_MINUTES), MEETING_ASSISTANT_HARD_MAX_MINUTES: String(MAX_MINUTES),
+    MEETING_ASSISTANT_TRACE_FILE: path.join(WORK, 'trace.jsonl'),
+    MEETING_ASSISTANT_MEDIA_URL: process.env.IVFILM_MEDIA_URL || 'http://127.0.0.1:3911',
+    MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN: need('IVFILM_MEDIA_ADMIN_TOKEN'),
+    MEETING_ASSISTANT_SINK_BASE_URL: MIDDLEWARE, MEETING_ASSISTANT_SINK_SECRET: need('IVFILM_SINK_SECRET'),
+    NODE_OPTIONS: `--require ${path.join(ROOT, 'scripts', 'meeting-assistant', 'lib', 'deadman.cjs')}`, MA_DEADMAN_MS: String(25 * 60_000),
+  };
 }
 const started = [];
 function start(name, argv, cwd, env) {
@@ -116,9 +145,9 @@ start('middleware', [path.join(ROOT, 'middleware', 'node_modules', '.bin', 'tsx'
   REALTIME_PLATFORM_PUBLIC_URL: process.env.IVFILM_PLATFORM_PUBLIC_URL || 'http://localhost:23011',
   REALTIME_VIDEO_PUBLIC_URL: process.env.IVFILM_VIDEO_PUBLIC_URL || 'http://localhost:3911',
   SOCIAL_CHAT_DYNAMODB_ENDPOINT: dynamo, DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: dynamo, DOCUMENT_COMMENT_IMPORT_TABLE: 'document-comments',
-  // No model: Bedrock is refused by these keys, Milo is never invited, the coach is the scripted stand-in.
+  // No Bedrock: refused by these keys; the coach is the scripted stand-in. Milo's live session only with --milo (miloEnv).
   AWS_ACCESS_KEY_ID: 'film-blocks-bedrock', AWS_SECRET_ACCESS_KEY: 'film-blocks-bedrock', AWS_EC2_METADATA_DISABLED: 'true',
-  INTERVIEWS_COACH_MODEL: 'scripted', OPENAI_API_KEY: '',
+  INTERVIEWS_COACH_MODEL: 'scripted', OPENAI_API_KEY: '', ...miloEnv(),
 });
 start('portal', [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
   VITE_GATEWAY_URL: `http://localhost:${MW_PORT}`, API_PROXY_TARGET: MIDDLEWARE,
@@ -131,15 +160,16 @@ const ceiling = setTimeout(() => { console.error('film: hard timeout (15 min)');
 const req = createRequire(path.join(ROOT, 'portal', 'package.json'));
 const pw = await import(pathToFileURL(req.resolve('playwright')).href);
 const chromium = pw.chromium ?? pw.default.chromium;
-const { joinCall } = await import('../journeys/interviews/h8-room.mjs');
+const { joinCall, letSound } = await import('../journeys/interviews/h8-room.mjs');
 
 // ── The record ──
 const VIEW = { width: 1280, height: 800 };
 const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
-const report = { startedAt: new Date().toISOString(), interview: null, steps: [], notes: [] };
+const report = { startedAt: new Date().toISOString(), interview: null, steps: [], notes: [], turns: [] };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
-const scene = (n, title) => { timeline.scenes.push({ n, title, caption: '', atMs: Date.now() }); console.log(`scene ${n}: ${title}`); };
+// Scenes are numbered in the order they come (a --milo take has more of them).
+const scene = (_n, title) => { const n = timeline.scenes.length + 1; timeline.scenes.push({ n, title, caption: '', atMs: Date.now() }); console.log(`scene ${n}: ${title}`); };
 const at = () => (timeline.film.fromMs ? ((Date.now() - timeline.film.fromMs) / 1000).toFixed(1) : '-');
 
 // ── The people: one Chromium each (its fake camera is a still card), recorded; the room pane opened wide for the board ──
@@ -171,6 +201,32 @@ const CURSOR = () => {
       pointers: [...(s.collaborators?.values?.() ?? [])].filter((c) => c.pointer).map((c) => c.username) };
   };
 };
+// --milo: the page's microphone is a WebAudio stream; window.__filmSay(url) plays a line into it and resolves when it ends (the
+// coding film's MIC). The camera stays Chromium's fake device.
+const MIC = () => {
+  const md = navigator.mediaDevices;
+  if (!md?.getUserMedia) return;
+  const original = md.getUserMedia.bind(md);
+  let ac = null; let dest = null;
+  const ensure = () => { if (!ac) { ac = new AudioContext({ sampleRate: 48000 }); dest = ac.createMediaStreamDestination(); } return dest; };
+  md.getUserMedia = async (c) => {
+    if (!c?.audio) return original(c);
+    const video = c.video ? await original({ video: c.video }) : null;
+    const track = ensure().stream.getAudioTracks()[0].clone();
+    return new MediaStream([...(video ? video.getVideoTracks() : []), track]);
+  };
+  window.__filmWarm = async () => {
+    const d = ensure(); await ac.resume();
+    const src = ac.createBufferSource(); src.buffer = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); src.connect(d);
+    await new Promise((resolve) => { src.onended = resolve; src.start(); });
+  };
+  window.__filmSay = async (url) => {
+    const d = ensure(); await ac.resume();
+    const buf = await ac.decodeAudioData(await (await fetch(url)).arrayBuffer());
+    const src = ac.createBufferSource(); src.buffer = buf; src.connect(d);
+    return new Promise((resolve) => { src.onended = () => resolve(buf.duration); src.start(); });
+  };
+};
 async function person(key, userId) {
   const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required',
     `--use-file-for-fake-video-capture=${path.join(OUT, 'media', `${key}.y4m`)}`] });
@@ -185,6 +241,10 @@ async function person(key, userId) {
     } catch { /* none */ }
   });
   await context.addInitScript(CURSOR);
+  if (MILO) {
+    await context.addInitScript(MIC);
+    await context.route(`${PORTAL}/__film-audio/**`, (route) => route.fulfill({ path: path.join(AUDIO, path.basename(new URL(route.request().url()).pathname)), contentType: 'audio/wav' }));
+  }
   const page = await context.newPage();
   timeline.videos[key] = { startMs: Date.now(), file: null };
   const p = { key, context, page, api: context.request, errors: [] };
@@ -201,13 +261,67 @@ async function say(id, gapMs = 350) {
   timeline.speech.push({ id, who: c.who, text: c.text, file: c.file ? path.relative(OUT, c.file) : null, atMs, durMs: c.durMs });
   busy.until = atMs + c.durMs;
   console.log(`  [${at()}] ${c.who}: ${c.text}`);
-  await sleep(c.durMs);
+  const p = c.who === 'hugo' ? lead : cand;
+  if (MILO && c.file && p) {
+    await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`).catch((e) => note(`line ${id} did not play: ${String(e).slice(0, 120)}`));
+    busy.until = Math.max(busy.until, Date.now());
+  } else await sleep(c.durMs);
 }
 /** Waits until line `id` is `leadMs` from its end. */
 async function nearEnd(id, leadMs) {
   const s = await until(async () => timeline.speech.findLast((x) => x.id === id) ?? null, 15_000, 40);
   if (s) { const w = s.atMs + s.durMs - leadMs - Date.now(); if (w > 0) await sleep(w); }
 }
+
+// ── Milo (--milo): his voice as the candidate's browser receives it, his words in the call chat, the coach's footer deck ──
+let callId = null;
+const deckWatch = { stop: false };
+const voiceLog = MILO ? fs.createWriteStream(path.join(OUT, 'assistant-voice.jsonl')) : null;
+const milo = { frames: 0, utterances: 0, cur: null, lastStartMs: 0 };
+timeline.milo = [];
+function keepMiloVoice(page) {
+  page.on('websocket', (ws) => ws.on('framereceived', ({ payload }) => {
+    if (typeof payload !== 'string' || !payload.includes('assistant-audio')) return;
+    let f; try { f = JSON.parse(payload); } catch { return; }
+    if (f?.type !== 'assistant-audio' || typeof f.data?.pcm !== 'string') return;
+    const now = Date.now();
+    milo.frames += 1;
+    const c = milo.cur;
+    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; timeline.milo.push(milo.cur); }
+    const u = milo.cur;
+    u.seq = f.data.seq; u.done = f.data.last === true;
+    u.ms += (Buffer.from(f.data.pcm, 'base64').length / 2 / (f.data.sampleRate || 24000)) * 1000;
+    busy.until = Math.max(busy.until, u.startMs + u.ms);
+    voiceLog?.write(`${JSON.stringify({ atMs: now, runId: f.data.runId, seq: f.data.seq, sampleRate: f.data.sampleRate, last: f.data.last === true, pcm: f.data.pcm })}\n`);
+  }));
+}
+/** Waits until Milo has said something new (an utterance after `n`) and finished it; → true when he did. */
+async function miloSays(n, ms) {
+  if (!(await until(async () => milo.utterances > n, ms, 100))) return false;
+  await until(async () => Date.now() > busy.until + 120, 60_000, 60);
+  return true;
+}
+/** Milo's posts in the call chat (his words, as captioned), oldest first. */
+async function miloPosts() {
+  if (!callId) return [];
+  const r = await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`).catch(() => null);
+  if (!r?.ok()) return [];
+  return ((await r.json().catch(() => ({}))).messages ?? []).filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => String(m.text ?? m.body ?? ''));
+}
+/** One Milo turn, measured: the asking line's end to Milo's first audio, and what he said (his new post). */
+async function turn(kind, asker, asked, endMs, n, posts0, spoke) {
+  const u = timeline.milo[n] ?? null;
+  const said = spoke ? ((await until(async () => { const p = await miloPosts(); return p.length > posts0 ? p.slice(posts0).join(' | ') : null; }, 6000, 400)) ?? '') : '';
+  const t = { kind, asker, asked, askedEndS: Number(((endMs - timeline.film.fromMs) / 1000).toFixed(1)), spoke,
+    firstAudioS: u ? Number(((u.startMs - timeline.film.fromMs) / 1000).toFixed(1)) : null, latencyS: u ? Number(((u.startMs - endMs) / 1000).toFixed(1)) : null,
+    voiceS: u ? Number((u.ms / 1000).toFixed(1)) : null, said };
+  report.turns.push(t);
+  console.log(`milo turn ${kind}: ${JSON.stringify(t)}`);
+  return t;
+}
+const deckOf = (page) => page.getByTestId('interview-room-ask');
+const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+const deckShown = async (page) => ((await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null);
 
 // ── Hands: the mouse at a hand's pace, the keyboard ──
 const cursorAt = new Map();
@@ -361,6 +475,7 @@ try {
   if ((await greta.api.post(`${PORTAL}/api/session/login`, { data: { userId: GRETA } })).status() !== 200) throw new Error('login the recruiter');
   lead = await person('lead', HUGO);
   const hp = lead.page;
+  hp.on('request', (rq) => { const m = /\/api\/calls\/([^/?]+)\//.exec(new URL(rq.url()).pathname); if (m && !callId && m[1] !== 'null') callId = decodeURIComponent(m[1]); });
   const api = (p) => `${PORTAL}/api/interviews/interviews${p}`;
   const row = async () => (await (await lead.api.get(api(`/${IV}`))).json()).interview;
 
@@ -388,6 +503,7 @@ try {
   const link = (await (await greta.api.post(api(`/${IV}/invite`), { data: {} })).json().catch(() => ({}))).linkPath;
   if (!link) throw new Error('no invite link');
   cand = await person('cand', null);
+  if (MILO) keepMiloVoice(cand.page);
   const cp = cand.page;
   await cp.goto(`${PORTAL}${link}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await cp.getByTestId('join-continue').first().click({ timeout: 15_000 }).catch(() => undefined);
@@ -411,6 +527,31 @@ try {
   const [lv, cv] = [await board(hp), await board(cp)];
   step('1 both in the call, the board open and in sync on both sides', !!tiles && ls && cs && !!lv && !!cv,
     `camera tiles ${await cams(hp)}/${await cams(cp)}; board synced lead=${ls} candidate=${cs}; canvas lead ${Math.round(lv?.width)}x${Math.round(lv?.height)}, candidate ${Math.round(cv?.width)}x${Math.round(cv?.height)}`);
+  // --milo: Hugo invites Milo and turns his voice on before the film starts (the footer's own controls).
+  let A = null;
+  const booked = { listeningSeconds: null };
+  const miloState = async () => {
+    const r = await lead.api.get(A('state'));
+    const body = r.ok() ? await r.json().catch(() => ({})) : {};
+    if (typeof body.listeningSeconds === 'number') booked.listeningSeconds = body.listeningSeconds;
+    return body;
+  };
+  if (MILO) {
+    for (const pg of [hp, cp]) { await pg.evaluate(() => window.__filmWarm?.()).catch(() => undefined); await letSound(pg); }
+    await press(hp, hp.getByTestId('assistant-invite').first(), { timeout: 15_000 });
+    const goAhead = hp.getByTestId('assistant-budget-ask').getByRole('button', { name: /go ahead/i });
+    if (await goAhead.waitFor({ timeout: 2000 }).then(() => true, () => false)) await press(hp, goAhead);
+    await until(async () => callId, 10_000);
+    A = (rest) => `${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/${rest}`;
+    const listening = await until(async () => ((await miloState()).state === 'listening' ? true : null), 40_000, 1000);
+    await press(hp, hp.getByTestId('assistant-status-mark').first(), { timeout: 10_000 }).catch(() => undefined);
+    await press(hp, hp.getByRole('menuitem', { name: /Turn Milo's voice on/ }), { timeout: 10_000 }).catch(() => undefined);
+    let voiceOn = await until(async () => ((await miloState()).voice === true ? true : null), 10_000, 500);
+    if (!voiceOn) { const r = await lead.api.post(A('voice'), { data: { on: true } }); note(`voice on from the footer did not take; by the API ${r.status()}`); voiceOn = (await miloState()).voice === true; }
+    for (const pg of [hp, cp]) await letSound(pg);
+    step('M Milo listening, voice on', !!listening && !!voiceOn, `Milo listening=${!!listening}; voice on=${!!voiceOn}; call ${callId}`);
+    if (!listening) throw new Error('Milo is not listening');
+  }
   await sleep(1500);
 
   // ── On film ──
@@ -422,7 +563,24 @@ try {
   await press(hp, hp.getByRole('menuitem', { name: /Master template/ }).first(), { pause: 350 });
   await i01;
   await say('i02', 300);
-  await say('i03', 300);
+  const i03 = say('i03', 300);
+  // The coach's first suggestion (the round's own question, before anyone said it): Hugo asks it himself.
+  if (MILO) {
+    const first = await until(deckShown.bind(null, hp), 4000, 400);
+    if (first) await press(hp, deckOf(hp).getByRole('button', { name: /^I.ll ask it$/i }).first(), { pause: 300 }).catch((e) => note(`first suggestion: ${String(e).slice(0, 80)}`));
+    note(`the coach's first suggestion by "It's a classic": ${first ? `"${first.slice(0, 100)}", answered I'll ask it` : 'none yet'}`);
+    // Until "where to go deep", any other suggestion is the one Hugo asks himself (a waiting one would hold the follow-up back).
+    (async () => {
+      while (!deckWatch.stop) {
+        const t = await deckShown(hp);
+        if (t && !/home timeline built|tens of millions of followers/i.test(t)) {
+          await deckOf(hp).getByRole('button', { name: /^I.ll ask it$/i }).first().click({ timeout: 2000 }).then(() => note(`[${at()}] answered "I'll ask it" to "${t.slice(0, 80)}"`), () => undefined);
+        }
+        await sleep(1500);
+      }
+    })();
+  }
+  await i03;
   const n0 = await same('2 the Design Twitter master template on both sides', 'after "Start from a board"', 80);
   const title = (await board(cp))?.textAt['Design Twitter'];
   if (title) ORIGIN = [title[0], title[1]]; else note('no "Design Twitter" title on the candidate\'s board');
@@ -452,6 +610,15 @@ try {
   step('4 the candidate sees Hugo\'s named pointer', seesHugo.some((n) => /Hugo/.test(n)), `pointers on the candidate's board: ${JSON.stringify(seesHugo)}`);
   await say('b04');
   await say('b05');
+  if (MILO) {
+    scene(3, 'Mateo asks Milo how much time is left.');
+    const n = milo.utterances; const posts0 = (await miloPosts()).length;
+    await say('t01', 300);
+    const endMs = Date.now();
+    const spoke = await miloSays(n, 20_000);
+    const t = await turn('time_left', 'candidate', LINES.t01[1], endMs, n, posts0, spoke);
+    step('T Milo tells Mateo the time left, aloud', spoke && /minutes? (?:are|is) left|end of its time|minutes long/i.test(t.said), `spoke=${spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
+  }
 
   scene(3, 'Your design: the requirements noted, then the high-level design from the palette.');
   const PANEL = 215;
@@ -516,8 +683,36 @@ try {
   const lv2 = await board(hp);
   const wk = lowest(lv2, 'Workers');
   const point = wk ? (async () => { const [hx, hy] = px(lv2, wk[0] + 50, wk[1] + 32); await moveTo(hp, hx, hy, 800); })() : null;
-  await say('h13');
   await point;
+  // --milo: the coach's follow-up is in Hugo's footer by now (it waits 90 s after the first one); he has Milo ask it aloud.
+  let askedByMilo = false;
+  deckWatch.stop = true;
+  if (MILO) {
+    const FOLLOW_UP = /home timeline built|tens of millions of followers/i;
+    const deck = await until(async () => {
+      const t = await deckShown(hp);
+      if (!t) return null;
+      if (FOLLOW_UP.test(t)) return t;
+      note(`skipped the suggestion "${t.slice(0, 80)}"`);
+      await deckOf(hp).getByRole('button', { name: /^Skip$/ }).first().click().catch(() => undefined);
+      return null;
+    }, 30_000, 700);
+    if (deck) {
+      scene(6, 'Milo suggests a follow-up to Hugo only; Hugo has Milo ask it.');
+      const glideTo = (async () => { const b = await deckOf(hp).getByRole('button', { name: /have milo ask/i }).first().boundingBox().catch(() => null); if (b) await moveTo(hp, b.x + b.width / 2, b.y + b.height / 2, 900); })();
+      await say('m01', 250);
+      await glideTo;
+      const n = milo.utterances; const posts0 = (await miloPosts()).length;
+      await press(hp, deckOf(hp).getByRole('button', { name: /have milo ask/i }).first(), { pause: 150 });
+      const pressedAt = Date.now();
+      const receipt = until(async () => /Milo asked it aloud|Milo posted the question in the chat \([^)]*\)|Not sent: [^.]*\.|Milo did not say whether it was sent/.exec(await hp.locator('body').innerText())?.[0] ?? null, 20_000, 500);
+      askedByMilo = await miloSays(n, 30_000);
+      const t = await turn('have_milo_ask', 'lead (button)', deck, pressedAt, n, posts0, askedByMilo);
+      const rc = (await receipt) ?? '';
+      step('S Have Milo ask: Milo asks the follow-up aloud', askedByMilo && rc === 'Milo asked it aloud' && FOLLOW_UP.test(t.said), `deck "${deck.slice(0, 120)}"; receipt "${rc || 'none'}"; voice ${t.latencyS ?? '-'} s after the press; said "${t.said.slice(0, 120)}"`);
+    } else note('no follow-up suggestion within 30 s; Hugo asks his own');
+  }
+  if (!askedByMilo) await say('h13');
   // Mateo walks the fan-out with his pointer while Hugo looks at the provided design in his own pane.
   const walk = (async () => { const v = await board(cp); const w2 = lowest(v, 'Workers') ?? o(PLACE.workers);
     for (const [x, y] of [[w2[0] + 50, w2[1] + 32], box('cache', 'c'), box('app', 'c'), box('cache', 'c')]) { const [a, b] = px(v, x, y); await moveTo(cp, a, b, 900); await sleep(400); } })();
@@ -535,9 +730,10 @@ try {
 
   scene(6, 'Hugo ends the round. The board is kept on the record.');
   const nFinal = (await board(cp))?.count ?? n5;
-  const b15 = say('b15', 250);
+  if (MILO) await miloState().catch(() => undefined);
+  const b15 = say(MILO ? 's15' : 'b15', 250);
   await press(hp, hp.getByRole('tab', { name: 'Board' }).first(), { pause: 150 }).catch(() => note('no Board tab to go back to'));
-  await nearEnd('b15', 1500);
+  await nearEnd(MILO ? 's15' : 'b15', 1500);
   await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
   await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { pause: 150, timeout: 10_000 });
   await b15;
@@ -545,12 +741,57 @@ try {
   const ended = await cp.getByTestId('join-ended').first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
   await b16;
   const state = await until(async () => ((await row()).state === 'ended' ? 'ended' : null), 10_000, 500);
+  if (MILO) {
+    await miloState().catch(() => undefined);
+    report.spend = { listeningSeconds: booked.listeningSeconds, maxMinutes: MAX_MINUTES };
+    // The scorecard: Hugo's ratings, the red flags list, then the recap with Milo's recommendation and its evidence (closed).
+    await hp.waitForURL(new RegExp(`/interviews/rounds/${IV}/scorecard$`), { timeout: 8000 }).catch(() => undefined);
+    if (!/\/scorecard$/.test(new URL(hp.url()).pathname)) await hp.goto(`${PORTAL}/interviews/rounds/${IV}/scorecard`, { waitUntil: 'domcontentloaded' });
+    await hp.getByTestId('interviews-scorecard-form').first().waitFor({ timeout: 30_000 });
+    scene(8, 'Hugo scores the round; Milo recommends, with its evidence.');
+    const talk = say('s01', 300);
+    const groups = hp.locator('[data-ui-control="rating"]');
+    await groups.first().waitFor({ timeout: 20_000 }).catch(() => undefined);
+    const nGroups = await groups.count();
+    let rated = 0;
+    for (let i = 0; i < nGroups; i += 1) await press(hp, groups.nth(i).getByRole('radio', { name: /^3 / }).first(), { pause: 120, timeout: 5000, ms: 420 }).then(() => { rated += 1; }, (e) => note(`rating ${i}: ${String(e).slice(0, 100)}`));
+    const flags = hp.getByTestId('interviews-scorecard-red-flags').first();
+    const nFlags = await flags.locator('input[type="checkbox"]').count().catch(() => 0);
+    if (nFlags) {
+      await flags.scrollIntoViewIfNeeded().catch(() => undefined);
+      // He reads down the list; this design shows none of them, so nothing is ticked.
+      for (const k of [0, Math.floor(nFlags / 2), nFlags - 1]) { const b = await flags.locator('input[type="checkbox"]').nth(k).boundingBox().catch(() => null); if (b) { await moveTo(hp, b.x + 200, b.y + b.height / 2, 500); await sleep(250); } }
+    }
+    await talk;
+    step('R ratings and the red flags list on the board round\'s scorecard', rated === nGroups && nGroups > 0 && nFlags > 0, `${rated} of ${nGroups} competencies rated; ${nFlags} red flags listed, none ticked`);
+    try {
+      await press(hp, hp.getByTestId('interviews-scorecard-to-recap'), { pause: 100, timeout: 10_000, ms: 500 });
+      const open = hp.getByTestId('interviews-scorecard-ask-option-open');
+      if (await open.waitFor({ timeout: 3000 }).then(() => true, () => false)) await press(hp, open, { pause: 100, ms: 500 });
+      await hp.getByTestId('interviews-scorecard-recap-step').first().waitFor({ timeout: 30_000 });
+    } catch (e) { note(`recap step: ${String(e).slice(0, 120)}`); }
+    const adviceBox = hp.getByTestId('interviews-scorecard-milo-advice').first();
+    const adviceShown = await adviceBox.waitFor({ timeout: 90_000 }).then(() => true, () => false);
+    const adviceText = adviceShown ? squash(await adviceBox.innerText().catch(() => '')) : '';
+    if (adviceShown) {
+      const shownAt = Date.now();
+      const b = await adviceBox.boundingBox().catch(() => null); if (b) await moveTo(hp, b.x + Math.min(160, b.width / 2), b.y + b.height / 2, 600);
+      const verdict = /Don.t advance/i.test(adviceText) ? 's41d' : /Inconclusive/i.test(adviceText) ? 's41i' : /Advance/i.test(adviceText) ? 's41a' : /no recommendation/i.test(adviceText) ? 's41n' : null;
+      if (verdict) await say(verdict, 300);
+      const held = Date.now() - shownAt; if (held < 3200) await sleep(3200 - held);
+    }
+    const evidence = hp.getByTestId('interviews-recap-evidence').first();
+    const evidenceOpen = (await evidence.count()) ? await evidence.evaluate((el) => !!(el.closest('details')?.open ?? el.querySelector('details')?.open ?? el.getAttribute('aria-expanded') === 'true')).catch(() => null) : null;
+    step('G Milo recommends on the scorecard, its evidence closed', adviceShown && /Milo recommends\s*(Advance|Inconclusive|Don.t advance)|Milo has no recommendation yet/i.test(adviceText),
+      `pill "${adviceText.slice(0, 200)}"; evidence disclosure present=${(await evidence.count()) > 0}, open=${evidenceOpen}`);
+  }
   await hp.goto(`${PORTAL}/interviews/rounds/${IV}/record`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   const recCanvas = hp.getByTestId('interviews-record-board-canvas').first();
   const onRecord = await recCanvas.waitFor({ timeout: 30_000 }).then(() => true, () => false);
   await recCanvas.scrollIntoViewIfNeeded().catch(() => undefined);
   const rec = await until(async () => board(hp, 'interviews-record-board-canvas'), 15_000, 400);
   const picks = await hp.getByTestId('interviews-record-board').getByRole('radio').count().catch(() => 0);
+  if (MILO) scene(9, 'The board is kept on the record.');
   const b17 = say('b17', 300);
   const picker = hp.getByTestId('interviews-record-board').getByRole('radio').first();
   if (picks > 0) { const pb = await picker.boundingBox().catch(() => null); if (pb) await moveTo(hp, pb.x + pb.width / 2, pb.y + pb.height / 2, 700); }

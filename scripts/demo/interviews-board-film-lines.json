@@ -33,6 +33,14 @@
   "h14": ["hugo", "Nice, that's close to what we had in mind."],
   "b15": ["hugo", "Good. Let's stop there, that's our time. Thanks, Mateo."],
   "b16": ["cand", "Thank you, that was fun."],
-  "b17": ["hugo", "And the whole board stays on the record, with its snapshots."]
+  "b17": ["hugo", "And the whole board stays on the record, with its snapshots."],
+  "t01": ["cand", "Milo, how much time do we have?"],
+  "m01": ["hugo", "Good question. There's a follow-up I'd like you to hear first."],
+  "s15": ["hugo", "Good. Let's stop there for today. Thanks, Mateo."],
+  "s01": ["hugo", "Now my scorecard. I rate each competency myself, then tick any red flags I saw."],
+  "s41a": ["hugo", "Milo suggests advance, and I agree."],
+  "s41i": ["hugo", "Milo says inconclusive. Fair, I'll put my notes in for the panel."],
+  "s41d": ["hugo", "Milo says don't advance. I see why, and the panel decides."],
+  "s41n": ["hugo", "Milo doesn't have enough evidence for a call yet, so that one's on me."]
  }
 }
