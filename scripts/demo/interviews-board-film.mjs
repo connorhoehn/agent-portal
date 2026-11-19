@@ -38,6 +38,8 @@ const FINAL = flag('--final') ?? path.join(OUT, 'system-design.mp4');
 const py = (...a) => new Promise((resolve) => spawn('python3', [COMPOSE, ...a], { stdio: 'inherit' }).on('exit', (c) => resolve(c ?? 1)));
 if (args.includes('--compose-only')) process.exit(await py('compose', '--out', OUT, '--final', FINAL));
 const REHEARSE = args.includes('--rehearse');
+// --no-call (a check of the board alone, without a media server): the round is started by its route and nobody joins the call.
+const NO_CALL = args.includes('--no-call');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const MW_PORT = Number(process.env.IVFILM_MW_PORT || 4180);
@@ -231,11 +233,13 @@ const board = (page, scope = CANVAS) => page.evaluate((s) => window.__board(s), 
 const px = (v, sx, sy) => [(sx + v.scrollX) * v.zoom + v.left, (sy + v.scrollY) * v.zoom + v.top];
 const TOOLBAR_H = 70; // Excalidraw's tool island over the canvas's top
 /** Brings the scene rectangle [x0, y0, x1, y1] into view with the wheel (Ctrl + wheel to zoom, the wheel to pan), as a hand does. */
-async function camera(page, [x0, y0, x1, y1], maxZoom = 1.3) {
+// The drawer's canvas keeps Excalidraw's shape properties panel on its left while a tool is in hand: the camera puts the
+// target to the right of it (`reserve` px), so no stroke starts on the panel.
+async function camera(page, [x0, y0, x1, y1], maxZoom = 1.3, reserve = 0) {
   let v = await board(page); if (!v) { note(`camera: no board on ${page === lead?.page ? 'lead' : 'cand'}`); return; }
-  const cx = v.left + v.width / 2; const cy = v.top + TOOLBAR_H + (v.height - TOOLBAR_H) / 2;
+  const cx = v.left + reserve + (v.width - reserve) / 2; const cy = v.top + TOOLBAR_H + (v.height - TOOLBAR_H) / 2;
   await moveTo(page, cx, cy, 350);
-  const zt = Math.min(maxZoom, v.width / (x1 - x0), (v.height - TOOLBAR_H) / (y1 - y0));
+  const zt = Math.min(maxZoom, (v.width - reserve) / (x1 - x0), (v.height - TOOLBAR_H) / (y1 - y0));
   await page.keyboard.down('Control');
   for (let i = 0; i < 60 && Math.abs(v.zoom - zt) > 0.02; i++) {
     await page.mouse.wheel(0, Math.max(-10, Math.min(10, (v.zoom - zt) * 100))); await sleep(25);
@@ -249,7 +253,7 @@ async function camera(page, [x0, y0, x1, y1], maxZoom = 1.3) {
 }
 /** Picks one of Excalidraw's tools from its toolbar (the key when the toolbar button is not on screen). */
 async function tool(page, name, key) {
-  const b = page.getByTestId(CANVAS).getByTestId(`toolbar-${name}`).first();
+  const b = page.getByTestId(CANVAS).locator(`label:has([data-testid="toolbar-${name}"])`).first(); // the radio's label takes the click
   if (await b.isVisible().catch(() => false)) await press(page, b, { pause: 120, ms: 280 }); else await page.keyboard.press(key);
 }
 /** The background swatch for the next shapes (Excalidraw's own picker), when its panel is on screen. */
@@ -290,6 +294,7 @@ async function drag(page, [sx, sy], [ex, ey]) {
 async function same(id, label, min) {
   const r = await until(async () => { const [a, b] = [await board(lead.page), await board(cand.page)]; return a && b && a.count === b.count && a.count >= min ? [a, b] : null; }, 8000, 250);
   const [a, b] = r ?? [await board(lead.page), await board(cand.page)];
+  if (NO_CALL) await cand.page.screenshot({ path: path.join(OUT, `beat-${id.split(' ')[0]}.png`) }).catch(() => undefined);
   step(id, !!r, `${label}: lead ${a?.count ?? '?'} elements, candidate ${b?.count ?? '?'} (at least ${min} expected)`);
   return a?.count ?? min;
 }
@@ -331,7 +336,7 @@ try {
   // Hugo opens the room and starts the call; the recruiter's link; the candidate's door; admitted; both in the call.
   await hp.goto(`${PORTAL}/interviews/rounds/${IV}/room`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await hp.getByTestId('interview-room').first().waitFor({ timeout: 60_000 });
-  await joinCall(hp);
+  if (NO_CALL) await lead.api.post(api(`/${IV}/start`), { data: { revision: (await row()).revision } }); else await joinCall(hp);
   await until(async () => ((await row()).state === 'live' ? true : null), 20_000, 1000);
   const link = (await (await greta.api.post(api(`/${IV}/invite`), { data: {} })).json().catch(() => ({}))).linkPath;
   if (!link) throw new Error('no invite link');
@@ -346,11 +351,13 @@ try {
   await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first().click({ timeout: 30_000 });
   const join = cp.getByTestId('join-room-bar-start').or(cp.getByTestId('join-room-bar-join')).first();
   await join.waitFor({ timeout: 30_000 });
-  await until(async () => !(await join.isDisabled()), 10_000, 250);
-  await join.click();
-  await cp.getByRole('button', { name: 'Join now', exact: true }).first().click({ timeout: 2000 }).catch(() => undefined);
+  if (!NO_CALL) {
+    await until(async () => !(await join.isDisabled()), 10_000, 250);
+    await join.click();
+    await cp.getByRole('button', { name: 'Join now', exact: true }).first().click({ timeout: 2000 }).catch(() => undefined);
+  }
   const cams = (pg) => pg.evaluate(() => [...document.querySelectorAll('video')].filter((v) => v.videoWidth > 0 && v.readyState >= 2).length).catch(() => 0);
-  const tiles = await until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 300);
+  const tiles = NO_CALL || await until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 300);
   const synced = (pg) => pg.locator('[data-testid="interview-board"][data-connection="synced"]').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
   const [ls, cs] = [await synced(hp), await synced(cp)];
   await until(async () => (await board(hp)) && (await board(cp)), 20_000, 300);
@@ -385,8 +392,8 @@ try {
   await say('b05');
 
   scene(3, 'Requirements on stickies, typed straight onto the board.');
-  const look1 = [480, 130, 1460, 480];
-  await Promise.all([camera(cp, look1, 0.9), camera(hp, look1, 0.9)]);
+  const PANEL = 215;
+  await Promise.all([camera(cp, [480, 130, 960, 480], 1.1, PANEL), camera(hp, [480, 130, 1460, 480], 0.9)]);
   const b06 = say('b06', 150);
   let first = true;
   for (const [j, text] of ['Post a tweet', 'Follow someone', 'Home timeline'].entries()) { await shape(cp, sticky('functional', j), text, first ? '#ffec99' : null); first = false; }
@@ -395,13 +402,14 @@ try {
   step('4 Hugo sees the candidate\'s named pointer', seesCand.length > 0, `pointers on Hugo's board: ${JSON.stringify(seesCand)}`);
   const n1 = await same('5 functional stickies, same on both sides', 'after three functional stickies', n0 + 6);
   const b07 = say('b07', 150);
+  await camera(cp, [980, 130, 1460, 480], 1.1, PANEL);
   for (const [j, text] of ['Fast timeline reads', 'Highly available', 'A few seconds stale is OK'].entries()) await shape(cp, sticky('nonfunctional', j), text);
   await b07;
   const n2 = await same('6 non-functional stickies, same on both sides', 'after three non-functional stickies', n1 + 6);
 
   scene(4, 'The high-level design, drawn with Excalidraw\'s own tools.');
   const look2 = [-20, 490, 460, 830];
-  await Promise.all([camera(cp, look2), camera(hp, look2)]);
+  await Promise.all([camera(cp, look2, 1.3, PANEL), camera(hp, look2)]);
   const b08 = say('b08', 150);
   await shape(cp, HLD.client, 'Client', '#a5d8ff');
   await shape(cp, HLD.api, 'API');
@@ -445,7 +453,7 @@ try {
   const seesHugo2 = (await board(cp))?.pointers ?? [];
   if (!seesHugo2.some((n) => /Hugo/.test(n))) note(`Hugo's pointer not on the candidate's board when he picked the fan-out: ${JSON.stringify(seesHugo2)}`);
   const look3 = [-20, 490, 960, 830];
-  await Promise.all([camera(cp, look3), camera(hp, look3)]);
+  await Promise.all([camera(cp, [480, 490, 960, 830], 1.1, PANEL), camera(hp, look3)]);
   const b14 = say('b14', 150);
   await shape(cp, [FR.deepdive[0] + 20, FR.deepdive[1] + 30, 400, 110], 'Fan-out on write for most accounts; celebrity tweets merged at read time', '#ffec99');
   await b14;
@@ -477,7 +485,8 @@ try {
   timeline.film.toMs = Date.now();
   report.pageErrors = [...lead.errors, ...cand.errors].slice(0, 20);
 } catch (e) {
-  step('X the take', false, `stopped: ${String(e?.stack ?? e).split('\n').slice(0, 2).join(' ')}`);
+  step('X the take', false, `stopped: ${String(e?.stack ?? e).split('\n').filter((l) => !/^\s*-\s+(waiting|  )/.test(l)).slice(0, 8).join(' | ')}`);
+  for (const p of [lead, cand].filter(Boolean)) await p.page.screenshot({ path: path.join(OUT, `stopped-${p.key}.png`) }).catch(() => undefined);
   if (!timeline.film.toMs) timeline.film.toMs = Date.now();
 } finally {
   await greta?.api.dispose().catch(() => undefined);
