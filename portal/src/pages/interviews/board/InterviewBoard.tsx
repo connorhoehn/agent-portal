@@ -7,12 +7,12 @@
 // Above it one compact row: the lead's "Start from a board" menu (the round's questions that carry a starting board;
 // a pick adds the board as one write and never clears anything) and the connection chip. The lead's room also
 // checkpoints the board (lib/interviewsBoard.ts BOARD_SNAPSHOT_MS) for the record.
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GatewayContext, useYjsDoc, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
 import { Chip, DropdownMenu, InlineAlert, LoadingState, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
 import { offlineGateway } from '../../../components/OptionalGatewayProvider';
 import {
-  BOARD_SNAPSHOT_MS, boardChannel, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, sceneKey, type KitBoard,
+  BOARD_SNAPSHOT_MS, boardChannel, boardCheckpoints, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, type KitBoard,
 } from '../../../lib/interviewsBoard';
 import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, type PadConnection } from '../../../lib/interviewsPad';
 import { useBoardFit } from './useBoardFit';
@@ -58,21 +58,17 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, gateway, 
   // Opened, the board zooms to its content (and again when an empty board first gets some), until the person moves it.
   useBoardFit(ydoc, `[data-board="${documentId}"]`);
 
-  // The lead's checkpoints: a changed board every BOARD_SNAPSHOT_MS, and once more when the room closes.
-  const posted = useRef('');
-  const flush = useCallback(() => {
-    if (!ydoc || !checkpoint) return;
-    const elements = readBoardElements(ydoc);
-    const key = sceneKey(elements);
-    if (!elements.length || key === posted.current) return;
-    posted.current = key;
-    void postBoardSnapshot(interviewId, elements);
-  }, [ydoc, checkpoint, interviewId]);
+  // The lead's checkpoints: a changed board every BOARD_SNAPSHOT_MS, and once more when the room closes. A post the
+  // server did not take is tried again on the next tick (boardCheckpoints).
+  const checkpoints = useMemo(() => (ydoc && checkpoint
+    ? boardCheckpoints(() => readBoardElements(ydoc), (elements) => postBoardSnapshot(interviewId, elements))
+    : null), [ydoc, checkpoint, interviewId]);
+  const flush = useCallback(() => { void checkpoints?.flush(); }, [checkpoints]);
   useEffect(() => {
-    if (!checkpoint || connection !== 'synced') return undefined;
+    if (!checkpoints || connection !== 'synced') return undefined;
     const tick = setInterval(flush, BOARD_SNAPSHOT_MS);
     return () => { clearInterval(tick); flush(); };
-  }, [checkpoint, connection, flush]);
+  }, [checkpoints, connection, flush]);
 
   const boards = (questions ?? []).filter((q) => q.board);
   const [inserted, setInserted] = useState<string | null>(null);

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, boardChannel, boardDocumentId, fitBoardView, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
 import { blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
@@ -107,4 +107,34 @@ test('the kit editor writes a starting board only when its scene moved: same ids
   insertBoard(ydoc, blueprintBoard());
   const read = readBoardElements(ydoc) as unknown as Array<Record<string, unknown>>;
   assert.equal(boardSceneKey(read), boardSceneKey(read.map((e) => ({ ...e }))));
+});
+
+test('a checkpoint counts as posted only once the server took it: a failed post is tried again on the next flush; one post at a time', async () => {
+  let board: Array<Record<string, unknown>> = [{ id: 'a', type: 'rectangle', version: 1 }];
+  const posts: string[] = [];
+  let ok = false;
+  let gate: Promise<void> | null = null;
+  const checkpoints = boardCheckpoints(() => board as never, async (elements) => {
+    posts.push(sceneKey(elements));
+    if (gate) await gate;
+    return ok;
+  });
+  assert.equal(await checkpoints.flush(), false, 'the server did not take it');
+  ok = true;
+  assert.equal(await checkpoints.flush(), true, 'the same board is posted again on the next flush');
+  assert.equal(await checkpoints.flush(), true, 'and then not again');
+  assert.deepEqual(posts, ['a:1', 'a:1']);
+  board = [];
+  assert.equal(await checkpoints.flush(), true, 'an empty board is nothing to post');
+  assert.equal(posts.length, 2);
+  // Two flushes at once (a tick and the end): the second waits for the first, and posts only if the board moved since.
+  board = [{ id: 'a', type: 'rectangle', version: 2 }];
+  let open!: () => void;
+  gate = new Promise<void>((r) => { open = r; });
+  const first = checkpoints.flush();
+  const second = checkpoints.flush();
+  gate = null;
+  open();
+  assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.deepEqual(posts, ['a:1', 'a:1', 'a:2']);
 });

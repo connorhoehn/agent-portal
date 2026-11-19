@@ -65,6 +65,8 @@ import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
 import { interviewsFlagGate, interviewsRouter } from './routes/interviews.js';
+import { INTERVIEWS_LARGE_JSON, INTERVIEWS_MOUNT } from './routes/interviews/body-limits.js';
+import { jsonBody } from './lib/json-body.js';
 import { interviewInviteRouter } from './routes/interview-invite.js';
 import { runsFacadeRouter } from './routes/runs.js';
 import { runReportsRouter } from './routes/run-reports.js';
@@ -183,7 +185,8 @@ app.use(securityHeaders);
 // server, never a browser. Mounted ahead of the browser-origin check, the JSON parser and the session middleware so none applies.
 app.use('/api/internal/meeting-assistant', meetingAssistantSinkRouter);
 app.use(browserOrigin);
-app.use(express.json({ verify: captureRawBody }));
+// express's 100 KB everywhere, but the named routes that carry a bigger document (lib/json-body.ts).
+app.use(jsonBody(INTERVIEWS_LARGE_JSON, captureRawBody));
 app.use(cookieParser());
 // HMAC-only source-owned attachments for platform/gateway collaboration
 // sessions. Mount before browser/session routes so it never inherits a user
@@ -413,7 +416,7 @@ app.use('/api/access/search', requireTenant('access'), requireAction('ViewAccess
 app.use('/api/access', requireTenant('access'), accessRouter);
 // The interviews tenant (docs/interviews-tenant-plan.md): openings, candidates, interviews, scorecards.
 // Reads only in phase 0; INTERVIEWS_ENABLED (lib/interviews/flag.ts) gates the whole mount, on in the mock world.
-app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
+app.use(INTERVIEWS_MOUNT, requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
 // The in-tenant quick request (routes/access-requests-quick.ts): a session
 // floor, NOT requireTenant('access') — a Work reader asks for the budgets tier
 // from the Initiatives page. It files through the same submit path; it limits

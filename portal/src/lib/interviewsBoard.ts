@@ -66,9 +66,39 @@ export const boardSnapshotsPath = (interviewId: string): string => `${INTERVIEWS
 /** A stable fingerprint of a scene: the elements' ids and versions. */
 export const sceneKey = (elements: readonly DiagramElement[]): string => elements.map((e) => `${e.id}:${e.version}`).sort().join('|');
 
+/** Post one checkpoint; true when the server took it (stored, or the same board as its last one). */
 export async function postBoardSnapshot(interviewId: string, elements: readonly DiagramElement[]): Promise<boolean> {
   const res = await writeJson<{ stored: boolean }>(boardSnapshotsPath(interviewId), 'POST', { elements });
   return res.ok;
+}
+
+export interface BoardCheckpoints {
+  /** Post the board when it changed since the last post the server took; true when nothing is left unposted. */
+  flush(): Promise<boolean>;
+}
+
+/**
+ * The lead's checkpoints of one board. A board counts as posted only once the server took it, so a failed post (the
+ * network, a refusal) is tried again on the next flush; one post at a time, a flush during a post waiting for it.
+ */
+export function boardCheckpoints(read: () => readonly DiagramElement[] | null, post: (elements: readonly DiagramElement[]) => Promise<boolean>): BoardCheckpoints {
+  let posted = '';
+  let last: Promise<boolean> = Promise.resolve(true);
+  const once = async (): Promise<boolean> => {
+    const elements = read();
+    if (!elements?.length) return true;
+    const key = sceneKey(elements);
+    if (key === posted) return true;
+    const ok = await post(elements).catch(() => false);
+    if (ok) posted = key;
+    return ok;
+  };
+  return {
+    flush() {
+      last = last.then(once, once);
+      return last;
+    },
+  };
 }
 
 export interface BoardSnapshot { seq: number; at: string; who: { id: string; name: string }; elements: Array<Record<string, unknown>> }
