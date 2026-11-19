@@ -741,6 +741,15 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   scale, latency, consistency and the like), the coach shows the lead one of them as an ordinary suggestion, once per
   interview. It is a rule (`coach/clarifying.ts`), logged under `rules:clarifying`: no model call and no hold. It does not
   wait for the 90-second gap or a new line, since silence is the point.
+- Follow (decided 2026-11-19): in a board round the lead's canvas follows the candidate from the start, so what the candidate
+  draws, and their pointer named "Candidate", is in the lead's view wherever the lead left the board. It is the library's
+  `followUserId` (the canvas mirrors the candidate's published scroll and zoom; pointers and cameras already travel in the
+  board's awareness, at most 20 a second). The lead's own press, wheel or key inside the canvas pauses it (a pointer move
+  does not), so the lead can still draw; the row's "Following Mateo" / "Follow Mateo" button stops or resumes it. The panel
+  has the same button, off at first; the candidate follows nobody and has no button but sees the lead's named pointer. The
+  fit-on-open holds while following. A mirror shows the candidate's top-left on a smaller canvas, so each canvas publishes
+  its size beside its camera and a `contain` follow is queued for the library (`docs/ui-components-queue.md`). The "added to
+  the board" notice clears itself after 4 s.
 - Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
 ## Not in this plan
