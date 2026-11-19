@@ -520,6 +520,47 @@ async function seedWorld(): Promise<void> {
     });
   });
 
+  describe("Milo's interview tools: the said sources, spoken_part, the pad's Milo side and kinds, the settings row", () => {
+    it('takes the tool sources and refuses an unknown one; a part mark keeps the heard words, bounded, and never lands on a spoken line', async () => {
+      const IV = 'iv-r6d1k9wt'; // no other said rows
+      const row = (id: string, source: 'tests' | 'imports' | 'helper' | 'ack' | 'intro', n: number) => ({ id, interviewId: IV, callId: null,
+        kind: 'answer' as const, source, questionId: null, suggestionId: null, text: `Line ${id}.`, askedBy: 'u-hugo', saidAt: at(n), posted: false, spoken: false });
+      const sources = ['tests', 'imports', 'helper', 'ack', 'intro'] as const;
+      for (const [i, source] of sources.entries()) await said.append(row(`said-milo-${source}`, source, i + 1));
+      await expect(said.append({ ...row('said-milo-bad', 'tests', 9), source: 'bogus' as never })).rejects.toThrow();
+      expect((await said.list(IV)).map((r) => r.source)).toEqual([...sources]);
+      expect(await said.markSpokenPart(IV, 'said-milo-tests', 'Added twelve')).toMatchObject({ id: 'said-milo-tests', spoken: false, spokenPart: 'Added twelve' });
+      expect((await said.markSpokenPart(IV, 'said-milo-imports', 'x'.repeat(2000)))?.spokenPart).toHaveLength(1500);
+      await said.markSpoken(IV, 'said-milo-helper');
+      expect(await said.markSpokenPart(IV, 'said-milo-helper', 'Added')).toBeNull();
+      const byId = new Map((await said.list(IV)).map((r) => [r.id, r]));
+      expect(byId.get('said-milo-helper')).toMatchObject({ spoken: true });
+      expect(byId.get('said-milo-helper')!.spokenPart).toBeUndefined();
+      expect(byId.get('said-milo-ack')!.spokenPart).toBeUndefined();
+      expect(await said.erase([IV])).toBe(sources.length);
+    });
+
+    it("appends Milo's tests, imports and helper events, and refuses a side or a kind the log does not know", async () => {
+      const base = interviewPadLogFixture.rows().find((r) => r.interviewId === MATEO_CODING)!;
+      const ev = (kind: string, n: number, side = 'milo') => ({ ...base, side, kind, whoId: 'milo', at: at(n), clientAt: at(n) }) as typeof base;
+      const posted = await pad.append('iv-m8t3h6ng', [ev('tests', 1), ev('imports', 2), ev('helper', 3)]);
+      expect(posted.map((r) => [r.seq, r.side, r.kind])).toEqual([[1, 'milo', 'tests'], [2, 'milo', 'imports'], [3, 'milo', 'helper']]);
+      await expect(pad.append('iv-m8t3h6ng', [ev('solution', 4)])).rejects.toThrow();
+      await expect(pad.append('iv-m8t3h6ng', [ev('tests', 4, 'bot')])).rejects.toThrow();
+      expect(await pad.counts('iv-m8t3h6ng')).toMatchObject({ events: 3, lastSeq: 3 });
+    });
+
+    it('reads the default with no row, upserts one row per interview, and two sets at once leave one row holding one of them', async () => {
+      const id = 'iv-n5z9f2cq'; // no settings row yet
+      expect(await miloSettings.get(id)).toEqual({ candidateMayAsk: false, updatedBy: null, updatedAt: null });
+      expect(await miloSettings.setCandidateMayAsk(id, true, 'u-hugo', at(1))).toEqual({ candidateMayAsk: true, updatedBy: 'u-hugo', updatedAt: at(1) });
+      await Promise.all([miloSettings.setCandidateMayAsk(id, false, 'u-greta', at(2)), miloSettings.setCandidateMayAsk(id, true, 'u-hugo', at(3))]);
+      const now = await miloSettings.get(id);
+      expect([{ candidateMayAsk: false, updatedBy: 'u-greta', updatedAt: at(2) }, { candidateMayAsk: true, updatedBy: 'u-hugo', updatedAt: at(3) }]).toContainEqual(now);
+      expect((await q(`SELECT COUNT(*)::int AS n FROM interview_milo_settings WHERE interview_id = ${literal(id)}`))[0]).toMatchObject({ n: '1' });
+    });
+  });
+
   describe('O-256 the runs store: one row per (interview, runId), finished once (I4.4)', () => {
     it('two inserts of one run id at once: one row, the other told it exists; two finishes at once: one result kept', async () => {
       const seeded = interviewRunsFixture.rows()[0]!;
