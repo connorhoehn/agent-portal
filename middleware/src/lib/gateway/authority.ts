@@ -369,8 +369,9 @@ async function guestChannel(args: LiveChannelAuthorization): Promise<boolean> {
   if (inDocumentNamespace(base)) return admitPadChannel(args, base);
   const lobby = interviewLobbyName(guest.interviewId);
   const seat = () => guestHoldsInterviewSeat(args.ctx, guest.interviewId);
-  // Its lobby's presence, and the lobby's bare name (the room's live hints: a subscribe, never a publish).
-  if (base === lobby) return (args.channel === `presence:${lobby}` || (args.channel === lobby && args.kind === 'subscribe')) && seat();
+  // Its lobby's presence; and the lobby's bare name (the room's live hints, the end among them: a subscribe, never a publish).
+  if (base === lobby && args.channel === lobby) return args.kind === 'subscribe' && guestHoldsInterviewSeat(args.ctx, guest.interviewId, { hint: true });
+  if (base === lobby) return args.channel === `presence:${lobby}` && seat();
   if (lobbyForCallLobbyChannel(base) === lobby || base === `${MEETING_CHANNEL_PREFIX}${lobby}`) {
     return args.kind === 'subscribe' && args.channel === base && seat();
   }

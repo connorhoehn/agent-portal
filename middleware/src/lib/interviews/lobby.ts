@@ -80,11 +80,14 @@ export interface GuestSeatFacts {
   interview: Pick<Interview, 'id' | 'state' | 'type'> | null;
   admission: AdmissionState;
   pad?: boolean;
+  /** The room's live hint channel (lib/interviews/live-hint.ts): it also carries the END, so an ended interview still counts. */
+  hint?: boolean;
 }
 
 export function guestSeatRule(f: GuestSeatFacts): boolean {
   if (!f.flagOn || !f.guestInterviewId || !f.interview || f.interview.id !== f.guestInterviewId) return false;
-  if (!CALL_STATES.includes(f.interview.state) || (f.pad && f.interview.type !== 'technical')) return false;
+  const states = f.hint ? [...CALL_STATES, 'ended'] : CALL_STATES;
+  if (!states.includes(f.interview.state) || (f.pad && f.interview.type !== 'technical')) return false;
   return f.admission === 'admitted';
 }
 
@@ -127,9 +130,9 @@ export function guestOfContext(ctx: Context): ContextGuest | null {
 }
 
 /** The guest's facts read now: its interview while the invite and its session are alive (null otherwise), and its admission. */
-async function guestFacts(guest: ContextGuest, now: Date): Promise<{ interview: Interview; admission: AdmissionState } | null> {
+async function guestFacts(guest: ContextGuest, now: Date, hint = false): Promise<{ interview: Interview; admission: AdmissionState } | null> {
   if (!interviewsEnabled() || !guestRealtimeEnabled()) return null;
-  const loaded = await loadGuestSession(guest.inviteId, (invite) => !!invite.sessionHash && guestSessionTag(invite.sessionHash) === guest.session, '', now);
+  const loaded = await loadGuestSession(guest.inviteId, (invite) => !!invite.sessionHash && guestSessionTag(invite.sessionHash) === guest.session, '', now, hint ? { endedAfterAdmission: true } : {});
   if (!loaded || loaded.interview.id !== guest.interviewId) return null;
   return { interview: loaded.interview, admission: admissionOf(loaded.invite).state };
 }
@@ -144,14 +147,14 @@ export async function guestContextCurrent(ctx: Context, now = interviewsNow()): 
  * Does this guest context hold a seat in `interviewId`'s call (or its pad) NOW? Read twice: the second read
  * follows every other read, so a revoke or a turn-away in between refuses.
  */
-export async function guestHoldsInterviewSeat(ctx: Context, interviewId: string, opts: { pad?: boolean } = {}, now = interviewsNow()): Promise<boolean> {
+export async function guestHoldsInterviewSeat(ctx: Context, interviewId: string, opts: { pad?: boolean; hint?: boolean } = {}, now = interviewsNow()): Promise<boolean> {
   const guest = guestOfContext(ctx);
   if (!guest) return false;
   try {
     for (let read = 0; read < 2; read++) {
-      const facts = await guestFacts(guest, now);
+      const facts = await guestFacts(guest, now, !!opts.hint);
       if (!guestSeatRule({ flagOn: interviewsEnabled(), guestInterviewId: facts ? guest.interviewId : null, interview: facts?.interview ?? null,
-        admission: facts?.admission ?? 'not-knocked', pad: opts.pad }) || interviewId !== guest.interviewId) return false;
+        admission: facts?.admission ?? 'not-knocked', pad: opts.pad, hint: opts.hint }) || interviewId !== guest.interviewId) return false;
     }
     return true;
   } catch { return false; }

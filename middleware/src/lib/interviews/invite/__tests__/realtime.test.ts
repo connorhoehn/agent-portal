@@ -208,6 +208,17 @@ describe('with guest realtime on', () => {
     expect(await admitSubscribe(ctx, `interviews:interview:${OTHER}`)).toBe(false);
   });
 
+  it('after the lead ends the interview the guest still hears the hint channel (the end itself) and nothing else of the room', async () => {
+    await admit();
+    const row = await interviewsStore().getInterview(OWN);
+    const ended = await interviewsStore().endInterview(OWN, new Date().toISOString(), row!.revision);
+    expect([ended.ok, (await interviewsStore().getInterview(OWN))?.state]).toEqual([true, 'ended']);
+    expect(await admitSubscribe(ctx, own)).toBe(true);
+    expect(await admitPublish(ctx, own)).toBe(false);
+    expect(await admitSubscribe(ctx, `presence:${own}`)).toBe(false);
+    expect(await join(own)).toBe(false);
+  });
+
   it('never rings anyone or runs the call, and never another lobby', async () => {
     await admit();
     for (const action of ['invite', 'remove-participant', 'mute-participant', 'transfer-host', 'set-title']) expect([action, await join(own, action)]).toEqual([action, false]);

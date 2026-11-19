@@ -77,6 +77,14 @@ describe('the guest seat', () => {
     expect(guest({ pad: true, interview: interview({ type: 'behavioural' }) })).toBe(false);
     expect(guest({ pad: true })).toBe(true);
   });
+
+  it('the live hint channel also hears the end: an ended interview still reaches its admitted guest there, and nothing else is widened', () => {
+    expect(guest({ hint: true, interview: interview({ state: 'ended' }) })).toBe(true);
+    for (const state of ['assigned', 'scored', 'cancelled', 'declined'] as const) expect(guest({ hint: true, interview: interview({ state }) })).toBe(false);
+    expect(guest({ hint: true, interview: interview({ state: 'ended' }), admission: 'waiting' })).toBe(false);
+    expect(guest({ hint: true, interview: interview({ state: 'ended', id: 'iv-2' }) })).toBe(false);
+    expect(guest({ interview: interview({ state: 'ended' }) })).toBe(false);
+  });
 });
 
 describe('a guest context, by its claims', () => {
