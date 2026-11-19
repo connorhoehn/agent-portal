@@ -22,6 +22,22 @@
 //   I2.4i…  (a call only) both in the call, "2 joined" on both bars, tiles carry names, the chat both ways, Leave →
 //          "You left the call" → Join, the chrome folded while live and back after End, End through the deck with
 //          Keep going and Esc, Join while the gateway is still connecting
+// The room's header (the full-width room): the h1 is the round's essentials; what the call is doing is the header's
+// description card (About …); the round's facts are under the Details tab.
+async function roomHeader(page) {
+  const h = page.getByTestId('interview-room-idle').first();
+  const title = (await h.locator('[data-page-header-title]').first().innerText()).trim();
+  await h.getByRole('button', { name: /^About / }).first().click();
+  const state = (await page.getByTestId('interview-room-idle-description-text').first().innerText().catch(() => '')).trim();
+  await page.keyboard.press('Escape');
+  return { title, state };
+}
+async function roomFacts(page) {
+  await page.getByTestId('interview-room-pane').getByRole('tab', { name: /^Details/ }).click();
+  return (await page.getByTestId('interview-room-details').getByTestId('key-value').innerText()).replace(/\s+/g, ' ');
+}
+const roomTab = (page, name) => page.getByTestId('interview-room-pane').getByRole('tab', { name: new RegExp(`^${name}`) });
+
 export default async function run(ctx) {
   const { SEED, record, signIn, resetMock, mintInvite, openGuest, toWaiting, waiting, admit, startInterview, endInterview,
     api, guestApi, shootPage, portal } = ctx;
@@ -58,19 +74,19 @@ export default async function run(ctx) {
   await step('I2.4a', async () => {
     await lead.goto(roomUrl(iv), { waitUntil: 'domcontentloaded' });
     await seen(lead, 'interview-room-idle');
-    const title = (await lead.getByTestId('interview-room-idle').getByTestId('page-header').innerText()).trim();
-    const facts = await lead.getByTestId('interview-room-idle').getByTestId('key-value').innerText();
-    const tabs = (await lead.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
-    // The width the shell gives the pane is its right column's (shell-split-secondary); the pane's card sits inside it.
-    const width = Math.round((await lead.getByTestId('shell-split-secondary').boundingBox())?.width ?? 0);
-    const card = Math.round((await lead.getByTestId('interview-room-pane').boundingBox())?.width ?? 0);
+    const { title, state } = await roomHeader(lead);
+    const facts = await roomFacts(lead);
+    const tabs = (await lead.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim().split('\n')[0]);
+    // The room is full width: its workspace takes the page beside the rail (no right column before the call).
+    const width = Math.round((await lead.getByTestId('interview-room-pane').boundingBox())?.width ?? 0);
+    const card = Math.round(lead.viewportSize()?.width ?? 0);
     const trail = await lead.getByText('My interviews', { exact: true }).count();
     const panes = await lead.getByTestId('page-conversation-pane').count();
     const shellChat = await lead.locator('[data-testid^="shell-huddle"], [data-testid="huddle-chat-pane"]').count();
-    await lead.getByTestId('interview-room-pane-tab-questions').click();
+    await roomTab(lead, 'Questions').click();
     const qText = await lead.getByTestId('interview-room-tab-questions').innerText().catch(() => '');
     const hasQuestion = prompts.length > 0 && prompts.some((p) => qText.includes(p.slice(0, 40)));
-    await lead.getByTestId('interview-room-pane-tab-pad').click();
+    await roomTab(lead, 'Pad').click();
     const start = lead.getByTestId('shell-footer-context-start');
     callable = (await start.count()) > 0 && !(await start.isDisabled());
     const reason = callable ? '' : (await start.getAttribute('title')) ?? '';
@@ -79,26 +95,26 @@ export default async function run(ctx) {
     const wp = await wen.newPage();
     await wp.goto(roomUrl(SEED.panelInterview), { waitUntil: 'domcontentloaded' });
     await seen(wp, 'interview-room-pane');
-    const bTabs = (await wp.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
+    const bTabs = (await wp.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim().split('\n')[0]);
     await wp.close();
-    const ok = title === 'The call has not started' && /Candidate\s*Mateo/.test(facts) && /Panel\s*Hugo Marchetti \(lead\)/.test(facts)
-      && JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat"]' && JSON.stringify(bTabs) === '["Plan","Milo","Chat"]'
+    const ok = /^Mateo/.test(title) && state.startsWith('The call has not started') && /Candidate\s*Mateo/.test(facts) && /Panel\s*Hugo Marchetti \(lead\)/.test(facts)
+      && JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat","Details"]' && JSON.stringify(bTabs) === '["Plan","Milo","Chat","Details"]'
       && hasQuestion && trail > 0 && panes === 1 && shellChat === 0 && shots.every((s) => s.ok)
       && (callable || NO_PLATFORM.test(reason));
     widthSeen = { width, card };
-    return { ok, detail: `"${title}"; tabs ${tabs.join('/')} (technical, column ${width} px, card ${card} px), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
+    return { ok, detail: `"${title}" (${state.slice(0, 40)}); tabs ${tabs.join('/')} (technical, room ${width} px of ${card}), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
   });
 
-  // The technical pane's width (decision 21: 560 to 760 px), its own step, measured on the column the shell gives it at
-  // 1440 (from I2.4a) and again at 1280.
+  // The room's width (the owner's full-width room, which replaced decision 21's 560 to 760 px pane): the workspace takes
+  // the page beside the rail, at 1440 (from I2.4a) and again at 1280.
   await step('I2.4o', async () => {
     await lead.setViewportSize({ width: 1280, height: 900 });
     await lead.waitForTimeout(300);
-    const at1280 = Math.round((await lead.getByTestId('shell-split-secondary').boundingBox())?.width ?? 0);
+    const at1280 = Math.round((await lead.getByTestId('interview-room-pane').boundingBox())?.width ?? 0);
     await lead.setViewportSize({ width: 1440, height: 900 });
-    const inRange = (w) => w >= 560 && w <= 760;
-    return { ok: !!widthSeen && inRange(widthSeen.width) && inRange(at1280),
-      detail: `the technical pane's column: ${widthSeen ? `${widthSeen.width} px at 1440 (card ${widthSeen.card} px)` : 'not measured at 1440'}, ${at1280} px at 1280; want 560 to 760` };
+    const wide = (w, of) => w >= of * 0.85;
+    return { ok: !!widthSeen && wide(widthSeen.width, 1440) && wide(at1280, 1280),
+      detail: `the room's workspace: ${widthSeen ? `${widthSeen.width} px at 1440` : 'not measured at 1440'}, ${at1280} px at 1280; want at least 85% of the window` };
   });
 
   await step('I2.4b', async () => {
@@ -160,7 +176,7 @@ export default async function run(ctx) {
         detail: `2 joined on both bars ${both}; the room live ${live}, trail gone ${trail === 0}; the candidate's tiles "${tiles.replace(/\s+/g, ' ').slice(0, 60)}"` };
     });
     await step('I2.4j', async () => {
-      await lead.getByTestId('interview-room-pane-tab-chat').click();
+      await roomTab(lead, 'Chat').click();
       await lead.getByTestId('interview-room-chat').getByRole('textbox').fill('Welcome, can you hear me?');
       await lead.keyboard.press('Enter');
       const got = await until(async () => /Welcome, can you hear me\?/.test(await guest.page.getByTestId('join-room-chat').innerText().catch(() => '')), 20_000);
@@ -228,7 +244,7 @@ export default async function run(ctx) {
     const text = await guest.page.locator('body').innerText();
     await lead.reload({ waitUntil: 'domcontentloaded' });
     const closed = await seen(lead, 'interview-room-closed');
-    const closedText = closed ? (await lead.getByTestId('interview-room-closed').innerText()).replace(/\s+/g, ' ') : '';
+    const closedText = closed ? (await roomHeader(lead)).state.replace(/\s+/g, ' ') : '';
     const ok = endedPage && /To have your recording and transcript deleted, ask the person who sent you your interview link\. They are removed within 30 days\./.test(deletion)
       && kept && deadAfter === 0 && !/score|result|decision|next stage/i.test(text) && /This interview has ended/.test(closedText);
     return { ok, detail: `ended page ${endedPage}, the deletion line "${deletion.slice(0, 60)}…"; a reload ${kept ? 'keeps the ended page' : deadAfter ? 'reads the DEAD page' : 'lost it'}; the lead reads "${closedText.slice(0, 40)}"; shots ${shots.map((s) => s.width).join(', ')}` };

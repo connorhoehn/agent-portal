@@ -15,6 +15,22 @@
 // member has no Invite, End, admit, Have Milo ask or Dismiss in the call; the candidate sees both staff tiles: the lead's
 // with the lead's name, the panel member's as "Interviewer" (E4 #32: the lead's name only, everywhere); the candidate
 // leaves → "You left the call" with Join → joins again → 3 joined.
+// The room's header (the full-width room): the h1 is the round's essentials; what the call is doing is the header's
+// description card (About …); the round's facts are under the Details tab.
+async function roomHeader(page) {
+  const h = page.getByTestId('interview-room-idle').first();
+  const title = (await h.locator('[data-page-header-title]').first().innerText()).trim();
+  await h.getByRole('button', { name: /^About / }).first().click();
+  const state = (await page.getByTestId('interview-room-idle-description-text').first().innerText().catch(() => '')).trim();
+  await page.keyboard.press('Escape');
+  return { title, state };
+}
+async function roomFacts(page) {
+  await page.getByTestId('interview-room-pane').getByRole('tab', { name: /^Details/ }).click();
+  return (await page.getByTestId('interview-room-details').getByTestId('key-value').innerText()).replace(/\s+/g, ' ');
+}
+const roomTab = (page, name) => page.getByTestId('interview-room-pane').getByRole('tab', { name: new RegExp(`^${name}`) });
+
 export default async function run(ctx) {
   const { SEED, record, signIn, resetMock, mintInvite, openGuest, toWaiting, waiting, admit, shootPage, portal } = ctx;
   const step = async (name, fn) => {
@@ -56,11 +72,11 @@ export default async function run(ctx) {
     await panel.goto(roomUrl(iv), { waitUntil: 'domcontentloaded' });
     await seen(panel, 'interview-room-idle');
     await panel.waitForTimeout(5000); // the room's knock read runs every few seconds
-    const title = (await panel.getByTestId('interview-room-idle').getByTestId('page-header').innerText()).trim();
-    const facts = (await panel.getByTestId('interview-room-idle').getByTestId('key-value').innerText()).replace(/\s+/g, ' ');
+    const { state: title } = await roomHeader(panel);
+    const facts = await roomFacts(panel);
     const controls = await leadControls(panel);
     const shots = await shootPage(panel, 'room-panel-before');
-    const ok = title === 'Waiting for the lead' && /Wen Zhao \(lead\)/.test(facts) && /Hugo Marchetti/.test(facts) && /The candidate Waiting for the lead to let them in/.test(facts) && none(controls) && shots.every((s) => s.ok);
+    const ok = title.startsWith('Waiting for the lead') && /Wen Zhao \(lead\)/.test(facts) && /Hugo Marchetti/.test(facts) && /The candidate Waiting for the lead to let them in/.test(facts) && none(controls) && shots.every((s) => s.ok);
     return { ok, detail: `"${title}"; facts "${facts.slice(0, 160)}"; lead's controls ${JSON.stringify(controls)}` };
   });
 
@@ -79,8 +95,8 @@ export default async function run(ctx) {
     const wp = await wen.newPage();
     await wp.goto(roomUrl(live), { waitUntil: 'domcontentloaded' });
     await seen(wp, 'interview-room-pane');
-    const tabs = (await wp.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim());
-    const title = (await wp.getByTestId('page-header').first().innerText().catch(() => '')).trim();
+    const tabs = (await wp.getByTestId('interview-room-pane').getByRole('tab').allInnerTexts()).map((t) => t.trim().split('\n')[0]);
+    const title = (await roomHeader(wp).catch(() => ({ state: '' }))).state;
     const invite = await mintInvite(greta, live);
     const g = await openGuest(invite.linkPath);
     opened.push(g.context);
@@ -95,7 +111,7 @@ export default async function run(ctx) {
     const yes = await admit(hugo, live, true);
     const inRoom = await seen(g.page, 'join-room');
     await wp.close();
-    const ok = JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat"]' && none(controls) && at === 'waiting'
+    const ok = JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat","Details"]' && none(controls) && at === 'waiting'
       && meeting === 'You are meeting Hugo Marchetti and one other interviewer.' && yes.status === 200 && inRoom;
     return { ok, detail: `Wen on the panel reads "${title}", tabs ${tabs.join('/')}, lead's controls ${JSON.stringify(controls)}; the candidate arriving after the start: ${at}, "${meeting}", admitted ${yes.status} → ${inRoom ? 'the room' : 'NOT the room'}` };
   });
