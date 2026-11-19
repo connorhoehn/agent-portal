@@ -82,8 +82,11 @@ export class BedrockCoachModel implements CoachModel {
 // In a technical round no step offers a question about complexity before working code, or about testing before a run
 // (stage.ts `fitsStage`).
 // Steps 2 to 4 are not keyed to a line and quote none. A question counts as asked when a panel line or the pad holds its
-// opening words (its first six; the whole prompt when another bank question opens the same way), as whole words, or when
-// one panel line holds at least half of its content words.
+// opening words (its first six; the whole prompt when another bank question opens the same way), as whole words, when
+// one panel line holds at least half of its content words, or when the lead posted it into the pad (the pad log's insert,
+// which arrives within seconds; the pad's text arrives only in a snapshot every 30 seconds). A panel line is read with
+// the short first fragment of the line after it, since a live transcript can credit a question's last word to the
+// candidate ("So, what's the runtime" / "complexity? Oh! It's linear time.").
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 /** A question's opening words (its first six). */
@@ -126,14 +129,39 @@ function cueOf(input: CoachInput, prompt: string): string {
   return input.questions.some((q) => words(q.prompt) !== whole && opening(q.prompt) === open) ? whole : open;
 }
 
+/** At most this many words of the next line's first sentence are read as the end of a panel line (panelReads). */
+export const SPILL_WORDS = 3;
+
 /**
- * Has this question been asked? A panel line holds its cue (cueOf) or half of its content words, or the pad holds its cue
- * (the Prepare insert posts the prompt there as a wrapped comment; `words` drops the comment marks and joins the lines);
- * never a mere overlap with the pad's code.
+ * The panel's lines as the coach reads them for "asked": each one, joined to the first sentence of the line right after it
+ * when that line is someone else's and its first sentence is a fragment of at most SPILL_WORDS words. A live transcript
+ * places a speaker change a second or so off, so the question's last word can open the answer's line.
+ */
+function panelReads(lines: CoachInput['lines']): string[] {
+  return lines.flatMap((l, i) => {
+    if (l.side !== 'panel') return [];
+    const next = lines[i + 1];
+    if (!next || next.side === 'panel' || next.seq !== l.seq + 1) return [l.text];
+    const head = /^[^.?!]*[.?!]/.exec(next.text)?.[0] ?? '';
+    const n = words(head).split(' ').filter(Boolean).length;
+    return [n > 0 && n <= SPILL_WORDS ? `${l.text} ${head}` : l.text];
+  });
+}
+
+/**
+ * Has this question been asked? A panel line (panelReads) holds its cue (cueOf) or half of its content words; the lead
+ * posted it into the pad (the pad log's insert of its id); or the pad's snapshot holds its cue (the Prepare insert posts
+ * the prompt there as a wrapped comment; `words` drops the comment marks and joins the lines); never a mere overlap with
+ * the pad's code.
  */
 export function questionAsked(input: CoachInput, prompt: string): boolean {
+  const posted = input.code?.posted;
+  if (posted?.length) {
+    const whole = words(prompt);
+    if (input.questions.some((q) => posted.includes(q.id) && words(q.prompt) === whole)) return true;
+  }
   const cue = cueOf(input, prompt);
-  const panel = input.lines.filter((l) => l.side === 'panel').map((l) => l.text);
+  const panel = panelReads(input.lines);
   if (panel.some((t) => said(cue, t))) return true;
   const want = plainContent(prompt);
   if (want.size >= 2 && panel.map(plainContent).some((p) => overlap(want, p) * 2 >= want.size)) return true;

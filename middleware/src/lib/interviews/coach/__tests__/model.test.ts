@@ -131,3 +131,84 @@ describe('a question already asked is never suggested again', () => {
     expect(questionAsked(withPad, PAIRS)).toBe(false);
   });
 });
+
+// The live take of 2026-11-19, in its shapes with other words: the lead's Prepare insert put the prompt into the pad as a
+// wrapped comment above the starter, the coach thought 3 s before the lead's next 30 s snapshot reached the log and offered
+// the question again; later the live transcript put the follow-up's last word at the head of the candidate's answer
+// ("So, what's the runtime" / "complexity? Oh! ...") and the coach offered that follow-up after it was answered.
+describe('the live take: a question in the pad, a follow-up split at a speaker change', () => {
+  const WIDGETS = 'Given a list of widgets and a budget, return the positions of the two widgets whose prices add up to the budget. Each input has exactly one answer, and the same widget may not be used twice.';
+  const COMPLEXITY = 'What is the runtime complexity of your solution, in time and in space?';
+  const TESTING = 'How would you test this function?';
+  const SORTED = 'What would you change if the list were already sorted?';
+  /** The pad's insert: the prompt wrapped to 60 columns, each line behind the language's comment mark. */
+  const commented = (prompt: string, mark: string): string => {
+    const out: string[] = []; let cur = '';
+    for (const w of prompt.split(' ')) { if (cur && cur.length + 1 + w.length > 60 - mark.length - 1) { out.push(cur); cur = w; } else cur = cur ? `${cur} ${w}` : w; }
+    return [...out, cur].map((l) => `${mark} ${l}`).join('\n');
+  };
+  const CODE: Record<string, { mark: string; code: string }> = {
+    python: { mark: '#', code: 'def pick(prices, budget):\n    seen = {}\n    for i, p in enumerate(prices):\n        if budget - p in seen:\n            return [seen[budget - p], i]\n        seen[p] = i\n    return []\n\n\nprint(pick([2, 7, 11, 15], 9))\n' },
+    go: { mark: '//', code: 'package main\n\nfunc pick(prices []int, budget int) []int {\n\treturn nil\n}\n' },
+    java: { mark: '//', code: 'class Main {\n    static int[] pick(int[] prices, int budget) {\n        return new int[0];\n    }\n}\n' },
+  };
+  const base: CoachInput = {
+    ...FIXED_INPUT, roundType: 'technical',
+    questions: [{ id: 'q-widgets', prompt: WIDGETS, followUps: [COMPLEXITY, TESTING, SORTED], competencyId: 'communication' }],
+    chosenQuestionIds: ['q-widgets'],
+    lines: [
+      { seq: 1, side: 'panel', text: 'Okay, a coding problem. I am going to post it into the pad. Here it comes' },
+      { seq: 2, side: 'candidate', text: '. Okay. Give me a second to look at it Hmm. A list of widgets. A budget? Return the positions' },
+    ],
+    previous: [],
+  };
+  const works = { language: 'python', status: 'succeeded', exitCode: 0, output: '[0, 1]', cut: false };
+
+  it('counts the prompt as asked from the pad log\'s insert while the snapshot is still the text from before it', () => {
+    const before: CoachInput = { ...base, code: { pad: { language: 'python', text: '', cut: false }, run: null } };
+    expect(scriptedSuggestion(before)?.text).toBe(WIDGETS);
+    const inserted: CoachInput = { ...base, code: { ...before.code!, posted: ['q-widgets'] } };
+    expect(questionAsked(inserted, WIDGETS)).toBe(true);
+    expect(scriptedSuggestion(inserted)).toBeNull();
+    // With no snapshot at all, the insert alone still counts; another question's insert does not.
+    expect(questionAsked({ ...base, code: { pad: null, run: null, posted: ['q-widgets'] } }, WIDGETS)).toBe(true);
+    expect(questionAsked({ ...base, code: { pad: null, run: null, posted: ['q-other'] } }, WIDGETS)).toBe(false);
+  });
+
+  it.each(Object.entries(CODE))('counts the wrapped comment above the candidate\'s %s code once the snapshot holds it', (language, { mark, code }) => {
+    const text = `${commented(WIDGETS, mark)}\n${code}`;
+    expect(text.split('\n').filter((l) => l.startsWith(`${mark} `)).length).toBeGreaterThan(2);
+    expect(questionAsked({ ...base, code: { pad: { language, text, cut: false }, run: null } }, WIDGETS)).toBe(true);
+    expect(questionAsked({ ...base, code: { pad: { language, text: code, cut: false }, run: null } }, WIDGETS)).toBe(false);
+  });
+
+  const afterRun = (lines: CoachInput['lines']): CoachInput => ({
+    ...base,
+    lines: [...base.lines, ...lines],
+    code: { pad: { language: 'python', text: `${commented(WIDGETS, '#')}\n${CODE['python']!.code}`, cut: false }, run: works, posted: ['q-widgets'] },
+  });
+  const SPLIT = [
+    { seq: 3, side: 'panel' as const, text: '. So, what\'s the runtime' },
+    { seq: 4, side: 'candidate' as const, text: 'complexity? Oh! It\'s linear time! Since we only pass through the list once. And linear space for the map' },
+    { seq: 5, side: 'panel' as const, text: 'And if the list were already sorted, would you do anything different? Then' },
+    { seq: 6, side: 'candidate' as const, text: 'I\'d use two pointers, one at each end, and walk them toward each other. That gets the extra space down to constant' },
+  ];
+
+  it('reads a question\'s last word that opened the candidate\'s answer as the panel\'s, and offers the follow-up not yet asked', () => {
+    const input = afterRun(SPLIT);
+    expect(questionAsked(input, COMPLEXITY)).toBe(true);
+    expect(questionAsked(input, SORTED)).toBe(true);
+    expect(questionAsked(input, TESTING)).toBe(false);
+    expect(scriptedSuggestion(input)).toEqual({ text: TESTING, competencyId: 'communication', basedOn: null });
+  });
+
+  it('takes only a short first fragment, from the very next line, and only someone else\'s', () => {
+    // The answer's first sentence is the candidate's own (more than three words): not read as the question's end.
+    const long = afterRun([SPLIT[0]!, { ...SPLIT[1]!, text: 'complexity is linear in time, I think. And linear space for the map' }]);
+    expect(questionAsked(long, COMPLEXITY)).toBe(false);
+    // A line left out between them (nobody was credited with it): no join across the gap.
+    expect(questionAsked(afterRun([SPLIT[0]!, { ...SPLIT[1]!, seq: 5 }]), COMPLEXITY)).toBe(false);
+    // The whole question in one panel line counts as before.
+    expect(questionAsked(afterRun([{ seq: 3, side: 'panel', text: 'So, what\'s the runtime complexity?' }]), COMPLEXITY)).toBe(true);
+  });
+});
