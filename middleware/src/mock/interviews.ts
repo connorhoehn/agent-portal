@@ -20,7 +20,8 @@
 // Candidates are records, never users (decision 3); the four cast users are in
 // providers/identity.ts FALLBACK_USERS with a grant only in `interviews`.
 
-import { architectureBoard, blueprintBoard, promptBoard } from '../lib/interviews/board/templates.js';
+import { blueprintBoard, masterBoard, promptBoard, providedDesignBoard } from '../lib/interviews/board/templates.js';
+import { TWITTER_DESIGN, TWITTER_PROMPT, TWITTER_QUESTIONS, TWITTER_RED_FLAGS } from './interviews-design-twitter.js';
 import { clock, defineFixture } from './core/index.js';
 import { seedAt } from './interviews-days.js';
 import { EM_KIT } from './interviews-behavioural.js';
@@ -116,11 +117,15 @@ const BACKEND_KIT: OpeningKit = {
       ],
     },
     {
-      // The classic open question on the Architecture kit: notes, a palette of components and an empty Design frame.
+      // The classic open question in the master template's format (board/templates.ts): the prompt and "Your design" with
+      // the Architecture kit's palette on the board, and the answer key (interviews-design-twitter.ts) for the lead only.
       id: 'q-be-twitter', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Design Twitter: people post short messages, follow other people and read a home timeline of the posts of the people they follow.',
       followUps: ['How is the home timeline built: when a post is written, or when the timeline is read?', 'What changes for an account with tens of millions of followers?'],
-      board: architectureBoard('Design Twitter'),
+      board: masterBoard(TWITTER_PROMPT, { palette: true }),
+      providedDesign: providedDesignBoard(TWITTER_DESIGN),
+      designQuestions: structuredClone(TWITTER_QUESTIONS),
+      redFlags: structuredClone(TWITTER_RED_FLAGS),
       clarifying: [
         'What is the read to write ratio?',
         'How many daily active users?',

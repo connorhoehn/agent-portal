@@ -1,9 +1,9 @@
-// The "Master template" (board/master.ts): the owner's format for a system design round. Part A (the prompt) and part B
+// The "Master template" (board/templates.ts): the owner's format for a system design round. Part A (the prompt) and part B
 // ("Your design") on the starting board, part C (the provided design) on its own board for the answer key.
 jest.mock('../../../../config.js', () => ({ config: { mock: { aurora: true } } }));
 import { KIT_LIMITS, checkBoard } from '../../kit.js';
 import { checkBoardScene } from '../snapshots.js';
-import { MASTER_SECTIONS, masterBoard, providedDesignBoard, type MasterPromptSpec, type ProvidedDesignSpec } from '../master.js';
+import { MASTER_SECTIONS, masterBoard, providedDesignBoard, type MasterPromptSpec, type ProvidedDesignSpec } from '../templates.js';
 
 const spec: MasterPromptSpec = {
   title: 'Design a parcel locker network',

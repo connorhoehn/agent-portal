@@ -7,7 +7,8 @@ import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorec
 import { EM_KIT } from '../../../mock/interviews-behavioural.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import type { OpeningKit } from '../types.js';
-import { architectureBoard, blueprintBoard } from '../board/templates.js';
+import { blueprintBoard, MASTER_SECTIONS, masterBoard } from '../board/templates.js';
+import { TWITTER_PROMPT } from '../../../mock/interviews-design-twitter.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
@@ -348,7 +349,7 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     const kit = seedKit('op-backend');
     expect(kit.rounds.find((r) => r.id === 'rd-design')!.surface).toBe('board');
     const boards = kit.questions.filter((q) => q.board).map((q) => q.board!.name);
-    expect(boards).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Architecture kit']);
+    expect(boards).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Master template']);
     const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
     const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
     expect(frames).toEqual(['Clarifying questions', 'Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
@@ -365,21 +366,26 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(prompt.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
   });
 
-  it('"Design Twitter" opens on the Architecture kit: prompt card, Notes, the palette and an empty Design frame', () => {
+  it('"Design Twitter" is in the master template\'s format: the prompt and "Your design" on its board, the answer key beside it', () => {
     const kit = seedKit('op-backend');
     const q = kit.questions.find((x) => x.id === 'q-be-twitter')!;
     expect(q).toMatchObject({ competencyId: 'system-design', roundType: 'technical' });
-    expect(q.board).toEqual(architectureBoard('Design Twitter'));
-    expect(q.board!.name).toBe('Architecture kit');
-    const frames = q.board!.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
-    expect(frames).toEqual(['Notes', 'Components', 'Design']);
-    expect(q.board!.elements.some((e) => e['type'] === 'text' && e['originalText'] === 'Design Twitter')).toBe(true);
-    // The Design frame starts empty: the candidate builds the diagram there.
-    expect(q.board!.elements.filter((e) => e['frameId'] === 'ak-design').length).toBe(0);
-    const idx = q.board!.elements.map((e) => String(e['index']));
-    expect([...idx].sort()).toEqual(idx);
+    expect(q.board).toEqual(masterBoard(TWITTER_PROMPT, { palette: true }));
+    expect(q.board!.elements.filter((e) => e['type'] === 'frame').map((e) => e['name'])).toEqual(MASTER_SECTIONS.map((s) => s.name));
+    expect(q.board!.elements.find((e) => e['id'] === 'mt-a-title')!['originalText']).toBe('Design Twitter');
+    // The answer key: five questions with answers, the last the enhancement; red flags in all four groups; its own board.
+    expect(q.designQuestions!.map((d) => Boolean(d.answer))).toEqual([true, true, true, true, true]);
+    expect(q.designQuestions!.map((d) => d.enhancement ?? false)).toEqual([false, false, false, false, true]);
+    expect(new Set(q.redFlags!.map((f) => f.group))).toEqual(new Set(['over-engineering', 'responsibility', 'naming', 'other']));
+    expect(q.providedDesign!.name).toBe('Provided design');
+    // None of the answer key is on the starting board the candidate sees.
+    const onBoard = JSON.stringify(q.board);
+    for (const d of q.designQuestions!) expect(onBoard).not.toContain(d.answer!.slice(0, 40));
+    for (const f of q.redFlags!) expect(onBoard).not.toContain(f.text.slice(0, 40));
+    expect(onBoard).not.toContain('Fan-out worker');
     const r = checkKit(kit);
-    expect(r.ok && r.value.questions.find((x) => x.id === 'q-be-twitter')!.board).toEqual(q.board);
+    const saved = r.ok ? r.value.questions.find((x) => x.id === 'q-be-twitter')! : null;
+    expect(saved).toEqual(q);
   });
 
   it('a behavioural round on the board, or a surface the room does not have, is refused', () => {

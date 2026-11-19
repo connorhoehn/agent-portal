@@ -37,6 +37,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
 jest.mock('../../providers/identity.js', () => ({ ...jest.requireActual('../../providers/identity.js'), listUsers: jest.fn() }));
 
 import express from 'express';
+import { KIT_BODY_LIMIT } from '../interviews/body-limits.js';
 import request from '../../test-support/http.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { requireTenant } from '../../lib/authz.js';
@@ -58,7 +59,8 @@ const USERS: UserInfo[] = [
 ];
 
 const app = express();
-app.use(express.json());
+// As the server parses the kit's PUT (body-limits.ts): a seeded kit with its boards and answer keys is over the 100 KB default.
+app.use(express.json({ limit: KIT_BODY_LIMIT }));
 app.use((req, _res, next) => {
   const id = String(req.headers['x-user'] ?? '');
   const me = USERS.find((x) => x.id === id);
@@ -156,9 +158,11 @@ describe('the recruiter writes', () => {
 
   it('offers the starting boards a question can begin from, around the title it is given', async () => {
     const res = await GRETA.get('/board-templates?title=Design%20a%20chat%20app');
-    expect(res.body.items.map((b: { name: string }) => b.name)).toEqual(['Blueprint', 'Prompt only', 'Architecture kit']);
+    expect(res.body.items.map((b: { name: string }) => b.name)).toEqual(['Blueprint', 'Prompt only', 'Architecture kit', 'Master template']);
     const kit = res.body.items[2] as { elements: Array<Record<string, unknown>> };
     expect(kit.elements.find((e) => e['id'] === 'ak-prompt-text')!['originalText']).toBe('Design a chat app');
+    const master = res.body.items[3] as { elements: Array<Record<string, unknown>> };
+    expect(master.elements.find((e) => e['id'] === 'mt-a-title')!['originalText']).toBe('Design a chat app');
     expect((await AMARA.get('/board-templates')).status).toBe(403);
   });
 

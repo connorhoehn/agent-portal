@@ -20,9 +20,10 @@ export interface KitBoard { name: string; elements: Array<Record<string, unknown
 
 /**
  * The starting boards the kit editor offers beside an empty one (the server builds them: GET /board-templates, from
- * middleware board/templates.ts). "Architecture kit" is the notes column, the component palette and a Design frame.
+ * middleware board/templates.ts). "Architecture kit" is the notes column, the component palette and a Design frame;
+ * "Master template" the owner's format (board/templates.ts): the prompt with user stories, then "Your design" in five sections.
  */
-export const BOARD_TEMPLATE_NAMES = ['Blueprint', 'Prompt only', 'Architecture kit'] as const;
+export const BOARD_TEMPLATE_NAMES = ['Blueprint', 'Prompt only', 'Architecture kit', 'Master template'] as const;
 
 /** The prompt card's text for a question: its prompt up to the first colon or full stop ("Design Twitter: …" → "Design Twitter"). */
 export function boardTitleOf(prompt: string): string {

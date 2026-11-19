@@ -6,7 +6,8 @@ import type * as YT from 'yjs';
 import { BOARD_DOCUMENT_PREFIX, BOARD_TEMPLATE_NAMES, boardCheckpoints, boardTitleOf, readBoardTemplate, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
-import { architectureBoard, blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
+import { architectureBoard, blueprintBoard, masterBoard, masterTemplateFor, promptBoard, providedDesignBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
+import { TWITTER_DESIGN, TWITTER_PROMPT } from '../../../../middleware/src/mock/interviews-design-twitter.ts';
 
 // The library's binding is CommonJS and requires yjs itself; under node the Y.Doc must come from that same copy (the
 // browser bundle has one copy).
@@ -58,8 +59,17 @@ test('"Design Twitter" goes in as the Architecture kit: Notes, the palette of gr
   assert.equal(groups.size, 12);
 });
 
-test('the kit editor offers the three templates, built around the question\'s title', async () => {
-  assert.deepEqual([...BOARD_TEMPLATE_NAMES], [blueprintBoard().name, promptBoard('x').name, architectureBoard('x').name]);
+test('"Design Twitter" in the master template goes in whole, and its provided design adds beside it on a reveal (no id shared)', () => {
+  const doc = new Y.Doc();
+  const board = masterBoard(TWITTER_PROMPT, { palette: true });
+  assert.equal(insertBoard(doc, board), board.elements.length);
+  const provided = providedDesignBoard(TWITTER_DESIGN);
+  assert.equal(insertBoard(doc, provided), provided.elements.length);
+  assert.equal(readBoardElements(doc).length, board.elements.length + provided.elements.length);
+});
+
+test('the kit editor offers the four templates, built around the question\'s title', async () => {
+  assert.deepEqual([...BOARD_TEMPLATE_NAMES], [blueprintBoard().name, promptBoard('x').name, architectureBoard('x').name, masterTemplateFor('x').name]);
   assert.equal(boardTitleOf('Design Twitter: people post short messages.'), 'Design Twitter');
   assert.equal(boardTitleOf('Design a URL shortener for 100M links a month. Then scale it.'), 'Design a URL shortener for 100M links a month');
   assert.equal(boardTitleOf('  '), 'The prompt');

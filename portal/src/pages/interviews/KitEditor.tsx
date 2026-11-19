@@ -370,6 +370,7 @@ const TEMPLATE_HINTS: Readonly<Record<(typeof BOARD_TEMPLATE_NAMES)[number], str
   'Blueprint': 'Seven labelled frames with starter stickies.',
   'Prompt only': 'The prompt card above seven empty frames.',
   'Architecture kit': 'Notes, a palette of components to copy, an empty Design frame.',
+  'Master template': 'The prompt with user stories, then "Your design" in five hinted sections.',
 };
 
 /**

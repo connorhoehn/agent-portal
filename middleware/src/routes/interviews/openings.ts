@@ -37,7 +37,7 @@ import type { Opening } from '../../lib/interviews/types.js';
 import { mayReadOpeningMoney } from '../../lib/interviews/scope.js';
 import { listUsers } from '../../providers/identity.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
-import { architectureBoard, blueprintBoard, promptBoard } from '../../lib/interviews/board/templates.js';
+import { architectureBoard, blueprintBoard, masterTemplateFor, promptBoard } from '../../lib/interviews/board/templates.js';
 
 export const openingsRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -82,14 +82,14 @@ openingsRouter.get('/hiring-managers', manage, asyncHandler(async (_req, res) =>
 }));
 
 /**
- * The starting boards a board round's question can begin from (board/templates.ts), built around `title`, the prompt
+ * The starting boards a board round's question can begin from (board/templates.ts, board/templates.ts), built around `title`, the prompt
  * card's text: the kit editor offers them beside an empty board, and the copy picked is the question's own to edit.
  */
 openingsRouter.get('/board-templates', manage, asyncHandler(async (req, res) => {
   const raw = typeof req.query['title'] === 'string' ? req.query['title'].trim().slice(0, 120) : '';
   const title = raw || 'The prompt';
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ items: [blueprintBoard(), promptBoard(title), architectureBoard(title)] });
+  res.json({ items: [blueprintBoard(), promptBoard(title), architectureBoard(title), masterTemplateFor(title)] });
 }));
 
 /** Create an opening with an empty kit; the recruiter fills the kit next. */
