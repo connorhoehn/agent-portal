@@ -87,8 +87,8 @@ export interface MeetingAssistantPolicy {
    */
   mayUseTool(call: PolicyCall, asker: { userId: string; roles: readonly string[] }, tool: string): boolean | Promise<boolean>;
   /**
-   * Run one of the family's SERVER tools (voice/catalogue.ts INTERVIEW_TOOLS) for this asker, after every check the orchestrator
-   * makes of a call: no browser turn and no confirm card. The answer is the line to post with the approved mark and say as approved
+   * Run one of the family's SERVER tools (server-tools.ts; `serverToolPolicy` derives this from a registered family) for this
+   * asker, after every check the orchestrator makes of a call: no browser turn and no confirm card. The answer is the line to post with the approved mark and say as approved
    * words (logged by the family, unposted, as `answerFromHeldText` logs its own), or null for nothing to say. Absent: the family
    * has no server tools, and a call naming one is refused as unknown.
    */
