@@ -11,19 +11,19 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-19T12:49:18.666Z",
-  "serverHandlerSha": "ef4ce3784d28ad290fdb85e00791097907af6d92b055e20a9bdbd1922d02a435"
+  "capturedAt": "2026-11-19T12:54:36.969Z",
+  "serverHandlerSha": "278b64e3e0410e509049d0bfc599b22e5b9eb8f4d7c111214d61177ac7ce9a6d"
  },
  "summary": {
-  "routes": 966,
-  "routesInSnapshot": 956,
+  "routes": 970,
+  "routesInSnapshot": 960,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
   "pages": 113,
   "byKind": {
    "dev": 14,
-   "write": 419,
-   "read": 494,
+   "write": 421,
+   "read": 496,
    "internal": 39,
    "navigate": 113
   },
@@ -188,16 +188,16 @@
     }
    },
    "social.calls": {
-    "total": 62,
-    "read": 24,
-    "write": 27,
+    "total": 64,
+    "read": 25,
+    "write": 28,
     "navigate": 0,
     "internal": 11,
     "dev": 0,
     "covered": 13,
     "v2": {
-     "not-yet": 7,
-     "never": 31,
+     "not-yet": 8,
+     "never": 32,
      "n/a": 11,
      "read": 12,
      "confirm": 1
@@ -277,16 +277,16 @@
     }
    },
    "other": {
-    "total": 79,
-    "read": 40,
-    "write": 39,
+    "total": 81,
+    "read": 41,
+    "write": 40,
     "navigate": 0,
     "internal": 0,
     "dev": 0,
     "covered": 0,
     "v2": {
-     "n/a": 10,
-     "not-yet": 44,
+     "n/a": 11,
+     "not-yet": 45,
      "never": 25
     }
    },
@@ -376,7 +376,7 @@
    }
   },
   "byTenant": {
-   "any": 192,
+   "any": 196,
    "access": 27,
    "orgiq": 422,
    "assessment": 112,
@@ -385,9 +385,9 @@
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 913,
-  "peopleReads": 494,
-  "peopleWrites": 419,
+  "peopleRoutes": 917,
+  "peopleReads": 496,
+  "peopleWrites": 421,
   "coveredRoutes": 236,
   "coveredReads": 161,
   "coveredWrites": 75,
@@ -397,11 +397,11 @@
   "serverTools": 6,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 225,
+   "not-yet": 227,
    "read": 161,
-   "never": 413,
+   "never": 414,
    "confirm": 74,
-   "n/a": 39,
+   "n/a": 40,
    "open": 1
   },
   "v2ToolRoutes": {
@@ -424,7 +424,7 @@
    "list": 83,
    "queue_work": 6,
    "decide": 14,
-   "get": 65,
+   "get": 67,
    "search": 4,
    "budget": 16,
    "update": 17,
@@ -768,7 +768,7 @@
    "refused:destructive": 47,
    "refused:interviews-clock": 1,
    "allowed": 125,
-   "refused:unclassified": 137,
+   "refused:unclassified": 139,
    "refused:spends": 25,
    "refused:fires": 26,
    "skipped": 31,
@@ -4012,6 +4012,12 @@
    "note": "consent to a meeting proposal is a person clicking Consent, Object or Not a decision in their own deck, and raising a blocked one again is a click on its card; the server counts only those clicks (two people, every named person and the executor, no open objection), and a spoken yes or a voice session answering for someone would be exactly the consent the rule refuses"
   },
   {
+   "pattern": "^PUT \\/api\\/calls\\/:[^/]+\\/chat\\/reads$",
+   "decision": "never",
+   "tool": null,
+   "note": "a call chat read position moves when its tab is on screen (the unread bubble), never by voice"
+  },
+  {
    "pattern": "^POST \\/api\\/calls\\/:[^/]+\\/assistant\\/actions\\/:[^/]+\\/decision$",
    "decision": "never",
    "tool": null,
@@ -4792,7 +4798,9 @@
   {"method":"POST","path":"/api/calls/:callId/assistant/turns/:turnId/claim","source":"src/routes/meeting-assistant.ts:729","declaredAt":"src/routes/meeting-assistant.ts:729","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","staffTenantGate","callTenantAgrees","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the exchange between the meeting assistant and the asking person's own browser: the server lists the tool calls made for that person, lets one browser claim a turn before running it, and takes the result that browser ran (never anyone else's); it is the transport of a tool call, not a tool of its own"}},
   {"method":"POST","path":"/api/calls/:callId/assistant/turns/:turnId/result","source":"src/routes/meeting-assistant.ts:741","declaredAt":"src/routes/meeting-assistant.ts:741","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","staffTenantGate","callTenantAgrees","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the exchange between the meeting assistant and the asking person's own browser: the server lists the tool calls made for that person, lets one browser claim a turn before running it, and takes the result that browser ran (never anyone else's); it is the transport of a tool call, not a tool of its own"}},
   {"method":"POST","path":"/api/calls/:callId/assistant/voice","source":"src/routes/meeting-assistant.ts:610","declaredAt":"src/routes/meeting-assistant.ts:610","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":"InviteMeetingAssistant","actions":["InviteMeetingAssistant"],"unresolvedGates":["flagGate","staffTenantGate","callTenantAgrees","refuseMasquerade"],"holders":["interviews/interviewer","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, extend (it holds money against the inviter), pause, dismiss, the voice switch (Milo speaking aloud to the whole call, a notice is posted) and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"GET","path":"/api/calls/:callId/chat","source":"src/routes/call-chat.ts:21","declaredAt":"src/routes/call-chat.ts:21","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/calls/:callId/chat","source":"src/routes/call-chat.ts:25","declaredAt":"src/routes/call-chat.ts:25","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/calls/:callId/chat/reads","source":"src/routes/call-chat.ts:35","declaredAt":"src/routes/call-chat.ts:35","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"PUT","path":"/api/calls/:callId/chat/reads","source":"src/routes/call-chat.ts:38","declaredAt":"src/routes/call-chat.ts:38","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a call chat read position moves when its tab is on screen (the unread bubble), never by voice"}},
   {"method":"DELETE","path":"/api/calls/:callId/page","source":"src/routes/call-pages.ts:52","declaredAt":"src/routes/call-pages.ts:52","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"page sharing is the live call's own control"}},
   {"method":"GET","path":"/api/calls/:callId/page","source":"src/routes/call-pages.ts:34","declaredAt":"src/routes/call-pages.ts:34","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/calls/:callId/page","source":"src/routes/call-pages.ts:51","declaredAt":"src/routes/call-pages.ts:51","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:active-call-state","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"page sharing is the live call's own control"}},
@@ -5020,17 +5028,19 @@
   {"method":"POST","path":"/api/initiative-decks/projects/:projectId","source":"src/routes/initiative-decks.ts:60","declaredAt":"src/routes/initiative-decks.ts:60","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":["queue_work","create"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/initiatives/:id/run-reports","source":"src/routes/session-briefs.ts:196","declaredAt":"src/routes/session-briefs.ts:196","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":"ViewSessionBrief","actions":["ViewSessionBrief"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/internal/meeting-assistant/pcm/:sinkToken","source":"src/routes/meeting-assistant-sink.ts:37","declaredAt":"src/routes/meeting-assistant-sink.ts:37","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["admit"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the meeting assistant's PCM sink: called by the media server's taps, authenticated by an unguessable per-call token in the path, never by a person"}},
-  {"method":"GET","path":"/api/interview-invite/admission","source":"src/routes/interview-invite.ts:198","declaredAt":"src/routes/interview-invite.ts:198","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/admission","source":"src/routes/interview-invite.ts:200","declaredAt":"src/routes/interview-invite.ts:200","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/calls/:callId/chat/reads","source":"src/routes/interview-invite-chat-reads.ts:43","declaredAt":"src/routes/interview-invite-chat-reads.ts:43","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"PUT","path":"/api/interview-invite/calls/:callId/chat/reads","source":"src/routes/interview-invite-chat-reads.ts:47","declaredAt":"src/routes/interview-invite-chat-reads.ts:47","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
   {"method":"GET","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:65","declaredAt":"src/routes/interview-invite-consents.ts:65","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"PUT","path":"/api/interview-invite/consents","source":"src/routes/interview-invite-consents.ts:71","declaredAt":"src/routes/interview-invite-consents.ts:71","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"POST","path":"/api/interview-invite/exchange","source":"src/routes/interview-invite.ts:109","declaredAt":"src/routes/interview-invite.ts:109","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"GET","path":"/api/interview-invite/interview","source":"src/routes/interview-invite.ts:143","declaredAt":"src/routes/interview-invite.ts:143","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"POST","path":"/api/interview-invite/knock","source":"src/routes/interview-invite.ts:180","declaredAt":"src/routes/interview-invite.ts:180","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
+  {"method":"POST","path":"/api/interview-invite/exchange","source":"src/routes/interview-invite.ts:110","declaredAt":"src/routes/interview-invite.ts:110","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
+  {"method":"GET","path":"/api/interview-invite/interview","source":"src/routes/interview-invite.ts:145","declaredAt":"src/routes/interview-invite.ts:145","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"POST","path":"/api/interview-invite/knock","source":"src/routes/interview-invite.ts:182","declaredAt":"src/routes/interview-invite.ts:182","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
   {"method":"POST","path":"/api/interview-invite/media/participant","source":"src/routes/interview-invite-media.ts:48","declaredAt":"src/routes/interview-invite-media.ts:48","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
   {"method":"POST","path":"/api/interview-invite/milo/request","source":"src/routes/interview-invite-milo.ts:36","declaredAt":"src/routes/interview-invite-milo.ts:36","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
   {"method":"POST","path":"/api/interview-invite/pad/events","source":"src/routes/interview-invite-pad.ts:28","declaredAt":"src/routes/interview-invite-pad.ts:28","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
-  {"method":"GET","path":"/api/interview-invite/realtime-token","source":"src/routes/interview-invite.ts:162","declaredAt":"src/routes/interview-invite.ts:162","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/interview-invite/room","source":"src/routes/interview-invite.ts:209","declaredAt":"src/routes/interview-invite.ts:209","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/realtime-token","source":"src/routes/interview-invite.ts:164","declaredAt":"src/routes/interview-invite.ts:164","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/interview-invite/room","source":"src/routes/interview-invite.ts:211","declaredAt":"src/routes/interview-invite.ts:211","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/interview-invite/runs","source":"src/routes/interview-invite-runs.ts:49","declaredAt":"src/routes/interview-invite-runs.ts:49","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interview-invite/runs","source":"src/routes/interview-invite-runs.ts:43","declaredAt":"src/routes/interview-invite-runs.ts:43","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the candidate's guest door, not a staff route"}},
   {"method":"GET","path":"/api/interview-invite/runs/:runId","source":"src/routes/interview-invite-runs.ts:66","declaredAt":"src/routes/interview-invite-runs.ts:66","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"other","cedarAction":null,"actions":[],"unresolvedGates":["interviewsFlagGate","requireGuest"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
