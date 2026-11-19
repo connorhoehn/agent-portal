@@ -29,17 +29,35 @@ export function questionForPad(questions: readonly KitQuestion[], pad: string, l
   return named ?? questions[0] ?? null;
 }
 
-export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; longStrings: boolean } | { ok: false };
+export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; needsVerdict: boolean } | { ok: false };
 
 /** A string longer than this in a case could describe the algorithm: the batch then goes to the solution check (index.ts). */
 export const MAX_PLAIN_CASE_STRING = 24;
+/** More than this many characters of strings across a batch could spell it out in short pieces (review 2, item 3). */
+export const MAX_PLAIN_BATCH_CHARS = 48;
 
-/** Does a case value carry a string longer than MAX_PLAIN_CASE_STRING (at any depth, keys too)? */
-export function hasLongString(v: unknown, depth = 0): boolean {
-  if (typeof v === 'string') return v.length > MAX_PLAIN_CASE_STRING;
-  if (depth > 6 || !v || typeof v !== 'object') return false;
-  if (Array.isArray(v)) return v.some((x) => hasLongString(x, depth + 1));
-  return Object.entries(v as Record<string, unknown>).some(([k, x]) => k.length > MAX_PLAIN_CASE_STRING || hasLongString(x, depth + 1));
+/** Every string in a case value (at any depth, keys too), into `out`. */
+function stringsIn(v: unknown, out: string[], depth = 0): void {
+  if (typeof v === 'string') { out.push(v); return; }
+  if (depth > 6 || !v || typeof v !== 'object') return;
+  if (Array.isArray(v)) { for (const x of v) stringsIn(x, out, depth + 1); return; }
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) { out.push(k); stringsIn(x, out, depth + 1); }
+}
+
+/**
+ * Could the batch's strings carry the algorithm? Yes when any string is longer than MAX_PLAIN_CASE_STRING or has whitespace in
+ * it (words), or when the batch's strings total more than MAX_PLAIN_BATCH_CHARS: six short phrases spell it out as well as one
+ * long one (review 2, item 3). Such a batch goes to the solution check.
+ */
+export function needsVerdict(cases: readonly TestCase[]): boolean {
+  const strings: string[] = [];
+  for (const c of cases) { stringsIn(c.args, strings); stringsIn(c.expected, strings); }
+  let total = 0;
+  for (const t of strings) {
+    if (t.length > MAX_PLAIN_CASE_STRING || /\s/.test(t)) return true;
+    total += t.length;
+  }
+  return total > MAX_PLAIN_BATCH_CHARS;
 }
 
 /** The block for the call's `cases` against the pad as it is: checked cases when the question has a reference, else inputs only. */
@@ -55,5 +73,5 @@ export function testCasesFor(cases: unknown, at: { pad: string; language: PadLan
   // The spares fill in for any dropped (already in the pad, or not what the reference returns): the first `count` stay.
   kept.splice(count);
   if (!kept.length) return { ok: false };
-  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length, longStrings: kept.some((c) => hasLongString(c.args) || hasLongString(c.expected)) };
+  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length, needsVerdict: needsVerdict(kept) };
 }

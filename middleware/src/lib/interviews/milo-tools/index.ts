@@ -245,8 +245,9 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     if (name === 'pad_add_tests') {
       const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language), count: a['count'] });
       if (!made.ok) { refusal = TESTS_NOT_ADDED; return null; }
-      // A long string value could carry the algorithm: such a batch is judged like a helper, and refused with no question to judge by.
-      if (made.longStrings) {
+      // Strings that could carry the algorithm (words, a long one, or many short ones): the batch is judged like a helper, and
+      // refused with no question to judge by.
+      if (made.needsVerdict) {
         if (!prompts.length) { refusal = TESTS_NOT_ADDED; return null; }
         const verdict = await judge({ questions: prompts, code: made.block, entries, kind: 'tests' });
         if (verdict !== 'helper') { refusal = TESTS_NOT_ADDED; return null; }

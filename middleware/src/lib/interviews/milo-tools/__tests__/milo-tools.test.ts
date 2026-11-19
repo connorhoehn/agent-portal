@@ -226,10 +226,26 @@ describe('the solution check cannot be gone around (review 1, item 3)', () => {
     expect(judged).toBe(1);
     expect(pad.text).not.toContain(story);
     verdict = 'helper';
-    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: ['short words'], expected: 1 }]) })).toMatch(/^Added one test input/);
-    expect(judged).toBe(1); // a short string needs no verdict
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: ['short'], expected: 1 }]) })).toMatch(/^Added one test input/);
+    expect(judged).toBe(1); // one short word needs no verdict
     questions = [{ ...OTHER, prompt: '' }];
     expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: [`${story} again`], expected: 1 }]) })).toBe(TESTS_NOT_ADDED);
+  });
+
+  it('the algorithm split over short strings still goes to the verdict: any string with a space, or more than 48 characters of strings in the batch (review 2, item 3)', async () => {
+    questions = [OTHER];
+    pad.text = OTHER.starter!.python!;
+    verdict = 'solution';
+    const split = ['walk the list', 'keep a map', 'value to index', 'look up target-n', 'if seen return', 'both indices'];
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases(split.map((w, i) => ({ args: [w], expected: i }))) })).toBe(TESTS_NOT_ADDED);
+    expect(judged).toBe(1);
+    const glued = ['walk_the_list', 'keep_a_map_of_seen', 'value_to_its_index', 'return_both_indices'];
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases(glued.map((w, i) => ({ args: [w], expected: i }))) })).toBe(TESTS_NOT_ADDED);
+    expect(judged).toBe(2);
+    expect(pad.text).not.toContain('keep_a_map');
+    verdict = 'helper';
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: ['abc'], expected: 1 }, { args: ['xyz'], expected: 2 }]) })).toMatch(/^Added two test inputs/);
+    expect(judged).toBe(2); // a few short words alone need no verdict
   });
 });
 
