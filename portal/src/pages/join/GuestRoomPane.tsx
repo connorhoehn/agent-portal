@@ -6,9 +6,9 @@
 // drops the pad's document, the run stream or a draft message. Nothing of the panel's side: no questions, no Milo,
 // no transcript, no notes. The pad never depends on the call: with no call (not joined yet, or it failed) the pad stays and
 // the chat says it opens with the call. The page owns the open state: × closes it, the bar's chat toggle opens it on Chat.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { EmptyState, Stack } from '@connorhoehn/ui-components/shared';
+import { EmptyState, Stack, Tabs } from '@connorhoehn/ui-components/shared';
 import { GUEST_PAD_BASE } from '../../lib/interviewsPad';
 import { roomPaneWidth } from '../../lib/interviewsRoom';
 import { RunnablePad } from '../interviews/pad/RunnablePad';
@@ -51,4 +51,33 @@ export function GuestRoomPane({ room, callId, tab, onTab, onClose }: {
         : <EmptyState title="The chat opens with the call" body="Join the call from the bar at the bottom of the window to send messages." testId="join-room-chat-waiting" />}
     </Stack>
   </SidePane>;
+}
+
+/**
+ * A technical round's room, full width (the owner's room layout, as the lead's room has it): the header line, then
+ * the library's tabs (Pad or Board, then Chat) over the page's width. Both bodies stay mounted, so switching never drops
+ * the pad's document, the board's canvas, the run stream or a draft message. The call's tiles sit in a narrow pane on
+ * the right while the call is drawn (JoinRoom). `inset` is the page's side inset (the guest shell bleeds).
+ */
+export function GuestRoomWorkspace({ room, callId, tab, onTab, header, inset }: {
+  room: GuestRoom; callId: string | null; tab: GuestPaneTab; onTab(tab: GuestPaneTab): void; header: ReactNode; inset: string;
+}) {
+  const board = surfaceOf(room.round) === 'board';
+  const [unread, setUnread] = useState(0);
+  return <Stack gap="none" className="min-h-0 min-w-0 flex-1" data-testid="join-room-pane">
+    {header}
+    <Tabs idPrefix="join-room" aria-label="Your interview" variant="underline" value={tab}
+      items={withUnreadBadges<{ id: string; label: string }>(board ? BOARD_TABS : TECHNICAL_TABS, { chat: unread })}
+      onValueChange={(id) => onTab(id === 'chat' ? 'chat' : 'pad')} className={`shrink-0 ${inset}`} />
+    <Stack gap="none" className={tab === 'pad' ? 'min-h-0 flex-1' : 'hidden'} data-testid="join-room-pad">
+      {board
+        ? <InterviewBoard interviewId={room.interviewId} self={room.self} seat="candidate" />
+        : <RunnablePad interviewId={room.interviewId} base={GUEST_PAD_BASE} self={room.self} seat="candidate" />}
+    </Stack>
+    <Stack gap="none" className={tab === 'chat' ? `min-h-0 flex-1 ${inset}` : 'hidden'} data-testid="join-room-chat">
+      {callId
+        ? <GuestRoomChatBody callId={callId} self={room.self} seen={tab === 'chat'} onUnread={setUnread} />
+        : <EmptyState title="The chat opens with the call" body="Join the call from the bar at the bottom of the window to send messages." testId="join-room-chat-waiting" />}
+    </Stack>
+  </Stack>;
 }

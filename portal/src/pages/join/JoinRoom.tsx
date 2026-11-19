@@ -14,12 +14,17 @@
 // footer model on one line: the round's name, time left (counted from the start, never the set time), microphone,
 // camera, the chat toggle (it opens the Chat tab), Leave. Two marked places are left for lane SPEAK (contract U9).
 //
+// The owner's room layout (the lead's room has it too): a technical round's room is full width, the header line (the round,
+// its length, what the call is doing) and the tabs (Pad or Board, Chat: GuestRoomWorkspace) over the page, the call's
+// tiles in a narrow, closable pane on the right while the call is drawn. A behavioural round keeps the tiles as the page
+// and the chat as the one pane.
+//
 // The room is read every few seconds (bounded, stopped on unmount). `ended`, or a not-found (turned away mid-call,
 // the link taken back), leaves the call and opens the ended page. Leave returns to a line offering to rejoin.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
-import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
-import { Button, EmptyState, Inline, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
+import { SidePane, SidePaneProvider, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
+import { Button, EmptyState, Inline, LoadingState, PageHeader, Stack, T } from '@connorhoehn/ui-components/shared';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
@@ -29,7 +34,7 @@ import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
 import { GuestMiloRequests, GuestMiloVoice, type MiloRequestAnswer } from './GuestMiloVoice';
-import { GuestRoomPane, type GuestPaneTab } from './GuestRoomPane';
+import { GuestRoomPane, GuestRoomWorkspace, type GuestPaneTab } from './GuestRoomPane';
 import { useGuestMediaBinding } from './guestMedia.ts';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
@@ -176,11 +181,15 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   const technical = room.round.type === 'technical';
   const [paneOpen, setPaneOpen] = useState(true);
   const [tab, setTab] = useState<GuestPaneTab>(technical ? 'pad' : 'chat');
-  const chatOpen = paneOpen && (!technical || tab === 'chat');
+  const chatOpen = technical ? tab === 'chat' : paneOpen;
   const toggleChat = useCallback(() => {
-    if (!chatOpen) { setPaneOpen(true); setTab('chat'); return; }
-    if (technical) setTab('pad'); else setPaneOpen(false);
-  }, [chatOpen, technical]);
+    if (technical) { setTab((t) => (t === 'chat' ? 'pad' : 'chat')); return; }
+    setPaneOpen((open) => !open);
+  }, [technical]);
+  // A technical round's Call pane (its tiles): the page owns its ×. Closed, it is not drawn, so the call's media falls back
+  // to the footer's mounted outlet and keeps playing; the header's "Show the call" brings it back.
+  const [callShut, setCallShut] = useState(false);
+  useEffect(() => { if (!drawn) setCallShut(false); }, [drawn]);
   const callId = host?.call.call?.callId ?? null;
   // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
   useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
@@ -192,6 +201,42 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   const [miloAnswer, setMiloAnswer] = useState<MiloRequestAnswer | null>(null);
   useEffect(() => { if (!joined) setMiloAnswer(null); }, [joined]);
 
+  const idle = {
+    title: view === 'lost' ? lostWords.title : view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in',
+    body: view === 'lost' ? lostWords.body : view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
+      : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.',
+    testId: view === 'lost' ? 'join-room-call-lost' : view === 'rejoin' ? 'join-room-left' : 'join-room-idle',
+  };
+  const footer = <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
+    <CallMediaOutlet />
+    <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
+      <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloAnswer} />
+    </Inline>
+  </Stack>;
+
+  if (technical) {
+    // The full-width room: the header line (the round, its length, what the call is doing) and the tabs take the page.
+    const inset = 'px-[var(--ui-page-gutter)]';
+    const header = <PageHeader density="compact" title={`${room.round.name} · ${room.round.minutes} min`}
+      description={drawn ? 'You are in the call: microphone, camera and Leave are in the bar at the bottom of the window.' : `${idle.title}. ${idle.body}`}
+      actions={drawn && callShut ? <Button variant="secondary" size="sm" onClick={() => setCallShut(false)} data-testid="join-room-show-call">Show the call</Button> : undefined}
+      className={inset} data-testid={drawn ? 'join-room-header' : idle.testId} />;
+    return <GuestShell bleed role={role}>
+      <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 320, fitPrimaryPx: 480 }}>
+        <Stack gap="none" className="h-full min-h-0 w-full bg-surface" data-testid="join-room">
+          <SidePaneSplit paneTestId="join-room-pane-frame" dividerLabel="Resize the room and the call" className="min-h-0 flex-1" data-testid="join-room-stage">
+            <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="join-room-stage-column">
+              <GuestRoomWorkspace room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} header={header} inset={inset} />
+              <GuestMiloVoice room={room} answer={miloAnswer} />
+            </Stack>
+          </SidePaneSplit>
+          {drawn && !callShut && <GuestCallPane onClose={() => setCallShut(true)} />}
+          {footer}
+        </Stack>
+      </SidePaneProvider>
+    </GuestShell>;
+  }
+
   return <GuestShell bleed role={role}>
     <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 360, fitPrimaryPx: 480 }}>
       <Stack gap="none" className="h-full min-h-0 w-full bg-surface" data-testid="join-room">
@@ -201,26 +246,26 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
           <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="join-room-stage-column">
             {drawn
               ? <CallBlock placement="pane" fit="contain" className="min-h-0 min-w-0 flex-1 justify-center bg-surface" />
-              : <EmptyState
-                title={view === 'lost' ? lostWords.title : view === 'rejoin' ? 'You left the call' : 'Your interviewer has let you in'}
-                body={view === 'lost' ? lostWords.body : view === 'rejoin' ? 'You can join again from the bar at the bottom of the window while the interview is on.'
-                  : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.'}
-                className="min-h-0 flex-1"
-                testId={view === 'lost' ? 'join-room-call-lost' : view === 'rejoin' ? 'join-room-left' : 'join-room-idle'} />}
+              : <EmptyState title={idle.title} body={idle.body} className="min-h-0 flex-1" testId={idle.testId} />}
             <GuestMiloVoice room={room} answer={miloAnswer} />
           </Stack>
         </SidePaneSplit>
         {paneShown && <GuestRoomPane room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
-        <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
-          <CallMediaOutlet />
-          <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
-            <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloAnswer} />
-          </Inline>
-        </Stack>
+        {footer}
       </Stack>
     </SidePaneProvider>
   </GuestShell>;
 }
+
+/** A technical round's call tiles, narrow on the right while the call is drawn (the lead's room has the same pane). */
+function GuestCallPane({ onClose }: { onClose(): void }) {
+  const { reveal } = useSidePaneHost();
+  useEffect(() => { reveal(); }, [reveal]);
+  return <SidePane title="Call" closeLabel="Hide the call" onClose={onClose} paneId="join-room-call" widthPx={GUEST_CALL_PANE} data-testid="join-room-call-pane">
+    <CallBlock placement="pane" fit="contain" className="min-h-0 min-w-0 flex-1 justify-center bg-surface" />
+  </SidePane>;
+}
+const GUEST_CALL_PANE = { min: 320, max: 440 } as const;
 
 /** The library's HuddleBar on the work-call model: Join before the call; microphone, camera, Message, Leave and the time left in it. */
 function GuestCallBar({ room, panel, chatOpen, onToggleChat, onMiloLine }: { room: GuestRoom; panel: GuestPanel | null; chatOpen: boolean; onToggleChat(): void; onMiloLine(answer: MiloRequestAnswer | null): void }) {
