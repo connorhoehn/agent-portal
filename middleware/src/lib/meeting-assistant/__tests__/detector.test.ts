@@ -135,6 +135,33 @@ describe('name matching', () => {
     expect(findAddress('Right. Thanks, Milo. That was great. Could you walk me through your approach?')).toBeNull();
   });
 
+  it('a greeting the transcript misheard as one other word ("Say Milo!", "Hay Milo,", "A Milo.") addresses Milo when the name is set off and an ask follows within two sentences (live take t5, 19 November)', () => {
+    // The live transcript wrote "Hey Milo!" as "Say Milo!": the pad request was refused as asked by nobody.
+    expect(findAddress('Oh, neat. Say Milo! It would be handy to have a few more sample inputs.')?.rest)
+      .toBe('It would be handy to have a few more sample inputs.');
+    expect(findAddress('Say Milo! Could you add a check for the blank list?')?.rest).toBe('Could you add a check for the blank list?');
+    expect(findAddress('Say, Milo. I was thinking. Can you sort the imports?')?.rest).toBe('Can you sort the imports?');
+    expect(findAddress('Fine by me. Hay Milo! Add the import at the top.')?.rest).toBe('Add the import at the top.');
+    expect(findAddress('A Milo. Could you add a test for the blank list?')?.rest).toBe('Could you add a test for the blank list?');
+    expect(findAddress('Ah Milo! Would you list the open notes?')?.rest).toBe('Would you list the open notes?');
+    expect(findAddress('Hay Milo, it would be handy to have more inputs.')?.rest).toBe('it would be handy to have more inputs.');
+    expect(findAddress('A Milo, could you add a test?')?.rest).toBe('could you add a test?');
+    expect(findAddress('Hey, Milo. Could you add a test?')?.rest).toBe('Could you add a test?');
+    expect(findAddress('Say Mylo! Could you add a test?')?.rest).toBe('Could you add a test?');
+    // Nothing asked within two sentences, or the ask too far on: no request.
+    expect(findAddress('Say Milo! Good to see you.')).toBeNull();
+    expect(findAddress('Say Milo! Welcome. That works. The tests pass. Can you explain the loop')).toBeNull();
+    // No vocative punctuation after the name: "say" is the verb, a hypothetical about Milo.
+    expect(findAddress('Say Milo added a test, what then?')).toBeNull();
+    expect(findAddress('Say Milo adds the import. Would you still run it?')).toBeNull();
+    expect(findAddress('A Milo user told me that. Could you check?')).toBeNull();
+    // More than one word before the name, or thanks: still a mention, or not a request.
+    expect(findAddress('We could ask Milo. Show me your solution.')).toBeNull();
+    expect(findAddress("Don't ask Milo, write it yourself")).toBeNull();
+    expect(findAddress('Thanks, Milo. That was great. Could you walk me through your approach?')).toBeNull();
+    expect(findAddress('I said Milo! Can you believe it?')).toBeNull();
+  });
+
   it('talk about Milo stays talk about Milo across a full stop or a comma; thanks said to Milo is not a request (review of 18 November, item 3)', () => {
     // The ask after the name is in another sentence: said to the person in the room.
     expect(findAddress('We could ask Milo. Show me your solution.')).toBeNull();

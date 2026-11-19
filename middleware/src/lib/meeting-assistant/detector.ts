@@ -23,6 +23,8 @@
 //     Milo. That was great. Could you walk me through it?" asks the candidate). A greeting that opens a later sentence of the
 //     line ("Oh, nice. Hey Milo! It would be helpful to have another dozen test cases") is a request when the rest of its
 //     sentence, or one of the next two sentences, asks something or says what would help ("it would be helpful", "I'd like").
+//     So is one word a transcript writes for a greeting ("Say Milo!", "Hay Milo!", "A Milo.") alone before the name, with the
+//     name set off after it; without that ("Say Milo added a test, what then?") "say" is the verb.
 //   C. the name is the last word of the caption (unless it follows thanks / bye / sorry): the request starts next caption.
 //   Mention. Talking about Milo to someone else is never an address: Milo as what the sentence acts on or names ("just ask
 //     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the same sentence goes on to ask it something
@@ -117,6 +119,11 @@ export function nameTwins(names: readonly string[]): string[] {
 export const NAME_ALTERNATION = NAME_SPELLINGS.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 const NAME = new RegExp(`(^|[^\\p{L}\\p{N}_])(${NAME_ALTERNATION})(?:['’]s)?(?![\\p{L}\\p{N}_]|-\\p{L})`, 'giu');
 const GREETING_ONLY = /^(?:(?:hey|hi|hello|ok|okay|so|yo|and|but|alright|well|um|uh|oh|there)[\s,.!-]*)+$/i;
+/**
+ * One word a transcript writes for a greeting ("Hey Milo!" heard as "Say Milo!" in the live take t5 of 19 November; "Hay", "A"):
+ * a greeting only when it alone opens the name's sentence and the name is set off after it ("Say Milo! Could you ...").
+ */
+const GREETING_MISHEARD = /^(?:say|hay|hei|a|ah|eh|ay|aye)[\s,]*$/i;
 const IMPERATIVES = new Set([
   'please', 'write', 'create', 'make', 'summarize', 'summarise', 'assign', 'add', 'draft', 'tell', 'show', 'find',
   'open', 'list', 'remind', 'schedule', 'send', 'give', 'set', 'update', 'check', 'look', 'pull', 'file', 'log',
@@ -173,7 +180,11 @@ const asksOrWants = (text: string): boolean => asksSomething(text) || WANTS.test
  * Only greeting words open the name's sentence, and an earlier sentence of the line comes before it ("Oh, nice. Hey Milo!"): the
  * transcript joined the lead-in to the request. (Greeting words opening the line itself are rule A.)
  */
-const greetedInSentence = (before: string): boolean => GREETING_ONLY.test(before.replace(/^[\s\S]*[.!?;…]["')\]]*\s*/, ''));
+const greetedInSentence = (before: string): boolean => GREETING_ONLY.test(sentenceSoFar(before));
+/** One misheard greeting word alone opens the name's sentence ("Oh, neat. Say Milo!"; `GREETING_MISHEARD`). */
+const misheardGreetingInSentence = (before: string): boolean => GREETING_MISHEARD.test(sentenceSoFar(before));
+/** The words of the name's own sentence before the name: what follows the line's last sentence end. */
+const sentenceSoFar = (before: string): string => before.replace(/^[\s\S]*[.!?;…]["')\]]*\s*/, '');
 /** The name ends its sentence: a full stop, "!" or "?" straight after it (an ellipsis is a pause, not an end). */
 const closesSentence = (after: string): boolean => /^\s*[.!?]/.test(after) && !/^\s*\.\./.test(after);
 /** Thanks or a goodbye right before the name ("Thanks, Milo"): said to Milo, but never a request, whatever follows. */
@@ -232,6 +243,8 @@ export function findAddress(text: string): NameHit | null {
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
     if (namePhraseFollows(after) || talksAboutName(before, after, rest, initial)) continue;
     const greeted = !initial && greetedInSentence(before);
+    // A misheard greeting counts as one only with the name set off after it: the end-of-sentence branch below (a comma is rule B).
+    const misheard = !initial && misheardGreetingInSentence(before);
     let addressed = initial;
     // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you or an apology.
     if (!addressed && rest === '' && !THANKS_OR_BYE.test(before) && !/sorry[\s,.!]*$/i.test(before)) addressed = true;
@@ -241,10 +254,10 @@ export function findAddress(text: string): NameHit | null {
       else if (!closesSentence(after)) addressed = greeted ? asksOrWants(rest) : asksSomething(rest);
       // Spoken to Milo at the end of a sentence, not in thanks: a request only when one of the next sentences asks it something.
       // The request is that sentence on: the words before it ("I was focusing.") would hide a fixed phrase ("repeat the question").
-      // A greeting that opens a later sentence of the line ("Go for it! Hey Milo!") is read the same way.
-      else if ((closesSentenceSpokenTo(before, after) || greeted) && !THANKS_OR_BYE.test(before)) {
+      // A greeting that opens a later sentence of the line ("Go for it! Hey Milo!"), or one misheard ("Say Milo!"), is read the same way.
+      else if ((closesSentenceSpokenTo(before, after) || greeted || misheard) && !THANKS_OR_BYE.test(before)) {
         const sentences = rest.split(/(?<=[.!?…])\s+/);
-        const asking = sentences.slice(0, VOCATIVE_REACH_SENTENCES).findIndex(greeted ? asksOrWants : asksSomething);
+        const asking = sentences.slice(0, VOCATIVE_REACH_SENTENCES).findIndex(greeted || misheard ? asksOrWants : asksSomething);
         if (asking >= 0) return { addressed: true, rest: sentences.slice(asking).join(' ') };
       }
     }
