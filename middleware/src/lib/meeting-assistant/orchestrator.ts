@@ -801,6 +801,8 @@ export class AssistantRuntime {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
     run.finished = true; this.dropVoice(run, true);
+    // The held lines still waiting their turn are dropped (`sayHeld`); nothing waits behind them any more.
+    run.heldChain = Promise.resolve();
     this.deps.watcher?.stop(callId);
     // Whatever a step before it throws, the audio and the tap are released and the settlement is told: money is booked once, here.
     const guarded = async (step: () => Promise<void>): Promise<void> => {
@@ -2009,6 +2011,8 @@ export class AssistantRuntime {
    */
   private async sayHeld(run: CallRun, askedBy: string, held: string): Promise<void> {
     const callId = run.ctx.callId;
+    // A line still waiting its turn when the call stopped (Milo left, the call ended): not posted, said or paid for.
+    if (run.finished) { trace('held.dropped', {}); return; }
     // The fixed refusal for an asker whose last answer from Milo was already that refusal (the same request heard again, however
     // long after): not posted or said again. Once Milo has answered that asker something else, the refusal is posted again.
     if (run.policy.heldRefusal !== undefined && held === run.policy.heldRefusal && run.lastAnswerTo?.get(askedBy) === held) { trace('held.repeat', {}); return; }
@@ -2016,7 +2020,8 @@ export class AssistantRuntime {
     // Posted first with the approved mark (the candidate reads it), then said aloud as approved words when Milo's voice is on.
     const posted = await postApprovedAnswer(callId, held, {}, { askedBy, askedByName: await this.nameIn(run, askedBy) }).catch(() => null);
     // The family's money check for the speech (interviews: a hold under the interview's cap); refused, the answer stays in the chat.
-    const speechHold = posted && run.policy.holdHeldSpeech
+    // None once the call has stopped while the line was being posted.
+    const speechHold = run.finished ? null : posted && run.policy.holdHeldSpeech
       ? await run.policy.holdHeldSpeech(run.call, { askedBy, text: held }).catch(() => null)
       : posted ? { release: async () => undefined } : null;
     let said: SayResult = { outcome: 'posted', why: null };

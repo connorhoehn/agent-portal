@@ -585,6 +585,40 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
   });
 });
 
+describe('6c. the lines the family holds are said one after another, and none after the call stops (review of 18 November, items 5 and 6)', () => {
+  const H1 = 'About 20 minutes are left in this round.', H2 = 'Here is the question again.', FALLBACK = 'I can repeat the question or tell you the time.';
+  const gated = () => {
+    let open!: () => void;
+    const gate = new Promise<void>((r) => { open = r; });
+    const holds: string[] = [];
+    const policy: MeetingAssistantPolicy = {
+      ...NO_RELAY, id: 'held-order',
+      answerFromHeldText: async (_c, r) => (r.askedBy !== GUEST ? null : /time/.test(r.text) ? H1 : H2),
+      // The first answer's speech money is held up, so the lines after it are still waiting.
+      holdHeldSpeech: async (_c, said) => { holds.push(said.text); await gate; return { release: async () => undefined }; },
+      heldFallback: async () => FALLBACK,
+      heldFallbackWait: { quietMs: 100, delegatedMs: 200 },
+    };
+    return { policy, holds, open: () => open() };
+  };
+  const say = async (userId: string, text: string) => { await intake.handle(CALL, { userId, text, at: now, turnEnded: true }); now += 100; await flush(); };
+
+  it('a held answer still waiting when the call stops is neither posted nor paid for', async () => {
+    const g = gated();
+    const off = registerMeetingAssistantPolicy('orgiq:heldorder', g.policy);
+    try {
+      await startCall('orgiq:heldorder:r2');
+      await say(GUEST, 'Milo, how much time is left?');
+      await say(GUEST, 'Milo, repeat the question.');
+      expect(mockPosts.approved).toEqual([H1]);
+      await runtime.stop(CALL);
+      g.open(); await new Promise((r) => setTimeout(r, 100)); await flush();
+      expect(mockPosts.approved).toEqual([H1]);
+      expect(g.holds).toEqual([H1]);
+    } finally { off(); }
+  });
+});
+
 describe('6b. a fixed request the family knows whole by its words', () => {
   it('is answered as soon as its line is heard: no wait for more words after a two-word "introduce yourself" (live take of 18 November)', async () => {
     const HELD: MeetingAssistantPolicy = {
