@@ -1,6 +1,6 @@
 // What the scorecard shows at a glance (docs/interviews-tenant-plan.md, "Milo's recommendation on the scorecard"):
 // each rating as stars on the kit's own 1 to 4 scale, each piece of Milo's evidence as the quote itself, and Milo's
-// recommendation (Advance, Hold, Don't advance) as a deterministic rule over the interviewers' ratings and how much of
+// recommendation (Advance, Inconclusive, Don't advance) as a deterministic rule over the interviewers' ratings and how much of
 // the round the recap's evidence covers. No model is asked: the rule reads what the people rated and what the
 // transcript holds, and the panel decides.
 
@@ -66,7 +66,7 @@ export function evidenceRow(claim: RecapClaim, max: number = ROW_QUOTE_CHARS): E
 export type MiloAdviceOutcome = 'advance' | 'hold' | 'dont-advance' | 'not-enough';
 
 export const MILO_ADVICE_LABELS: Readonly<Record<MiloAdviceOutcome, string>> = {
-  advance: 'Advance', hold: 'Hold', 'dont-advance': 'Don\'t advance', 'not-enough': 'Not enough evidence to recommend',
+  advance: 'Advance', hold: 'Inconclusive', 'dont-advance': 'Don\'t advance', 'not-enough': 'Not enough evidence to recommend',
 };
 
 /** The library Banner variant for each outcome: green, yellow, red, and a neutral note when there is none. */
@@ -104,7 +104,7 @@ const names = (xs: ReadonlyArray<{ name: string }>): string => xs.length <= 2 ? 
  * 2. Each competency's score is the average of its ratings; the overall score is the average of those.
  * 3. Don't advance: overall under 2.25, or two or more competencies under 2.
  * 4. Advance: overall 3 or more, no competency under 2, and evidence for every required competency.
- * 5. Otherwise Hold.
+ * 5. Otherwise Inconclusive.
  * At most two reasons, the deciding one first.
  */
 export function miloAdvice(input: {

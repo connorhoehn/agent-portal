@@ -252,7 +252,7 @@ The rule, in order (the kit rates every competency 1 to 4):
 2. Each competency's score is the average of its ratings (the viewer's own scorecard while it is being filled; once submitted, every submitted scorecard for this round the viewer may read). The overall score is the average of those.
 3. **Don't advance**: overall under 2.25, or two or more competencies under 2.
 4. **Advance**: overall 3 or more, no competency under 2, and evidence for every required competency.
-5. Otherwise **Hold**.
+5. Otherwise **Inconclusive**.
 
 The banner lists at most two reasons, the deciding one first ("Below the bar on Clarity.", "No evidence in the transcript for Design.", "Rated 3.5 of 4 on average across 4 competencies."). It is shown only after the ratings are recorded (the recap step onwards, a submitted scorecard, or a reader's view), never while the person is still rating from their own judgement.
 

@@ -70,7 +70,7 @@ export function miloScoresIn(text) {
     .replace(/Milo does not rate or recommend\./g, ' ')
     // The owner's scorecard banner (docs/interviews-tenant-plan.md, "Milo's recommendation on the scorecard"): a fixed rule
     // over the people's ratings, not a model's judgement, so its own fixed words are taken out like the hints.
-    .replace(/Milo recommends: (?:Advance|Hold|Don't advance)/g, ' ')
+    .replace(/Milo recommends: (?:Advance|Inconclusive|Don't advance)/g, ' ')
     .replace(/Milo's recommendation from the ratings and the transcript evidence\./g, ' ')
     .replace(/Milo finds what was said, and where; it does not judge the candidate\./g, ' ')
     .replace(/Milo can only find what was said[^.]*\./g, ' ');
