@@ -26,8 +26,8 @@ test('a technical round is on the pad unless it says board; a behavioural round 
   assert.equal(surfaceOf({ type: 'technical' }), 'pad');
   assert.equal(surfaceOf({ type: 'technical', surface: 'board' }), 'board');
   assert.equal(surfaceOf({ type: 'behavioural', surface: 'board' }), null);
-  assert.deepEqual(roomTabs('technical', 'board').map((t) => t.label), ['Board', 'Questions', 'Milo', 'Chat']);
-  assert.deepEqual(roomTabs('technical').map((t) => t.label), ['Pad', 'Questions', 'Milo', 'Chat']);
+  assert.deepEqual(roomTabs('technical', 'board').map((t) => t.label), ['Board', 'Questions', 'Milo', 'Chat', 'Details']);
+  assert.deepEqual(roomTabs('technical').map((t) => t.label), ['Pad', 'Questions', 'Milo', 'Chat', 'Details']);
 });
 
 test('a starting board goes in as one write, beside what is drawn, and a second pick adds nothing', () => {

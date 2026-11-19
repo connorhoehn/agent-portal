@@ -12,9 +12,9 @@ import { TWITTER_RED_FLAGS } from '../../../../middleware/src/mock/interviews-de
 const key = { providedDesign: { name: 'Provided design', elements: [{ id: 'pd-a', type: 'rectangle', x: 0, y: 10, width: 100, height: 50 }] }, redFlags: TWITTER_RED_FLAGS };
 
 test('a board round with an answer key gets a "Provided design" tab after the board; a pad round, or none, does not', () => {
-  assert.deepEqual(roomTabs('technical', 'board', true).map((t) => t.label), ['Board', 'Provided design', 'Questions', 'Milo', 'Chat']);
-  assert.deepEqual(roomTabs('technical', 'board').map((t) => t.label), ['Board', 'Questions', 'Milo', 'Chat']);
-  assert.deepEqual(roomTabs('technical', 'pad', true).map((t) => t.label), ['Pad', 'Questions', 'Milo', 'Chat']);
+  assert.deepEqual(roomTabs('technical', 'board', true).map((t) => t.label), ['Board', 'Provided design', 'Questions', 'Milo', 'Chat', 'Details']);
+  assert.deepEqual(roomTabs('technical', 'board').map((t) => t.label), ['Board', 'Questions', 'Milo', 'Chat', 'Details']);
+  assert.deepEqual(roomTabs('technical', 'pad', true).map((t) => t.label), ['Pad', 'Questions', 'Milo', 'Chat', 'Details']);
   assert.equal(roomTabOf('technical', 'design', 'pad', true), 'design');
   assert.equal(roomTabOf('technical', 'design', 'pad'), 'pad');
   const qs = [{ id: 'q1' }, { id: 'q2', answerKey: key }, { id: 'q3', answerKey: {} }];

@@ -4,16 +4,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, guestRoomNameFor, isGuestUserId, miloInviteBlock, staffRoomNameFor, panelLine, roomPaneWidth,
-  roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
+  roomHeadline, roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
 } from '../interviewsRoom.ts';
 
 const MIN = 60_000;
 const T0 = Date.parse('2026-11-16T14:00:00.000Z');
 
 test('the pane has the round type’s tabs in order, opens on the first, and Message selects Chat', () => {
-  assert.deepEqual(roomTabIds('technical'), ['pad', 'questions', 'milo', 'chat']);
-  assert.deepEqual(roomTabIds('behavioural'), ['plan', 'milo', 'chat']);
-  assert.deepEqual(roomTabs('behavioural').map((t) => t.label), ['Plan', 'Milo', 'Chat']);
+  assert.deepEqual(roomTabIds('technical'), ['pad', 'questions', 'milo', 'chat', 'details']);
+  assert.deepEqual(roomTabIds('behavioural'), ['plan', 'milo', 'chat', 'details']);
+  assert.deepEqual(roomTabs('behavioural').map((t) => t.label), ['Plan', 'Milo', 'Chat', 'Details']);
   assert.equal(defaultRoomTab('technical'), 'pad');
   assert.equal(defaultRoomTab('behavioural'), 'plan');
   assert.equal(ROOM_MESSAGE_TAB, 'chat');
@@ -50,6 +50,11 @@ test('after the split rounds the page\'s share, the pane column holds the floor 
 test('the round’s crumb names the candidate, then the round', () => {
   assert.equal(roundCrumbLabel({ candidate: { name: 'Mateo Álvarez' }, round: { id: 'r', name: 'System design', type: 'technical', minutes: 60 } }),
     'Mateo Álvarez, System design');
+});
+
+test('the room\'s header line sums up the Details tab: candidate, round and length', () => {
+  assert.equal(roomHeadline({ candidate: { name: 'Mateo Álvarez' }, round: { id: 'r', name: 'System design', type: 'technical', minutes: 60 } }),
+    'Mateo Álvarez · System design · 60 min');
 });
 
 test('the footer’s time counts from the join, never from the set time, and says the round’s length before', () => {

@@ -4,15 +4,15 @@
 //   - the call: the shell's one call host (lib/conversationCall.tsx). The page binds the interview's lobby
 //     (`interviews:interview:<id>`, C1) the way an initiative page binds its huddle (`useCallBlock(…, { bind })`),
 //     so the footer's start, the pre-join device check, the tiles and the HuddleBar run it unchanged.
-//   - the tiles: the library's `CallBlock`, claimed as the call's grid (`placement="pane"` draws the dock's
-//     `grid` layout: tiles only, the footer's bar owns mic, camera and Leave), taking all the page's space. It wins
-//     the call's one media sink because nothing else on the page claims it: the room registers as the huddle
-//     pane's owner (as pages/social/RoomPane.tsx does), so the shell's fallback chat pane, its media grid and its
-//     composer dock never open here, the chat tab draws `HuddleChatBody showCall={false}`, and the footer's video
-//     panel is kept shut while the call is this room's.
-//   - the one right pane (U1): the shell's right column (`SidePane`) with the library's tabs. Technical: Pad,
-//     Questions, Milo, Chat. Behavioural: Plan, Milo, Chat. Milo is Milo's notes, the lead's private question and
-//     the live transcript (rows I3.6, I3.7). The footer's Message opens the Chat tab; it never opens a second pane.
+//   - the room, full width: the header line (candidate · round · length, the candidate's status) and the library's
+//     tabs filling the page. Technical: Board or Pad, Provided design (a board round with an answer key), Questions,
+//     Milo, Chat, Details. Behavioural: Plan, Milo, Chat, Details. Details holds the round's facts. Milo is Milo's
+//     notes, the lead's private question and the live transcript (rows I3.6, I3.7). The footer's Message opens Chat.
+//   - the tiles: while the call is drawn, the library's `CallBlock` (`placement="pane"`: tiles only, the footer's bar
+//     owns mic, camera and Leave) in a narrow `SidePane` on the right. It wins the call's one media sink because
+//     nothing else claims it: the room registers as the huddle pane's owner (as pages/social/RoomPane.tsx does), so
+//     the shell's fallback chat pane, its media grid and its composer dock never open here, the chat tab draws
+//     `HuddleChatBody showCall={false}`, and the footer's video panel is kept shut while the call is this room's.
 //   - the chrome (U5): while the call is drawn the page folds the shell's trail, the primary rail and the content
 //     gutter (components/shell/pageChrome.ts); the header and the footer stay. Before and after, an ordinary page.
 //   - the footer: the work-call footer (SocialFooter) with the interview's own elements registered here
@@ -24,7 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { Button, ChatComposer, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, ChatComposer, Chip, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T, Tabs } from '@connorhoehn/ui-components/shared';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
@@ -53,7 +53,7 @@ import {
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
-  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomPaneWidth, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
+  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomHeadline, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloAsked, type MiloAskWhy, type MiloSaid, miloInviteBlock,
   NO_SEAT_NOT_FOUND, callLossWords, miloLostLine,
 } from '../../lib/interviewsRoom';
@@ -212,90 +212,64 @@ function InterviewRoom({ id }: { id: string }) {
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {polling && <InterviewHintListener interviewId={id} onHint={onHint} />}
-    {drawn
-      // The recording note is drawn here, not by the library's pane (ShellCallMedia turns that one off): its banner ran edge to
-      // edge with no gutter and the tile's centring left a gap under it. The note takes the tiles' gutter and the page's stack gap.
-      ? <Stack gap="sm" className="h-full min-h-0 min-w-0 flex-1 bg-surface" data-testid="interview-room-stage">
-        {host?.recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{host.recordingNote}</Inline>}
-        <CallBlock placement="pane" fit="contain" className={host?.recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
-      </Stack>
-      : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)}
-        lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
-        miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} />}
-    <RoomPane room={room} here={call.here} onBoardCheckpoints={setBoardCheckpoints} />
+    <RoomWorkspace room={room} here={call.here} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
+      onBack={() => navigate(MY_INTERVIEWS_HREF)} lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
+      miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints} />
+    {drawn && <RoomCallPane recordingNote={host?.recordingNote ?? null} />}
   </Stack>;
 }
 
 /**
- * Before the call (or after it): who, when, how long, the panel and the candidate; the one action is the bar's Join. After a lost
- * call it says the call dropped instead, and the lead's one action is Restart the call (the bar's start, the same interview).
+ * The call's tiles while the call is drawn, in the shell's right column: narrow, resizable and closable, so the room's
+ * tabs keep the page's width. They claim the call's one media sink (`placement="pane"`: tiles only, the footer's bar
+ * owns mic, camera and Leave). The recording note is drawn here, with the tiles' gutter (ShellCallMedia turns the
+ * library pane's own off).
  */
-function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart = null, miloLine = null }: {
-  room: RoomView; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
-  lost?: ReturnType<typeof callLossWords> | null; onRestart?: (() => void) | null; miloLine?: string | null;
-}) {
-  if (!OPEN_STATES.has(room.state)) {
-    const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
-    return <EmptyState title={over ? 'This interview has ended' : 'This interview is not ready for a call'}
-      body={over ? 'Its call is closed. Your scorecard is on My interviews.' : 'The call opens once the lead has accepted the round.'}
-      actionLabel="Open My interviews" onAction={onBack} testId="interview-room-closed" />;
-  }
-  const lead = room.seat === 'lead';
-  // Any seat reads whether the candidate is here (the panel waits with them for the lead).
-  const waiting = candidateLine(admission, room.seat);
-  const facts = [
-    { label: 'Candidate', value: room.candidate.name },
-    { label: 'Round', value: `${room.round.name} · ${room.round.type === 'technical' ? 'Technical' : 'Behavioural'}` },
-    { label: 'When', value: whenWithZone(room.scheduledAt) },
-    { label: 'Length', value: `${room.round.minutes} min` },
-    { label: 'Panel', value: panelLine(room.seats) },
-    ...(waiting ? [{ label: 'The candidate', value: waiting }] : []),
-    ...(off ? [{ label: 'Off for this interview', value: off }] : []),
-  ];
-  // The page's one h1 (the shell's trail is only a breadcrumb), then who, when and how long.
-  return (
-    <Stack gap="md" className="min-h-0 flex-1 overflow-auto" data-testid="interview-room-idle">
-      <PageHeader density="compact" title={lost ? lost.title : live ? 'The call is on' : room.state === 'live' ? 'The interview is live' : lead ? 'The call has not started' : 'Waiting for the lead'} />
-      <Stack gap="md" className="px-[var(--ui-page-gutter)]">
-        {lost ? <Stack gap="sm" align="start" data-testid="interview-room-call-lost">
-          <T size="sm" tone="secondary" wrap>{lost.body}</T>
-          {miloLine && <T size="sm" tone="secondary" wrap data-testid="interview-room-milo-left">{miloLine}</T>}
-          {lost.action && onRestart && <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>}
-        </Stack>
-        : <T size="sm" tone="secondary" wrap>{live ? 'Join it from the bar at the bottom of the window.'
-          : room.state === 'live' ? 'The interview is live. Join the call from the bar at the bottom of the window.'
-            : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-            : 'You can join the call from the bar at the bottom of the window.'}</T>}
-        <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
-      </Stack>
+function RoomCallPane({ recordingNote }: { recordingNote: React.ReactNode }) {
+  const { reveal } = useSidePaneHost();
+  useEffect(() => { reveal(); }, [reveal]);
+  return <SidePane title="Call" paneId="interview-room-call" widthPx={ROOM_CALL_PANE} data-testid="interview-room-stage">
+    <Stack gap="sm" className="h-full min-h-0 min-w-0 flex-1 bg-surface">
+      {recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{recordingNote}</Inline>}
+      <CallBlock placement="pane" fit="contain" className={recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
     </Stack>
-  );
+  </SidePane>;
+}
+/** The call pane's floor and ceiling: room for two tiles one above the other, never the board's width. */
+const ROOM_CALL_PANE = { min: 320, max: 440 } as const;
+
+/** The header line's state: what the call is doing, for this seat. */
+function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } | null): string {
+  if (lost) return lost.title;
+  if (live) return 'The call is on';
+  if (room.state === 'live') return 'The interview is live';
+  return room.seat === 'lead' ? 'The call has not started' : 'Waiting for the lead';
 }
 
 /**
- * The room's one right pane (U1), with the library's tabs. While the call is this room's, the room is the huddle
- * pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own chat pane never opens beside it, and a focus
- * request for the call's chat (the footer's Message) selects the Chat tab and shows the pane.
+ * The room, full width (UI: the owner's room layout): the header line says who, which round and how long, with the
+ * candidate's status; the tabs (Board or Pad, Provided design, Questions or Plan, Milo, Chat, Details) take the rest of
+ * the page. Details holds the round's facts and what to do next; the call's controls stay in the footer's bar. While
+ * the call is this room's, the room is the huddle pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own
+ * chat pane never opens, and a focus request for the call's chat (the footer's Message) selects the Chat tab.
  */
-function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: boolean; onBoardCheckpoints: (c: BoardCheckpoints | null) => void }) {
-  const pane = useSidePaneHost();
-  const { reveal } = pane;
-  // Open by default in the room; the reader's × still closes it for this visit.
-  useEffect(() => { reveal(); }, [reveal]);
+function RoomWorkspace({ room, here, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints }: {
+  room: RoomView; here: boolean; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
+  lost: ReturnType<typeof callLossWords> | null; onRestart: (() => void) | null; miloLine: string | null;
+  onBoardCheckpoints: (c: BoardCheckpoints | null) => void;
+}) {
   const type = room.round.type;
   const [tab, setTab] = useState<RoomTabId>(() => defaultRoomTab(type));
   const chat = useHuddleChat();
   const registerPane = chat?.registerPaneOwner;
-  const chatVisible = pane.shown && !pane.folded && tab === ROOM_MESSAGE_TAB;
-  // The Milo tab is the pane's too: Milo's lines in the call chat count on it (its unread bubble), not on Chat.
-  const miloVisible = pane.shown && !pane.folded && tab === 'milo';
   const hideChat = useCallback(() => setTab(defaultRoomTab(type)), [type]);
-  useEffect(() => (here ? registerPane?.({ visible: chatVisible, hide: hideChat, milo: { visible: miloVisible } }) : undefined),
-    [here, registerPane, chatVisible, miloVisible, hideChat]);
+  // The Milo tab is the room's too: Milo's lines in the call chat count on it (its unread bubble), not on Chat.
+  useEffect(() => (here ? registerPane?.({ visible: tab === ROOM_MESSAGE_TAB, hide: hideChat, milo: { visible: tab === 'milo' } }) : undefined),
+    [here, registerPane, tab, hideChat]);
   const unread = useHuddleChatUnread();
   const lastFocus = useRef(chat?.focusRequest ?? 0);
   useEffect(() => {
-    if (here && chat && chat.focusRequest !== lastFocus.current) { setTab(ROOM_MESSAGE_TAB); reveal(); }
+    if (here && chat && chat.focusRequest !== lastFocus.current) setTab(ROOM_MESSAGE_TAB);
     lastFocus.current = chat?.focusRequest ?? 0;
   }, [here, chat?.focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const milo = useMiloPane(room);
@@ -303,9 +277,36 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
   const design = surface === 'board' && answerKeyQuestions(room.questions).length > 0;
   const plainTabs = useMemo(() => roomTabs(type, surface, design), [type, surface, design]);
   const tabs = useMemo(() => withUnreadBadges(plainTabs, here ? { chat: unread.chat, milo: unread.milo } : {}), [plainTabs, here, unread.chat, unread.milo]);
-  return <SidePane title={roomCallTitle(room)} subtitle={`${room.round.minutes} min · ${type === 'technical' ? 'Technical' : 'Behavioural'} round`}
-    paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t, design))}
-    data-testid="interview-room-pane">
+  const open = OPEN_STATES.has(room.state);
+  const over = room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed';
+  const lead = room.seat === 'lead';
+  // Any seat reads whether the candidate is here (the panel waits with them for the lead).
+  const waiting = candidateLine(admission, room.seat);
+  const hint = !open ? (over ? 'Its call is closed. Your scorecard is on My interviews.' : 'The call opens once the lead has accepted the round.')
+    : lost ? lost.body
+    : live ? 'Join it from the bar at the bottom of the window.'
+    : room.state === 'live' ? 'The interview is live. Join the call from the bar at the bottom of the window.'
+    : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
+    : 'You can join the call from the bar at the bottom of the window.';
+  const facts = [
+    { label: 'Candidate', value: room.candidate.name },
+    { label: 'Round', value: `${room.round.name} · ${type === 'technical' ? 'Technical' : 'Behavioural'}` },
+    { label: 'When', value: whenWithZone(room.scheduledAt) },
+    { label: 'Length', value: `${room.round.minutes} min` },
+    { label: 'Panel', value: panelLine(room.seats) },
+    ...(waiting ? [{ label: 'The candidate', value: waiting }] : []),
+    ...(off ? [{ label: 'Off for this interview', value: off }] : []),
+  ];
+  const action = !open ? <Button variant="secondary" size="sm" onClick={onBack} data-testid="interview-room-closed">Open My interviews</Button>
+    : lost?.action && onRestart ? <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>
+    : null;
+  return <Stack gap="none" className="min-h-0 min-w-0 flex-1" data-testid="interview-room-pane">
+    {/* The page's one h1 (the shell's trail is only a breadcrumb): the essentials, the candidate's status, what the call is doing. */}
+    <PageHeader density="compact" title={roomHeadline(room)} description={`${roomStateTitle(room, live, lost)}. ${hint}`}
+      badge={waiting ? <Chip size="sm" tone={admission?.state === 'admitted' ? 'success' : 'warning'} data-testid="interview-room-candidate-status">{waiting}</Chip> : undefined}
+      actions={action ?? undefined} data-testid={lost ? 'interview-room-call-lost' : 'interview-room-idle'} />
+    <Tabs idPrefix="interview-room" aria-label="The interview room" variant="underline" items={tabs} value={tab}
+      onValueChange={(next) => setTab((t) => roomTabOf(type, next, t, design))} className="shrink-0" />
     {/* A board round's board stays mounted under the other tabs: its canvas, its follow and its live document survive a
         visit to Questions or Provided design (the reveal lands on it from there), shown again as it was. */}
     {surface === 'board' && <Stack gap="none" className={tab === 'pad' ? 'min-h-0 flex-1' : 'hidden'} data-testid="interview-room-tab-pad">
@@ -317,18 +318,21 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
           : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
       </Stack>
       : tab === 'pad'
-      // Full-bleed, as on the candidate's side: the surface's own toolbar row carries the pane's inset (its first
-      // control under the first tab's label) and the canvas or editor takes the rest of the column.
+      // Full-bleed: the surface's own toolbar row carries the page's inset and the canvas or editor takes the rest.
       ? (surface === 'board' ? null : <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-tab-pad"><PadTab room={room} /></Stack>)
       : tab === 'design'
       ? <ProvidedDesignTab room={room} onRevealed={() => setTab('pad')} />
-      : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
-        {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
+      : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto py-4" data-testid={`interview-room-tab-${tab}`}>
+        {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={lead && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
-        {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}
+        {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={lead && room.state === 'live'} /><Competencies room={room} /></>}
         {tab === 'milo' && <MiloForYou room={room} {...milo} />}
+        {tab === 'details' && <Stack gap="md" data-testid="interview-room-details">
+          {miloLine && <T size="sm" tone="secondary" wrap data-testid="interview-room-milo-left">{miloLine}</T>}
+          <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />
+        </Stack>}
       </Stack>}
-  </SidePane>;
+  </Stack>;
 }
 
 /**

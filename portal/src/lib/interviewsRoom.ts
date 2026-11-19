@@ -422,11 +422,12 @@ export const askedByLabel = (by: MiloAskedItem['by']): string | null => (by === 
 // ── The room as decision 21 draws it (UI round 1, lane ROOM; contracts U1, U6) ──────────────────────────────
 
 /** The one pane's tabs (U1), in order: a technical round leads with the pad, a behavioural one with the plan. */
-export type RoomTabId = 'pad' | 'design' | 'questions' | 'plan' | 'milo' | 'chat';
-const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', design: 'Provided design', questions: 'Questions', plan: 'Plan', milo: 'Milo', chat: 'Chat' };
-/** `design`: the round's questions carry an answer key, so a board round gets "Provided design" after the board. */
+export type RoomTabId = 'pad' | 'design' | 'questions' | 'plan' | 'milo' | 'chat' | 'details';
+const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', design: 'Provided design', questions: 'Questions', plan: 'Plan', milo: 'Milo', chat: 'Chat', details: 'Details' };
+/** `design`: the round's questions carry an answer key, so a board round gets "Provided design" after the board. The
+ *  last tab, Details, holds the round's facts (who, when, how long, the panel), which the header line sums up. */
 export function roomTabIds(type: RoundType, design = false): RoomTabId[] {
-  return type === 'technical' ? ['pad', ...(design ? ['design' as const] : []), 'questions', 'milo', 'chat'] : ['plan', 'milo', 'chat'];
+  return type === 'technical' ? ['pad', ...(design ? ['design' as const] : []), 'questions', 'milo', 'chat', 'details'] : ['plan', 'milo', 'chat', 'details'];
 }
 /** The tab row; a board round's `pad` tab holds the whiteboard and says so (WHITEBOARD-PLAN step 1). */
 export const roomTabs = (type: RoundType, surface?: RoundSurface | null, answerKey = false): Array<{ id: RoomTabId; label: string }> =>
@@ -451,6 +452,8 @@ export const roomPaneWidth = (type: RoundType): { min: number; max: number } => 
 
 /** The round's crumb (U6): "Mateo Álvarez, System design". */
 export const roundCrumbLabel = (room: Pick<RoomView, 'round' | 'candidate'>): string => `${room.candidate.name}, ${room.round.name}`;
+/** The room's header line: who, which round and how long (the Details tab has the rest). */
+export const roomHeadline = (room: Pick<RoomView, 'round' | 'candidate'>): string => `${room.candidate.name} · ${room.round.name} · ${room.round.minutes} min`;
 
 /**
  * The footer's time while the call is on: counted from the call's start (the join), never from the set time, so a
