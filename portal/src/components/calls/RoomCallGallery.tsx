@@ -21,7 +21,7 @@ import { aboveFooterEnd, useFooterAnchorKey } from '../shell/footerPanel';
 
 /** The gallery's size: two small tiles side by side under a compact header. */
 const WIDTH_REM = 22;
-const HEIGHT_REM = 8.5;
+const HEIGHT_REM = 10;
 const NOTE_REM = 1.75;
 
 /** The viewer's remembered state for this room kind (storage wrapped: a blocked store just uses the default). */
@@ -71,7 +71,7 @@ export function RoomCallGallery({ mode, onMode, positionKey, count, recordingNot
   const start = aboveFooterEnd(height, WIDTH_REM);
   return <FloatingPanel key={`${anchorKey}:${recordingNote ? 'note' : 'plain'}`} open onClose={() => onMode('minimised')} title={`Call · ${people}`} tone="dark"
     defaultPosition={start} persistKey={positionKey} snapAnchors={['bottom-right', 'bottom-left', 'top-right', 'top-left']}
-    widthClassName="w-[min(22rem,calc(100vw-2rem))]" heightClassName={recordingNote ? 'h-[10.25rem]' : 'h-[8.5rem]'} data-testid={testId}>
+    widthClassName="w-[min(22rem,calc(100vw-2rem))]" heightClassName={recordingNote ? 'h-[11.75rem]' : 'h-[10rem]'} data-testid={testId}>
     <Stack gap="xs" className="min-h-0 min-w-0 flex-1 p-2">
       {recordingNote && <Inline gap="none" data-testid={`${testId}-recording-note`}>{recordingNote}</Inline>}
       <Inline gap="sm" align="stretch" wrap={false} className="min-h-0 min-w-0 flex-1">
