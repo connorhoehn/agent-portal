@@ -9,7 +9,7 @@
 //
 // The story: the recruiter assigns Mateo's System design round (POST /interviews), Hugo accepts it, it gets a time and Hugo
 // chooses "Design Twitter" (q-be-twitter) in Prepare's route; Hugo starts the call, the candidate opens the link and is
-// admitted (all before the film starts). On film: Hugo puts the question's "Prompt only" board on the board; Mateo asks
+// admitted (all before the film starts). On film: Hugo puts the question's "Prompt and empty frames" board on the board; Mateo asks
 // about reads and freshness, types the functional and non-functional stickies, draws the high-level design (boxes with
 // labels, arrows), hesitates and drags the fan-out worker aside, asks where to go deep; Hugo picks the fan-out; a Deep dive
 // sticky; Hugo ends the round and opens its record page's board (the closing board and the snapshot picker).
@@ -299,7 +299,7 @@ async function same(id, label, min) {
   return a?.count ?? min;
 }
 
-// ── The board's plan, in scene units (the "Prompt only" board: the prompt card above frames of 440 × 300, three to a row) ──
+// ── The board's plan, in scene units (the "Prompt and empty frames" board: the prompt card above frames of 440 × 300, three to a row) ──
 const FR = { functional: [500, 160], nonfunctional: [1000, 160], hld: [0, 520], deepdive: [500, 520] };
 const sticky = (frame, j) => [FR[frame][0] + 20 + (j % 2) * 210, FR[frame][1] + 30 + Math.floor(j / 2) * 110, 190, 80];
 const B = { w: 120, h: 64 };
@@ -372,7 +372,7 @@ try {
   const insert = hp.getByTestId('interview-board-insert').first();
   const b01 = say('b01', 0);
   await press(hp, insert, { pause: 400 });
-  await press(hp, hp.getByRole('menuitem', { name: /Prompt only/ }).first(), { pause: 350 });
+  await press(hp, hp.getByRole('menuitem', { name: /Prompt and empty frames/ }).first(), { pause: 350 });
   await b01;
   const n0 = await same('2 the Design Twitter board on both sides', 'after "Start from a board"', 7);
   const prompt = (await board(cp))?.texts.some((t) => /Design Twitter/.test(t));

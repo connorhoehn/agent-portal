@@ -65,7 +65,7 @@ export interface KitRound {
  * (kit.ts checkBoard); the room inserts it as one write when the lead picks the question.
  */
 export interface KitBoard {
-  /** The board's short name, shown beside the question, e.g. "Blueprint". */
+  /** The board's short name, shown beside the question, e.g. "Frames with starter notes". */
   name: string;
   elements: Array<Record<string, unknown>>;
 }

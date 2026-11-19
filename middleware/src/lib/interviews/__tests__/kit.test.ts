@@ -348,7 +348,7 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     const kit = seedKit('op-backend');
     expect(kit.rounds.find((r) => r.id === 'rd-design')!.surface).toBe('board');
     const boards = kit.questions.filter((q) => q.board).map((q) => q.board!.name);
-    expect(boards).toEqual(['Blueprint', 'Prompt only', 'Prompt only']);
+    expect(boards).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Prompt and empty frames']);
     const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
     const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
     expect(frames).toEqual(['Clarifying questions', 'Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
@@ -369,7 +369,7 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     const kit = seedKit('op-backend');
     const q = kit.questions.find((x) => x.id === 'q-be-twitter')!;
     expect(q).toMatchObject({ competencyId: 'system-design', roundType: 'technical' });
-    expect(q.board!.name).toBe('Prompt only');
+    expect(q.board!.name).toBe('Prompt and empty frames');
     const texts = q.board!.elements.filter((e) => e['type'] === 'text').map((e) => e['originalText']);
     expect(texts).toEqual(['Design Twitter']);
     const frames = q.board!.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);

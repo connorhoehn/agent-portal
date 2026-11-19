@@ -130,13 +130,13 @@ export function withNotes(board: KitBoard, notes: ReadonlyArray<{ frame: string;
   return { name: board.name, elements: [...board.elements, ...added.map((e, i) => ({ ...e, index: boardIndex(n0 + i) }))] };
 }
 
-/** "Blueprint": the seven frames, each with its starter stickies. */
+/** "Frames with starter notes" (the Blueprint): the seven frames, each with its starter stickies. */
 export function blueprintBoard(): KitBoard {
-  return { name: 'Blueprint', elements: indexed(sections('bp', 0, true)) };
+  return { name: 'Frames with starter notes', elements: indexed(sections('bp', 0, true)) };
 }
 
-/** "Prompt only": one prompt card above empty frames, the Blueprint's seven unless another list is given. */
+/** "Prompt and empty frames" (Prompt only): one prompt card above empty frames, the Blueprint's seven unless another list is given. */
 export function promptBoard(prompt: string, frames: ReadonlyArray<{ id: string; name: string }> = DESIGN_SECTIONS): KitBoard {
   const width = COLUMNS * FRAME_W + (COLUMNS - 1) * GAP;
-  return { name: 'Prompt only', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false, frames)]) };
+  return { name: 'Prompt and empty frames', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false, frames)]) };
 }
