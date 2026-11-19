@@ -1049,7 +1049,7 @@ try {
     if (verdict) await say(lead, verdict, 300);
     const held = Date.now() - shownAt; if (held < 3200) await sleep(3200 - held);
   }
-  step('G Milo\'s recommendation on screen', adviceShown && /Milo recommends (Advance|Inconclusive|Don.t advance|No recommendation yet)/i.test(adviceText), `pill "${adviceText.slice(0, 160)}"`);
+  step('G Milo\'s recommendation on screen', adviceShown && /Milo recommends\s*(Advance|Inconclusive|Don.t advance)|Milo has no recommendation yet/i.test(adviceText), `pill "${adviceText.slice(0, 160)}"`);
   // The evidence sits under a closed "Milo's evidence" disclosure: open it, then a quote row.
   const evidence = hp.getByTestId('interviews-recap-evidence').first();
   if (await evidence.count()) await press(hp, evidence.getByText(/Milo.s evidence/).first(), { pause: 150, timeout: 5000 }).catch((e) => note(`evidence disclosure: ${String(e).slice(0, 100)}`));
