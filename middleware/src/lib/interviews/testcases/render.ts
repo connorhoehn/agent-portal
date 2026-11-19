@@ -10,6 +10,7 @@
 // and the pad defines a top-level function, the block also runs each case through that function (ok or DIFF per case when
 // checked, the result when not), so the round's Run button tries them as they are; elsewhere (Swift, Java, Go, C++, or no
 // function found) the cases are comments, one per line, in the call's notation.
+import { scannable } from '../pad-text.js';
 import type { PadLanguage } from '../types.js';
 
 /** One case: the arguments in order, and (checked against the question's reference) the value the call returns. JSON values only. */
@@ -43,10 +44,12 @@ export function functionOf(text: string, language: PadLanguage): string | null {
     typescript: /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*[(<]|^(?:export\s+)?(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/m,
     go: /^func\s+([A-Za-z_]\w*)\s*\(/m,
     swift: /^\s*func\s+([A-Za-z_]\w*)\s*[(<]/m,
-    java: /^\s*(?:(?:public|private|protected|static|final)\s+)+[\w<>\[\], ]+\s+([a-z_]\w*)\s*\(/m,
-    cpp: /^[\w:<>,* &]+\s+[*&]?([A-Za-z_]\w*)\s*\([^;]*\)\s*(?:const\s*)?\{/m,
+    // No two parts can match the same characters (the old java and cpp forms let a run of spaces be split many ways, which took
+    // seconds on one long line): a type is words and brackets, with spaces only after a comma inside it.
+    java: /^[ \t]*(?:(?:public|private|protected|static|final)[ \t]+)+[\w<>[\]]+(?:,[ \t]*[\w<>[\]]+)*[ \t]+([a-z_]\w*)[ \t]*\(/m,
+    cpp: /^(?:[\w:<>,*&]+[ \t]+)+[*&]?([A-Za-z_]\w*)[ \t]*\([^;{]*\)\s*(?:const\s*)?\{/m,
   };
-  const m = re[language].exec(text);
+  const m = re[language].exec(scannable(text));
   const name = m ? (m[1] ?? m[2] ?? null) : null;
   return name && name !== 'main' ? name : null;
 }

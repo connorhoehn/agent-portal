@@ -9,6 +9,7 @@
 //
 // Where: at the top of the pad, after what already leads it (a Go package line, a shebang, the imports already there), so the
 // new line sits with the others. A line the pad already has is not written again; nothing new means nothing is written.
+import { lineTooLong } from '../pad-text.js';
 import type { PadLanguage } from '../types.js';
 
 /** At most this many imports in one request. */
@@ -143,7 +144,7 @@ const IMPORT_LINE: Readonly<Record<PadLanguage, RegExp>> = {
 export function afterImports(current: string, language: PadLanguage): number {
   const rows = current.split('\n');
   let after = -1;
-  for (let i = 0; i < rows.length && LEADING[language].test(rows[i]!); i += 1) if (IMPORT_LINE[language].test(rows[i]!)) after = i;
+  for (let i = 0; i < rows.length && !lineTooLong(rows[i]!) && LEADING[language].test(rows[i]!); i += 1) if (IMPORT_LINE[language].test(rows[i]!)) after = i;
   return after < 0 ? 0 : Math.min(rows.slice(0, after + 1).join('\n').length + 1, current.length);
 }
 
@@ -156,7 +157,9 @@ export function placeImports(current: string, lines: readonly string[], language
   const fresh = lines.flatMap((l) => l.split('\n')).filter((l) => !have.has(l.trim()));
   if (!fresh.length) return null;
   const index = afterImports(current, language);
-  if (index === 0) return { index: 0, text: `${fresh.join('\n')}\n${current && !/^\s*\n/.test(current) ? '\n' : ''}` };
+  // A blank line after the imports unless the pad already starts with one (whitespace up to its first newline).
+  const startsBlank = current.slice(0, current.length - current.trimStart().length).includes('\n');
+  if (index === 0) return { index: 0, text: `${fresh.join('\n')}\n${current && !startsBlank ? '\n' : ''}` };
   // The last import line ended the pad with no newline after it.
   const lead = current.length < index || !current.slice(0, index).endsWith('\n') ? '\n' : '';
   return { index, text: `${lead}${fresh.join('\n')}\n` };

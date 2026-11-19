@@ -14,6 +14,7 @@
 //
 // The line Milo must not cross is the question's own answer, not "logic". The block is marked as Milo's at both ends, so the
 // candidate, the panel and the record can tell it from the candidate's own code.
+import { lineTooLong } from '../pad-text.js';
 import type { PadLanguage } from '../types.js';
 import { functionOf } from '../testcases/render.js';
 import { afterImports, checkedImportLines } from './imports.js';
@@ -90,9 +91,11 @@ export type HelperCheck =
 export function checkHelper(what: string, code: unknown, language: PadLanguage, entry: string | null): HelperCheck {
   const builtin = builtinFor(typeof what === 'string' ? what : '', language);
   if (builtin) return { ok: true, kind: 'import', line: builtin };
-  const text = typeof code === 'string' ? code.replace(/\r\n?/g, '\n').replace(/\s+$/, '') : '';
+  // The size first: no pattern runs over code longer than the bound (a trailing-space pattern alone was quadratic).
+  if (typeof code === 'string' && code.length > MAX_HELPER_CHARS) return { ok: false, why: 'size' };
+  const text = typeof code === 'string' ? code.replace(/\r\n?/g, '\n').trimEnd() : '';
   if (!text.trim()) return { ok: false, why: 'empty' };
-  if (text.length > MAX_HELPER_CHARS || text.split('\n').length > MAX_HELPER_LINES) return { ok: false, why: 'size' };
+  if (text.split('\n').length > MAX_HELPER_LINES || text.split('\n').some(lineTooLong)) return { ok: false, why: 'size' };
   if (FOREIGN[language].test(text) || !NATIVE[language].test(text)) return { ok: false, why: 'language' };
   if (entry && defines(text, entry)) return { ok: false, why: 'entry' };
   return { ok: true, kind: 'code', code: text };

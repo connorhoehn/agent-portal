@@ -28,6 +28,7 @@ import { saidStore, type SaidSource } from '../speak/store.js';
 import { interviewsStore } from '../store-select.js';
 import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type PadLanguage } from '../types.js';
 import { functionOf } from '../testcases/render.js';
+import { MAX_PAD_TEXT } from '../pad-text.js';
 import { checkedImportLines, placeImports } from './imports.js';
 import { checkHelper, entryOf, helperBlock, placeHelper } from './helper.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
@@ -49,6 +50,7 @@ export const NOTHING_NEW = 'The pad already has that.';
 export const HELPER_NOT_ADDED = "Milo couldn't add that helper to the pad.";
 export const TESTS_NOT_ADDED = "Milo couldn't add those test cases to the pad.";
 export const PAD_FAILED = "Milo couldn't change the pad this time.";
+export const PAD_TOO_LONG = 'The pad is too long for Milo to change.';
 export const TESTS_LIMIT = 'Milo has already added test cases three times in this round.';
 export const ON_IT = 'On it.';
 /** The most times Milo writes test cases in one interview. */
@@ -221,6 +223,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
   let done: Ran | null = null;
   let kind: 'tests' | 'imports' | 'helper' = 'tests';
   const plan: MiloPadPlan = async ({ text, language }) => {
+    if (text.length > MAX_PAD_TEXT) { refusal = PAD_TOO_LONG; return null; }
     const question = questionForPad(questions, text, language);
     if (name === 'pad_add_tests') {
       const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language) });
