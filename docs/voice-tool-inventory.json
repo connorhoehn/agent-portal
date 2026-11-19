@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-19T02:00:15.128Z",
-  "serverHandlerSha": "0d72e19eab1d4567320bd7c4a499a1599916aec2298ac6de9d7b5b6c0e535c3f"
+  "capturedAt": "2026-11-19T02:05:27.433Z",
+  "serverHandlerSha": "d6d178e8763a30f7593f78e5d184f287fcdccba2e85967cc4747faf737a9bd28"
  },
  "summary": {
   "routes": 964,
@@ -542,7 +542,7 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/milo-ask",
-    "source": "src/routes/interviews/milo.ts:82"
+    "source": "src/routes/interviews/milo.ts:80"
    },
    {
     "method": "GET",
@@ -552,22 +552,22 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/milo-intro",
-    "source": "src/routes/interviews/milo.ts:121"
+    "source": "src/routes/interviews/milo.ts:119"
    },
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/milo-notes",
-    "source": "src/routes/interviews/milo.ts:75"
+    "source": "src/routes/interviews/milo.ts:73"
    },
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/milo-settings",
-    "source": "src/routes/interviews/milo.ts:138"
+    "source": "src/routes/interviews/milo.ts:135"
    },
    {
     "method": "PUT",
     "path": "/api/interviews/interviews/:id/milo-settings",
-    "source": "src/routes/interviews/milo.ts:146"
+    "source": "src/routes/interviews/milo.ts:143"
    },
    {
     "method": "POST",
@@ -652,7 +652,7 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/say",
-    "source": "src/routes/interviews/milo.ts:101"
+    "source": "src/routes/interviews/milo.ts:99"
    },
    {
     "method": "GET",
@@ -687,7 +687,7 @@
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/transcript",
-    "source": "src/routes/interviews/milo.ts:67"
+    "source": "src/routes/interviews/milo.ts:65"
    },
    {
     "method": "GET",
@@ -2612,80 +2612,68 @@
   {
    "name": "time_left",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": false,
-   "spend": null,
+   "who": "anyone",
+   "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools time_left",
-   "file": "middleware/src/lib/interviews/milo-tools/time-left.ts",
-   "line": 8
+   "line": 1123
   },
   {
    "name": "repeat_question",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": false,
-   "spend": null,
+   "who": "anyone",
+   "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools repeat_question",
-   "file": "middleware/src/lib/interviews/milo-tools/repeat-question.ts",
-   "line": 8
+   "line": 1131
   },
   {
    "name": "introduce",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": false,
-   "spend": null,
+   "who": "lead",
+   "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools introduce",
-   "file": "middleware/src/lib/interviews/milo-tools/introduce.ts",
-   "line": 14
+   "line": 1139
   },
   {
    "name": "pad_add_tests",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": true,
-   "spend": null,
+   "who": "pad",
+   "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_tests (the pad, as Milo)",
-   "file": "middleware/src/lib/interviews/milo-tools/pad-add-tests.ts",
-   "line": 14
+   "line": 1147
   },
   {
    "name": "pad_add_import",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": true,
-   "spend": null,
+   "who": "pad",
+   "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_import (the pad, as Milo)",
-   "file": "middleware/src/lib/interviews/milo-tools/pad-add-import.ts",
-   "line": 10
+   "line": 1172
   },
   {
    "name": "pad_add_helper",
    "kind": "server",
-   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "writes": true,
-   "spend": "tools",
+   "who": "pad",
+   "spend": "interview",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_helper (the pad, as Milo)",
-   "file": "middleware/src/lib/interviews/milo-tools/pad-add-helper.ts",
-   "line": 13
+   "line": 1184
   }
  ],
  "navigatePages": [
@@ -5051,12 +5039,12 @@
   {"method":"DELETE","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:95","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:77","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/milo-ask","source":"src/routes/interviews/milo.ts:82","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/milo-ask","source":"src/routes/interviews/milo.ts:80","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-export","source":"src/routes/interviews/records.ts:73","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/milo-intro","source":"src/routes/interviews/milo.ts:121","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo introducing itself is the lead's button in the room (or Milo's own `introduce` server tool in the call), never the voice navigator's"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/milo-notes","source":"src/routes/interviews/milo.ts:75","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/milo-settings","source":"src/routes/interviews/milo.ts:138","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"PUT","path":"/api/interviews/interviews/:id/milo-settings","source":"src/routes/interviews/milo.ts:146","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"whether the candidate may ask Milo to change the pad is the lead's switch in the room"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/milo-intro","source":"src/routes/interviews/milo.ts:119","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo introducing itself is the lead's button in the room (or Milo's own `introduce` server tool in the call), never the voice navigator's"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/milo-notes","source":"src/routes/interviews/milo.ts:73","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/milo-settings","source":"src/routes/interviews/milo.ts:135","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"PUT","path":"/api/interviews/interviews/:id/milo-settings","source":"src/routes/interviews/milo.ts:143","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"whether the candidate may ask Milo to change the pad is the lead's switch in the room"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/pad/events","source":"src/routes/interviews/pad.ts:45","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log and its runs belong to the room, never to the voice navigator"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/pad/log","source":"src/routes/interviews/pad.ts:58","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/panel","source":"src/routes/interviews/assignments.ts:198","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
@@ -5073,14 +5061,14 @@
   {"method":"GET","path":"/api/interviews/interviews/:id/runs/:runId","source":"src/routes/interviews/runs.ts:134","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/runs/:runId/cancel","source":"src/routes/interviews/runs.ts:142","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"work","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log and its runs belong to the room, never to the voice navigator"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/runs/events","source":"src/routes/interviews/runs.ts:126","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/say","source":"src/routes/interviews/milo.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo saying an approved question aloud is the lead's choice in the room, never the voice navigator's"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/say","source":"src/routes/interviews/milo.ts:99","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo saying an approved question aloud is the lead's choice in the room, never the voice navigator's"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:117","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:136","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a scorecard is the interviewer's own judgement; Milo never scores (decision 6)"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/start","source":"src/routes/interviews/room.ts:80","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/suggestion","source":"src/routes/interviews/coach.ts:39","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/suggestion/:suggestionId/answer","source":"src/routes/interviews/coach.ts:48","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"answering Milo's suggestion is the lead's act in the room"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/time","source":"src/routes/interviews/assignments.ts:216","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"assign a round, change its panel or set its time (AssignInterviews)"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/transcript","source":"src/routes/interviews/milo.ts:67","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/transcript","source":"src/routes/interviews/milo.ts:65","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/waiting","source":"src/routes/interviews/admission.ts:52","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/panel-notice","source":"src/routes/interviews/assignments.ts:162","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/interviews/openings","source":"src/routes/interviews.ts:57","declaredAt":"src/routes/interviews.ts:57","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
