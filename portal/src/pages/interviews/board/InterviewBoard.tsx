@@ -15,6 +15,7 @@ import {
   BOARD_SNAPSHOT_MS, boardChannel, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, sceneKey, type KitBoard,
 } from '../../../lib/interviewsBoard';
 import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, type PadConnection } from '../../../lib/interviewsPad';
+import { useBoardFit } from './useBoardFit';
 
 const ExcalidrawCanvas = lazy(() => import('@connorhoehn/ui-components/diagram').then((m) => ({ default: m.CollaborativeExcalidraw })));
 
@@ -54,6 +55,8 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, gateway, 
   const connection = padConnection({ configured: true, connectionState: String(gateway.connectionState), synced, refused });
   const editable = connection === 'synced';
   const user = useMemo(() => ({ userId: self.userId, displayName: caretName(seat, self.displayName), color: caretColor(self.userId) }), [seat, self.displayName, self.userId]);
+  // Opened, the board zooms to its content (and again when an empty board first gets some), until the person moves it.
+  useBoardFit(ydoc, `[data-board="${documentId}"]`);
 
   // The lead's checkpoints: a changed board every BOARD_SNAPSHOT_MS, and once more when the room closes.
   const posted = useRef('');
@@ -88,20 +91,20 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, gateway, 
     {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-board-status">In sync</Chip>}
   </Toolbar>;
 
-  return <BoardFrame connection={connection} toolbar={toolbar} note={inserted}
+  return <BoardFrame boardId={documentId} connection={connection} toolbar={toolbar} note={inserted}
     canvas={ydoc && connection !== 'refused'
       ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={provider?.awareness ?? null} user={user} editable={editable} className="h-full min-h-0 flex-1" />
       : null} />;
 }
 
 /** The board's column: the row, a notice when there is one, the canvas taking the rest. */
-function BoardFrame({ connection, toolbar, canvas, note }: { connection: PadConnection; toolbar?: React.ReactNode; canvas?: React.ReactNode; note?: string | null }) {
+function BoardFrame({ boardId, connection, toolbar, canvas, note }: { boardId?: string; connection: PadConnection; toolbar?: React.ReactNode; canvas?: React.ReactNode; note?: string | null }) {
   const notice = NOTICES[connection];
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-board" data-connection={connection}>
     {toolbar}
     {notice && <InlineAlert tone={notice.tone} data-testid="interview-board-notice">{notice.text}</InlineAlert>}
     {note && <InlineAlert tone="info" data-testid="interview-board-inserted">{note}</InlineAlert>}
-    {canvas && <Stack gap="none" className="min-h-[480px] flex-1 overflow-hidden" data-testid="interview-board-canvas">
+    {canvas && <Stack gap="none" className="min-h-[480px] flex-1 overflow-hidden" data-testid="interview-board-canvas" data-board={boardId}>
       <Suspense fallback={<LoadingState label="Loading the whiteboard…" />}>{canvas}</Suspense>
     </Stack>}
   </Stack>;

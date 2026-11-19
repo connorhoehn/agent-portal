@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, boardChannel, boardDocumentId, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, boardChannel, boardDocumentId, fitBoardView, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
 import { blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
@@ -51,4 +51,22 @@ test('a second document, fed the first one\'s update, holds the same board (what
   lead.on('update', (u: Uint8Array) => Y.applyUpdate(candidate, u));
   insertBoard(lead, blueprintBoard());
   assert.equal(sceneKey(readBoardElements(candidate)), sceneKey(readBoardElements(lead)));
+});
+
+test('fitting a board sends Excalidraw its own "Zoom to fit" (Shift+1) at the canvas, and finds nothing to fit without one', () => {
+  const g = globalThis as { KeyboardEvent?: unknown };
+  const had = g.KeyboardEvent;
+  g.KeyboardEvent ??= class extends Event { constructor(type: string, init: Record<string, unknown>) { super(type, init); this.code = String(init['code']); this.shiftKey = Boolean(init['shiftKey']); } code: string; shiftKey: boolean; };
+  try {
+    const sent: Array<{ type: string; code: string; shiftKey: boolean; bubbles: boolean }> = [];
+    const canvas = { dispatchEvent: (e: { type: string; code: string; shiftKey: boolean; bubbles: boolean }) => { sent.push(e); return true; } };
+    const asked: string[] = [];
+    const root = { querySelector: (q: string) => { asked.push(q); return canvas; } } as unknown as ParentNode;
+    assert.equal(fitBoardView(root), true);
+    assert.deepEqual(asked, ['.excalidraw']);
+    assert.equal(sent.length, 1);
+    assert.deepEqual([sent[0]!.type, sent[0]!.code, sent[0]!.shiftKey, sent[0]!.bubbles], ['keydown', 'Digit1', true, true]);
+    assert.equal(fitBoardView({ querySelector: () => null } as unknown as ParentNode), false);
+    assert.equal(fitBoardView(null), false);
+  } finally { g.KeyboardEvent = had; }
 });

@@ -81,3 +81,20 @@ export async function readBoardSnapshots(interviewId: string, fetcher: typeof fe
     return Array.isArray(body.snapshots) ? body.snapshots : null;
   } catch { return null; }
 }
+
+// ── fit to the content ────────────────────────────────────────────────────────
+
+/**
+ * Zoom a mounted board so its content fills the pane: Excalidraw's own "Zoom to fit" (its Shift+1 shortcut, which it
+ * allows in view mode too), sent to the canvas's container. The library's canvas takes no fit option yet
+ * (docs/ui-components-queue.md); once it does, this goes. Whether a canvas was there to fit.
+ */
+export function fitBoardView(root: ParentNode | null | undefined): boolean {
+  const canvas = root?.querySelector('.excalidraw');
+  if (!canvas) return false;
+  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true, cancelable: true }));
+  return true;
+}
+
+/** When the board fits itself after it opens, in ms: the canvas loads the scene over its first seconds. */
+export const BOARD_FIT_DELAYS_MS: readonly number[] = [400, 1200, 2500, 4500];
