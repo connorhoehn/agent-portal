@@ -87,7 +87,7 @@ describe('the request with a Code part', () => {
     expect(system.startsWith(`${COACH_SYSTEM_PROMPT}\n${COACH_CODE_RULES}\n`)).toBe(true);
     expect(system).toContain('Never rate, score, rank or compare the candidate');
     expect(COACH_CODE_RULES).toMatch(/Ask, never grade/);
-    expect(COACH_CODE_RULES).toMatch(/runtime or space complexity only once the last run finished cleanly/);
+    expect(COACH_CODE_RULES).toMatch(/runtime or space complexity, or what the candidate would change in the solution, only once the last run finished cleanly/);
     expect(COACH_CODE_RULES).toMatch(/test the code only once they have run it/);
   });
 

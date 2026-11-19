@@ -30,14 +30,17 @@ describe('the stage of the code', () => {
     ['What is the big O of that lookup?', 'complexity'],
     ['How would you test this function?', 'testing'],
     ['Which tests would you write first?', 'testing'],
-    ['What would you change if the array were already sorted?', null],
+    ['What would you change if the array were already sorted?', 'change'],
+    ['Can you walk me through it?', null],
   ])('"%s" is about %s', (text, topic) => { expect(topicOf(text)).toBe(topic); });
 
-  it('complexity needs working code; testing needs a run; anything else fits always, and every topic fits a round without code', () => {
+  it('complexity and a change to the solution need working code; testing needs a run; anything else fits always, and every topic fits a round without code', () => {
     const complexity = 'What is the runtime complexity of your solution?';
     const testing = 'How would you test this function?';
     expect([fitsStage(complexity, 'not-run'), fitsStage(complexity, 'ran'), fitsStage(complexity, 'works')]).toEqual([false, false, true]);
     expect([fitsStage(testing, 'not-run'), fitsStage(testing, 'ran'), fitsStage(testing, 'works')]).toEqual([false, true, true]);
+    const change = 'What would you change if the array were already sorted?';
+    expect([fitsStage(change, 'not-run'), fitsStage(change, 'ran'), fitsStage(change, 'works')]).toEqual([false, false, true]);
     expect(fitsStage('Can you walk me through it?', 'not-run')).toBe(true);
     expect(fitsStage(complexity, null)).toBe(true);
   });
@@ -64,8 +67,8 @@ describe('the stand-in follows the stage', () => {
   // The candidate's line shares the most words with the complexity follow-up, then with the testing one.
   const aboutCost = 'I think the runtime complexity is fine in time and in space, and I would test this function later.';
 
-  it('before a run: neither the complexity nor the testing follow-up, though the line fits them best', () => {
-    expect(scriptedSuggestion(input(coachCode(PAD, null), aboutCost))?.text).toBe(FOLLOW.sorted);
+  it('before a run: no follow-up at all (the sorted-input one waits for working code too), though the line fits them best', () => {
+    expect(scriptedSuggestion(input(coachCode(PAD, null), aboutCost))).toBeNull();
   });
   it('after a run that did not finish cleanly: the testing follow-up, not yet the complexity one', () => {
     expect(scriptedSuggestion(input(coachCode(PAD, run('failed', 1)), aboutCost))?.text).toBe(FOLLOW.testing);

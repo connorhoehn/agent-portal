@@ -26,7 +26,7 @@ import type { KitCompetency, KitQuestion, RoundType } from '../types.js';
 import { codeStage, STAGE_WORDS } from './stage.js';
 
 /** Bumped whenever the system prompt or the shape of the request changes; written on every log row. */
-export const COACH_PROMPT_VERSION = 'coach-2026-11-18.1';
+export const COACH_PROMPT_VERSION = 'coach-2026-11-18.2';
 
 /** A spoken question: one breath. Longer answers are dropped (parse.ts). */
 export const MAX_SUGGESTION_CHARS = 280;
@@ -122,7 +122,7 @@ export const COACH_CODE_RULES = [
   'This is a technical round: you also read the shared code pad (its current text and language) and the last run of it (its status, exit code and the end of its output).',
   'A suggestion may be about the code: a question about a choice in it, a case it does not handle yet, or what the last run showed. Ask, never grade: do not say whether the code is correct, good, bad, efficient or finished, and never compare it to an expected answer.',
   'A suggestion about the code quotes, word for word, one line of the pad or of the output in "basedOn", the way a suggestion about what was said quotes the transcript.',
-  'Fit the suggestion to where the interview is ("Where the code is" below): ask about runtime or space complexity only once the last run finished cleanly, and ask how the candidate would test the code only once they have run it.',
+  'Fit the suggestion to where the interview is ("Where the code is" below): ask about runtime or space complexity, or what the candidate would change in the solution, only once the last run finished cleanly, and ask how the candidate would test the code only once they have run it.',
 ].join('\n');
 
 export const coachSystemPrompt = (input: Pick<CoachInput, 'code'>): string => (input.code ? `${COACH_SYSTEM_PROMPT}\n${COACH_CODE_RULES}` : COACH_SYSTEM_PROMPT);
