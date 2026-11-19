@@ -13,7 +13,8 @@
 // name (the one panel name they read, from GET /interview) on the lead's tile and "Interviewer" on every other
 // (E4 #32). The call's own frames already carry every seat's id, so this adds no one. No panel names, no
 // questions, nothing from the candidate's record.
-import type { Interview, InterviewState, Opening } from '../types.js';
+import { roundSurface } from '../kit.js';
+import type { Interview, InterviewState, Opening, RoundSurface } from '../types.js';
 import type { Admission } from './admission.js';
 import { inviteDeadReason, inviteExpiresAt } from './rules.js';
 import type { Invite } from './store.js';
@@ -39,7 +40,8 @@ export interface GuestRoomView {
   interviewId: string;
   lobbyName: string;
   self: { userId: string; displayName: string };
-  round: { name: string; type: 'technical' | 'behavioural'; minutes: number };
+  /** `surface`: the code pad or the whiteboard for a technical round, null for a behavioural one (kit.ts roundSurface). */
+  round: { name: string; type: 'technical' | 'behavioural'; minutes: number; surface: RoundSurface | null };
   scheduledAt: string | null;
   /** The interview record keeps no start instant (only `endedAt`), so this is null; the page counts from the call's start. */
   startedAt: string | null;
@@ -55,7 +57,8 @@ export function guestRoomView(self: GuestRoomView['self'], interview: Interview,
     interviewId: interview.id,
     lobbyName: `interviews:interview:${interview.id}`,
     self,
-    round: { name: round?.name ?? (interview.type === 'technical' ? 'Technical interview' : 'Interview'), type: interview.type, minutes: interview.minutes },
+    round: { name: round?.name ?? (interview.type === 'technical' ? 'Technical interview' : 'Interview'), type: interview.type, minutes: interview.minutes,
+      surface: roundSurface({ type: interview.type, surface: round?.surface }) },
     scheduledAt: interview.scheduledAt,
     startedAt: null,
     state,

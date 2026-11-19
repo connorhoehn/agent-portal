@@ -1,11 +1,12 @@
 // The kit and an opening's details, checked before anything is written (lib/interviews/kit.ts; rows I1.3, I1.8).
 import {
-  EMPTY_KIT, KIT_LIMITS, NOTHING_IN_USE, checkKit, checkOpeningDetails, kitInUse, openingIdFor, problemsLine, roundHasPad,
+  EMPTY_KIT, KIT_LIMITS, NOTHING_IN_USE, checkBoard, checkKit, checkOpeningDetails, kitInUse, openingIdFor, problemsLine, roundHasPad, roundSurface,
 } from '../kit.js';
 import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { EM_KIT } from '../../../mock/interviews-behavioural.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import type { OpeningKit } from '../types.js';
+import { blueprintBoard } from '../board/templates.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
@@ -89,7 +90,7 @@ describe('a question probes a competency in the kit, for a round the kit has', (
     kit.questions.push({ ...structuredClone(kit.questions[0]!) });
     expect(checkKit(kit).ok ? [] : (checkKit(kit) as { problems: unknown[] }).problems).toEqual([
       { path: 'competencies.5.name', message: 'Two competencies are called "problem SOLVING"; rename one.' },
-      { path: 'questions.7.id', message: 'Question 8 repeats question 1; remove one of them.' },
+      { path: 'questions.8.id', message: 'Question 9 repeats question 1; remove one of them.' },
     ]);
   });
 });
@@ -245,5 +246,70 @@ describe('an opening\'s details', () => {
     expect(openingIdFor('iOS Engineer', new Set(['op-ios-engineer', 'op-ios-engineer-2']))).toBe('op-ios-engineer-3');
     expect(openingIdFor('!!!', new Set())).toBe('op-opening');
     expect(EMPTY_KIT).toEqual({ rounds: [], competencies: [], questions: [] });
+  });
+});
+
+describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN steps 1 and 2)', () => {
+  it('a technical round works on the pad or the board; an old kit with no surface reads as the pad', () => {
+    expect(roundSurface({ type: 'technical' })).toBe('pad');
+    expect(roundSurface({ type: 'technical', surface: 'board' })).toBe('board');
+    expect(roundSurface({ type: 'behavioural' })).toBeNull();
+    expect(roundSurface(null)).toBeNull();
+    const old = seedKit('op-backend');
+    for (const r of old.rounds) delete r.surface;
+    for (const q of old.questions) delete q.board;
+    const r = checkKit(old);
+    expect(r.ok && r.value.rounds.map((x) => x.surface)).toEqual(['pad', 'pad', undefined]);
+  });
+
+  it('the seeded System design round is a board round, and its questions carry the two templates', () => {
+    const kit = seedKit('op-backend');
+    expect(kit.rounds.find((r) => r.id === 'rd-design')!.surface).toBe('board');
+    const boards = kit.questions.filter((q) => q.board).map((q) => q.board!.name);
+    expect(boards).toEqual(['Blueprint', 'Prompt only']);
+    const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
+    const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
+    expect(frames).toEqual(['Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
+    expect(blueprint.elements.filter((e) => e['type'] === 'rectangle').length).toBe(18);
+    // Every element has an index, in order, and every sticky's text is bound to it.
+    const idx = blueprint.elements.map((e) => String(e['index']));
+    expect([...idx].sort()).toEqual(idx);
+    for (const t of blueprint.elements.filter((e) => e['type'] === 'text')) {
+      const box = blueprint.elements.find((e) => e['id'] === t['containerId'])!;
+      expect(box['boundElements']).toEqual([{ type: 'text', id: t['id'] }]);
+    }
+    const prompt = kit.questions.find((q) => q.id === 'q-be-shortener')!.board!;
+    expect(prompt.elements.some((e) => e['type'] === 'text' && String(e['originalText']).includes('URL shortener'))).toBe(true);
+    expect(prompt.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
+  });
+
+  it('a behavioural round on the board, or a surface the room does not have, is refused', () => {
+    const kit = seedKit('op-backend') as unknown as { rounds: Array<Record<string, unknown>> };
+    kit.rounds[2]!['surface'] = 'board';
+    kit.rounds[0]!['surface'] = 'slides';
+    expect(paths(checkKit(kit))).toEqual(['rounds.0.surface', 'rounds.2.surface']);
+  });
+
+  it('a board on a behavioural question, an unreadable, empty, unnamed or too large board is refused', () => {
+    const at = (q: Record<string, unknown>) => { const kit = seedKit('op-backend') as unknown as { questions: Array<Record<string, unknown>> }; Object.assign(kit.questions[2]!, q); return paths(checkKit(kit)); };
+    const board = blueprintBoard();
+    expect(at({ board })).toEqual([]);
+    expect(at({ board: { ...board, name: '' } })).toEqual(['questions.2.board']);
+    expect(at({ board: { name: 'X', elements: 'nope' } })).toEqual(['questions.2.board']);
+    expect(at({ board: { name: 'X', elements: [{ id: 'a', type: 'rectangle', isDeleted: true }] } })).toEqual(['questions.2.board']);
+    expect(at({ board: { name: 'X', elements: [{ id: 'a', type: 'rectangle' }, { id: 'a', type: 'text' }] } })).toEqual(['questions.2.board']);
+    const many = Array.from({ length: KIT_LIMITS.boardElements + 1 }, (_, n) => ({ id: `e${n}`, type: 'rectangle' }));
+    expect(at({ board: { name: 'X', elements: many } })).toEqual(['questions.2.board']);
+    const kit = seedKit('op-backend') as unknown as { questions: Array<Record<string, unknown>> };
+    const behavioural = kit.questions.findIndex((q) => q['roundType'] === 'behavioural');
+    kit.questions[behavioural]!['board'] = board;
+    expect(paths(checkKit(kit))).toEqual([`questions.${behavioural}.board`]);
+  });
+
+  it('a board keeps only its live elements, and checkBoard says why one is refused', () => {
+    const r = checkBoard({ name: ' Sketch ', elements: [{ id: 'a', type: 'rectangle' }, { id: 'b', type: 'text', isDeleted: true }] });
+    expect(r).toEqual({ ok: true, board: { name: 'Sketch', elements: [{ id: 'a', type: 'rectangle' }] } });
+    expect(checkBoard(null)).toEqual({ ok: false, why: 'unreadable' });
+    expect(checkBoard({ name: 'x', elements: [] })).toEqual({ ok: false, why: 'empty' });
   });
 });

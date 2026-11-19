@@ -20,6 +20,7 @@
 // Candidates are records, never users (decision 3); the four cast users are in
 // providers/identity.ts FALLBACK_USERS with a grant only in `interviews`.
 
+import { blueprintBoard, promptBoard } from '../lib/interviews/board/templates.js';
 import { clock, defineFixture } from './core/index.js';
 import { seedAt } from './interviews-days.js';
 import { EM_KIT } from './interviews-behavioural.js';
@@ -53,8 +54,9 @@ const COMMUNICATION = {
 
 const BACKEND_KIT: OpeningKit = {
   rounds: [
-    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60 },
-    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60 },
+    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad' },
+    // The system design round is drawn on the shared whiteboard (WHITEBOARD-PLAN step 1).
+    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60, surface: 'board' },
     { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
   ],
   competencies: [
@@ -92,6 +94,13 @@ const BACKEND_KIT: OpeningKit = {
       id: 'q-be-ledger', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Design the write path for a double-entry ledger that records card captures and refunds, survives a region failover and never loses or duplicates an entry.',
       followUps: ['What happens when the failover lands in the middle of a write?', 'How would you prove no entry was written twice?'],
+      board: blueprintBoard(),
+    },
+    {
+      id: 'q-be-shortener', competencyId: 'system-design', roundType: 'technical',
+      prompt: 'Design a URL shortener for 100M links a month.',
+      followUps: ['How do you make the short codes, and what happens when two collide?', 'Where would you put a cache, and what does it hold?'],
+      board: promptBoard('Design a URL shortener for 100M links a month'),
     },
     {
       id: 'q-be-reconcile', competencyId: 'system-design', roundType: 'technical',
@@ -129,7 +138,7 @@ const BACKEND_KIT: OpeningKit = {
 
 const IOS_KIT: OpeningKit = {
   rounds: [
-    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60 },
+    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad' },
     { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
   ],
   competencies: [

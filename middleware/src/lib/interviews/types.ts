@@ -36,11 +36,32 @@ export const RECOMMENDATIONS: readonly Recommendation[] = ['strong-no', 'no', 'y
 export type PadLanguage = 'python' | 'swift' | 'javascript' | 'typescript' | 'java' | 'go' | 'cpp';
 export const PAD_LANGUAGES: readonly PadLanguage[] = ['python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp'];
 
+/**
+ * What a technical round works on (WHITEBOARD-PLAN step 1): the shared code pad, or the shared whiteboard (a system
+ * design round). A kit saved before the board existed has no `surface`; its technical rounds read as 'pad'
+ * (kit.ts roundSurface). A behavioural round has neither.
+ */
+export type RoundSurface = 'pad' | 'board';
+export const ROUND_SURFACES: readonly RoundSurface[] = ['pad', 'board'];
+
 export interface KitRound {
   id: string;
   name: string;
   type: RoundType;
   minutes: number;
+  /** A technical round's surface; absent on behavioural rounds and on kits saved before the board. */
+  surface?: RoundSurface;
+}
+
+/**
+ * A starting board for a board round's question: an Excalidraw scene's elements, kept as the library's binding
+ * writes them (realtime-modules adapters/excalidraw `DiagramElement`). The kit checks its shape and size only
+ * (kit.ts checkBoard); the room inserts it as one write when the lead picks the question.
+ */
+export interface KitBoard {
+  /** The board's short name, shown beside the question, e.g. "Blueprint". */
+  name: string;
+  elements: Array<Record<string, unknown>>;
 }
 
 /**
@@ -70,6 +91,8 @@ export interface KitQuestion {
   competencyId: string;
   roundType: RoundType;
   starter?: Partial<Record<PadLanguage, string>>;
+  /** A technical question's starting board, for a board round (WHITEBOARD-PLAN step 2). */
+  board?: KitBoard;
 }
 
 /** An opening's kit: its rounds, the competencies they judge and the question bank, each list in the order shown. */

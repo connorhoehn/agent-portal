@@ -1,0 +1,111 @@
+// Starting boards for system design rounds (WHITEBOARD-PLAN step 2): Excalidraw elements built in code, so the seed,
+// the tests and a later importer share one shape. Two boards ship with the seeded backend kit:
+//
+//   Blueprint     six labelled frames (Requirements, Non-functional requirements, API, High-level design, Data model,
+//                 Trade-offs), each with a few starter stickies the interviewer talks through.
+//   Prompt only   one prompt card above the same six frames, empty.
+//
+// The elements carry every field Excalidraw 0.18 reads, a fractional `index` in order, and stickies as a rectangle with
+// its bound text, so the canvas draws them without repairing anything.
+import type { KitBoard } from '../types.js';
+
+type El = Record<string, unknown>;
+const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+
+/** The n-th fractional index in order: a0..az, then b00..bzz. */
+export function boardIndex(n: number): string {
+  return n < 62 ? `a${DIGITS[n]}` : `b${DIGITS[Math.floor(n / 62) % 62]}${DIGITS[n % 62]}`;
+}
+
+/** A stable small number from a string (the element's seed and nonce, so a rebuilt board is identical). */
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return (h >>> 0) % 2_000_000_000;
+}
+
+function base(id: string, type: string, x: number, y: number, width: number, height: number, extra: El = {}): El {
+  return {
+    id, type, x, y, width, height, angle: 0, strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2,
+    strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, seed: hash(id), version: 1,
+    versionNonce: hash(`${id}:nonce`), isDeleted: false, boundElements: null, updated: 1, link: null, locked: false, ...extra,
+  };
+}
+
+const FONT = 16;
+const LINE = 1.25;
+/** Break text at spaces so each line holds about `chars` characters. */
+function wrap(text: string, chars: number): string {
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of text.split(/\s+/)) {
+    if (cur && cur.length + 1 + w.length > chars) { lines.push(cur); cur = w; } else cur = cur ? `${cur} ${w}` : w;
+  }
+  if (cur) lines.push(cur);
+  return lines.join('\n');
+}
+
+/** A rectangle with centred text bound to it (a sticky, or the prompt card). */
+function card(id: string, x: number, y: number, width: number, height: number, text: string, opts: { fill: string; frameId?: string | null; fontSize?: number }): El[] {
+  const fontSize = opts.fontSize ?? FONT;
+  const wrapped = wrap(text, Math.max(8, Math.floor((width - 20) / (fontSize * 0.55))));
+  const lines = wrapped.split('\n');
+  const tw = Math.min(width - 10, Math.max(...lines.map((l) => l.length)) * fontSize * 0.55);
+  const th = lines.length * fontSize * LINE;
+  const textId = `${id}-text`;
+  const frameId = opts.frameId ?? null;
+  return [
+    base(id, 'rectangle', x, y, width, height, { backgroundColor: opts.fill, strokeWidth: 1, roundness: { type: 3 }, frameId, boundElements: [{ type: 'text', id: textId }] }),
+    base(textId, 'text', x + (width - tw) / 2, y + (height - th) / 2, tw, th, {
+      frameId, text: wrapped, originalText: text, fontSize, fontFamily: 2, textAlign: 'center', verticalAlign: 'middle', containerId: id, autoResize: true, lineHeight: LINE,
+    }),
+  ];
+}
+
+/** The six sections a system design answer walks through, with the stickies the Blueprint starts each one with. */
+export const DESIGN_SECTIONS: ReadonlyArray<{ id: string; name: string; stickies: readonly string[] }> = [
+  { id: 'requirements', name: 'Requirements', stickies: ['Who are the users?', 'The core flows: write and read', 'What is out of scope?'] },
+  { id: 'nfr', name: 'Non-functional requirements', stickies: ['Scale: reads and writes per second', 'Latency target (p99)', 'Availability and durability'] },
+  { id: 'api', name: 'API', stickies: ['The main endpoints', 'Request and response shapes', 'Idempotency and errors'] },
+  { id: 'hld', name: 'High-level design', stickies: ['Clients, API and services', 'Where the state lives', 'Caches and queues'] },
+  { id: 'data', name: 'Data model', stickies: ['Entities and keys', 'Access patterns', 'Partitioning'] },
+  { id: 'tradeoffs', name: 'Trade-offs', stickies: ['What did you give up?', 'Failure modes', 'What it costs to run'] },
+];
+
+const FRAME_W = 440;
+const FRAME_H = 300;
+const GAP = 60;
+const STICKY_W = 190;
+const STICKY_H = 90;
+const STICKY_FILL = '#ffec99';
+
+/** The six frames in a 3 x 2 grid starting at `top`, with the Blueprint's stickies when `stickies` is set. */
+function sections(prefix: string, top: number, stickies: boolean): El[] {
+  const out: El[] = [];
+  DESIGN_SECTIONS.forEach((s, i) => {
+    const fx = (i % 3) * (FRAME_W + GAP);
+    const fy = top + Math.floor(i / 3) * (FRAME_H + GAP);
+    const frameId = `${prefix}-${s.id}`;
+    if (stickies) {
+      s.stickies.forEach((text, j) => {
+        out.push(...card(`${frameId}-s${j + 1}`, fx + 20 + (j % 2) * (STICKY_W + 20), fy + 30 + Math.floor(j / 2) * (STICKY_H + 20), STICKY_W, STICKY_H, text, { fill: STICKY_FILL, frameId }));
+      });
+    }
+    // The frame after its children: Excalidraw draws a frame's name above it and clips its children to it.
+    out.push(base(frameId, 'frame', fx, fy, FRAME_W, FRAME_H, { name: s.name, strokeWidth: 1, roughness: 0 }));
+  });
+  return out;
+}
+
+const indexed = (els: El[]): El[] => els.map((e, n) => ({ ...e, index: boardIndex(n) }));
+
+/** "Blueprint": the six frames, each with its starter stickies. */
+export function blueprintBoard(): KitBoard {
+  return { name: 'Blueprint', elements: indexed(sections('bp', 0, true)) };
+}
+
+/** "Prompt only": one prompt card above six empty frames. */
+export function promptBoard(prompt: string): KitBoard {
+  const width = 3 * FRAME_W + 2 * GAP;
+  return { name: 'Prompt only', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false)]) };
+}

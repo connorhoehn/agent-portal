@@ -6,9 +6,9 @@
 // a list of problems, one plain sentence per field, keyed by a path the editor maps to its field:
 //
 //   rounds | competencies | questions               the list itself (too few, too many, a removal)
-//   rounds.<i>.<field>                              name, type, minutes
+//   rounds.<i>.<field>                              name, type, minutes, surface
 //   competencies.<i>.<field>                        name, lookFor, anchors.<1-4>
-//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>
+//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board
 //   <field>                                         an opening's details: title, level, team, location, ...
 //
 // <i> is the item's position in the list as sent, so the editor needs no ids to place a message.
@@ -22,9 +22,9 @@
 // round's or chosen question's type changed), so those rows never meet a dangling id.
 
 import {
-  OPENING_STATES, PAD_LANGUAGES, ROUND_TYPES,
-  type InterviewsWorld, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningState,
-  type PadLanguage, type RoundType,
+  OPENING_STATES, PAD_LANGUAGES, ROUND_SURFACES, ROUND_TYPES,
+  type InterviewsWorld, type KitBoard, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningState,
+  type PadLanguage, type RoundSurface, type RoundType,
 } from './types.js';
 
 export const KIT_LIMITS = {
@@ -38,6 +38,11 @@ export const KIT_LIMITS = {
   prompt: 1000,
   followUp: 300,
   starter: 8000,
+  boardName: 40,
+  /** A starting board's elements: a blueprint of frames and stickies is well under a hundred. */
+  boardElements: 400,
+  /** A starting board as JSON, in bytes. */
+  boardBytes: 256 * 1024,
   minutesMin: 15,
   minutesMax: 180,
 } as const;
@@ -52,6 +57,37 @@ export const PAD_LANGUAGE_LABELS: Readonly<Record<PadLanguage, string>> = {
 /** Only a technical round has the code pad (decision 11); a behavioural round never does (row I1.8). */
 export function roundHasPad(type: RoundType): boolean {
   return type === 'technical';
+}
+
+/**
+ * What a round works on: a technical round's saved surface, 'pad' when it has none (a kit saved before the board);
+ * null for a behavioural round, which has neither (decision 11).
+ */
+export function roundSurface(round: Pick<KitRound, 'type' | 'surface'> | null | undefined): RoundSurface | null {
+  if (!round || round.type !== 'technical') return null;
+  return round.surface === 'board' ? 'board' : 'pad';
+}
+
+/**
+ * A starting board as the editor sent it: a short name and a list of Excalidraw elements, each a plain object with
+ * a string `id` and `type`. Only the shape and the size are checked: the canvas draws what it understands.
+ */
+export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: false; why: 'unreadable' | 'name' | 'empty' | 'large' } {
+  if (!isRecord(raw)) return { ok: false, why: 'unreadable' };
+  const name = text(raw['name']);
+  if (!name || name.length > KIT_LIMITS.boardName) return { ok: false, why: 'name' };
+  const list = raw['elements'];
+  if (!Array.isArray(list)) return { ok: false, why: 'unreadable' };
+  if (!list.some((e) => isRecord(e) && e['isDeleted'] !== true)) return { ok: false, why: 'empty' };
+  if (list.length > KIT_LIMITS.boardElements) return { ok: false, why: 'large' };
+  const ids = new Set<string>();
+  for (const e of list) {
+    if (!isRecord(e) || typeof e['id'] !== 'string' || !e['id'] || typeof e['type'] !== 'string' || ids.has(e['id'])) return { ok: false, why: 'unreadable' };
+    ids.add(e['id']);
+  }
+  const elements = (list as Array<Record<string, unknown>>).filter((e) => e['isDeleted'] !== true).map((e) => structuredClone(e));
+  if (Buffer.byteLength(JSON.stringify(elements), 'utf8') > KIT_LIMITS.boardBytes) return { ok: false, why: 'large' };
+  return { ok: true, board: { name, elements } };
 }
 
 export const EMPTY_KIT: OpeningKit = { rounds: [], competencies: [], questions: [] };
@@ -138,7 +174,16 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
     if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < KIT_LIMITS.minutesMin || minutes > KIT_LIMITS.minutesMax) {
       p.add(`${at}.minutes`, `Round ${n} must last between ${KIT_LIMITS.minutesMin} and ${KIT_LIMITS.minutesMax} whole minutes.`);
     }
-    return { id, name, type, minutes: Number(minutes) };
+    const out: KitRound = { id, name, type, minutes: Number(minutes) };
+    // A technical round's surface: the pad unless it says board; an old kit sends none. A behavioural round has neither.
+    const surface = r['surface'];
+    if (surface !== undefined && surface !== null && !ROUND_SURFACES.includes(surface as RoundSurface)) {
+      p.add(`${at}.surface`, `Round ${n} must use the code pad or the whiteboard.`);
+    } else if (surface === 'board' && type === 'behavioural') {
+      p.add(`${at}.surface`, `Round ${n} is behavioural, which has no whiteboard; make it technical or use no board.`);
+    }
+    if (type === 'technical') out.surface = surface === 'board' ? 'board' : 'pad';
+    return out;
   });
   duplicates(p, 'rounds', rounds, 'Round', 'rounds');
 
@@ -206,6 +251,19 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
         }
         out.starter = starter;
       }
+    }
+    const boardIn = q['board'];
+    if (boardIn !== undefined && boardIn !== null) {
+      const checked = checkBoard(boardIn);
+      if (roundType === 'behavioural') p.add(`${at}.board`, `Question ${n} is for a behavioural round, which has no whiteboard, so it cannot carry a board.`);
+      else if (!checked.ok) {
+        p.add(`${at}.board`, {
+          unreadable: `Question ${n}'s board could not be read; remove it and draw it again.`,
+          name: `Question ${n}'s board needs a short name, up to ${KIT_LIMITS.boardName} characters.`,
+          empty: `Question ${n}'s board is empty; draw something on it or remove it.`,
+          large: `Question ${n}'s board is too big for a starting board; keep it under ${KIT_LIMITS.boardElements} shapes.`,
+        }[checked.why]);
+      } else out.board = checked.board;
     }
     return out;
   });

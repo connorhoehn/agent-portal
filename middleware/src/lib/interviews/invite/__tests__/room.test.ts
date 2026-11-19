@@ -55,7 +55,7 @@ describe('what the read carries', () => {
     const view = guestRoomView({ userId: 'guest:inv-1', displayName: 'Candidate' }, interview(), opening, 'open');
     expect(view).toEqual({
       interviewId: 'iv-1', lobbyName: 'interviews:interview:iv-1', self: { userId: 'guest:inv-1', displayName: 'Candidate' },
-      round: { name: 'System design', type: 'technical', minutes: 60 }, scheduledAt: at(HOUR).toISOString(), startedAt: null, state: 'open', leadCallId: 'u-lead',
+      round: { name: 'System design', type: 'technical', minutes: 60, surface: 'pad' }, scheduledAt: at(HOUR).toISOString(), startedAt: null, state: 'open', leadCallId: 'u-lead',
     });
     expect(JSON.stringify({ ...view, leadCallId: null })).not.toMatch(/u-lead|u-panel|q-1/);
     expect(guestRoomView({ userId: 'guest:inv-1', displayName: 'Candidate' }, interview({ type: 'behavioural' }), null, 'ended').round.name).toBe('Interview');

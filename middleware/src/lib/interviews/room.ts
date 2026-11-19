@@ -12,7 +12,8 @@
 // details or résumé: the panel reads the candidate's name and nothing else about them here.
 
 import { seatOf } from './assign.js';
-import type { Interview, InterviewState, KitCompetency, Opening, PadLanguage, Seat } from './types.js';
+import { roundSurface } from './kit.js';
+import type { Interview, InterviewState, KitBoard, KitCompetency, Opening, PadLanguage, RoundSurface, Seat } from './types.js';
 
 /** C1: the interview's call lobby (lib/interviews/lobby.ts `interviewLobbyName` once SEAT is in; the same string). */
 export const roomLobbyName = (interviewId: string): string => `interviews:interview:${interviewId}`;
@@ -28,6 +29,8 @@ export interface RoomQuestion {
   competency: string | null;
   /** Starter code per language, in the pad's language order; empty for a behavioural question. */
   starter: Array<{ language: PadLanguage; code: string }>;
+  /** The question's starting board, for a board round (WHITEBOARD-PLAN step 2); absent when it has none. */
+  board?: KitBoard;
 }
 
 /** C5's room view: what `GET /api/interviews/interviews/:id/room` answers, for the lead and the panel only. */
@@ -36,7 +39,8 @@ export interface RoomView {
   lobbyName: string;
   opening: { id: string; title: string };
   candidate: { name: string };
-  round: { id: string; name: string; type: Interview['type']; minutes: number };
+  /** `surface`: what the round works on, the code pad or the whiteboard; null for a behavioural round (kit.ts roundSurface). */
+  round: { id: string; name: string; type: Interview['type']; minutes: number; surface: RoundSurface | null };
   scheduledAt: string | null;
   endedAt: string | null;
   state: InterviewState;
@@ -61,7 +65,7 @@ export function roomView(i: Interview, opening: Opening, candidateName: string, 
     lobbyName: roomLobbyName(i.id),
     opening: { id: opening.id, title: opening.title },
     candidate: { name: candidateName },
-    round: { id: i.roundId, name: round?.name ?? 'Round', type: i.type, minutes: i.minutes },
+    round: { id: i.roundId, name: round?.name ?? 'Round', type: i.type, minutes: i.minutes, surface: roundSurface({ type: i.type, surface: round?.surface }) },
     scheduledAt: i.scheduledAt,
     endedAt: i.endedAt,
     state: i.state,
@@ -71,7 +75,8 @@ export function roomView(i: Interview, opening: Opening, candidateName: string, 
       const q = opening.kit.questions.find((k) => k.id === qid);
       if (!q) return [];
       const starter = PAD_ORDER.flatMap((language) => (q.starter?.[language] ? [{ language, code: q.starter[language]! }] : []));
-      return [{ id: q.id, prompt: q.prompt, followUps: [...q.followUps], competencyId: q.competencyId, competency: names.get(q.competencyId) ?? null, starter }];
+      return [{ id: q.id, prompt: q.prompt, followUps: [...q.followUps], competencyId: q.competencyId, competency: names.get(q.competencyId) ?? null, starter,
+        ...(q.board ? { board: structuredClone(q.board) } : {}) }];
     }),
     competencies: structuredClone(opening.kit.competencies),
     revision: i.revision,

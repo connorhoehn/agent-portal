@@ -16,7 +16,7 @@ const anchors = (one: string, two: string, three: string, four: string) => ({ 1:
 export const EM_KIT: OpeningKit = {
   rounds: [
     { id: 'rd-leadership', name: 'Leadership', type: 'behavioural', minutes: 60 },
-    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60 },
+    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60, surface: 'board' },
   ],
   competencies: [
     {
