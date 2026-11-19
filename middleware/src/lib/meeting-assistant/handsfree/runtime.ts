@@ -162,6 +162,20 @@ export interface StandaloneRun extends HandsfreeRun {
 
 export const GATE_FIXED_REFUSAL = 'Sorry, I can only tell you the time left or repeat the question.';
 
+/**
+ * The gate's family: `cand*` gets fixed lines only when the candidate may not ask, and a fixed "time" line is its one held answer.
+ * Nothing a routed person says is ever held (`mayBeHeld` false), so the gate measures the early release at the first output frame.
+ */
+export function gateFamily(candidateMayAsk: boolean, isCandidate: (userId: string) => boolean) {
+  return {
+    admit: async (userId: string) => (!candidateMayAsk && isCandidate(userId) ? 'fixed-lines' as const : 'route' as const),
+    heldAnswer: async (r: { text: string; admission: string }) => (r.admission === 'fixed-lines' && /time/i.test(r.text) ? 'There are twenty minutes left.' : null),
+    mayBeHeld: (_r: { text: string }) => false,
+    refusal: GATE_FIXED_REFUSAL,
+    instructions: () => null,
+  };
+}
+
 export async function startHandsfreeRun(input: StandaloneRunInput): Promise<StandaloneRun> {
   const [{ OpenAiLiveSession }, { voiceConfig }, { createListeningSide }, { createHandsfreeRules }, { openAiTranscriberFactory }, { HandsfreeTalking }, { HANDSFREE_TURN_RULES }, { policyForLobby }] = await Promise.all([
     import('../live-session.js'), import('../../voice/config.js'), import('./listening.js'), import('./rules.js'),
@@ -178,12 +192,7 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   const names = input.speakers.map((s) => s.name);
   const isCandidate = (userId: string): boolean => userId.startsWith('cand');
   const base = policyForLobby(null);
-  const family = {
-    admit: async (userId: string) => (!input.candidateMayAsk && isCandidate(userId) ? 'fixed-lines' as const : 'route' as const),
-    heldAnswer: async (r: { text: string; admission: string }) => (r.admission === 'fixed-lines' && /time/i.test(r.text) ? 'There are twenty minutes left.' : null),
-    refusal: GATE_FIXED_REFUSAL,
-    instructions: () => null,
-  };
+  const family = gateFamily(input.candidateMayAsk, isCandidate);
   const policy = Object.create(base, { handsfree: { value: () => family }, acknowledgement: { value: () => 'in-call-notice' } }) as typeof base;
   const record = { callId: input.callId, state: 'listening', acked: [...input.speakers.map((s) => s.userId), 'room'] } as unknown as import('../types.js').AssistantRecord;
 

@@ -1,7 +1,7 @@
 // Hands-free talking side and run (lane B): the session hears only what the router feeds, tool calls carry the routed asker, and
 // the run wires the listening side, the router and the session's events together. Fakes of lanes A and C (handsfree-fakes.ts).
 import { HandsfreeTalking } from '../handsfree/talking.js';
-import { HandsfreeRuntime } from '../handsfree/runtime.js';
+import { HandsfreeRuntime, gateFamily } from '../handsfree/runtime.js';
 import { SessionEmitter, type LiveMeetingSession, type SessionEvents } from '../session.js';
 import type { HeardLine } from '../handsfree/types.js';
 import { FakeClock, FakeListening, FakeRelay, FakeRules, frame, settle } from './handsfree-fakes.js';
@@ -151,5 +151,15 @@ describe('hands-free run', () => {
     expect(w.listening.closed).toBe(true);
     expect(w.inner.closed).toBe(1);
     expect(await w.hf.holdPress('u-una')).toEqual({ ok: false, reason: 'not-running' });
+  });
+});
+
+describe("the voice gate's family", () => {
+  it('never holds a routed request (so the gate measures the early release); the candidate without pad help gets fixed lines', async () => {
+    const f = gateFamily(false, (u) => u.startsWith('cand'));
+    expect(f.mayBeHeld({ text: 'Milo, how much time is left?' })).toBe(false);
+    expect(await f.admit('cand')).toBe('fixed-lines');
+    expect(await f.admit('hugo')).toBe('route');
+    expect(await f.heldAnswer({ text: 'time left?', admission: 'fixed-lines' })).toMatch(/twenty minutes/);
   });
 });
