@@ -338,6 +338,21 @@ async function askByVoice(kind, asker, id, how, expect, ms = 20_000) {
   t.how = how; t.right = spoke && expect.test(t.said);
   return t;
 }
+/** --handsfree: Hugo talks over Milo's utterance `n` about 2.5 s in ("Okay, thanks, that's enough"); measured to his silence. */
+const BARGE_ON = flag('--barge-on') ?? 'cand';
+async function bargeOver(n) {
+  const u = timeline.milo[n];
+  await sleep(Math.max(0, u.startMs + 2500 - Date.now()));
+  if (u.done) { note('Milo finished before the barge-in could start'); return null; }
+  const startMs = Date.now();
+  const x01 = say('x01', 0, { now: true });
+  await until(async () => (u.done || (u.lastAtMs && Date.now() - u.lastAtMs > 700) ? true : null), 12_000, 50);
+  const barge = { on: BARGE_ON, startS: Number(((startMs - timeline.film.fromMs) / 1000).toFixed(1)), lastFrameAfterS: Number((((u.lastAtMs ?? startMs) - startMs) / 1000).toFixed(2)),
+    playoutEndAfterS: Number(((u.startMs + u.ms - startMs) / 1000).toFixed(2)), closed: u.done, voiceS: Number((u.ms / 1000).toFixed(1)) };
+  await x01;
+  await until(async () => Date.now() > busy.until + 120, 30_000, 60);
+  return barge;
+}
 /** --handsfree: Hugo holds the bar's talk button through line `id`, then lets go; his answer measured from the release. */
 async function askByHold(kind, id, expect) {
   const btn = lead.page.getByTestId('milo-hold-button').first();
@@ -355,9 +370,11 @@ async function askByHold(kind, id, expect) {
   await sleep(300);
   await lead.page.mouse.up();
   const relMs = Date.now();
-  const spoke = await miloSays(n, 20_000);
+  let barge = null;
+  if (BARGE_ON === 'hold' && (await until(async () => (milo.utterances > n ? true : null), 15_000, 50))) { barge = await bargeOver(n); report.barge = barge; }
+  const spoke = barge ? true : await miloSays(n, 20_000);
   const t = await turn(kind, 'lead (hold)', LINES[id][1], relMs, n, posts0, spoke);
-  t.how = 'hold'; t.right = spoke && expect.test(t.said); t.holding = !!holding; t.chips = chips;
+  t.how = 'hold'; t.right = spoke && expect.test(t.said); t.holding = !!holding; t.chips = chips; t.barge = barge;
   return t;
 }
 const deckOf = (page) => page.getByTestId('interview-room-ask');
@@ -666,24 +683,12 @@ try {
     await say('t02', 300);
     const endMs = Date.now();
     const began = await until(async () => (milo.utterances > n ? true : null), 15_000, 50);
-    let barge = null;
-    if (began) {
-      const u = timeline.milo[n];
-      await sleep(Math.max(0, u.startMs + 2500 - Date.now()));
-      if (!u.done) {
-        const startMs = Date.now();
-        const x01 = say('x01', 0, { now: true });
-        await until(async () => (u.done || (u.lastAtMs && Date.now() - u.lastAtMs > 700) ? true : null), 12_000, 50);
-        barge = { startS: Number(((startMs - timeline.film.fromMs) / 1000).toFixed(1)), lastFrameAfterS: Number((((u.lastAtMs ?? startMs) - startMs) / 1000).toFixed(2)),
-          playoutEndAfterS: Number(((u.startMs + u.ms - startMs) / 1000).toFixed(2)), closed: u.done, voiceS: Number((u.ms / 1000).toFixed(1)) };
-        await x01;
-      } else note('Milo finished before the barge-in could start');
-    }
+    const barge = began && BARGE_ON === 'cand' ? await bargeOver(n) : null;
     await until(async () => Date.now() > busy.until + 120, 30_000, 60);
     const t = await turn('time_left', 'candidate', LINES.t02[1], endMs, n, posts0, !!began);
-    t.how = 'name last'; t.right = !!began && /minute|end of its time/i.test(t.said); t.barge = barge; report.barge = barge;
+    t.how = 'name last'; t.right = !!began && /minute|end of its time/i.test(t.said); t.barge = barge; if (barge) report.barge = barge;
     step('T Milo tells Mateo the time left (name last)', t.right, `spoke=${!!began}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
-    step('X Hugo talks over Milo and Milo stops', !!barge && barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(barge)}`);
+    step('X Hugo talks over Milo and Milo stops', !!report.barge && report.barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(report.barge ?? null)}`);
   } else if (MILO) {
     scene(3, 'Mateo asks Milo how much time is left.');
     const n = milo.utterances; const posts0 = (await miloPosts()).length;
