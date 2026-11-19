@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T13:10:06.070Z",
-  "serverHandlerSha": "64ba214792c750db2dd4bfcdb8d89a878b5d0d7ed3714589060ea7eb4bc28669",
+  "capturedAt": "2026-11-19T13:17:33.842Z",
+  "serverHandlerSha": "f4b4b3a4745d6b430e84b2b798669dad26debf93aba5ca64130f0ce143c446e9",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2438,6 +2438,9 @@
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/chat": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
+    "GET /api/calls/:callId/chat/reads": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/page": {
@@ -5019,6 +5022,9 @@
     },
     "GET /api/interview-invite/admission": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/interview-invite/calls/:callId/chat/reads": {
+      "skipped": "no value found for :callId under /api/interview-invite/calls (orgiq/admin); no value found for :callId under /api/interview-invite/calls (assessment/admin); no value found for :callId under /api/interview-invite/calls (anonymous)"
     },
     "GET /api/interview-invite/consents": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
