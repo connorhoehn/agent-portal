@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-19T04:43:44.256Z",
-  "serverHandlerSha": "15cac0a5afa711650db263ffca9b4d053c1fda6ac434af5328d7a0bde640f52c"
+  "capturedAt": "2026-11-19T05:00:13.489Z",
+  "serverHandlerSha": "3cb5681b0e0b8e27e26cac982914ea2e2bfdfa4f7e16670e85305350c3075bcc"
  },
  "summary": {
   "routes": 966,
@@ -447,7 +447,7 @@
    {
     "method": "GET",
     "path": "/api/interviews/candidates/:id/consents",
-    "source": "src/routes/interviews/records.ts:43"
+    "source": "src/routes/interviews/records.ts:44"
    },
    {
     "method": "GET",
@@ -557,7 +557,7 @@
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/milo-export",
-    "source": "src/routes/interviews/records.ts:73"
+    "source": "src/routes/interviews/records.ts:74"
    },
    {
     "method": "POST",
@@ -617,7 +617,7 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/recap/ask",
-    "source": "src/routes/interviews/recap.ts:112"
+    "source": "src/routes/interviews/recap.ts:113"
    },
    {
     "method": "POST",
@@ -667,12 +667,12 @@
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/scorecard",
-    "source": "src/routes/interviews/scorecards.ts:117"
+    "source": "src/routes/interviews/scorecards.ts:121"
    },
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/scorecard",
-    "source": "src/routes/interviews/scorecards.ts:136"
+    "source": "src/routes/interviews/scorecards.ts:140"
    },
    {
     "method": "POST",
@@ -5040,7 +5040,7 @@
   {"method":"GET","path":"/api/interviews/candidates","source":"src/routes/interviews.ts:79","declaredAt":"src/routes/interviews.ts:79","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/interviews/candidates","source":"src/routes/interviews/candidates.ts:56","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"hiring setup (ManageCandidates): adding a candidate is done on the form"}},
   {"method":"GET","path":"/api/interviews/candidates/:id","source":"src/routes/interviews.ts:88","declaredAt":"src/routes/interviews.ts:88","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/interviews/candidates/:id/consents","source":"src/routes/interviews/records.ts:43","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/candidates/:id/consents","source":"src/routes/interviews/records.ts:44","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/candidates/:id/debrief","source":"src/routes/interviews/debrief.ts:36","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/candidates/:id/deletion","source":"src/routes/interviews/retention.ts:71","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"deleting a candidate's data is confirmed on the profile, never by voice"}},
   {"method":"GET","path":"/api/interviews/candidates/:id/deletions","source":"src/routes/interviews/retention.ts:88","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -5064,7 +5064,7 @@
   {"method":"GET","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:95","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:77","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/milo-ask","source":"src/routes/interviews/milo.ts:82","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/milo-export","source":"src/routes/interviews/records.ts:73","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/milo-export","source":"src/routes/interviews/records.ts:74","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/milo-intro","source":"src/routes/interviews/milo.ts:121","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo introducing itself is the lead's button in the room (or Milo's own `introduce` server tool in the call), never the voice navigator's"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-notes","source":"src/routes/interviews/milo.ts:75","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/milo-settings","source":"src/routes/interviews/milo.ts:138","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -5076,7 +5076,7 @@
   {"method":"POST","path":"/api/interviews/interviews/:id/plan-draft","source":"src/routes/interviews/plan.ts:19","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
   {"method":"PUT","path":"/api/interviews/interviews/:id/questions","source":"src/routes/interviews/prepare.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"update","note":"choose a round's questions (Prepare)"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/recap","source":"src/routes/interviews/recap.ts:91","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/recap/ask","source":"src/routes/interviews/recap.ts:112","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"asking Milo where something was said is read on the scorecard page, never by voice"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/recap/ask","source":"src/routes/interviews/recap.ts:113","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"asking Milo where something was said is read on the scorecard page, never by voice"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/recap/open","source":"src/routes/interviews/recap.ts:100","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo's private answers, plan drafts and the recap are read on their pages, never by voice"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/record","source":"src/routes/interviews/record.ts:28","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/room","source":"src/routes/interviews/room.ts:51","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -5086,8 +5086,8 @@
   {"method":"POST","path":"/api/interviews/interviews/:id/runs/:runId/cancel","source":"src/routes/interviews/runs.ts:142","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"work","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/runs/events","source":"src/routes/interviews/runs.ts:126","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/say","source":"src/routes/interviews/milo.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"Milo saying an approved question aloud is the lead's choice in the room, never the voice navigator's"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:117","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:136","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a scorecard is the interviewer's own judgement; Milo never scores (decision 6)"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:121","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/scorecard","source":"src/routes/interviews/scorecards.ts:140","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a scorecard is the interviewer's own judgement; Milo never scores (decision 6)"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/start","source":"src/routes/interviews/room.ts:81","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/suggestion","source":"src/routes/interviews/coach.ts:39","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/suggestion/:suggestionId/answer","source":"src/routes/interviews/coach.ts:48","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"answering Milo's suggestion is the lead's act in the room"}},
