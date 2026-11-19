@@ -70,7 +70,11 @@ test('follow-up: a missed follow-up fails 9/9', async () => {
 test('chatter, mentions, colleague: an unasked reply or a leaked frame fails', async () => {
   const sc = gateScenarios().find((s) => s.id === 'chatter')!; const first = sc.steps.findIndex((s) => s.expect === 'silent');
   assert.deepEqual(failing(scoreScenario('chatter', await run('chatter', { unaskedAfter: new Set([first + 1]) }))), ['chatter.unasked']);
-  assert.deepEqual(failing(scoreScenario('mentions', await run('mentions', { leakFrames: (s) => (s.clip === 'm02' ? 3 : 0) }))), ['mentions.relayed']);
+  const mi = gateScenarios().find((s) => s.id === 'mentions')!.steps.findIndex((s) => s.clip === 'm02');
+  // Outbound: Milo's voice relayed on a mention fails it; a name routed in (inbound) until its verdict does not (review 1, item 10).
+  assert.deepEqual(failing(scoreScenario('mentions', await run('mentions', { unaskedAfter: new Set([mi]) }))), ['mentions.relayed', 'mentions.silent']);
+  assert.deepEqual(failing(scoreScenario('mentions', await run('mentions', { leakFrames: (s) => (s.clip === 'm02' ? 3 : 0) }))), []);
+  assert.deepEqual(failing(scoreScenario('mentions', await run('mentions', { toolOnMention: true }))), ['mentions.tools']);
   assert.deepEqual(failing(scoreScenario('colleague', await run('colleague', { leakFrames: (s) => (s.clip === 'w01' ? 2 : 0) }))), ['colleague.relayed']);
 });
 
@@ -86,6 +90,9 @@ test('barge-in: a relay that talks on 1 s after the interruption fails', async (
 
 test('two at once and echo and candidate-off', async () => {
   assert.deepEqual(failing(scoreScenario('two-at-once', await run('two-at-once', { mixedAudio: true }))), ['two-at-once.mixed']);
+  // Decision 10: the queued second asker must be answered, and after the first.
+  assert.deepEqual(failing(scoreScenario('two-at-once', await run('two-at-once', { queuedSecond: 'never' }))), ['two-at-once.second']);
+  assert.deepEqual(failing(scoreScenario('two-at-once', await run('two-at-once', { queuedSecond: 'first' }))), ['two-at-once.first', 'two-at-once.second']);
   assert.deepEqual(failing(scoreScenario('echo', await run('echo', { echoTriggers: 1 }))), ['echo.trigger']);
   assert.deepEqual(failing(scoreScenario('candidate-off', await run('candidate-off', { candidateLeaks: true }))), ['candidate-off.routed', 'candidate-off.fixed']);
 });

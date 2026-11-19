@@ -11,7 +11,7 @@ export const GATE = Object.freeze({
   nameLast: { tries: 7, p50Ms: 2700, p90Ms: 3200, understood: 7 },
   followUp: { tries: 9, replied: 9, p90Ms: 1600 },
   chatter: { runs: 3, spokeUnasked: 0 },
-  mentions: { clips: 8, relayedFrames: 0 },
+  mentions: { clips: 8, relayedFrames: 0, toolCalls: 0 },
   asker: { wrongAsker: 0 },
   barge: { relaySilentMs: 700 },
   colleague: { relayedFrames: 0 },
@@ -89,7 +89,7 @@ export function gateScenarios(): ScenarioSpec[] {
     { id: 'name-last', about: 'name last: the sentence is replayed from the buffer; Milo must understand it', speakers: ['hugo', 'cand'], steps: last },
     { id: 'follow-up', about: 'a follow-up without the name, 3 s after the answer, same person', speakers: ['hugo'], steps: follow },
     { id: 'chatter', about: 'two people talking to each other, three rounds: Milo must stay silent', speakers: ['hugo', 'cand'], steps: chatter },
-    { id: 'mentions', about: 'the name used in passing, never a request: nothing relayed', speakers: ['hugo', 'cand'], steps: mentions },
+    { id: 'mentions', about: 'the name used in passing, never a request: Milo relays no voice and calls no tool', speakers: ['hugo', 'cand'], steps: mentions },
     { id: 'asker', about: 'tool requests from both voices: askedBy is the right person', speakers: ['hugo', 'cand'], steps: tools },
     {
       id: 'barge', about: 'talk over Milo, and "Milo, stop": the relay goes silent in time and the next question is answered', speakers: ['hugo'],
@@ -103,10 +103,11 @@ export function gateScenarios(): ScenarioSpec[] {
       ],
     },
     {
-      id: 'two-at-once', about: 'two people say Milo together: one answer at a time, to the first asker, no mixed audio', speakers: ['hugo', 'cand'],
+      id: 'two-at-once', about: 'two people say Milo together: one floor, the first asker answered first, the queued second after, no mixed audio', speakers: ['hugo', 'cand'],
       steps: [
         { speaker: 'hugo', clip: 'p01', gapMs: 800, expect: 'reply', answer: 'madrid' },
-        { speaker: 'cand', clip: 'p02', gapMs: 0, concurrentMs: 150, expect: 'silent' },
+        // Step-0 decision 10: the second "Milo" while the floor is held is queued (one sentence) and answered after the first.
+        { speaker: 'cand', clip: 'p02', gapMs: 0, concurrentMs: 150, expect: 'reply', answer: 'cairo' },
       ],
     },
     {
@@ -141,6 +142,8 @@ export interface StepObs {
   lastVoiceMs: number | null;
   /** Frames of any voice from the server's fixed lines (not the model). */
   fixedVoice: boolean;
+  /** Voiced frames of Milo's voice relayed (OUTBOUND) in the run this step owns or the strays attributed to it. */
+  relayedFrames: number;
   /** Voice runs that started while nobody had asked: attributed to the latest started step. */
   strayRuns: number;
   /** Frames of this step's window (its start to 6 s after its end) in which a person's audio was handed to the talking side, per person. */
@@ -215,9 +218,13 @@ export function scoreScenario(scenarioId: string, run: RunObs): Check[] {
     case 'chatter':
       return [check('unasked', 'spoke when not asked', String(strays), `= ${GATE.chatter.spokeUnasked}`, strays === GATE.chatter.spokeUnasked)];
     case 'mentions': {
-      const frames = steps.reduce((a, s) => a + sumRouted(s), 0);
+      // Outbound: Milo's voice relayed to the room (review 1, item 10: this counted the people's routed audio, inbound). The
+      // inbound frames are shown beside it: a name routes until its verdict, so they are not a failure on their own.
+      const frames = steps.reduce((a, s) => a + s.relayedFrames, 0); const routedIn = steps.reduce((a, s) => a + sumRouted(s), 0);
+      const tools = steps.reduce((a, s) => a + s.toolCalls.length, 0);
       return [
-        check('relayed', 'relayed frames', String(frames), `= ${GATE.mentions.relayedFrames}`, frames === GATE.mentions.relayedFrames && steps.length === GATE.mentions.clips),
+        check('relayed', 'Milo voice frames relayed', `${frames} (${routedIn} routed in)`, `= ${GATE.mentions.relayedFrames}`, frames === GATE.mentions.relayedFrames && steps.length === GATE.mentions.clips),
+        check('tools', 'tool calls on a mention', String(tools), `= ${GATE.mentions.toolCalls}`, tools === GATE.mentions.toolCalls),
         check('silent', 'Milo spoke', String(strays), '= 0', strays === 0),
       ];
     }
@@ -237,10 +244,15 @@ export function scoreScenario(scenarioId: string, run: RunObs): Check[] {
       ];
     }
     case 'two-at-once': {
+      // Step-0 decision 10: one floor; the first asker answered first; the second's queued sentence replayed once the floor frees
+      // and answered after (its answer may follow on in the first one's run of voice, so the order is read off the words too).
       const [a, b] = [steps[0]!, steps[1]!];
-      const understood = a.firstVoiceMs !== null && understoodAnswer(a, 0);
+      const words = `${a.text} ${b.text}`.toLowerCase(); const first = words.search(/madrid/); const second = words.search(/cairo/);
+      const firstOk = a.firstVoiceMs !== null && understoodAnswer(a, 0) && (second < 0 || first < second);
+      const secondOk = second >= 0 && first >= 0 && second > first && (b.firstVoiceMs === null || a.lastVoiceMs === null || b.firstVoiceMs > a.lastVoiceMs);
       return [
-        check('first', 'the first asker is answered', understood ? 'yes' : 'no', 'yes', understood),
+        check('first', 'the first asker is answered first', firstOk ? 'yes' : 'no', 'yes', firstOk),
+        check('second', 'the queued second is answered after', secondOk ? 'yes' : 'no', 'yes', secondOk),
         check('mixed', 'mixed audio routed', String(a.mixed || b.mixed), 'false', !(a.mixed || b.mixed)),
         check('stray', 'unasked voice', String(strays), '= 0', strays === 0),
       ];

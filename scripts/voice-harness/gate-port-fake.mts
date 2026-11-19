@@ -21,6 +21,10 @@ export interface FakeProfile {
   echoTriggers: number;
   /** Candidate-off: audio routed and a model reply instead of the fixed line. */
   candidateLeaks: boolean;
+  /** Two at once: the queued second asker is answered after the floor frees (decision 10), never, or before the first. */
+  queuedSecond: 'after' | 'never' | 'first';
+  /** A mention (silent step) set off a tool call. */
+  toolOnMention: boolean;
 }
 
 export const idealProfile: FakeProfile = {
@@ -33,6 +37,8 @@ export const idealProfile: FakeProfile = {
   mixedAudio: false,
   echoTriggers: 0,
   candidateLeaks: false,
+  queuedSecond: 'after',
+  toolOnMention: false,
 };
 
 export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opened: PortOpen | null } {
@@ -41,6 +47,8 @@ export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opene
   let window: { start: number; end: number; kind: 'model' | 'fixed' } | null = null;
   const pending: Array<{ at: number; run: () => void }> = [];
   let nowMs = 0; let stepNo = 0;
+  /** The answer last scheduled, and when the floor it holds frees (its start + its talk). */
+  let lastAnswer: { item: { at: number; run: () => void }; freeAt: number } | null = null;
   const port = {
     get opened() { return opened; },
     async open(input: PortOpen, e: PortEvents) { opened = input; ev = e; },
@@ -53,6 +61,7 @@ export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opene
       if (step.expect === 'silent') {
         const leak = p.leakFrames(step);
         for (let n = 0; n < leak; n += 1) pending.push({ at: startMs + n * 100, run: () => ev?.routed(step.speaker, nowMs) });
+        if (p.toolOnMention && /^m\d\d$/.test(step.clip ?? '')) pending.push({ at: endMs + 600, run: () => ev?.tool('add_note', step.speaker, nowMs) });
         if (p.unaskedAfter.has(i)) pending.push({ at: endMs + 600, run: () => { window = { start: nowMs, end: nowMs + 1200, kind: 'model' }; } });
         if (step.loopback === undefined && p.echoTriggers > 0 && i > 0) for (let n = 0; n < p.echoTriggers; n += 1) pending.push({ at: startMs + 500, run: () => ev?.trigger('room', nowMs) });
         return;
@@ -62,8 +71,16 @@ export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opene
       if (step.expect === 'fixed' && p.candidateLeaks) for (let n = 0; n < 5; n += 1) pending.push({ at: startMs + n * 100, run: () => ev?.routed(step.speaker, nowMs) });
       const latency = p.latencyMs(step, i);
       if (latency === null) return;
-      const at = endMs + latency;
-      pending.push({ at, run: () => { window = { start: nowMs, end: nowMs + (step.clip && /^g0[12]$/.test(step.clip) ? 8000 : p.talkMs), kind }; if (step.answer) ev?.text(step.answer.split('|')[0]!, nowMs); else ev?.text('Sure.', nowMs); } });
+      let at = endMs + latency;
+      // A second asker while the floor is held: queued, answered once the floor frees (or as the profile breaks it).
+      const queued = step.concurrentMs !== undefined && lastAnswer !== null;
+      if (queued && p.queuedSecond === 'never') return;
+      if (queued && p.queuedSecond === 'after') at = Math.max(at, lastAnswer!.freeAt + latency);
+      if (queued && p.queuedSecond === 'first') { at = endMs + 300; lastAnswer!.item.at = at + p.talkMs + latency; }
+      const talk = step.clip && /^g0[12]$/.test(step.clip) ? 8000 : p.talkMs;
+      const item = { at, run: () => { window = { start: nowMs, end: nowMs + talk, kind }; if (step.answer) ev?.text(step.answer.split('|')[0]!, nowMs); else ev?.text('Sure.', nowMs); } };
+      pending.push(item);
+      lastAnswer = { item, freeAt: at + talk };
       if (step.expect === 'tool') pending.push({ at: endMs + 600, run: () => ev?.tool('add_note', p.askedBy(step), nowMs) });
       if (p.mixedAudio && step.concurrentMs === undefined) pending.push({ at: startMs + 200, run: () => ev?.routed(step.speaker, nowMs, true) });
     },

@@ -101,7 +101,7 @@ async function main(): Promise<number> {
 }
 
 function emptyStep(i: number, s: ScenarioSpec['steps'][number]): RunObs['steps'][number] {
-  return { i, clip: s.clip, speaker: s.speaker, expect: s.expect, speechEndMs: null, firstVoiceMs: null, lastVoiceMs: null, fixedVoice: false, strayRuns: 0, routed: {}, mixed: false, text: '', toolCalls: [], relaySilentMs: null, triggers: 0, noReply: false, ...(s.barge ? { barge: s.barge } : {}) };
+  return { i, clip: s.clip, speaker: s.speaker, expect: s.expect, speechEndMs: null, firstVoiceMs: null, lastVoiceMs: null, fixedVoice: false, relayedFrames: 0, strayRuns: 0, routed: {}, mixed: false, text: '', toolCalls: [], relaySilentMs: null, triggers: 0, noReply: false, ...(s.barge ? { barge: s.barge } : {}) };
 }
 
 main().then((code) => process.exit(code), (e: Error) => { console.error('FAILED', e.message); process.exit(2); });

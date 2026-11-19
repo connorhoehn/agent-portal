@@ -46,7 +46,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
   const { clock } = opts; const maxMs = opts.maxMs ?? 240_000;
   const recs: Rec[] = sc.steps.map((spec, i) => ({
     spec, i, clip: spec.clip, speaker: spec.speaker, expect: spec.expect, ...(spec.barge ? { barge: spec.barge } : {}),
-    speechEndMs: null, firstVoiceMs: null, lastVoiceMs: null, fixedVoice: false, strayRuns: 0, routed: {}, mixed: false, text: '', toolCalls: [],
+    speechEndMs: null, firstVoiceMs: null, lastVoiceMs: null, fixedVoice: false, relayedFrames: 0, strayRuns: 0, routed: {}, mixed: false, text: '', toolCalls: [],
     relaySilentMs: null, triggers: 0, noReply: false,
     started: false, clipStartMs: 0, done: false, doneAt: 0, pos: 0, pcm: spec.clip ? opts.clips[spec.clip]! : null,
     clipMs: spec.clip ? ((opts.clips[spec.clip]!.length / HANDSFREE_FRAME_BYTES) * HANDSFREE_FRAME_MS) : 0,
@@ -60,11 +60,11 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
     voice: (at, kind) => {
       const cont = at - lastVoiceAny < (runOwner?.spec.expect === 'tool' ? TOOL_GAP_MS : RUN_GAP_MS) && runOwner !== null;
       lastVoiceAny = at;
-      if (cont && runOwner) { runOwner.lastVoiceMs = at; if (kind === 'fixed') runOwner.fixedVoice = true; return; }
+      if (cont && runOwner) { runOwner.lastVoiceMs = at; runOwner.relayedFrames += 1; if (kind === 'fixed') runOwner.fixedVoice = true; return; }
       const a = awaiting();
-      if (a) { a.firstVoiceMs = at; a.lastVoiceMs = at; if (kind === 'fixed') a.fixedVoice = true; runOwner = a; return; }
+      if (a) { a.firstVoiceMs = at; a.lastVoiceMs = at; a.relayedFrames += 1; if (kind === 'fixed') a.fixedVoice = true; runOwner = a; return; }
       const last = latestStarted(); runOwner = last;
-      if (last) { last.strayRuns += 1; last.lastVoiceMs = at; if (kind === 'fixed') last.fixedVoice = true; }
+      if (last) { last.strayRuns += 1; last.lastVoiceMs = at; last.relayedFrames += 1; if (kind === 'fixed') last.fixedVoice = true; }
     },
     routed: (speaker, at, mixed) => {
       const r = recs.findLast((x) => x.started && x.speaker === speaker && x.clipStartMs <= at) ?? latestStarted();
