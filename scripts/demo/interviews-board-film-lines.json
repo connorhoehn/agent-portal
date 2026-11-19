@@ -1,0 +1,31 @@
+{
+ "voices": {
+  "hugo": {
+   "speaker": "ryan",
+   "instruct": "A warm, upbeat interviewer in his forties, friendly and conversational, smiling as he speaks, relaxed and natural, with lively intonation and a steady, natural speaking pitch."
+  },
+  "cand": {
+   "speaker": "aiden",
+   "instruct": "An energetic young candidate in his late twenties, slightly nervous but confident, expressive and quick, animated like a real person chatting."
+  }
+ },
+ "lines": {
+  "b01": ["hugo", "This one's system design, and it's a classic: design Twitter. The board is yours."],
+  "b02": ["cand", "Before I draw anything: what's the read to write ratio? Are people mostly reading timelines?"],
+  "b03": ["hugo", "Very read heavy. Think a hundred reads for every tweet."],
+  "b04": ["cand", "And how fresh does the home timeline need to be? Is a few seconds of delay okay?"],
+  "b05": ["hugo", "A few seconds is fine."],
+  "b06": ["cand", "Okay. Functional first: post a tweet, follow someone, and the home timeline."],
+  "b07": ["cand", "Non-functional: timeline reads have to be fast, it has to stay up, and a few seconds stale is okay."],
+  "b08": ["cand", "Now the high level. A client talks to an API. Writes go to a tweet service, and into a tweet store."],
+  "b09": ["cand", "Then a fan-out worker pushes each tweet into the followers' timeline cache, and the timeline service reads from that cache."],
+  "b10": ["cand", "So on every tweet, I push it to each follower's timeline. Hmm. Actually, wait. That breaks for someone with fifty million followers."],
+  "b11": ["cand", "For big accounts, I'd merge at read time instead."],
+  "b12": ["cand", "That's the high level. Where would you like me to go deep?"],
+  "b13": ["hugo", "Exactly there: the fan-out. Walk me through it."],
+  "b14": ["cand", "Sure. Fan-out on write for most people, and celebrity tweets merged in when the timeline is read."],
+  "b15": ["hugo", "Good. Let's stop there, that's our time. Thanks, Mateo."],
+  "b16": ["cand", "Thank you, that was fun."],
+  "b17": ["hugo", "And the whole board stays on the record, with its snapshots."]
+ }
+}
