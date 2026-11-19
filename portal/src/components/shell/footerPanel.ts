@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 // Where a shell conversation panel opens: upward from the bottom bar, at its
 // left edge, the way the huddle design anchors every footer menu
 // (docs/design/initiative-huddle-shell-plan.md, "open footer menus upward").
@@ -43,4 +43,24 @@ export function useFooterAnchorKey(): string {
     return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', update); };
   }, []);
   return key;
+}
+
+/**
+ * A page outside the shell (the candidate's room) publishes its own footer's height as `--shell-collaboration-floor`,
+ * so `aboveFooter` and the floating call gallery sit the same 1rem above it as they do above the shell's bar.
+ */
+export function usePublishCollaborationFloor(footer: RefObject<HTMLElement | null>): void {
+  useLayoutEffect(() => {
+    const element = footer.current;
+    if (!element) return;
+    const measure = () => document.documentElement.style.setProperty('--shell-collaboration-floor',
+      `${Math.max(0, Math.ceil(window.innerHeight - element.getBoundingClientRect().top))}px`);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener('resize', measure); measure();
+    return () => {
+      observer?.disconnect(); window.removeEventListener('resize', measure);
+      document.documentElement.style.removeProperty('--shell-collaboration-floor');
+    };
+  }, [footer]);
 }

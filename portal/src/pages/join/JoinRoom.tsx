@@ -27,7 +27,8 @@ import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
 import { Button, EmptyState, Inline, LoadingState, PageHeader, Stack, T } from '@connorhoehn/ui-components/shared';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
-import { RoomCallGallery } from '../../components/calls/RoomCallGallery';
+import { RoomCallDockedPane, RoomCallGallery, useRoomCallMode } from '../../components/calls/RoomCallGallery';
+import { usePublishCollaborationFloor } from '../../components/shell/footerPanel';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { callLossWords, callTimeLabel, guestRoomNameFor, timeLeftTone } from '../../lib/interviewsRoom';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
@@ -187,7 +188,11 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
     if (technical) { setTab((t) => (t === 'chat' ? 'pad' : 'chat')); return; }
     setPaneOpen((open) => !open);
   }, [technical]);
-  // A technical round's call floats (RoomCallGallery, as the lead's does); minimised, its media plays from the footer's outlet.
+  // A technical round's call (RoomCallGallery, as the lead's): floating by default, docked in the Call pane or minimised to a
+  // pill, switched from the widget and remembered; minimised, its media plays from the footer's mounted outlet.
+  const [callMode, setCallMode] = useRoomCallMode('join.room.call-mode', 'floating');
+  const footerRef = useRef<HTMLElement>(null);
+  usePublishCollaborationFloor(footerRef);
   const callId = host?.call.call?.callId ?? null;
   // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
   useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
@@ -205,7 +210,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
       : 'Join the call from the bar at the bottom of the window. You will check your camera and microphone first.',
     testId: view === 'lost' ? 'join-room-call-lost' : view === 'rejoin' ? 'join-room-left' : 'join-room-idle',
   };
-  const footer = <Stack as="footer" gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
+  const footer = <Stack as="footer" ref={footerRef} gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
     <CallMediaOutlet />
     <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
       <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloAnswer} />
@@ -227,8 +232,9 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
               <GuestMiloVoice room={room} answer={miloAnswer} />
             </Stack>
           </SidePaneSplit>
-          {drawn && <RoomCallGallery storageKey="join.room.call-gallery" count={callCounts(host?.call.call ?? null).joined}
-            recordingNote={host?.recordingNote ?? null} liftRem={3} testId="join-room-gallery" />}
+          {drawn && callMode !== 'docked' && <RoomCallGallery mode={callMode} onMode={setCallMode} positionKey="join.room.call-gallery.position.v2"
+            count={callCounts(host?.call.call ?? null).joined} recordingNote={host?.recordingNote ?? null} testId="join-room-gallery" />}
+          {drawn && callMode === 'docked' && <RoomCallDockedPane onMode={setCallMode} recordingNote={host?.recordingNote ?? null} paneId="join-room-call" testId="join-room-call-pane" />}
           {footer}
         </Stack>
       </SidePaneProvider>

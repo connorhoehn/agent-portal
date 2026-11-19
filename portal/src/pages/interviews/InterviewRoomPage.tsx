@@ -9,7 +9,8 @@
 //     Milo, Chat, Details. Behavioural: Plan, Milo, Chat, Details. Details holds the round's facts. Milo is Milo's
 //     notes, the lead's private question and the live transcript (rows I3.6, I3.7). The footer's Message opens Chat.
 //   - the tiles: while the call is drawn, the library's `CallBlock` (`placement="pane"`: tiles only, the footer's bar
-//     owns mic, camera and Leave) in a narrow `SidePane` on the right. It wins the call's one media sink because
+//     owns mic, camera and Leave) docked in a narrow `SidePane`, floating bottom-right or minimised to a pill
+//     (components/calls/RoomCallGallery.tsx). It wins the call's one media sink because
 //     nothing else claims it: the room registers as the huddle pane's owner (as pages/social/RoomPane.tsx does), so
 //     the shell's fallback chat pane, its media grid and its composer dock never open here, the chat tab draws
 //     `HuddleChatBody showCall={false}`, and the footer's video panel is kept shut while the call is this room's.
@@ -23,7 +24,6 @@
 // to the scorecard that is now due. Anyone without a seat reads the not-found page.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
 import { Button, ChatComposer, Chip, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T, Tabs } from '@connorhoehn/ui-components/shared';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
@@ -35,7 +35,7 @@ import { CallBlock, callCounts, callDrawn, useCallBlock, useCallHost, useCallMed
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { HuddleChatBody, useHuddleChat, useHuddleChatUnread } from '../../components/shell/HuddleChat';
 import { withUnreadBadges } from '../../components/calls/UnreadTabBadge';
-import { RoomCallGallery } from '../../components/calls/RoomCallGallery';
+import { RoomCallDockedPane, RoomCallGallery, useRoomCallMode } from '../../components/calls/RoomCallGallery';
 import { usePageChromeFold } from '../../components/shell/pageChrome';
 import { scorecardPath } from '../../lib/interviewsScorecard';
 import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHintListener';
@@ -95,10 +95,12 @@ function InterviewRoom({ id }: { id: string }) {
   const lostMilo = useMeetingAssistant(lost.loss?.callId ?? null);
   // U5: while the call is drawn, the shell folds its trail, primary rail and gutter.
   usePageChromeFold(drawn);
-  // The Call pane's ×: the page draws the pane only while it is open, so the call's media sink falls back to the shell's own
-  // (mounted, hidden) outlet and keeps playing; a closed SidePane would detach the tiles' node and pause its media.
-  const [callPaneShut, setCallPaneShut] = useState(false);
-  useEffect(() => { if (!drawn) setCallPaneShut(false); }, [drawn]);
+  // Where the call is drawn (lib/roomCallMode.ts): docked pane, floating gallery or minimised pill, switched from the widget
+  // itself and remembered per viewer and round kind. A technical round floats by default (the board or pad keeps the
+  // page's width); a behavioural round docks (the faces are what that round is about). Minimised, nothing claims the
+  // call's sink, so its media falls back to the shell's own (mounted, hidden) outlet and keeps playing.
+  const technical = room?.round.type === 'technical';
+  const [callMode, setCallMode] = useRoomCallMode(technical ? 'interviews.room.call-mode.technical' : 'interviews.room.call-mode.behavioural', technical ? 'floating' : 'docked');
   // The page's tiles are the call's one media sink: the footer's own video panel stays shut while the call is this room's.
   const media = useCallMediaPanel();
   useEffect(() => { if (call.here && media?.open) media.setOpen(false); }, [call.here, media?.open, media?.setOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -213,9 +215,6 @@ function InterviewRoom({ id }: { id: string }) {
       <UnavailableNotice error={error} what="this interview room" source="The room is read from the interviews tenant's rounds" onRetry={refresh} />
     );
   }
-  // A technical round's call floats (RoomCallGallery): the board or pad keeps the page's width. A behavioural round keeps the
-  // narrow Call pane beside the plan: the faces are what that round is about.
-  const floating = room?.round.type === 'technical';
   if (!room) return <LoadingState label={isLoading ? 'Loading the interview room…' : 'Loading…'} />;
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
@@ -223,32 +222,12 @@ function InterviewRoom({ id }: { id: string }) {
     <RoomWorkspace room={room} here={call.here} joined={joined} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
       onBack={() => navigate(MY_INTERVIEWS_HREF)} lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
       miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints}
-      folded={drawn} onShowCall={drawn && !floating && callPaneShut ? () => setCallPaneShut(false) : null} />
-    {drawn && floating && <RoomCallGallery storageKey="interviews.room.call-gallery" count={callCounts(host?.call.call ?? null).joined}
-      recordingNote={host?.recordingNote ?? null} testId="interview-room-gallery" />}
-    {drawn && !floating && !callPaneShut && <RoomCallPane recordingNote={host?.recordingNote ?? null} onClose={() => setCallPaneShut(true)} />}
+      folded={drawn} />
+    {drawn && callMode !== 'docked' && <RoomCallGallery mode={callMode} onMode={setCallMode} positionKey="interviews.room.call-gallery.position.v2"
+      count={callCounts(host?.call.call ?? null).joined} recordingNote={host?.recordingNote ?? null} testId="interview-room-gallery" />}
+    {drawn && callMode === 'docked' && <RoomCallDockedPane onMode={setCallMode} recordingNote={host?.recordingNote ?? null} paneId="interview-room-call" testId="interview-room-stage" />}
   </Stack>;
 }
-
-/**
- * The call's tiles while the call is drawn, in the shell's right column: narrow, resizable and closable, so the room's
- * tabs keep the page's width. They claim the call's one media sink (`placement="pane"`: tiles only, the footer's bar
- * owns mic, camera and Leave). The recording note is drawn here, with the tiles' gutter (ShellCallMedia turns the
- * library pane's own off). The page owns its open state (`onClose`): closed, it is not drawn at all, and the header offers
- * "Show the call" to bring it back.
- */
-function RoomCallPane({ recordingNote, onClose }: { recordingNote: React.ReactNode; onClose(): void }) {
-  const { reveal } = useSidePaneHost();
-  useEffect(() => { reveal(); }, [reveal]);
-  return <SidePane title="Call" closeLabel="Hide the call" onClose={onClose} paneId="interview-room-call" widthPx={ROOM_CALL_PANE} data-testid="interview-room-stage">
-    <Stack gap="sm" className="h-full min-h-0 min-w-0 flex-1 bg-surface">
-      {recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{recordingNote}</Inline>}
-      <CallBlock placement="pane" fit="contain" className={recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
-    </Stack>
-  </SidePane>;
-}
-/** The call pane's floor and ceiling: room for two tiles one above the other, never the board's width. */
-const ROOM_CALL_PANE = { min: 320, max: 440 } as const;
 
 /** The header line's state: what the call is doing, for this seat. */
 function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } | null): string {
@@ -266,14 +245,13 @@ function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } |
  * the call is this room's, the room is the huddle pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own
  * chat pane never opens, and a focus request for the call's chat (the footer's Message) selects the Chat tab.
  */
-function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints, folded, onShowCall }: {
+function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints, folded }: {
   room: RoomView; here: boolean; /** This person is in the call (not only bound to its lobby). */ joined: boolean; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
   lost: ReturnType<typeof callLossWords> | null; onRestart: (() => void) | null; miloLine: string | null;
   onBoardCheckpoints: (c: BoardCheckpoints | null) => void;
   /** The shell's chrome is folded (the call is drawn): its content gutter is gone, so the room draws the inset itself. */
   folded: boolean;
   /** The Call pane was closed: the header's way back to it. */
-  onShowCall: (() => void) | null;
 }) {
   const type = room.round.type;
   const [tab, setTab] = useState<RoomTabId>(() => defaultRoomTab(type));
@@ -314,7 +292,6 @@ function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost,
   ];
   const action = !open ? <Button variant="secondary" size="sm" onClick={onBack} data-testid="interview-room-closed">Open My interviews</Button>
     : lost?.action && onRestart ? <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>
-    : onShowCall ? <Button variant="secondary" size="sm" onClick={onShowCall} data-testid="interview-room-show-call">Show the call</Button>
     : null;
   const status = waiting ? <Chip size="sm" tone={candidateStatusTone(admission?.state)} data-testid="interview-room-candidate-status">{waiting}</Chip> : null;
   // Milo's record for a lost call is said on the header line too, not only under Details.
