@@ -178,4 +178,16 @@ describe('the registry guards (server-tools.ts)', () => {
       expect(await runServerTool(call, ALICE, 'flaky_agenda', {}, 'model')).toBeNull(); // now the window holds
     } finally { off(); }
   });
+
+  it('the window holds one request heard twice (the phrase and the model), never a second phrase request: a re-ask is answered', async () => {
+    const twice: ServerToolDef<{ callId: string }> = { ...READ_AGENDA, name: 'twice_agenda', repeatWindowMs: 60_000, run: async () => ({ line: AGENDA, kind: 'agenda' }) };
+    const off = registerServerTools({ ...STANDUP, family: 'orgiq:twice', tools: [twice] });
+    try {
+      const call = { callId: 'c8', lobby: 'orgiq:twice:w', tenant: 'orgiq' };
+      expect(await runServerTool(call, ALICE, 'twice_agenda', {}, 'phrase')).toEqual({ line: AGENDA, retry: false });
+      expect(await runServerTool(call, ALICE, 'twice_agenda', {}, 'model')).toBeNull(); // the same request, heard by the model too
+      expect(await runServerTool(call, ALICE, 'twice_agenda', {}, 'phrase')).toEqual({ line: AGENDA, retry: false }); // asked again
+      expect(await runServerTool(call, ALICE, 'twice_agenda', {}, 'model')).toBeNull();
+    } finally { off(); }
+  });
 });

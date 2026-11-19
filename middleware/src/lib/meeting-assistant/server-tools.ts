@@ -55,7 +55,7 @@ export interface ServerToolDef<Ctx, Kind extends string = string> {
   phrase?(text: string): boolean | Promise<boolean>;
   /** The largest arguments a call may carry. Absent: 4096 bytes. */
   maxArgsBytes?: number;
-  /** The same asker's second run within this is not run (the phrase and the model's call heard for one request). Not for a button. */
+  /** The same asker's second run within this is not run (the phrase and the model's call heard for one request; a second phrase run is a re-ask and runs). Not for a button. */
   repeatWindowMs?: number;
   /** The family's spend part it may hold beyond the live session, or null. */
   spend: string | null;
@@ -146,7 +146,8 @@ export async function phraseTool(family: string, text: string): Promise<Register
 
 // ── The one runner ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const recent = new Map<string, number>();
+/** Per asker and tool: the last run that said something, and how it was asked. */
+const recent = new Map<string, { at: number; via: ServerToolVia }>();
 const writing = new Set<string>();
 const scopeOf = (call: PolicyCall): string => call.lobby ?? call.callId;
 
@@ -181,12 +182,15 @@ export async function runServerTool(call: PolicyCall, askedBy: string, name: str
   if (def.repeatWindowMs !== undefined && via !== 'button') {
     const key = `${f.family}|${scope}|${askedBy}|${name}`;
     const now = f.now?.() ?? Date.now();
-    if (now - (recent.get(key) ?? -Infinity) < def.repeatWindowMs) { note('repeat'); return null; }
+    // One request heard twice (the phrase and the model's call for it) runs once. Two phrase runs are two utterances: a re-ask
+    // ("how much time is left?" again 15 s later) is answered (hands-free gate, 19 November: it got silence).
+    const last = recent.get(key);
+    if (last && now - last.at < def.repeatWindowMs && !(via === 'phrase' && last.via === 'phrase')) { note('repeat'); return null; }
   }
   // The repeat window is used up only by a run that said something.
   const used = (): void => {
     if (def.repeatWindowMs === undefined || via === 'button') return;
-    recent.set(`${f.family}|${scope}|${askedBy}|${name}`, f.now?.() ?? Date.now());
+    recent.set(`${f.family}|${scope}|${askedBy}|${name}`, { at: f.now?.() ?? Date.now(), via });
     if (recent.size > 500) recent.delete(recent.keys().next().value as string);
   };
   if (!def.writes) {

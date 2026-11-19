@@ -21,6 +21,10 @@ describe('what the detector reads as one of the two requests (as it should)', ()
     ['time left', 'time'],
     ['minutes remaining', 'time'],
     ['how long have we got', 'time'],
+    // A follow-up after the time line (gate iv-follow, 19 November).
+    ['And how much time is left now?', 'time'],
+    ['So how long do we have now?', 'time'],
+    ['how much time is left right now', 'time'],
     // A clause before the request, the name last (film F1, 19 November).
     ['Before I start drawing, roughly how much time is left, Milo?', 'time'],
     ['Okay so before I code this up, how long do I have left?', 'time'],
