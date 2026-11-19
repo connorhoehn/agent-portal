@@ -74,6 +74,8 @@ let runtime: AssistantRuntime;
 let listening: FakeListening | null;
 let rules: FakeRules;
 let sent: number[];
+/** The call's seats as the gateway reports them (null: the orchestrator's default roster). */
+let seats: Array<{ userId: string; active: boolean }> | null = null;
 const audioTap: { sink: AudioSink | null; attach(callId: string, sink: AudioSink): void; suspend(callId: string): void; detach(callId: string): void } = {
   sink: null, attach(_c, sink) { this.sink = sink; }, suspend() { this.sink = null; }, detach() { this.sink = null; },
 };
@@ -86,7 +88,7 @@ async function boot(flag: string | undefined, withSides = true): Promise<void> {
   listening = null; rules = new FakeRules(); sent = [];
   runtime = new AssistantRuntime({
     store: () => store, intake: () => intake, clock: () => now, makeSession: () => new FakeSession(),
-    rolesOf: async () => ['member'], audio: audioTap, voiceSink: (_c, frame) => { sent.push(frame.data.seq); return true; },
+    rolesOf: async () => ['member'], audio: audioTap, ...(seats ? { seats: async () => seats! } : {}), voiceSink: (_c, frame) => { sent.push(frame.data.seq); return true; },
     ...(withSides ? { handsfree: (_call: unknown, clock: HandsfreeClock) => { listening = new FakeListening(clock as unknown as FakeClock); return { listening: listening as never, rules }; } } : {}),
   }, { tickMs: 0 });
   await runtime.start(ctx);
@@ -107,6 +109,7 @@ beforeEach(async () => {
   });
 });
 afterEach(async () => {
+  seats = null;
   await runtime.dispose(); intake.dispose(); setAssistantStore(null);
   if (savedFlag === undefined) delete process.env['MEETING_ASSISTANT_HANDSFREE']; else process.env['MEETING_ASSISTANT_HANDSFREE'] = savedFlag;
 });
@@ -254,6 +257,30 @@ describe('the hands-free seam', () => {
     await flush();
     expect(await store.lines(CALL, 0, 10)).toHaveLength(0);
     expect(runtime.callStats(CALL).echoLinesDropped).toBe(1);
+  });
+
+  it('a person who leaves the call is let go: their lane (and its transcription stream) closes and their floor frees, once', async () => {
+    seats = [{ userId: ALICE, active: true }, { userId: BOB, active: true }];
+    await boot('1');
+    audioTap.sink!.placed(BOB, pcm(1), 0);
+    await flush();
+    listening!.emit('name', { userId: BOB, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 300, textSoFar: 'Milo' });
+    await flush();
+    expect(runtime.handsfreeRun(CALL)!.state()).toMatchObject({ phase: 'routing', userId: BOB });
+    await runtime.tick();
+    expect(listening!.closedLanes).toEqual([]);
+    seats = [{ userId: ALICE, active: true }, { userId: BOB, active: false }];
+    now += 5_000; await runtime.tick();
+    expect(listening!.closedLanes).toEqual([BOB]);
+    expect(runtime.handsfreeRun(CALL)!.state()).toMatchObject({ phase: 'idle' });
+    now += 5_000; await runtime.tick();
+    expect(listening!.closedLanes).toEqual([BOB]);
+    // Back in the call: their next audio opens a lane again.
+    seats = [{ userId: ALICE, active: true }, { userId: BOB, active: true }];
+    now += 5_000; await runtime.tick();
+    audioTap.sink!.placed(BOB, pcm(1), 100);
+    await flush();
+    expect(listening!.opened.filter((u) => u === BOB)).toHaveLength(2);
   });
 
   it('a stop closes the listening side with the session', async () => {

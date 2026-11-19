@@ -284,6 +284,8 @@ export const DELEGATION_LINE_SKEW_MS = 5 * 60_000;
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Milo is. */
 export const ATTENDANCE_EVERY_MS = 15_000;
+/** A hands-free run reads the seats this often: someone who left has their lane (and its paid transcription stream) closed. */
+export const HANDSFREE_SEATS_EVERY_MS = 5_000;
 /** The process writes "still alive" on each listening record this often (audit M5); a restart closes the listening period there. */
 export const HEARTBEAT_EVERY_MS = 30_000;
 export const UNASKED_REPLY = `${ASSISTANT_NAME} could not tell who asked. Ask again.`;
@@ -423,6 +425,9 @@ interface CallRun {
   hf: HandsfreeRuntime | null;
   /** Hands-free turns opened so far (a request, for the per-request call cap, is the asker plus this number). */
   hfTurns: number;
+  /** When the seats were last read for leavers, and the people already let go (until they hold a seat again). */
+  hfSeatsAt: number;
+  hfGone: Set<string>;
 }
 
 /**
@@ -757,7 +762,7 @@ export class AssistantRuntime {
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), heldChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
-      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0,
+      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0, hfSeatsAt: -Infinity, hfGone: new Set(),
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -2439,6 +2444,7 @@ export class AssistantRuntime {
   private async tickRun(run: CallRun, now: number): Promise<void> {
     if (run.finished) return;
     if (now - run.attendanceAt >= ATTENDANCE_EVERY_MS) { run.attendanceAt = now; await this.snapshotAttendance(run.ctx.callId); }
+    if (run.hf && now - run.hfSeatsAt >= HANDSFREE_SEATS_EVERY_MS) { run.hfSeatsAt = now; await this.letLeaversGo(run); }
     if (now - run.heartbeatAt >= HEARTBEAT_EVERY_MS) await this.heartbeat(run);
     await this.checkCeiling(run);
     if (run.finished) return;
@@ -2533,6 +2539,21 @@ export class AssistantRuntime {
   callIds(): string[] { return [...this.runs.keys()]; }
 
   /** Everyone who holds an ACTIVE seat right now was present while Milo was (audit M1); departed rows are never counted. */
+  /**
+   * Hands-free: everyone whose seat is no longer active is let go once (`personLeft`: their transcription stream closes, their ring,
+   * floor and queued sentence go). Holding a seat again clears that, and their next audio opens a lane as for anyone new.
+   */
+  private async letLeaversGo(run: CallRun): Promise<void> {
+    let seats: Array<{ userId: string; active: boolean }>;
+    try { seats = await this.seatsOf(run.ctx.callId); } catch { return; /* the seat roster is best effort here */ }
+    const hf = run.hf;
+    if (!hf || run.finished) return;
+    for (const u of seats) {
+      if (u.active) run.hfGone.delete(u.userId);
+      else if (!run.hfGone.has(u.userId)) { run.hfGone.add(u.userId); hf.personLeft(u.userId); }
+    }
+  }
+
   private async snapshotAttendance(callId: string): Promise<void> {
     try { for (const u of await this.seatsOf(callId)) if (u.active) await this.store.attend(callId, u.userId); } catch { /* the seat roster is best effort here */ }
   }
