@@ -27,7 +27,11 @@ const MAX_KEPT_VERDICTS = 64;
 // Barge-in by voice (review 1, item 8). Words confirm a barge-in about a second after it starts; a voiced onset in a mic that does
 // not carry Milo's playout pauses the relay at once (what has not played is kept), and the words then confirm it (cleared) or not
 // (resumed). A mic is judged on its earlier loudness against his earlier playout: one that follows it is leaky (an open speaker:
-// its onsets are his echo), and stays words-only, as does a mic heard during too little of his playout to tell.
+// its onsets are his echo), and stays words-only. A mic heard during too little of his playout to correlate (his first line) is
+// judged on the bins it has: quiet through at least 300 ms of his voice before the onset, it pauses like a clean one (an echo
+// would have been loud there); loud through most of them, it is leaky; less heard than that, or a mic whose words have already
+// echoed him, stays words-only. A pause is bounded and his own words heard back resume it, so his echo never stops him (gate
+// fixed-barge, 19 November: "Milo, stop" 600 ms into his first line went 1 s unheeded).
 /** This much voice (20 ms windows over ONSET_RMS, gaps under 60 ms bridged) is an onset; 300 ms of quiet re-arms it. */
 export const PAUSE_ONSET_MS = 200;
 const ONSET_RMS = 300;
@@ -45,6 +49,10 @@ const LEAK_MAX_LAG = 6;
 const LEAK_CLEAN_CORR = 0.3;
 /** The newest bins are left out of the judgement (the onset being judged is not history). */
 const LEAK_SKIP_BINS = 5;
+/** Too little history to correlate: at least this many voiced bins of his heard in the mic before the onset to judge it at all. */
+const LEAK_EARLY_MIN_BINS = 3;
+/** The onset's own bins left out of that early judgement (its 200 ms of voice and a bridged gap). */
+const LEAK_EARLY_SKIP_BINS = 3;
 /** A voiced stretch after this much quiet is a new stretch of speech (where a sentence heard later probably began). */
 const SPEECH_GAP_MS = 600;
 /** A server line the session's own words wait behind (`serverLine`): heard again after its line, or after this at most. */
@@ -175,6 +183,8 @@ export class Router {
   private readonly miloBins = new Map<number, number>();
   private readonly micBins = new Map<string, Map<number, number>>();
   private readonly onsets = new Map<string, { voicedMs: number; quietMs: number; fired: boolean }>();
+  /** Mics whose words have echoed Milo in this call: an onset there too new to judge is his echo, never a pause. */
+  private readonly echoMics = new Set<string>();
   /** The relay is paused for a voiced onset in `userId`'s mic: frames not yet played, and frames since, wait here. */
   private paused: { userId: string; timer: unknown } | null = null;
   private pausedFrames: Array<{ pcm: Buffer; last: boolean; said: boolean; replay: boolean }> = [];
@@ -373,7 +383,7 @@ export class Router {
       if (this.begunBefore(userId, sentenceId)) { this.trace('words.before-playout', { userId }); return; }
       const v = this.deps.rules.overlap(heard, this.saying);
       if (v === 'barge-in') { this.bargeIn(userId); return; }
-      if (v === 'echo') { if (this.paused?.userId === userId) this.resume('echo'); return; }
+      if (v === 'echo') { this.echoMics.add(userId); if (this.paused?.userId === userId) this.resume('echo'); return; }
       if (this.paused?.userId === userId) return; // unclear: still paused, the next words tell
     }
     // The asker speaks again inside their window: a follow-up turn on this sentence (judged when it is final).
@@ -710,9 +720,10 @@ export class Router {
 
   private voicedOnset(userId: string, bin: number): void {
     if (this.paused || !(this.uttering || this.deps.clock.nowMs() < this.playingUntil)) return;
-    const mic = this.micLeak(userId, bin - LEAK_SKIP_BINS);
-    if (mic !== 'clean') { this.trace('pause.skipped', { userId, mic }); return; }
-    this.pause(userId);
+    let mic: 'clean' | 'leaky' | 'unknown' | 'early-clean' = this.micLeak(userId, bin - LEAK_SKIP_BINS);
+    if (mic === 'unknown' && !this.echoMics.has(userId)) mic = this.micLeakEarly(userId, bin - LEAK_EARLY_SKIP_BINS);
+    if (mic !== 'clean' && mic !== 'early-clean') { this.trace('pause.skipped', { userId, mic, echoed: this.echoMics.has(userId) }); return; }
+    this.pause(userId, mic);
   }
 
   /** Does this mic carry Milo's playout? Its loudness against his, at the best echo lag, up to bin `before`. */
@@ -734,14 +745,31 @@ export class Router {
     return best < LEAK_CLEAN_CORR ? 'clean' : 'leaky';
   }
 
-  private pause(userId: string): void {
+  /**
+   * Too little of his playout heard in this mic to correlate: its voiced bins of his before the onset, each loud in the mic (at any
+   * echo lag) or not. Quiet through at least `LEAK_EARLY_MIN_BINS` of them is early-clean; loud through half or more is leaky.
+   */
+  private micLeakEarly(userId: string, before: number): 'early-clean' | 'leaky' | 'unknown' {
+    const mic = this.micBins.get(userId);
+    if (!mic) return 'unknown';
+    let voiced = 0; let loud = 0;
+    for (const [b, e] of this.miloBins) {
+      if (b >= before || !mic.has(b) || e <= VOICED_LOUDNESS) continue;
+      voiced += 1;
+      for (let lag = 0; lag <= LEAK_MAX_LAG && b + lag < before; lag++) if ((mic.get(b + lag) ?? 0) > VOICED_LOUDNESS) { loud += 1; break; }
+    }
+    if (voiced < LEAK_EARLY_MIN_BINS) return 'unknown';
+    return loud * 2 >= voiced ? 'leaky' : 'early-clean';
+  }
+
+  private pause(userId: string, mic: 'clean' | 'early-clean' = 'clean'): void {
     const now = this.deps.clock.nowMs();
     const unplayed = this.playout.filter((p) => p.endMs > now);
     this.deps.relay.clear();
     this.forgetUnplayed(now);
     this.pausedFrames = unplayed.map((p) => ({ pcm: p.pcm, last: p.last, said: false, replay: true }));
     this.paused = { userId, timer: this.deps.clock.setTimeout(() => this.resume('timeout'), PAUSE_MAX_MS) };
-    this.trace('relay.paused', { userId, frames: unplayed.length });
+    this.trace('relay.paused', { userId, frames: unplayed.length, mic });
   }
 
   /** Not a barge-in after all: what was paused plays from where it stopped. */
@@ -799,6 +827,7 @@ export class Router {
    */
   private echoed(userId: string, sentenceId: string): void {
     this.trace('echo', { userId });
+    this.echoMics.add(userId);
     if (this.queued?.userId === userId && this.queued.sentenceId === sentenceId) this.queued = null;
     const t = this.turn;
     if (!t || t.userId !== userId || this.st.phase === 'follow-up') return; // nothing opened (the window itself goes on)

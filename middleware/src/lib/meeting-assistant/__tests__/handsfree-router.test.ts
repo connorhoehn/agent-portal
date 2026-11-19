@@ -679,6 +679,40 @@ describe('hands-free router', () => {
       fresh.hugo(3_000); fresh.hugo(3_000); fresh.hugo(3_000);
       expect(fresh.relay.clears).toBe(0); // nothing of his playout heard in that mic yet: no way to tell
     });
+
+    it('a mic too new to judge (his first line: under 15 bins of his playout) pauses on its onset; words that talk over him confirm it', async () => {
+      // Gate fixed-barge, 19 November: "Milo, stop" 600 ms into a server line that was his first audio waited ~1 s for its words.
+      const fresh = await answering();
+      for (let i = 0; i < 6; i++) fresh.hugo(0); // quiet through his first 600 ms
+      fresh.hugo(3_000); fresh.hugo(3_000); fresh.hugo(3_000);
+      expect(fresh.relay.clears).toBe(1);
+      expect(fresh.drops).toEqual([]);
+      fresh.rules.overlapFor = () => 'barge-in';
+      fresh.words(HUGO, 'h1', 'Milo stop');
+      expect(fresh.drops).toEqual(['barge-in']);
+    });
+
+    it('a mic too new to judge whose onset was his own echo: the words resume him, and that mic is words-only from then on', async () => {
+      const w = await answering();
+      for (let i = 0; i < 6; i++) w.hugo(0);
+      w.hugo(3_000); w.hugo(3_000);
+      expect(w.relay.clears).toBe(1);
+      const before = w.relay.pushed.length;
+      w.rules.overlapFor = () => 'echo';
+      w.words(HUGO, 'h1', 'once upon a time');
+      expect(w.drops).toEqual([]);
+      expect(w.relay.pushed.length).toBeGreaterThan(before); // never stopped by his own echo
+      for (let i = 0; i < 4; i++) w.hugo(0);
+      w.hugo(3_000); w.hugo(3_000); w.hugo(3_000);
+      expect(w.relay.clears).toBe(1); // a mic heard echoing him does not pause him again
+    });
+
+    it('a mic too new to judge that was loud through most of his playout so far is taken as leaky (no pause)', async () => {
+      const w = await answering();
+      for (let i = 0; i < 8; i++) w.hugo(Math.round(w.leak(1) * 0.5));
+      w.hugo(3_000); w.hugo(3_000); w.hugo(3_000);
+      expect(w.relay.clears).toBe(0);
+    });
   });
 
   describe('hold', () => {
