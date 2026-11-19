@@ -41,6 +41,12 @@
   "s41a": ["hugo", "Milo suggests advance, and I agree."],
   "s41i": ["hugo", "Milo says inconclusive. Fair, I'll put my notes in for the panel."],
   "s41d": ["hugo", "Milo says don't advance. I see why, and the panel decides."],
-  "s41n": ["hugo", "Milo doesn't have enough evidence for a call yet, so that one's on me."]
+  "s41n": ["hugo", "Milo doesn't have enough evidence for a call yet, so that one's on me."],
+  "h00": ["hugo", "Please introduce yourself to Mateo."],
+  "t02": ["cand", "Before I start drawing, roughly how much time is left, Milo?"],
+  "t03": ["hugo", "Milo, how long have we got?"],
+  "f01": ["hugo", "Great. And can you read out the question once more?"],
+  "x01": ["hugo", "Okay, thanks, that's enough. Go ahead, Mateo."],
+  "b16m": ["cand", "Thank you, that was fun. I liked how Milo kept time."]
  }
 }

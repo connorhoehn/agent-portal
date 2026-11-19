@@ -54,6 +54,9 @@ const REHEARSE = args.includes('--rehearse');
 // --no-call (a check of the board alone, without a media server): the round is started by its route and nobody joins the call.
 const NO_CALL = args.includes('--no-call');
 const MILO = args.includes('--milo') && !NO_CALL;
+// --handsfree (with --milo): the middleware runs Milo hands-free (MEETING_ASSISTANT_HANDSFREE=1); people talk to him by name, and
+// Hugo holds the bar's talk button once.
+const HANDSFREE = MILO && args.includes('--handsfree');
 const MAX_MINUTES = Number(flag('--max-minutes') ?? 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -113,7 +116,7 @@ function miloEnv() {
   const key = line.replace(/^\s*OPENAI_API_KEY\s*=\s*/, '').trim().replace(/^['"]|['"]$/g, '');
   if (!key) { console.error('film: no provider key in IVFILM_KEY_FILE'); process.exit(2); }
   return {
-    OPENAI_API_KEY: key, MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1',
+    OPENAI_API_KEY: key, MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1', ...(HANDSFREE ? { MEETING_ASSISTANT_HANDSFREE: '1' } : {}),
     MEETING_ASSISTANT_MAX_MINUTES: String(MAX_MINUTES), MEETING_ASSISTANT_HARD_MAX_MINUTES: String(MAX_MINUTES),
     MEETING_ASSISTANT_TRACE_FILE: path.join(WORK, 'trace.jsonl'),
     MEETING_ASSISTANT_MEDIA_URL: process.env.IVFILM_MEDIA_URL || 'http://127.0.0.1:3911',
@@ -254,8 +257,8 @@ async function person(key, userId) {
 
 /** A line: its clip is placed in the edit now; resolves when it would end. Lines never overlap. */
 const busy = { until: 0 };
-async function say(id, gapMs = 350) {
-  const wait = busy.until + gapMs - Date.now(); if (wait > 0) await sleep(wait);
+async function say(id, gapMs = 350, { now = false } = {}) {
+  const wait = now ? 0 : busy.until + gapMs - Date.now(); if (wait > 0) await sleep(wait);
   const c = CLIPS[id] ?? { who: LINES[id][0], text: LINES[id][1], file: null, durMs: 900 + 62 * LINES[id][1].length };
   const atMs = Date.now();
   timeline.speech.push({ id, who: c.who, text: c.text, file: c.file ? path.relative(OUT, c.file) : null, atMs, durMs: c.durMs });
@@ -289,7 +292,7 @@ function keepMiloVoice(page) {
     const c = milo.cur;
     if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; timeline.milo.push(milo.cur); }
     const u = milo.cur;
-    u.seq = f.data.seq; u.done = f.data.last === true;
+    u.seq = f.data.seq; u.done = f.data.last === true; u.lastAtMs = now;
     u.ms += (Buffer.from(f.data.pcm, 'base64').length / 2 / (f.data.sampleRate || 24000)) * 1000;
     busy.until = Math.max(busy.until, u.startMs + u.ms);
     voiceLog?.write(`${JSON.stringify({ atMs: now, runId: f.data.runId, seq: f.data.seq, sampleRate: f.data.sampleRate, last: f.data.last === true, pcm: f.data.pcm })}\n`);
@@ -299,6 +302,11 @@ function keepMiloVoice(page) {
 async function miloSays(n, ms) {
   if (!(await until(async () => milo.utterances > n, ms, 100))) return false;
   await until(async () => Date.now() > busy.until + 120, 60_000, 60);
+  // --handsfree: one answer can come as two utterances (the model's first words, then the server's held answer said over them),
+  // so a short settle: an utterance starting within 1 s belongs to the same answer.
+  for (let k = milo.utterances; HANDSFREE && (await until(async () => (milo.utterances > k ? true : null), 1000, 50)); k = milo.utterances) {
+    await until(async () => Date.now() > busy.until + 120, 60_000, 60);
+  }
   return true;
 }
 /** Milo's posts in the call chat (his words, as captioned), oldest first. */
@@ -317,6 +325,38 @@ async function turn(kind, asker, asked, endMs, n, posts0, spoke) {
     voiceS: u ? Number((u.ms / 1000).toFixed(1)) : null, said };
   report.turns.push(t);
   console.log(`milo turn ${kind}: ${JSON.stringify(t)}`);
+  return t;
+}
+/** --handsfree: a line said to Milo by voice, and his answer measured (the line's end to his first audio). */
+async function askByVoice(kind, asker, id, how, expect, ms = 20_000) {
+  const n = milo.utterances; const posts0 = (await miloPosts()).length;
+  await say(id, 300);
+  const endMs = Date.now();
+  const spoke = await miloSays(n, ms);
+  const t = await turn(kind, asker, LINES[id][1], endMs, n, posts0, spoke);
+  t.how = how; t.right = spoke && expect.test(t.said);
+  return t;
+}
+/** --handsfree: Hugo holds the bar's talk button through line `id`, then lets go; his answer measured from the release. */
+async function askByHold(kind, id, expect) {
+  const btn = lead.page.getByTestId('milo-hold-button').first();
+  const b = await btn.boundingBox({ timeout: 8000 }).catch(() => null);
+  if (!b) { note('no hold-to-talk button in Hugo\'s bar'); return null; }
+  await moveTo(lead.page, b.x + b.width / 2, b.y + b.height / 2, 700);
+  const n = milo.utterances; const posts0 = (await miloPosts()).length;
+  await sleep(Math.max(0, busy.until + 300 - Date.now()));
+  await lead.page.mouse.down();
+  const holding = await until(async () => ((await lead.page.getByTestId('milo-hold').first().getAttribute('data-holding').catch(() => null)) === 'true' ? true : null), 3000, 100);
+  const chips = { lead: squash(await lead.page.getByTestId('milo-floor').first().textContent({ timeout: 1500 }).catch(() => '')),
+    cand: squash(await cand.page.getByTestId('milo-floor').first().textContent({ timeout: 1500 }).catch(() => '')) };
+  report.holdAtS = Number(((Date.now() - timeline.film.fromMs) / 1000).toFixed(1));
+  await say(id, 0, { now: true });
+  await sleep(300);
+  await lead.page.mouse.up();
+  const relMs = Date.now();
+  const spoke = await miloSays(n, 20_000);
+  const t = await turn(kind, 'lead (hold)', LINES[id][1], relMs, n, posts0, spoke);
+  t.how = 'hold'; t.right = spoke && expect.test(t.said); t.holding = !!holding; t.chips = chips;
   return t;
 }
 const deckOf = (page) => page.getByTestId('interview-room-ask');
@@ -567,6 +607,10 @@ try {
   await press(hp, hp.getByRole('menuitem', { name: /Master template/ }).first(), { pause: 350 });
   await i01;
   await say('i02', 300);
+  if (HANDSFREE) {
+    const t = await askByHold('introduce', 'h00', /Milo|assistant/i);
+    step('H Hugo holds the talk button; Milo introduces himself', !!t?.right && t.holding, t ? `holding=${t.holding}; chips ${JSON.stringify(t.chips)}; ${t.latencyS ?? '-'} s after the release; said "${t.said.slice(0, 120)}"` : 'no hold button');
+  }
   const i03 = say('i03', 300);
   // The coach's first suggestion (the round's own question, before anyone said it): Hugo asks it himself.
   if (MILO) {
@@ -577,7 +621,7 @@ try {
     (async () => {
       while (!deckWatch.stop) {
         const t = await deckShown(hp);
-        if (t && !/home timeline built|tens of millions of followers/i.test(t)) {
+        if (t && (HANDSFREE || !/home timeline built|tens of millions of followers/i.test(t))) {
           await deckOf(hp).getByRole('button', { name: /^I.ll ask it$/i }).first().click({ timeout: 2000 }).then(() => note(`[${at()}] answered "I'll ask it" to "${t.slice(0, 80)}"`), () => undefined);
         }
         await sleep(1500);
@@ -614,7 +658,32 @@ try {
   step('4 the candidate sees Hugo\'s named pointer', seesHugo.some((n) => /Hugo/.test(n)), `pointers on the candidate's board: ${JSON.stringify(seesHugo)}`);
   await say('b04');
   await say('b05');
-  if (MILO) {
+  if (HANDSFREE) {
+    scene(3, 'Mateo asks Milo how much time is left, his name last.');
+    // Hugo talks over Milo's answer about 2.5 s in ("Okay, thanks, that's enough"): the barge-in, measured to his silence.
+    const n = milo.utterances; const posts0 = (await miloPosts()).length;
+    await say('t02', 300);
+    const endMs = Date.now();
+    const began = await until(async () => (milo.utterances > n ? true : null), 15_000, 50);
+    let barge = null;
+    if (began) {
+      const u = timeline.milo[n];
+      await sleep(Math.max(0, u.startMs + 2500 - Date.now()));
+      if (!u.done) {
+        const startMs = Date.now();
+        const x01 = say('x01', 0, { now: true });
+        await until(async () => (u.done || (u.lastAtMs && Date.now() - u.lastAtMs > 700) ? true : null), 12_000, 50);
+        barge = { startS: Number(((startMs - timeline.film.fromMs) / 1000).toFixed(1)), lastFrameAfterS: Number((((u.lastAtMs ?? startMs) - startMs) / 1000).toFixed(2)),
+          playoutEndAfterS: Number(((u.startMs + u.ms - startMs) / 1000).toFixed(2)), closed: u.done, voiceS: Number((u.ms / 1000).toFixed(1)) };
+        await x01;
+      } else note('Milo finished before the barge-in could start');
+    }
+    await until(async () => Date.now() > busy.until + 120, 30_000, 60);
+    const t = await turn('time_left', 'candidate', LINES.t02[1], endMs, n, posts0, !!began);
+    t.how = 'name last'; t.right = !!began && /minute|end of its time/i.test(t.said); t.barge = barge; report.barge = barge;
+    step('T Milo tells Mateo the time left (name last)', t.right, `spoke=${!!began}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
+    step('X Hugo talks over Milo and Milo stops', !!barge && barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(barge)}`);
+  } else if (MILO) {
     scene(3, 'Mateo asks Milo how much time is left.');
     const n = milo.utterances; const posts0 = (await miloPosts()).length;
     await say('t01', 300);
@@ -683,6 +752,13 @@ try {
   const n5 = await same('11 the purposes, same on both sides', 'after the drag and two notes', n4 + 2);
 
   scene(5, 'Where to go deep? Hugo picks the fan-out.');
+  if (HANDSFREE) {
+    scene(4, 'Hugo asks Milo the time, then the question again without the name.');
+    const t = await askByVoice('time_left', 'lead', 't03', 'name first', /minute|end of its time/i);
+    step('U Milo tells Hugo the time left (name first)', t.right, `spoke=${t.spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
+    const f = await askByVoice('repeat_question', 'lead', 'f01', 'follow-up (no name)', /twitter|timeline|tweet|post/i, 15_000);
+    step('F Milo answers the follow-up without his name', f.right, `spoke=${f.spoke}; ${f.latencyS ?? '-'} s after the follow-up; said "${f.said.slice(0, 120)}"`);
+  }
   await beat(['b12'], () => camera(cp, region(VIEW_DRAWING), 1.0, 0), 250);
   const lv2 = await board(hp);
   const wk = lowest(lv2, 'Workers');
@@ -691,7 +767,7 @@ try {
   // --milo: the coach's follow-up is in Hugo's footer by now (it waits 90 s after the first one); he has Milo ask it aloud.
   let askedByMilo = false;
   deckWatch.stop = true;
-  if (MILO) {
+  if (MILO && !HANDSFREE) {
     const FOLLOW_UP = /home timeline built|tens of millions of followers/i;
     const deck = await until(async () => {
       const t = await deckShown(hp);
@@ -737,13 +813,27 @@ try {
   if (MILO) await miloState().catch(() => undefined);
   const b15 = say(MILO ? 's15' : 'b15', 250);
   await press(hp, hp.getByRole('tab', { name: 'Board' }).first(), { pause: 150 }).catch(() => note('no Board tab to go back to'));
-  await nearEnd(MILO ? 's15' : 'b15', 1500);
-  await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
-  await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { pause: 150, timeout: 10_000 });
-  await b15;
-  const b16 = say('b16', 200);
+  let b16 = null;
+  if (HANDSFREE) {
+    // A mention, not a request: Milo must stay silent. Watched for 4 s from its end while Hugo goes to End.
+    await b15;
+    const nM = milo.utterances;
+    await say('b16m', 200);
+    const mEnd = Date.now();
+    await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
+    const replied = await until(async () => (milo.utterances > nM ? true : null), Math.max(200, mEnd + 4000 - Date.now()), 100);
+    report.mention = { atS: Number(((mEnd - timeline.film.fromMs) / 1000).toFixed(1)), replied: !!replied };
+    step('N a mention of Milo gets no reply', !replied, `Milo ${replied ? 'REPLIED' : 'stayed silent'} within 4 s of "I liked how Milo kept time"`);
+    await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { pause: 150, timeout: 10_000 });
+  } else {
+    await nearEnd(MILO ? 's15' : 'b15', 1500);
+    await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
+    await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { pause: 150, timeout: 10_000 });
+    await b15;
+    b16 = say('b16', 200);
+  }
   const ended = await cp.getByTestId('join-ended').first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
-  await b16;
+  if (b16) await b16;
   const state = await until(async () => ((await row()).state === 'ended' ? 'ended' : null), 10_000, 500);
   if (MILO) {
     await miloState().catch(() => undefined);
