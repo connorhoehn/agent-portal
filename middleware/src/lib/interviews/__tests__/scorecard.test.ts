@@ -56,6 +56,30 @@ describe('what a complete scorecard is', () => {
   });
 });
 
+describe('the red flags seen (a board round with an answer key)', () => {
+  const FLAGS = ['A service for every noun.', 'Fan-out on write for everyone.', 'Vague names.'];
+  it('keeps the ones ticked, in the question\'s order, and stores them with the version; none ticked stores none', () => {
+    const out = checkScorecard({ ...GOOD, redFlagsSeen: ['Vague names.', 'A service for every noun.', 'Vague names.'] }, KIT, undefined, FLAGS);
+    expect(out.ok && out.value.redFlagsSeen).toEqual(['A service for every noun.', 'Vague names.']);
+    const row = newScorecardVersion({ id: 'sc-1', interviewId: 'iv-x', authorId: 'u-wen', version: 1, input: out.ok ? out.value : (null as never), reason: null, at: 'now', ratingsAtRecap: null });
+    expect(row.redFlagsSeen).toEqual(['A service for every noun.', 'Vague names.']);
+    const none = checkScorecard({ ...GOOD, redFlagsSeen: [] }, KIT, undefined, FLAGS);
+    expect(none.ok && 'redFlagsSeen' in none.value).toBe(false);
+    expect('redFlagsSeen' in newScorecardVersion({ id: 'sc-2', interviewId: 'iv-x', authorId: 'u-wen', version: 1, input: none.ok ? none.value : (null as never), reason: null, at: 'now', ratingsAtRecap: null })).toBe(false);
+  });
+  it.each([
+    ['a flag the round\'s questions do not have', ['Something else.'], 'redFlagsSeen'],
+    ['a list that is not a list of text', 'Vague names.', 'redFlagsSeen'],
+  ])('refuses %s', (_label, redFlagsSeen, field) => {
+    const out = checkScorecard({ ...GOOD, redFlagsSeen }, KIT, undefined, FLAGS);
+    expect(out.ok ? [] : out.fields.map((f) => f.field)).toEqual([field]);
+  });
+  it('a round without red flags takes none', () => {
+    const out = checkScorecard({ ...GOOD, redFlagsSeen: ['Vague names.'] }, KIT);
+    expect(out.ok ? [] : out.fields.map((f) => f.field)).toEqual(['redFlagsSeen']);
+  });
+});
+
 describe('a scorecard rates the competencies its round assesses', () => {
   const backend = () => interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.kit;
 

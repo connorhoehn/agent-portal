@@ -9,6 +9,7 @@
 import { clockOf } from './interviewsRecord.ts';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
 import type { KitCompetency } from './interviewsKit.ts';
+import type { KitRedFlag } from './interviewsAnswerKey.ts';
 import type { MiloAskBody } from './interviewsRoom.ts';
 import { writeJson } from './writeJson.ts';
 
@@ -24,6 +25,8 @@ export interface ScorecardVersion {
   submittedAt: string;
   version: number;
   correctionReason: string | null;
+  /** A board round: the red flags the author ticked (absent when none). Never scored, and not in Milo's recommendation. */
+  redFlagsSeen?: string[];
   /** Each rating with its competency's name and the anchor sentence for the rating given, as rated (whatever the round assesses now). */
   ratings: Array<CompetencyRating & { competency: string; anchor?: string | null }>;
 }
@@ -44,6 +47,8 @@ export interface ScorecardPageView {
   competencies: KitCompetency[];
   /** The competencies the round assesses: each must be rated. `competencies` adds only what the viewer's own latest version rated outside them (optional, kept on a correction). */
   required: string[];
+  /** A board round's red flags by group (its questions' answer key), the "Red flags seen" checklist; empty otherwise (missing from an older server). */
+  redFlags?: KitRedFlag[];
   mine: ScorecardView | null;
   canSubmit: boolean;
   refusal: string | null;
@@ -83,6 +88,8 @@ export interface Draft {
   reason: string;
   /** Where the person is in the form. */
   step: ScorecardStep;
+  /** A board round: the red flags ticked so far, by their text. */
+  redFlagsSeen?: string[];
   /** The recap was opened from this draft: going back to it asks nothing again (the server keeps the first open only). */
   recapOpened: boolean;
 }
@@ -95,6 +102,7 @@ export function draftFrom(card: ScorecardView): Draft {
     ratings: Object.fromEntries(card.ratings.map((r) => [r.competencyId, r.rating])),
     notes: Object.fromEntries(card.ratings.map((r) => [r.competencyId, r.note])),
     recommendation: card.recommendation, summary: card.summary, reason: '', step: 'rate', recapOpened: false,
+    ...(card.redFlagsSeen?.length ? { redFlagsSeen: [...card.redFlagsSeen] } : {}),
   };
 }
 
@@ -136,6 +144,7 @@ export function bodyOf(d: Draft, competencies: readonly KitCompetency[], basedOn
     // Only what was rated: an optional competency left "Not seen in this round" is not sent.
     ratings: competencies.filter((c) => !!d.ratings[c.id]).map((c) => ({ competencyId: c.id, rating: d.ratings[c.id], note: (d.notes[c.id] ?? '').trim() })),
     recommendation: d.recommendation, summary: d.summary.trim(), basedOn,
+    ...(d.redFlagsSeen?.length ? { redFlagsSeen: [...d.redFlagsSeen] } : {}),
     ...(basedOn > 0 ? { reason: d.reason.trim() } : {}),
   };
 }

@@ -265,6 +265,8 @@ export interface Scorecard {
   changedAfterRecap: boolean;
   /** Why this version corrects the one before it (row I5.3); null on a first version. */
   correctionReason: string | null;
+  /** A board round with red flags: the ones the author ticked (scorecard.ts); absent when none. Never scored. */
+  redFlagsSeen?: string[];
 }
 
 /** Everything the phase 0 reads look at, as one snapshot from the store. */

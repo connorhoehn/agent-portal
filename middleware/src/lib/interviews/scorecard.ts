@@ -24,7 +24,7 @@
 
 import { seatOf } from './assign.js';
 import { competenciesOfRound } from './kit.js';
-import type { CompetencyRating, Interview, InterviewState, KitCompetency, OpeningKit, Recommendation, Scorecard } from './types.js';
+import type { CompetencyRating, Interview, InterviewState, KitCompetency, KitRedFlag, OpeningKit, Recommendation, Scorecard } from './types.js';
 import { RECOMMENDATIONS } from './types.js';
 
 export const SCORECARD_LIMITS = {
@@ -41,13 +41,15 @@ export interface ScorecardInput {
   ratings: CompetencyRating[];
   recommendation: Recommendation;
   summary: string;
+  /** A board round with red flags (answer-key.ts): the ones the author saw, in the questions' order; absent when none. Never scored. */
+  redFlagsSeen?: string[];
 }
 
 export type FieldProblem = { field: string; message: string };
 export type Checked<T> = { ok: true; value: T } | { ok: false; fields: FieldProblem[] };
 
 /** The keys a submit may carry. Anything else (an author, a version number, a recap flag) is refused. */
-const BODY_KEYS: ReadonlySet<string> = new Set(['ratings', 'recommendation', 'summary', 'reason', 'basedOn']);
+const BODY_KEYS: ReadonlySet<string> = new Set(['ratings', 'recommendation', 'summary', 'reason', 'basedOn', 'redFlagsSeen']);
 
 /** States in which a seated person may submit: the first version once it has ended, a correction while scored too. */
 const SUBMITTABLE: ReadonlySet<InterviewState> = new Set(['ended', 'scored']);
@@ -113,12 +115,20 @@ export function scorecardCompetencies(
   return { competencies: kit.competencies.filter((c) => keep.has(c.id)), required: round.map((c) => c.id) };
 }
 
+/** The red flags of the questions chosen for the round, in their order (each text once): what its scorecards may tick. */
+export function redFlagsOfRound(i: Pick<Interview, 'questionIds'>, kit: Pick<OpeningKit, 'questions'>): Array<{ group: KitRedFlag['group']; text: string }> {
+  const seen = new Set<string>();
+  return i.questionIds.flatMap((id) => kit.questions.find((q) => q.id === id)?.redFlags ?? [])
+    .filter((f) => (seen.has(f.text) ? false : (seen.add(f.text), true)))
+    .map((f) => ({ group: f.group, text: f.text }));
+}
+
 /**
  * Check a submit's body against `competencies` (what this scorecard rates, scorecardCompetencies): every one in
  * `required` rated (default: all of them), the rest optional, anything else refused. A correction must carry a
  * reason; a first version must not.
  */
-export function checkScorecard(body: unknown, competencies: readonly KitCompetency[], required: readonly string[] = competencies.map((c) => c.id)): Checked<ScorecardInput & { reason: string | null; basedOn: number }> {
+export function checkScorecard(body: unknown, competencies: readonly KitCompetency[], required: readonly string[] = competencies.map((c) => c.id), redFlags: readonly string[] = []): Checked<ScorecardInput & { reason: string | null; basedOn: number }> {
   const fields: FieldProblem[] = [];
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, fields: [{ field: 'body', message: 'Send the scorecard as a form.' }] };
   const b = body as Record<string, unknown>;
@@ -165,11 +175,20 @@ export function checkScorecard(body: unknown, competencies: readonly KitCompeten
   if (reason && reason.length > SCORECARD_LIMITS.reasonChars) fields.push({ field: 'reason', message: `Keep the reason under ${SCORECARD_LIMITS.reasonChars} characters.` });
   if (reason && basedOn === 0) fields.push({ field: 'reason', message: 'A reason is only for correcting a scorecard you already submitted.' });
 
+  // The red flags seen: only the round's questions' own (redFlagsOfRound), kept in their order, each once.
+  const seenRaw = b['redFlagsSeen'];
+  let redFlagsSeen: string[] = [];
+  if (seenRaw !== undefined && seenRaw !== null) {
+    if (!Array.isArray(seenRaw) || seenRaw.some((f) => typeof f !== 'string')) fields.push({ field: 'redFlagsSeen', message: 'The red flags seen must be a list.' });
+    else if (seenRaw.some((f) => !redFlags.includes(f as string))) fields.push({ field: 'redFlagsSeen', message: 'Tick only the red flags this round lists.' });
+    else redFlagsSeen = redFlags.filter((f) => (seenRaw as string[]).includes(f));
+  }
+
   if (fields.length) return { ok: false, fields };
   // In the kit's order, whatever order they came in.
   const order = new Map(competencies.map((c, n) => [c.id, n]));
   ratings.sort((x, y) => order.get(x.competencyId)! - order.get(y.competencyId)!);
-  return { ok: true, value: { ratings, recommendation: recommendation as Recommendation, summary, reason, basedOn: basedOn as number } };
+  return { ok: true, value: { ratings, recommendation: recommendation as Recommendation, summary, ...(redFlagsSeen.length ? { redFlagsSeen } : {}), reason, basedOn: basedOn as number } };
 }
 
 /**
@@ -197,6 +216,7 @@ export function newScorecardVersion(args: {
     version: args.version,
     changedAfterRecap: changedAfterRecap(args.ratingsAtRecap, args.input.ratings),
     correctionReason: args.version > 1 ? args.reason : null,
+    ...(args.input.redFlagsSeen?.length ? { redFlagsSeen: [...args.input.redFlagsSeen] } : {}),
   };
 }
 

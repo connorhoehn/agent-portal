@@ -117,6 +117,8 @@ export interface ScorecardVersionView {
   correctionReason: string | null;
   /** Each rating with its competency's name and the anchor sentence for the rating given (null once the kit lost it). */
   ratings: Array<CompetencyRating & { competency: string; anchor: string | null }>;
+  /** A board round: the red flags the author ticked; absent when none. */
+  redFlagsSeen?: string[];
 }
 
 /** An author's latest scorecard on an interview, with the versions before it, oldest first (decision 14). */
@@ -215,6 +217,7 @@ export class WorldIndex {
     const view = (s: Scorecard): ScorecardVersionView => ({
       id: s.id, interviewer: this.people(s.interviewerId), recommendation: s.recommendation, summary: s.summary,
       submittedAt: s.submittedAt, version: s.version, correctionReason: s.correctionReason,
+      ...(s.redFlagsSeen?.length ? { redFlagsSeen: [...s.redFlagsSeen] } : {}),
       ratings: s.ratings.map((r) => ({ ...r, competency: kit.get(r.competencyId)?.name ?? r.competencyId, anchor: kit.get(r.competencyId)?.anchors[r.rating] ?? null })),
     });
     return latestByAuthor(all).map((s) => ({

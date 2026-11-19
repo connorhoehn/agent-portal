@@ -21,8 +21,9 @@
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
+  Button, ChatComposer, ChecklistSection, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
+import { redFlagGroups, toggleSeenFlag, type KitRedFlag } from '../../lib/interviewsAnswerKey';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -190,6 +191,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           </Stack>
         </DetailSection>
       ))}
+      {!!view.redFlags?.length && <RedFlagsSeen flags={view.redFlags} seen={draft.redFlagsSeen ?? []}
+        onToggle={(text) => setDraft((d) => ({ ...d, redFlagsSeen: toggleSeenFlag(d.redFlagsSeen ?? [], text, view.redFlags!.map((f) => f.text)) }))} />}
       <Stack gap="sm">
         {!rated && <T size="sm" tone="secondary" data-testid="interviews-scorecard-missing">{missing[0]}</T>}
         {problemLine}
@@ -262,7 +265,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       {advicePill}
       {lockedLine && <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-reviewed-line">{lockedLine}</T>}
       <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />
-      <ScorecardReadout card={mine} competencies={competencies} recap={recapNow} testId="interviews-scorecard-mine" />
+      <ScorecardReadout card={mine} competencies={competencies} recap={recapNow} flags={view.redFlags} testId="interviews-scorecard-mine" />
     </Stack>
   ) : (
     <EmptyState title="No scorecard yet" description={view.refusal ?? 'You have not submitted a scorecard for this round.'} />
@@ -275,7 +278,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       {othersNote && <T size="sm" tone="secondary" data-testid="interviews-scorecard-others-line">{othersNote}</T>}
       {view.others.map((s) => (
         <Stack key={s.id} gap="sm">
-          <ScorecardReadout card={s} competencies={competencies} round={s.round} testId="interviews-scorecard-other" />
+          <ScorecardReadout card={s} competencies={competencies} round={s.round} flags={s.interviewId === interview.id ? view.redFlags : undefined} testId="interviews-scorecard-other" />
           {s.earlier.length > 0 && <Versions versions={s.earlier} competencies={competencies} />}
         </Stack>
       ))}
@@ -311,8 +314,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
  * One submitted scorecard, read-only: the three steps it went through, then each competency's rating as stars beside its
  * anchor sentence and note (and, on the viewer's own, Milo's evidence for it), the summary and the decision in words.
  */
-function ScorecardReadout({ card, competencies, round, recap, testId }: {
-  card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; recap?: RecapBody | null; testId: string;
+function ScorecardReadout({ card, competencies, round, recap, flags, testId }: {
+  card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; recap?: RecapBody | null; flags?: readonly KitRedFlag[]; testId: string;
 }) {
   const kit = new Map(competencies.map((c) => [c.id, c]));
   const when = dateLabel(card.submittedAt, Date.now(), undefined, true);
@@ -339,6 +342,28 @@ function ScorecardReadout({ card, competencies, round, recap, testId }: {
           );
         })}
         <T size="sm" data-testid="interviews-scorecard-summary">{card.summary}</T>
+        {!!card.redFlagsSeen?.length && <RedFlagsSeen flags={flags?.length ? flags : card.redFlagsSeen.map((text) => ({ group: 'other' as const, text }))} seen={card.redFlagsSeen} />}
+      </Stack>
+    </DetailSection>
+  );
+}
+
+/**
+ * "Red flags seen" (a board round whose questions carry red flags): the library's checklist, one per group. The form
+ * ticks them (`onToggle`); a submitted scorecard shows the ones its author ticked, read-only. Never scored, and not
+ * part of Milo's recommendation.
+ */
+function RedFlagsSeen({ flags, seen, onToggle }: { flags: readonly KitRedFlag[]; seen: readonly string[]; onToggle?: (text: string) => void }) {
+  const groups = redFlagGroups(onToggle ? flags : flags.filter((f) => seen.includes(f.text)));
+  return (
+    <DetailSection variant="heading" as={onToggle ? 'h2' : 'h3'} title="Red flags seen" data-testid="interviews-scorecard-red-flags"
+      hint={onToggle ? 'Tick what this candidate’s design showed. It goes with your scorecard and is not scored.' : undefined}>
+      <Stack gap="sm">
+        {groups.map((g) => (
+          <ChecklistSection key={g.group} variant="label" as="h4" title={g.label} data-testid="interviews-scorecard-red-flag-group"
+            items={g.items.map((text) => ({ id: text, text, done: seen.includes(text) }))}
+            {...(onToggle ? { onToggle: (id: string) => onToggle(id) } : { readOnlyReason: 'Submitted with the scorecard.' })} />
+        ))}
       </Stack>
     </DetailSection>
   );

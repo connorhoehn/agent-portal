@@ -27,11 +27,11 @@ import { indexFor, param } from '../../lib/interviews/request.js';
 import { ratingsAtRecap } from '../../lib/interviews/recap/index.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
 import {
-  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, scorecardCompetencies, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, scorecardCompetencies, isScoredNow, newScorecardVersion, redFlagsOfRound, stateRefusal, submitMove, versionsOf,
 } from '../../lib/interviews/scorecard.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
-import type { Interview, KitCompetency, RoundType, Seat } from '../../lib/interviews/types.js';
+import type { Interview, KitCompetency, KitRedFlag, RoundType, Seat } from '../../lib/interviews/types.js';
 import type { ScorecardView, WorldIndex } from '../../lib/interviews/views.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 
@@ -60,6 +60,8 @@ export interface ScorecardPageView {
   competencies: KitCompetency[];
   /** The ids of the competencies the round assesses (kit.ts competenciesOfRound), in the kit's order: each must be rated. */
   required: string[];
+  /** A board round's red flags by group (its questions' answer key), for the "Red flags seen" checklist; empty otherwise. */
+  redFlags: Array<{ group: KitRedFlag['group']; text: string }>;
   /** The viewer's own latest scorecard with the versions before it; null before they submit (and for readers). */
   mine: ScorecardView | null;
   /** Whether the viewer may submit (or correct) now, and if not, why in one sentence. */
@@ -104,6 +106,8 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
       leadId: i.leadId,
     },
     ...structuredClone(scorecardCompetencies(i, opening.kit, versionsOf(ix.world.scorecards, i.id, viewer.id))),
+    // A board round's red flags (its questions' answer key): the checklist the scorecard offers; empty for any other round.
+    redFlags: redFlagsOfRound(i, opening.kit),
     mine,
     canSubmit: refusal === null,
     refusal,
@@ -150,7 +154,7 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
 
   res.setHeader('Cache-Control', 'no-store');
   const rates = scorecardCompetencies(i, opening.kit, versionsOf(world.scorecards, i.id, session.sub));
-  const checked = checkScorecard(req.body, rates.competencies, rates.required);
+  const checked = checkScorecard(req.body, rates.competencies, rates.required, redFlagsOfRound(i, opening.kit).map((f) => f.text));
   if (!checked.ok) { res.status(400).json({ error: checked.fields[0]!.message, fields: checked.fields }); return; }
   const { reason, basedOn, ...input } = checked.value;
 

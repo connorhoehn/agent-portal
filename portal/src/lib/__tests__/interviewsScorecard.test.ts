@@ -167,3 +167,12 @@ test('a recap answer\'s source reads the record\'s clock, not the wall clock (E4
   assert.deepEqual(recapSourceOf({ seq: 2, speaker: 'Mateo Álvarez', offsetMs: 7_400 }), { label: 'Line 2, Mateo Álvarez', clock: '0:07', seconds: 7 });
   assert.deepEqual(recapSourceOf({ seq: 3, speaker: '' }), { label: 'Line 3', clock: null, seconds: null });
 });
+
+test('the red flags seen go with the scorecard when some are ticked, and a correction starts from the ones submitted', () => {
+  const d = { ...emptyDraft(), ratings: { ownership: 4 as const, clarity: 2 as const }, recommendation: 'no' as const, summary: 'Not yet.' };
+  assert.equal('redFlagsSeen' in bodyOf(d, KIT, 0), false);
+  assert.equal('redFlagsSeen' in bodyOf({ ...d, redFlagsSeen: [] }, KIT, 0), false);
+  assert.deepEqual(bodyOf({ ...d, redFlagsSeen: ['Vague names.'] }, KIT, 0)['redFlagsSeen'], ['Vague names.']);
+  const card = { id: 'sc', interviewer: { id: 'u', name: 'U' }, recommendation: 'no' as const, summary: 's', submittedAt: '', version: 1, correctionReason: null, ratings: [], earlier: [], redFlagsSeen: ['Vague names.'] };
+  assert.deepEqual(draftFrom(card).redFlagsSeen, ['Vague names.']);
+});

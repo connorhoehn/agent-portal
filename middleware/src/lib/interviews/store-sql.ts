@@ -172,12 +172,20 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
   };
 }
 
+/** The stored red flags seen: present only when some were ticked (the column defaults to an empty list). */
+const redFlagsSeenOf = (v: unknown): { redFlagsSeen?: string[] } => {
+  const list = json<unknown[]>(v, []);
+  const texts = Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
+  return texts.length ? { redFlagsSeen: texts } : {};
+};
+
 export function scorecardFromRow(r: Record<string, unknown>): Scorecard {
   return {
     id: str(r['id']), interviewId: str(r['interview_id']), interviewerId: str(r['interviewer_id']),
     ratings: json<CompetencyRating[]>(r['ratings'], []), recommendation: str(r['recommendation']) as Recommendation,
     summary: str(r['summary']), submittedAt: isoOf(r['submitted_at']), version: num(r['version']), changedAfterRecap: bool(r['changed_after_recap']),
     correctionReason: strOrNull(r['correction_reason']),
+    ...(redFlagsSeenOf(r['red_flags_seen'])),
   };
 }
 
@@ -275,14 +283,14 @@ export class SqlInterviewsStore implements InterviewsStore {
   SET state = 'scored', revision = revision + 1
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
-  static readonly SCORECARD_COLUMNS = 'id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason';
+  static readonly SCORECARD_COLUMNS = 'id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason, red_flags_seen';
   /**
    * Inserts only while the author's latest version is `:version - 1`; two submits racing on the same version meet
    * the table's UNIQUE (interview_id, interviewer_id, version) and the loser inserts nothing.
    */
   static readonly INSERT_SCORECARD_VERSION_SQL = `INSERT INTO interview_scorecards (${SqlInterviewsStore.SCORECARD_COLUMNS})
   SELECT :id, :interview_id, :interviewer_id, CAST(:ratings AS JSONB), :recommendation, :summary, CAST(:submitted_at AS TIMESTAMPTZ), :version,
-    :changed_after_recap, :correction_reason
+    :changed_after_recap, :correction_reason, CAST(:red_flags_seen AS JSONB)
   WHERE (SELECT COALESCE(MAX(version), 0) FROM interview_scorecards WHERE interview_id = :interview_id AND interviewer_id = :interviewer_id) = :version - 1
   ON CONFLICT DO NOTHING
   RETURNING ${SqlInterviewsStore.SCORECARD_COLUMNS}`;
@@ -299,7 +307,7 @@ export class SqlInterviewsStore implements InterviewsStore {
       textParam('id', row.id), textParam('interview_id', row.interviewId), textParam('interviewer_id', row.interviewerId),
       textParam('ratings', JSON.stringify(row.ratings)), textParam('recommendation', row.recommendation), textParam('summary', row.summary),
       textParam('submitted_at', row.submittedAt), intParam('version', row.version), { name: 'changed_after_recap', value: { booleanValue: row.changedAfterRecap } },
-      textParam('correction_reason', row.correctionReason),
+      textParam('correction_reason', row.correctionReason), textParam('red_flags_seen', JSON.stringify(row.redFlagsSeen ?? [])),
     ]);
     if (written[0]) return { ok: true, row: scorecardFromRow(written[0]) };
     const latest = (await this.exec(SqlInterviewsStore.LATEST_SCORECARD_SQL, [textParam('interview_id', row.interviewId), textParam('interviewer_id', row.interviewerId)]))[0];

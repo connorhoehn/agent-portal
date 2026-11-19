@@ -621,6 +621,9 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     sqlFile: 'interviews_schema.sql',
     table: 'interview_scorecards',
     mockRows: async () => (await import('../../interviews.js')).interviewScorecardsFixture.rows('default'),
+    unmodelledColumns: {
+      red_flags_seen: 'Only a board round with red flags (an answer key) ticks any; the seeded scorecards are of rounds without one, and the row type leaves the key out when none was ticked (the column defaults to an empty list).',
+    },
     mockId: (s: { id: string }) => s.id,
   },
 ];
