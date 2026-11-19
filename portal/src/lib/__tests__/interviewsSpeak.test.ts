@@ -1,7 +1,7 @@
 // Milo asks aloud in the room and the candidate's page (rows I3.5, I3.8; contract U9, U10): the pure parts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isMiloAnswerLine, lastAskedOf, lastMiloLineOf, miloAskReceipt, onPadQuestion, queuePadQuestion, saidOf, sayPath, takePadQuestion } from '../interviewsRoom.ts';
+import { isMiloAnswerLine, lastMiloLineOf, miloAskReceipt, onPadQuestion, queuePadQuestion, saidOf, sayPath, takePadQuestion } from '../interviewsRoom.ts';
 
 test('said and line are read off an answer body, and nothing else', () => {
   assert.deepEqual(saidOf({ suggestion: null, said: 'spoken' }), { said: 'spoken' });
@@ -44,18 +44,18 @@ test('the candidate reads the last question Milo asked from the chat frames, nev
   const ch = 'orgiq:huddle:call-1';
   // What a guest receives: Milo's approved lines as plain lines under its name, no assistant keys (contract E9).
   const q = (message: string, userId = 'agent:meeting-assistant') => ({ id: message, userId, message, metadata: { displayName: 'Milo' } });
-  let cur = lastAskedOf({ type: 'chat', action: 'history', channel: ch, messages: [q('First?'), q('Second?'), q('About 5 minutes are left in this round.')] }, ch, null);
-  assert.equal(cur, 'Second?');
+  let cur = lastMiloLineOf({ type: 'chat', action: 'history', channel: ch, messages: [q('First?'), q('Second?'), q('About 5 minutes are left in this round.')] }, ch, null);
+  assert.equal(cur?.text, 'Second?');
   for (const answer of ['About 1 minute is left in this round.', 'This round is 45 minutes long.', 'This round is at the end of its time.', 'Milo has not asked a question yet.',
     'I can repeat the question or tell you how much time is left. Ask "Milo, repeat the question" or "Milo, how much time is left?"']) assert.equal(isMiloAnswerLine(answer), true, answer);
   assert.equal(isMiloAnswerLine('How long would the migration take?'), false);
-  cur = lastAskedOf({ type: 'chat', action: 'message', channel: ch, message: q('A person typed this', 'u-hugo') }, ch, cur);
-  assert.equal(cur, 'Second?');
-  cur = lastAskedOf({ type: 'chat', action: 'message', channel: 'orgiq:huddle:other', message: q('Elsewhere?') }, ch, cur);
-  assert.equal(cur, 'Second?');
-  cur = lastAskedOf({ type: 'assistant-audio', channel: ch, data: {} }, ch, cur);
-  assert.equal(cur, 'Second?');
-  assert.equal(lastAskedOf({ type: 'chat', action: 'message', channel: ch, message: q('Third?') }, ch, cur), 'Third?');
+  cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: q('A person typed this', 'u-hugo') }, ch, cur);
+  assert.equal(cur?.text, 'Second?');
+  cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: 'orgiq:huddle:other', message: q('Elsewhere?') }, ch, cur);
+  assert.equal(cur?.text, 'Second?');
+  cur = lastMiloLineOf({ type: 'assistant-audio', channel: ch, data: {} }, ch, cur);
+  assert.equal(cur?.text, 'Second?');
+  assert.equal(lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: q('Third?') }, ch, cur)?.text, 'Third?');
 });
 
 test('a question queued for the pad is taken once, and its listeners are told', () => {
@@ -73,7 +73,7 @@ test('a question queued for the pad is taken once, and its listeners are told', 
 
 test('the candidate\'s bar labels Milo\'s line by what it is: a question is "asked", a confirmation or the intro is "said" (film rehearsal)', () => {
   const ch = 'orgiq:huddle:call-1';
-  const line = (message: string, said = false) => ({ id: message, userId: 'agent:meeting-assistant', message, metadata: { displayName: 'Milo', ...(said ? { miloLine: 'said' } : {}) } });
+  const line = (message: string, said = false, timestamp?: string) => ({ id: message, userId: 'agent:meeting-assistant', message, ...(timestamp ? { timestamp } : {}), metadata: { displayName: 'Milo', ...(said ? { miloLine: 'said' } : {}) } });
   let cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('How would you design a rate limiter?') }, ch, null);
   assert.deepEqual(cur, { text: 'How would you design a rate limiter?', asked: true });
   cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('Added eleven test cases at the bottom of the pad.', true) }, ch, cur);
@@ -81,5 +81,7 @@ test('the candidate\'s bar labels Milo\'s line by what it is: a question is "ask
   // The fixed answers to the candidate's own requests stay on their own line.
   assert.deepEqual(lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('About 5 minutes are left in this round.', true) }, ch, cur), cur);
   // The question for a repeat is still the last one asked, never the confirmation.
-  assert.equal(lastAskedOf({ type: 'chat', action: 'history', channel: ch, messages: [line('First?'), line('Added a helper.', true)] }, ch, null), 'First?');
+  assert.equal(lastMiloLineOf({ type: 'chat', action: 'history', channel: ch, messages: [line('First?'), line('Added a helper.', true)] }, ch, null)?.text, 'Added a helper.');
+  // A line carries its own time, for a replay of the history.
+  assert.equal(lastMiloLineOf({ type: 'chat', action: 'history', channel: ch, messages: [line('Old?', false, '2026-11-18T10:00:00.000Z')] }, ch, null)?.at, Date.parse('2026-11-18T10:00:00.000Z'));
 });

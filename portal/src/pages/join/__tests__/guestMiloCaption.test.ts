@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CAPTION_ECHO_MS, captionClearsAt, captionFromChat, captionFromRequest, captionHoldMs, captionKindLabel, replacesCaption,
+  CAPTION_ECHO_MS, captionClearsAt, captionFromChat, captionFromRequest, captionHoldMs, captionKindLabel, lineIsStale, replacesCaption,
 } from '../guestMiloCaption.ts';
 
 const Q = { text: 'How would you design a rate limiter?', asked: true };
@@ -57,4 +57,15 @@ test('the caption never clears while Milo is speaking, and its hold counts from 
   assert.equal(captionClearsAt(s, false, 4_000), 4_000 + 8_000);
   // A stop from before this line arrived does not shorten it.
   assert.equal(captionClearsAt(s, false, 500), 1_000 + 8_000);
+});
+
+test('a replayed line takes its own time and is skipped once older than its hold (a rejoining candidate is not shown or read an old line)', () => {
+  const now = 1_000_000;
+  const fresh = { ...Q, at: now - 5_000 };
+  assert.equal(captionFromChat(fresh, 1, now).at, now - 5_000);
+  assert.equal(captionFromChat(Q, 1, now).at, now, 'a line with no time of its own keeps the arrival time');
+  assert.equal(lineIsStale(fresh, now), false);
+  assert.equal(lineIsStale({ ...Q, at: now - captionHoldMs(captionFromChat(Q, 1, 0)) - 1 }, now), true);
+  assert.equal(lineIsStale({ ...SAID, at: now - 60_000 }, now), true, 'something said holds for less');
+  assert.equal(lineIsStale(Q, now), false);
 });

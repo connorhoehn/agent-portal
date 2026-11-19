@@ -29,7 +29,11 @@ export const MILO_CAPTION_SPEAKER = 'Milo';
 export const captionKindLabel = (kind: MiloCaptionKind): string | null => (kind === 'question' ? 'Question' : null);
 
 export const captionFromChat = (line: MiloLastLine, seq: number, at: number): MiloCaption =>
-  ({ seq, text: line.text, kind: line.asked ? 'question' : 'said', source: 'chat', at });
+  ({ seq, text: line.text, kind: line.asked ? 'question' : 'said', source: 'chat', at: line.at ?? at });
+
+/** A line sent longer ago than its caption would be held (a history replay to a rejoining candidate) is not shown or read. */
+export const lineIsStale = (line: MiloLastLine, now: number): boolean =>
+  line.at !== undefined && now - line.at >= captionHoldMs({ text: line.text, kind: line.asked ? 'question' : 'said' });
 
 /**
  * The answer to a request, as a caption. "Repeat the question" answers with the question itself: that is the question again (a

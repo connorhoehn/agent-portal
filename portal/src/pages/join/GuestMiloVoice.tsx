@@ -24,7 +24,7 @@ import { lastMiloLineOf, type MiloLastLine } from '../../lib/interviewsRoom';
 import { NO_ASSISTANT } from '../../lib/meetingAssistantModel';
 import { GUEST_API } from './guestApi';
 import {
-  MILO_CAPTION_SPEAKER, captionClearsAt, captionFromChat, captionFromRequest, captionKindLabel, replacesCaption,
+  MILO_CAPTION_SPEAKER, captionClearsAt, captionFromChat, captionFromRequest, captionKindLabel, lineIsStale, replacesCaption,
   type MiloCaption, type MiloRequestAnswer,
 } from './guestMiloCaption';
 import type { GuestRoom } from './steps';
@@ -55,12 +55,16 @@ export function GuestMiloVoice({ room, answer = null }: { room: GuestRoom; answe
   const [last, setLast] = useState<MiloLastLine | null>(null);
   const [caption, setCaption] = useState<MiloCaption | null>(null);
   const seq = useRef(0);
-  const show = (make: (n: number) => MiloCaption) => setCaption((cur) => {
+  // The newest caption, read outside the state updater (an updater must not mutate a ref: it may run twice).
+  const shown = useRef<MiloCaption | null>(null);
+  shown.current = caption;
+  const show = (make: (n: number) => MiloCaption) => {
     const next = make(seq.current + 1);
-    if (!replacesCaption(cur, next)) return cur;
+    if (!replacesCaption(shown.current, next)) return;
     seq.current = next.seq;
-    return next;
-  });
+    shown.current = next;
+    setCaption(next);
+  };
   useEffect(() => {
     setLast(null); setCaption(null);
     if (!callId) return undefined;
@@ -68,7 +72,7 @@ export function GuestMiloVoice({ room, answer = null }: { room: GuestRoom; answe
     return gateway.onMessage((frame) => setLast((cur) => lastMiloLineOf(frame, channel, cur)));
   }, [callId, gateway.onMessage]);
   // A new line of Milo's in the chat (lastMiloLineOf hands back the same object when a frame holds none).
-  useEffect(() => { if (last) show((n) => captionFromChat(last, n, Date.now())); }, [last]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (last && !lineIsStale(last, Date.now())) show((n) => captionFromChat(last, n, Date.now())); }, [last]); // eslint-disable-line react-hooks/exhaustive-deps
   // Milo's answer to the candidate's request. A sentence of ours when Milo did not answer is a plain note below, not Milo's words.
   useEffect(() => { if (answer?.ok) show((n) => captionFromRequest(answer, last, n)); }, [answer]); // eslint-disable-line react-hooks/exhaustive-deps
   // Clearing: never while the voice plays; the hold counts from when it stopped.
@@ -96,7 +100,7 @@ export function GuestMiloVoice({ room, answer = null }: { room: GuestRoom; answe
 }
 
 /** One caption: Milo's mark and name (as the call chat draws Milo's rows), the kind and the speaking state, then the words, whole. */
-function MiloCaptionCard({ caption, speaking }: { caption: MiloCaption; speaking: boolean }) {
+export function MiloCaptionCard({ caption, speaking }: { caption: MiloCaption; speaking: boolean }) {
   const question = caption.kind === 'question';
   const kind = captionKindLabel(caption.kind);
   // The words keep the ids the walks read: a line from the chat (or the question again) is the question line; Milo's answer to a
@@ -110,7 +114,7 @@ function MiloCaptionCard({ caption, speaking }: { caption: MiloCaption; speaking
         <Inline gap="xs" align="center">
           <T size="xs" weight="semibold">{MILO_CAPTION_SPEAKER}</T>
           {kind && <Chip size="xs" tone="accent" data-testid="guest-milo-kind">{kind}</Chip>}
-          {speaking && <Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Speaking</Chip>}
+          {speaking && <Inline gap="none" aria-hidden="true"><Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Speaking</Chip></Inline>}
         </Inline>
         <T size="sm" weight={question ? 'medium' : 'normal'} wrap data-testid={wordsId}>{caption.text}</T>
       </Stack>
