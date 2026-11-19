@@ -101,6 +101,22 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
         'kind" (DE-46 policy-set validation) — a kind the server DOES send would ' +
         'not be refused.',
     },
+    {
+      file: 'middleware/src/lib/interviews/__tests__/kit.test.ts',
+      field: 'type',
+      value: 'embeddable',
+      reason:
+        'Deliberately not a board element kind. The test is "a starting board with an ' +
+        'embedded page is refused" — GET /board-templates never sends one, by design.',
+    },
+    {
+      file: 'middleware/src/lib/interviews/board/__tests__/snapshots.test.ts',
+      field: 'type',
+      value: 'embeddable',
+      reason:
+        'Deliberately not a board element kind. The test is "a checkpoint leaves an ' +
+        'embedded page out" — GET /board-templates never sends one, by design.',
+    },
   ],
 };
 

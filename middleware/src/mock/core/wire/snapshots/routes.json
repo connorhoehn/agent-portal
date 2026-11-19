@@ -2442,6 +2442,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/interviews/board-templates",
+      "source": "src/routes/interviews/openings.ts:88"
+    },
+    {
+      "method": "GET",
       "path": "/api/interviews/candidates",
       "source": "src/routes/interviews.ts:79"
     },
@@ -2503,7 +2508,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/hiring-managers",
-      "source": "src/routes/interviews/openings.ts:78"
+      "source": "src/routes/interviews/openings.ts:79"
     },
     {
       "method": "GET",
@@ -2738,7 +2743,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews/openings.ts:84"
+      "source": "src/routes/interviews/openings.ts:96"
     },
     {
       "method": "GET",
@@ -2748,17 +2753,17 @@
     {
       "method": "PUT",
       "path": "/api/interviews/openings/:id/details",
-      "source": "src/routes/interviews/openings.ts:110"
+      "source": "src/routes/interviews/openings.ts:122"
     },
     {
       "method": "PUT",
       "path": "/api/interviews/openings/:id/kit",
-      "source": "src/routes/interviews/openings.ts:122"
+      "source": "src/routes/interviews/openings.ts:134"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id/spend",
-      "source": "src/routes/interviews/openings.ts:101"
+      "source": "src/routes/interviews/openings.ts:113"
     },
     {
       "method": "POST",
