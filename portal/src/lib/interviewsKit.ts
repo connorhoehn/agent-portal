@@ -26,6 +26,8 @@ export interface KitQuestion {
   starter?: Partial<Record<PadLanguage, string>>;
   /** A board round question's starting board (WHITEBOARD-PLAN step 2). */
   board?: { name: string; elements: Array<Record<string, unknown>> };
+  /** A system design question's expected clarifying questions (the coach nudges the lead when none was asked). */
+  clarifying?: string[];
 }
 export interface OpeningKit { rounds: KitRound[]; competencies: KitCompetency[]; questions: KitQuestion[] }
 

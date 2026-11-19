@@ -95,12 +95,24 @@ const BACKEND_KIT: OpeningKit = {
       prompt: 'Design the write path for a double-entry ledger that records card captures and refunds, survives a region failover and never loses or duplicates an entry.',
       followUps: ['What happens when the failover lands in the middle of a write?', 'How would you prove no entry was written twice?'],
       board: blueprintBoard(),
+      clarifying: [
+        'How many captures and refunds a second, at peak?',
+        'Which regions, and is failover active-active or active-passive?',
+        'Who reads the ledger, and how fresh must a balance be?',
+        'Must a refund link to its capture, and can it be partial?',
+      ],
     },
     {
       id: 'q-be-shortener', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Design a URL shortener for 100M links a month.',
       followUps: ['How do you make the short codes, and what happens when two collide?', 'Where would you put a cache, and what does it hold?'],
       board: promptBoard('Design a URL shortener for 100M links a month'),
+      clarifying: [
+        'How many reads per write: how often is a short link opened?',
+        'Do links expire, and can a user pick a custom alias?',
+        'How fast must a redirect be, and from where in the world?',
+        'Do we need click analytics, and how fresh?',
+      ],
     },
     {
       id: 'q-be-reconcile', competencyId: 'system-design', roundType: 'technical',

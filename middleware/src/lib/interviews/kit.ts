@@ -8,7 +8,7 @@
 //   rounds | competencies | questions               the list itself (too few, too many, a removal)
 //   rounds.<i>.<field>                              name, type, minutes, surface
 //   competencies.<i>.<field>                        name, lookFor, anchors.<1-4>
-//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board
+//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board, clarifying.<j>
 //   <field>                                         an opening's details: title, level, team, location, ...
 //
 // <i> is the item's position in the list as sent, so the editor needs no ids to place a message.
@@ -32,6 +32,8 @@ export const KIT_LIMITS = {
   competencies: 12,
   questions: 60,
   followUps: 5,
+  /** A system design question's expected clarifying questions. */
+  clarifying: 5,
   name: 60,
   lookFor: 400,
   anchor: 200,
@@ -251,6 +253,15 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
         }
         out.starter = starter;
       }
+    }
+    const clarifyIn = listOf(q['clarifying']);
+    if (clarifyIn.length > 0 && roundType === 'behavioural') {
+      p.add(`${at}.clarifying`, `Question ${n} is for a behavioural round; clarifying questions belong to a system design question.`);
+    } else if (clarifyIn.length > KIT_LIMITS.clarifying) {
+      p.add(`${at}.clarifying`, `Question ${n} has more than ${KIT_LIMITS.clarifying} clarifying questions.`);
+    } else if (clarifyIn.length > 0) {
+      out.clarifying = clarifyIn.map((c, j) => p.str(`${at}.clarifying.${j}`, c, KIT_LIMITS.followUp,
+        `Clarifying question ${j + 1} on question ${n} is empty; write it or remove it.`, `Clarifying question ${j + 1} on question ${n} is longer than ${KIT_LIMITS.followUp} characters.`));
     }
     const boardIn = q['board'];
     if (boardIn !== undefined && boardIn !== null) {

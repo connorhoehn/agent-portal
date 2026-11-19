@@ -244,7 +244,7 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
   };
   const setType = (roundType: RoundType) => {
     // A behavioural round has no code pad or whiteboard, so its questions carry no starter code or board (row I1.8).
-    const { starter: _drop, board: _board, ...rest } = q;
+    const { starter: _drop, board: _board, clarifying: _clarifying, ...rest } = q;
     onChange(roundHasPad(roundType) ? { ...q, roundType } : { ...rest, roundType });
   };
   // A starting board is offered when the kit has a whiteboard round (or the question already carries one).
@@ -315,8 +315,38 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
         ))}
       </Stack>
 
+      {boardOffered && <ClarifyingQuestions question={q} at={at} index={index} problems={problems} onChange={onChange} />}
       {boardOffered && <StartingBoard question={q} problem={problems.get(`${at}.board`)} onChange={onChange} />}
     </RowForm>
+  );
+}
+
+/** A system design question's expected clarifying questions: up to five, what a strong candidate asks before drawing. */
+function ClarifyingQuestions({ question: q, at, index, problems, onChange }: {
+  question: KitQuestion; at: string; index: number; problems: ReadonlyMap<string, string>; onChange: (q: KitQuestion) => void;
+}) {
+  const list = q.clarifying ?? [];
+  const setList = (next: string[]) => { const { clarifying: _drop, ...rest } = q; onChange(next.length ? { ...rest, clarifying: next } : rest); };
+  return (
+    <Stack gap="xs" data-testid="interviews-kit-clarifying">
+      <Inline justify="between" align="center">
+        <T size="sm" weight="medium">Clarifying questions</T>
+        <Button size="sm" variant="ghost" disabled={list.length >= 5} onClick={() => setList([...list, ''])} data-testid="interviews-kit-add-clarifying">Add clarifying question</Button>
+      </Inline>
+      <T size="xs" tone="tertiary">{list.length === 0
+        ? 'None yet. Three to five questions a strong candidate asks before drawing: who uses it, scale, the read and write mix, latency, consistency.'
+        : 'When the candidate has asked none of these a few minutes in, Milo suggests one to the lead.'}</T>
+      {problems.get(`${at}.clarifying`) && <T size="xs" tone="danger">{problems.get(`${at}.clarifying`)}</T>}
+      {list.map((c, j) => (
+        <Inline key={j} gap="xs" wrap={false} align="start">
+          <FormField label={`Clarifying question ${j + 1}`} error={problems.get(`${at}.clarifying.${j}`)} className="flex-1">
+            {(w) => <Input {...w} size="sm" value={c} onChange={(e) => setList(list.map((x, k) => (k === j ? e.target.value : x)))} />}
+          </FormField>
+          <IconButton size="sm" variant="ghost" aria-label={`Remove clarifying question ${j + 1} of question ${index + 1}`} icon={<TrashIcon size={14} />} className="mt-6"
+            onClick={() => setList(list.filter((_, k) => k !== j))} />
+        </Inline>
+      ))}
+    </Stack>
   );
 }
 

@@ -22,8 +22,10 @@ import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
 import type { RunView } from '../runs/service.js';
 import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
+import { CLARIFYING_MODEL_ID, CLARIFYING_RULE_VERSION, clarifyingNudge, type ClarifyNudge } from './clarifying.js';
+import { roundSurface } from '../kit.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
-import { assistantTranscript, type TranscriptSource } from './transcript.js';
+import { assistantTranscript, type CoachTranscript, type TranscriptSource } from './transcript.js';
 import { interviewsNowMs } from '../clock.js';
 import { logAndPost, sayLogged, type NotAloudWhy } from '../speak/index.js';
 
@@ -193,10 +195,24 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     inFlight: inFlight.has(interview.id), nowMs,
   });
   if (decision.kind === 'not-found') return { kind: 'not-found' };
-  if (decision.kind === 'none') return { kind: 'ok', body: { suggestion: null, paused: ready && modelPaused(interview.id) ? 'model' : null, retryAfterMs: decision.retryAfterMs } };
+  if (decision.kind === 'none' && (!ready || decision.reason === 'in-flight' || decision.reason === 'not-live' || decision.reason === 'no-consent')) {
+    return { kind: 'ok', body: { suggestion: null, paused: ready && modelPaused(interview.id) ? 'model' : null, retryAfterMs: decision.retryAfterMs } };
+  }
   if (decision.kind === 'show') {
     const shown = (await store.markShown(interview.id, decision.suggestion.id, iso(nowMs))) ?? decision.suggestion;
     return { kind: 'ok', body: { suggestion: suggestionView(shown, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
+  }
+
+  // A whiteboard round a few minutes in with no clarifying question from the candidate: one nudge, by rule, no model
+  // (clarifying.ts). It waits for no gap and no new line (silence is the point). Decided without an await, so the
+  // in-flight check above still holds when the think below adds its hold.
+  const nudge = transcript ? clarifyingFor(ref, log, transcript.lines, nowMs) : null;
+  if (nudge && transcript) {
+    const row = await appendClarifying(ref, nudge, transcript, nowMs, d);
+    if (row) return { kind: 'ok', body: { suggestion: suggestionView(row, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
+  }
+  if (decision.kind === 'none' || nudge) {
+    return { kind: 'ok', body: { suggestion: null, paused: ready && modelPaused(interview.id) ? 'model' : null, retryAfterMs: decision.kind === 'none' ? decision.retryAfterMs : RETRY_WAITING_MS } };
   }
 
   // think: one call in flight per interview (the check above and this add run without an await between them).
@@ -237,6 +253,40 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     return { kind: 'ok', body: { suggestion: suggestionView(row, opening), paused: null, retryAfterMs: RETRY_WAITING_MS } };
   } finally {
     inFlight.delete(interview.id);
+  }
+}
+
+/** The clarifying nudge the rule gives now (clarifying.ts), from the interview's round and questions; null for none. */
+function clarifyingFor(ref: CoachRef, log: readonly SuggestionRecord[], lines: readonly CoachLine[], nowMs: number): ClarifyNudge | null {
+  const { interview, opening: { kit } } = ref;
+  const chosen = interview.questionIds.map((id) => kit.questions.find((q) => q.id === id)).filter((q): q is NonNullable<typeof q> => Boolean(q));
+  return clarifyingNudge({
+    surface: roundSurface(kit.rounds.find((r) => r.id === interview.roundId)),
+    startedAtMs: interview.startedAt ? Date.parse(interview.startedAt) : null,
+    nowMs,
+    questions: chosen.length ? chosen : kit.questions.filter((q) => q.roundType === interview.type),
+    lines,
+    log,
+  });
+}
+
+/** Log the nudge as a suggestion shown now; null when another read of this interview holds it (it will show that one). */
+async function appendClarifying(ref: CoachRef, nudge: ClarifyNudge, transcript: CoachTranscript, nowMs: number, d: CoachDeps): Promise<SuggestionRecord | null> {
+  const id = ref.interview.id;
+  if (inFlight.has(id)) return null;
+  inFlight.add(id);
+  try {
+    const madeAt = iso(nowMs);
+    const row: SuggestionRecord = {
+      id: d.newId(), interviewId: id, callId: transcript.callId, throughSeq: transcript.lastSeq,
+      text: nudge.text, competencyId: nudge.competencyId, basedOn: null,
+      madeAt, shownAt: madeAt, answer: null, answeredAt: null, spoken: false,
+      modelId: CLARIFYING_MODEL_ID, promptVersion: CLARIFYING_RULE_VERSION, dropped: null,
+    };
+    await d.store().appendSuggestion(row);
+    return row;
+  } finally {
+    inFlight.delete(id);
   }
 }
 

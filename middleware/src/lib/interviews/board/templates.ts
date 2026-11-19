@@ -1,9 +1,9 @@
 // Starting boards for system design rounds (WHITEBOARD-PLAN step 2): Excalidraw elements built in code, so the seed,
 // the tests and a later importer share one shape. Two boards ship with the seeded backend kit:
 //
-//   Blueprint     six labelled frames (Requirements, Non-functional requirements, API, High-level design, Data model,
-//                 Trade-offs), each with a few starter stickies the interviewer talks through.
-//   Prompt only   one prompt card above the same six frames, empty.
+//   Blueprint     seven labelled frames (Clarifying questions first, then Requirements, Non-functional requirements,
+//                 API, High-level design, Data model, Trade-offs), each with a few starter stickies to talk through.
+//   Prompt only   one prompt card above the same seven frames, empty.
 //
 // The elements carry every field Excalidraw 0.18 reads, a fractional `index` in order, and stickies as a rectangle with
 // its bound text, so the canvas draws them without repairing anything.
@@ -62,8 +62,9 @@ function card(id: string, x: number, y: number, width: number, height: number, t
   ];
 }
 
-/** The six sections a system design answer walks through, with the stickies the Blueprint starts each one with. */
+/** The seven sections a system design answer walks through, clarifying questions first, with the stickies the Blueprint starts each one with. */
 export const DESIGN_SECTIONS: ReadonlyArray<{ id: string; name: string; stickies: readonly string[] }> = [
+  { id: 'clarify', name: 'Clarifying questions', stickies: ['Who uses it, and for what?', 'How big: users, requests, data', 'Read/write mix, latency, consistency'] },
   { id: 'requirements', name: 'Requirements', stickies: ['Who are the users?', 'The core flows: write and read', 'What is out of scope?'] },
   { id: 'nfr', name: 'Non-functional requirements', stickies: ['Scale: reads and writes per second', 'Latency target (p99)', 'Availability and durability'] },
   { id: 'api', name: 'API', stickies: ['The main endpoints', 'Request and response shapes', 'Idempotency and errors'] },
@@ -76,16 +77,18 @@ const FRAME_W = 440;
 const FRAME_H = 300;
 const GAP = 60;
 const STICKY_W = 190;
+/** Frames per row: the seven sections sit four above three. */
+const COLUMNS = 4;
 const STICKY_H = 90;
 const STICKY_FILL = '#ffec99';
 const NOTE_FILL = '#b2f2bb';
 
-/** The six frames in a 3 x 2 grid starting at `top`, with the Blueprint's stickies when `stickies` is set. */
+/** The frames in rows of COLUMNS starting at `top`, with the Blueprint's stickies when `stickies` is set. */
 function sections(prefix: string, top: number, stickies: boolean): El[] {
   const out: El[] = [];
   DESIGN_SECTIONS.forEach((s, i) => {
-    const fx = (i % 3) * (FRAME_W + GAP);
-    const fy = top + Math.floor(i / 3) * (FRAME_H + GAP);
+    const fx = (i % COLUMNS) * (FRAME_W + GAP);
+    const fy = top + Math.floor(i / COLUMNS) * (FRAME_H + GAP);
     const frameId = `${prefix}-${s.id}`;
     if (stickies) {
       s.stickies.forEach((text, j) => {
@@ -117,13 +120,13 @@ export function withNotes(board: KitBoard, notes: ReadonlyArray<{ frame: string;
   return { name: board.name, elements: [...board.elements, ...added.map((e, i) => ({ ...e, index: boardIndex(n0 + i) }))] };
 }
 
-/** "Blueprint": the six frames, each with its starter stickies. */
+/** "Blueprint": the seven frames, each with its starter stickies. */
 export function blueprintBoard(): KitBoard {
   return { name: 'Blueprint', elements: indexed(sections('bp', 0, true)) };
 }
 
-/** "Prompt only": one prompt card above six empty frames. */
+/** "Prompt only": one prompt card above seven empty frames. */
 export function promptBoard(prompt: string): KitBoard {
-  const width = 3 * FRAME_W + 2 * GAP;
+  const width = COLUMNS * FRAME_W + (COLUMNS - 1) * GAP;
   return { name: 'Prompt only', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false)]) };
 }

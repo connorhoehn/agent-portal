@@ -60,7 +60,7 @@ describe('the service', () => {
 
   it('checks a scene: elements with an id and a type, the deleted ones dropped; anything else is refused', () => {
     expect(checkBoardScene([{ id: 'a', type: 'rectangle' }, { id: 'b', type: 'text', isDeleted: true }])).toEqual({ scene: '[{"id":"a","type":"rectangle"}]', elements: 1 });
-    expect(checkBoardScene(blueprintBoard().elements)!.elements).toBe(42);
+    expect(checkBoardScene(blueprintBoard().elements)!.elements).toBe(49);
     expect(checkBoardScene('nope')).toBeNull();
     expect(checkBoardScene([{ id: 1, type: 'x' }])).toBeNull();
     expect(checkBoardScene([{ id: 'a', type: 'text', text: 'x'.repeat(600 * 1024) }])).toBeNull();
@@ -91,7 +91,7 @@ describe('the mock world', () => {
     const read = await readBoardSnapshots('iv-j6x2d9sb', (id) => id);
     expect(read.map((s) => s.seq)).toEqual([1, 2, 3, 4]);
     const notes = read.map((s) => (s.elements as Array<{ id: string; type: string }>).filter((e) => e.type === 'rectangle' && e.id.endsWith('-note')).length);
-    expect(notes).toEqual([0, 2, 4, 6]); // the clarifying note waits for its frame (step 2b)
+    expect(notes).toEqual([1, 3, 5, 7]);
     expect(read.every((s, i) => i === 0 || Date.parse(s.at) > Date.parse(read[i - 1]!.at))).toBe(true);
     expect(await readBoardSnapshots('iv-nothing-here', (id) => id)).toEqual([]);
   });

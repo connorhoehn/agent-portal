@@ -93,6 +93,12 @@ export interface KitQuestion {
   starter?: Partial<Record<PadLanguage, string>>;
   /** A technical question's starting board, for a board round (WHITEBOARD-PLAN step 2). */
   board?: KitBoard;
+  /**
+   * A system design question's clarifying questions: what a strong candidate asks before drawing (who uses it, scale,
+   * the read/write mix, latency, consistency). The coach suggests one to the lead when none was asked early in a board
+   * round (coach/clarifying.ts). Technical questions only; absent when there are none.
+   */
+  clarifying?: string[];
 }
 
 /** An opening's kit: its rounds, the competencies they judge and the question bank, each list in the order shown. */

@@ -269,8 +269,8 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(boards).toEqual(['Blueprint', 'Prompt only']);
     const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
     const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
-    expect(frames).toEqual(['Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
-    expect(blueprint.elements.filter((e) => e['type'] === 'rectangle').length).toBe(18);
+    expect(frames).toEqual(['Clarifying questions', 'Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
+    expect(blueprint.elements.filter((e) => e['type'] === 'rectangle').length).toBe(21);
     // Every element has an index, in order, and every sticky's text is bound to it.
     const idx = blueprint.elements.map((e) => String(e['index']));
     expect([...idx].sort()).toEqual(idx);
@@ -311,5 +311,36 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(r).toEqual({ ok: true, board: { name: 'Sketch', elements: [{ id: 'a', type: 'rectangle' }] } });
     expect(checkBoard(null)).toEqual({ ok: false, why: 'unreadable' });
     expect(checkBoard({ name: 'x', elements: [] })).toEqual({ ok: false, why: 'empty' });
+  });
+});
+
+describe('a system design question\'s clarifying questions (WHITEBOARD-PLAN step 2b)', () => {
+  it('the seeded board questions carry three to five, and the kit keeps them as written', () => {
+    const kit = seedKit('op-backend');
+    for (const id of ['q-be-ledger', 'q-be-shortener']) {
+      const q = kit.questions.find((x) => x.id === id)!;
+      expect(q.clarifying!.length).toBeGreaterThanOrEqual(3);
+      expect(q.clarifying!.length).toBeLessThanOrEqual(5);
+    }
+    const r = checkKit(kit);
+    expect(r.ok && r.value.questions.find((q) => q.id === 'q-be-ledger')!.clarifying).toEqual(kit.questions.find((q) => q.id === 'q-be-ledger')!.clarifying);
+  });
+
+  it('more than five, an empty one, and any on a behavioural question are refused, each on its own path', () => {
+    const kit = seedKit('op-backend');
+    const at = kit.questions.findIndex((q) => q.id === 'q-be-ledger');
+    kit.questions[at]!.clarifying = ['a?', 'b?', 'c?', 'd?', 'e?', 'f?'];
+    expect(paths(checkKit(kit))).toEqual([`questions.${at}.clarifying`]);
+    kit.questions[at]!.clarifying = ['Who uses it?', '  '];
+    expect(paths(checkKit(kit))).toEqual([`questions.${at}.clarifying.1`]);
+    const em = seedKit('op-em');
+    em.questions[0]!.clarifying = ['Who uses it?'];
+    expect(messages(checkKit(em))).toEqual(['Question 1 is for a behavioural round; clarifying questions belong to a system design question.']);
+  });
+
+  it('a question without any keeps none', () => {
+    const kit = seedKit('op-backend');
+    const r = checkKit(kit);
+    expect(r.ok && r.value.questions.filter((q) => !q.clarifying).every((q) => !('clarifying' in q))).toBe(true);
   });
 });
