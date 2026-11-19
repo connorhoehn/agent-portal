@@ -209,6 +209,8 @@ export const OPENING_MIN_ZOOM = 0.6;
 const OPENING_MARGIN = 32;
 /** Room above the prompt's title for Excalidraw's floating toolbar, which sits over the canvas's top. */
 const OPENING_TOP = 80;
+/** Room under the prompt's last line for Excalidraw's zoom and undo controls, which sit over the canvas's bottom. */
+const OPENING_BOTTOM = 72;
 const ZOOM_STEP = 0.1;
 export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: number; deltaY: number }
 
@@ -217,7 +219,7 @@ export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: numbe
  * the whole board; "Reset zoom" (zoom 1, about that centre), `zoomOutSteps` of "Zoom out" (0.1 each) to the widest zoom
  * at which the prompt's column fits the canvas (never below OPENING_MIN_ZOOM), then one wheel scroll of
  * (`deltaX`, `deltaY`) puts the prompt's top-left corner inside the canvas (OPENING_MARGIN from the left, OPENING_TOP
- * from the top, clear of Excalidraw's floating toolbar). The rest of the board
+ * from the top, clear of Excalidraw's floating toolbar; OPENING_BOTTOM kept clear above its zoom control). The rest of the board
  * (Your design) is reached by scrolling. Null when the board has no prompt part.
  */
 export function openingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }): OpeningView | null {
@@ -225,7 +227,11 @@ export function openingView(elements: ReadonlyArray<Record<string, unknown>>, ca
   const all = sceneBounds(elements);
   if (!region || !all || canvas.width <= 0 || canvas.height <= 0) return null;
   const fits = Math.floor(((canvas.width - 2 * OPENING_MARGIN) / Math.max(1, region.x2 - region.x1)) * 10 + 1e-9) / 10;
-  const zoom = Math.min(1, Math.max(OPENING_MIN_ZOOM, fits));
+  // The prompt's first screen ends at its red note (`mt-a-note`): it sits above the bottom controls, never under the zoom
+  // control (the owner's note), still never below the readable floor. The rest of the column is reached by scrolling.
+  const note = sceneBounds(elements.filter((e) => e['id'] === 'mt-a-note'));
+  const fitsTall = note ? Math.floor(((canvas.height - OPENING_TOP - OPENING_BOTTOM) / Math.max(1, note.y2 - region.y1)) * 10 + 1e-9) / 10 : 1;
+  const zoom = Math.min(1, Math.max(OPENING_MIN_ZOOM, Math.min(fits, fitsTall)));
   const zoomOutSteps = Math.round((1 - zoom) / ZOOM_STEP);
   const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
   // Excalidraw's wheel scroll: the visible left edge moves by deltaX / zoom scene units.

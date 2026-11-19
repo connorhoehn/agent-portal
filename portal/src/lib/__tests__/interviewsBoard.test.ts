@@ -239,15 +239,21 @@ test('a master template board opens on its prompt at a readable zoom, not fitted
   const all = sceneBounds(board)!;
   const prompt = openingRegion(board)!;
   assert.ok(prompt.x1 <= all.x1 + 1 && prompt.x2 < all.x2 / 2, 'the prompt is the board\'s left part');
-  // A room pane about 900 px wide: zoom 1 (the prompt's 620 px column fits), the prompt's left edge 32 px in, its top 80 px down (under the floating toolbar).
+  // A room pane about 900 px wide and 620 tall: the prompt's 620 px column fits at 1, but its red note would end under the
+  // zoom control, so it opens at 0.8 (the note ends above the bottom controls' 72 px); the prompt's left edge 32 px in,
+  // its top 80 px down (under the floating toolbar).
   const W = 900, H = 620;
   const v = openingView(board, { width: W, height: H })!;
-  assert.equal(v.zoom, 1);
-  assert.equal(v.zoomOutSteps, 0);
+  assert.equal(v.zoom, 0.8);
+  assert.equal(v.zoomOutSteps, 2);
+  const note = sceneBounds(board.filter((e) => e['id'] === 'mt-a-note'))!;
+  assert.ok(80 + (note.y2 - prompt.y1) * v.zoom <= H - 72, 'the red note ends above the zoom control');
+  // A tall pane keeps zoom 1.
+  assert.equal(openingView(board, { width: W, height: 900 })!.zoom, 1);
   const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
   // After the fit and the reset the view's centre is the board's; the wheel moves its left edge to the prompt's.
-  assert.equal(cx - W / 2 + v.deltaX / v.zoom, prompt.x1 - 32);
-  assert.equal(cy - H / 2 + v.deltaY / v.zoom, prompt.y1 - 80);
+  assert.ok(Math.abs((cx - W / (2 * v.zoom) + v.deltaX / v.zoom) - (prompt.x1 - 32 / v.zoom)) < 1e-6);
+  assert.ok(Math.abs((cy - H / (2 * v.zoom) + v.deltaY / v.zoom) - (prompt.y1 - 80 / v.zoom)) < 1e-6);
   // A narrow pane zooms out in Excalidraw's 0.1 steps, never below the readable floor.
   const narrow = openingView(board, { width: 520, height: 600 })!;
   assert.equal(narrow.zoom, 0.7);
