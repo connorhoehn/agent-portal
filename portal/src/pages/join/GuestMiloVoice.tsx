@@ -23,6 +23,8 @@ import { useCallHost } from '../../lib/conversationCall';
 import { lastMiloLineOf, type MiloLastLine } from '../../lib/interviewsRoom';
 import { NO_ASSISTANT } from '../../lib/meetingAssistantModel';
 import { GUEST_API } from './guestApi';
+import { MiloHoldControl } from '../../components/shell/MiloHoldControl';
+import { GUEST_FLOOR_BASE } from '../../lib/miloFloor';
 import {
   MILO_CAPTION_SPEAKER, captionClearsAt, captionFromChat, captionFromRequest, captionKindLabel, lineIsStale, replacesCaption,
   type MiloCaption, type MiloRequestAnswer,
@@ -140,6 +142,8 @@ export function GuestMiloRequests({ room, onLine }: { room: GuestRoom; onLine(an
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0" data-testid="guest-milo-requests">
     <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('repeat')} data-testid="guest-milo-repeat">Repeat the question</Button>
     <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('time')} data-testid="guest-milo-time">How much time is left?</Button>
+    {/* Hands-free: who is talking to Milo, and the hold button only when the lead turned pad help on (the server's admission). */}
+    <MiloHoldControl base={GUEST_FLOOR_BASE} on selfId={null} />
   </Inline>;
 }
 

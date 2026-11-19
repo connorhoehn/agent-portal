@@ -28,6 +28,9 @@ import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { hideAssistantNotice, noticeKey, useAssistantNoticeHidden } from '../../lib/assistantNoticeHidden';
 import { useCallHost } from '../../lib/conversationCall';
 import { useInterviewRoomMiloBlock, useInterviewRoomSeat } from './InterviewRoomFooter';
+import { MiloHoldControl } from './MiloHoldControl';
+import { staffFloorBase } from '../../lib/miloFloor';
+import { useSession } from '../../lib/auth';
 
 export { useLiveCallId };
 
@@ -78,6 +81,7 @@ export function AssistantBarControls() {
   const huddle = useHuddleChat();
   const focus = useComposerFocus();
   const transcriptOn = useLiveTranscriptOn(callId);
+  const selfId = useSession().session?.sub ?? null;
   // Nothing is drawn until the first state read answers: no "Invite Milo" while Milo may already be here.
   if (controls.hidden || view.phase === 'loading') return null;
   const cards = myWaitingActions(view);
@@ -143,6 +147,8 @@ export function AssistantBarControls() {
         <Badge variant="count" value={cards.length + owed} color="accent" aria-label={waiting} />
       </Button>
     </Tooltip>}
+    {/* Hands-free: the hold button for someone the call's rules route, and who has Milo's ear for everyone. */}
+    {view.handsfree && !controls.left && <MiloHoldControl base={staffFloorBase(callId)} on={view.handsfree} mayHold={view.mayHold} selfId={selfId} />}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="assistant-enable-sound">Click to hear {ASSISTANT_NAME}</Button>}
     {/* A refusal or a failed start is not drawn on this line (one row clipped it): it is a deck prompt above the row (AssistantBudgetAsk). */}
   </Inline>;

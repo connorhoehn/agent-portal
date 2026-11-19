@@ -55,6 +55,9 @@ export interface AssistantView {
   minutesWording?: { writes: string; adds: string };
   /** Which period of Milo in this call this is (1 for the first, 2 after it was invited back once, ...). */
   period: number;
+  /** The call runs hands-free now (the bar polls the floor), and whether this person gets the hold button (the call's rules route them). */
+  handsfree: boolean;
+  mayHold: boolean;
 }
 
 /** 'almost': less than five minutes of the call's listening time are left, too little for an invitation back. */
@@ -97,6 +100,8 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     extendSeconds: phase === 'listening' || phase === 'paused' ? seconds(b['extendSeconds']) : null,
     youAckedBefore: b['youAckedBefore'] === true,
     ...wordingOf(b['minutesWording']),
+    handsfree: phase === 'listening' && b['handsfree'] === true,
+    mayHold: phase === 'listening' && b['handsfree'] === true && b['mayHold'] === true,
     period: typeof b['period'] === 'number' && Number.isInteger(b['period']) && b['period'] >= 1 ? b['period'] : 1,
     openRequests: present(phase) ? list(b['openRequests'], (r) => {
       const name = text(r['askerName']);
