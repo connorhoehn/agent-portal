@@ -204,6 +204,20 @@ export function openingRegion(elements: ReadonlyArray<Record<string, unknown>>):
   return null;
 }
 
+/**
+ * A starting board's own elements, by their ids (middleware board/templates.ts: `bp-`, `po-`, `ak-`, `mt-`, and the
+ * provided design's `pd-`, `<question>:pd-` once revealed); everything else on a board was drawn in the room.
+ */
+const KIT_ID = /^(?:[^:]+:)?(?:bp|po|ak|mt|pd)-/;
+export const isKitElement = (e: Record<string, unknown>): boolean => typeof e['id'] === 'string' && KIT_ID.test(e['id']);
+/** The box around what was drawn on a board (not its starting board), or null when nothing was. */
+export function drawingRegion(elements: ReadonlyArray<Record<string, unknown>>): SceneBounds | null {
+  return sceneBounds(elements.filter((e) => !isKitElement(e)));
+}
+
+/** What a board opens on: the prompt (the room) or the drawing (the record page, which shows what was drawn). */
+export type BoardOpening = 'prompt' | 'drawing';
+
 /** Below this the prompt's 24 px body text stops reading (about 14 px on screen). */
 export const OPENING_MIN_ZOOM = 0.6;
 const OPENING_MARGIN = 32;
@@ -222,7 +236,8 @@ export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: numbe
  * from the top, clear of Excalidraw's floating toolbar; OPENING_BOTTOM kept clear above its zoom control). The rest of the board
  * (Your design) is reached by scrolling. Null when the board has no prompt part.
  */
-export function openingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }): OpeningView | null {
+export function openingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }, on: BoardOpening = 'prompt'): OpeningView | null {
+  if (on === 'drawing') return drawingView(elements, canvas);
   const region = openingRegion(elements);
   const all = sceneBounds(elements);
   if (!region || !all || canvas.width <= 0 || canvas.height <= 0) return null;
@@ -240,21 +255,41 @@ export function openingView(elements: ReadonlyArray<Record<string, unknown>>, ca
   return { zoom: Math.round(zoom * 10) / 10, zoomOutSteps, deltaX, deltaY };
 }
 
+/**
+ * How a board opens on its drawing (the record page): the drawing whole and centred, between the floating toolbar and
+ * the bottom controls, at the widest zoom (a 0.1 step, never above 1) at which it fits, by the same controls as
+ * openingView. Null when nothing was drawn (the board is fitted whole).
+ */
+function drawingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }): OpeningView | null {
+  const region = drawingRegion(elements);
+  const all = sceneBounds(elements);
+  if (!region || !all || canvas.width <= 0 || canvas.height <= 0) return null;
+  const band = canvas.height - OPENING_TOP - OPENING_BOTTOM;
+  const step = (n: number) => Math.floor(n * 10 + 1e-9) / 10;
+  const fits = Math.min(step((canvas.width - 2 * OPENING_MARGIN) / Math.max(1, region.x2 - region.x1)), step(band / Math.max(1, region.y2 - region.y1)));
+  const zoom = Math.min(1, Math.max(ZOOM_STEP, fits));
+  const zoomOutSteps = Math.round((1 - zoom) / ZOOM_STEP);
+  const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
+  const left = (region.x1 + region.x2) / 2 - canvas.width / (2 * zoom);
+  const top = (region.y1 + region.y2) / 2 - (OPENING_TOP + band / 2) / zoom;
+  return { zoom: Math.round(zoom * 10) / 10, zoomOutSteps, deltaX: (left - (cx - canvas.width / (2 * zoom))) * zoom, deltaY: (top - (cy - canvas.height / (2 * zoom))) * zoom };
+}
+
 const nextTask = (): Promise<void> => new Promise((r) => { setTimeout(r, 40); });
 const key = (target: Element, k: string, code: string): void => {
   target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, shiftKey: true, bubbles: true, cancelable: true }));
 };
 
 /**
- * Open a mounted board: a board with a prompt part opens on it at a readable zoom (openingView), any other is fitted
- * whole (fitBoardView). Each step waits a task, since Excalidraw's next action reads the state the last one set.
+ * Open a mounted board: a board with a prompt part opens on it at a readable zoom (openingView), or with `on: 'drawing'`
+ * on what was drawn, fitted (the record page); any other is fitted whole (fitBoardView). Each step waits a task, since Excalidraw's next action reads the state the last one set.
  * Whether a canvas was there.
  */
-export async function openBoardView(root: ParentNode | null | undefined, elements: ReadonlyArray<Record<string, unknown>>): Promise<boolean> {
+export async function openBoardView(root: ParentNode | null | undefined, elements: ReadonlyArray<Record<string, unknown>>, on: BoardOpening = 'prompt'): Promise<boolean> {
   if (!fitBoardView(root)) return false;
   const container = root!.querySelector('.excalidraw');
   const canvas = container?.querySelector('canvas.interactive') ?? container?.querySelector('canvas');
-  const view = container && canvas ? openingView(elements, { width: container.clientWidth, height: container.clientHeight }) : null;
+  const view = container && canvas ? openingView(elements, { width: container.clientWidth, height: container.clientHeight }, on) : null;
   if (!view) return true;
   await nextTask();
   key(container!, ')', 'Digit0');
@@ -280,7 +315,16 @@ export interface BoardFitEnv {
   fit(): void;
   /** True while the canvas follows someone (useBoardFollow): their camera is the view, so no fit moves it. */
   held?: () => boolean;
+  /**
+   * The canvas's size on the page ("640x480"), or null while it is not drawn (the lazy canvas, or under another tab at
+   * 0 by 0). Given, the opening is played once per scene and size: a later delay finds the view already open and moves
+   * nothing, since each opening is played on screen (Zoom to fit, Reset zoom, the zoom-outs, the scroll).
+   */
+  view?: () => string | null;
 }
+
+/** After the canvas is first seen, how long it gets to load its scene (the library loads it over its first ticks) before it opens. */
+export const BOARD_FIT_SETTLE_MS = 150;
 
 /** The events by which the person takes the view: a press, a wheel, a key, their own (trusted) and inside the board. */
 const TOUCHES = ['pointerdown', 'wheel', 'keydown'] as const;
@@ -294,7 +338,23 @@ const TOUCHES = ['pointerdown', 'wheel', 'keydown'] as const;
 export function watchBoardFit(ydoc: Y.Doc, selector: string, env: BoardFitEnv): () => void {
   let touched = false;
   const timers: unknown[] = [];
-  const fit = () => { if (!touched && !env.held?.() && readBoardElements(ydoc).length > 0) env.fit(); };
+  let seen = false;
+  let opened: string | null = null;
+  const fit = () => {
+    if (touched) return;
+    // Following: the followed camera is the view; once it stops, the board may open again.
+    if (env.held?.()) { opened = null; return; }
+    const count = readBoardElements(ydoc).length;
+    if (count === 0) return;
+    if (!env.view) { env.fit(); return; }
+    const size = env.view();
+    if (size === null || /^0x|x0$/.test(size)) { seen = false; return; }
+    if (!seen) { seen = true; timers.push(env.setTimer(fit, BOARD_FIT_SETTLE_MS)); return; }
+    const key = `${size}|${count}`;
+    if (key === opened) return;
+    opened = key;
+    env.fit();
+  };
   const schedule = (delays: readonly number[]) => { for (const ms of delays) timers.push(env.setTimer(fit, ms)); };
   schedule(BOARD_FIT_DELAYS_MS);
   let empty = readBoardElements(ydoc).length === 0;

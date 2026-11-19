@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, BOARD_TEMPLATE_NAMES, boardCheckpoints, boardTitleOf, readBoardTemplate, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, openingRegion, openingView, sceneBounds, OPENING_MIN_ZOOM, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, BOARD_FIT_SETTLE_MS, drawingRegion, isKitElement, BOARD_TEMPLATE_NAMES, boardCheckpoints, boardTitleOf, readBoardTemplate, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, openingRegion, openingView, sceneBounds, OPENING_MIN_ZOOM, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
 import { architectureBoard, blueprintBoard, masterBoard, masterTemplateFor, promptBoard, providedDesignBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
@@ -267,4 +267,73 @@ test('a master template board opens on its prompt at a readable zoom, not fitted
   assert.equal(openingRegion(blueprintBoard().elements), null);
   assert.equal(openingView(blueprintBoard().elements, { width: W, height: H }), null);
   assert.equal(openingView([], { width: W, height: H }), null);
+});
+
+test('watchBoardFit: the opening is played once per scene and canvas size, after the canvas is seen to settle; a hidden canvas never fits', () => {
+  const doc = new Y.Doc();
+  insertBoard(doc, blueprintBoard());
+  const page = { addEventListener: () => {}, removeEventListener: () => {} };
+  const timers: Array<{ fn: () => void; ms: number }> = [];
+  let fits = 0;
+  let size: string | null = null;
+  const stop = watchBoardFit(doc, '[data-board="b"]', {
+    page, setTimer: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, clearTimer: () => {}, fit: () => { fits += 1; },
+    view: () => size,
+  });
+  const next = () => timers.shift()!.fn();
+  next();
+  assert.equal(fits, 0, 'no canvas yet (the lazy chunk): nothing to fit');
+  size = '0x0';
+  next();
+  assert.equal(fits, 0, 'a hidden canvas (under another tab) is never fitted');
+  size = '640x480';
+  next();
+  assert.equal(fits, 0, 'the first sight of the canvas waits for its scene to load');
+  assert.equal(timers.at(-1)!.ms, BOARD_FIT_SETTLE_MS, 'a settle check is queued');
+  timers.splice(timers.length - 1, 1)[0]!.fn();
+  assert.equal(fits, 1, 'then the board opens');
+  size = '800x480';
+  next();
+  assert.equal(fits, 2, 'a new canvas size opens it again');
+  assert.equal(timers.length, 0);
+  // The same scene on the same canvas: every later chance to fit replays nothing (the owner saw it zoom out and in).
+  const doc2 = new Y.Doc();
+  insertBoard(doc2, blueprintBoard());
+  const timers2: Array<() => void> = [];
+  let fits2 = 0;
+  const stop2 = watchBoardFit(doc2, '[data-board="c"]', {
+    page, setTimer: (fn) => { timers2.push(fn); return timers2.length; }, clearTimer: () => {}, fit: () => { fits2 += 1; }, view: () => '640x480',
+  });
+  for (let i = 0; i < 20 && timers2.length; i++) timers2.shift()!();
+  assert.equal(fits2, 1, 'one opening, however many delays');
+  stop();
+  stop2();
+});
+
+test('the record page opens a board on what was drawn, whole and centred, not on the prompt; every kit element reads as the kit\'s', () => {
+  const kits = [blueprintBoard(), promptBoard('Design a cache'), architectureBoard('Design a cache'), masterBoard(TWITTER_PROMPT, { palette: true }), providedDesignBoard(TWITTER_DESIGN)];
+  for (const k of kits) assert.deepEqual(k.elements.filter((e) => !isKitElement(e)).map((e) => e['id']), [], `${k.name}: every element is the kit's`);
+  assert.ok(isKitElement({ id: 'q-be-twitter:pd-hld' }), 'a revealed provided design is the kit\'s too');
+  const board = masterBoard(TWITTER_PROMPT, { palette: true }).elements;
+  assert.equal(drawingRegion(board), null, 'nothing drawn yet');
+  assert.equal(openingView(board, { width: 650, height: 490 }, 'drawing'), null, 'nothing drawn: fitted whole');
+  const hld = sceneBounds(board.filter((e) => e['id'] === 'mt-b-hld'))!;
+  // Three boxes and an arrow the candidate drew inside High-level design (Excalidraw's own ids), 640 by 300.
+  const drawn = [[0, 0, 120, 64], [260, 0, 120, 64], [520, 236, 120, 64], [120, 32, 140, 0]].map(([x, y, w, h], i) =>
+    ({ id: `Xk3${i}aQ9pLr2vT`, type: i === 3 ? 'arrow' : 'rectangle', x: hld.x1 + 40 + x!, y: hld.y1 + 300 + y!, width: w, height: h }));
+  const region = drawingRegion([...board, ...drawn])!;
+  assert.deepEqual([region.x2 - region.x1, region.y2 - region.y1], [640, 300]);
+  const W = 650, H = 490;
+  const v = openingView([...board, ...drawn], { width: W, height: H }, 'drawing')!;
+  assert.equal(v.zoom, 0.9, 'the widest 0.1 step at which the drawing fits (586 / 640)');
+  const all = sceneBounds([...board, ...drawn])!;
+  // After Zoom to fit the view is centred on the whole board; Reset zoom and the zoom-outs keep that centre; the wheel moves the left edge by deltaX / zoom.
+  const left = (all.x1 + all.x2) / 2 - W / (2 * v.zoom) + v.deltaX / v.zoom;
+  const top = (all.y1 + all.y2) / 2 - H / (2 * v.zoom) + v.deltaY / v.zoom;
+  const onScreen = (x: number, y: number) => [(x - left) * v.zoom, (y - top) * v.zoom];
+  const [x1, y1] = onScreen(region.x1, region.y1); const [x2, y2] = onScreen(region.x2, region.y2);
+  assert.ok(x1! >= 0 && x2! <= W, `the drawing's width is on screen (${x1!.toFixed(0)}..${x2!.toFixed(0)} of ${W})`);
+  assert.ok(y1! >= 80 && y2! <= H - 72, `between the toolbar and the bottom controls (${y1!.toFixed(0)}..${y2!.toFixed(0)})`);
+  assert.ok(Math.abs((x1! + x2!) / 2 - W / 2) < 1, 'centred');
+  assert.equal(openingView([...board, ...drawn], { width: W, height: H })!.zoom, openingView(board, { width: W, height: H })!.zoom, 'the room still opens on the prompt');
 });

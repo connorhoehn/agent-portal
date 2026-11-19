@@ -5,7 +5,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react';
 import * as Y from 'yjs';
 import { LoadingState, Stack } from '@connorhoehn/ui-components/shared';
-import { insertBoard, readBoardElements } from '../../../lib/interviewsBoard';
+import { insertBoard, readBoardElements, type BoardOpening } from '../../../lib/interviewsBoard';
 import { useBoardFit } from './useBoardFit';
 
 const ExcalidrawCanvas = lazy(() => import('@connorhoehn/ui-components/diagram').then((m) => ({ default: m.CollaborativeExcalidraw })));
@@ -17,12 +17,14 @@ export interface BoardSceneProps {
   sceneId: string;
   elements: ReadonlyArray<Record<string, unknown>>;
   editable?: boolean;
+  /** What it opens on: a master template's prompt (the default), or what was drawn (the record page). */
+  opensOn?: BoardOpening;
   onElements?: (elements: Array<Record<string, unknown>>) => void;
   className?: string;
   'data-testid'?: string;
 }
 
-export function BoardScene({ sceneId, elements, editable = false, onElements, className, 'data-testid': testId }: BoardSceneProps) {
+export function BoardScene({ sceneId, elements, editable = false, opensOn = 'prompt', onElements, className, 'data-testid': testId }: BoardSceneProps) {
   // The doc lives as long as the scene id: a later prop never replaces local strokes.
   const ydoc = useMemo(() => {
     const doc = new Y.Doc();
@@ -30,7 +32,7 @@ export function BoardScene({ sceneId, elements, editable = false, onElements, cl
     return doc;
   }, [sceneId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => ydoc.destroy(), [ydoc]);
-  useBoardFit(ydoc, `[data-board-scene="${sceneId}"]`);
+  useBoardFit(ydoc, `[data-board-scene="${sceneId}"]`, false, opensOn);
   const changed = useCallback(() => {
     if (onElements) onElements(readBoardElements(ydoc) as unknown as Array<Record<string, unknown>>);
   }, [onElements, ydoc]);

@@ -1,5 +1,5 @@
 // The record page's whiteboard (WHITEBOARD-PLAN step 1): the board's checkpoints from GET /interviews/:id/board/snapshots,
-// the final board first on screen and a few timed ones to step back through, each read-only and zoomed to its content.
+// the final board first on screen and a few timed ones to step back through, each read-only and opened on what was drawn.
 // Choosing a time also moves the page's clock there, so the transcript and the recording follow.
 import { useEffect, useMemo, useState } from 'react';
 import { LoadingState, SegmentedControl, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -39,7 +39,7 @@ export function BoardSnapshots({ interviewId, startedAt, onMoveTo }: BoardSnapsh
             onMoveTo?.(m.atMs);
           }} />
       )}
-      <BoardScene sceneId={`snapshot-${interviewId}-${shown.seq}`} elements={shown.elements} data-testid="interviews-record-board-canvas"
+      <BoardScene sceneId={`snapshot-${interviewId}-${shown.seq}`} elements={shown.elements} opensOn="drawing" data-testid="interviews-record-board-canvas"
         className="min-h-[320px] flex-1 overflow-hidden" />
     </Stack>
   );
