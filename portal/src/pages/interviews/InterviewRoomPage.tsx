@@ -33,7 +33,8 @@ import { interviewsRoundHome } from '../../components/shell/breadcrumbResolve';
 import { useSession } from '../../lib/auth';
 import { CallBlock, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
-import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
+import { HuddleChatBody, useHuddleChat, useHuddleChatUnread } from '../../components/shell/HuddleChat';
+import { withUnreadBadges } from '../../components/calls/UnreadTabBadge';
 import { usePageChromeFold } from '../../components/shell/pageChrome';
 import { scorecardPath } from '../../lib/interviewsScorecard';
 import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHintListener';
@@ -284,8 +285,12 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
   const chat = useHuddleChat();
   const registerPane = chat?.registerPaneOwner;
   const chatVisible = pane.shown && !pane.folded && tab === ROOM_MESSAGE_TAB;
+  // The Milo tab is the pane's too: Milo's lines in the call chat count on it (its unread bubble), not on Chat.
+  const miloVisible = pane.shown && !pane.folded && tab === 'milo';
   const hideChat = useCallback(() => setTab(defaultRoomTab(type)), [type]);
-  useEffect(() => (here ? registerPane?.({ visible: chatVisible, hide: hideChat }) : undefined), [here, registerPane, chatVisible, hideChat]);
+  useEffect(() => (here ? registerPane?.({ visible: chatVisible, hide: hideChat, milo: { visible: miloVisible } }) : undefined),
+    [here, registerPane, chatVisible, miloVisible, hideChat]);
+  const unread = useHuddleChatUnread();
   const lastFocus = useRef(chat?.focusRequest ?? 0);
   useEffect(() => {
     if (here && chat && chat.focusRequest !== lastFocus.current) { setTab(ROOM_MESSAGE_TAB); reveal(); }
@@ -293,7 +298,8 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
   }, [here, chat?.focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const milo = useMiloPane(room);
   const surface = surfaceOf(room.round);
-  const tabs = useMemo(() => roomTabs(type, surface), [type, surface]);
+  const plainTabs = useMemo(() => roomTabs(type, surface), [type, surface]);
+  const tabs = useMemo(() => withUnreadBadges(plainTabs, here ? { chat: unread.chat, milo: unread.milo } : {}), [plainTabs, here, unread.chat, unread.milo]);
   return <SidePane title={roomCallTitle(room)} subtitle={`${room.round.minutes} min · ${type === 'technical' ? 'Technical' : 'Behavioural'} round`}
     paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t))}
     data-testid="interview-room-pane">

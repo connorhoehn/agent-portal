@@ -7,15 +7,26 @@
 // session and the staff roster route. So this is the library's chat panel straight on `useChat(channel)`, in the
 // room's one pane (GuestRoomPane): no pins, no uploads, no page references, no reactions. A huddle send must carry a
 // delivery id (middleware lib/call-chat-send.ts), so each send gets a fresh one.
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { GUEST_CALL_READS, useCallChatUnread } from '../../hooks/useCallChatUnread';
 import { useChat } from '@connorhoehn/realtime-modules/client';
 import { WrappedChatPanel } from '@connorhoehn/ui-components/integrations/realtime';
 
 const newDeliveryId = (): string => (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
 
-/** The chat alone, for the room's pane (its Chat tab, or the whole pane in a behavioural round). */
-export function GuestRoomChatBody({ callId, self }: { callId: string; self: { userId: string; displayName: string } }) {
+/**
+ * The chat alone, for the room's pane (its Chat tab, or the whole pane in a behavioural round). It stays mounted behind the
+ * Pad tab, so it also counts what arrives there: `onUnread` gets the Chat tab's bubble (my position is the server's, on the
+ * guest's twin of the reads route), and `seen` (the Chat tab on screen) marks what it shows read.
+ */
+export function GuestRoomChatBody({ callId, self, seen = true, onUnread }: {
+  callId: string; self: { userId: string; displayName: string }; seen?: boolean; onUnread?: (count: number) => void;
+}) {
   const chat = useChat(`orgiq:huddle:${callId}`);
+  const tabs = useMemo(() => ({ chat: { seen } }), [seen]);
+  const unread = useCallChatUnread({ callId, viewerId: self.userId, messages: chat.messages, tabs, base: GUEST_CALL_READS });
+  useEffect(() => { onUnread?.(unread.chat); }, [onUnread, unread.chat]);
+  useEffect(() => () => onUnread?.(0), [onUnread]);
   const sendable = useMemo(() => ({
     ...chat,
     sendMessage: (text: string, metadata?: Record<string, unknown>) => chat.sendMessage(text, { ...metadata, clientDeliveryId: newDeliveryId() }),

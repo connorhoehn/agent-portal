@@ -94,10 +94,13 @@ export interface UseConversationOptions {
   post?: (text: string, metadata: Record<string, unknown>) => Promise<void>;
   /** Confirm native history before claiming that this discussion is empty. */
   confirmHistory?: boolean;
+  /** The thread is on screen now, so what it shows is read (default: whenever connected). A call's chat that stays
+   * mounted behind a closed pane or another tab passes false then, so its read receipt waits (hooks/useCallChatUnread.ts). */
+  active?: boolean;
 }
 
 /** The runtime of one conversation: call once per channel and share it. */
-export function useConversation(channel: string, { maySend, post, confirmHistory = false }: UseConversationOptions): ConversationRuntime {
+export function useConversation(channel: string, { maySend, post, confirmHistory = false, active = true }: UseConversationOptions): ConversationRuntime {
   const { session } = useSession();
   const userId = session?.sub ?? '';
   const displayName = session?.name ?? session?.sub ?? 'You';
@@ -108,7 +111,7 @@ export function useConversation(channel: string, { maySend, post, confirmHistory
   const last = chat.messages[chat.messages.length - 1];
   const receipts = useChatReadReceipts(channel, {
     ...(userId ? { currentUserId: userId } : {}),
-    active: connected,
+    active: connected && active,
     newestMessage: last?.timestamp ? { ...(last.id ? { id: last.id } : {}), timestamp: last.timestamp } : null,
   });
   const quote = useQuoteReply(channel);

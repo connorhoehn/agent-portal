@@ -10,7 +10,7 @@ import type { SocialCall } from './useSocialCall';
 import { CallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { useCallMeeting } from '../../components/shell/CallMeeting';
 import { useAssistantRosterEntries } from '../../components/shell/MeetingAssistantBar';
-import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
+import { HuddleChatBody, useHuddleChat, useHuddleChatUnread } from '../../components/shell/HuddleChat';
 import RoomConfiguration from './RoomConfiguration';
 import RoomActivity from './RoomActivity';
 import { useLobbyCall } from '@connorhoehn/realtime-modules/client/video';
@@ -52,6 +52,7 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
   const assistantEntries = useAssistantRosterEntries();
   const currentRoomName = live?.meeting.myRoom?.name ?? 'Main call';
   const registerPane = chat?.registerPaneOwner;
+  const unread = useHuddleChatUnread();
   const hideConversation = useCallback(() => setCallPane(null), []);
   useEffect(() => here ? registerPane?.({ visible: view === 'call' && callPane === 'conversation', hide: hideConversation }) : undefined, [here, registerPane, view, callPane, hideConversation]);
   const joined = useRef(false);
@@ -89,7 +90,7 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
       items={VIEWS.map(id => ({ id, label: id[0]!.toUpperCase() + id.slice(1) }))} />
     </Stack>
     <TabPanel id="call" when={view} idPrefix="hangout-view" className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {here ? <HangoutCallView title={currentRoomName} count={active.length} pane={callPane} onPaneChange={changeCallPane}
+      {here ? <HangoutCallView title={currentRoomName} count={active.length} pane={callPane} onPaneChange={changeCallPane} unread={unread.chat}
         stage={<CallBlock placement="stage" className="min-h-0 flex-1" />}
         conversation={<HuddleChatBody showCall={false} />}
         people={<RosterPanel {...(live ? meetingRosterProps(live.meeting, live.roster) : {

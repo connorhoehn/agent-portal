@@ -1,12 +1,16 @@
 import { useId, useRef, type ReactNode } from 'react';
 import { ChatSidePanelFrame } from '@connorhoehn/ui-components';
-import { Button, Inline, PageSection, Stack, Tabs } from '@connorhoehn/ui-components/shared';
+import { Badge, Button, Inline, PageSection, Stack, Tabs } from '@connorhoehn/ui-components/shared';
+import { withUnreadBadges } from '../../components/calls/UnreadTabBadge';
+import { unreadWords } from '../../lib/callChatUnreadModel';
 
 export type HangoutCallPane = 'conversation' | 'people' | null;
 
 /** A call keeps its media mounted while its auxiliary sidebar opens/closes. */
-export function HangoutCallView({ title, count, pane, onPaneChange, stage, conversation, people }: {
+export function HangoutCallView({ title, count, pane, onPaneChange, stage, conversation, people, unread = 0 }: {
   title: string; count: number; pane: HangoutCallPane;
+  /** The call chat's unread count (hooks/useCallChatUnread.ts): a bubble on Conversation while it is not open. */
+  unread?: number;
   onPaneChange(pane: HangoutCallPane): void;
   stage: ReactNode; conversation: ReactNode; people: ReactNode;
 }) {
@@ -22,7 +26,7 @@ export function HangoutCallView({ title, count, pane, onPaneChange, stage, conve
     <PageSection size="sm" title={title} description={`${count} ${count === 1 ? 'participant' : 'participants'} · Gallery`}
       actions={<Inline gap="sm">
         <Button variant="secondary" size="sm" ref={peopleButton} aria-controls={sidebarId} aria-expanded={pane === 'people'} onClick={() => onPaneChange(pane === 'people' ? null : 'people')}>People ({count})</Button>
-        <Button variant="secondary" size="sm" ref={conversationButton} aria-controls={sidebarId} aria-expanded={pane === 'conversation'} onClick={() => onPaneChange(pane === 'conversation' ? null : 'conversation')}>Conversation</Button>
+        <Button variant="secondary" size="sm" ref={conversationButton} aria-controls={sidebarId} aria-expanded={pane === 'conversation'} onClick={() => onPaneChange(pane === 'conversation' ? null : 'conversation')}>Conversation{unread > 0 && <Badge variant="count" value={unread} aria-label={unreadWords(unread)} data-testid="hangout-conversation-unread" />}</Button>
       </Inline>} />
     <Inline gap="none" align="stretch" wrap={false} className="relative min-h-0 min-w-0 flex-1 overflow-hidden border-t border-border" data-testid="hangout-call-layout">
       <Stack gap="none" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="hangout-gallery">{stage}</Stack>
@@ -30,7 +34,7 @@ export function HangoutCallView({ title, count, pane, onPaneChange, stage, conve
         <ChatSidePanelFrame title="In this call" subtitle={title} onClose={closePane} closeLabel="Close call sidebar">
           <Stack gap="none" className="h-full min-h-0">
             <Tabs idPrefix="hangout-call-pane" aria-label="Call sidebar" value={pane} onValueChange={value => onPaneChange(value as Exclude<HangoutCallPane, null>)}
-              items={[{ id: 'conversation', label: 'Conversation' }, { id: 'people', label: `People (${count})` }]} variant="underline" size="sm" />
+              items={withUnreadBadges([{ id: 'conversation', label: 'Conversation' }, { id: 'people', label: `People (${count})` }], { conversation: unread })} variant="underline" size="sm" />
             <Stack gap="none" role="tabpanel" id="hangout-call-pane-panel-conversation" aria-labelledby="hangout-call-pane-tab-conversation" className={pane === 'conversation' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'} hidden={pane !== 'conversation'}>{conversation}</Stack>
             {pane === 'people' && <Stack gap="none" role="tabpanel" id="hangout-call-pane-panel-people" aria-labelledby="hangout-call-pane-tab-people" className="min-h-0 flex-1 overflow-y-auto">{people}</Stack>}
           </Stack>

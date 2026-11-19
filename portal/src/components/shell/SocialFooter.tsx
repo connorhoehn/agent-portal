@@ -30,7 +30,7 @@ import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { callCounts, callDrawn, useCallBlockPlacement, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { CallPageSharing } from './CallPageSharing';
 import { EmbeddedSocialEntry } from './EmbeddedSocial';
-import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
+import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleChatUnread, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
 import { AssistantBarControls, AssistantBudgetAsk, AssistantConsentNotice } from './MeetingAssistantBar';
 import { AssistantProposalAsk } from './AssistantProposalAsk';
@@ -71,6 +71,8 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
   const { session } = useSession();
   const frames = useGatewayFrames();
   const chat = useHuddleChatToggle({ behavior: 'focus' });
+  // The call chat's unread bubble on Message (hooks/useCallChatUnread.ts); 0 while the chat is on screen.
+  const unread = useHuddleChatUnread();
   const pageOwnsCall = useHuddleChat()?.paneOwned ?? false;
   // On a call that carries a meeting (lib/meetingRooms.ts): Raise, React,
   // People and Rooms as the bar's meeting items; React then replaces the
@@ -119,7 +121,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
       connectionState={frames.connectionState}
       screenShare={controls?.screenShare}
     /> : undefined}
-    {...(joined && chat ? { onToggleChat: chat.toggle, chatOpen: chat.open, chatLabel: 'Message' } : {})}
+    {...(joined && chat ? { onToggleChat: chat.toggle, chatOpen: chat.open, chatLabel: 'Message', chatUnread: unread.chat } : {})}
     {...(over || barShown || pageOwnsCall || !items.mediaToggle ? {} : { onToggleMedia, mediaOpen, mediaToggleLabel: `${people} — ${mediaOpen ? 'hide' : 'show'} call video` })}
     {...(call.phase === 'failed' ? { statusLabel: 'Connection failed' }
       : call.phase === 'calling' ? { statusLabel: `Calling ${host.lobby.title}…` } : {})}

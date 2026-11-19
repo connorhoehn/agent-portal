@@ -21,6 +21,8 @@ import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInp
 import { PageReferenceCard } from '../chat/PageReferenceCard';
 import { AssistantMessageExtras, assistantBody, assistantSystemLine } from '../chat/AssistantMessageExtras';
 import { isAssistantChatMessage } from '../../lib/assistantMessages';
+import { isMiloLine, type UnreadMessage } from '../../lib/callChatUnreadModel';
+import { useCallChatUnread } from '../../hooks/useCallChatUnread';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
 import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
 import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -46,7 +48,11 @@ import { LiveTranscript } from './LiveTranscript';
 import { setLiveTranscript, useLiveTranscriptOn } from '../../lib/liveTranscript';
 
 export type RetiredHuddleDraft = SavedHuddleDraft<RichChatDraft, CallPageDescriptor>;
-export interface HuddlePaneControl { visible: boolean; hide(): void }
+/** A pane that owns the huddle's chat. `milo`: it also has a Milo tab (Milo's lines count there, not on Chat), on screen or not. */
+export interface HuddlePaneControl { visible: boolean; hide(): void; milo?: { visible: boolean } }
+/** The unread bubbles of the joined huddle (hooks/useCallChatUnread.ts): Chat, and Milo for a pane with a Milo tab. */
+export interface HuddleChatUnread { chat: number; milo: number }
+const NO_UNREAD: HuddleChatUnread = { chat: 0, milo: 0 };
 
 export interface HuddleChatState {
   participants: readonly HuddleParticipant[];
@@ -120,6 +126,7 @@ const EMPTY_DRAFT: RichChatDraft = { html: '', files: [] };
 const HuddleChatContext = createContext<HuddleChatContextValue | null>(null);
 const ReactionPlaybackContext = createContext<CallReactionPlayback | null>(null);
 export const useHuddleChat = (): HuddleChatContextValue | null => useContext(HuddleChatContext);
+const notMilo = (m: UnreadMessage) => !isMiloLine(m);
 
 /** What the mounted channel exposes to the shell: the hooks' state and the confirmed send. */
 interface HuddleChannelRuntime {
@@ -127,6 +134,7 @@ interface HuddleChannelRuntime {
   conversation: ConversationRuntime;
   /** Rejects on a refusal, timeout, lost connection or a channel change. */
   sendConfirmed(text: string, deliveryId: string, page: CallPageDescriptor | null, extra: Record<string, unknown>): Promise<void>;
+  unread: HuddleChatUnread;
 }
 /** An external store, so publishing the channel's state re-renders its readers, never the shell. */
 function channelStore() {
@@ -142,17 +150,27 @@ function useHuddleChannel(): HuddleChannelRuntime | null {
   const store = useContext(ChannelContext);
   return useSyncExternalStore(store?.subscribe ?? (() => () => {}), store?.get ?? (() => null), store?.get ?? (() => null));
 }
+/** The joined huddle's unread counts (0 when there is none): the bubbles on its Chat and Milo tabs and the footer's Message. */
+export function useHuddleChatUnread(): HuddleChatUnread {
+  return useHuddleChannel()?.unread ?? NO_UNREAD;
+}
 
 /** Mounted only for a confirmed participant on a live gateway: joins the call's chat channel. */
-function HuddleChannel({ channel, userId, displayName, maySend, post, publish }: {
-  channel: string; userId: string; displayName: string; maySend: boolean;
+function HuddleChannel({ channel, callId, userId, displayName, maySend, post, publish, seen }: {
+  channel: string; callId: string; userId: string; displayName: string; maySend: boolean;
+  /** Is the chat on screen, and the owner's Milo tab (null: no Milo tab). */
+  seen: { chat: boolean; milo: boolean | null };
   /** Posts a finished card through the huddle's confirmed send. */
   post: (text: string, metadata: Record<string, unknown>) => Promise<void>;
   publish: (runtime: HuddleChannelRuntime | null) => void;
 }) {
   const gateway = useGatewayOptional();
-  const conversation = useConversation(channel, { maySend, post });
+  const conversation = useConversation(channel, { maySend, post, active: seen.chat });
   const { chat } = conversation;
+  const miloTab = seen.milo !== null;
+  const unreadTabs = useMemo(() => ({ chat: { seen: seen.chat, ...(miloTab ? { counts: notMilo } : {}) },
+    ...(miloTab ? { milo: { seen: !!seen.milo, counts: isMiloLine } } : {}) }), [seen.chat, seen.milo, miloTab]);
+  const unread = useCallChatUnread({ callId, viewerId: userId, messages: chat.messages, tabs: unreadTabs });
   const connected = gateway?.connectionState === 'connected';
   // Unmounting (a new call, identity or reconnect) abandons in-flight
   // acknowledgements: their drafts are kept and nothing is retried here.
@@ -167,7 +185,7 @@ function HuddleChannel({ channel, userId, displayName, maySend, post, publish }:
       send: () => latest.current.chat.sendMessage(text, { displayName, ...extra, clientDeliveryId: deliveryId,
         ...(page ? { pageReference: { kind: page.kind, id: page.id } } : {}) }) });
   }, [channel, userId, displayName]);
-  useEffect(() => { publish({ channel, conversation, sendConfirmed }); });
+  useEffect(() => { publish({ channel, conversation, sendConfirmed, unread }); });
   useEffect(() => () => publish(null), [publish]);
   return null;
 }
@@ -362,6 +380,11 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
     draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane,
     refresh: () => { setSendError(null); void confirm(true); }, meetingChat,
   }), [meetingChat, paneOwners, registerPaneOwner, current, callId, channel, actorId, host?.lobby?.title, state, unavailableReason, pending, view, draft, setDraft, retiredDrafts, updateRetiredDraft, discardRetiredDraft, page, setPage, focusRequest, send, openPane, confirm, paneFits]);
+  // What of the huddle is on screen: an owning pane says so itself; otherwise the shell's split pane or the floating panel.
+  const ownedPane = [...paneOwners.values()].find(pane => !!pane) ?? null;
+  const chatSeen = paneOwners.size > 0 ? !!ownedPane?.visible : view === 'floating' || (view === 'pane' && paneFits);
+  const miloSeen = ownedPane?.milo ? ownedPane.milo.visible : null;
+  const seen = useMemo(() => ({ chat: chatSeen, milo: miloSeen }), [chatSeen, miloSeen]);
   const publish = useCallback((next: HuddleChannelRuntime | null) => {
     if (next || store.get()) store.set(next);
   }, [store]);
@@ -369,7 +392,7 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
     <ReactionPlaybackContext.Provider value={reactionPlayback}>
     <ChannelContext.Provider value={store}>
       {children}
-      {mounted && channel && actorId ? <HuddleChannel key={`${scopeKey}:${readyEpoch}:${channel}`} channel={channel} userId={actorId}
+      {mounted && channel && actorId && callId ? <HuddleChannel key={`${scopeKey}:${readyEpoch}:${channel}`} channel={channel} callId={callId} userId={actorId} seen={seen}
         displayName={session?.name ?? actorId} maySend={!rosterState.denied && rosterState.canSend && !rosterState.ended}
         post={async (text, metadata) => { if (!await sendRef.current(text, null, metadata)) throw new Error(`The summary could not be sent to this ${noun}.`); }}
         publish={publish} /> : null}
