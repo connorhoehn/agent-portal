@@ -678,6 +678,34 @@ The plan was checked against the code and the installed packages on the day it w
 
 Still unverified: speech pricing, and every size in the ledger.
 
+## System design on the shared whiteboard (18 November 2026)
+
+Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared Excalidraw board instead of the code pad.
+
+- A kit round has `surface: 'pad' | 'board'`. Only a technical round has one; a behavioural round on the board is refused. A kit
+  saved before this has no surface and its technical rounds read as the pad (`kit.ts roundSurface`). Switching an in-use round's
+  surface is allowed: nothing stored depends on it, and the record shows whatever the interview kept.
+- A technical question may carry one starting board (`board: { name, elements }`, at most 400 live elements and 256 KB). The kit
+  checks its shape and size only. The seeded backend kit's System design round is a board round; the ledger question carries the
+  Blueprint board (six labelled frames with starter stickies) and a new URL shortener question carries the Prompt only board (one
+  prompt card above six empty frames). Both are built in code (`lib/interviews/board/templates.ts`).
+- The board is one Yjs document per interview, `doc:ivboard:<interviewId>`, on the same `collabDocs` feature as the pad (an
+  interview id is at most 38 characters here, so the channel stays under the library's 50). Its seats are the pad's exactly: the
+  lead and panel of that technical interview while the call can run, and the admitted candidate of that interview. Everyone
+  else, other interviews, other tenants and Milo are refused (Milo's board tools are step 4). Proved on real sockets in
+  `board/__tests__/board-proof.test.ts`.
+- The room's pane shows the board where the pad would be, under a tab named Board, for the lead, the panel and the candidate,
+  with the library's `CollaborativeExcalidraw` in hosted mode and named pointers through the provider's awareness.
+- The lead's "Start from a board" menu adds a chosen question's starting board as one write. It never clears anything, and a
+  second pick of the same board adds nothing. Preparing the round does not insert it on its own: the lead picks when to show it,
+  as with the pad's "Insert a question".
+- Checkpoints: the lead's room posts the board's live elements every minute when they changed, after an insert and when the
+  room closes (`POST /interviews/:id/board/snapshots`, lead or panel, live only). A repeat of the last one is not stored, and an
+  interview keeps at most 200. Memory and SQL stores (`interview_board_snapshots`, row-level rule added), erased with the
+  interview's media by the retention sweep (`board-snapshots`). The read (`GET .../board/snapshots`) has the pad log's viewers.
+- Open: the record page does not show the board yet (the read is there); the kit editor cannot attach or edit a board yet (the
+  kit accepts one); the canvas opens at the scene's origin rather than fitted to the pane.
+
 ## Not in this plan
 
 Email and calendar invites, availability, take-home assignments, a question marketplace, importing from an applicant tracking system, offers, candidates signing in to see their own status, and any scoring by a model.
