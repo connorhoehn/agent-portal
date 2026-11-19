@@ -23,7 +23,7 @@ export interface KitBoard { name: string; elements: Array<Record<string, unknown
  * middleware board/templates.ts). "Architecture kit" is the notes column, the component palette and a Design frame;
  * "Master template" the owner's format (board/templates.ts): the prompt with user stories, then "Your design" in five sections.
  */
-export const BOARD_TEMPLATE_NAMES = ['Blueprint', 'Prompt only', 'Architecture kit', 'Master template'] as const;
+export const BOARD_TEMPLATE_NAMES = ['Frames with starter notes', 'Prompt and empty frames', 'Architecture kit', 'Master template'] as const;
 
 /** The prompt card's text for a question: its prompt up to the first colon or full stop ("Design Twitter: …" → "Design Twitter"). */
 export function boardTitleOf(prompt: string): string {
@@ -172,6 +172,79 @@ export function fitBoardView(root: ParentNode | null | undefined): boolean {
   } finally {
     for (const t of toolbars) t.classList.add('App-toolbar');
   }
+  return true;
+}
+
+// ── opening on the prompt (the master template) ──────────────────────────────
+
+export interface SceneBounds { x1: number; y1: number; x2: number; y2: number }
+/** The box around a scene's live elements (their x, y, width and height), or null for an empty one. */
+export function sceneBounds(elements: ReadonlyArray<Record<string, unknown>>): SceneBounds | null {
+  let b: SceneBounds | null = null;
+  for (const e of elements) {
+    if (e['isDeleted'] === true) continue;
+    const x = Number(e['x']), y = Number(e['y']), w = Math.abs(Number(e['width']) || 0), h = Math.abs(Number(e['height']) || 0);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    b = b ? { x1: Math.min(b.x1, x), y1: Math.min(b.y1, y), x2: Math.max(b.x2, x + w), y2: Math.max(b.y2, y + h) } : { x1: x, y1: y, x2: x + w, y2: y + h };
+  }
+  return b;
+}
+
+/** The master template's part A, the prompt (middleware board/templates.ts masterBoard names its elements `mt-a-*`). */
+export const OPENING_PREFIX = 'mt-a-';
+/** The part of a board it opens on: the prompt's box, or null when the board has none (it is fitted whole). */
+export function openingRegion(elements: ReadonlyArray<Record<string, unknown>>): SceneBounds | null {
+  return sceneBounds(elements.filter((e) => typeof e['id'] === 'string' && (e['id'] as string).startsWith(OPENING_PREFIX)));
+}
+
+/** Below this the prompt's 24 px body text stops reading (about 14 px on screen). */
+export const OPENING_MIN_ZOOM = 0.6;
+const OPENING_MARGIN = 32;
+const ZOOM_STEP = 0.1;
+export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: number; deltaY: number }
+
+/**
+ * How a board opens on its prompt, as Excalidraw's own controls do it: after its "Zoom to fit" the view is centred on
+ * the whole board; "Reset zoom" (zoom 1, about that centre), `zoomOutSteps` of "Zoom out" (0.1 each) to the widest zoom
+ * at which the prompt's column fits the canvas (never below OPENING_MIN_ZOOM), then one wheel scroll of
+ * (`deltaX`, `deltaY`) puts the prompt's top-left corner OPENING_MARGIN px inside the canvas. The rest of the board
+ * (Your design) is reached by scrolling. Null when the board has no prompt part.
+ */
+export function openingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }): OpeningView | null {
+  const region = openingRegion(elements);
+  const all = sceneBounds(elements);
+  if (!region || !all || canvas.width <= 0 || canvas.height <= 0) return null;
+  const fits = Math.floor(((canvas.width - 2 * OPENING_MARGIN) / Math.max(1, region.x2 - region.x1)) * 10 + 1e-9) / 10;
+  const zoom = Math.min(1, Math.max(OPENING_MIN_ZOOM, fits));
+  const zoomOutSteps = Math.round((1 - zoom) / ZOOM_STEP);
+  const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
+  // Excalidraw's wheel scroll: the visible left edge moves by deltaX / zoom scene units.
+  const deltaX = ((region.x1 - OPENING_MARGIN / zoom) - (cx - canvas.width / (2 * zoom))) * zoom;
+  const deltaY = ((region.y1 - OPENING_MARGIN / zoom) - (cy - canvas.height / (2 * zoom))) * zoom;
+  return { zoom: Math.round(zoom * 10) / 10, zoomOutSteps, deltaX, deltaY };
+}
+
+const nextTask = (): Promise<void> => new Promise((r) => { setTimeout(r, 40); });
+const key = (target: Element, k: string, code: string): void => {
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: k, code, shiftKey: true, bubbles: true, cancelable: true }));
+};
+
+/**
+ * Open a mounted board: a board with a prompt part opens on it at a readable zoom (openingView), any other is fitted
+ * whole (fitBoardView). Each step waits a task, since Excalidraw's next action reads the state the last one set.
+ * Whether a canvas was there.
+ */
+export async function openBoardView(root: ParentNode | null | undefined, elements: ReadonlyArray<Record<string, unknown>>): Promise<boolean> {
+  if (!fitBoardView(root)) return false;
+  const container = root!.querySelector('.excalidraw');
+  const canvas = container?.querySelector('canvas.interactive') ?? container?.querySelector('canvas');
+  const view = container && canvas ? openingView(elements, { width: container.clientWidth, height: container.clientHeight }) : null;
+  if (!view) return true;
+  await nextTask();
+  key(container!, ')', 'Digit0');
+  for (let i = 0; i < view.zoomOutSteps; i += 1) { await nextTask(); key(container!, '_', 'Minus'); }
+  await nextTask();
+  canvas!.dispatchEvent(new WheelEvent('wheel', { deltaX: view.deltaX, deltaY: view.deltaY, deltaMode: 0, bubbles: true, cancelable: true }));
   return true;
 }
 

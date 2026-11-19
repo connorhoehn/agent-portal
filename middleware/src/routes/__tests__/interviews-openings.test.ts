@@ -158,7 +158,7 @@ describe('the recruiter writes', () => {
 
   it('offers the starting boards a question can begin from, around the title it is given', async () => {
     const res = await GRETA.get('/board-templates?title=Design%20a%20chat%20app');
-    expect(res.body.items.map((b: { name: string }) => b.name)).toEqual(['Blueprint', 'Prompt only', 'Architecture kit', 'Master template']);
+    expect(res.body.items.map((b: { name: string }) => b.name)).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Architecture kit', 'Master template']);
     const kit = res.body.items[2] as { elements: Array<Record<string, unknown>> };
     expect(kit.elements.find((e) => e['id'] === 'ak-prompt-text')!['originalText']).toBe('Design a chat app');
     const master = res.body.items[3] as { elements: Array<Record<string, unknown>> };

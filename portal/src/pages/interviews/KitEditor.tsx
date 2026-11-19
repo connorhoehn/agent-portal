@@ -367,8 +367,8 @@ function ClarifyingQuestions({ question: q, at, index, problems, onChange }: {
 
 /** What each starting-board template holds, under its name in the "Add a starting board" menu. */
 const TEMPLATE_HINTS: Readonly<Record<(typeof BOARD_TEMPLATE_NAMES)[number], string>> = {
-  'Blueprint': 'Seven labelled frames with starter stickies.',
-  'Prompt only': 'The prompt card above seven empty frames.',
+  'Frames with starter notes': 'Seven labelled frames with starter stickies.',
+  'Prompt and empty frames': 'The prompt card above seven empty frames.',
   'Architecture kit': 'Notes, a palette of components to copy, an empty Design frame.',
   'Master template': 'The prompt with user stories, then "Your design" in five hinted sections.',
 };
