@@ -726,4 +726,137 @@ describe('hands-free router', () => {
       expect(w.router.state()).toEqual({ phase: 'idle' });
     });
   });
+
+  describe('film fixes (HF-FILM-DIAG, 19 Nov)', () => {
+    /** A fixed verdict for Una, handed to the orchestrator's held-text path; the line's frames come back tagged with a say id. */
+    function fixedWorld() {
+      const clock = new FakeClock();
+      const listening = new FakeListening(clock);
+      const rules = new FakeRules();
+      rules.verdictFor = () => ({ kind: 'fixed', line: 'About 12 minutes are left in this round.' });
+      const talking = new FakeTalking();
+      const relay = new FakeRelay();
+      const fixed: Array<[string, string]> = [];
+      const router = new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay, sayFixed: (u, l) => fixed.push([u, l]) });
+      const drops: string[] = [];
+      router.on('drop', (d) => drops.push(d.reason));
+      const step = (who: Array<[string, number]> = []) => { clock.advance(100); for (const [u, t] of who) listening.speak(u, t); router.tick(); };
+      const words = (u: string, sid: string, delta: string) => listening.emit('words', { userId: u, sentenceId: sid, delta, atMs: clock.nowMs() });
+      const line = (n: number, id = 'say_1') => { for (let i = 0; i < n; i++) router.outputAudio(frame(T_MILO), i === n - 1, id); };
+      const ask = async (text = 'Milo, how long is left?') => {
+        listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo' }); await settle();
+        listening.emit('sentence', { userId: UNA, sentenceId: 's1', text, startMs: 0, endMs: clock.nowMs(), named: true }); await settle();
+      };
+      return { clock, listening, rules, talking, relay, router, fixed, drops, step, words, line, ask };
+    }
+
+    it('fix 1: a server line relayed through the router is Milo playing: words over it are a barge-in, and the rest of the line is dropped', async () => {
+      const w = fixedWorld();
+      for (let i = 0; i < 5; i++) w.step([[UNA, T_UNA]]);
+      await w.ask();
+      w.router.outputText('About 12 minutes are left in this round.', true);
+      for (let i = 0; i < 3; i++) w.router.outputAudio(frame(T_MILO), false, 'say_1');
+      expect(w.router.playing()).toBe(true);
+      w.words(HUGO, 'h1', 'stop stop');
+      expect(w.drops).toContain('barge-in');
+      const before = w.relay.pushed.length;
+      w.line(4);
+      expect(w.relay.pushed.length).toBe(before);
+    });
+
+    it('fix 2: the follow-up window opens after a fixed line for its asker (no name needed), and the session\'s own words in it stay unheard', async () => {
+      const w = fixedWorld();
+      for (let i = 0; i < 5; i++) w.step([[UNA, T_UNA]]);
+      await w.ask();
+      expect(w.fixed).toEqual([[UNA, 'About 12 minutes are left in this round.']]);
+      w.line(5);
+      expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+      expect(w.talking.asker).toBeNull();
+      // The session's own (unrouted) reply inside the window is not relayed and does not take the window.
+      w.router.outputAudio(frame(T_MILO), false); w.router.outputAudio(frame(T_MILO), true);
+      expect(w.relay.pushed).toHaveLength(5);
+      expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+      // Una asks again without the name: routed as her follow-up.
+      w.clock.advance(1_000 + HANDSFREE.echoGraceMs);
+      w.rules.verdictFor = () => ({ kind: 'request' });
+      w.words(UNA, 's2', 'and can you read the question');
+      expect(w.router.state()).toMatchObject({ phase: 'routing', userId: UNA, via: 'follow-up' });
+    });
+
+    it('fix 2: a fixed-lines person (a candidate without pad help) still gets no window', async () => {
+      const w = fixedWorld();
+      w.rules.admission.set(UNA, 'fixed-lines');
+      await w.ask();
+      expect(w.fixed).toHaveLength(1);
+      w.line(5);
+      expect(w.router.state()).toEqual({ phase: 'idle' });
+    });
+
+    it("fix 3: late words of a sentence begun before Milo started (the hold's own) are no barge-in; a sentence begun after is", async () => {
+      const w = world();
+      expect(await w.router.holdPress(UNA)).toEqual({ ok: true });
+      w.talk(UNA, T_UNA, 10);
+      w.words(UNA, 'u1', 'Milo can you');
+      w.router.holdRelease(UNA);
+      w.quiet(5);
+      w.router.turnEnded();
+      w.router.outputAudio(frame(T_MILO), false);
+      w.router.outputText('Hello, I am Milo');
+      // His deltas arrive about a second late: more words of the sentence he began while holding.
+      w.clock.advance(50);
+      w.words(UNA, 'u1', ' introduce yourself to the candidate please');
+      expect(w.drops).toEqual([]);
+      w.router.outputAudio(frame(T_MILO), false);
+      expect(w.relay.pushed).toHaveLength(2);
+      w.words(HUGO, 'h1', 'stop');
+      expect(w.drops).toEqual(['barge-in']);
+    });
+
+    it('fix 4: a routed request the family holds is answered on the words so far, once (the final sentence is not judged again)', async () => {
+      const w = fixedWorld();
+      w.rules.mayBeFixedFor = (s) => /left/.test(s.text);
+      for (let i = 0; i < 5; i++) w.step([[UNA, T_UNA]]);
+      w.words(UNA, 's1', 'Milo, how much time');
+      w.listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo, how much time' }); await settle();
+      expect(w.rules.verdicts).toHaveLength(0);
+      w.words(UNA, 's1', ' is left'); await settle();
+      expect(w.rules.verdicts).toEqual([{ userId: UNA, text: 'Milo, how much time is left', via: 'name' }]);
+      expect(w.fixed).toHaveLength(1);
+      expect(w.router.state()).toEqual({ phase: 'idle' });
+      w.listening.emit('sentence', { userId: UNA, sentenceId: 's1', text: 'Milo, how much time is left?', startMs: 0, endMs: w.clock.nowMs(), named: true }); await settle();
+      expect(w.rules.verdicts).toHaveLength(1);
+      expect(w.fixed).toHaveLength(1);
+    });
+
+    it('fix 4: an early verdict that is not fixed changes nothing (the final verdict decides)', async () => {
+      const w = fixedWorld();
+      w.rules.mayBeFixedFor = () => true;
+      w.rules.verdictFor = () => ({ kind: 'request' });
+      for (let i = 0; i < 5; i++) w.step([[UNA, T_UNA]]);
+      w.listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo' }); await settle();
+      w.words(UNA, 's1', 'Milo, what is the time complexity'); await settle();
+      expect(w.router.state()).toMatchObject({ phase: 'routing', userId: UNA });
+      w.listening.emit('sentence', { userId: UNA, sentenceId: 's1', text: 'Milo, what is the time complexity?', startMs: 0, endMs: w.clock.nowMs(), named: true }); await settle();
+      w.router.outputAudio(frame(T_MILO), true);
+      expect(w.relay.pushed).toHaveLength(1);
+    });
+
+    it("fix 6: a server line coming mutes the session's own preamble: what has not played is cleared, the rest is unheard, the line plays", async () => {
+      const w = world();
+      w.talk(UNA, T_UNA, 5);
+      w.name(UNA, 's1', 0); await settle();
+      w.sentence(UNA, 's1', 'Milo, introduce yourself'); await settle();
+      w.router.outputAudio(frame(T_MILO), false);
+      expect(w.relay.pushed).toHaveLength(1);
+      w.router.serverLine(true);
+      expect(w.relay.clears).toBe(1);
+      w.router.outputAudio(frame(T_MILO), false); w.router.outputAudio(frame(T_MILO), true);
+      expect(w.relay.pushed).toHaveLength(1);
+      w.milo(3, 'say_1');
+      expect(w.relay.pushed).toHaveLength(4);
+      // The line over, the session is heard again.
+      w.router.outputAudio(frame(T_MILO), true);
+      expect(w.relay.pushed).toHaveLength(5);
+    });
+  });
 });

@@ -45,6 +45,10 @@ const LEAK_MAX_LAG = 6;
 const LEAK_CLEAN_CORR = 0.3;
 /** The newest bins are left out of the judgement (the onset being judged is not history). */
 const LEAK_SKIP_BINS = 5;
+/** A voiced stretch after this much quiet is a new stretch of speech (where a sentence heard later probably began). */
+const SPEECH_GAP_MS = 600;
+/** A server line the session's own words wait behind (`serverLine`): heard again after its line, or after this at most. */
+export const SERVER_LINE_MUTE_MS = 15_000;
 
 /** RMS of 16-bit LE samples in [from, to) bytes. */
 function rmsOf(pcm: Buffer, from = 0, to = pcm.length): number {
@@ -76,7 +80,11 @@ export interface RouterDeps {
   clock: HandsfreeClock;
   call: PolicyCall;
   /** `provisional` (rules.ts `EarlyHandsfreeRules`): absent, every answer waits for the final verdict. */
-  rules: HandsfreeRules & { provisional?(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null };
+  rules: HandsfreeRules & {
+    provisional?(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null;
+    /** rules.ts `mayBeFixed`: the words so far may be a held answer (a phrase tool), so the verdict is asked on them now. Absent: never. */
+    mayBeFixed?(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): boolean;
+  };
   listening: Pick<ListeningSide, 'preRoll' | 'on'>;
   talking: Pick<TalkingSide, 'feed' | 'setAsker' | 'say'>;
   relay: RelayPort;
@@ -167,6 +175,23 @@ export class Router {
   private paused: { userId: string; timer: unknown } | null = null;
   private pausedFrames: Array<{ pcm: Buffer; last: boolean; said: boolean; replay: boolean }> = [];
   private closed = false;
+  /** The say id of the server line playing, one cut by a barge-in or drop (its later frames are dropped), and who a fixed line answers. */
+  private sayingId: string | null = null;
+  private droppedSay: string | null = null;
+  private lineFor: string | null = null;
+  /** Lines this router said itself (no orchestrator): their words, told to the echo check as they start playing. */
+  private readonly sayTexts = new Map<string, string>();
+  /** Where Milo's current stretch of playout began (session ms): a sentence begun before it is no barge-in (film fix 3). */
+  private playStartMs = -Infinity;
+  /** Per sentence: when its first words came, and where its speech probably began (the mic's last voiced stretch). */
+  private readonly firstWords = new Map<string, { at: number; start: number | null }>();
+  private readonly speechStarts = new Map<string, number[]>();
+  private readonly lastVoiced = new Map<string, number>();
+  /** Early verdicts asked on a routed sentence's words so far (`mayBeFixed`), by sentence. */
+  private readonly earlyFixed = new Map<string, Promise<TriggerVerdict>>();
+  /** A server line is coming: the session's own words are unheard until it has played (film fix 6). */
+  private modelMuted = false;
+  private muteTimer: unknown = null;
   private readonly listeners = new Map<string, Set<(e: never) => void>>();
   private readonly offs: Array<() => void>;
 
@@ -176,7 +201,7 @@ export class Router {
     this.offs = [
       l.on('frame', (e) => this.onFrame(e.userId, e.pcm, e.atMs)),
       l.on('name', (e) => { void this.onName(e.userId, e.sentenceId, e.sentenceStartMs, e.nameEndMs, e.textSoFar); }),
-      l.on('words', (e) => this.onWords(e.userId, e.sentenceId, e.delta)),
+      l.on('words', (e) => this.onWords(e.userId, e.sentenceId, e.delta, e.atMs)),
       l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named, e.startMs, e.endMs)),
       l.on('lane', (e) => { if (e.state === 'down' && e.reason === 'left') this.personLeft(e.userId); }),
     ];
@@ -269,6 +294,7 @@ export class Router {
     if (admission !== 'route') { this.trace('name.denied', { userId }); return; }
     if (busy()) { this.queue(userId, sentenceId, sentenceStartMs); return; }
     this.startRoute(userId, 'name', sentenceId, Math.max(sentenceStartMs, nameEndMs - HANDSFREE.preRollMaxMs));
+    this.tryEarlyFixed(userId, sentenceId);
   }
 
   private queue(userId: string, sentenceId: string, sentenceStartMs: number): void {
@@ -325,9 +351,13 @@ export class Router {
   // ---------------------------------------------------------------------------------------------------------------------------
   // What people say (words, finished sentences)
 
-  private onWords(userId: string, sentenceId: string, delta: string): void {
+  private onWords(userId: string, sentenceId: string, delta: string, atMs = this.deps.clock.nowMs()): void {
     if (this.closed) return;
     const key = `${userId}|${sentenceId}`;
+    if (!this.firstWords.has(key)) {
+      this.firstWords.set(key, { at: this.deps.clock.nowMs(), start: this.speechStartBefore(userId, atMs) });
+      if (this.firstWords.size > MAX_KEPT_VERDICTS) this.firstWords.delete(this.firstWords.keys().next().value as string);
+    }
     const heard = `${this.heard.get(key) ?? ''}${delta}`;
     this.lastWordsMs.set(userId, this.deps.clock.nowMs());
     this.heard.set(key, heard);
@@ -335,6 +365,8 @@ export class Router {
     if (this.st.phase === 'routing' && this.st.userId === userId && this.turn?.via !== 'hold') this.armGiveUp();
     if (this.heard.size > MAX_KEPT_VERDICTS) this.heard.delete(this.heard.keys().next().value as string);
     if (this.playing()) {
+      // Words of a sentence begun before he started (the question's tail, the hold's own words, ~1 s late) are no barge-in.
+      if (this.begunBefore(userId, sentenceId)) { this.trace('words.before-playout', { userId }); return; }
       const v = this.deps.rules.overlap(heard, this.saying);
       if (v === 'barge-in') { this.bargeIn(userId); return; }
       if (v === 'echo') { if (this.paused?.userId === userId) this.resume('echo'); return; }
@@ -343,6 +375,55 @@ export class Router {
     // The asker speaks again inside their window: a follow-up turn on this sentence (judged when it is final).
     if (this.st.phase === 'follow-up' && this.st.userId === userId) { this.openTurn(userId, 'follow-up', sentenceId); this.warmAdmission(userId); }
     else if (this.turn && this.turn.userId === userId && this.turn.via === 'follow-up' && this.turn.sentenceId === null) { this.turn.sentenceId = sentenceId; this.warmAdmission(userId); }
+    this.tryEarlyFixed(userId, sentenceId);
+  }
+
+  /** Did this sentence begin before Milo's current playout: the routed turn's own, its first words came before, or its speech did? */
+  private begunBefore(userId: string, sentenceId: string): boolean {
+    const t = this.turn;
+    if (t && t.userId === userId && t.sentenceId === sentenceId) return true;
+    const f = this.firstWords.get(`${userId}|${sentenceId}`);
+    return !!f && (f.at < this.playStartMs || (f.start !== null && f.start < this.playStartMs));
+  }
+
+  /** Where the speech heard at `atMs` probably began: the start of the mic's voiced stretch (voiced in the last 2 s), else unknown. */
+  private speechStartBefore(userId: string, atMs: number): number | null {
+    const last = this.lastVoiced.get(userId);
+    if (last === undefined || last < atMs - 2_000) return null;
+    let start: number | null = null;
+    for (const s of this.speechStarts.get(userId) ?? []) if (s <= atMs) start = s;
+    return start !== null && start >= atMs - HANDSFREE.ringMs ? start : null;
+  }
+
+  /**
+   * The routed sentence's words so far may be a held answer (a phrase tool: the time, the question again): the verdict is asked on
+   * them now, not at the final (~1.7 s later), so the server line goes before the session's own answer. Only a `fixed` verdict is
+   * used (the final sentence is then not judged again); anything else changes nothing. One ask at a time per sentence.
+   */
+  private tryEarlyFixed(userId: string, sentenceId: string): void {
+    const may = this.deps.rules.mayBeFixed;
+    const t = this.turn;
+    if (!may || !t || t.userId !== userId || t.sentenceId !== sentenceId || t.verdict !== null || t.via === 'hold') return;
+    const key = `${userId}|${sentenceId}`;
+    if (this.verdicts.has(key) || this.earlyFixed.has(key)) return;
+    const text = this.heard.get(key);
+    if (!text) return;
+    const via: 'name' | 'follow-up' = t.via === 'follow-up' ? 'follow-up' : 'name';
+    let ok = false;
+    try { ok = may.call(this.deps.rules, this.deps.call, { userId, text, via }); } catch { ok = false; }
+    if (!ok) return;
+    const asked = this.deps.rules.verdict(this.deps.call, { userId, text, via }).catch((): TriggerVerdict => ({ kind: 'mention' }));
+    this.earlyFixed.set(key, asked);
+    void asked.then((v) => {
+      this.earlyFixed.delete(key);
+      if (this.closed) return;
+      if (v.kind !== 'fixed') { const now = this.heard.get(key); if (now !== undefined && now !== text) this.tryEarlyFixed(userId, sentenceId); return; }
+      if (this.verdicts.has(key)) return;
+      this.verdicts.set(key, v);
+      this.trace('verdict.early-fixed', { userId });
+      const cur = this.turn;
+      if (cur && cur.userId === userId && cur.sentenceId === sentenceId && cur.verdict === null) this.applyVerdict(cur, v);
+    });
   }
 
   private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number, endMs: number): void {
@@ -373,6 +454,10 @@ export class Router {
   private isFixedPending(userId: string): boolean { return this.admitting === userId; }
 
   private async judge(userId: string, sentenceId: string, text: string, via: 'name' | 'follow-up'): Promise<void> {
+    // Answered early on its words so far (a held answer): not judged again (the phrase tool ran once).
+    const early = this.earlyFixed.get(`${userId}|${sentenceId}`);
+    if (early && (await early).kind === 'fixed') return;
+    if (this.verdicts.get(`${userId}|${sentenceId}`)?.kind === 'fixed') return;
     let v: TriggerVerdict;
     try { v = await this.deps.rules.verdict(this.deps.call, { userId, text, via }); } catch { v = { kind: 'mention' }; }
     if (this.closed) return;
@@ -380,10 +465,10 @@ export class Router {
     this.verdicts.set(key, v);
     if (this.verdicts.size > MAX_KEPT_VERDICTS) this.verdicts.delete(this.verdicts.keys().next().value as string);
     const t = this.turn;
-    const early = this.earlyKey === key;
-    if (early) this.earlyKey = null;
+    const wasEarly = this.earlyKey === key;
+    if (wasEarly) this.earlyKey = null;
     if (t && t.userId === userId && t.sentenceId === sentenceId && t.verdict === null) this.applyVerdict(t, v);
-    else if (early && t && t.userId === userId && t.via === 'follow-up' && t.sentenceId === null && t.verdict === null) {
+    else if (wasEarly && t && t.userId === userId && t.via === 'follow-up' && t.sentenceId === null && t.verdict === null) {
       // The early answer ended and opened its window before the verdict: the window carries the request, or goes with it.
       if (v.kind === 'request') { t.verdict = v; this.syncAsker(); } else { if (this.playing()) this.stopPlayout(); this.applyVerdict(t, v); }
     } else if (this.queued && this.queued.userId === userId && this.queued.sentenceId === sentenceId && v.kind !== 'request') this.queued = null;
@@ -402,7 +487,8 @@ export class Router {
     // Released early and not a request after all: what already went out stops playing.
     if (v.kind !== 'request' && t.early && !this.uttering && this.playing()) this.stopPlayout();
     if (v.kind === 'request') { this.syncAsker(); const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
-    if (v.kind === 'fixed') { this.drop(v.kind); this.sayFixed(t.userId, v.line); return; }
+    // A fixed line answers a routed asker: their follow-up window opens once it has played (film fix 2).
+    if (v.kind === 'fixed') { this.drop(v.kind); this.lineFor = t.userId; this.sayFixed(t.userId, v.line); return; }
     this.drop(v.kind);
   }
 
@@ -410,7 +496,10 @@ export class Router {
   private sayFixed(userId: string, line: string): void {
     if (this.deps.sayFixed) { this.deps.sayFixed(userId, line); return; }
     this.sayNo += 1;
-    this.deps.talking.say(`hf-fixed-${this.sayNo}`, line, () => undefined);
+    const id = `hf-fixed-${this.sayNo}`;
+    this.sayTexts.set(id, line);
+    if (this.sayTexts.size > 8) this.sayTexts.delete(this.sayTexts.keys().next().value as string);
+    this.deps.talking.say(id, line, () => undefined);
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
@@ -432,12 +521,24 @@ export class Router {
   outputAudio(pcm: Buffer, last: boolean, say?: string): void {
     if (this.closed) return;
     this.lastOutputMs = this.deps.clock.nowMs();
-    if (say !== undefined) { this.relayFrame(pcm, last, true); return; }
+    if (say !== undefined) {
+      // A server line cut by a barge-in (or a drop): the rest of it is never heard.
+      if (this.droppedSay === say) { if (last) this.droppedSay = null; return; }
+      const own = this.sayTexts.get(say);
+      if (own !== undefined) { this.sayTexts.delete(say); this.outputText(own, true); }
+      this.sayingId = say;
+      this.relayFrame(pcm, last, true);
+      return;
+    }
     this.speaking = !last;
+    // A server line is coming: what the session says of its own meanwhile (a preamble, its own take on the request) is unheard.
+    if (this.modelMuted) return;
     if (this.dropUtt) { if (last) this.dropUtt = false; return; }
     const t = this.turn;
     // Nobody asked: the whole utterance is unheard (a turn opened while it runs never takes its tail).
     if (!t || this.st.phase === 'idle') { this.dropUtt = !last; return; }
+    // The window a server line opened: the session's own words in it were never asked for (its asker gets only the line).
+    if (this.st.phase === 'follow-up' && t.verdict?.kind === 'fixed') { this.dropUtt = !last; return; }
     if (this.st.phase === 'routing') this.setState({ ...this.st, phase: 'answering' });
     if (this.st.phase === 'follow-up') this.setState({ phase: 'answering', userId: t.userId, via: t.via, sinceMs: this.deps.clock.nowMs() });
     this.clearGiveUp();
@@ -514,11 +615,56 @@ export class Router {
     if (this.paused) { this.pausedFrames.push({ pcm, last, said, replay: false }); return; }
     this.pushOut(pcm, last);
     if (last && !said) this.answerEnded();
+    if (last && said) this.lineEnded();
+  }
+
+  /**
+   * A server line has played to its end: the session is heard again, and a fixed line's asker gets their follow-up window (unless
+   * the floor went to someone else meanwhile, someone is queued or holds it).
+   */
+  private lineEnded(): void {
+    this.unmute();
+    this.sayingId = null;
+    const who = this.lineFor;
+    this.lineFor = null;
+    if (!who || this.closed || this.holder || this.liveQueue()) return;
+    const st = this.st;
+    if (st.phase === 'idle' || (st.phase === 'follow-up' && st.userId === who)) {
+      this.openWindow(who, this.playingUntil + HANDSFREE.followUpMs, { kind: 'fixed', line: '' });
+      this.trace('window.after-line', { userId: who });
+    }
+  }
+
+  /**
+   * A server line is on its way (the orchestrator ran a server tool whose line it will say), or not after all (`false`): until it
+   * has played, the session's own words are unheard, and what of them has not played yet is cleared (film fix 6).
+   */
+  serverLine(coming: boolean): void {
+    if (this.closed) return;
+    if (!coming) { this.unmute(); return; }
+    this.modelMuted = true;
+    if (this.muteTimer !== null) this.deps.clock.clearTimeout(this.muteTimer);
+    this.muteTimer = this.deps.clock.setTimeout(() => { this.muteTimer = null; this.modelMuted = false; }, SERVER_LINE_MUTE_MS);
+    if (this.uttering && !this.utteringSay) {
+      this.discardPause();
+      this.deps.relay.clear();
+      this.playingUntil = this.deps.clock.nowMs();
+      this.forgetUnplayed(this.playingUntil);
+      this.uttering = false;
+      this.trace('preamble.cut', {});
+    }
+  }
+
+  private unmute(): void {
+    this.modelMuted = false;
+    if (this.muteTimer !== null) { this.deps.clock.clearTimeout(this.muteTimer); this.muteTimer = null; }
   }
 
   /** Into the relay, on the playout clock: it plays for 100 ms after the frame before it. */
   private pushOut(pcm: Buffer, last: boolean): void {
     const now = this.deps.clock.nowMs();
+    // A new stretch of his playout (not his voice a moment ago going on): where barge-in starts counting.
+    if (this.playStartMs === -Infinity || now >= this.playingUntil + HANDSFREE.echoGraceMs) this.playStartMs = Math.max(now, this.playingUntil);
     this.playingUntil = Math.max(now, this.playingUntil) + TICK_MS;
     this.deps.relay.push(pcm, last);
     this.playout = this.playout.filter((p) => p.endMs > now);
@@ -540,8 +686,15 @@ export class Router {
     const o = this.onsets.get(userId) ?? { voicedMs: 0, quietMs: ONSET_REARM_MS, fired: false };
     this.onsets.set(userId, o);
     const win = (HANDSFREE.sampleRate * 2) / 50; // 20 ms
-    for (let at = 0; at + win <= pcm.length; at += win) {
-      if (rmsOf(pcm, at, at + win) > ONSET_RMS) { o.voicedMs += 20; o.quietMs = 0; }
+    const starts = this.speechStarts.get(userId) ?? [];
+    this.speechStarts.set(userId, starts);
+    for (let at = 0, ms = atMs; at + win <= pcm.length; at += win, ms += 20) {
+      if (rmsOf(pcm, at, at + win) > ONSET_RMS) {
+        o.voicedMs += 20; o.quietMs = 0;
+        const lv = this.lastVoiced.get(userId);
+        if (lv === undefined || ms - lv >= SPEECH_GAP_MS) { starts.push(ms); if (starts.length > 16) starts.shift(); }
+        this.lastVoiced.set(userId, ms);
+      }
       else {
         o.quietMs += 20;
         if (o.quietMs >= ONSET_GAP_MS) o.voicedMs = 0;
@@ -666,6 +819,7 @@ export class Router {
     this.deps.relay.clear();
     this.forgetUnplayed(this.deps.clock.nowMs());
     this.playingUntil = this.deps.clock.nowMs();
+    this.cutLine();
     this.emit('drop', { userId: t?.userId ?? userId, reason: 'barge-in', atMs: this.deps.clock.nowMs() });
     this.dropUtt = this.speaking;
     this.uttering = false;
@@ -684,12 +838,21 @@ export class Router {
     t.held = [];
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
     this.discardPause();
-    if (this.uttering || reason === 'hold-cancel' || reason === 'stop') { this.deps.relay.clear(); this.playingUntil = this.deps.clock.nowMs(); this.forgetUnplayed(this.playingUntil); }
+    if (this.uttering || reason === 'hold-cancel' || reason === 'stop') { this.cutLine(); this.deps.relay.clear(); this.playingUntil = this.deps.clock.nowMs(); this.forgetUnplayed(this.playingUntil); }
     // The session may talk on, unheard, to the end of its utterance.
     this.dropUtt = this.speaking;
     this.uttering = false;
     this.emit('drop', { userId: t.userId, reason, atMs: this.deps.clock.nowMs() });
     this.toIdle();
+  }
+
+  /** A server line playing now is cut: its later frames are dropped, and its asker gets no window. */
+  private cutLine(): void {
+    if (!this.uttering || !this.utteringSay || this.sayingId === null) return;
+    this.droppedSay = this.sayingId;
+    this.sayingId = null;
+    this.lineFor = null;
+    this.unmute();
   }
 
   private toIdle(): void {
@@ -776,7 +939,7 @@ export class Router {
     this.closed = true;
     const t = this.turn;
     if (t?.verdictTimer) this.deps.clock.clearTimeout(t.verdictTimer);
-    this.clearWindow(); this.clearGiveUp(); this.clearHold(); this.discardPause();
+    this.clearWindow(); this.clearGiveUp(); this.clearHold(); this.discardPause(); this.unmute();
     this.out = []; this.turn = null; this.queued = null;
     for (const off of this.offs.splice(0)) off();
     this.listeners.clear();

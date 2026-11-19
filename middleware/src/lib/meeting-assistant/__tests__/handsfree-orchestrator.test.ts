@@ -19,6 +19,7 @@ jest.mock('../chat.js', () => {
     postReply: async (_c: string, r: { text: string; askedBy: string; askedByName: string }) => { mockPosts.replies.push(r); return { id: 'm' }; },
     postPrivately: async (_c: string, userId: string, r: { text: string }) => { mockPosts.privates.push({ userId, text: r.text }); return true; },
     postNoticeQuietly: async (_c: string, text: string) => { mockPosts.notices.push(text); },
+    postApprovedAnswer: async (_c: string, text: string, _o: unknown, r: { askedBy: string; askedByName: string }) => { mockPosts.replies.push({ text, ...r }); return { id: 'm-approved' }; },
     noticeText: (jest.requireActual('../chat.js') as typeof import('../chat.js')).noticeText,
     postAction: async (callId: string, input: { actionId: string; askedBy: string; summary: string; detail?: string[]; tool: { name: string; argsDigest: string } }) => {
       mockPosts.actions.push(input);
@@ -62,6 +63,10 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   sendText(): void { throw new SessionTextUnsupported(); }
   answerToolCall(id: string, output: string) { if (this.closed || !this.open.delete(id)) return false; this.answers.push([id, output]); return true; }
   appendContext() { return true; }
+  /** Server lines asked for (`sayVerbatim`): sent at once; the test plays their frames and ends them. */
+  readonly asked: Array<{ id: string; text: string; ended: (t: string | null) => void }> = [];
+  sayVerbatim(id: string, text: string, ended: (t: string | null) => void, sent?: () => void) { this.asked.push({ id, text, ended }); sent?.(); return true; }
+  cancelSay() { /* forgotten */ }
   async close() { if (this.closed) return; this.closed = true; this.emit('closed', { reason: 'close_requested' }); }
   call(id: string, name: string, args: unknown, askedBy?: string) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs: 0, ...(askedBy ? { askedBy } : {}) }); }
   fire<K extends keyof SessionEvents>(type: K, event: SessionEvents[K]) { this.emit(type, event); }
@@ -304,6 +309,40 @@ describe('the hands-free seam', () => {
     await runtime.stop(CALL);
     expect(l.closed).toBe(true);
     expect(runtime.handsfreeRun(CALL)).toBeNull();
+  });
+
+  it('a fixed verdict\'s server line (sayFixed) plays through the router: Milo is playing, words over it cut it, its asker gets the window', async () => {
+    await boot('1');
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    const LINE = 'About twelve minutes are left in this round.';
+    rules.verdictFor = () => ({ kind: 'fixed', line: LINE });
+    const hf = runtime.handsfreeRun(CALL) as unknown as import('../handsfree/runtime.js').HandsfreeRuntime;
+    const drops: string[] = [];
+    hf.on('drop', (d) => drops.push(d.reason));
+    listening!.emit('name', { userId: ALICE, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 300, textSoFar: 'Milo' });
+    await flush();
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, how long is left?', startMs: 0, endMs: 1200, named: true });
+    await flush();
+    const req = inner().asked[0]!;
+    expect(req.text).toBe(LINE);
+    inner().fire('outputTranscript', { text: LINE, final: true, say: req.id });
+    for (let i = 0; i < 6; i++) inner().fire('outputAudio', { pcm: pcm(9), seq: i + 1, say: req.id, ...(i === 5 ? { last: true as const } : {}) });
+    req.ended(LINE);
+    await flush();
+    expect(hf.router.playing()).toBe(true);
+    listening!.emit('words', { userId: BOB, sentenceId: 'b1', delta: 'stop', atMs: 2_000 });
+    expect(drops).toContain('barge-in');
+  });
+
+  it('a server tool\'s line coming mutes the session\'s own words until it plays (the preamble is not heard)', async () => {
+    await boot('1');
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    const hf = runtime.handsfreeRun(CALL) as unknown as import('../handsfree/runtime.js').HandsfreeRuntime;
+    const muted: boolean[] = [];
+    const orig = hf.router.serverLine.bind(hf.router);
+    hf.router.serverLine = (c: boolean) => { muted.push(c); orig(c); };
+    hf.serverLine(true);
+    expect(muted).toEqual([true]);
   });
 });
 

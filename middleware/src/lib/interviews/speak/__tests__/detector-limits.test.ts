@@ -21,6 +21,11 @@ describe('what the detector reads as one of the two requests (as it should)', ()
     ['time left', 'time'],
     ['minutes remaining', 'time'],
     ['how long have we got', 'time'],
+    // A clause before the request, the name last (film F1, 19 November).
+    ['Before I start drawing, roughly how much time is left, Milo?', 'time'],
+    ['Okay so before I code this up, how long do I have left?', 'time'],
+    ['Sorry, I lost my train of thought, could you repeat the question, Milo?', 'repeat'],
+    ['Before I answer, what was the question again?', 'repeat'],
   ])('"%s" is %s', (text, want) => {
     expect(candidateRequestOf(text)).toBe(want);
   });
@@ -65,6 +70,8 @@ describe('decision 10: a sentence that only contains the words is other', () => 
     'I spent a long time on this, how much is left to cover',
     'I would repeat it with exponential backoff',
     'so the time left over goes to the queue',
+    'after the first pass the time left is spent on tests',
+    'I think I would repeat the question back to the user',
   ])('"%s" is other', (text) => {
     expect(candidateRequestOf(text)).toBe('other');
   });

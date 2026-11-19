@@ -99,6 +99,8 @@ export class HandsfreeRuntime implements HandsfreeRun {
   turnEnded(): void { this.router.turnEnded(); }
   outputAudio(pcm: Buffer, last: boolean, say?: string): void { this.router.outputAudio(pcm, last, say); }
   outputText(text: string, final = false): void { this.router.outputText(text, final); }
+  /** A server line is on its way (or not after all): the session's own words are unheard until it plays (router.ts `serverLine`). */
+  serverLine(coming: boolean): void { this.router.serverLine(coming); }
 
   close(): Promise<void> {
     this.closingAll ??= Promise.allSettled([this.closeListening(), this.deps.talking.close()]).then(() => undefined);

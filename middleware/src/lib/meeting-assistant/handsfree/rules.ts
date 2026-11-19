@@ -54,6 +54,11 @@ export interface EarlyHandsfreeRules extends HandsfreeRules {
    * hold), so the answer may be relayed before it; null otherwise. Never runs a held answer or anything with side effects.
    */
   provisional(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null;
+  /**
+   * Pure and synchronous, on the words so far: true when the family may hold them (its `mayBeHeld`, a superset of its phrase tools)
+   * for a person whose `route` admission is cached, so the router asks the verdict now instead of at the final (film fix 4).
+   */
+  mayBeFixed(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): boolean;
 }
 
 /** A promise's value, or `fallback` once `ms` pass or it rejects. */
@@ -300,9 +305,19 @@ export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): EarlyHandsf
     return 'request';
   }
 
+  function mayBeFixed(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): boolean {
+    if (cached(call, s.userId) !== 'route') return false;
+    const text = String(s.text ?? '');
+    const request = s.via === 'name' || HAS_NAME.test(text) ? addressedRequest(text) : text;
+    if (request === null || !request.trim() || parseCommand(request) === 'cancel') return false;
+    const family = policyFor(call).handsfree?.(call);
+    return !!family?.heldAnswer && !!family.mayBeHeld && family.mayBeHeld({ text: request });
+  }
+
   return {
     admit: (call, userId) => within(decideAdmission(call, userId), wait, 'deny'),
     provisional: (call, s) => { try { return provisional(call, s); } catch { return null; } },
+    mayBeFixed: (call, s) => { try { return mayBeFixed(call, s); } catch { return false; } },
     verdict: (call, sentence) => decideVerdict(call, sentence).catch((): TriggerVerdict => ({ kind: 'mention' })),
     overlap: (heard, saying) => {
       try { return overlapOf(String(heard ?? ''), String(saying ?? '')); } catch { return 'unclear'; }

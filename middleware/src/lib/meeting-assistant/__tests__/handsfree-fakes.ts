@@ -70,6 +70,9 @@ export class FakeRules implements HandsfreeRules {
   /** The early verdict on words so far (rules.ts `provisional`); default: none, so answers wait for the final verdict. */
   provisionalFor: (s: { userId: string; text: string; via: 'name' | 'follow-up' }) => 'request' | null = () => null;
   readonly provisionals: Array<{ userId: string; text: string; via: string }> = [];
+  /** rules.ts `mayBeFixed`: may the words so far be a held (server) answer? Default: never, so no early verdict is asked. */
+  mayBeFixedFor: (s: { userId: string; text: string; via: 'name' | 'follow-up' }) => boolean = () => false;
+  mayBeFixed(_call: unknown, s: { userId: string; text: string; via: 'name' | 'follow-up' }): boolean { return this.mayBeFixedFor(s); }
   admits = 0;
   async admit(_call: unknown, userId: string): Promise<Admission> { this.admits += 1; return this.admission.get(userId) ?? 'route'; }
   provisional(_call: unknown, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null { this.provisionals.push(s); return this.provisionalFor(s); }

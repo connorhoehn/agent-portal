@@ -260,6 +260,22 @@ describe('provisional: the early verdict on words so far (review 1, item 9), and
     expect(held).not.toHaveBeenCalled();
   });
 
+  it('mayBeFixed (film fix 4): words the family may hold, for a cached route admission, so the router asks the verdict on them now', async () => {
+    const { INTERVIEWS_MILO_POLICY } = await import('../../interviews/milo-policy.js');
+    const interview = INTERVIEWS_MILO_POLICY.handsfree!({ callId: CALL.callId, lobby: 'interviews:interview:iv-1', tenant: 't' });
+    const rules = rulesWith(record(), { policy: () => withFamily({ heldAnswer: async () => null, mayBeHeld: interview.mayBeHeld! }) });
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'Milo, how much time is left', via: 'name' })).toBe(false); // not admitted yet
+    await rules.admit(CALL, UNA);
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'Milo, how much time is left', via: 'name' })).toBe(true);
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'Milo, can you repeat the question', via: 'name' })).toBe(true);
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'Milo, what is a hash map', via: 'name' })).toBe(false);
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'Milo, never mind', via: 'name' })).toBe(false);
+    expect(rules.mayBeFixed(CALL, { userId: UNA, text: 'and how long is left', via: 'follow-up' })).toBe(true);
+    const fixed = rulesWith(record(), { policy: () => withFamily({ admit: async () => 'fixed-lines', heldAnswer: async () => null, mayBeHeld: () => true }) });
+    await fixed.admit(CALL, UNA);
+    expect(fixed.mayBeFixed(CALL, { userId: UNA, text: 'Milo, how much time is left', via: 'name' })).toBe(false);
+  });
+
   it('a family with a held answer and no mayBeHeld is never released early; fixed-lines and deny never', async () => {
     const rules = rulesWith(record(), { policy: () => withFamily({ heldAnswer: async () => null }) });
     await rules.admit(CALL, UNA);

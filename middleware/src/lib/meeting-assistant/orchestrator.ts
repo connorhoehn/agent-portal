@@ -1008,6 +1008,11 @@ export class AssistantRuntime {
       trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
     });
     hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; void this.pushFloor(run); });
+    // Talked over while a server line plays (the router cleared the relay): the line is cut, nothing more of it goes out.
+    hf.on('drop', (d) => {
+      const head = run.approvals[0];
+      if (d.reason === 'barge-in' && head && head.relayedBefore !== null) head.finish('posted', 'paused');
+    });
     run.hf = hf;
     void this.pushFloor(run);
     return hf;
@@ -1537,8 +1542,7 @@ export class AssistantRuntime {
       if (why) break;
       while (i < frames.length && run.relay.queuedFrames() < APPROVED_AHEAD_FRAMES) {
         const f = frames[i]!;
-        run.releasingApproved = true;
-        try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
+        this.approvedFrame(run, hold, f, i);
         hold.releasedMs += pcmMs(f.pcm.length);
         i += 1;
       }
@@ -1615,8 +1619,7 @@ export class AssistantRuntime {
           if (!this.silentForLine(run, hold)) break;
           hold.relayedBefore = run.relay.relayed; run.gate.clear();
         }
-        run.releasingApproved = true;
-        try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
+        this.approvedFrame(run, hold, f, hold.sent);
         hold.releasedMs += pcmMs(f.pcm.length);
         hold.sent += 1;
       }
@@ -1625,6 +1628,21 @@ export class AssistantRuntime {
       hold.tick = setTimeout(() => { hold.tick = null; this.streamApproved(run, hold); }, VOICE_FRAME_MS);
       (hold.tick as { unref?: () => void }).unref?.();
     }
+  }
+
+  /**
+   * One approved frame out. Hands-free: through the router (film fix 1), so the line is Milo playing there (a barge-in pauses and
+   * cuts it, a fixed line's asker gets the follow-up window after it) and its words are what the echo check compares; otherwise the
+   * call's gate, opened for `approved`.
+   */
+  private approvedFrame(run: CallRun, hold: ApprovedHold, f: { pcm: Buffer; last: boolean }, index: number): void {
+    if (run.hf) {
+      if (index === 0) run.hf.outputText(hold.text, true);
+      run.hf.outputAudio(f.pcm, f.last, hold.id);
+      return;
+    }
+    run.releasingApproved = true;
+    try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
   }
 
   /** A person's name in Milo's chat: the call family's own name for someone the directory does not know, else the directory's. */
@@ -2216,6 +2234,8 @@ export class AssistantRuntime {
     if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }, null, { continue: false }); run.session?.resumeTools?.(); return; }
     runs.add(key);
     if (runs.size > 200) runs.delete(runs.values().next().value as string);
+    // Hands-free: the server says what was done, so the session's own words meanwhile (a preamble) are unheard (film fix 6).
+    run.hf?.serverLine(true);
     this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' }, null, { continue: false });
     const out = await run.policy.runTool!(run.call, { askedBy: asker, name: e.name, args: e.args }).catch((err: unknown) => {
       console.warn('[meeting-assistant] server tool failed', (err as Error).message);
@@ -2226,6 +2246,7 @@ export class AssistantRuntime {
     if (retry) { runs.delete(key); if (out.note) run.session?.appendContext(out.note); }
     const line = retry ? out.line : out;
     trace('call.server', { call: e.callId, said: line !== null, ...(retry ? { retry: true } : {}) });
+    if (line === null) run.hf?.serverLine(false);
     try {
       if (line !== null) await this.queueHeld(run, asker, line);
     } finally {

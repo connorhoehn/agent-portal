@@ -45,6 +45,14 @@ const REPEAT_CORE = String.raw`(?:repeat(?:\s+(?:the\s+(?:last\s+)?question|that
 const TIME_CORE = String.raw`(?:how\s+are\s+we\s+(?:doing\s+)?(?:on|for)\s+time|time\s+check|how\s+much\s+time\s+(?:is\s+|do\s+(?:i|we)\s+have\s+|have\s+(?:i|we)\s+got\s+)?(?:left|remaining)|how\s+much\s+time\s+do\s+(?:i|we)\s+have|how\s+long\s+(?:do|have)\s+(?:i|we)\s+(?:have|got)(?:\s+left)?|(?:time|minutes?)\s+(?:is\s+|are\s+)?(?:left|remaining))`;
 const REPEAT = new RegExp(`^${LEAD}${REPEAT_CORE}${TAIL}$`);
 const TIME = new RegExp(`^${LEAD}${TIME_CORE}${IN_ROUND}${TAIL}$`);
+// A clause before the request ("Before I start drawing, roughly how much time is left, Milo?", film F1): up to ten words, then
+// only a request put as a question or an ask to Milo, ending the sentence (so "the time left over goes…" and "I would repeat it…"
+// stay other).
+const PREFACE = String.raw`(?:[a-z0-9]+\s+){1,10}?(?:(?:roughly|about|approximately|exactly|quickly|just|so)\s+)?`;
+const TIME_ASK = String.raw`(?:how\s+are\s+we\s+(?:doing\s+)?(?:on|for)\s+time|how\s+much\s+time\s+(?:is\s+|do\s+(?:i|we)\s+have\s+|have\s+(?:i|we)\s+got\s+)?(?:left|remaining)|how\s+much\s+time\s+do\s+(?:i|we)\s+have|how\s+long\s+(?:do|have)\s+(?:i|we)\s+(?:have|got)(?:\s+left)?)`;
+const REPEAT_ASK = String.raw`(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:repeat\s+the\s+(?:last\s+)?question|say\s+(?:that|it|the\s+question)\s+again|read\s+(?:out\s+)?the\s+question(?:\s+(?:out|again|once\s+more))?)|what\s+was\s+the\s+question)`;
+const TIME_PREFACED = new RegExp(`^${PREFACE}${TIME_ASK}${IN_ROUND}${TAIL}$`);
+const REPEAT_PREFACED = new RegExp(`^${PREFACE}${REPEAT_ASK}${TAIL}$`);
 
 /** Lower case, punctuation as spaces (apostrophes dropped), one space between words. */
 
@@ -53,6 +61,8 @@ export function candidateRequestOf(text: string): CandidateRequest {
   const t = utterance(text);
   if (REPEAT.test(t)) return 'repeat';
   if (TIME.test(t)) return 'time';
+  if (TIME_PREFACED.test(t)) return 'time';
+  if (REPEAT_PREFACED.test(t)) return 'repeat';
   return 'other';
 }
 
