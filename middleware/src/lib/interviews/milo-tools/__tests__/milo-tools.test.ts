@@ -304,6 +304,26 @@ describe('imports never land inside a statement (review 2, item 5)', () => {
   });
 });
 
+describe('a line separator in a case does not end a comment (review 2, item 6)', () => {
+  it('U+2028 and U+2029 in a case string are written escaped: the comment form runs nothing, the script form keeps the value', () => {
+    for (const sep of ['\u2028', '\u2029']) {
+      const value = `a${sep}globalThis.pwned = 1 //`;
+      const comment = renderTestCases([{ args: [value] }], 'javascript', null);
+      expect(comment.includes(sep)).toBe(false);
+      const sandbox: Record<string, unknown> = {};
+      runInNewContext(comment, sandbox);
+      expect(sandbox['pwned']).toBeUndefined();
+      const script = renderTestCases([{ args: [value], expected: value }], 'javascript', 'echo');
+      const printed: string[] = [];
+      runInNewContext(`function echo(x) { return x; }\n${script}`, { console: { log: (...a: unknown[]) => printed.push(a.join(' ')) }, JSON });
+      expect(printed).toHaveLength(1);
+      expect(printed[0]!.startsWith('ok')).toBe(true);
+      expect(renderTestCases([{ args: [{ [value]: value }] }], 'python', null).includes(sep)).toBe(false);
+      expect(renderTestCases([{ args: [value] }], 'python', 'f').includes(sep)).toBe(false);
+    }
+  });
+});
+
 describe('the session hears the pad change (review 1, item 7)', () => {
   const contexts: Array<[string, string]> = [];
   beforeEach(() => { contexts.length = 0; resetPadNotes(); });

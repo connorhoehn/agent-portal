@@ -61,15 +61,22 @@ export function functionOf(text: string, language: PadLanguage): string | null {
 /** Languages whose pad runs as a script, so the block can call the function and print each case. */
 const RUNS_AS_SCRIPT: ReadonlySet<PadLanguage> = new Set(['python', 'javascript', 'typescript']);
 
+/**
+ * A string as a quoted literal: JSON's escaping, and U+2028 and U+2029 escaped too. JSON leaves them raw, and in a JavaScript
+ * `//` comment either one ends the line, so the rest of a case string ran as code (review 2, item 6). The escapes mean the same
+ * in every language's string literal here.
+ */
+export const quoted = (s: string): string => JSON.stringify(s).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+
 /** A JSON value as a Python literal (True/False/None, dicts and lists as Python writes them). */
 export function pythonLiteral(v: unknown): string {
   if (v === null || v === undefined) return 'None';
   if (v === true) return 'True';
   if (v === false) return 'False';
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'None';
-  if (typeof v === 'string') return JSON.stringify(v);
+  if (typeof v === 'string') return quoted(v);
   if (Array.isArray(v)) return `[${v.map(pythonLiteral).join(', ')}]`;
-  if (typeof v === 'object') return `{${Object.entries(v as Record<string, unknown>).map(([k, x]) => `${JSON.stringify(k)}: ${pythonLiteral(x)}`).join(', ')}}`;
+  if (typeof v === 'object') return `{${Object.entries(v as Record<string, unknown>).map(([k, x]) => `${quoted(k)}: ${pythonLiteral(x)}`).join(', ')}}`;
   return 'None';
 }
 
@@ -78,8 +85,8 @@ export function scriptLiteral(v: unknown): string {
   if (v === undefined) return 'null';
   if (typeof v === 'number' && !Number.isFinite(v)) return 'null';
   if (Array.isArray(v)) return `[${v.map(scriptLiteral).join(', ')}]`;
-  if (v && typeof v === 'object') return `{ ${Object.entries(v as Record<string, unknown>).map(([k, x]) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k)}: ${scriptLiteral(x)}`).join(', ')} }`;
-  return JSON.stringify(v);
+  if (v && typeof v === 'object') return `{ ${Object.entries(v as Record<string, unknown>).map(([k, x]) => `${/^[A-Za-z_$][\w$]*$/.test(k) ? k : quoted(k)}: ${scriptLiteral(x)}`).join(', ')} }`;
+  return typeof v === 'string' ? quoted(v) : JSON.stringify(v);
 }
 
 function header(language: PadLanguage, count: number, checked: boolean): string[] {
