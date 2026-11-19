@@ -15,7 +15,7 @@
 // The line Milo must not cross is the question's own answer, not "logic". The block is marked as Milo's at both ends, so the
 // candidate, the panel and the record can tell it from the candidate's own code.
 import { lineTooLong } from '../pad-text.js';
-import type { PadLanguage } from '../types.js';
+import type { KitQuestion, PadLanguage } from '../types.js';
 import { COMMENT, functionOf } from '../testcases/render.js';
 import { afterImports, checkedImportLines } from './imports.js';
 
@@ -91,9 +91,10 @@ export type HelperCheck =
 
 /**
  * The deterministic checks: an import when one is what was asked, else the code when it is bounded, in `language`, and does not
- * define the question's function (`entry`, from the kit's starter in that language; null when the round has none).
+ * name any of the round's functions (`entry`: one name, every name the starters declare, or null when the round has none).
  */
-export function checkHelper(what: string, code: unknown, language: PadLanguage, entry: string | null): HelperCheck {
+export function checkHelper(what: string, code: unknown, language: PadLanguage, entry: string | null | readonly string[]): HelperCheck {
+  const entries = entry === null ? [] : typeof entry === 'string' ? [entry] : entry;
   const builtin = builtinFor(typeof what === 'string' ? what : '', language);
   if (builtin) return { ok: true, kind: 'import', line: builtin };
   // The size first: no pattern runs over code longer than the bound (a trailing-space pattern alone was quadratic).
@@ -102,8 +103,15 @@ export function checkHelper(what: string, code: unknown, language: PadLanguage, 
   if (!text.trim()) return { ok: false, why: 'empty' };
   if (text.split('\n').length > MAX_HELPER_LINES || text.split('\n').some(lineTooLong)) return { ok: false, why: 'size' };
   if (FOREIGN[language].test(text) || !NATIVE[language].test(text)) return { ok: false, why: 'language' };
-  if (entry && defines(text, entry)) return { ok: false, why: 'entry' };
+  if (entries.some((e) => defines(text, e))) return { ok: false, why: 'entry' };
   return { ok: true, kind: 'code', code: text };
+}
+
+/** Every function the questions' starters declare, in any language (a round of two questions has two; review 2, item 2). */
+export function entriesOf(questions: readonly KitQuestion[]): string[] {
+  const out = new Set<string>();
+  for (const q of questions) for (const [lang, s] of Object.entries(q.starter ?? {})) { const f = s ? functionOf(s, lang as PadLanguage) : null; if (f) out.add(f); }
+  return [...out];
 }
 
 /** The question's function in `language`: the one its starter declares there, else null. */

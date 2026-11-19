@@ -19,17 +19,21 @@ import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend } fr
 
 export const SOLUTION_CHECK_PROMPT = [
   'You check code before it is added to a candidate\'s shared code pad in a technical interview.',
-  'You are given the interview question and a piece of helper code someone asked for. Answer SOLUTION if the code solves the',
-  'question, or most of it (its algorithm, its function, or the part the candidate is meant to work out); answer HELPER if it is',
-  'a general tool (a data structure, a utility) that does not by itself answer the question.',
+  'You are given the round\'s interview questions and a piece of helper code someone asked for. Answer SOLUTION if the code solves',
+  'any of the questions, or most of one (its algorithm, its function, or the part the candidate is meant to work out); answer',
+  'HELPER if it is a general tool (a data structure, a utility) that does not by itself answer any of them.',
   'You may be given test cases instead of helper code: answer SOLUTION if any of their values or comments describes or gives away',
-  'how to solve the question, else HELPER.',
+  'how to solve any of the questions, else HELPER.',
   'Answer with exactly one word: HELPER or SOLUTION.',
 ].join('\n');
 export const SOLUTION_CHECK_MAX_TOKENS = 5;
+/** At most this many of the round's questions go to one check. */
+export const MAX_VERDICT_QUESTIONS = 8;
 export const SCRIPTED_VERDICT_MODEL_ID = 'scripted-verdict';
 
-export interface VerdictInput { question: string; code: string; entry: string | null; kind?: 'helper' | 'tests' }
+/** Every technical question of the round (the pad's own cannot be told for sure: a renamed function matches none; review 2,
+ * item 2) and every function name their starters declare, in any language. */
+export interface VerdictInput { questions: string[]; code: string; entries: string[]; kind?: 'helper' | 'tests' }
 export type Verdict = 'helper' | 'solution';
 
 export interface VerdictModel {
@@ -43,7 +47,8 @@ export function buildVerdictRequest(modelId: string, input: VerdictInput, fence:
     modelId,
     system: [{ text: withDataRule(SOLUTION_CHECK_PROMPT) }],
     messages: [{ role: 'user' as const, content: [{ text: [
-      `The question:\n${fence.wrap(input.question, { kind: 'question', maxChars: 2000 })}`,
+      `${input.questions.length === 1 ? 'The question' : `The round's ${input.questions.length} questions`}:`,
+      ...input.questions.slice(0, MAX_VERDICT_QUESTIONS).map((q) => fence.wrap(q, { kind: 'question', maxChars: 2000 })),
       '',
       `${input.kind === 'tests' ? 'The test cases' : 'The helper code'}:\n${fence.wrap(input.code, { kind: 'code', maxChars: 6000 })}`,
       '',
@@ -66,7 +71,8 @@ export class ScriptedVerdictModel implements VerdictModel {
   readonly kind = 'scripted' as const;
   readonly modelId = SCRIPTED_VERDICT_MODEL_ID;
   async judge(input: VerdictInput): Promise<MiloModelResult> {
-    const named = input.entry !== null && new RegExp(String.raw`\b${input.entry.replace(/[^\w]/g, '')}\b`).test(input.code);
+    const words = new Set(input.code.split(/[^\w$]+/));
+    const named = input.entries.some((e) => words.has(e.replace(/[^\w$]/g, '')));
     const approach = /\btarget\b[\s\S]*\b(?:complement|seen|diff)\b|\b(?:complement|seen|diff)\b[\s\S]*\btarget\b/i.test(input.code);
     return { raw: named || approach ? 'SOLUTION' : 'HELPER', code: 'ok', sent: true, usage: null };
   }
@@ -80,7 +86,7 @@ export function makeVerdictModel(): VerdictModel {
   return makeCoachModel().kind === 'scripted' ? new ScriptedVerdictModel() : new BedrockVerdictModel();
 }
 
-const estimate = (input: VerdictInput) => ({ inputTokens: Math.ceil((SOLUTION_CHECK_PROMPT.length + 400 + input.question.length + input.code.length) / 4), outputTokens: SOLUTION_CHECK_MAX_TOKENS });
+const estimate = (input: VerdictInput) => ({ inputTokens: Math.ceil((SOLUTION_CHECK_PROMPT.length + 400 + input.questions.slice(0, MAX_VERDICT_QUESTIONS).reduce((n, q) => n + Math.min(q.length, 2000), 0) + input.code.length) / 4), outputTokens: SOLUTION_CHECK_MAX_TOKENS });
 
 /** The verdict, held and settled under the interview's cap; anything but a clear HELPER is `solution` (fail closed). */
 export async function judgeHelper(interviewId: string, leadId: string, input: VerdictInput): Promise<Verdict> {

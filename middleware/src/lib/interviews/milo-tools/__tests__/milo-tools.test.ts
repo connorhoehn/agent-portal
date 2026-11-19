@@ -43,6 +43,7 @@ let settings: MemoryMiloSettingsStore;
 let said: MemorySaidStore;
 let logged: PadEventIn[][];
 let judged: number;
+let judgedInputs: Array<{ questions?: string[]; entries?: string[] }>;
 let verdict: 'helper' | 'solution';
 let questions: KitQuestion[];
 
@@ -66,7 +67,7 @@ beforeEach(() => {
   pad = { text: TWO_SUM.starter!.python!, language: 'python' };
   settings = new MemoryMiloSettingsStore();
   said = new MemorySaidStore(); setSaidStore(said);
-  logged = []; judged = 0; verdict = 'helper'; questions = [TWO_SUM]; failWith = null;
+  logged = []; judged = 0; judgedInputs = []; verdict = 'helper'; questions = [TWO_SUM]; failWith = null;
   resetMiloTools();
   setSpeakDeps({ callOf: async () => 'call-tools', miloJoinedAt: async () => Date.now() - 10 * 60_000 });
   setMiloToolDeps({
@@ -76,7 +77,7 @@ beforeEach(() => {
     questions: async () => questions,
     write,
     padLog: async (_id, events) => { logged.push([...events]); return events.length; },
-    judge: async () => { judged += 1; return verdict; },
+    judge: async (_id, _lead, input) => { judged += 1; judgedInputs.push(input as never); return verdict; },
   });
 });
 afterAll(() => { setMiloToolDeps(null); setSaidStore(null); setSpeakDeps(null); });
@@ -200,6 +201,20 @@ describe('the solution check cannot be gone around (review 1, item 3)', () => {
     expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY })).toBe(HELPER_NOT_ADDED);
     expect(judged).toBe(0);
     expect(pad.text).not.toContain('class Trie');
+  });
+
+  it('a round of two questions: a helper naming either one\'s function is refused, and the verdict is asked about both (review 2, item 2)', async () => {
+    const MERGE: KitQuestion = { ...TWO_SUM, id: 'q-merge', prompt: 'Merge all overlapping intervals and return the result.',
+      starter: { python: 'def merge_intervals(intervals):\n    pass\n', javascript: 'function mergeIntervals(intervals) {\n}\n' } };
+    questions = [TWO_SUM, MERGE];
+    pad.text = 'def solve(nums, target):\n    pass\n'; // the candidate renamed the function
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'an interval merger', code: 'def merge_intervals(xs):\n    return xs\n' })).toBe(NOT_SOLUTION);
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a merger', code: 'class Merger:\n    run = mergeIntervals\n' })).toBe(NOT_SOLUTION);
+    expect(judged).toBe(0);
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY })).toBe(HELPER_ADDED);
+    expect(judgedInputs).toHaveLength(1);
+    expect(judgedInputs[0]!.questions).toEqual([TWO_SUM.prompt, MERGE.prompt]);
+    expect(judgedInputs[0]!.entries).toEqual(expect.arrayContaining(['two_sum', 'twoSum', 'merge_intervals', 'mergeIntervals']));
   });
 
   it('cases with a long string go to the verdict; refused when it says solution or there is no question', async () => {

@@ -32,7 +32,7 @@ import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type PadLanguage }
 import { functionOf } from '../testcases/render.js';
 import { MAX_PAD_TEXT } from '../pad-text.js';
 import { checkedImportLines, placeImports } from './imports.js';
-import { checkHelper, entryOf, helperBlock, placeHelper } from './helper.js';
+import { checkHelper, entriesOf, entryOf, helperBlock, placeHelper } from './helper.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 import { testCasesFor, questionForPad } from './tests.js';
 import { atEnd } from '../pad/milo-writer.js';
@@ -231,6 +231,10 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     return d.judge(interview.id, interview.leadId, input).catch(() => 'solution' as const);
   };
   const questions = await d.questions(interview).catch(() => []);
+  // The verdict judges against EVERY technical question of the round and refuses a helper naming any of their functions: which
+  // one the pad is working on cannot be told for sure (a renamed function matches none; review 2, item 2).
+  const prompts = questions.map((q) => q.prompt.trim()).filter(Boolean);
+  const entries = entriesOf(questions);
   let refusal: string | null = null;
   let retryNote: string | undefined;
   let done: Ran | null = null;
@@ -243,8 +247,8 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
       if (!made.ok) { refusal = TESTS_NOT_ADDED; return null; }
       // A long string value could carry the algorithm: such a batch is judged like a helper, and refused with no question to judge by.
       if (made.longStrings) {
-        if (!question?.prompt.trim()) { refusal = TESTS_NOT_ADDED; return null; }
-        const verdict = await judge({ question: question.prompt, code: made.block, entry: entryOf(question.starter, language), kind: 'tests' });
+        if (!prompts.length) { refusal = TESTS_NOT_ADDED; return null; }
+        const verdict = await judge({ questions: prompts, code: made.block, entries, kind: 'tests' });
         if (verdict !== 'helper') { refusal = TESTS_NOT_ADDED; return null; }
       }
       done = { line: testsAddedLine(made.count, made.checked), source: 'tests' };
@@ -264,7 +268,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     }
     // pad_add_helper
     const what = typeof a['what'] === 'string' ? a['what'] : '';
-    const checked = checkHelper(what, a['code'], language, entryOf(question?.starter, language));
+    const checked = checkHelper(what, a['code'], language, entries);
     if (!checked.ok) {
       refusal = checked.why === 'entry' ? NOT_SOLUTION : HELPER_NOT_ADDED;
       // Code in another language: likely written for the pad as the session last knew it. Not the request's one run.
@@ -281,8 +285,8 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
       };
     }
     // Every helper is judged, whoever asked; with no question to judge it by, it is refused (fail closed; review 1, item 3).
-    if (!question?.prompt.trim()) { refusal = HELPER_NOT_ADDED; return null; }
-    const verdict = await judge({ question: question.prompt, code: checked.code, entry: entryOf(question.starter, language), kind: 'helper' });
+    if (!prompts.length) { refusal = HELPER_NOT_ADDED; return null; }
+    const verdict = await judge({ questions: prompts, code: checked.code, entries, kind: 'helper' });
     if (verdict !== 'helper') { refusal = NOT_SOLUTION; return null; }
     kind = 'helper';
     const block = helperBlock(checked.code, what, language);
