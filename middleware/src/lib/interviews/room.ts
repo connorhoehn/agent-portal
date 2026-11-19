@@ -14,7 +14,8 @@
 
 import { seatOf } from './assign.js';
 import { competenciesOfRound, roundSurface } from './kit.js';
-import type { Interview, InterviewState, KitBoard, KitCompetency, Opening, PadLanguage, RoundSurface, Seat } from './types.js';
+import { hasAnswerKey } from './answer-key.js';
+import type { Interview, InterviewState, KitBoard, KitCompetency, KitQuestion, Opening, PadLanguage, RoundSurface, Seat } from './types.js';
 
 /** C1: the interview's call lobby (lib/interviews/lobby.ts `interviewLobbyName` once SEAT is in; the same string). */
 export const roomLobbyName = (interviewId: string): string => `interviews:interview:${interviewId}`;
@@ -32,6 +33,8 @@ export interface RoomQuestion {
   starter: Array<{ language: PadLanguage; code: string }>;
   /** The question's starting board, for a board round (WHITEBOARD-PLAN step 2); absent when it has none. */
   board?: KitBoard;
+  /** The answer key (answer-key.ts): the room is read only by its seats, the lead and the panel; absent when it has none. */
+  answerKey?: Pick<KitQuestion, 'providedDesign' | 'designQuestions' | 'redFlags'>;
 }
 
 /** C5's room view: what `GET /api/interviews/interviews/:id/room` answers, for the lead and the panel only. */
@@ -77,7 +80,8 @@ export function roomView(i: Interview, opening: Opening, candidateName: string, 
       if (!q) return [];
       const starter = PAD_ORDER.flatMap((language) => (q.starter?.[language] ? [{ language, code: q.starter[language]! }] : []));
       return [{ id: q.id, prompt: q.prompt, followUps: [...q.followUps], competencyId: q.competencyId, competency: names.get(q.competencyId) ?? null, starter,
-        ...(q.board ? { board: structuredClone(q.board) } : {}) }];
+        ...(q.board ? { board: structuredClone(q.board) } : {}),
+        ...(hasAnswerKey(q) ? { answerKey: structuredClone({ providedDesign: q.providedDesign, designQuestions: q.designQuestions, redFlags: q.redFlags }) } : {}) }];
     }),
     competencies: structuredClone(competenciesOfRound(opening.kit, i.roundId)),
     revision: i.revision,

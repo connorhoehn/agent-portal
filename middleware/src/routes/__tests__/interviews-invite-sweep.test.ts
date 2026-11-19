@@ -15,6 +15,9 @@
 // the sweep until it is named); each guest route refuses no cookie, a staff session and a guest not admitted, and an
 // admitted guest of one live interview reaches nothing of another; the routes rounds 3 to 6 added are named and refused;
 // and the reverse, a Work-only person and a caller holding only a guest cookie on every interviews route.
+// The answer key (lib/interviews/answer-key.ts): an admitted guest of a live system design round on "Design Twitter" walks
+// every GET route the server mounts and Milo's request, and no answer has a word of the provided design, an answer or a
+// red flag; the lead's room has them (so the check can fail), and only the lead may reveal the provided design.
 // The server runs with Milo on (MEETING_ASSISTANT_ENABLED, as the walk runs it), so Milo's call routes are judged by
 // their gates, not by the feature flag's 404.
 // Writes to the mock control routes (/api/__mock/*: reset, scenarios, the clock) are not sent: they would
@@ -27,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { enumerateRoutes } from '../../mock/core/wire/routes.js';
+import { TWITTER_QUESTIONS, TWITTER_RED_FLAGS } from '../../mock/interviews-design-twitter.js';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const OWN = 'iv-k1p5w8ra';
@@ -510,4 +514,85 @@ describe('lane H6: another tenant\'s person and a bare guest cookie on every int
     }
     expect(wrong).toEqual([]);
   }, 120_000);
+});
+
+describe('the answer key against a guest: a live "Design Twitter" round', () => {
+  let greta = ''; let hugo = ''; let wen = ''; let guest = ''; let other = '';
+  let IV = '';
+  const login = async (userId: string) => cookieOf(await fetch(`${base}/api/session/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ userId }) }), 'orgiq.session');
+  const json = (a: Answer): Record<string, unknown> => { try { return JSON.parse(a.body) as Record<string, unknown>; } catch { return {}; } };
+  const api = (p: string) => `/api/interviews/interviews${p}`;
+  const revision = async () => (json(await call('GET', api(`/${IV}`), hugo))['interview'] as { revision: number }).revision;
+  const guestOf = async (interviewId: string): Promise<string> => {
+    const made = await call('POST', api(`/${interviewId}/invite`), greta, {});
+    expect([interviewId, made.status]).toEqual([interviewId, 201]);
+    const token = String(json(made)['linkPath']).split('#')[1];
+    return cookieOf(await fetch(`${base}/api/interview-invite/exchange`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) }), 'interviews.guest');
+  };
+  // Pieces of the answer key no other text in the seed holds: each answer's and red flag's opening words, and the provided design's ids.
+  const MARKERS = [...TWITTER_QUESTIONS.map((q) => q.answer!.slice(0, 32)), ...TWITTER_RED_FLAGS.map((f) => f.text.slice(0, 32)), 'pd-node-', 'providedDesign', 'redFlags', 'designQuestions'];
+  const leaked = (body: string) => MARKERS.filter((m) => body.includes(m));
+
+  beforeAll(async () => {
+    expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
+    greta = await login('u-greta'); hugo = await login('u-hugo'); wen = await login('u-wen');
+    const made = await call('POST', api(''), greta, { applicationId: 'app-7b69njmx', roundId: 'rd-design', leadId: 'u-hugo', panelIds: [] });
+    expect(made.status).toBe(201);
+    IV = String((json(made)['interview'] as { id: string }).id);
+    const notice = json(await call('GET', api('/panel-notice'), hugo)) as { acknowledged?: boolean; notice?: { version?: string } };
+    if (notice.acknowledged === false && notice.notice?.version) await call('POST', api(`/${IV}/panel-notice`), hugo, { version: notice.notice.version });
+    expect((await call('POST', api(`/${IV}/answer`), hugo, { revision: await revision(), answer: 'accept' })).status).toBe(200);
+    const when = new Date(Math.ceil((Date.now() + 5 * 60_000) / 60_000) * 60_000).toISOString();
+    expect((await call('PUT', api(`/${IV}/time`), greta, { revision: await revision(), scheduledAt: when })).status).toBe(200);
+    expect((await call('PUT', api(`/${IV}/questions`), hugo, { revision: await revision(), questionIds: ['q-be-twitter'] })).status).toBe(200);
+    expect((await call('POST', api(`/${IV}/start`), hugo, { revision: await revision() })).status).toBe(200);
+    guest = await guestOf(IV);
+    const consent = (json(await call('GET', '/api/interview-invite/consents', guest))['notice'] ?? {}) as { version?: string };
+    expect((await call('PUT', '/api/interview-invite/consents', guest, { noticeVersion: consent.version, recording: true, transcription: true, milo: true })).status).toBeLessThan(500);
+    expect((await call('POST', '/api/interview-invite/knock', guest, {})).status).toBe(200);
+    expect((await call('POST', api(`/${IV}/admit`), hugo, { admit: true })).status).toBe(200);
+    other = await guestOf(OTHER);
+  }, 90_000);
+
+  afterAll(async () => { await fetch(`${base}/api/__mock/reset`, { method: 'POST' }).catch(() => undefined); });
+
+  it('the lead\'s room carries the answer key, so the markers are real', async () => {
+    const room = await call('GET', api(`/${IV}/room`), hugo);
+    expect(room.status).toBe(200);
+    expect(leaked(room.body).length).toBeGreaterThan(10);
+  });
+
+  it('no GET route the server mounts, nor Milo\'s request, answers the admitted guest (or another interview\'s) any of it', async () => {
+    const fill = (path: string) => path.replace(/:runId/g, 'run-x').replace(/:[A-Za-z_]+\??/g, IV).replace(/\*/g, IV);
+    const seen = new Set<string>();
+    const found: string[] = [];
+    let answered = 0;
+    for (const r of enumerateRoutes().routes) {
+      const key = `${r.method} ${r.path}`;
+      if (r.method !== 'GET' || seen.has(key) || key === 'GET /api/interview-invite/runs/events') continue;
+      seen.add(key);
+      for (const [who, cookie] of [['guest', guest], ['another interview\'s guest', other]] as const) {
+        const a = await call('GET', fill(r.path), cookie);
+        if (a.status < 400) answered++;
+        if (leaked(a.body).length) found.push(`${key} (${who}): ${leaked(a.body).join(', ')}`);
+      }
+    }
+    const milo = await call('POST', '/api/interview-invite/milo/request', guest, { request: 'time' });
+    if (leaked(milo.body).length) found.push(`POST milo/request: ${leaked(milo.body).join(', ')}`);
+    expect(answered).toBeGreaterThan(5);
+    expect(found).toEqual([]);
+  });
+
+  it('only the lead reveals the provided design: not the guest, not an interviewer without a seat, not for a question not chosen', async () => {
+    // The guest holds no staff session: the tenant's mount refuses it before the route.
+    expect([401, 404]).toContain((await call('POST', api(`/${IV}/board/reveal`), guest, { questionId: 'q-be-twitter' })).status);
+    expect((await call('POST', api(`/${IV}/board/reveal`), wen, { questionId: 'q-be-twitter' })).status).toBe(404);
+    expect((await call('POST', api(`/${IV}/board/reveal`), hugo, { questionId: 'q-be-ledger' })).status).toBe(404);
+    const shown = await call('POST', api(`/${IV}/board/reveal`), hugo, { questionId: 'q-be-twitter' });
+    expect(shown.status).toBe(200);
+    expect((json(shown)['board'] as { name: string }).name).toBe('Provided design');
+    // logged in the interview's pad log, as a reveal of that question
+    const log = json(await call('GET', api(`/${IV}/pad/log`), hugo));
+    expect(((log['events'] ?? []) as Array<{ kind: string; questionId?: string }>).filter((e) => e.kind === 'reveal').map((e) => e.questionId)).toEqual(['q-be-twitter']);
+  });
 });
