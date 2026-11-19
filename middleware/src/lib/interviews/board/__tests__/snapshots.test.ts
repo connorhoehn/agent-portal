@@ -4,7 +4,7 @@ jest.mock('../../../../config.js', () => ({ config: { mock: { aurora: true } } }
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   COUNT_BOARD_SNAPSHOTS_SQL, ERASE_BOARD_SNAPSHOTS_SQL, INSERT_BOARD_SNAPSHOT_SQL, LATEST_BOARD_SNAPSHOT_SQL, LIST_BOARD_SNAPSHOTS_SQL,
-  BOARD_END_GRACE_MS, MAX_BOARD_SNAPSHOTS, MemoryBoardSnapshotStore, mayCheckpoint, SqlBoardSnapshotStore, checkBoardScene, readBoardSnapshots, saveBoardSnapshot, setBoardSnapshotStore,
+  BOARD_END_GRACE_MS, BOARD_SNAPSHOT_GAP_MS, MAX_BOARD_SNAPSHOTS, REPLACE_BOARD_SNAPSHOT_SQL, MemoryBoardSnapshotStore, mayCheckpoint, SqlBoardSnapshotStore, checkBoardScene, readBoardSnapshots, saveBoardSnapshot, setBoardSnapshotStore,
   type BoardSnapshotStore,
 } from '../snapshots.js';
 import { blueprintBoard } from '../templates.js';
@@ -21,6 +21,12 @@ function fakeExec(): (sql: string, params?: SqlParameter[]) => Promise<Row[]> {
     if (sql === INSERT_BOARD_SNAPSHOT_SQL) {
       const row = { interview_id: p['interview_id'], seq: (Number(mine().slice(-1)[0]?.['seq'] ?? 0)) + 1, at: p['at'], who_id: p['who_id'], side: p['side'], elements: p['elements'], scene: p['scene'] };
       rows.push(row);
+      return [row];
+    }
+    if (sql === REPLACE_BOARD_SNAPSHOT_SQL) {
+      const row = mine().find((r) => Number(r['seq']) === Number(p['seq']));
+      if (!row) return [];
+      Object.assign(row, { at: p['at'], who_id: p['who_id'], side: p['side'], elements: p['elements'], scene: p['scene'] });
       return [row];
     }
     if (sql === ERASE_BOARD_SNAPSHOTS_SQL) {
@@ -51,6 +57,15 @@ describe.each([
     expect(await store.list('iv-a')).toEqual([]);
     expect(await store.count('iv-b')).toBe(1);
   });
+
+  it('replaces one checkpoint in place, keeping its seq; nothing for a seq it does not have', async () => {
+    const store = make();
+    await store.append('iv-a', { at: '2026-11-18T10:00:00.000Z', whoId: 'u-hugo', side: 'panel', elements: 1, scene: '[1]' });
+    expect(await store.replace('iv-a', 1, { at: '2026-11-18T10:05:00.000Z', whoId: 'u-hugo', side: 'panel', elements: 2, scene: '[1,2]' }))
+      .toMatchObject({ seq: 1, at: '2026-11-18T10:05:00.000Z', elements: 2, scene: '[1,2]' });
+    expect((await store.list('iv-a')).map((r) => [r.seq, r.scene])).toEqual([[1, '[1,2]']]);
+    expect(await store.replace('iv-a', 9, { at: '2026-11-18T10:05:00.000Z', whoId: 'u-hugo', side: 'panel', elements: 0, scene: '[]' })).toBeNull();
+  });
 });
 
 describe('the service', () => {
@@ -66,14 +81,29 @@ describe('the service', () => {
     expect(checkBoardScene([{ id: 'a', type: 'text', text: 'x'.repeat(600 * 1024) }])).toBeNull();
   });
 
-  it('stores a checkpoint, skips one that repeats the last, and stops at the cap', async () => {
+  it('stores a checkpoint, skips one that repeats the last, and at the cap the newest replaces the last, so the final board is kept', async () => {
     const hugo = { id: 'u-hugo', side: 'panel' as const };
+    const t0 = Date.UTC(2026, 10, 18, 10, 0);
     const one = checkBoardScene([{ id: 'a', type: 'rectangle' }])!;
-    expect(await saveBoardSnapshot('iv-a', hugo, one)).toBe(true);
-    expect(await saveBoardSnapshot('iv-a', hugo, one)).toBe(false);
-    for (let n = 1; n < MAX_BOARD_SNAPSHOTS; n++) await saveBoardSnapshot('iv-a', hugo, checkBoardScene([{ id: `e${n}`, type: 'rectangle' }])!);
+    expect(await saveBoardSnapshot('iv-a', hugo, one, new Date(t0))).toBe(true);
+    expect(await saveBoardSnapshot('iv-a', hugo, one, new Date(t0 + BOARD_SNAPSHOT_GAP_MS + 1))).toBe(false);
+    for (let n = 1; n < MAX_BOARD_SNAPSHOTS; n++) await saveBoardSnapshot('iv-a', hugo, checkBoardScene([{ id: `e${n}`, type: 'rectangle' }])!, new Date(t0 + n * (BOARD_SNAPSHOT_GAP_MS + 1)));
     expect(await store.count('iv-a')).toBe(MAX_BOARD_SNAPSHOTS);
-    expect(await saveBoardSnapshot('iv-a', hugo, checkBoardScene([{ id: 'late', type: 'rectangle' }])!)).toBe(false);
+    const lateAt = new Date(t0 + (MAX_BOARD_SNAPSHOTS + 5) * (BOARD_SNAPSHOT_GAP_MS + 1));
+    expect(await saveBoardSnapshot('iv-a', hugo, checkBoardScene([{ id: 'late', type: 'rectangle' }])!, lateAt)).toBe(true);
+    expect(await store.count('iv-a')).toBe(MAX_BOARD_SNAPSHOTS);
+    expect(await store.latest('iv-a')).toMatchObject({ seq: MAX_BOARD_SNAPSHOTS, scene: '[{"id":"late","type":"rectangle"}]', at: lateAt.toISOString() });
+  });
+
+  it('keeps at most one checkpoint per BOARD_SNAPSHOT_GAP_MS: a post sooner than that after the last replaces it', async () => {
+    const hugo = { id: 'u-hugo', side: 'panel' as const };
+    const t0 = Date.UTC(2026, 10, 18, 10, 0);
+    const scene = (id: string) => checkBoardScene([{ id, type: 'rectangle' }])!;
+    expect(await saveBoardSnapshot('iv-a', hugo, scene('a'), new Date(t0))).toBe(true);
+    for (let n = 1; n <= 20; n++) expect(await saveBoardSnapshot('iv-a', hugo, scene(`b${n}`), new Date(t0 + n * 100))).toBe(true);
+    expect((await store.list('iv-a')).map((r) => [r.seq, r.scene])).toEqual([[1, '[{"id":"b20","type":"rectangle"}]']]);
+    expect(await saveBoardSnapshot('iv-a', hugo, scene('c'), new Date(t0 + 2000 + BOARD_SNAPSHOT_GAP_MS))).toBe(true);
+    expect(await store.count('iv-a')).toBe(2);
   });
 
   it('reads the checkpoints with the writer\'s name and the elements parsed', async () => {

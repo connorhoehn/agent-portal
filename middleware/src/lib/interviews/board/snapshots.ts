@@ -1,8 +1,9 @@
 // The whiteboard's checkpoints (WHITEBOARD-PLAN step 1): while a board round is live, the lead's room posts the
 // board's elements every so often and when it closes, so the record page shows the final board and a few timed
 // snapshots beside the recording and the transcript. The pad log's pattern (../pad/log/): a memory store for the mock
-// world and a SQL store (schema/interviews_schema.sql `interview_board_snapshots`), append-only, capped per
-// interview, erased with the interview's media by the retention sweep.
+// world and a SQL store (schema/interviews_schema.sql `interview_board_snapshots`), capped per interview, erased with
+// the interview's media by the retention sweep. The newest board is always kept: a post sooner than
+// BOARD_SNAPSHOT_GAP_MS after the last checkpoint, or one at the cap, replaces the last checkpoint instead of adding one.
 //
 // A snapshot is the scene as the library's Excalidraw binding holds it: a JSON array of elements. Only its shape and
 // its size are checked; a snapshot identical to the last one is not stored again.
@@ -17,6 +18,8 @@ import { INTERVIEWS_TENANT, type Interview } from '../types.js';
 export const MAX_BOARD_SNAPSHOTS = 200;
 export const MAX_BOARD_SCENE_BYTES = 512 * 1024;
 export const MAX_BOARD_ELEMENTS = 2000;
+/** At most one checkpoint per this long in an interview: a sooner post replaces the last one. */
+export const BOARD_SNAPSHOT_GAP_MS = 30_000;
 
 export type BoardSide = 'panel' | 'candidate';
 
@@ -41,6 +44,8 @@ export interface BoardSnapshotStore {
   latest(interviewId: string): Promise<BoardSnapshotRecord | null>;
   /** Append one with the next `seq`. */
   append(interviewId: string, snapshot: NewBoardSnapshot): Promise<BoardSnapshotRecord>;
+  /** Put this snapshot in place of checkpoint `seq` (its seq kept); null when there is no such checkpoint. */
+  replace(interviewId: string, seq: number, snapshot: NewBoardSnapshot): Promise<BoardSnapshotRecord | null>;
   /** Every checkpoint of the interview, oldest first. */
   list(interviewId: string): Promise<BoardSnapshotRecord[]>;
   /** Remove every checkpoint of these interviews; how many went. */
@@ -66,6 +71,12 @@ export class MemoryBoardSnapshotStore implements BoardSnapshotStore {
     this.rows.push(row);
     return { ...row };
   }
+  async replace(interviewId: string, seq: number, s: NewBoardSnapshot): Promise<BoardSnapshotRecord | null> {
+    const row = this.rows.find((r) => r.interviewId === interviewId && r.seq === seq);
+    if (!row) return null;
+    Object.assign(row, s);
+    return { ...row };
+  }
   async list(interviewId: string): Promise<BoardSnapshotRecord[]> { return this.of(interviewId).map((r) => ({ ...r })); }
   async erase(interviewIds: readonly string[]): Promise<number> {
     const ids = new Set(interviewIds);
@@ -83,6 +94,10 @@ export const LATEST_BOARD_SNAPSHOT_SQL = `SELECT ${COLUMNS} FROM interview_board
 export const INSERT_BOARD_SNAPSHOT_SQL = `INSERT INTO interview_board_snapshots (${COLUMNS})
   SELECT :interview_id, COALESCE(MAX(seq), 0) + 1, CAST(:at AS TIMESTAMPTZ), :who_id, :side, :elements, :scene
   FROM interview_board_snapshots WHERE interview_id = :interview_id
+  RETURNING ${COLUMNS}`;
+export const REPLACE_BOARD_SNAPSHOT_SQL = `UPDATE interview_board_snapshots
+  SET at = CAST(:at AS TIMESTAMPTZ), who_id = :who_id, side = :side, elements = :elements, scene = :scene
+  WHERE interview_id = :interview_id AND seq = :seq
   RETURNING ${COLUMNS}`;
 export const LIST_BOARD_SNAPSHOTS_SQL = `SELECT ${COLUMNS} FROM interview_board_snapshots WHERE interview_id = :interview_id ORDER BY seq`;
 export const ERASE_BOARD_SNAPSHOTS_SQL = 'DELETE FROM interview_board_snapshots WHERE interview_id = ANY(string_to_array(:interview_ids, \',\')) RETURNING seq';
@@ -116,6 +131,12 @@ export class SqlBoardSnapshotStore implements BoardSnapshotStore {
         if (attempt >= 3 || !isDuplicate(e)) throw e;
       }
     }
+  }
+  async replace(interviewId: string, seq: number, s: NewBoardSnapshot): Promise<BoardSnapshotRecord | null> {
+    const row = (await this.exec(REPLACE_BOARD_SNAPSHOT_SQL, [
+      text('interview_id', interviewId), long('seq', seq), text('at', s.at), text('who_id', s.whoId), text('side', s.side), long('elements', s.elements), text('scene', s.scene),
+    ]))[0];
+    return row ? fromRow(row) : null;
   }
   async list(interviewId: string): Promise<BoardSnapshotRecord[]> {
     return (await this.exec(LIST_BOARD_SNAPSHOTS_SQL, [text('interview_id', interviewId)])).map(fromRow);
@@ -165,14 +186,22 @@ export function checkBoardScene(raw: unknown): { scene: string; elements: number
   return Buffer.byteLength(scene, 'utf8') > MAX_BOARD_SCENE_BYTES ? null : { scene, elements: live.length };
 }
 
-/** Store a checkpoint unless it repeats the last one or the interview is at its cap. Whether one was stored. */
+/**
+ * Store a checkpoint unless it repeats the last one; whether one was stored. Sooner than BOARD_SNAPSHOT_GAP_MS after the
+ * last checkpoint, or with the interview at its cap, it replaces the last one: the rows grow at most one per gap, and the
+ * newest board (the closing one) is never the one dropped.
+ */
 export async function saveBoardSnapshot(interviewId: string, writer: { id: string; side: BoardSide }, checked: { scene: string; elements: number }, now = new Date()): Promise<boolean> {
   return runWithDbTenant(INTERVIEWS_TENANT, async () => {
     const store = boardSnapshotStore();
     const last = await store.latest(interviewId);
     if (last && last.scene === checked.scene) return false;
-    if (last && (await store.count(interviewId)) >= MAX_BOARD_SNAPSHOTS) return false;
-    await store.append(interviewId, { at: now.toISOString(), whoId: writer.id, side: writer.side, elements: checked.elements, scene: checked.scene });
+    const snapshot: NewBoardSnapshot = { at: now.toISOString(), whoId: writer.id, side: writer.side, elements: checked.elements, scene: checked.scene };
+    const soon = last !== null && now.getTime() - Date.parse(last.at) < BOARD_SNAPSHOT_GAP_MS;
+    if (last && (soon || (await store.count(interviewId)) >= MAX_BOARD_SNAPSHOTS)) {
+      if (await store.replace(interviewId, last.seq, snapshot)) return true;
+    }
+    await store.append(interviewId, snapshot);
     return true;
   });
 }
