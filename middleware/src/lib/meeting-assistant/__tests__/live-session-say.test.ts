@@ -158,6 +158,29 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a line held only behind the voice\'s own reply says so (sayBehindOwnReply); a person speaking, or nothing waiting, does not (live take of 19 November)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20 });
+    await s.start(START);
+    audio(3000); words('Sure, the question was', 0);
+    await tick(20);
+    expect(s.sayBehindOwnReply()).toBe(false); // nothing waiting
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(10);
+    expect(s.sayBehindOwnReply()).toBe(true);
+    frame({ type: 'session.input_transcript.delta', start_ms: 300, end_ms: 500, delta: 'one' });
+    await tick(10);
+    expect(s.sayBehindOwnReply()).toBe(false); // the lead is speaking over it: the room's time
+    await tick(80); // their turn is flushed and the reply wait is over; the voice's own reply still runs
+    audio(3000); words(' how you would shard it.', 200);
+    await tick(10);
+    expect(s.sayBehindOwnReply()).toBe(true);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(100); // the reply is over: the line is sent, and nothing is waiting
+    expect(received.filter((e) => e['type'] === 'session.commentary.append').length).toBe(1);
+    expect(s.sayBehindOwnReply()).toBe(false);
+    await s.close();
+  });
+
   it('a line waits while a person is speaking, and goes out once their turn is over and no reply began', async () => {
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20 });
     await s.start(START);

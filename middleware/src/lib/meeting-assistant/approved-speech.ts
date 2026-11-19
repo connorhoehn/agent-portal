@@ -151,6 +151,15 @@ export const SAY_MS_PER_CHAR = 70;
  * only: a repeat or a time answer said much later would interrupt what came after it. The bound (`sayBoundMs`) starts once it is sent.
  */
 export const SAY_QUIET_WAIT_MS = 5_000;
+/**
+ * The wait for quiet counts only the room's time. While a line is outstanding nothing else the session says is relayed (orchestrator.ts
+ * `onOutputAudio`), so time the session holds the line behind its own reply (session.ts `sayBehindOwnReply`) is time nobody hears
+ * anything and the room waits for Milo: it does not count. Live take of 19 November: "Have Milo ask" and the spoken repeat each
+ * landed as the provider began its own reply (8.6 s and 7.4 s, both then dropped), the 5 s ran out behind it, and both lines stayed
+ * in the chat. In all a line waits unsent at most SAY_QUIET_MAX_WAIT_MS, looked at every SAY_QUIET_STEP_MS.
+ */
+export const SAY_QUIET_MAX_WAIT_MS = 12_000;
+export const SAY_QUIET_STEP_MS = 100;
 
 /**
  * A held line (an answer said later, a tool's confirmation, "On it.", an approved question) begins only into a short silence: its

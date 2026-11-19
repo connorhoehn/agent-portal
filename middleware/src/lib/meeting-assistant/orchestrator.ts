@@ -55,7 +55,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -633,7 +633,7 @@ interface ApprovedHold {
   releasing: boolean;
   /** Its utterance is complete (the session's transcript of it), waiting for its turn to be released. */
   heard?: { transcript: string | null };
-  /** Start the wait for quiet (SAY_QUIET_WAIT_MS): at once, or when the line before it is over. */
+  /** Start the wait for quiet (SAY_QUIET_WAIT_MS of the room's time): at once, or when the line before it is over. */
   waitForQuiet: () => void;
   finish: (outcome: SayOutcome, why: SayWithheldWhy | 'relayed') => void;
 }
@@ -1277,7 +1277,7 @@ export class AssistantRuntime {
     return new Promise<SayResult>((resolve) => {
       const hold: ApprovedHold = {
         id, text: words, session, frames: [], sent: 0, prefixOk: false, checked: '', releasedMs: 0, relayedBefore: null, tick: null, timer: null, releasing: false,
-        waitForQuiet: () => bound(SAY_QUIET_WAIT_MS, 'not-quiet'),
+        waitForQuiet: () => quietWait(),
         finish: (outcome, why) => {
           const at = run.approvals.indexOf(hold);
           if (at < 0) return;
@@ -1303,6 +1303,26 @@ export class AssistantRuntime {
       };
       // Before the line goes to the model it may wait SAY_QUIET_WAIT_MS for quiet, counted once the lines before it are over; once
       // it is sent (`sent`), the bound counts.
+      // The wait counts the room's time only: a step the session spent holding the line behind its own reply, which nobody hears
+      // while this line is outstanding (`onOutputAudio`), with nothing of Milo's playing, is not counted; SAY_QUIET_MAX_WAIT_MS in all.
+      const quietWait = () => {
+        if (hold.releasing || !run.approvals.includes(hold)) return;
+        if (hold.timer) clearTimeout(hold.timer);
+        let counted = 0;
+        let waited = 0;
+        const step = () => {
+          hold.timer = setTimeout(() => {
+            if (hold.releasing || !run.approvals.includes(hold)) return;
+            waited += SAY_QUIET_STEP_MS;
+            if (!(session.sayBehindOwnReply?.() === true && run.relay.queuedFrames() === 0)) counted += SAY_QUIET_STEP_MS;
+            if (counted < SAY_QUIET_WAIT_MS && waited < SAY_QUIET_MAX_WAIT_MS) { step(); return; }
+            trace('say.quiet', { waitedMs: waited, countedMs: counted });
+            hold.finish('posted', 'not-quiet');
+          }, SAY_QUIET_STEP_MS);
+          (hold.timer as { unref?: () => void }).unref?.();
+        };
+        step();
+      };
       const bound = (ms: number, why: SayWithheldWhy) => {
         if (hold.releasing || !run.approvals.includes(hold)) return;
         if (hold.timer) clearTimeout(hold.timer);

@@ -32,8 +32,9 @@ import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type S
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import type { AudioSink } from '../audio-intake.js';
+import type { SayResult } from '../approved-speech.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -52,6 +53,9 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   readonly cancelled: string[] = [];
   /** Busy (its own reply running): the line waits, unsent, until the test calls `sent` (as the live session does at quiet). */
   busy = false;
+  /** While busy, held only behind its own reply (nobody's turn heard, nothing else running): `sayBehindOwnReply`. */
+  ownReply = false;
+  sayBehindOwnReply() { return this.busy && this.ownReply; }
   startedWith: SessionStartInput | null = null;
   async start(i: SessionStartInput) { this.startedWith = i; }
   pendingInputText() { return ''; }
@@ -283,6 +287,65 @@ describe('a call whose policy relays nothing of the live model (an interview)', 
       expect(s.cancelled).toEqual([s.asked[0]!.id]);
       expect(voiceTrace()).toEqual(expect.arrayContaining([expect.objectContaining({ ev: 'voice.approved', decision: 'withheld', why: 'not-quiet' })]));
       expect(sent).toEqual([]);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('a line held only behind the voice\'s own reply, which nobody hears, is not withheld as not-quiet: it is sent after it and spoken (live take of 19 November)', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r5d');
+      const s = fake();
+      // "Have Milo ask" landed 25 ms after the provider began its own reply to the lead (8.6 s long, then dropped).
+      s.busy = true; s.ownReply = true;
+      const pending = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+      await flush();
+      const req = s.asked[0]!;
+      jest.advanceTimersByTime(600);
+      s.ownReply = false; // the lead says one more word over it: the room's time counts
+      jest.advanceTimersByTime(1000);
+      s.ownReply = true;
+      jest.advanceTimersByTime(7000);
+      await flush();
+      expect(s.cancelled).toEqual([]);
+      s.busy = false; req.sent!(); // the reply is over: the session sends the line
+      s.frames(12, req.id);
+      req.ended(QUESTION);
+      await jest.advanceTimersByTimeAsync(5000);
+      expect(await pending).toEqual({ outcome: 'spoken', why: null });
+      expect(sent.length).toBe(12);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('the room\'s own time still runs out the quiet wait, and a reply that never ends holds the line SAY_QUIET_MAX_WAIT_MS at most', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:saytest:r5e');
+      const s = fake();
+      s.busy = true; s.ownReply = true;
+      let first: SayResult | null = null;
+      void runtime.sayHeldTextWhy(CALL, QUESTION, ALICE).then((r) => { first = r; });
+      await flush();
+      jest.advanceTimersByTime(3000);
+      s.ownReply = false; // people talk: 5 s of that, with the 3 s behind the reply not counted
+      jest.advanceTimersByTime(SAY_QUIET_WAIT_MS - 100);
+      await flush();
+      expect(first).toBeNull();
+      jest.advanceTimersByTime(200);
+      await flush();
+      expect(first).toEqual({ outcome: 'posted', why: 'not-quiet' });
+      s.ownReply = true;
+      let second: SayResult | null = null;
+      void runtime.sayHeldTextWhy(CALL, QUESTION, ALICE).then((r) => { second = r; });
+      await flush();
+      jest.advanceTimersByTime(SAY_QUIET_MAX_WAIT_MS - 100);
+      await flush();
+      expect(second).toBeNull();
+      jest.advanceTimersByTime(200);
+      await flush();
+      expect(second).toEqual({ outcome: 'posted', why: 'not-quiet' });
+      expect(s.cancelled).toEqual([s.asked[0]!.id, s.asked[1]!.id]);
     } finally { jest.useRealTimers(); }
   });
 

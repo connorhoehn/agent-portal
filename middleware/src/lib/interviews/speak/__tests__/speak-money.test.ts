@@ -12,7 +12,7 @@ jest.mock('../../spend.js', () => ({
   releaseInterviewSpend: jest.fn(async () => undefined),
   meterInterviewSpend: jest.fn(),
 }));
-import { SAY_MAX_BOUND_MS, SAY_QUIET_WAIT_MS } from '../../../meeting-assistant/approved-speech.js';
+import { SAY_MAX_BOUND_MS, SAY_QUIET_MAX_WAIT_MS } from '../../../meeting-assistant/approved-speech.js';
 import * as spend from '../../spend.js';
 import { INTERVIEW_SPEND_PARTS } from '../../spend.js';
 import { MemorySaidStore, SPEECH_HOLD_TTL_MS, SPEECH_HOLD_USD, answerCandidate, logSaid, notAloudWhy, sayApproved, sayLogged, setSpeakDeps } from '../index.js';
@@ -143,7 +143,7 @@ it('a spoken request\'s held answer (the policy\'s holdHeldSpeech): refused unde
 });
 
 describe('the speech hold outlives the longest say', () => {
-  it('the wait for quiet plus the longest bound stays well inside the hold\'s lifetime, so the money is held for the whole say', () => {
-    expect(SAY_QUIET_WAIT_MS + SAY_MAX_BOUND_MS).toBeLessThan(SPEECH_HOLD_TTL_MS / 2);
+  it('the longest wait for quiet plus the longest bound stays well inside the hold\'s lifetime, so the money is held for the whole say', () => {
+    expect(SAY_QUIET_MAX_WAIT_MS + SAY_MAX_BOUND_MS).toBeLessThan(SPEECH_HOLD_TTL_MS / 2);
   });
 });

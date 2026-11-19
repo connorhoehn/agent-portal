@@ -298,6 +298,19 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   }
 
   /**
+   * The line waiting is held unsent only by the voice's own reply: an utterance no `say` claimed, or its voice still running, with
+   * nobody's turn being heard, no reply wait, no line sent or claimed, no function call open and no response of the second model
+   * running. The caller relays nothing else the session says while a line of its own is outstanding, so nobody hears that reply
+   * (approved-speech.ts SAY_QUIET_MAX_WAIT_MS).
+   */
+  sayBehindOwnReply(): boolean {
+    if (this.ended || this.sayWaiting.length === 0) return false;
+    const own = this.output !== null ? this.output.say === undefined : this.tailLeft > 0;
+    return own && this.saying === null && this.input === null && this.answerWait === null && this.sayQueue.length === 0
+      && this.open.size === 0 && this.responses.size === 0;
+  }
+
+  /**
    * Not quiet: a person's turn is being heard, the provider is saying something (an utterance open, its voice still running, a
    * claimed one not yet over), a line already sent has not been claimed yet, a response of the second model is running or a
    * function call awaits its output, or the provider may be about to answer and the wait for its evidence is not over.
