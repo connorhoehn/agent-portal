@@ -752,6 +752,14 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   the board" notice clears itself after 4 s.
 - Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
+## Call chat unread (19 November 2026)
+
+While a call's chat (or Milo) is not the thing on screen, a new message from someone else puts an unread bubble on its tab; opening the tab clears it. One implementation for every tenant's call surface:
+
+- **Read position (backend):** per person, per call, per tab (`chat`, `milo`), "read up to the message at time T". The `chat` position is the library read receipt on the call chat's channel (the cursor the gateway's `read` frame moves and Social's conversations count from); `milo` sits in the same store. Routes: `GET/PUT /api/calls/:callId/chat/reads` for members, and the candidate's twin `GET/PUT /api/interview-invite/calls/:callId/chat/reads` (their own interview's live call, admitted, seated). Authority is the call chat's own; a position only moves forward (middleware `lib/call-chat-reads.ts`).
+- **Count (portal):** `hooks/useCallChatUnread.ts` counts others' messages after my position; my own never count, nor a history replay at or before it, nor anything before my position has loaded. A tab on screen in a visible window marks what it shows read (debounced write).
+- **Where:** the interview room's Chat and Milo tabs (Milo's lines in the call chat count on Milo, people's on Chat); the candidate's Chat tab in a technical round (a behavioural round's pane is the chat alone: no tab, no bubble); the footer's Message in every tenant (Work's and Social's huddle chat has no tabs, it sits behind Message); Social's hangout Conversation button and tab. Work has no separate Milo panel: Milo's lines are in the huddle chat and count on Message.
+
 ## Not in this plan
 
 Email and calendar invites, availability, take-home assignments, a question marketplace, importing from an applicant tracking system, offers, candidates signing in to see their own status, and any scoring by a model.
