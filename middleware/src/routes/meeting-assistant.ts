@@ -63,6 +63,7 @@ import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meetin
 import { eraseCall } from '../lib/meeting-assistant/erase.js';
 import { assistantRuntime, describeCall, MAX_RESULT_BYTES, RunStillStopping, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
+import { floorOf, holdAction, mayHold, HOLD_ACTIONS, type HoldAction } from '../lib/meeting-assistant/handsfree/surface.js';
 import { NOT_SET_UP, preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { actionCardTurnId, AUTO_ATTEMPTS, MAX_ATTEMPTS, meetingNameOf, minutesWriting, onCallEnded, rewriteMinutes, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
 import { minutesCounts, summaryParts, summaryWithProposals } from '../lib/meeting-assistant/minutes.js';
@@ -220,10 +221,18 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     pendingRequests: record.pendingRequests,
     voice: record.voice === true,
     hearing: hearingOf(record.state, runtime.sessionOpen(callId), tapArmer().hearing(callId)),
+    // Hands-free (MEETING_ASSISTANT_HANDSFREE): the call runs it now, and whether this person gets the hold button (the run's own
+    // admission: a candidate without pad help gets fixed lines, so no button). The floor itself is read at /floor.
+    ...(record.state === 'listening' ? await handsfreeOf(callId, record, session.sub) : { handsfree: false, mayHold: false }),
     ...turns,
     ...runtime.voiceStats(callId),
     ...runtime.callStats(callId),
   };
+}
+
+async function handsfreeOf(callId: string, record: AssistantRecord, userId: string): Promise<{ handsfree: boolean; mayHold: boolean }> {
+  const run = assistantRuntime().handsfreeRun(callId);
+  return { handsfree: !!run, mayHold: await mayHold(run, policyCallOf(record), userId) };
 }
 
 /** The call's record name for Milo's instructions: the initiative's name, or null. */
@@ -934,6 +943,28 @@ meetingAssistantRouter.post('/proposals/:proposalId/raise-again', asyncHandler(a
   // A watcher proposal raised again during the call can be the one that reaches the cap: the call is told once, as when Milo raises it.
   else await noticeIfCapReached(store, v.callId, out.proposal.source, postNoticeQuietly).catch(() => false);
   res.json(await proposalView((await store.getProposal(v.callId, out.proposal.id)) ?? out.proposal, v.session.sub, v));
+}));
+
+/**
+ * The hold button (hands-free only): press, release or cancel, as the seated person; the run admits them (handsfree/rules.ts) and holds
+ * one floor (a second holder is 409 BUSY). No hands-free run in this call: 409 NOT_HANDSFREE.
+ */
+meetingAssistantRouter.post('/hold/:action', asyncHandler(async (req, res) => {
+  const action = req.params['action'];
+  if (!HOLD_ACTIONS.includes(action as HoldAction)) throw new NotFoundError('Not found');
+  const { session, callId } = await seatOf(req);
+  const out = await holdAction(assistantRuntime().handsfreeRun(callId), session.sub, action as HoldAction, (id) => nameOf(id));
+  res.status(out.status).json({ callId, ...out.body });
+}));
+
+/** Who is talking to Milo now, for every seat in the call ("Hugo is talking to Milo", the tile ring). Polled often, so a seat check only. */
+meetingAssistantRouter.get('/floor', asyncHandler(async (req, res) => {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  await callChatRuntime().assertMember(callId, session, false).catch((e: unknown) => {
+    throw session.tenant === INTERVIEWS && e instanceof AppError && e.status === 403 ? new NotFoundError('Not found') : e;
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ callId, ...(await floorOf(assistantRuntime().handsfreeRun(callId), (id) => nameOf(id))) });
 }));
 
 meetingAssistantRouter.get('/state', asyncHandler(async (req, res) => {

@@ -22,8 +22,27 @@ import { interviewsStore } from '../lib/interviews/store-select.js';
 import { answerCandidate, candidateLine } from '../lib/interviews/speak/index.js';
 import { interviewsNowMs } from '../lib/interviews/clock.js';
 import { interviewsFlagGate } from './interviews.js';
+import { floorOf, holdAction, mayHold, HOLD_ACTIONS, type HoldAction } from '../lib/meeting-assistant/handsfree/surface.js';
+import type { HandsfreeRules, HandsfreeRun } from '../lib/meeting-assistant/handsfree/types.js';
+import type { PolicyCall } from '../lib/meeting-assistant/policy.js';
+import type { Interview } from '../lib/interviews/types.js';
 
 export const miloGuestRouter = Router();
+
+/** The interview call's hands-free run and its policy call, or null (Milo not in the call, or not hands-free). Tests replace it. */
+export type GuestHandsfree = (interview: Pick<Interview, 'id' | 'callId'>) => Promise<{ run: HandsfreeRun; call: PolicyCall; rules?: HandsfreeRules } | null>;
+const defaultGuestHandsfree: GuestHandsfree = async (interview) => {
+  if (!interview.callId) return null;
+  const run = (await import('../lib/meeting-assistant/orchestrator.js')).peekAssistantRuntime()?.handsfreeRun(interview.callId) ?? null;
+  if (!run) return null;
+  const { assistantStore } = await import('../lib/meeting-assistant/store-select.js');
+  const { policyCallOf } = await import('../lib/meeting-assistant/policy.js');
+  const record = await assistantStore().get(interview.callId).catch(() => null);
+  return record ? { run, call: policyCallOf(record) } : null;
+};
+let guestHandsfree: GuestHandsfree = defaultGuestHandsfree;
+export function setGuestHandsfree(next: GuestHandsfree | null): void { guestHandsfree = next ?? defaultGuestHandsfree; }
+const nameOfPerson = async (id: string): Promise<string> => (await import('../lib/meeting-assistant/chat.js')).nameOf(id);
 
 /** The least time between two of the candidate's requests, per interview. */
 export const GUEST_MILO_GAP_MS = 10_000;
@@ -49,4 +68,36 @@ miloGuestRouter.post('/milo/request', interviewsFlagGate, requireGuest(), asyncH
   lastAsked.set(interview.id, now);
   const { line } = await answerCandidate(interview, request, guestSubject(guest.inviteId));
   res.json({ line });
+}));
+
+/** The let-in candidate of a live interview, or null (the router's one not-found). */
+async function liveGuest(req: import('express').Request): Promise<{ interview: Interview; subject: string } | null> {
+  const guest = req.guest!;
+  const [invite, interviews] = await Promise.all([inviteStore().getInvite(guest.inviteId), interviewsStore().listInterviews()]);
+  const interview = interviews.find((i) => i.id === guest.interviewId) ?? null;
+  if (!invite || !interview || admissionOf(invite).state !== 'admitted' || interview.state !== 'live') return null;
+  return { interview, subject: guestSubject(guest.inviteId) };
+}
+
+/**
+ * Hands-free Milo for the candidate: GET /milo/floor → { handsfree, mayHold, floor } (who is talking to Milo, and whether the candidate
+ * gets the hold button: only with the lead's pad-help setting on, the run's own admission), and POST /milo/hold/:action (press,
+ * release, cancel) as the candidate. Gated as /milo/request is.
+ */
+miloGuestRouter.get('/milo/floor', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const me = await liveGuest(req);
+  if (!me) { res.status(404).json(GUEST_REFUSAL); return; }
+  const hf = await guestHandsfree(me.interview);
+  res.json({ ...(await floorOf(hf?.run ?? null, nameOfPerson)), mayHold: hf ? await mayHold(hf.run, hf.call, me.subject, hf.rules) : false });
+}));
+
+miloGuestRouter.post('/milo/hold/:action', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const action = req.params['action'];
+  const me = await liveGuest(req);
+  if (!me || !HOLD_ACTIONS.includes(action as HoldAction)) { res.status(404).json(GUEST_REFUSAL); return; }
+  const hf = await guestHandsfree(me.interview);
+  const out = await holdAction(hf?.run ?? null, me.subject, action as HoldAction, nameOfPerson);
+  res.status(out.status).json(out.body);
 }));

@@ -48,7 +48,7 @@ import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { requireTenant } from '../../lib/authz.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { interviewInviteRouter, resetInviteThrottle } from '../interview-invite.js';
-import { resetGuestMiloLimit } from '../interview-invite-milo.js';
+import { resetGuestMiloLimit, setGuestHandsfree } from '../interview-invite-milo.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { interviewsFixture } from '../../mock/interviews.js';
 import { interviewInvitesFixture } from '../../mock/interviews-invites.js';
@@ -196,4 +196,52 @@ it('after the end: the guest\'s one not-found, nothing logged, posted or said; a
   expect([res.status, res.body]).toEqual([404, { error: 'This link no longer works.' }]);
   expect((await said.list(IV)).map((r) => r.source)).toEqual(['repeat']);
   expect(posts).toHaveLength(1);
+});
+
+describe('hands-free Milo for the candidate (lane D)', () => {
+  const F = '/api/interview-invite/milo/floor';
+  const H = (a: string) => `/api/interview-invite/milo/hold/${a}`;
+  const CALL1 = { callId: 'call-1', lobby: `interview:${IV}`, tenant: 'interviews' };
+  function holdRun(admission: 'route' | 'fixed-lines') {
+    let holder: string | null = null;
+    const run = {
+      state: () => (holder ? { phase: 'routing', userId: holder, via: 'hold', sinceMs: 0 } : { phase: 'idle' }),
+      holdPress: async (u: string) => (admission !== 'route' ? { ok: false, reason: 'not-admitted' } : holder ? { ok: false, reason: 'busy' } : ((holder = u), { ok: true })),
+      holdRelease: () => { holder = null; },
+      holdCancel: () => { holder = null; },
+    };
+    setGuestHandsfree(async () => ({ run: run as never, call: CALL1, rules: { admit: async () => admission } as never }));
+    return { hold: (u: string | null) => { holder = u; } };
+  }
+  afterEach(() => { setGuestHandsfree(null); });
+
+  it('pad help off: the candidate reads who is talking to Milo but gets no button, and a press is refused', async () => {
+    const cookie = await admittedGuest();
+    const { hold } = holdRun('fixed-lines');
+    hold('u-hugo');
+    const floor = await request(app).get(F).set('Cookie', cookie);
+    expect(floor.status).toBe(200);
+    expect(floor.body).toMatchObject({ handsfree: true, mayHold: false, floor: { userId: 'u-hugo', name: 'Hugo Marchetti' } });
+    hold(null);
+    expect((await request(app).post(H('press')).set('Cookie', cookie).send({})).status).toBe(403);
+  });
+
+  it('pad help on: the button, and a press routes the candidate until release', async () => {
+    const cookie = await admittedGuest();
+    holdRun('route');
+    expect((await request(app).get(F).set('Cookie', cookie)).body).toMatchObject({ mayHold: true, floor: null });
+    const pressed = await request(app).post(H('press')).set('Cookie', cookie).send({});
+    expect(pressed.status).toBe(200);
+    expect(pressed.body).toMatchObject({ holding: true, floor: { name: 'The candidate' } });
+    expect((await request(app).post(H('release')).set('Cookie', cookie).send({})).body).toMatchObject({ holding: false, floor: null });
+    expect((await request(app).post(H('grab')).set('Cookie', cookie).send({})).status).toBe(404);
+  });
+
+  it('no hands-free run: no button and 409; no guest cookie: refused', async () => {
+    const cookie = await admittedGuest();
+    setGuestHandsfree(async () => null);
+    expect((await request(app).get(F).set('Cookie', cookie)).body).toEqual({ handsfree: false, floor: null, mayHold: false });
+    expect((await request(app).post(H('press')).set('Cookie', cookie).send({})).status).toBe(409);
+    expect((await request(app).get(F)).status).toBeGreaterThanOrEqual(401);
+  });
 });
