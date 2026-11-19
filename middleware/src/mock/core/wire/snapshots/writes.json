@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T17:13:06.416Z",
-  "serverHandlerSha": "13f31a02057692470e62d3db7c7b7d706f02de919c773d911abfd77ac36e27f6",
+  "capturedAt": "2026-11-19T18:03:26.166Z",
+  "serverHandlerSha": "df3944b3811820d03946d7477d68fb5a9e50def7f8a3be96e3ecc0d615d6779d",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2130,6 +2130,12 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/calls/:callId/assistant/hold/:action": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/calls/:callId/assistant/invite": {
       "refused": {
         "rule": "unclassified",
@@ -3139,6 +3145,12 @@
       }
     },
     "POST /api/interview-invite/media/participant": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/interview-invite/milo/hold/:action": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
