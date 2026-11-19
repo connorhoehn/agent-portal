@@ -21,7 +21,7 @@ import { afterImports, checkedImportLines, placeImports } from '../imports.js';
 import { renderTestCases } from '../../testcases/render.js';
 import { runInNewContext } from 'node:vm';
 import { referenceFor } from '../references.js';
-import { INTERVIEW_SCRIPT_RULES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../scripted.js';
+import { INTERVIEW_SCRIPT_RULES, SPARE_CASES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../scripted.js';
 
 const IV = 'iv-tools';
 const LEAD = 'u-hugo';
@@ -277,6 +277,21 @@ describe('the session hears the pad change (review 1, item 7)', () => {
   });
 });
 
+describe('the count comes out as asked (film rehearsal: asked for twelve, got eleven)', () => {
+  it('asking for twelve with one of them already in the pad yields twelve: a spare fills in', async () => {
+    const step = INTERVIEW_SCRIPT_RULES.find((r) => r.id === 'iv-tests')!;
+    const args = (step.run(step.match.exec('another dozen test cases')!) as { call: { args: unknown } }).call.args;
+    // The starter calls the first prepared case, and the candidate added the second (the film's eleven).
+    pad.text = `${TWO_SUM.starter!.python!}print(two_sum([3, 2, 4], 6))\n`; // and the candidate added a call of the second
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', args)).toBe('Added twelve test cases at the bottom of the pad.');
+    expect(pad.text.match(/^    \(\(/gm)).toHaveLength(12);
+  });
+
+  it('the real count is still said when fewer pass than asked', async () => {
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { count: 12, cases: cases([{ args: [[1, 5, 9, 13], 22], expected: [2, 3] }, { args: [[1, 2], 3], expected: [5, 5] }]) })).toBe('Added one test case at the bottom of the pad.');
+  });
+});
+
 describe('review 1, the minor list', () => {
   it('a JavaScript switch and a Python dict opened at a line end are the language\'s own', () => {
     const sw = 'function kindOf(n) {\n  switch (n % 3) {\n    case 0:\n      return "a";\n    default:\n      return "b";\n  }\n}';
@@ -346,8 +361,8 @@ describe('the scripted stand-in and the isolation of the server tools', () => {
     const rule = (t: string) => INTERVIEW_SCRIPT_RULES.find((r) => r.match.test(t));
     const step = rule('it would be helpful to have another dozen test cases')!;
     const m = step.match.exec('it would be helpful to have another dozen test cases')!;
-    const out = step.run(m) as { call: { name: string; args: { cases: unknown[] } } };
-    expect([out.call.name, out.call.args.cases.length]).toEqual(['pad_add_tests', 12]);
+    const out = step.run(m) as { call: { name: string; args: { cases: unknown[]; count: number } } };
+    expect([out.call.name, out.call.args.count, out.call.args.cases.length]).toEqual(['pad_add_tests', 12, 12 + SPARE_CASES]);
     const lru = rule('Mateo wants to use an LRU cache for his algorithm, can you just add it for him at the top')!;
     expect((lru.run(lru.match.exec('an LRU cache')!) as { call: { name: string } }).call.name).toBe('pad_add_helper');
   });

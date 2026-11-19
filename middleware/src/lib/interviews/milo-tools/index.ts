@@ -239,7 +239,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     if (text.length > MAX_PAD_TEXT) { refusal = PAD_TOO_LONG; return null; }
     const question = questionForPad(questions, text, language);
     if (name === 'pad_add_tests') {
-      const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language) });
+      const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language), count: a['count'] });
       if (!made.ok) { refusal = TESTS_NOT_ADDED; return null; }
       // A long string value could carry the algorithm: such a batch is judged like a helper, and refused with no question to judge by.
       if (made.longStrings) {

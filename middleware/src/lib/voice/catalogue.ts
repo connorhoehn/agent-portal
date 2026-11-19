@@ -1146,12 +1146,12 @@ export const INTERVIEW_TOOLS: readonly ServerTool[] = [
   },
   {
     name: 'pad_add_tests',
-    description: 'Add test cases for the interview\'s coding question at the bottom of the shared code pad. You write the cases: for each, the arguments of one call to the question\'s function as a JSON array, and the value the question says it returns as JSON. Write as many as were asked for (a dozen is 12; 12 when no number was said). Never the solution.',
+    description: 'Add test cases for the interview\'s coding question at the bottom of the shared code pad. You write the cases: for each, the arguments of one call to the question\'s function as a JSON array, and the value the question says it returns as JSON. Put the number asked for in count (a dozen is 12; 12 when no number was said) and write about three more cases than that: the system drops any the pad already has and keeps the first count that pass. Never the solution.',
     parameters: {
       type: 'object',
       properties: {
         cases: {
-          type: 'array', minItems: 1, maxItems: 20,
+          type: 'array', minItems: 1, maxItems: 24,
           items: {
             type: 'object',
             properties: {
@@ -1161,8 +1161,9 @@ export const INTERVIEW_TOOLS: readonly ServerTool[] = [
             required: ['args', 'expected'], additionalProperties: false,
           },
         },
+        count: { type: 'integer', minimum: 1, maximum: 20, description: 'How many test cases were asked for.' },
       },
-      required: ['cases'], additionalProperties: false,
+      required: ['cases', 'count'], additionalProperties: false,
     },
     kind: 'server', tenants: ['interviews'], who: 'pad', spend: 'none',
     says: 'Writes the test cases into the pad as Milo; an expected value is kept only when the question\'s reference agrees.',

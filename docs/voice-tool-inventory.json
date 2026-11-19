@@ -2662,7 +2662,7 @@
    "who": "pad",
    "spend": "none",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_import (the pad, as Milo)",
-   "line": 1171
+   "line": 1172
   },
   {
    "name": "pad_add_helper",
@@ -2673,7 +2673,7 @@
    "who": "pad",
    "spend": "interview",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_helper (the pad, as Milo)",
-   "line": 1183
+   "line": 1184
   }
  ],
  "navigatePages": [

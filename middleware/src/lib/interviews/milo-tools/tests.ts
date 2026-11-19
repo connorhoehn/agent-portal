@@ -13,6 +13,8 @@ import { referenceFor } from './references.js';
 
 /** At most this many cases in one call (the catalogue's schema says the same). */
 export const MAX_TEST_CASES = 20;
+/** At most this many cases are read from one call: the number asked for and a few spares (the first `count` that pass are kept). */
+export const MAX_OFFERED_CASES = 24;
 
 /**
  * The question the pad is working on: the round's question whose starter function the pad defines in its language, else the
@@ -41,13 +43,17 @@ export function hasLongString(v: unknown, depth = 0): boolean {
 }
 
 /** The block for the call's `cases` against the pad as it is: checked cases when the question has a reference, else inputs only. */
-export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null }): TestCasesMade {
-  const parsed = parseToolCases(cases, { pad: at.pad, max: MAX_TEST_CASES });
+export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null; count?: unknown }): TestCasesMade {
+  // The number asked for (the call's `count`), within 1 and MAX_TEST_CASES; none said: up to MAX_TEST_CASES.
+  const count = typeof at.count === 'number' && Number.isInteger(at.count) ? Math.max(1, Math.min(MAX_TEST_CASES, at.count)) : MAX_TEST_CASES;
+  const parsed = parseToolCases(cases, { pad: at.pad, max: MAX_OFFERED_CASES });
   if (!parsed.ok) return { ok: false };
   const reference = at.question ? referenceFor(at.question.id) : null;
   const kept: TestCase[] = reference
     ? parsed.cases.filter((c) => reference.agrees(c.args, c.expected) === true)
     : parsed.cases.map((c) => ({ args: c.args }));
+  // The spares fill in for any dropped (already in the pad, or not what the reference returns): the first `count` stay.
+  kept.splice(count);
   if (!kept.length) return { ok: false };
   return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length, longStrings: kept.some((c) => hasLongString(c.args) || hasLongString(c.expected)) };
 }

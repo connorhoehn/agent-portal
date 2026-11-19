@@ -10,18 +10,19 @@
 //   "...trie..." / "...helper..."        pad_add_helper with a small Python trie
 //   "...solve it..." / "...solution..."  pad_add_helper whose code defines the question's function: the server refuses it
 import type { ScriptRule } from '../../meeting-assistant/scripted-session.js';
+import { utterance } from '../speak/utterance.js';
 import type { TestCase } from '../testcases/render.js';
 
 export const DEFAULT_TEST_CASES = 12;
 export const MAX_TEST_CASES = 20;
+/** Cases passed beyond the number asked for (the server keeps the first `count` that are new and agree with the reference). */
+export const SPARE_CASES = 3;
 const NUMBER_WORDS: Readonly<Record<string, number>> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
   fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
 };
 
 
-/** Lower case, punctuation as spaces (apostrophes dropped), one space between words. */
-const utterance = (text: string): string => text.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** How many test cases the words ask for, within 1 and MAX_TEST_CASES. */
 export function amountOf(text: string): number {
@@ -120,7 +121,9 @@ export const INTERVIEW_SCRIPT_RULES: readonly ScriptRule[] = [
   { id: 'iv-solution', match: /\b(?:solve (?:it|this|the (?:question|problem))|the solution|write (?:the|my) (?:code|function|answer))\b/i,
     run: () => ({ call: { name: 'pad_add_helper', args: { what: 'the solution', code: SCRIPTED_SOLUTION_PY } } }) },
   { id: 'iv-tests', match: /\btest\s*cases?\b/i,
-    run: (m) => ({ call: { name: 'pad_add_tests', args: { cases: scriptedTestCases('q-be-twosum').slice(1, 1 + amountOf(m.input ?? '')).map(asToolCase) } } }) },
+    // As the live agent is told: the number asked for, and SPARE_CASES more, so the count comes out as asked when the pad already
+    // has some of them (the starter's own example is among them, as the pad calls it).
+    run: (m) => { const count = amountOf(m.input ?? ''); return { call: { name: 'pad_add_tests', args: { count, cases: scriptedTestCases('q-be-twosum').slice(0, count + SPARE_CASES).map(asToolCase) } } }; } },
   { id: 'iv-lru', match: /\blru\b|least recently used/i,
     run: () => ({ call: { name: 'pad_add_helper', args: { what: 'an LRU cache', code: SCRIPTED_LRU_JS } } }) },
   { id: 'iv-trie', match: /\btrie\b|\bhelper\b/i,
