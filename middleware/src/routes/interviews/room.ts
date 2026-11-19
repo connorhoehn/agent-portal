@@ -22,6 +22,7 @@ import type { WriteResult } from '../../lib/interviews/store.js';
 import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 import { forgetInterviewGuest } from '../../lib/interviews/invite/admission.js';
+import { publishInterviewHint } from '../../lib/interviews/live-hint.js';
 
 export const roomRouter = Router();
 
@@ -82,6 +83,8 @@ roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, rev
   const r = await interviewsStore().endInterview(i.id, interviewsNow().toISOString(), revision);
   if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
   // The call is over for the candidate: the gateway's verdict cache forgets every yes it holds for the guest.
+  // The candidate's page learns it now, not on its next poll: the hint goes out first, while the guest still holds its subscription.
+  if (r.ok) await publishInterviewHint(i.id, 'ended');
   if (r.ok) await forgetInterviewGuest(i.id, 'interview-ended');
   return r;
 }));

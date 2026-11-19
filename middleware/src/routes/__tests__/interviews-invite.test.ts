@@ -54,6 +54,7 @@ import { interviewInvitesFixture } from '../../mock/interviews-invites.js';
 import { interviewsFixture } from '../../mock/interviews.js';
 import { newInviteToken } from '../../lib/interviews/invite/token.js';
 import { config } from '../../config.js';
+import * as liveHint from '../../lib/interviews/live-hint.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -439,6 +440,26 @@ describe('the waiting room', () => {
     expect([ended.status, ended.body.room?.state]).toEqual([200, 'ended']);
     // Every other guest route treats the closed interview as a dead link.
     expect((await mine(cookie)).status).toBe(404);
+  });
+
+  it('a knock and the end each send the room one live hint, once a write really happened', async () => {
+    const hint = jest.spyOn(liveHint, 'publishInterviewHint').mockResolvedValue(undefined);
+    try {
+      const cookie = await guest();
+      await knock(cookie);
+      expect(hint.mock.calls).toEqual([[IV, 'knock']]);
+      await knock(cookie); // a second knock while waiting changes nothing
+      expect(hint).toHaveBeenCalledTimes(1);
+      await decide(HUGO, true);
+      const first = (await HUGO.get(`/interviews/${IV}/room`)).body.room.revision;
+      expect((await request(app).post(`/api/interviews/interviews/${IV}/start`).set('x-user', 'u-hugo').send({ revision: first })).status).toBe(200);
+      const revision = (await HUGO.get(`/interviews/${IV}/room`)).body.room.revision;
+      expect((await request(app).post(`/api/interviews/interviews/${IV}/end`).set('x-user', 'u-hugo').send({ revision: revision + 99 })).status).toBe(409);
+      expect(hint).toHaveBeenCalledTimes(1);
+      const live = (await HUGO.get(`/interviews/${IV}/room`)).body.room.revision;
+      expect((await request(app).post(`/api/interviews/interviews/${IV}/end`).set('x-user', 'u-hugo').send({ revision: live })).status).toBe(200);
+      expect(hint.mock.calls.at(-1)).toEqual([IV, 'ended']);
+    } finally { hint.mockRestore(); }
   });
 
   it('the room is not-found for a guest the lead turned away, and after a revoke', async () => {

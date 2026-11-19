@@ -116,7 +116,7 @@ const FAMILY_SAMPLES: Record<string, string[]> = {
   'assessment:doc': ['assessment:doc:1'], 'assessment:team': ['assessment:team:TEAM-1'], 'assessment:knowledge': ['presence:assessment:knowledge:k'],
   'assessment:deck': ['presence:assessment:deck:d1'], 'pipelines:deck': ['presence:pipelines:deck:d1'], 'pipelines:run': ['pipelines:run:r1'],
   'pipelines:def': ['pipelines:def:d1'], 'access:req': ['access:req:req-0001'],
-  'interviews:interview': [`presence:interviews:interview:${OTHER}`, `interviews:interview:${OWN}`, `typing:interviews:interview:${OWN}`, `cursor:interviews:interview:${OWN}`],
+  'interviews:interview': [`presence:interviews:interview:${OTHER}`, `typing:interviews:interview:${OWN}`, `cursor:interviews:interview:${OWN}`],
   'orgiq:lobby': ['presence:orgiq:lobby'], 'assessment:lobby': ['presence:assessment:lobby'], 'pipelines:lobby': ['presence:pipelines:lobby'],
 };
 const HOST_NAMES = [
@@ -182,6 +182,7 @@ describe('with guest realtime on', () => {
     expect(await admitPrincipal(ctx)).toBe(true);
     await applyAdmission(inviteId, { kind: 'knock' });
     expect(await admitSubscribe(ctx, `presence:${own}`)).toBe(false);
+    expect(await admitSubscribe(ctx, own)).toBe(false);
     expect(await join(own)).toBe(false);
     expect(await admitSubscribe(ctx, `doc:ivpad:${OWN}`)).toBe(false);
     expect(await admitLobbyRead(ctx, own)).toBe('denied');
@@ -198,6 +199,13 @@ describe('with guest realtime on', () => {
     expect(await admitPublish(ctx, `meeting:${own}`)).toBe(false);
     expect(await admitSubscribe(ctx, `doc:ivpad:${OWN}`)).toBe(true);
     expect(await admitLobbyRead(ctx, own)).toBe('ok');
+  });
+
+  it('once admitted it hears its own interview\'s live hints (the bare lobby name), read only, never another interview\'s', async () => {
+    await admit();
+    expect(await admitSubscribe(ctx, own)).toBe(true);
+    expect(await admitPublish(ctx, own)).toBe(false);
+    expect(await admitSubscribe(ctx, `interviews:interview:${OTHER}`)).toBe(false);
   });
 
   it('never rings anyone or runs the call, and never another lobby', async () => {
@@ -254,7 +262,11 @@ describe('with guest realtime on', () => {
     expect(await admitCall(greta, 'join', { lobbyName: own }, callGuards(noStoredCall))).toBe(false);
     expect(await admitSubscribe(greta, `presence:${own}`)).toBe(false);
     expect(await admitLobbyRead(greta, own)).toBe('denied');
-    expect(await admitSubscribe(hugo, own)).toBe(false); // the lobby name itself carries no chat: the call's chat is its huddle
+    // The lobby name itself carries the room's live hints (knock, end) and nothing else: only that interview's seats read it, nobody writes it.
+    expect(await admitSubscribe(hugo, own)).toBe(true);
+    expect(await admitPublish(hugo, own)).toBe(false);
+    expect(await admitSubscribe(hugo, `interviews:interview:${OTHER}`)).toBe(false);
+    expect(await admitSubscribe(greta, own)).toBe(false);
   });
 
   // Round 3's session-tag gap: the call runtimes held a guest Session by its subject alone, so a link opened again

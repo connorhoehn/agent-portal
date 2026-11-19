@@ -121,6 +121,8 @@ const DISCUSSION: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'ty
 // `cursor:<channel>` under the family's read authority, like its presence.
 const DISCUSSION_CURSORS: ReadonlySet<ChannelService> = new Set(['chat', 'presence', 'typing', 'reactions', 'cursor']);
 const PRESENCE: ReadonlySet<ChannelService> = new Set(['presence']);
+// An interview's lobby: presence, plus the bare name the server's live hints (knock, end) ride; write is null, so nobody posts there.
+const PRESENCE_HINT: ReadonlySet<ChannelService> = new Set(['presence', 'chat']);
 // The library's activity service subscribes on the BARE channel name, which
 // channelService() reads as `chat`. A server-push hint channel therefore offers
 // only that bare subscribe; with `write: null` nobody can post to it (chat send,
@@ -197,7 +199,7 @@ export const TENANT_CHANNEL_FAMILIES: readonly TenantChannelFamily[] = [
     read: tenantOnly('access', 'ViewAccess'), write: tenantOnly('access', 'ViewAccess') },
   // An interview's call (lib/interviews/lobby.ts): a call lobby with presence. The family's read is only the
   // floor; the gateway's authority asks the seat on every decision, and its chat is the call's huddle chat.
-  { id: 'interviews:interview', tenant: 'interviews', pattern: /^interviews:interview:[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/, services: PRESENCE, lobby: true,
+  { id: 'interviews:interview', tenant: 'interviews', pattern: /^interviews:interview:[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/, services: PRESENCE_HINT, lobby: true,
     read: tenantOnly('interviews', 'ViewInterviews'), write: null },
   // The shell presence lobby of each tenant whose manifest entry says `presenceLobby`.
   ...TENANTS_WITH_PRESENCE_LOBBY.map((tenant): TenantChannelFamily => ({

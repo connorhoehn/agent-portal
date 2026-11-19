@@ -96,7 +96,7 @@ export async function knockPrecondition(interviewId: string): Promise<true | Kno
 }
 
 export type AdmissionWrite =
-  | { ok: true; admission: Admission }
+  | { ok: true; admission: Admission; changed: boolean }
   | { ok: false; reason: 'not-allowed' | 'stale' | 'no-guest' }
   | { ok: false; reason: 'precondition'; why: KnockRefusal };
 
@@ -117,13 +117,13 @@ export async function applyAdmission(inviteId: string, event: AdmissionEvent, no
     const current = admissionOf(invite);
     const next = nextAdmission(current, event, now);
     if (!next) return { ok: false, reason: 'not-allowed' };
-    if (next === current) return { ok: true, admission: current };
+    if (next === current) return { ok: true, admission: current, changed: false };
     const written = await store.setAdmission(invite.id, invite.sessionHash, current.state,
       { admissionState: next.state, knockedAt: next.knockedAt, admissionDecidedAt: next.decidedAt });
     // Out of the room (turned away, or back to waiting): the gateway's verdict cache drops every yes it holds for the
     // guest now, so a cached call-chat yes never outlives the decision (with REALTIME_AUTHORITY_CACHE on).
     if (written && next.state !== 'admitted') guestLeft(guestSubject(invite.id), 'interview-admission');
-    return written ? { ok: true, admission: admissionOf(written) } : { ok: false, reason: 'stale' };
+    return written ? { ok: true, admission: admissionOf(written), changed: true } : { ok: false, reason: 'stale' };
   });
 }
 

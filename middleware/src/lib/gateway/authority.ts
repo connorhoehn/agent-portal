@@ -325,7 +325,7 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
   callSteps: [workGraphLobbyStep, socialCallStep, interviewCallStep],
 });
 
-/** `presence:interviews:interview:<id>`: the shape (the family offers presence only), then the seat, between two reloads. */
+/** `presence:interviews:interview:<id>` or the bare name (the room's live hints): the shape, then the seat, between two reloads. */
 async function admitInterviewLobbyChannel(args: LiveChannelAuthorization, base: string): Promise<boolean> {
   const interviewId = interviewOfLobby(base);
   if (!interviewId || !channelGuard(args.ctx as GuardAuth | null, args.channel, args.kind)) return false;
@@ -369,7 +369,8 @@ async function guestChannel(args: LiveChannelAuthorization): Promise<boolean> {
   if (inDocumentNamespace(base)) return admitPadChannel(args, base);
   const lobby = interviewLobbyName(guest.interviewId);
   const seat = () => guestHoldsInterviewSeat(args.ctx, guest.interviewId);
-  if (base === lobby) return args.channel === `presence:${lobby}` && seat();
+  // Its lobby's presence, and the lobby's bare name (the room's live hints: a subscribe, never a publish).
+  if (base === lobby) return (args.channel === `presence:${lobby}` || (args.channel === lobby && args.kind === 'subscribe')) && seat();
   if (lobbyForCallLobbyChannel(base) === lobby || base === `${MEETING_CHANNEL_PREFIX}${lobby}`) {
     return args.kind === 'subscribe' && args.channel === base && seat();
   }

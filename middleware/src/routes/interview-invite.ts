@@ -37,6 +37,7 @@ import { interviewsFlagGate } from './interviews.js';
 import { realtimeSigningSecret } from '../lib/realtime-token.js';
 import { GUEST_DISPLAY_NAME, guestRealtimeEnabled, guestSubject, mintGuestRealtimeToken } from '../lib/interviews/invite/realtime.js';
 import { admissionOf, applyAdmission } from '../lib/interviews/invite/admission.js';
+import { publishInterviewHint } from '../lib/interviews/live-hint.js';
 import { guestRoomState, guestRoomView } from '../lib/interviews/invite/room.js';
 import { config } from '../config.js';
 import { interviewsNow } from '../lib/interviews/clock.js';
@@ -179,7 +180,11 @@ interviewInviteRouter.get('/realtime-token', interviewsFlagGate, requireGuest(),
 interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
   const written = await applyAdmission(req.guest!.inviteId, { kind: 'knock' });
-  if (written.ok) { res.json({ admission: written.admission }); return; }
+  if (written.ok) {
+    // The lead's room reads who is waiting now, not on its next poll. A repeated knock changes nothing and says nothing.
+    if (written.changed) await publishInterviewHint(req.guest!.interviewId, 'knock');
+    res.json({ admission: written.admission }); return;
+  }
   if (written.reason === 'no-guest') { res.status(404).json(GUEST_REFUSAL); return; }
   if (written.reason === 'precondition' && written.why === 'declined-required') {
     // Row I6.4: the answer stands; the page shows its own page for this, told apart by `reason`.
