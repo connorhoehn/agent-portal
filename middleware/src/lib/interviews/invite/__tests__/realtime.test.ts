@@ -88,11 +88,14 @@ describe('served only by the guest\'s own router', () => {
     expect(routes.sort()).toEqual([
       'GET /api/interview-invite/admission',
       'GET /api/interview-invite/calls/:callId/chat/reads', // the candidate's call chat read position (routes/interview-invite-chat-reads.ts)
-      'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview', 'GET /api/interview-invite/realtime-token',
+      'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview',
+      'GET /api/interview-invite/milo/floor', // hands-free Milo (lane D): who is talking to Milo, and the candidate's hold button
+      'GET /api/interview-invite/realtime-token',
       'GET /api/interview-invite/room',
       'GET /api/interview-invite/runs', 'GET /api/interview-invite/runs/:runId', 'GET /api/interview-invite/runs/events', // lane RUNS (row I4.4)
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock',
       'POST /api/interview-invite/media/participant', // the candidate's own media id, bound to its session's subject (routes/interview-invite-media.ts)
+      'POST /api/interview-invite/milo/hold/:action', // hands-free Milo (lane D): the candidate's hold, only with pad help on
       'POST /api/interview-invite/milo/request', // lane SPEAK (rows I3.5, I3.8): the candidate's two requests (routes/interview-invite-milo.ts)
       'POST /api/interview-invite/pad/events', // row I4.3: the candidate's pad log writes (routes/interview-invite-pad.ts)
       'POST /api/interview-invite/runs', 'POST /api/interview-invite/runs/:runId/cancel', // lane RUNS (row I4.4)

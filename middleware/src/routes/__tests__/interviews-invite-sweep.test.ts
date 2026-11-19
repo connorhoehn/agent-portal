@@ -54,6 +54,8 @@ const GUEST_ADMITTED_ROUTES = new Set([
   'GET /api/interview-invite/runs/:runId',
   'POST /api/interview-invite/runs/:runId/cancel',
   'POST /api/interview-invite/milo/request',
+  'GET /api/interview-invite/milo/floor',
+  'POST /api/interview-invite/milo/hold/:action',
   'POST /api/interview-invite/media/participant',
   'GET /api/interview-invite/calls/:callId/chat/reads',
   'PUT /api/interview-invite/calls/:callId/chat/reads',
@@ -400,7 +402,7 @@ describe('lane H6: every guest route, from the router', () => {
     'POST /api/interview-invite/media/participant': { callId: 'h6-no-such-call', participantId: 'guest:inv-x-abc' },
     'PUT /api/interview-invite/calls/:callId/chat/reads': { tab: 'chat', readAt: '2026-10-10T12:00:00.000Z' },
   };
-  const pathOf = (key: string) => key.split(' ')[1]!.replace(':runId', 'run-kwame-01').replace(':callId', 'h6-no-such-call');
+  const pathOf = (key: string) => key.split(' ')[1]!.replace(':runId', 'run-kwame-01').replace(':callId', 'h6-no-such-call').replace(':action', 'press');
 
   beforeAll(async () => {
     expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
@@ -423,7 +425,7 @@ describe('lane H6: every guest route, from the router', () => {
     const named = new Set([...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]);
     expect([...mounted].filter((k) => !named.has(k)).sort()).toEqual([]);
     expect([...named].filter((k) => !mounted.has(k)).sort()).toEqual([]);
-    expect(mounted.size).toBe(18);
+    expect(mounted.size).toBe(20);
   });
 
   it('refuses each guest route to no cookie and to a staff session, with the one not-found', async () => {
@@ -451,11 +453,13 @@ describe('lane H6: every guest route, from the router', () => {
 
   it('answers an admitted guest of a live round on its own routes', async () => {
     for (const key of GUEST_ADMITTED_ROUTES) {
-      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant' || key.includes('/chat/reads')) continue; // a stream; a call the mock has not started
+      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant' || key.includes('/chat/reads') || key.includes('/milo/hold/')) continue; // a stream; a call the mock has not started; no hands-free run
       const [method] = key.split(' ');
       const a = await call(method!, pathOf(key), admittedKwame, BODIES[key] ?? {});
       expect([key, a.status < 300]).toEqual([key, true]);
     }
+    // No hands-free run in the mock world: the hold is the plain 409, never the guest refusal.
+    expect((await call('POST', pathOf('POST /api/interview-invite/milo/hold/:action'), admittedKwame, {})).status).toBe(409);
     // No call is running, so the media binding is the same not-found as any other (the bound case is interview-invite-media's).
     expect((await call('POST', '/api/interview-invite/media/participant', admittedKwame, BODIES['POST /api/interview-invite/media/participant'])).status).toBe(404);
     // The call chat's read position is the guest's only in a call of their interview they are seated in: none runs here.
