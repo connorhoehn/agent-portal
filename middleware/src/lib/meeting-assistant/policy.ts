@@ -19,6 +19,7 @@ import { MEETING_EXCLUDED_TOOLS, meetingBackendInstructions, meetingFunctionTool
 import { assistantLimits, type AssistantLimits } from './limits.js';
 import { assistantStore } from './store-select.js';
 import type { AssistantRecord, MinutesRecord } from './types.js';
+import type { Admission } from './handsfree/types.js';
 
 /** The call a decision is about. */
 export interface PolicyCall {
@@ -135,6 +136,12 @@ export interface MeetingAssistantPolicy {
   /** Whether what the live model says reaches the call: its voice through the relay, and its words posted in the call chat. */
   relaysLiveSpeech(call: PolicyCall): boolean;
   /**
+   * Hands-free Milo (MEETING_ASSISTANT_HANDSFREE; handsfree/rules.ts): what this family adds to the hands-free rules of a call.
+   * Asked only under the flag, after the rules' own checks (Milo listening, the person acknowledged). Absent: everyone the rules
+   * admit is routed, nothing is answered from held text, and the session gets no family rules (Work, Social).
+   */
+  handsfree?(call: PolicyCall): HandsfreeFamily;
+  /**
    * A request answered from text the server holds, never by a model: the sentence to post for it, or null when it is not one of
    * the policy's fixed requests (it then goes to the model as usual). An empty string: one of them, handled, with nothing to say.
    * Absent: there are none.
@@ -180,6 +187,22 @@ export interface MeetingAssistantPolicy {
    * Absent: MINUTES_WORDING, "minutes for the people in the call". An interview's call holds the candidate, who never reads them.
    */
   readonly minutesWording?: MinutesWording;
+}
+
+/** A family's part of the hands-free rules (policy `handsfree`). Every promise here is bounded by the rules (a late answer is `deny` or `mention`). */
+export interface HandsfreeFamily {
+  /** Who may have their audio routed (`route`), get server lines only (`fixed-lines`) or nothing (`deny`), asked at every trigger. */
+  admit(userId: string): Promise<Admission>;
+  /**
+   * An addressed request answered from words the server holds, never by the model: the line to say, '' for handled with nothing
+   * to say, null when it is not one (a routed person's request then goes to the model). A `fixed-lines` person's request is
+   * always one: null from here gives them `refusal`.
+   */
+  heldAnswer?(request: { askedBy: string; text: string; admission: Exclude<Admission, 'deny'> }): Promise<string | null>;
+  /** What a `fixed-lines` person gets for anything `heldAnswer` does not answer. Absent: nothing is said. */
+  readonly refusal?: string;
+  /** The family's own rules for the hands-free session's instructions (instructions.ts `handsfree.familyRules`); null: none. */
+  instructions(): string | null;
 }
 
 /** What Milo writes and for whom, after its name: the first period's words, and a later period's. No full stop. */
