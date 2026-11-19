@@ -114,6 +114,27 @@ describe('name matching', () => {
     expect(findAddress('I trust Milo. Not sure yet. Can you check the totals')).toBeNull();
   });
 
+  it('a greeting to Milo at the start of a later sentence of the line addresses Milo when that sentence or one of the next two asks (live take of 19 November)', () => {
+    // The transcript put a lead-in before the greeting in the same line: both pad requests were refused as asked by nobody.
+    expect(findAddress('Oh, nice. Hey Milo! It would be helpful to have another dozen test cases')?.rest)
+      .toBe('It would be helpful to have another dozen test cases');
+    expect(findAddress('Go for it! Hey Milo! Matteo wants to use an LRU cache for his algorithm. Can you just add it for him at the top to import and save time')?.rest)
+      .toBe('Can you just add it for him at the top to import and save time');
+    expect(findAddress('Right. Hi Milo. Could you add a test for the empty list?')?.rest).toBe('Could you add a test for the empty list?');
+    expect(findAddress('Great, thanks. Okay Milo, add the import at the top')?.rest).toBe('add the import at the top');
+    expect(findAddress('Sounds good. Okay Milo add the import at the top')?.rest).toBe('add the import at the top');
+    expect(findAddress("That's fine. Hey Milo it would be helpful to have the edge cases in the pad")?.rest)
+      .toBe('it would be helpful to have the edge cases in the pad');
+    // A greeting with nothing asked after it, or the ask too far on, is not a request.
+    expect(findAddress('Oh, nice. Hey Milo! Good to see you.')).toBeNull();
+    expect(findAddress('Great. Hi Milo! Welcome. That works. The tests pass. Can you explain the loop')).toBeNull();
+    expect(findAddress('Sounds good. Okay Milo is taking notes today')).toBeNull();
+    // Tonight's negatives stay closed with a lead-in before them.
+    expect(findAddress('Oh, nice. We could ask Milo. Show me your solution.')).toBeNull();
+    expect(findAddress("Okay. Don't ask Milo, write it yourself")).toBeNull();
+    expect(findAddress('Right. Thanks, Milo. That was great. Could you walk me through your approach?')).toBeNull();
+  });
+
   it('talk about Milo stays talk about Milo across a full stop or a comma; thanks said to Milo is not a request (review of 18 November, item 3)', () => {
     // The ask after the name is in another sentence: said to the person in the room.
     expect(findAddress('We could ask Milo. Show me your solution.')).toBeNull();

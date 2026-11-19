@@ -20,7 +20,9 @@
 //     has ended ("I trust Milo. Show me your solution.") is said to someone else, with one exception: a name
 //     set off by a comma that closes its sentence ("So sorry, Milo. I was miles away. Could you repeat that?")
 //     is a request when one of the next two sentences asks so, unless it is thanks or a goodbye ("Thanks,
-//     Milo. That was great. Could you walk me through it?" asks the candidate).
+//     Milo. That was great. Could you walk me through it?" asks the candidate). A greeting that opens a later sentence of the
+//     line ("Oh, nice. Hey Milo! It would be helpful to have another dozen test cases") is a request when the rest of its
+//     sentence, or one of the next two sentences, asks something or says what would help ("it would be helpful", "I'd like").
 //   C. the name is the last word of the caption (unless it follows thanks / bye / sorry): the request starts next caption.
 //   Mention. Talking about Milo to someone else is never an address: Milo as what the sentence acts on or names ("just ask
 //     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the same sentence goes on to ask it something
@@ -162,6 +164,15 @@ const asksYou = (text: string): boolean => {
 };
 /** Do these words start by asking something: "please", an imperative, or "can/could/would/will you"? */
 const asksSomething = (text: string): boolean => IMPERATIVES.has(norm(text).split(' ')[0] ?? '') || asksYou(text);
+/** A want said as such: "it would be helpful to have ...", "that'd be great", "I'd like ...". Asked of whoever was just greeted. */
+const WANTS = /^(?:(?:it|that) would|it'd|that'd) be (?:really |very |super )?(?:helpful|great|nice|good|useful|handy)\b|^(?:i|we)(?: would|'d) (?:like|love)\b/;
+/** Asking something, or saying what would help (after a greeting to Milo only: an apology or a mention is not enough for that). */
+const asksOrWants = (text: string): boolean => asksSomething(text) || WANTS.test(norm(text));
+/**
+ * Only greeting words open the name's sentence, and an earlier sentence of the line comes before it ("Oh, nice. Hey Milo!"): the
+ * transcript joined the lead-in to the request. (Greeting words opening the line itself are rule A.)
+ */
+const greetedInSentence = (before: string): boolean => GREETING_ONLY.test(before.replace(/^[\s\S]*[.!?;…]["')\]]*\s*/, ''));
 /** The name ends its sentence: a full stop, "!" or "?" straight after it (an ellipsis is a pause, not an end). */
 const closesSentence = (after: string): boolean => /^\s*[.!?]/.test(after) && !/^\s*\.\./.test(after);
 /** Thanks or a goodbye right before the name ("Thanks, Milo"): said to Milo, but never a request, whatever follows. */
@@ -219,18 +230,20 @@ export function findAddress(text: string): NameHit | null {
     const rest = after.replace(/^[\s,:;.\-–—!?…]+/, '').trim();
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
     if (namePhraseFollows(after) || talksAboutName(before, after, rest, initial)) continue;
+    const greeted = !initial && greetedInSentence(before);
     let addressed = initial;
     // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you or an apology.
     if (!addressed && rest === '' && !THANKS_OR_BYE.test(before) && !/sorry[\s,.!]*$/i.test(before)) addressed = true;
     if (!addressed) {
       if (/^\s*([,:;—–-]|\.\.\.|…)/.test(after)) addressed = true;
       // Mid-sentence, the name straight followed by the ask ("so Milo please summarise the call").
-      else if (!closesSentence(after)) addressed = asksSomething(rest);
+      else if (!closesSentence(after)) addressed = greeted ? asksOrWants(rest) : asksSomething(rest);
       // Spoken to Milo at the end of a sentence, not in thanks: a request only when one of the next sentences asks it something.
       // The request is that sentence on: the words before it ("I was focusing.") would hide a fixed phrase ("repeat the question").
-      else if (closesSentenceSpokenTo(before, after) && !THANKS_OR_BYE.test(before)) {
+      // A greeting that opens a later sentence of the line ("Go for it! Hey Milo!") is read the same way.
+      else if ((closesSentenceSpokenTo(before, after) || greeted) && !THANKS_OR_BYE.test(before)) {
         const sentences = rest.split(/(?<=[.!?…])\s+/);
-        const asking = sentences.slice(0, VOCATIVE_REACH_SENTENCES).findIndex(asksSomething);
+        const asking = sentences.slice(0, VOCATIVE_REACH_SENTENCES).findIndex(greeted ? asksOrWants : asksSomething);
         if (asking >= 0) return { addressed: true, rest: sentences.slice(asking).join(' ') };
       }
     }
