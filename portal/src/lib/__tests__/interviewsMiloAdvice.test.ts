@@ -2,7 +2,7 @@
 // the quote and expand only when there is more, and Milo's recommendation rule, each outcome.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { draftRatings, evidenceRow, isGenericClaim, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf } from '../interviewsMiloAdvice.ts';
+import { MILO_ADVICE_LABELS, MILO_ADVICE_TONES, draftRatings, evidenceRow, isGenericClaim, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf } from '../interviewsMiloAdvice.ts';
 
 const REQ = [{ id: 'a', name: 'Ownership' }, { id: 'b', name: 'Clarity' }, { id: 'c', name: 'Testing' }, { id: 'd', name: 'Design' }];
 const claim = (seq: number, quote = 'I paged the on-call lead.') => ({ text: 'The candidate said this in answer to the question.', source: { kind: 'transcript' as const, seq, quote } });
@@ -27,18 +27,18 @@ test('Advance: high ratings, nothing under the bar, evidence for every competenc
   assert.deepEqual(a.reasons, ['Rated 3.5 of 4 on average across 4 competencies.', 'Strongest on Ownership (4 of 4), with evidence for every competency.']);
 });
 
-test('Hold: high ratings but a competency without evidence', () => {
+test('Inconclusive: high ratings but a competency without evidence', () => {
   const a = miloAdvice({ required: REQ, ratings: r(4, 3, 3, 4), recap: recapFor(['a', 'b', 'c']), leadIn: true });
-  assert.equal(a.outcome, 'hold');
+  assert.equal(a.outcome, 'inconclusive');
   assert.equal(a.tone, 'warning');
   assert.equal(a.reasons[0], 'No evidence in the transcript for Design.');
   assert.equal(a.reasons.length, 2);
 });
 
-test('Hold: middling ratings, or one competency under the bar', () => {
-  assert.equal(miloAdvice({ required: REQ, ratings: r(3, 2, 3, 2), recap: all, leadIn: true }).outcome, 'hold');
+test('Inconclusive: middling ratings, or one competency under the bar', () => {
+  assert.equal(miloAdvice({ required: REQ, ratings: r(3, 2, 3, 2), recap: all, leadIn: true }).outcome, 'inconclusive');
   const one = miloAdvice({ required: REQ, ratings: r(4, 1, 4, 4), recap: all, leadIn: true });
-  assert.equal(one.outcome, 'hold');
+  assert.equal(one.outcome, 'inconclusive');
   assert.equal(one.reasons[0], 'Below the bar on Clarity.');
 });
 
@@ -46,7 +46,7 @@ test("Don't advance: a low average, or two competencies under the bar", () => {
   const low = miloAdvice({ required: REQ, ratings: r(2, 2, 2, 2), recap: all, leadIn: true });
   assert.equal(low.outcome, 'dont-advance');
   assert.equal(low.label, 'Don\'t advance');
-  assert.equal(low.tone, 'error');
+  assert.equal(low.tone, 'danger');
   assert.deepEqual(low.reasons, ['Rated 2 of 4 on average across 4 competencies.']);
   const two = miloAdvice({ required: REQ, ratings: r(1, 1, 4, 4), recap: all, leadIn: true });
   assert.equal(two.outcome, 'dont-advance');
@@ -56,7 +56,8 @@ test("Don't advance: a low average, or two competencies under the bar", () => {
 test('not enough evidence: no recap, an unrated competency, or evidence for under half', () => {
   const none = miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: null, leadIn: true });
   assert.equal(none.outcome, 'not-enough');
-  assert.equal(none.tone, 'info');
+  // No recommendation carries no pill: no label and no tone.
+  assert.deepEqual(Object.keys(none).sort(), ['outcome', 'reasons']);
   assert.equal(miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: { state: 'no-transcript', competencies: [] }, leadIn: true }).outcome, 'not-enough');
   const unrated = miloAdvice({ required: REQ, ratings: { a: [4], b: [4] }, recap: all, leadIn: true });
   assert.equal(unrated.outcome, 'not-enough');
@@ -64,8 +65,8 @@ test('not enough evidence: no recap, an unrated competency, or evidence for unde
   const thin = miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: recapFor(['a']), leadIn: true });
   assert.equal(thin.outcome, 'not-enough');
   assert.equal(thin.reasons[0], 'The transcript has evidence for only 1 of 4 competencies.');
-  // Exactly half evidenced is enough to recommend (at most Hold, since two lack evidence).
-  assert.equal(miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: recapFor(['a', 'b']), leadIn: true }).outcome, 'hold');
+  // Exactly half evidenced is enough to recommend (at most Inconclusive, since two lack evidence).
+  assert.equal(miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: recapFor(['a', 'b']), leadIn: true }).outcome, 'inconclusive');
 });
 
 test('pooled ratings average across interviewers', () => {
@@ -73,7 +74,7 @@ test('pooled ratings average across interviewers', () => {
   assert.deepEqual(pooled, { a: [4, 1], b: [3] });
   assert.deepEqual(draftRatings({ a: 3, b: null }), { a: [3] });
   // Ownership averages 2.5: not under the bar.
-  assert.equal(miloAdvice({ required: REQ.slice(0, 2), ratings: pooled, recap: all, leadIn: true }).outcome, 'hold');
+  assert.equal(miloAdvice({ required: REQ.slice(0, 2), ratings: pooled, recap: all, leadIn: true }).outcome, 'inconclusive');
 });
 
 test('an evidence row is the quote with its line; the generic sentence never shows', () => {
@@ -117,4 +118,9 @@ test('the lead\'s card is in: their submitted card on this round, or their own d
   assert.equal(leadCardIn({ leadId: 'u-wen', draftingSeat: 'panel', cards: [] }), false);
   assert.equal(leadCardIn({ leadId: 'u-wen', draftingSeat: 'panel', cards: [wen] }), true);
   assert.equal(leadCardIn({ leadId: 'u-wen', draftingSeat: 'lead', cards: [] }), true);
+});
+
+test('the pill has three labels and a tone each; there is no label for no recommendation', () => {
+  assert.deepEqual(MILO_ADVICE_LABELS, { advance: 'Advance', inconclusive: 'Inconclusive', 'dont-advance': 'Don\'t advance' });
+  assert.deepEqual(MILO_ADVICE_TONES, { advance: 'success', inconclusive: 'warning', 'dont-advance': 'danger' });
 });

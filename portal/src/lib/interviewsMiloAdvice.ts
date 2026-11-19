@@ -63,18 +63,23 @@ export function evidenceRow(claim: RecapClaim, max: number = ROW_QUOTE_CHARS): E
 
 // ── Milo's recommendation ───────────────────────────────────────────────────
 
-export type MiloAdviceOutcome = 'advance' | 'hold' | 'dont-advance' | 'not-enough';
+/** What Milo may recommend: the pill's three outcomes. */
+export type MiloRecommendation = 'advance' | 'inconclusive' | 'dont-advance';
+export type MiloAdviceOutcome = MiloRecommendation | 'not-enough';
 
-export const MILO_ADVICE_LABELS: Readonly<Record<MiloAdviceOutcome, string>> = {
-  advance: 'Advance', hold: 'Inconclusive', 'dont-advance': 'Don\'t advance', 'not-enough': 'Not enough evidence to recommend',
+export const MILO_ADVICE_LABELS: Readonly<Record<MiloRecommendation, string>> = {
+  advance: 'Advance', inconclusive: 'Inconclusive', 'dont-advance': 'Don\'t advance',
 };
 
-/** The library Banner variant for each outcome: green, yellow, red, and a neutral note when there is none. */
-export const MILO_ADVICE_TONES: Readonly<Record<MiloAdviceOutcome, 'success' | 'warning' | 'error' | 'info'>> = {
-  advance: 'success', hold: 'warning', 'dont-advance': 'error', 'not-enough': 'info',
+/** The library Chip tone of each pill: green, yellow, red. No recommendation shows no pill. */
+export const MILO_ADVICE_TONES: Readonly<Record<MiloRecommendation, 'success' | 'warning' | 'danger'>> = {
+  advance: 'success', inconclusive: 'warning', 'dont-advance': 'danger',
 };
 
-export interface MiloAdvice { outcome: MiloAdviceOutcome; label: string; tone: 'success' | 'warning' | 'error' | 'info'; reasons: string[] }
+/** A recommendation (its pill and at most two reasons, the deciding one first), or none and the one reason why. */
+export type MiloAdvice =
+  | { outcome: MiloRecommendation; label: string; tone: 'success' | 'warning' | 'danger'; reasons: [string] | [string, string] }
+  | { outcome: 'not-enough'; reasons: [string] };
 
 /** Each competency's ratings across the scorecards given (one per interviewer, latest version). */
 export function pooledRatings(cards: ReadonlyArray<{ ratings: ReadonlyArray<{ competencyId: string; rating: number }> }>): Record<string, number[]> {
@@ -123,33 +128,35 @@ export function miloAdvice(input: {
   /** Whether the lead's scorecard is in (leadCardIn). */
   leadIn: boolean;
 }): MiloAdvice {
-  const out = (outcome: MiloAdviceOutcome, reasons: string[]): MiloAdvice => ({ outcome, label: MILO_ADVICE_LABELS[outcome], tone: MILO_ADVICE_TONES[outcome], reasons: reasons.slice(0, 2) });
+  const out = (outcome: MiloRecommendation, first: string, second?: string): MiloAdvice => (
+    { outcome, label: MILO_ADVICE_LABELS[outcome], tone: MILO_ADVICE_TONES[outcome], reasons: second === undefined ? [first] : [first, second] });
+  const none = (reason: string): MiloAdvice => ({ outcome: 'not-enough', reasons: [reason] });
   const { required, ratings, recap } = input;
-  if (required.length === 0) return out('not-enough', ['This round has no competencies to weigh.']);
-  if (!input.leadIn) return out('not-enough', ['The lead interviewer\'s scorecard is not in yet.']);
-  if (!recap || recap.state !== 'ready') return out('not-enough', ['Milo has no recap of the transcript for this round, so there is no evidence to weigh.']);
+  if (required.length === 0) return none('This round has no competencies to weigh.');
+  if (!input.leadIn) return none('The lead interviewer\'s scorecard is not in yet.');
+  if (!recap || recap.state !== 'ready') return none('Milo has no recap of the transcript for this round, so there is no evidence to weigh.');
   const unrated = required.filter((c) => !(ratings[c.id]?.length));
-  if (unrated.length) return out('not-enough', [`${names(unrated)} ${unrated.length === 1 ? 'is' : 'are'} not rated yet.`]);
+  if (unrated.length) return none(`${names(unrated)} ${unrated.length === 1 ? 'is' : 'are'} not rated yet.`);
   const evidenced = (id: string) => (recap.competencies.find((c) => c.id === id)?.evidence.length ?? 0) > 0;
   const uncovered = required.filter((c) => !evidenced(c.id));
   const covered = required.length - uncovered.length;
   if (covered * 2 < required.length) {
-    return out('not-enough', [`The transcript has evidence for only ${covered} of ${required.length} competencies.`]);
+    return none(`The transcript has evidence for only ${covered} of ${required.length} competencies.`);
   }
   const scored = required.map((c) => { const rs = ratings[c.id]!; return { ...c, score: rs.reduce((a, b) => a + b, 0) / rs.length }; });
   const overall = scored.reduce((a, c) => a + c.score, 0) / scored.length;
   const low = scored.filter((c) => c.score < LOW_BELOW);
   const average = `Rated ${ratingWords(overall)} on average across ${scored.length} ${scored.length === 1 ? 'competency' : 'competencies'}.`;
   if (overall < DONT_ADVANCE_BELOW || low.length >= 2) {
-    return out('dont-advance', low.length ? [`Below the bar on ${names(low)}.`, average] : [average]);
+    return low.length ? out('dont-advance', `Below the bar on ${names(low)}.`, average) : out('dont-advance', average);
   }
   if (overall >= ADVANCE_FROM && low.length === 0 && uncovered.length === 0) {
     const best = [...scored].sort((a, b) => b.score - a.score)[0]!;
-    return out('advance', [average, `Strongest on ${best.name} (${ratingWords(best.score)}), with evidence for every competency.`]);
+    return out('advance', average, `Strongest on ${best.name} (${ratingWords(best.score)}), with evidence for every competency.`);
   }
   const why: string[] = [];
   if (low.length) why.push(`Below the bar on ${names(low)}.`);
   if (uncovered.length) why.push(`No evidence in the transcript for ${names(uncovered)}.`);
   why.push(average);
-  return out('hold', why);
+  return out('inconclusive', why[0]!, why[1]);
 }

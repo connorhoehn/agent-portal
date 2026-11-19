@@ -16,8 +16,8 @@
 //
 // At a glance (lib/interviewsMiloAdvice.ts): each rating reads as stars on the kit's 1 to 4 scale, each piece of evidence
 // is the quote itself with its transcript line (expanding only when there is more), and once the ratings are in, Milo's
-// recommendation sits on top as a coloured banner: Advance, Hold or Don't advance, a fixed rule over the ratings and the
-// recap's coverage (no model call), or "not enough evidence". The panel decides.
+// recommendation sits on top as a coloured pill: Advance, Inconclusive or Don't advance, a fixed rule over the ratings and
+// the recap's coverage (no model call), or no recommendation and why. The panel decides.
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
@@ -91,7 +91,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
     // Nothing is recommended until the lead's scorecard is in (or the lead is the one rating now).
     leadIn: leadCardIn({ leadId: interview.leadId, draftingSeat: editing ? interview.seat : null, cards }),
   });
-  const adviceBanner = interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404 ? <MiloAdviceBanner advice={advice} /> : null;
+  const advicePill = interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404 ? <MiloAdvicePill advice={advice} /> : null;
   const missing = missingFrom(draft, competencies, limits, basedOn > 0, round.required);
   const status = roundStatus(interview.state);
 
@@ -210,7 +210,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const recapStep = (
     <Stack gap="md" data-testid="interviews-scorecard-recap-step">
       {correctingLine}
-      {adviceBanner}
+      {advicePill}
       <RecapView recap={recapNow} error={recapRead.error} hidden={false} competencies={round.required} ratings={draft.ratings} />
       <AskFromRecap interviewId={interview.id} />
       <Inline gap="sm">
@@ -223,7 +223,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const decideStep = (
     <Stack gap="md" data-testid="interviews-scorecard-decide-step">
       {correctingLine}
-      {adviceBanner}
+      {advicePill}
       <DetailSection variant="heading" as="h2" title="Your recommendation" hint="Your own judgement of this round.">
         <Stack gap="sm">
           <RadioGroup<Recommendation | ''> name={`recommendation-${interview.id}`} orientation="horizontal" value={draft.recommendation ?? ''}
@@ -259,7 +259,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const lockedLine = reviewedLine(interview.state, mine !== null);
   const mineTab = editing ? form : mine ? (
     <Stack gap="md">
-      {adviceBanner}
+      {advicePill}
       {lockedLine && <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-reviewed-line">{lockedLine}</T>}
       <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />
       <ScorecardReadout card={mine} competencies={competencies} recap={recapNow} testId="interviews-scorecard-mine" />
@@ -271,7 +271,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const othersNote = othersLine(view);
   const othersTab = (
     <Stack gap="md" data-testid="interviews-scorecard-others">
-      {!seated && adviceBanner}
+      {!seated && advicePill}
       {othersNote && <T size="sm" tone="secondary" data-testid="interviews-scorecard-others-line">{othersNote}</T>}
       {view.others.map((s) => (
         <Stack key={s.id} gap="sm">
@@ -497,17 +497,16 @@ function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
   );
 }
 
-/** Milo's recommendation at the top of the scorecard: green Advance, yellow Hold, red Don't advance, or no recommendation. */
-function MiloAdviceBanner({ advice }: { advice: MiloAdvice }) {
-  const recommends = advice.outcome !== 'not-enough';
+/** Milo's recommendation at the top of the scorecard: a green Advance, yellow Inconclusive or red Don't advance pill, or no recommendation. */
+function MiloAdvicePill({ advice }: { advice: MiloAdvice }) {
   return (
     <Stack gap="xs" data-testid="interviews-scorecard-milo-advice">
       <Inline gap="sm" align="center">
         <T size="lg" weight="semibold">Milo recommends</T>
-        <Chip tone={advice.tone === 'error' ? 'danger' : advice.tone} size="md">{recommends ? advice.label : 'No recommendation yet'}</Chip>
+        <Chip tone={advice.outcome === 'not-enough' ? 'info' : advice.tone} size="md">{advice.outcome === 'not-enough' ? 'No recommendation yet' : advice.label}</Chip>
       </Inline>
       <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-milo-reason">
-        {`${advice.reasons[0] ?? 'Not enough evidence in the transcript yet.'} The panel decides.`}
+        {`${advice.reasons[0]} The panel decides.`}
       </T>
     </Stack>
   );
