@@ -872,7 +872,12 @@ export class AssistantRuntime {
     const offEvents = intake.onEvents((callId, events, applied) => this.onDetector(callId, events, applied));
     // A spoken dismiss: whoever holds a seat is recorded as present before the record becomes `left` (as the Dismiss button does).
     const offLeave = intake.onBeforeDismiss(async (callId) => { if (this.isRunning(callId)) await this.snapshotAttendance(callId); });
-    this.unsubscribeIntake = () => { offEvents(); offLeave(); };
+    // The call's family knows some requests whole by their words (its fixed phrases): those need no wait for more words.
+    const offWhole = intake.onWholeRequest(async (callId, request) => {
+      const run = this.runs.get(callId);
+      return !!run && !run.finished && !!run.policy.wholeRequest && (await run.policy.wholeRequest(run.call, request));
+    });
+    this.unsubscribeIntake = () => { offEvents(); offLeave(); offWhole(); };
     this.unsubscribeLines?.();
     this.unsubscribeLines = this.deps.watcher ? intake.onStored((line) => { if (this.isRunning(line.callId)) this.deps.watcher?.onLine(line); }) : null;
   }

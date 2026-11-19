@@ -230,7 +230,7 @@ const NO_TOOLS: SessionTools = Object.freeze({ tools: [], backendInstructions: '
  * only asked once a session that was offered the tools makes a call.
  */
 export function serverToolPolicy(family: string, load?: () => Promise<unknown>): Pick<MeetingAssistantPolicy,
-  'sessionTools' | 'mayUseTool' | 'runTool' | 'maxToolArgsBytes' | 'heldFallback' | 'heldAcknowledgement'> {
+  'sessionTools' | 'mayUseTool' | 'runTool' | 'maxToolArgsBytes' | 'heldFallback' | 'heldAcknowledgement' | 'wholeRequest'> {
   const fam = async (): Promise<ServerToolFamily<unknown> | null> => { await load?.(); return families.get(family) ?? null; };
   const ofCall = async (call: PolicyCall): Promise<ServerToolFamily<unknown> | null> => (familyOfLobby(call.lobby) === family ? fam() : null);
   return {
@@ -256,6 +256,10 @@ export function serverToolPolicy(family: string, load?: () => Promise<unknown>):
     runTool: async (call, request) => {
       await ofCall(call);
       return policyAnswer(await runServerTool(call, request.askedBy, request.name, request.args, 'model'));
+    },
+    // A tool's phrase is a whole request (it matches the utterance word for word): heard, it needs no wait for more words.
+    wholeRequest: async (call, request) => {
+      try { return (await ofCall(call)) !== null && (await phraseTool(family, request)) !== null; } catch { return false; }
     },
     maxToolArgsBytes: (_call, tool) => families.get(family)?.tools.find((t) => t.name === tool)?.maxArgsBytes ?? DEFAULT_TOOL_ARGS_BYTES,
     heldFallback: async (call, request) => {

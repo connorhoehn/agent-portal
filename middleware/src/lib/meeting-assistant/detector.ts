@@ -18,15 +18,17 @@
 //     So "I think Milo could help with that budget question" is NOT a request (mid-sentence, "could"
 //     not followed by "you"), but "I think Milo, could you help" is.
 //   C. the name is the last word of the caption (unless it follows thanks / bye): the request starts next caption.
-//   Mention. Talking about Milo to someone else is never an address, wherever the name stands: Milo as the object the
-//     sentence ends on ("just ask Milo", "talk to Milo"), or as its subject in the third person, a modal straight after
-//     the name with no person after it ("Milo can help with that"; "Milo can you", "Milo, can help" still address it).
+//   Mention. Talking about Milo to someone else is never an address: Milo as what the sentence acts on or names ("just ask
+//     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the words after the name ask it something ("let
+//     me ask Milo, can you add a test"); or Milo as the subject in the third person, a modal straight after the name with no
+//     person after it ("Milo can help with that"; "Milo can you", "Milo, can help" still address it).
 //   Text before the name is dropped. If nothing follows the name ("...Milo.") the request is opened
 //   empty and starts with the same speaker's next caption.
 //   Stitching. The same speaker's following captions join the request. It closes when the speaker has been
 //     quiet for 1.5 s since their last caption arrived; the wait stretches to 4 s when that caption looks
 //     cut off (no closing . ? ! or a dangling word like "and") or the request has under three words so far
-//     (a bare "Milo, please."). Hard caps: 12 captions or 60 s per request.
+//     (a bare "Milo, please."). Hard caps: 12 captions or 60 s per request. A request the call's family knows
+//     whole by its words ("Milo, introduce yourself") closes at once.
 //   Other speakers' captions never join; each speaker has at most one open request.
 //   Half-cut words. A caption ending in `pr-` followed by one starting with lowercase `iya` is joined: "priya".
 //   Slivers. A caption of at most two words that is exactly a known Whisper filler is not stitched and
@@ -118,10 +120,14 @@ const IMPERATIVES = new Set([
 export const WHISPER_FILLERS = new Set([
   'thank you', 'thanks', 'you', 'bye', 'bye bye', 'goodbye', 'thanks for watching', 'okay', 'ok', 'uh', 'um', 'hmm', 'mm', 'mhm', 'the end',
 ]);
-/** Words the name ends a sentence after when it is what the sentence acts on, not who it speaks to: "just ask Milo". */
+/**
+ * Words that make the name what the speaker's sentence acts on or names, not who it speaks to: "just ask Milo", "I've brought in
+ * Milo, our AI support", "this is Milo".
+ */
 const NAME_AS_OBJECT: ReadonlySet<string> = new Set([
   'ask', 'asking', 'tell', 'telling', 'let', 'have', 'get', 'use', 'using', 'try', 'ping', 'call',
-  'to', 'with', 'for', 'from', 'about', 'at', 'by', 'of', 'on', 'like', 'than', 'without',
+  'to', 'with', 'for', 'from', 'about', 'at', 'by', 'of', 'on', 'in', 'into', 'like', 'than', 'without',
+  'is', 'was', "it's", "that's", "here's", "there's",
 ]);
 /** A modal straight after the name says what Milo does ("Milo can help with that"), unless a person follows it ("Milo can you"). */
 const MODALS: ReadonlySet<string> = new Set([
@@ -131,13 +137,14 @@ const MODALS: ReadonlySet<string> = new Set([
 const QUESTION_SUBJECTS: ReadonlySet<string> = new Set(['you', 'u', 'ya', 'we', 'i', 'he', 'she', 'they', 'it', 'this', 'that', 'there', 'someone', 'somebody', 'anyone', 'anybody']);
 /**
  * Is this mention of the name talk about Milo to someone else (the Mention rule above)? `before` and `after` are the text around
- * the name; `rest` is `after` without the punctuation it starts with.
+ * the name, `rest` is `after` without the punctuation it starts with, `initial` whether the name starts its sentence. A name the
+ * sentence acts on still addresses Milo when the words after it ask something ("let me ask Milo, can you add a test").
  */
-const talksAboutName = (before: string, after: string, rest: string): boolean => {
-  if (rest === '') return NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '');
-  if (!/^\s+\p{L}/u.test(after)) return false;
+const talksAboutName = (before: string, after: string, rest: string, initial: boolean): boolean => {
   const [first = '', second = ''] = norm(rest).split(' ');
-  return MODALS.has(first) && !QUESTION_SUBJECTS.has(second);
+  const asks = IMPERATIVES.has(first) || (['can', 'could', 'would', 'will'].includes(first) && second === 'you');
+  if (!initial && !asks && NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '')) return true;
+  return /^\s+\p{L}/u.test(after) && MODALS.has(first) && !QUESTION_SUBJECTS.has(second);
 };
 const DANGLING = new Set(['and', 'or', 'but', 'to', 'for', 'the', 'a', 'an', 'of', 'with', 'that', 'in', 'on', 'so', 'then', 'about', 'at', 'is', 'it']);
 
@@ -183,8 +190,8 @@ export function findAddress(text: string): NameHit | null {
     const before = text.slice(0, start).trim();
     const after = text.slice(end);
     const rest = after.replace(/^[\s,:;.\-–—!?…]+/, '').trim();
-    if (namePhraseFollows(after) || talksAboutName(before, after, rest)) continue;
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
+    if (namePhraseFollows(after) || talksAboutName(before, after, rest, initial)) continue;
     let addressed = initial;
     // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you.
     if (!addressed && rest === '' && !/(thanks|thank you|bye|goodbye|cheers|sorry)[\s,.!]*$/i.test(before)) addressed = true;
@@ -240,11 +247,13 @@ export class RequestDetector {
   hasOpen(userId: string): boolean { return this.open.has(userId); }
 
   /**
+   * `whole`: the words after the name on this line are a request the call's family knows whole (a fixed phrase, intake.ts
+   * `onWholeRequest`), so it closes now, however few words it has.
    * `turnEnded`: the provider itself ended the speaker's turn with this line (it began answering or handed the request on), so a
    * request with enough words closes now instead of waiting out `cutWaitMs`. The Live API puts a sentence's closing punctuation at
    * the START of the next delta, so a finished request ("Milo, how much time is left") looks cut by its text alone.
    */
-  push(line: TranscriptLine, opts: { turnEnded?: boolean } = {}): DetectorEvent[] {
+  push(line: TranscriptLine, opts: { turnEnded?: boolean; whole?: boolean } = {}): DetectorEvent[] {
     const events = this.expire();
     // A piece nobody's audio was voiced for has no speaker to ask anything: it is stored but never a request or a command.
     const userId = line.userId;
@@ -276,6 +285,8 @@ export class RequestDetector {
         startedClock: now, lastClock: now, lastLooksCut: true, captions: 1 };
       if (hit.rest) { appendText(o.parts, hit.rest); o.lastLooksCut = looksCut(hit.rest); }
       this.open.set(userId, o);
+      // Words the call's family knows as a whole request (`whole`, judged on this line's words after the name) need no more.
+      if (opts.whole === true && hit.rest) { events.push(...this.close(o)); return events; }
       return this.capped(o, events, now, opts.turnEnded === true);
     }
 

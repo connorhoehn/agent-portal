@@ -13,7 +13,7 @@
 // command is applied to the state as the speaker who said it.
 import { createHash } from 'node:crypto';
 import { transcriptSource, type TranscriptSource, type Unsubscribe } from './transcript-source.js';
-import { RequestDetector, type DetectorEvent } from './detector.js';
+import { findAddress, RequestDetector, type DetectorEvent } from './detector.js';
 import { MAX_LINE_CHARS, type AssistantStore } from './store.js';
 import type { AssistantRecord, RawLine, TranscriptLine } from './types.js';
 
@@ -44,6 +44,7 @@ export class LineIntake {
   private readonly source: () => TranscriptSource;
   private readonly listeners = new Set<(callId: string, events: DetectorEvent[], applied: ReadonlySet<DetectorEvent>) => void | Promise<void>>();
   private readonly beforeDismiss = new Set<(callId: string) => Promise<void>>();
+  private readonly wholeJudges = new Set<(callId: string, request: string) => Promise<boolean>>();
   private readonly storedListeners = new Set<(line: TranscriptLine) => void>();
 
   constructor(private readonly store: AssistantStore, opts: IntakeOptions = {}) {
@@ -94,8 +95,9 @@ export class LineIntake {
     });
     if (!stored) return { stored: null, reason: 'duplicate', events: [] };
     this.tellStored(stored);
+    const whole = await this.isWholeRequest(callId, stored.text);
     const detector = this.detectors.get(callId) ?? this.newDetector(callId);
-    const events = detector.push(stored, { turnEnded: raw.turnEnded === true });
+    const events = detector.push(stored, { turnEnded: raw.turnEnded === true, whole });
     await this.apply(callId, events);
     return { stored, events };
   }
@@ -135,6 +137,23 @@ export class LineIntake {
   onEvents(listener: (callId: string, events: DetectorEvent[], applied: ReadonlySet<DetectorEvent>) => void | Promise<void>): () => void {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
+  }
+
+  /**
+   * Judge whether the words after Milo's name on a line are a whole request (the call's family knows them, word for word): the
+   * detector then closes it at once. A judge that throws says no.
+   */
+  onWholeRequest(judge: (callId: string, request: string) => Promise<boolean>): () => void {
+    this.wholeJudges.add(judge);
+    return () => { this.wholeJudges.delete(judge); };
+  }
+
+  private async isWholeRequest(callId: string, text: string): Promise<boolean> {
+    if (!this.wholeJudges.size) return false;
+    const rest = findAddress(text)?.rest;
+    if (!rest) return false;
+    for (const judge of [...this.wholeJudges]) if (await judge(callId, rest).catch(() => false)) return true;
+    return false;
   }
 
   /** Run just before a spoken dismiss moves the record to `left` (attendance closes then). */

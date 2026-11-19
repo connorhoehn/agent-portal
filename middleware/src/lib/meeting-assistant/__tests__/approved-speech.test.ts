@@ -574,6 +574,23 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
   });
 });
 
+describe('6b. a fixed request the family knows whole by its words', () => {
+  it('is answered as soon as its line is heard: no wait for more words after a two-word "introduce yourself" (live take of 18 November)', async () => {
+    const HELD: MeetingAssistantPolicy = {
+      ...NO_RELAY, id: 'held-whole',
+      wholeRequest: async (_c, request) => /^introduce yourself$/i.test(request.trim()),
+      answerFromHeldText: async (_c, r) => (/introduce yourself/i.test(r.text) ? 'Hi, I am Milo.' : null),
+    };
+    const off = registerMeetingAssistantPolicy('orgiq:heldwhole', HELD);
+    try {
+      await startCall('orgiq:heldwhole:r1');
+      await intake.handle(CALL, { userId: ALICE, text: "I'm Hugo, and I'll be running today's session. I've also brought in Milo, our AI support for the interview. Milo, introduce yourself", at: now });
+      await flush();
+      expect(mockPosts.approved).toEqual(['Hi, I am Milo.']);
+    } finally { off(); }
+  });
+});
+
 describe('7. the fixed refusal for a request heard again, and the asker\'s name', () => {
   const REFUSAL = 'I can repeat the question or tell you how much time is left.';
   const HELD: MeetingAssistantPolicy = {

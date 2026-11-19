@@ -141,6 +141,12 @@ export interface MeetingAssistantPolicy {
    */
   answerFromHeldText?(call: PolicyCall, request: { askedBy: string; text: string }): Promise<string | null>;
   /**
+   * Are these words (what followed Milo's name on one heard line) a whole request the family knows by its words, such as one of
+   * its fixed phrases? The request detector then closes the request at once instead of waiting for more words: a two-word
+   * "introduce yourself" otherwise waits out the detector's long wait. Absent: none are known.
+   */
+  wholeRequest?(call: PolicyCall, request: string): Promise<boolean>;
+  /**
    * After a held answer was posted (with the approved mark) and offered to the call's voice as approved words (orchestrator.ts
    * `sayHeldText`): whether it was relayed. For the family's own log. Absent: nothing is noted.
    */

@@ -84,6 +84,12 @@ describe('name matching', () => {
     // The lead telling the candidate, the moment before the candidate asks (live interview, 18 November).
     expect(findAddress("Great list! Tell you what? If you'd like more examples to check against, just ask Milo")).toBeNull();
     expect(findAddress('You can always talk to Milo.')).toBeNull();
+    expect(findAddress("I've also brought in Milo, our AI support for the interview.")).toBeNull();
+    expect(findAddress('This is Milo, our note taker')).toBeNull();
+    // The first mention only names Milo; the address is the next sentence (live take of 18 November, the intro).
+    expect(findAddress("I've also brought in Milo, our AI support for the interview. Milo, introduce yourself")?.rest).toBe('introduce yourself');
+    // Named as the object, but the words after the name ask it something: an address.
+    expect(findAddress('Let me ask Milo, can you add a test for the empty list')?.rest).toBe('can you add a test for the empty list');
     expect(findAddress('Milo can help with that')).toBeNull();
     expect(findAddress('Good question. Milo will sort that out')).toBeNull();
     // A person after the modal makes it a question to Milo; a comma after the name makes it an address.
@@ -369,6 +375,11 @@ describe('the provider ended the turn', () => {
   it('still waits for an opener of fewer words than a request', () => {
     expect(requests(ended('u-cand', 'Milo, um'))).toHaveLength(0);
     expect(requests(wait(DETECTOR_LIMITS.cutWaitMs))).toHaveLength(1);
+  });
+  it('a request the call\'s family knows whole by its words closes at once, however short and with no end from the provider', () => {
+    const whole = (userId: string, text: string): DetectorEvent[] =>
+      d.push({ callId: 'call-1', seq: ++seq, userId, participantId: `p-${userId}`, speakerName: userId, text, at: now, captionId: `c-${seq}` }, { whole: true });
+    expect(requests(whole('u-lead', 'Okay. Milo, introduce yourself'))).toEqual([expect.objectContaining({ text: 'introduce yourself', lines: [1] })]);
   });
   it('without the provider\'s end, an unpunctuated request still waits the long time', () => {
     say('u-cand', 'Milo, how much time is left');

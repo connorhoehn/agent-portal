@@ -144,6 +144,22 @@ describe('the registry guards (server-tools.ts)', () => {
     } finally { off(); }
   });
 
+  it('a tool\'s phrase is a whole request in its own family\'s calls only: the detector need not wait for more words', async () => {
+    const PHRASED: ServerToolDef<{ callId: string }> = {
+      name: 'phrased_agenda', description: 'Read it.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+      says: 'x', mapsTo: 'server: test phrased_agenda', writes: false, spend: null, phrase: (t) => /^read the agenda$/i.test(t.trim()),
+      mayAsk: async () => true, run: async () => ({ line: 'done', kind: 'agenda' }),
+    };
+    const off = registerServerTools({ ...STANDUP, family: 'orgiq:phrased', tools: [PHRASED] });
+    try {
+      const policy = serverToolPolicy('orgiq:phrased');
+      const mine = { callId: 'c7', lobby: 'orgiq:phrased:weekly', tenant: 'orgiq' };
+      expect(await policy.wholeRequest!(mine, 'read the agenda')).toBe(true);
+      expect(await policy.wholeRequest!(mine, 'read the agenda and then the minutes')).toBe(false);
+      expect(await policy.wholeRequest!({ ...mine, lobby: 'orgiq:initiative:p-1' }, 'read the agenda')).toBe(false);
+    } finally { off(); }
+  });
+
   it('refuses a tool named like a browser voice tool, and a tool with both a phrase and writes', () => {
     const clash = { ...READ_AGENDA, name: VOICE_TOOLS[0]!.name };
     expect(() => registerServerTools({ ...STANDUP, family: 'orgiq:clash', tools: [clash] })).toThrow(/voice tool/);
