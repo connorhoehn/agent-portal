@@ -124,6 +124,27 @@ describe('hands-free run', () => {
     expect(calls).toEqual(['u-una']);
   });
 
+  it('idle, the session is fed only the quiet that closes a turn, then a keepalive frame every 10 s; routed, every tick', async () => {
+    const w = run();
+    const idle = (ms: number): void => { for (let t = 0; t < ms; t += 100) { w.clock.advance(100); w.hf.sink.append(frame(5)); } };
+    idle(60_000);
+    // 2 s of quiet once the replay lead is paid back, then one frame per 10 s: not 55 s of silence.
+    expect(w.inner.appended.length).toBeGreaterThan(0);
+    expect(w.inner.appended.length).toBeLessThanOrEqual(20 + 6);
+    expect(w.inner.appended.every((b) => b.every((x) => x === 0))).toBe(true);
+    // Routed (a hold): fed every tick again.
+    expect(await w.hf.holdPress('u-una')).toEqual({ ok: true });
+    const before = w.inner.appended.length;
+    idle(1_000);
+    expect(w.inner.appended.length - before).toBe(10);
+    // Back to idle: the quiet that closes the turn is fed again, then nothing but the keepalive.
+    w.hf.holdCancel('u-una');
+    const after = w.inner.appended.length;
+    idle(30_000);
+    expect(w.inner.appended.length - after).toBeGreaterThanOrEqual(20);
+    expect(w.inner.appended.length - after).toBeLessThanOrEqual(20 + 4);
+  });
+
   it('close closes both sides once and refuses holds after', async () => {
     const w = run();
     await Promise.all([w.hf.close(), w.hf.close()]);

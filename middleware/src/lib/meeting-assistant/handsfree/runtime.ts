@@ -6,8 +6,16 @@
 //   listening 'line' ─► onLine (the orchestrator stores it; the coach and minutes read the rows unchanged)
 //   session outputAudio / outputTranscript / turn end ─► router ─► relay
 import { Router, type RelayPort } from './router.js';
-import type { HandsfreeClock, HandsfreeRules, HandsfreeRun, HeardLine, HoldResult, ListeningSide, RouteState, RouterEvents, TalkingSide } from './types.js';
+import { HANDSFREE, type HandsfreeClock, HandsfreeRules, HandsfreeRun, HeardLine, HoldResult, ListeningSide, RouteState, RouterEvents, TalkingSide } from './types.js';
 import type { PolicyCall } from '../policy.js';
+
+/**
+ * Idle (nobody routed), the router feeds the session quiet once a replay's lead is paid back. The session needs only enough of it to
+ * close a turn it may still hold open (a dropped mention); after that it is fed one frame per keepalive interval. The session bills
+ * by the minute of its life either way (probe: fed nothing, muted or silence alike), so this saves the socket, not the price.
+ */
+const IDLE_QUIET_MS = 2_000;
+const IDLE_KEEPALIVE_MS = 10_000;
 
 export interface HandsfreeRuntimeDeps {
   call: PolicyCall;
@@ -33,9 +41,19 @@ export class HandsfreeRuntime implements HandsfreeRun {
   private readonly joined = new Set<string>();
   private readonly offs: Array<() => void> = [];
   private closing: Promise<void> | null = null;
+  /** Quiet fed in the current idle stretch (ms), and when a frame was last fed while idle. */
+  private idleFedMs = 0;
+  private idleFedAt = -Infinity;
 
   constructor(private readonly deps: HandsfreeRuntimeDeps) {
-    this.router = new Router({ clock: deps.clock, call: deps.call, rules: deps.rules, listening: deps.listening, talking: deps.talking, relay: deps.relay, ...(deps.sayFixed ? { sayFixed: deps.sayFixed } : {}), ...(deps.working ? { working: deps.working } : {}), ...(deps.trace ? { trace: deps.trace } : {}) });
+    const t = deps.talking;
+    const talking: TalkingSide = {
+      feed: (frames) => this.feed(frames),
+      say: (id, text, ended) => t.say(id, text, ended),
+      setAsker: (userId, pending) => t.setAsker(userId, pending),
+      close: () => t.close(),
+    };
+    this.router = new Router({ clock: deps.clock, call: deps.call, rules: deps.rules, listening: deps.listening, talking, relay: deps.relay, ...(deps.sayFixed ? { sayFixed: deps.sayFixed } : {}), ...(deps.working ? { working: deps.working } : {}), ...(deps.trace ? { trace: deps.trace } : {}) });
     this.offs.push(deps.listening.on('line', (l) => { if (!this.closing) deps.onLine(l); }));
     this.sink = {
       append: () => { if (!this.closing) { deps.listening.tick(); this.router.tick(); } },
@@ -96,6 +114,19 @@ export class HandsfreeRuntime implements HandsfreeRun {
       this.closing = this.deps.listening.close().catch(() => undefined);
     }
     return this.closing;
+  }
+
+  /** The router's frames to the session, less the idle quiet past what closes a turn (IDLE_QUIET_MS), bar a keepalive frame. */
+  private feed(frames: readonly Buffer[]): void {
+    if (this.router.state().phase !== 'idle') { this.idleFedMs = 0; this.deps.talking.feed(frames); return; }
+    const now = this.deps.clock.nowMs();
+    const kept: Buffer[] = [];
+    for (const f of frames) {
+      if (this.idleFedMs < IDLE_QUIET_MS) this.idleFedMs += HANDSFREE.frameMs;
+      else if (now - this.idleFedAt < IDLE_KEEPALIVE_MS) continue;
+      kept.push(f); this.idleFedAt = now;
+    }
+    if (kept.length) this.deps.talking.feed(kept);
   }
 
   private open(userId: string, name: string): void {
