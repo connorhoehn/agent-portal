@@ -94,11 +94,6 @@ export interface LiveMeetingSession {
   sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean;
   /** Forget a `say` request the caller gave up on, so it never claims a later utterance. Absent: nothing to forget. */
   cancelSay?(id: string): void;
-  /**
-   * A line is waiting unsent only behind the voice's own reply (no `say` claimed it, nobody's turn is being heard, nothing else
-   * keeps the session busy). Absent: never.
-   */
-  sayBehindOwnReply?(): boolean;
   /** What the session has heard of the current person-turn but not yet emitted as an `inputTranscript` ('' when nothing). Read-only, for the voice gate. */
   pendingInputText(): string;
   /** The provider's error events so far (codes only, bounded); absent on a session with no provider. */

@@ -1303,8 +1303,8 @@ export class AssistantRuntime {
       };
       // Before the line goes to the model it may wait SAY_QUIET_WAIT_MS for quiet, counted once the lines before it are over; once
       // it is sent (`sent`), the bound counts.
-      // The wait counts the room's time only: a step the session spent holding the line behind its own reply, which nobody hears
-      // while this line is outstanding (`onOutputAudio`), with nothing of Milo's playing, is not counted; SAY_QUIET_MAX_WAIT_MS in all.
+      // The wait counts the room's time only (`roomHeard`): a step the session spends holding the line behind its own work (its
+      // reply, a delegation, a turn it has not closed) while nobody speaks is not counted; SAY_QUIET_MAX_WAIT_MS in all.
       const quietWait = () => {
         if (hold.releasing || !run.approvals.includes(hold)) return;
         if (hold.timer) clearTimeout(hold.timer);
@@ -1314,7 +1314,7 @@ export class AssistantRuntime {
           hold.timer = setTimeout(() => {
             if (hold.releasing || !run.approvals.includes(hold)) return;
             waited += SAY_QUIET_STEP_MS;
-            if (!(session.sayBehindOwnReply?.() === true && run.relay.queuedFrames() === 0)) counted += SAY_QUIET_STEP_MS;
+            if (this.roomHeard(run)) counted += SAY_QUIET_STEP_MS;
             if (counted < SAY_QUIET_WAIT_MS && waited < SAY_QUIET_MAX_WAIT_MS) { step(); return; }
             trace('say.quiet', { waitedMs: waited, countedMs: counted });
             hold.finish('posted', 'not-quiet');
@@ -1408,11 +1408,26 @@ export class AssistantRuntime {
     const now = this.now();
     hold.silenceFrom ??= now;
     const waited = now - hold.silenceFrom;
-    const lastVoice = run.timeline.lastVoicedEndMs();
-    const quietMs = lastVoice === null ? Infinity : now - (run.sessionStartedAt + lastVoice);
+    const quietMs = this.quietForMs(run);
     if (quietMs < SAY_SILENCE_MS && waited < SAY_SILENCE_WAIT_MS) return false;
     if (waited > 0) trace('say.silence', { waitedMs: waited, why: quietMs >= SAY_SILENCE_MS ? 'quiet' : 'bound' });
     return true;
+  }
+
+  /** How long nobody in the call has been voiced (the voiced timeline, on the session's clock); Infinity when nobody has been yet. */
+  private quietForMs(run: CallRun): number {
+    const lastVoice = run.timeline.lastVoicedEndMs();
+    return lastVoice === null ? Infinity : this.now() - (run.sessionStartedAt + lastVoice);
+  }
+
+  /**
+   * The room is taken: someone in the call was voiced in the last SAY_SILENCE_MS, or Milo's own audio is still playing. Only this is
+   * the room's time for a line waiting unsent (approved-speech.ts SAY_QUIET_WAIT_MS); the session's own work while nobody speaks
+   * (its reply, which nobody hears while the line is outstanding, a delegation to the second model, a turn it has not closed, a call
+   * awaiting its output) is time the room waits for Milo.
+   */
+  private roomHeard(run: CallRun): boolean {
+    return this.quietForMs(run) < SAY_SILENCE_MS || run.relay.queuedFrames() > 0;
   }
 
   /** Why an approved line can no longer go out (it was given up, the run ended, the session changed, the voice is off or paused). */

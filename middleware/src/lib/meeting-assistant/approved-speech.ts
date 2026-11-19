@@ -152,13 +152,17 @@ export const SAY_MS_PER_CHAR = 70;
  */
 export const SAY_QUIET_WAIT_MS = 5_000;
 /**
- * The wait for quiet counts only the room's time. While a line is outstanding nothing else the session says is relayed (orchestrator.ts
- * `onOutputAudio`), so time the session holds the line behind its own reply (session.ts `sayBehindOwnReply`) is time nobody hears
- * anything and the room waits for Milo: it does not count. Live take of 19 November: "Have Milo ask" and the spoken repeat each
- * landed as the provider began its own reply (8.6 s and 7.4 s, both then dropped), the 5 s ran out behind it, and both lines stayed
- * in the chat. In all a line waits unsent at most SAY_QUIET_MAX_WAIT_MS, looked at every SAY_QUIET_STEP_MS.
+ * The wait for quiet counts only the room's time: a step in which someone in the call is voiced (within SAY_SILENCE_MS) or Milo's
+ * audio is still playing (orchestrator.ts `roomHeard`). While a line is outstanding nothing else the session says is relayed
+ * (`onOutputAudio`), so the time the session holds the line behind its own work while nobody speaks is silence in which the room
+ * waits for Milo: it does not count, and a line asked for is never left in the chat while nobody is speaking. Live takes of 19
+ * November: t4, "Have Milo ask" and the spoken repeat each landed as the provider began its own reply (8.6 s and 7.4 s, both then
+ * dropped); t5, "Have Milo ask" came as the lead stopped, the provider handed his words to the second model (its reply, dropped,
+ * ended 12.8 s after the ask) and the room stayed silent 61 s; each time the 5 s ran out behind it and the line stayed in the chat.
+ * In all a line waits unsent at most SAY_QUIET_MAX_WAIT_MS, looked at every SAY_QUIET_STEP_MS: the session's own work ends by then
+ * (a running response is ended after 30 s at the latest: live-session.ts `responseStuckMs`).
  */
-export const SAY_QUIET_MAX_WAIT_MS = 12_000;
+export const SAY_QUIET_MAX_WAIT_MS = 30_000;
 export const SAY_QUIET_STEP_MS = 100;
 
 /**
