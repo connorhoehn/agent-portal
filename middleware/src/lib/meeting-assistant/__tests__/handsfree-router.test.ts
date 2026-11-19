@@ -514,7 +514,7 @@ describe('hands-free router', () => {
       expect(w.relay.pushed.map((p) => p.tag)).toEqual([T_MILO, T_MILO]);
       expect(w.talking.asker).toBe(UNA);
       expect(w.talking.pending).toBe(true); // tool calls still wait for the final verdict
-      expect(w.rules.provisionals).toEqual([{ userId: UNA, text: "Milo, what's the capital of France", via: 'name' }]);
+      expect(w.rules.provisionals[0]).toEqual({ userId: UNA, text: "Milo, what's the capital of France", via: 'name' });
       w.clock.advance(HANDSFREE.verdictWaitMs + 100); // no verdict timeout once released
       expect(w.drops).toEqual([]);
       w.sentence(UNA, 's1', "Milo, what's the capital of France?");
@@ -532,7 +532,22 @@ describe('hands-free router', () => {
       w.sentence(UNA, 's1', 'Milo, hi');
       w.milo(2);
       expect(w.relay.pushed).toHaveLength(0);
-      expect(w.rules.provisionals.map((p) => p.text)).toEqual(['Milo, hi']);
+      expect(new Set(w.rules.provisionals.map((p) => p.text))).toEqual(new Set(['Milo, hi']));
+    });
+
+    it('frames held on too few words are released once the words so far (or the final text) make a provisional request', async () => {
+      const w = world();
+      w.rules.verdictFor = () => new Promise(() => undefined);
+      w.rules.provisionalFor = (s) => (s.text.includes('capital') ? 'request' : null);
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.words(UNA, 's1', 'Milo, what');
+      w.milo(2);
+      expect(w.relay.pushed).toHaveLength(0);
+      w.sentence(UNA, 's1', "Milo, what's the capital of Peru?");
+      expect(w.relay.pushed).toHaveLength(2);
+      w.clock.advance(HANDSFREE.verdictWaitMs + 100);
+      expect(w.drops).toEqual([]);
     });
 
     it('a final mention after an early release clears the relay and frees the floor', async () => {

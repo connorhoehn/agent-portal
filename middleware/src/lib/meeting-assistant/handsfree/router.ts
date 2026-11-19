@@ -103,7 +103,6 @@ interface Turn {
   reheld?: boolean;
   /** The words so far were a provisional request: the answer is relayed before the final verdict, which confirms or revokes it. */
   early?: boolean;
-  earlyAsked?: boolean;
   /** Opened inside the asker's follow-up window: Milo's echo goes back to it (when it ends, and the request it carried). */
   window?: { untilMs: number; verdict: TriggerVerdict | null };
 }
@@ -366,6 +365,8 @@ export class Router {
     const via: 'name' | 'follow-up' = mine && t?.via === 'follow-up' && !named ? 'follow-up' : 'name';
     if (mine) this.armGiveUp();
     void this.judge(userId, sentenceId, text, via);
+    // Frames already held for this sentence's verdict may go now that its whole text is in.
+    if (mine && t && t.verdict === null && !t.early && t.held.length) this.tryEarly(t);
   }
 
   /** A fixed-lines person named Milo but their admission is still being asked: judged the same way. */
@@ -440,7 +441,7 @@ export class Router {
     if (this.st.phase === 'routing') this.setState({ ...this.st, phase: 'answering' });
     if (this.st.phase === 'follow-up') this.setState({ phase: 'answering', userId: t.userId, via: t.via, sinceMs: this.deps.clock.nowMs() });
     this.clearGiveUp();
-    if (t.verdict === null && !t.early && !t.earlyAsked && !t.held.length) this.tryEarly(t);
+    if (t.verdict === null && !t.early) this.tryEarly(t);
     if (t.verdict === null && t.early) { this.relayFrame(pcm, last); return; }
     if (t.verdict === null) {
       t.held.push({ pcm, last });
@@ -451,12 +452,12 @@ export class Router {
   }
 
   /**
-   * At the answer's first frame, before the final verdict: the rules' side-effect-free early verdict on the person's words so far
+   * At each answer frame held for the verdict (until one is released or the verdict comes), and when the sentence's final text
+   * lands: the rules' side-effect-free early verdict on the person's words so far
    * (the final text when it is in). A provisional request is relayed now; the final verdict confirms it (the asker, and so tool
    * calls, wait for that) or revokes it (the relay is cleared). Review 1, item 9.
    */
   private tryEarly(t: Turn): void {
-    t.earlyAsked = true;
     const provisional = this.deps.rules.provisional;
     if (!provisional || t.sentenceId === null) return;
     const key = `${t.userId}|${t.sentenceId}`;
@@ -468,7 +469,9 @@ export class Router {
     if (p !== 'request') return;
     t.early = true;
     this.earlyKey = key;
-    this.trace('verdict.early', { userId: t.userId });
+    if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
+    this.trace('verdict.early', { userId: t.userId, held: t.held.length });
+    for (const f of t.held.splice(0)) this.relayFrame(f.pcm, f.last);
   }
 
   /** Ask the person's admission now, so the rules' cache has it when their follow-up's first answer frame comes. */
