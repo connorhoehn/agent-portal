@@ -122,7 +122,7 @@ export function gateScenarios(): ScenarioSpec[] {
     },
     {
       id: 'echo', about: "Milo's own voice played into a mic: no trigger", speakers: ['hugo'],
-      steps: [{ speaker: 'hugo', clip: 'q04', gapMs: 800, expect: 'reply', loopback: true }, { speaker: 'hugo', clip: null, gapMs: 7000, expect: 'silent' }],
+      steps: [{ speaker: 'hugo', clip: 'g02', gapMs: 800, expect: 'reply', loopback: true }, { speaker: 'hugo', clip: null, gapMs: 7000, expect: 'silent' }],
     },
   ];
 }
@@ -261,7 +261,7 @@ export function scoreScenario(scenarioId: string, run: RunObs): Check[] {
     }
     case 'echo': {
       const triggers = steps.reduce((a, s) => a + s.triggers, 0); const extra = steps.slice(1).reduce((a, s) => a + s.strayRuns, 0) + steps[0]!.strayRuns;
-      return [check('trigger', "triggers from Milo's own voice", `${triggers} triggers, ${extra} extra answers`, `= ${GATE.echo.triggers}`, triggers === GATE.echo.triggers && extra === 0 && steps.slice(1).every((s) => sumRouted(s) === 0))];
+      return [check('trigger', "triggers from Milo's own voice", `${triggers} triggers, ${extra} extra answers`, `= ${GATE.echo.triggers}`, triggers === GATE.echo.triggers && extra === 0 && steps.every((s) => (s.routed['room'] ?? 0) === 0))];
     }
     default:
       return [check('known', 'known scenario', scenarioId, 'listed', false)];

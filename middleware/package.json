@@ -12,7 +12,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node node_modules/.bin/jest --config jest.config.cjs"
+    "test": "node node_modules/.bin/jest --config jest.config.cjs",
+    "voice-gate:scripted": "tsx --test ../scripts/voice-harness/gate.test.mts",
+    "voice-gate": "tsx ../scripts/voice-harness/gate.mts"
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",

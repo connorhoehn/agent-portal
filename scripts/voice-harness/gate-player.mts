@@ -80,7 +80,8 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
       const r = awaiting() ?? runOwner ?? latestStarted();
       if (r) r.text += delta;
     },
-    trigger: () => { const r = latestStarted(); if (r) r.triggers += 1; },
+    // only a trigger from a mic that is not one of the scenario's people counts: the echo room (their own names are the point)
+    trigger: (speaker) => { if (sc.speakers.includes(speaker)) return; const r = latestStarted(); if (r) r.triggers += 1; },
   };
 
   await port.open({ scenario: sc.id, speakers: sc.speakers, instructions: opts.instructions, candidateMayAsk: sc.candidateMayAsk ?? true }, ev);

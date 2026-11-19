@@ -1,0 +1,181 @@
+{
+ "_note": "Baseline of the probe-style direct driver (gate-port-direct.mts), 19 Nov 2026, gpt-live-1 + gpt-live-transcribe, clips by make-clips.py from lines.json (Qwen3-TTS, voices hugo and cand). The runtime must beat the failing rows. Rows near a threshold move run to run (the barge and two-at-once rows differed between a smoke run and the full run).",
+ "driver": "direct",
+ "checks": [
+  {
+   "id": "name-first.answered",
+   "label": "answered 22/22",
+   "value": "22/22",
+   "threshold": "22/22",
+   "pass": true
+  },
+  {
+   "id": "name-first.p50",
+   "label": "p50",
+   "value": "1165 ms",
+   "threshold": "<= 1300 ms",
+   "pass": true
+  },
+  {
+   "id": "name-first.p90",
+   "label": "p90",
+   "value": "1301 ms",
+   "threshold": "<= 1800 ms",
+   "pass": true
+  },
+  {
+   "id": "name-first.max",
+   "label": "all under",
+   "value": "2021 ms",
+   "threshold": "< 2500 ms",
+   "pass": true
+  },
+  {
+   "id": "name-last.p50",
+   "label": "p50",
+   "value": "1967 ms",
+   "threshold": "<= 2700 ms",
+   "pass": true
+  },
+  {
+   "id": "name-last.p90",
+   "label": "p90",
+   "value": "2776 ms",
+   "threshold": "<= 3200 ms",
+   "pass": true
+  },
+  {
+   "id": "name-last.understood",
+   "label": "understood",
+   "value": "7/7",
+   "threshold": "7/7",
+   "pass": true
+  },
+  {
+   "id": "follow-up.answered",
+   "label": "follow-ups answered",
+   "value": "9/9",
+   "threshold": "9/9",
+   "pass": true
+  },
+  {
+   "id": "follow-up.p90",
+   "label": "follow-up p90",
+   "value": "1491 ms",
+   "threshold": "<= 1600 ms",
+   "pass": true
+  },
+  {
+   "id": "chatter.unasked",
+   "label": "spoke when not asked",
+   "value": "0",
+   "threshold": "= 0",
+   "pass": true
+  },
+  {
+   "id": "mentions.relayed",
+   "label": "relayed frames",
+   "value": "380",
+   "threshold": "= 0",
+   "pass": false
+  },
+  {
+   "id": "mentions.silent",
+   "label": "Milo spoke",
+   "value": "1",
+   "threshold": "= 0",
+   "pass": false
+  },
+  {
+   "id": "asker.askedBy",
+   "label": "tool calls with the right askedBy",
+   "value": "4/4",
+   "threshold": "every one",
+   "pass": true
+  },
+  {
+   "id": "barge.silent",
+   "label": "relay silent after the interruption (worst)",
+   "value": "934 ms",
+   "threshold": "<= 700 ms",
+   "pass": false
+  },
+  {
+   "id": "barge.next",
+   "label": "the next question answered",
+   "value": "1/2",
+   "threshold": "all",
+   "pass": false
+  },
+  {
+   "id": "two-at-once.first",
+   "label": "the first asker is answered",
+   "value": "no",
+   "threshold": "yes",
+   "pass": false
+  },
+  {
+   "id": "two-at-once.mixed",
+   "label": "mixed audio routed",
+   "value": "false",
+   "threshold": "false",
+   "pass": true
+  },
+  {
+   "id": "two-at-once.stray",
+   "label": "unasked voice",
+   "value": "0",
+   "threshold": "= 0",
+   "pass": true
+  },
+  {
+   "id": "colleague.relayed",
+   "label": "colleague frames relayed",
+   "value": "0",
+   "threshold": "= 0",
+   "pass": true
+  },
+  {
+   "id": "colleague.silent",
+   "label": "Milo replied to the colleague",
+   "value": "1",
+   "threshold": "= 0",
+   "pass": false
+  },
+  {
+   "id": "candidate-off.routed",
+   "label": "audio routed",
+   "value": "0",
+   "threshold": "= 0",
+   "pass": null
+  },
+  {
+   "id": "candidate-off.fixed",
+   "label": "only the fixed line spoke",
+   "value": "0 fixed, 0 model",
+   "threshold": "fixed only",
+   "pass": null
+  },
+  {
+   "id": "echo.trigger",
+   "label": "triggers from Milo's own voice",
+   "value": "0 triggers, 0 extra answers",
+   "threshold": "= 0",
+   "pass": true
+  },
+  {
+   "id": "echo.trigger",
+   "label": "triggers from Milo's own voice",
+   "value": "0 triggers, 0 extra answers",
+   "threshold": "= 0",
+   "pass": true
+  },
+  {
+   "id": "echo.trigger",
+   "label": "triggers from Milo's own voice",
+   "value": "0 triggers, 0 extra answers",
+   "threshold": "= 0",
+   "pass": true
+  }
+ ]
+}

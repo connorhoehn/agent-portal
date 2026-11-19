@@ -38,7 +38,7 @@ export function directPort(opts: DirectOptions): GatePort {
   let offset = 0; let nowMs = 0; let startedWall = 0;
   let state: 'idle' | 'routing' | 'answering' | 'follow-up' = 'idle';
   let owner: string | null = null; let stateSince = 0; let lastModelVoice = -1e9; let relaying = false; let bargeRun = 0;
-  let lead = 0; let backlog: Buffer[] = []; let loop = false; let held: Buffer | null = null; let txStartWall = 0;
+  let lead = 0; let backlog: Buffer[] = []; let loop = false; let outBuf: Buffer = Buffer.alloc(0); let txStartWall = 0;
   const silence = Buffer.alloc(HANDSFREE_FRAME_BYTES);
   const errors: string[] = [];
   const toSession = (wall: number): number => Math.round(wall - offset);
@@ -98,7 +98,12 @@ export function directPort(opts: DirectOptions): GatePort {
     } else if (lead >= HANDSFREE_FRAME_MS) lead -= HANDSFREE_FRAME_MS; // repay the burst's lead by skipping an idle frame
     else send(silence);
     // loopback: Milo's last frame, one tick late, as a room mic hears it
-    if (loop && held) { const room = people.get('room'); if (room) frame('room', held, atMs); held = null; } else if (loop) { const room = people.get('room'); if (room) frame('room', silence, atMs); }
+    if (loop) {
+      const room = people.get('room');
+      if (room) {
+        if (outBuf.length >= HANDSFREE_FRAME_BYTES) { frame('room', Buffer.from(outBuf.subarray(0, HANDSFREE_FRAME_BYTES)), atMs); outBuf = outBuf.subarray(HANDSFREE_FRAME_BYTES); } else frame('room', silence, atMs);
+      }
+    }
   }
 
   const port: GatePort = {
@@ -111,7 +116,7 @@ export function directPort(opts: DirectOptions): GatePort {
           if (state === 'routing' || state === 'follow-up') { state = 'answering'; stateSince = nowMs; }
           if (relaying) ev?.voice(toSession(wall), 'model');
         },
-        onFrame: (pcm) => { if (loop) held = pcm.length === HANDSFREE_FRAME_BYTES ? pcm : held; },
+        onFrame: (pcm) => { if (loop) outBuf = Buffer.concat([outBuf, pcm]).subarray(-HANDSFREE_FRAME_BYTES * 20); },
         onOutputText: (d) => { if (relaying) ev?.text(d, nowMs); },
         onOther: (e) => {
           const inner = (e['event'] ?? e) as Record<string, unknown>;
