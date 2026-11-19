@@ -223,6 +223,20 @@ describe('the hands-free seam', () => {
     } finally { off(); }
   });
 
+  it('lines heard after a pause and resume are stored, though the new listening side numbers its sentences from 1 again', async () => {
+    await boot('1');
+    const line = (text: string) => ({ callId: CALL, userId: ALICE, participantId: 'p-alice', speakerName: 'Alice', text, at: now, captionId: `hf:${ALICE}:1:1`, startMs: 0, endMs: 900 });
+    listening!.emit('line', line('before the pause'));
+    await flush();
+    const first = listening!;
+    await runtime.pause(CALL); await runtime.resume(CALL); await flush();
+    expect(listening).not.toBe(first);
+    now += 1000;
+    listening!.emit('line', line('after the resume'));
+    await flush();
+    expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['before the pause', 'after the resume']);
+  });
+
   it('a stop closes the listening side with the session', async () => {
     await boot('true');
     const l = listening!;

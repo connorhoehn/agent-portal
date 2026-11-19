@@ -1014,13 +1014,18 @@ export class AssistantRuntime {
     run.relay.push(pcm, last);
   }
 
-  /** A hands-free heard line (exact speaker, session ms): stored like a live piece, behind the earlier ones. */
+  /**
+   * A hands-free heard line (exact speaker, session ms): stored like a live piece, behind the earlier ones. Its caption id is unique
+   * only within its listening side, which is new with every session (a pause, a replacement, an invitation back), so it is scoped to
+   * the period and session here; the store keeps one row per caption id across the whole call (review 1, item 3).
+   */
   private onHeardLine(run: CallRun, l: HeardLine): Promise<void> {
     run.transcribedAt = this.now(); run.deaf = null;
+    const scope = `${run.period}.${run.sessionNo}`;
     const next = run.lineChain.then(async () => {
       run.pieceNo += 1;
       const outcome = await this.deps.intake().handle(run.ctx.callId, {
-        userId: l.userId, text: l.text, at: l.at, ...callOffsets(run, l), captionId: l.captionId || `hf:${run.sessionNo}:${run.pieceNo}`,
+        userId: l.userId, text: l.text, at: l.at, ...callOffsets(run, l), captionId: l.captionId ? `${l.captionId}@${scope}` : `hf:${scope}:${run.pieceNo}`,
         ...(l.participantId ? { participantId: l.participantId } : {}), ...(l.speakerName ? { speakerName: l.speakerName } : {}),
       });
       if (outcome.stored) { run.lastLineAt = Math.max(run.lastLineAt, outcome.stored.at); run.lastLineSeq = Math.max(run.lastLineSeq, outcome.stored.seq); }
