@@ -2541,14 +2541,19 @@
       "source": "src/routes/interviews/assignments.ts:124"
     },
     {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/board/reveal",
+      "source": "src/routes/interviews/board.ts:48"
+    },
+    {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/board/snapshots",
-      "source": "src/routes/interviews/board.ts:34"
+      "source": "src/routes/interviews/board.ts:41"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/board/snapshots",
-      "source": "src/routes/interviews/board.ts:23"
+      "source": "src/routes/interviews/board.ts:30"
     },
     {
       "method": "GET",

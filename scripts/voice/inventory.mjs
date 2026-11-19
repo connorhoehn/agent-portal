@@ -637,7 +637,7 @@ export const V2_RULES = [
   // Interviews
   [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
   [/^(POST|PUT) \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
-  [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|board\/snapshots|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log, the whiteboard\'s checkpoints and the runs belong to the room, never to the voice navigator'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|board\/snapshots|board\/reveal|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log, the whiteboard\'s checkpoints and the runs belong to the room, never to the voice navigator'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/say$/, 'never', null, 'Milo saying an approved question aloud is the lead\'s choice in the room, never the voice navigator\'s'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-intro$/, 'never', null, 'Milo introducing itself is the lead\'s button in the room (or Milo\'s own `introduce` server tool in the call), never the voice navigator\'s'],
   [/^PUT \/api\/interviews\/interviews\/:[^/]+\/milo-settings$/, 'never', null, 'whether the candidate may ask Milo to change the pad is the lead\'s switch in the room'],
