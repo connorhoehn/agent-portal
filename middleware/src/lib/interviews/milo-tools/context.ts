@@ -6,6 +6,7 @@
 // were when the session started (bounded), and the rules. Everything from the round is fenced as data. Nothing here is trusted
 // later: the server checks every call against the pad as it is when it writes (its language then, never the agent's idea of it).
 import { Fence } from '../../untrusted-text.js';
+import { MAX_SESSION_CONTEXT_CHARS } from '../../meeting-assistant/session.js';
 import type { Interview, KitQuestion, PadLanguage } from '../types.js';
 
 export const MAX_CONTEXT_PAD_CHARS = 4000;
@@ -34,10 +35,20 @@ export function interviewBackendInstructions(questions: readonly KitQuestion[], 
   return parts.join('\n\n').slice(0, 20_000);
 }
 
-/** Silent context for the session when the pad changed after it started: its language and text now (review 1, item 7). */
-export function padContextNote(pad: { text: string; language: PadLanguage }, fence: Fence = new Fence()): string {
-  const text = pad.text.length > MAX_CONTEXT_PAD_CHARS ? pad.text.slice(0, MAX_CONTEXT_PAD_CHARS) : pad.text;
-  return `The pad changed. It is now in ${pad.language}; write anything for it in ${pad.language}. Its text now:\n${fence.wrap(text, { kind: 'code', maxChars: MAX_CONTEXT_PAD_CHARS })}`;
+/**
+ * Silent context for the session when the pad changed after it started: its language and text now (review 1, item 7). The pad
+ * text is sized BEFORE it is fenced, so the whole note fits one `appendContext` and the data marker always closes (review 2,
+ * item 4: cut after fencing, the candidate's text reached the agent unterminated).
+ */
+export function padContextNote(pad: { text: string; language: PadLanguage }, fence: Fence = new Fence(), max = MAX_SESSION_CONTEXT_CHARS): string {
+  const head = `The pad changed. It is now in ${pad.language}; write anything for it in ${pad.language}. Its text now:\n`;
+  let budget = Math.max(0, Math.min(MAX_CONTEXT_PAD_CHARS, max - head.length - fence.wrap('', { kind: 'code' }).length - ' truncated="true"'.length));
+  for (;;) {
+    const note = head + fence.wrap(pad.text, { kind: 'code', maxChars: budget });
+    // Defusing a tag in the text can lengthen it: take the excess off and fence again.
+    if (note.length <= max || budget === 0) return note;
+    budget = Math.max(0, budget - (note.length - max));
+  }
 }
 
 /** Only an interview with a pad has pad tools; the context is asked of a technical round only. */

@@ -14,11 +14,14 @@ import { MILO_INTRO } from '../../speak/intro.js';
 import type { Interview, KitQuestion, PadLanguage } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
-  MAX_VERDICTS, notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_NOTE_EVERY_MS, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
+  MAX_VERDICTS, notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
 } from '../index.js';
 import { builtinFor, checkHelper, MAX_HELPER_LINES } from '../helper.js';
 import { afterImports, checkedImportLines, placeImports } from '../imports.js';
 import { renderTestCases } from '../../testcases/render.js';
+import { padContextNote } from '../context.js';
+import { Fence } from '../../../untrusted-text.js';
+import { MAX_SESSION_CONTEXT_CHARS } from '../../../meeting-assistant/session.js';
 import { runInNewContext } from 'node:vm';
 import { referenceFor } from '../references.js';
 import { INTERVIEW_SCRIPT_RULES, SPARE_CASES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../scripted.js';
@@ -290,7 +293,7 @@ describe('the session hears the pad change (review 1, item 7)', () => {
     return jest.spyOn(orchestrator, 'peekAssistantRuntime').mockReturnValue({ addSessionContext: (c: string, t: string) => { contexts.push([c, t]); return true; } } as never);
   };
 
-  it('a language change is told at once with the pad text now; a text change at most every PAD_NOTE_EVERY_MS', async () => {
+  it('a language change is told at once with the pad text now; a text change alone is never told (review 2, item 4)', async () => {
     const spy = await runtimeWith();
     try {
       interview = { ...interview, callId: 'call-tools' } as Interview;
@@ -299,12 +302,23 @@ describe('the session hears the pad change (review 1, item 7)', () => {
       expect(await notePadChange(IV, [{ kind: 'language', clientAt: new Date(t0).toISOString(), language: 'javascript' }], t0)).toBe(true);
       expect(contexts.at(-1)![0]).toBe('call-tools');
       expect(contexts.at(-1)![1]).toContain('It is now in javascript');
-      const snap = (text: string) => [{ kind: 'snapshot' as const, clientAt: new Date(t0).toISOString(), text, language: 'javascript' }];
-      expect(await notePadChange(IV, snap('function twoSum() {}'), t0 + 1000)).toBe(false); // too soon after the last note
-      expect(await notePadChange(IV, snap('function twoSum() { return 1; }'), t0 + PAD_NOTE_EVERY_MS + 1)).toBe(true);
-      expect(contexts.at(-1)![1]).toContain('return 1;');
-      expect(await notePadChange(IV, snap('function twoSum() { return 1; }'), t0 + 3 * PAD_NOTE_EVERY_MS)).toBe(false); // unchanged
+      const snap = (text: string, language = 'javascript') => [{ kind: 'snapshot' as const, clientAt: new Date(t0).toISOString(), text, language }];
+      expect(await notePadChange(IV, snap('function twoSum() {}'), t0 + 1000)).toBe(false);
+      // The text changes every 30 s all interview: no note, however long ago the last one was.
+      for (let i = 1; i <= 6; i += 1) expect(await notePadChange(IV, snap(`function twoSum() { return ${i}; }`), t0 + i * 60_000)).toBe(false);
+      expect(contexts).toHaveLength(1);
+      expect(await notePadChange(IV, snap('def two_sum(): return 6', 'python'), t0 + 7 * 60_000)).toBe(true);
+      expect(contexts.at(-1)![1]).toContain('return 6');
     } finally { spy.mockRestore(); }
+  });
+
+  it('the note fits the session\'s context bound with its data marker closed, however long the pad (review 2, item 4)', () => {
+    const fence = new Fence();
+    for (const text of ['x'.repeat(6000), `${'<untrusted-a '.repeat(500)}`, 'short']) {
+      const note = padContextNote({ text, language: 'python' }, fence);
+      expect(note.length).toBeLessThanOrEqual(MAX_SESSION_CONTEXT_CHARS);
+      expect(note.endsWith(fence.closeTag)).toBe(true);
+    }
   });
 });
 

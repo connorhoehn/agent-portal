@@ -59,7 +59,7 @@ import {
   hangupLiveSession, liveSocketSessionBody, LIVE_SOCKET_OPEN, openLiveSocket, type LiveSocket,
 } from '../voice/openai.js';
 import {
-  MAX_PROVIDER_ERRORS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
+  MAX_PROVIDER_ERRORS, MAX_SESSION_CONTEXT_CHARS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
 } from './session.js';
 import { trace } from './trace.js';
 import { readAloudContent, saidVerbatim } from './approved-speech.js';
@@ -270,7 +270,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
 
   appendContext(text: string): boolean {
     if (this.ended || !this.opened) return false;
-    this.send({ type: 'session.thinking.append', event_id: this.eventId(), delegation_id: null, content: text.slice(0, 2000) });
+    this.send({ type: 'session.thinking.append', event_id: this.eventId(), delegation_id: null, content: text.slice(0, MAX_SESSION_CONTEXT_CHARS) });
     return true;
   }
 

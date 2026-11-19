@@ -10,6 +10,9 @@
 // `userId` the SERVER gave `sendText`. The real session never sets it; the orchestrator works the asker out itself.
 import type { ResponsesFunctionTool } from '../voice/catalogue.js';
 
+/** The most text one `appendContext` passes to a session (a longer one is cut; a caller fencing data sizes it to fit). */
+export const MAX_SESSION_CONTEXT_CHARS = 2000;
+
 export interface SessionStartInput {
   /** What the voice is told (the front model). */
   instructions: string;

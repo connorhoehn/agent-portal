@@ -384,14 +384,13 @@ export type { PadLanguage };
 
 // ── The pad's changes reach the session (review 1, item 7) ───────────────────────────────────────────────────────────────
 
-/** A changed text reaches the session at most this often (the portal posts a snapshot every 30 s); a language change at once. */
-export const PAD_NOTE_EVERY_MS = 15_000;
 const padNoted = new Map<string, { language: string; text: string; at: number }>();
 
 /**
- * What the pad log took in (pad/log/service.ts `appendPadEvents`): when the pad's language changed, or its text did and the last
- * note is PAD_NOTE_EVERY_MS old, the live session of the interview's call is told the pad as it is now (silent context), so a
- * helper or a test asked for next is written for the pad's language and text, not the ones the session started with.
+ * What the pad log took in (pad/log/service.ts `appendPadEvents`): when the pad's language changed, the live session of the
+ * interview's call is told the pad as it is now (silent context), so a helper or a test asked for next is written in the pad's
+ * language. A change of text alone is never told (review 2, item 4: a note every 30 s all interview grew the session's context);
+ * a call refused for the pad's language carries the pad as it is in its retry note instead.
  */
 export async function notePadChange(interviewId: string, events: readonly PadEventIn[], now = Date.now()): Promise<boolean> {
   const snap = [...events].reverse().find((e) => e.kind === 'snapshot' && typeof e.text === 'string');
@@ -400,13 +399,11 @@ export async function notePadChange(interviewId: string, events: readonly PadEve
   const last = padNoted.get(interviewId);
   const language = (lang ?? last?.language ?? '') as PadLanguage;
   const text = snap?.text ?? last?.text ?? '';
-  const languageChanged = !!last && last.language !== language;
-  const textChanged = !last || last.text !== text;
-  if (last && !languageChanged && (!textChanged || now - last.at < PAD_NOTE_EVERY_MS)) return false;
   if (!language) return false;
+  const languageChanged = !!last && last.language !== language;
   padNoted.set(interviewId, { language, text, at: now });
   if (padNoted.size > 500) padNoted.delete(padNoted.keys().next().value as string);
-  if (!last) return false; // the first look: the session started with this pad
+  if (!last || !languageChanged) return false; // the first look (the session started with this pad), or the text alone changed
   const d = deps();
   const interview = await d.interview(interviewId).catch(() => null);
   if (!interview || interview.state !== 'live' || !interview.callId || !hasPad(interview)) return false;
