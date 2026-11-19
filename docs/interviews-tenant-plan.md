@@ -687,8 +687,9 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   surface is allowed: nothing stored depends on it, and the record shows whatever the interview kept.
 - A technical question may carry one starting board (`board: { name, elements }`, at most 400 live elements and 256 KB). The kit
   checks its shape and size only. The seeded backend kit's System design round is a board round; the ledger question carries the
-  Blueprint board (six labelled frames with starter stickies) and a new URL shortener question carries the Prompt only board (one
-  prompt card above six empty frames). Both are built in code (`lib/interviews/board/templates.ts`).
+  Blueprint board (seven labelled frames, three to a row, Clarifying questions first, each with starter stickies) and a new URL
+  shortener question carries the Prompt only board (one prompt card above the seven frames, empty). Both are built in code
+  (`lib/interviews/board/templates.ts`).
 - The board is one Yjs document per interview, `doc:ivboard:<interviewId>`, on the same `collabDocs` feature as the pad (an
   interview id is at most 38 characters here, so the channel stays under the library's 50). Its seats are the pad's exactly: the
   lead and panel of that technical interview while the call can run, and the admitted candidate of that interview. Everyone
@@ -703,8 +704,24 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   room closes (`POST /interviews/:id/board/snapshots`, lead or panel, live only). A repeat of the last one is not stored, and an
   interview keeps at most 200. Memory and SQL stores (`interview_board_snapshots`, row-level rule added), erased with the
   interview's media by the retention sweep (`board-snapshots`). The read (`GET .../board/snapshots`) has the pad log's viewers.
-- Open: the record page does not show the board yet (the read is there); the kit editor cannot attach or edit a board yet (the
-  kit accepts one); the canvas opens at the scene's origin rather than fitted to the pane.
+- The canvas opens zoomed to its content, on both sides of the room, on the record page and in the kit editor, and once more
+  when an empty board first gets a starting board, until the person presses or scrolls it (`useBoardFit`). The library's canvas
+  has no fit option, so the board sends Excalidraw its own Zoom to fit, with the toolbars' class lifted for that one keystroke
+  (Excalidraw 0.18 measures its toolbar in window coordinates, which squeezed the fit of a canvas lower on the page). The
+  `fitOnOpen` option is queued for the library (`docs/ui-components-queue.md`).
+- The record page of a board round shows the whiteboard where the code would be: the final board and up to four earlier
+  checkpoints spread over the round, chosen from one compact control, each read-only in the same canvas and zoomed to fit.
+  Choosing one moves the page's clock (transcript and recording) to its time. The record view carries the round's surface. The
+  mock world seeds Mateo's finished system design round with four checkpoints of the Blueprint as his notes filled it.
+- The kit editor sets each technical round to the code pad or the whiteboard ("Works on"), and a question for a whiteboard
+  round can add, name, draw and remove its starting board in the room's own canvas, and list its clarifying questions.
+- Clarifying questions (step 2b): a technical question may carry up to five (`clarifying`), what a strong candidate asks before
+  drawing; the seeded ledger and shortener questions carry four each. When a whiteboard round is four to fifteen minutes in and
+  no candidate line asked one (two shared words with one of them, or a question with one such word or a word about users,
+  scale, latency, consistency and the like), the coach shows the lead one of them as an ordinary suggestion, once per
+  interview. It is a rule (`coach/clarifying.ts`), logged under `rules:clarifying`: no model call and no hold. It does not
+  wait for the 90-second gap or a new line, since silence is the point.
+- Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
 ## Not in this plan
 
