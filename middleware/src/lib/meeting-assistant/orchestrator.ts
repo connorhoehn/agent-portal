@@ -21,7 +21,8 @@
 //     name which it was, and a stall the recovery does not end leaves through giveUp (`checkHearing`).
 import { randomBytes } from 'node:crypto';
 import { getUser, listUsers } from '../../providers/identity.js';
-import { hashToolArgs, serverTool, voiceTool } from '../voice/catalogue.js';
+import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
+import { serverToolDef } from './server-tools.js';
 import { ASSISTANT_NAME, CANNOT_HEAR_NOTICE, NO_WORDS_NOTICE } from './chat-types.js';
 import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
@@ -1803,7 +1804,7 @@ export class AssistantRuntime {
     // Without a delegation the call is judged when it arrived; on the lines' clock that is no earlier than the last line stored.
     const judgeAt = delegation?.judgeAt ?? (run.session?.kind === 'scripted' ? null : Math.max(run.sessionStartedAt + e.atMs, run.lastLineAt));
     run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null, acknowledged: delegation?.acknowledged ?? false });
-    trace('call', { call: id, name: voiceTool(e.name) || serverTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
+    trace('call', { call: id, name: voiceTool(e.name) || serverToolDef(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).
     await run.lineChain;
     // The lines that addressed Milo up to that moment are this call's request: its context answers them, and a plain answer
@@ -1841,7 +1842,7 @@ export class AssistantRuntime {
     trace('call.asker', { call: e.callId, asker, judgedAt: atMs });
     // A server tool's call that is refused leaves its asker's request unanswered: the family's fallback is said now, not after
     // the wait (a refused call never counts as the request answered; review 1, item 6).
-    const serverCall = !voiceTool(e.name) && !!serverTool(e.name) && !!run.policy.runTool;
+    const serverCall = !voiceTool(e.name) && !!serverToolDef(e.name) && !!run.policy.runTool;
     const refused = async (why: string, text = ''): Promise<void> => {
       if (serverCall) this.answer(run, e.callId, { refused: why }, null, { continue: false }); else await this.refuse(run, e.callId, why);
       if (serverCall) {
@@ -1864,11 +1865,12 @@ export class AssistantRuntime {
     if (made > MAX_CALLS_PER_REQUEST) { await refused('too many steps', addressing?.text); return; }
     const askerName = await nameOf(asker);
     const name = e.name;
-    // A server tool (voice/catalogue.ts INTERVIEW_TOOLS) runs only in a family that runs them (`runTool`).
-    const onServer = !voiceTool(name) && !!serverTool(name) && !!run.policy.runTool;
+    // A server tool (server-tools.ts, registered by its family) runs only in a family that runs them (`runTool`).
+    const serverDef = voiceTool(name) ? undefined : serverToolDef(name);
+    const onServer = !!serverDef && !!run.policy.runTool;
     if (!voiceTool(name) && !onServer) { await this.refuse(run, e.callId, 'unknown tool'); return; }
     // The arguments are model output: an object, and small (the family may allow more for its own tools: a pad's test cases).
-    const maxArgs = run.policy.maxToolArgsBytes?.(run.call, name) ?? MAX_ARGS_BYTES;
+    const maxArgs = run.policy.maxToolArgsBytes?.(run.call, name) ?? (onServer ? serverDef?.maxArgsBytes : undefined) ?? MAX_ARGS_BYTES;
     const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && (e.argsBytes ?? Buffer.byteLength(JSON.stringify(e.args))) <= maxArgs;
     // (c) The asker's own role.
     const roles = await this.deps.rolesOf(asker, tenant);
@@ -1888,7 +1890,7 @@ export class AssistantRuntime {
     if (!argsOk) { await refused('invalid arguments', addressing?.text); return; }
     if (onServer) {
       // A server tool that writes runs with no confirm card, so the request must be the asker's beyond doubt (review 1, item 1).
-      if (serverTool(name)?.who === 'pad' && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
+      if (serverDef?.writes && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
       // The asker's request already got the fallback line: a call that lands after it does not run (it would contradict it).
       const ask = run.asks?.get(asker);
       if (ask?.fellBack) { trace('call.refused', { call: e.callId, why: 'after-fallback' }); this.answer(run, e.callId, { refused: 'too late' }, null, { continue: false }); run.session?.resumeTools?.(); return; }
@@ -2474,7 +2476,7 @@ export function setAssistantRuntime(next: AssistantRuntime | null): void { void 
 
 /**
  * Is `request` (the line that addressed Milo, as the asker's) beyond doubt the asker's own request at `atMs` (when the model
- * began the work)? A server tool that writes (an interview's pad tools) has no confirm card, so: the line is heard from the asker
+ * began the work)? A server tool that writes (its definition's `writes`, server-tools.ts) has no confirm card, so: the line is heard from the asker
  * alone (no overlapped speech), it carries Milo's name itself, and nobody else spoke between it and `atMs`. Anything else is
  * not run: someone else's words after the name (a candidate's "and add a helper…" after the lead's question) could be what the
  * model is acting on.

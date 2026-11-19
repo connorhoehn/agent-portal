@@ -1,0 +1,116 @@
+// What every interview tool shares: the interview behind a request, where the asker stands in it, the fixed sentences, and the said
+// log (family.ts `log`). Tests replace the dependencies with `setMiloToolDeps`.
+import { randomBytes } from 'node:crypto';
+import { runWithDbTenant } from '../../../providers/db-tenant.js';
+import { interviewsNowMs } from '../clock.js';
+import { guestOfInterview, isGuestId } from '../guest-id.js';
+import { miloSettingsStore, type MiloSettings } from '../milo-settings.js';
+import { appendPadEvents, MILO_WRITER_ID } from '../pad/log/service.js';
+import type { PadEventIn } from '../pad/log/rules.js';
+import { writeIntoPad, type MiloPadPlan, type MiloPadWriteResult } from '../pad/milo-writer.js';
+import { saidStore, type SaidSource } from '../speak/store.js';
+import { interviewsStore } from '../store-select.js';
+import { INTERVIEWS_TENANT, type Interview, type KitQuestion } from '../types.js';
+import { judgeHelper, type VerdictInput } from './verdict.js';
+
+export type Standing = 'lead' | 'panel' | 'candidate';
+
+// ── The fixed sentences ──────────────────────────────────────────────────────────────────────────────────────────────────
+export const PAD_OFF = "The lead hasn't turned on pad help from Milo for this round.";
+export const PAD_LEAD_ONLY = 'Only the lead interviewer, or the candidate when the lead allows it, can ask Milo to change the pad.';
+export const INTRO_LEAD_ONLY = 'Only the lead interviewer can ask Milo to introduce itself.';
+export const NO_PAD = 'There is no code pad in this round.';
+export const PAD_BUSY = 'Milo is still writing in the pad.';
+export const NOT_SOLUTION = "I can add test cases, imports or a helper, but I can't write the solution.";
+export const NOT_STANDARD_IMPORT = 'Milo only adds standard-library imports at the top of the pad.';
+export const NOTHING_NEW = 'The pad already has that.';
+export const HELPER_NOT_ADDED = "Milo couldn't add that helper to the pad.";
+export const TESTS_NOT_ADDED = "Milo couldn't add those test cases to the pad.";
+export const PAD_FAILED = "Milo couldn't change the pad this time.";
+export const PAD_TOO_LONG = 'The pad is too long for Milo to change.';
+export const TESTS_LIMIT = 'Milo has already added test cases three times in this round.';
+export const ON_IT = 'On it.';
+/** The most times Milo writes test cases in one interview. */
+export const MAX_TEST_CASE_BATCHES = 3;
+/** At most this many pad changes by Milo in one interview (test cases, imports and helpers together). */
+export const MAX_PAD_CHANGES = 12;
+/** At most this many solution checks (a model call each) in one interview, whatever they found. */
+export const MAX_VERDICTS = 10;
+export const PAD_CHANGES_LIMIT = 'Milo has made all the pad changes it can in this interview.';
+/** Argument-less tools heard twice for one request (the phrase and the model's call): the second within this is not run. */
+export const REPEAT_WINDOW_MS = 20_000;
+
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+export const countWords = (n: number): string => NUMBER_WORDS[n] ?? String(n);
+export const testsAddedLine = (n: number, checked: boolean): string => (checked
+  ? `Added ${countWords(n)} test case${n === 1 ? '' : 's'} at the bottom of the pad.`
+  : `Added ${countWords(n)} test input${n === 1 ? '' : 's'} at the bottom of the pad. The expected values are yours to fill in.`);
+export const importsAddedLine = (n: number): string => (n === 1 ? 'Added the import at the top of the pad.' : `Added ${countWords(n)} imports at the top of the pad.`);
+export const HELPER_ADDED = 'Added the helper at the top of the pad, marked as added by Milo.';
+
+// ── The interview behind a request ───────────────────────────────────────────────────────────────────────────────────────
+
+export interface MiloToolDeps {
+  interview: (interviewId: string) => Promise<Interview | null>;
+  /** The guest id was minted for this interview (milo-policy.ts). */
+  guestOf: (userId: string, interviewId: string) => Promise<boolean>;
+  settings: (interviewId: string) => Promise<MiloSettings>;
+  questions: (interview: Interview) => Promise<KitQuestion[]>;
+  write: (interviewId: string, plan: MiloPadPlan) => Promise<MiloPadWriteResult>;
+  padLog: (interviewId: string, events: readonly PadEventIn[], at: Date) => Promise<number>;
+  judge: (interviewId: string, leadId: string, input: VerdictInput) => Promise<'helper' | 'solution'>;
+  now: () => number;
+  newId: () => string;
+}
+
+async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
+  const store = interviewsStore();
+  const [applications, openings] = await runWithDbTenant(INTERVIEWS_TENANT, () => Promise.all([store.listApplications(), store.listOpenings()]));
+  const opening = openings.find((o) => o.id === applications.find((a) => a.id === interview.applicationId)?.openingId);
+  const bank = opening?.kit.questions ?? [];
+  const chosen = interview.questionIds.length ? bank.filter((q) => interview.questionIds.includes(q.id)) : bank;
+  return chosen.filter((q) => q.roundType === 'technical');
+}
+
+const DEFAULTS: MiloToolDeps = {
+  interview: async (id) => (await runWithDbTenant(INTERVIEWS_TENANT, () => interviewsStore().listInterviews())).find((i) => i.id === id) ?? null,
+  guestOf: guestOfInterview,
+  settings: (id) => runWithDbTenant(INTERVIEWS_TENANT, () => miloSettingsStore().get(id)),
+  questions: roundQuestions,
+  write: writeIntoPad,
+  padLog: (id, events, at) => runWithDbTenant(INTERVIEWS_TENANT, () => appendPadEvents(id, { id: MILO_WRITER_ID, side: 'milo' }, events, at)),
+  judge: judgeHelper,
+  now: interviewsNowMs,
+  newId: () => `said-${randomBytes(8).toString('hex')}`,
+};
+let overrides: Partial<MiloToolDeps> = {};
+/** Tests: replace some dependencies; `null` puts every default back. */
+export function setMiloToolDeps(next: Partial<MiloToolDeps> | null): void { overrides = next ?? {}; }
+export const deps = (): MiloToolDeps => ({ ...DEFAULTS, ...overrides });
+
+/** A live interview by id, or null (not found, not live, unreadable). */
+export async function liveInterview(interviewId: string): Promise<Interview | null> {
+  const interview = await deps().interview(interviewId).catch(() => null);
+  return interview && interview.state === 'live' ? interview : null;
+}
+
+/** Where this person stands in the interview: its lead, on its panel, its candidate (a guest of its invite), or nowhere. */
+export async function standingOf(interview: Interview, userId: string): Promise<Standing | null> {
+  if (userId === interview.leadId) return 'lead';
+  if (interview.panelIds.includes(userId)) return 'panel';
+  if (isGuestId(userId) && (await deps().guestOf(userId, interview.id).catch(() => false))) return 'candidate';
+  return null;
+}
+
+/** May the candidate ask Milo to change the pad (the lead's switch, milo-settings.ts)? Unreadable: no. */
+export const candidateMayAsk = async (interview: Interview): Promise<boolean> => !!(await deps().settings(interview.id).catch(() => null))?.candidateMayAsk;
+
+/** A line Milo will say, logged in the said log, unposted (the orchestrator posts and says it; `heldTextSaid` marks the row). */
+export async function logLine(interview: Interview, askedBy: string, said: { line: string; source: SaidSource }): Promise<string> {
+  const d = deps();
+  await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().append({
+    id: d.newId(), interviewId: interview.id, callId: interview.callId, kind: 'answer', source: said.source, questionId: null, suggestionId: null,
+    text: said.line, askedBy, saidAt: new Date(d.now()).toISOString(), posted: false, spoken: false,
+  }));
+  return said.line;
+}

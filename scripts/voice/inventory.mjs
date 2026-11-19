@@ -399,19 +399,47 @@ function parseCatalogue(manifest) {
   const [navBody] = balanced(raw, raw.indexOf('[', raw.indexOf('=', navStart)));
   const navigatePages = [...navBody.matchAll(/id:\s*'([\w-]+)',\s*path:\s*'([^']+)',\s*tenants:\s*\[([^\]]*)\]/g)].map((m) => ({ id: m[1], path: m[2], tenants: strLits(m[3]) }));
   const voiceTenants = strLits(/export const VOICE_TENANTS = \[([^\]]*)\]/.exec(raw)?.[1] ?? '');
-  // Tools that run on the server inside one family's call (INTERVIEW_TOOLS): no browser runner and no route, so they cover none.
-  const sStart = raw.indexOf('export const INTERVIEW_TOOLS');
-  const sBody = sStart < 0 ? '' : raw.slice(sStart, raw.indexOf('\n];', sStart));
-  const sHeads = [...sBody.matchAll(/\n\s*\{\s*\n\s*name:\s*'(\w+)'/g)];
-  const serverTools = sHeads.map((h, i) => {
-    const block = sBody.slice(h.index, sHeads[i + 1]?.index ?? sBody.length);
-    return {
-      name: h[1], kind: /\bkind:\s*'(\w+)'/.exec(block)?.[1] ?? null, tenants: strLits(/tenants:\s*\[([^\]]*)\]/.exec(block)?.[1] ?? ''),
-      who: /\bwho:\s*'(\w+)'/.exec(block)?.[1] ?? null, spend: /\bspend:\s*'(\w+)'/.exec(block)?.[1] ?? null,
-      mapsTo: /mapsTo:\s*(["'])([\s\S]*?)\1\s*,?\s*\n/.exec(block)?.[2] ?? '', line: lineAt(raw, sStart + h.index + 1),
-    };
-  });
+  const serverTools = parseServerTools();
   return { tools, navigatePages, voiceTenants, serverTools };
+}
+
+/**
+ * Tools that run on the server inside one family's call (meeting-assistant/server-tools.ts): no browser runner and no route, so they
+ * cover none. Every file under middleware/src/lib that calls `registerServerTools(` names a family with literal `family: '...'`,
+ * `tenants: [...]` and `tools: [A, B]`; each tool is an `export const A: ServerToolDef<...> = { name: '...', ... }` in the file its
+ * import names. Listed in each family's order.
+ */
+function parseServerTools() {
+  const libDir = 'middleware/src/lib';
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+      if (e.isDirectory()) { if (e.name !== '__tests__' && e.name !== 'node_modules') walk(`${dir}/${e.name}`); } else if (e.name.endsWith('.ts')) files.push(`${dir}/${e.name}`);
+    }
+  };
+  walk(libDir);
+  const out = [];
+  for (const file of files.sort()) {
+    const raw = read(file);
+    if (!/^registerServerTools\(/m.test(raw)) continue;
+    const family = /\bfamily:\s*'([\w:-]+)'/.exec(raw)?.[1] ?? null;
+    const tenants = strLits(/\btenants:\s*\[([^\]]*)\]/.exec(raw)?.[1] ?? '');
+    const ids = (/\btools:\s*\[([^\]]*)\]/.exec(raw)?.[1] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    for (const id of ids) {
+      const from = new RegExp(`import\\s*\\{[^}]*\\b${id}\\b[^}]*\\}\\s*from\\s*'([^']+)'`).exec(raw)?.[1];
+      const toolFile = from ? join(dirname(file), from.replace(/\.js$/, '.ts')) : file;
+      const src = read(toolFile);
+      const at = src.search(new RegExp(`export const ${id}\\b`));
+      if (at < 0) throw new Error(`inventory: server tool ${id} not found in ${toolFile}`);
+      const block = src.slice(at, src.indexOf('\n};', at));
+      out.push({
+        name: /\bname:\s*'(\w+)'/.exec(block)?.[1] ?? null, kind: 'server', family, tenants,
+        writes: /\bwrites:\s*true\b/.test(block), spend: /\bspend:\s*'(\w+)'/.exec(block)?.[1] ?? null,
+        mapsTo: /mapsTo:\s*(["'])([\s\S]*?)\1\s*,?\s*\n/.exec(block)?.[2] ?? '', file: toolFile, line: lineAt(src, at + 1),
+      });
+    }
+  }
+  return out;
 }
 
 /** `METHOD /api/...` references inside a mapsTo string; `<tenant>` and `<apiPrefix>` expand to every indexed tenant's prefix. */

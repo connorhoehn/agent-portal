@@ -2612,68 +2612,80 @@
   {
    "name": "time_left",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "anyone",
-   "spend": "none",
+   "writes": false,
+   "spend": null,
    "mapsTo": "server: lib/interviews/milo-tools time_left",
-   "line": 1123
+   "file": "middleware/src/lib/interviews/milo-tools/time-left.ts",
+   "line": 8
   },
   {
    "name": "repeat_question",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "anyone",
-   "spend": "none",
+   "writes": false,
+   "spend": null,
    "mapsTo": "server: lib/interviews/milo-tools repeat_question",
-   "line": 1131
+   "file": "middleware/src/lib/interviews/milo-tools/repeat-question.ts",
+   "line": 8
   },
   {
    "name": "introduce",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "lead",
-   "spend": "none",
+   "writes": false,
+   "spend": null,
    "mapsTo": "server: lib/interviews/milo-tools introduce",
-   "line": 1139
+   "file": "middleware/src/lib/interviews/milo-tools/introduce.ts",
+   "line": 14
   },
   {
    "name": "pad_add_tests",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "pad",
-   "spend": "none",
+   "writes": true,
+   "spend": null,
    "mapsTo": "server: lib/interviews/milo-tools pad_add_tests (the pad, as Milo)",
-   "line": 1147
+   "file": "middleware/src/lib/interviews/milo-tools/pad-add-tests.ts",
+   "line": 14
   },
   {
    "name": "pad_add_import",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "pad",
-   "spend": "none",
+   "writes": true,
+   "spend": null,
    "mapsTo": "server: lib/interviews/milo-tools pad_add_import (the pad, as Milo)",
-   "line": 1172
+   "file": "middleware/src/lib/interviews/milo-tools/pad-add-import.ts",
+   "line": 10
   },
   {
    "name": "pad_add_helper",
    "kind": "server",
+   "family": "interviews:interview",
    "tenants": [
     "interviews"
    ],
-   "who": "pad",
-   "spend": "interview",
+   "writes": true,
+   "spend": "tools",
    "mapsTo": "server: lib/interviews/milo-tools pad_add_helper (the pad, as Milo)",
-   "line": 1184
+   "file": "middleware/src/lib/interviews/milo-tools/pad-add-helper.ts",
+   "line": 13
   }
  ],
  "navigatePages": [

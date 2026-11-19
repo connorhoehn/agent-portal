@@ -37,7 +37,9 @@ import { askMilo, checkQuestion, notesFor, transcriptFor, type MiloRef } from '.
 import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { sayApproved, saidStore } from '../../lib/interviews/speak/index.js';
-import { ALREADY_INTRODUCED, introduceMilo, introduced } from '../../lib/interviews/speak/intro.js';
+import { ALREADY_INTRODUCED, introduced } from '../../lib/interviews/speak/intro.js';
+import { runServerTool } from '../../lib/meeting-assistant/server-tools.js';
+import { interviewCall } from '../../lib/interviews/milo-tools/index.js';
 import { miloSettingsStore } from '../../lib/interviews/milo-settings.js';
 import { interviewsNowMs } from '../../lib/interviews/clock.js';
 import { NOT_SAID_ALOUD } from '../../lib/meeting-assistant/approved-speech.js';
@@ -122,10 +124,11 @@ miloRouter.post('/interviews/:id/milo-intro', asyncHandler(async (req, res) => {
   const p = await panelSide(req);
   if (!p || p.ref.interview.leadId !== p.userId || p.ref.interview.state !== 'live') throw new NotFoundError(NOTHING_HERE);
   res.setHeader('Cache-Control', 'no-store');
-  const out = await introduceMilo(p.ref.interview, p.userId);
-  if (out === 'already') { res.status(409).json({ error: ALREADY_INTRODUCED }); return; }
-  if (out.said === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
-  res.json({ said: out.said, line: out.said === 'spoken' ? INTRODUCED_ALOUD : NOT_SAID_ALOUD });
+  // The same tool the lead's words and the live model's call run (milo-tools/introduce.ts), pressed: posted and said at once.
+  const out = await runServerTool(interviewCall(p.ref.interview.id), p.userId, 'introduce', {}, 'button');
+  if (!out || out.delivered === undefined) { res.status(409).json({ error: ALREADY_INTRODUCED }); return; }
+  if (out.delivered === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
+  res.json({ said: out.delivered, line: out.delivered === 'spoken' ? INTRODUCED_ALOUD : NOT_SAID_ALOUD });
 }));
 
 /** The states after the call: nothing of Milo's is set any more. */
