@@ -75,6 +75,9 @@ function quoteOf(text: string): string {
 /** The stand-in's one statement: reporting words only, so the drift limit has nothing to check and nothing is invented. */
 export const ANSWER_TEXT = 'The candidate said this in answer to the question.';
 
+/** Competencies judged on the whole conversation, with no question of their own to open a window. */
+const CROSS_CUTTING: readonly string[] = ['communication'];
+
 export function scriptedRecap(input: RecapInput): { competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[]; notCovered: string[] } {
   const competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[] = [];
   const notCovered: string[] = [];
@@ -95,6 +98,18 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
       }
       windows.push(answers.sort((a, b) => input.lines[b]!.text.length - input.lines[a]!.text.length || a - b));
     });
+    // Communication is not asked in a question of its own; it is read across everything the candidate said once a question was asked.
+    if (windows.length === 0 && CROSS_CUTTING.includes(c.id)) {
+      const first = input.lines.findIndex((_l, n) => opens(n, anyQuestion));
+      if (first >= 0) {
+        const all: number[] = [];
+        for (let k = first + 1; k < input.lines.length; k += 1) {
+          const line = input.lines[k]!;
+          if (line.side === 'candidate' && !addressesMilo(line.text) && quoteOf(line.text)) all.push(k);
+        }
+        windows.push(all.sort((a, b) => input.lines[b]!.text.length - input.lines[a]!.text.length || a - b));
+      }
+    }
     const taken = new Set<number>();
     for (let round = 0; taken.size < MAX_CLAIMS_PER_COMPETENCY && windows.some((w) => w.some((k) => !taken.has(k))); round += 1) {
       for (const w of windows) {

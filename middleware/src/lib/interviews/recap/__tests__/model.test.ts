@@ -66,6 +66,23 @@ describe('the scripted recap', () => {
     expect(seqs.map(at)).toEqual([...seqs.map(at)].sort((a, b) => a - b));
   });
 
+  it('Communication is judged across the whole conversation: a round whose only asked questions are another competency\'s still has Communication evidence', () => {
+    const input: RecapInput = {
+      competencies: [FIXED_INPUT.competencies[0]!, { ...FIXED_INPUT.competencies[1]!, id: 'system-design', name: 'System design' }],
+      questions: [{ text: 'Design Twitter: people post short messages and read a home timeline.', competencyId: 'system-design', how: 'chosen' }],
+      lines: [
+        { seq: 1, side: 'panel', text: 'Design Twitter: people post short messages and read a home timeline.' },
+        { seq: 2, side: 'candidate', text: 'So on every tweet I push it to each follower\'s timeline, and I will explain why as I go.' },
+        { seq: 3, side: 'candidate', text: 'Milo, how much time is left' },
+        { seq: 4, side: 'candidate', text: 'For big accounts I would skip the fan-out and merge their tweets in at read time instead.' },
+      ],
+    };
+    const out = scriptedRecap(input);
+    expect(out.competencies.map((c) => c.id)).toEqual(['communication', 'system-design']);
+    expect(out.competencies[0]!.evidence.map((e) => e.seq)).toEqual([2, 4]);
+    expect(out.notCovered).toEqual([]);
+  });
+
   it('passes its own parse, and says nothing when no asked question was heard', async () => {
     const raw = (await new ScriptedRecapModel().write(FIXED_INPUT)).raw;
     expect(parseRecapAnswer(raw, { competencyIds: ['communication', 'collaboration'], lines: FIXED_INPUT.lines })).toMatchObject({ ok: true, droppedClaims: 0 });
