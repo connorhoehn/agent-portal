@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
 import { blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
@@ -137,4 +137,17 @@ test('a checkpoint counts as posted only once the server took it: a failed post 
   open();
   assert.deepEqual(await Promise.all([first, second]), [true, true]);
   assert.deepEqual(posts, ['a:1', 'a:1', 'a:2']);
+});
+
+test('ending the round waits for the board\'s closing checkpoint, but never longer than the bound', async () => {
+  const steps: string[] = [];
+  const quick: BoardCheckpoints = { flush: async () => { steps.push('flushed'); return true; } };
+  assert.equal(await flushBoardWithin(quick, 1000), true);
+  steps.push('ended');
+  assert.deepEqual(steps, ['flushed', 'ended']);
+  const hung: BoardCheckpoints = { flush: () => new Promise<boolean>(() => {}) };
+  const started = Date.now();
+  assert.equal(await flushBoardWithin(hung, 30), false);
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(await flushBoardWithin(null, 30), true, 'no board open: nothing to wait for');
 });

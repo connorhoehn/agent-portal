@@ -4,7 +4,7 @@ jest.mock('../../../../config.js', () => ({ config: { mock: { aurora: true } } }
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   COUNT_BOARD_SNAPSHOTS_SQL, ERASE_BOARD_SNAPSHOTS_SQL, INSERT_BOARD_SNAPSHOT_SQL, LATEST_BOARD_SNAPSHOT_SQL, LIST_BOARD_SNAPSHOTS_SQL,
-  MAX_BOARD_SNAPSHOTS, MemoryBoardSnapshotStore, SqlBoardSnapshotStore, checkBoardScene, readBoardSnapshots, saveBoardSnapshot, setBoardSnapshotStore,
+  BOARD_END_GRACE_MS, MAX_BOARD_SNAPSHOTS, MemoryBoardSnapshotStore, mayCheckpoint, SqlBoardSnapshotStore, checkBoardScene, readBoardSnapshots, saveBoardSnapshot, setBoardSnapshotStore,
   type BoardSnapshotStore,
 } from '../snapshots.js';
 import { blueprintBoard } from '../templates.js';
@@ -81,6 +81,24 @@ describe('the service', () => {
     expect(await readBoardSnapshots('iv-a', () => 'Hugo Marchetti')).toEqual([
       { seq: 1, at: '2026-11-18T10:00:00.000Z', who: { id: 'u-hugo', name: 'Hugo Marchetti' }, elements: [{ id: 'a', type: 'rectangle' }] },
     ]);
+  });
+});
+
+describe('who may post a checkpoint, and until when (review WB-1, item 2)', () => {
+  const END = Date.UTC(2026, 10, 18, 11, 0);
+  const base = { leadId: 'u-hugo', panelIds: ['u-wen'], endedAt: null as string | null };
+  it('the lead and the panel while live; after the end, the lead alone for a short grace, so the closing board is kept', () => {
+    expect(mayCheckpoint({ ...base, state: 'live' }, 'u-hugo', END)).toBe(true);
+    expect(mayCheckpoint({ ...base, state: 'live' }, 'u-wen', END)).toBe(true);
+    expect(mayCheckpoint({ ...base, state: 'live' }, 'guest:x', END)).toBe(false);
+    const ended = { ...base, state: 'ended' as const, endedAt: new Date(END).toISOString() };
+    expect(mayCheckpoint(ended, 'u-hugo', END + 5_000)).toBe(true);
+    expect(mayCheckpoint(ended, 'u-hugo', END + BOARD_END_GRACE_MS)).toBe(true);
+    expect(mayCheckpoint(ended, 'u-hugo', END + BOARD_END_GRACE_MS + 1)).toBe(false);
+    expect(mayCheckpoint(ended, 'u-wen', END + 5_000)).toBe(false);
+    expect(mayCheckpoint({ ...ended, endedAt: null }, 'u-hugo', END)).toBe(false);
+    expect(mayCheckpoint({ ...base, state: 'ready' }, 'u-hugo', END)).toBe(false);
+    expect(mayCheckpoint({ ...base, state: 'cancelled', endedAt: new Date(END).toISOString() }, 'u-hugo', END)).toBe(false);
   });
 });
 

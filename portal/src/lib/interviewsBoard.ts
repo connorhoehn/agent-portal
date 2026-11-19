@@ -101,6 +101,20 @@ export function boardCheckpoints(read: () => readonly DiagramElement[] | null, p
   };
 }
 
+/** How long ending the round waits for the board's closing checkpoint. */
+export const BOARD_END_FLUSH_MS = 3000;
+
+/**
+ * The board's closing checkpoint, before the round ends (the server takes the lead's post for a short grace after the
+ * end too). Bounded: a slow or hung post never holds up the end. True when nothing was left unposted.
+ */
+export async function flushBoardWithin(checkpoints: BoardCheckpoints | null, ms = BOARD_END_FLUSH_MS): Promise<boolean> {
+  if (!checkpoints) return true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), ms); });
+  try { return await Promise.race([checkpoints.flush(), late]); } finally { clearTimeout(timer); }
+}
+
 export interface BoardSnapshot { seq: number; at: string; who: { id: string; name: string }; elements: Array<Record<string, unknown>> }
 
 export async function readBoardSnapshots(interviewId: string, fetcher: typeof fetch = fetch): Promise<BoardSnapshot[] | null> {

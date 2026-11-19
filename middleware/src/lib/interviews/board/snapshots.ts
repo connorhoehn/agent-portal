@@ -11,7 +11,7 @@ import { config } from '../../../config.js';
 import { interviewBoardSnapshotsFixture } from '../../../mock/interviews-board-snapshots.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { isoOf, type SqlExec } from '../store-sql.js';
-import { INTERVIEWS_TENANT } from '../types.js';
+import { INTERVIEWS_TENANT, type Interview } from '../types.js';
 
 /** At most this many checkpoints an interview (one a minute covers a three-hour round), each at most this big. */
 export const MAX_BOARD_SNAPSHOTS = 200;
@@ -136,6 +136,20 @@ export function boardSnapshotStore(): BoardSnapshotStore {
 export function setBoardSnapshotStore(next: BoardSnapshotStore | null): void { current = next; }
 
 // ── the service ──────────────────────────────────────────────────────────────
+
+/** How long after the end the lead's room may still post: its closing checkpoint goes out as the room ends. */
+export const BOARD_END_GRACE_MS = 2 * 60_000;
+
+/**
+ * May this person post a checkpoint now? The lead or a panel member while the round is live; after the end, the lead
+ * alone for BOARD_END_GRACE_MS, so the board as it was at the end reaches the record.
+ */
+export function mayCheckpoint(interview: Pick<Interview, 'state' | 'leadId' | 'panelIds' | 'endedAt'>, userId: string, nowMs: number): boolean {
+  if (interview.state === 'live') return interview.leadId === userId || interview.panelIds.includes(userId);
+  if (interview.state !== 'ended' || interview.leadId !== userId || !interview.endedAt) return false;
+  const since = nowMs - Date.parse(interview.endedAt);
+  return since >= 0 && since <= BOARD_END_GRACE_MS;
+}
 
 /** A posted scene: a list of elements, each a plain object with a string `id` and `type`; the live ones are kept. */
 export function checkBoardScene(raw: unknown): { scene: string; elements: number } | null {

@@ -41,7 +41,7 @@ import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '.
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import { BoardTab } from './room/BoardTab';
-import { surfaceOf } from '../../lib/interviewsBoard';
+import { flushBoardWithin, surfaceOf, type BoardCheckpoints } from '../../lib/interviewsBoard';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
@@ -166,8 +166,13 @@ function InterviewRoom({ id }: { id: string }) {
   // The host value is a new object each render: read through a ref so the footer's registration does not change with it.
   const hostRef = useRef(host);
   hostRef.current = host;
+  // The open board's checkpoints (the room pane's Board tab), flushed before the round ends.
+  const boardCheckpoints = useRef<BoardCheckpoints | null>(null);
+  const setBoardCheckpoints = useCallback((c: BoardCheckpoints | null) => { boardCheckpoints.current = c; }, []);
   const end = useCallback(async (): Promise<{ error?: string }> => {
     if (!room) return { error: 'The room is still loading.' };
+    // The board's closing checkpoint first, while the round is still live (bounded; the server's grace covers a late one).
+    await flushBoardWithin(boardCheckpoints.current);
     const out = await endInterview(room.id, room.revision);
     if (!out.ok) { if (out.stale) refresh(); return { error: out.error }; }
     // The page's own unbind is ignored while the call runs, so the lobby is dropped here once the call is left: the footer stops offering "Join the call" for a round that has ended.
@@ -214,7 +219,7 @@ function InterviewRoom({ id }: { id: string }) {
       : <RoomIdle room={room} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)} onBack={() => navigate(MY_INTERVIEWS_HREF)}
         lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
         miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} />}
-    <RoomPane room={room} here={call.here} />
+    <RoomPane room={room} here={call.here} onBoardCheckpoints={setBoardCheckpoints} />
   </Stack>;
 }
 
@@ -269,7 +274,7 @@ function RoomIdle({ room, live, admission, off, onBack, lost = null, onRestart =
  * pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own chat pane never opens beside it, and a focus
  * request for the call's chat (the footer's Message) selects the Chat tab and shows the pane.
  */
-function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
+function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: boolean; onBoardCheckpoints: (c: BoardCheckpoints | null) => void }) {
   const pane = useSidePaneHost();
   const { reveal } = pane;
   // Open by default in the room; the reader's × still closes it for this visit.
@@ -298,7 +303,7 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
           : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
       </Stack>
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
-        {tab === 'pad' && (surface === 'board' ? <BoardTab room={room} /> : <PadTab room={room} />)}
+        {tab === 'pad' && (surface === 'board' ? <BoardTab room={room} onCheckpoints={onBoardCheckpoints} /> : <PadTab room={room} />)}
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}

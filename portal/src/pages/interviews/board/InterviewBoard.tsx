@@ -12,7 +12,8 @@ import { GatewayContext, useYjsDoc, type GatewayContextValue } from '@connorhoeh
 import { Chip, DropdownMenu, InlineAlert, LoadingState, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
 import { offlineGateway } from '../../../components/OptionalGatewayProvider';
 import {
-  BOARD_SNAPSHOT_MS, boardChannel, boardCheckpoints, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, type KitBoard,
+  BOARD_SNAPSHOT_MS, boardChannel, boardCheckpoints, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, type BoardCheckpoints,
+  type KitBoard,
 } from '../../../lib/interviewsBoard';
 import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, type PadConnection } from '../../../lib/interviewsPad';
 import { useBoardFit } from './useBoardFit';
@@ -29,6 +30,8 @@ export interface InterviewBoardProps {
   questions?: readonly BoardQuestion[];
   /** Post checkpoints while the round is live (the lead's room). */
   checkpoint?: boolean;
+  /** The lead's room: the board's checkpoints while it is open (null once closed), so ending the round flushes them first. */
+  onCheckpoints?: (checkpoints: BoardCheckpoints | null) => void;
 }
 
 const NOTICES: Readonly<Partial<Record<PadConnection, { tone: 'info' | 'warning' | 'error'; text: string }>>> = {
@@ -44,7 +47,7 @@ export function InterviewBoard(props: InterviewBoardProps) {
   return <SharedBoard {...props} gateway={gateway} documentId={documentId} channel={boardChannel(props.interviewId)!} />;
 }
 
-function SharedBoard({ interviewId, self, seat, questions, checkpoint, gateway, documentId, channel }:
+function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpoints, gateway, documentId, channel }:
   InterviewBoardProps & { gateway: GatewayContextValue; documentId: string; channel: string }) {
   const { ydoc, provider, synced } = useYjsDoc({ documentId, ws: gateway, onMessage: gateway.onMessage });
   const [refused, setRefused] = useState(false);
@@ -64,6 +67,11 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, gateway, 
     ? boardCheckpoints(() => readBoardElements(ydoc), (elements) => postBoardSnapshot(interviewId, elements))
     : null), [ydoc, checkpoint, interviewId]);
   const flush = useCallback(() => { void checkpoints?.flush(); }, [checkpoints]);
+  useEffect(() => {
+    if (!onCheckpoints) return undefined;
+    onCheckpoints(checkpoints);
+    return () => onCheckpoints(null);
+  }, [checkpoints, onCheckpoints]);
   useEffect(() => {
     if (!checkpoints || connection !== 'synced') return undefined;
     const tick = setInterval(flush, BOARD_SNAPSHOT_MS);
