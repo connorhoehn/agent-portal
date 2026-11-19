@@ -1,10 +1,12 @@
 // Starting boards for system design rounds (WHITEBOARD-PLAN step 2): Excalidraw elements built in code, so the seed,
-// the tests and a later importer share one shape. Two boards ship with the seeded backend kit:
+// the tests and a later importer share one shape. Three boards ship with the seeded backend kit:
 //
-//   Blueprint     seven labelled frames (Clarifying questions first, then Requirements, Non-functional requirements,
-//                 API, High-level design, Data model, Trade-offs), each with a few starter stickies to talk through.
-//   Prompt only   one prompt card above the same seven frames, empty; or above another list of frames, such as
-//                 INTERVIEW_SECTIONS' five (Clarifying questions, Functional, Non-functional, High-level design, Deep dive).
+//   Blueprint         seven labelled frames (Clarifying questions first, then Requirements, Non-functional requirements,
+//                     API, High-level design, Data model, Trade-offs), each with a few starter stickies to talk through.
+//   Prompt only       one prompt card above the same seven frames, empty; or above another list of frames, such as
+//                     INTERVIEW_SECTIONS' five (Clarifying questions, Functional, Non-functional, High-level design, Deep dive).
+//   Architecture kit  the prompt card, a Notes column, a palette of ready-made components (one group each) and an
+//                     empty Design frame to build the diagram in (architectureBoard, below).
 //
 // The elements carry every field Excalidraw 0.18 reads, a fractional `index` in order, and stickies as a rectangle with
 // its bound text, so the canvas draws them without repairing anything.
@@ -139,4 +141,197 @@ export function blueprintBoard(): KitBoard {
 export function promptBoard(prompt: string, frames: ReadonlyArray<{ id: string; name: string }> = DESIGN_SECTIONS): KitBoard {
   const width = COLUMNS * FRAME_W + (COLUMNS - 1) * GAP;
   return { name: 'Prompt and empty frames', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false, frames)]) };
+}
+
+// ── "Architecture kit": notes on the left, a palette of ready-made components, an empty Design frame ─────────────────
+//
+// The way a system design round is often run on a whiteboard: the candidate keeps short notes in a column (what each
+// component is and why), and builds the diagram beside them from recognisable shapes joined by labelled arrows. The
+// palette holds one copy of each shape; each is a single group (the shape's strokes plus its label), so a click selects
+// the whole component and Alt-drag or Cmd/Ctrl+D copies it. Every shape is drawn here from the board's own primitives
+// (rectangle, ellipse, diamond, line, arrow, text), so the kit's and the checkpoints' checks keep it as it is.
+
+/** The one fill of every component, so the diagram reads as one set. */
+export const COMPONENT_FILL = '#ffd43b';
+const HINT_COLOR = '#868e96';
+/** A component's icon is drawn in a box of this size; its label sits below. */
+const ICON_W = 100;
+const ICON_H = 64;
+
+type ShapePart = { type: 'rectangle' | 'ellipse' | 'diamond'; x: number; y: number; w: number; h: number; fill?: boolean; stroke?: boolean; round?: boolean };
+type LinePart = { type: 'line' | 'arrow'; x: number; y: number; to: Array<[number, number]>; label?: string };
+type Part = ShapePart | LinePart;
+
+/** A free text element (no container), `color` its stroke. */
+function freeText(id: string, x: number, y: number, text: string, opts: { fontSize?: number; color?: string; align?: 'left' | 'center'; width?: number; frameId?: string | null } = {}): El {
+  const fontSize = opts.fontSize ?? FONT;
+  const lines = text.split('\n');
+  const width = opts.width ?? Math.max(...lines.map((l) => l.length)) * fontSize * 0.55;
+  return base(id, 'text', x, y, width, lines.length * fontSize * LINE, {
+    strokeColor: opts.color ?? '#1e1e1e', frameId: opts.frameId ?? null, text, originalText: text, fontSize, fontFamily: 2,
+    textAlign: opts.align ?? 'left', verticalAlign: 'top', containerId: null, autoResize: true, lineHeight: LINE,
+  });
+}
+
+/** One part of an icon as elements at (ox, oy), the icon box's top-left corner: the shape, and an arrow's bound label. */
+function partElements(id: string, p: Part, ox: number, oy: number, dashed: boolean): El[] {
+  const look = { strokeStyle: dashed ? 'dashed' : 'solid' };
+  if ('to' in p) {
+    const points: Array<[number, number]> = [[0, 0], ...p.to];
+    const xs = points.map(([x]) => x);
+    const ys = points.map(([, y]) => y);
+    const el = base(id, p.type, ox + p.x, oy + p.y, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), {
+      ...look, points, lastCommittedPoint: null, startBinding: null, endBinding: null, startArrowhead: null,
+      endArrowhead: p.type === 'arrow' ? 'arrow' : null, roundness: p.type === 'arrow' ? { type: 2 } : null,
+      ...(p.type === 'arrow' ? { elbowed: false } : {}),
+    });
+    if (!p.label) return [el];
+    // Excalidraw's own arrow label: a text bound to the arrow (containerId), drawn at its middle.
+    const textId = `${id}-label`;
+    const end = points[points.length - 1]!;
+    const w = p.label.length * FONT * 0.55;
+    el['boundElements'] = [{ type: 'text', id: textId }];
+    return [el, base(textId, 'text', ox + p.x + end[0] / 2 - w / 2, oy + p.y + end[1] / 2 - (FONT * LINE) / 2, w, FONT * LINE, {
+      text: p.label, originalText: p.label, fontSize: FONT, fontFamily: 2, textAlign: 'center', verticalAlign: 'middle', containerId: id, autoResize: true, lineHeight: LINE,
+    })];
+  }
+  return [base(id, p.type, ox + p.x, oy + p.y, p.w, p.h, {
+    ...look, backgroundColor: p.fill === false ? 'transparent' : COMPONENT_FILL, strokeColor: p.stroke === false ? 'transparent' : '#1e1e1e',
+    roundness: p.round ? { type: 3 } : p.type === 'rectangle' ? null : { type: 2 },
+  })];
+}
+
+/** A server: a rounded slab with a drive slot. */
+const server = (x: number, y: number, w: number, h: number): Part[] => [
+  { type: 'rectangle', x, y, w, h, round: true },
+  { type: 'line', x: x + 10, y: y + h / 2, to: [[w * 0.35, 0]] },
+];
+
+/** A cylinder standing up (a database): the body without a stroke, its two sides as lines, then the lid. */
+const cylinder = (): Part[] => [
+  { type: 'ellipse', x: 26, y: 46, w: 48, h: 18 },
+  { type: 'rectangle', x: 26, y: 9, w: 48, h: 46, stroke: false },
+  { type: 'line', x: 26, y: 9, to: [[0, 46]] },
+  { type: 'line', x: 74, y: 9, to: [[0, 46]] },
+  { type: 'ellipse', x: 26, y: 0, w: 48, h: 18 },
+];
+
+/** A cloud: overlapping puffs, then the same puffs a little smaller without a stroke, so only the outline shows. */
+const cloud = (): Part[] => {
+  const puffs = [{ x: 4, y: 22, w: 46, h: 38 }, { x: 28, y: 4, w: 48, h: 46 }, { x: 56, y: 20, w: 40, h: 38 }, { x: 10, y: 34, w: 80, h: 30 }];
+  return [
+    ...puffs.map((p): Part => ({ type: 'ellipse', ...p })),
+    ...puffs.map((p): Part => ({ type: 'ellipse', x: p.x + 3, y: p.y + 3, w: p.w - 6, h: p.h - 6, stroke: false })),
+  ];
+};
+
+/**
+ * The components the Architecture kit's palette offers, in its order: each a label and the parts of its icon, drawn in
+ * a 100 × 64 box. A question picks any of them by id (architectureBoard's `components`); a new one is one entry here.
+ */
+export const ARCHITECTURE_COMPONENTS: ReadonlyArray<{ id: string; label: string; parts: () => Part[]; dashed?: boolean }> = [
+  { id: 'web', label: 'Web client', parts: () => [
+    { type: 'rectangle', x: 0, y: 0, w: 100, h: 64, round: true },
+    { type: 'line', x: 0, y: 16, to: [[100, 0]] },
+    { type: 'ellipse', x: 8, y: 5, w: 6, h: 6, fill: false },
+    { type: 'ellipse', x: 18, y: 5, w: 6, h: 6, fill: false },
+  ] },
+  { id: 'mobile', label: 'Mobile client', parts: () => [
+    { type: 'rectangle', x: 32, y: 0, w: 36, h: 64, round: true },
+    { type: 'line', x: 44, y: 7, to: [[12, 0]] },
+    { type: 'line', x: 44, y: 56, to: [[12, 0]] },
+  ] },
+  { id: 'cdn', label: 'CDN', parts: cloud },
+  { id: 'lb', label: 'Load balancer', parts: () => [
+    { type: 'rectangle', x: 18, y: 0, w: 64, h: 64, round: true },
+    { type: 'line', x: 28, y: 32, to: [[18, 0]] },
+    { type: 'arrow', x: 46, y: 32, to: [[24, -18]] },
+    { type: 'arrow', x: 46, y: 32, to: [[26, 0]] },
+    { type: 'arrow', x: 46, y: 32, to: [[24, 18]] },
+  ] },
+  { id: 'app', label: 'App servers', parts: () => [...server(5, 0, 90, 18), ...server(5, 23, 90, 18), ...server(5, 46, 90, 18)] },
+  { id: 'auth', label: 'Auth', parts: () => [
+    ...server(0, 8, 68, 22), ...server(0, 36, 68, 22),
+    { type: 'ellipse', x: 78, y: 12, w: 18, h: 24, fill: false },
+    { type: 'rectangle', x: 74, y: 26, w: 26, h: 22, round: true },
+  ] },
+  { id: 'cache', label: 'Cache', parts: () => [
+    { type: 'diamond', x: 5, y: 30, w: 90, h: 34 },
+    { type: 'diamond', x: 5, y: 15, w: 90, h: 34 },
+    { type: 'diamond', x: 5, y: 0, w: 90, h: 34 },
+  ] },
+  { id: 'queue', label: 'Message queue', parts: () => [
+    { type: 'ellipse', x: 2, y: 12, w: 20, h: 40 },
+    { type: 'rectangle', x: 12, y: 12, w: 74, h: 40, stroke: false },
+    { type: 'line', x: 12, y: 12, to: [[74, 0]] },
+    { type: 'line', x: 12, y: 52, to: [[74, 0]] },
+    { type: 'ellipse', x: 76, y: 12, w: 20, h: 40 },
+  ] },
+  { id: 'workers', label: 'Workers', parts: () => [
+    { type: 'rectangle', x: 30, y: 18, w: 62, h: 46, round: true },
+    { type: 'rectangle', x: 20, y: 9, w: 62, h: 46, round: true },
+    { type: 'rectangle', x: 10, y: 0, w: 62, h: 46, round: true },
+  ] },
+  { id: 'db-primary', label: 'Database (primary)', parts: cylinder },
+  { id: 'db-replica', label: 'Database (replica)', parts: cylinder, dashed: true },
+  { id: 'arrow', label: 'Labelled arrow', parts: () => [{ type: 'arrow', x: 0, y: 32, to: [[100, 0]], label: 'reads' }] },
+];
+
+/** One component at (x, y): its icon's elements and its label below, all in one group (`<prefix>-g-<id>`), in `frameId`. */
+export function architectureComponent(prefix: string, id: string, x: number, y: number, frameId: string | null = null): El[] {
+  const c = ARCHITECTURE_COMPONENTS.find((k) => k.id === id);
+  if (!c) return [];
+  const group = `${prefix}-g-${c.id}`;
+  const els = c.parts().flatMap((p, i) => partElements(`${prefix}-${c.id}-${i + 1}`, p, x, y, Boolean(c.dashed)));
+  const lw = c.label.length * FONT * 0.55;
+  els.push(freeText(`${prefix}-${c.id}-name`, x + (ICON_W - lw) / 2, y + ICON_H + 10, c.label, { align: 'center', width: lw }));
+  return els.map((e) => ({ ...e, groupIds: [group], frameId }));
+}
+
+/** The Notes column's headed placeholders, in the order the answer is given. */
+export const NOTE_HEADINGS: ReadonlyArray<{ id: string; name: string; hint: string }> = [
+  { id: 'clarify', name: 'Clarifying questions', hint: 'Who uses it, how many, and how much they read versus write.' },
+  { id: 'functional', name: 'Functional', hint: 'The few things it must do.' },
+  { id: 'nonfunctional', name: 'Non-functional', hint: 'Scale, latency, availability, consistency.' },
+  { id: 'components', name: 'Components', hint: 'One line each: what it is, and why it is there.' },
+  { id: 'deepdive', name: 'Deep dive', hint: 'The hardest part, the options, and the trade-off chosen.' },
+];
+
+const KIT_W = 1500;
+const KIT_TOP = 120;
+const KIT_H = 840;
+const NOTES_W = 380;
+const RIGHT_X = NOTES_W + 40;
+const RIGHT_W = KIT_W - RIGHT_X;
+const CELL_W = 180;
+const CELL_H = 140;
+const PALETTE_COLUMNS = 6;
+export const ARCHITECTURE_HINT = 'Click a component to select it whole; Alt-drag or Cmd/Ctrl+D copies it into Design. Double-click an arrow to label it.';
+
+/**
+ * "Architecture kit": the prompt card across the top; on the left a Notes frame of headed placeholders; on the right a
+ * Components frame with the palette (all of ARCHITECTURE_COMPONENTS unless `components` names some), a one-line hint,
+ * and a large empty Design frame where the diagram is built.
+ */
+export function architectureBoard(prompt: string, opts: { components?: readonly string[] } = {}): KitBoard {
+  const out: El[] = [...card('ak-prompt', 0, 0, KIT_W, 80, prompt, { fill: 'transparent', fontSize: 28 })];
+  NOTE_HEADINGS.forEach((h, i) => {
+    const y = KIT_TOP + 30 + i * 160;
+    out.push(freeText(`ak-notes-${h.id}`, 20, y, h.name, { fontSize: 20, frameId: 'ak-notes' }));
+    out.push(freeText(`ak-notes-${h.id}-hint`, 20, y + 32, wrap(h.hint, 36), { color: HINT_COLOR, frameId: 'ak-notes' }));
+  });
+  out.push(base('ak-notes', 'frame', 0, KIT_TOP, NOTES_W, KIT_H, { name: 'Notes', strokeWidth: 1, roughness: 0 }));
+  const ids = (opts.components ?? ARCHITECTURE_COMPONENTS.map((c) => c.id)).filter((id) => ARCHITECTURE_COMPONENTS.some((c) => c.id === id));
+  ids.forEach((id, i) => {
+    const x = RIGHT_X + (i % PALETTE_COLUMNS) * CELL_W + (CELL_W - ICON_W) / 2;
+    const y = KIT_TOP + 30 + Math.floor(i / PALETTE_COLUMNS) * CELL_H;
+    out.push(...architectureComponent('ak', id, x, y, 'ak-palette'));
+  });
+  const paletteH = Math.max(1, Math.ceil(ids.length / PALETTE_COLUMNS)) * CELL_H + 20;
+  out.push(base('ak-palette', 'frame', RIGHT_X, KIT_TOP, RIGHT_W, paletteH, { name: 'Components', strokeWidth: 1, roughness: 0 }));
+  const hintY = KIT_TOP + paletteH + 16;
+  out.push(freeText('ak-hint', RIGHT_X, hintY, ARCHITECTURE_HINT, { color: HINT_COLOR }));
+  const designY = hintY + 44;
+  out.push(base('ak-design', 'frame', RIGHT_X, designY, RIGHT_W, KIT_TOP + KIT_H - designY, { name: 'Design', strokeWidth: 1, roughness: 0 }));
+  return { name: 'Architecture kit', elements: indexed(out) };
 }

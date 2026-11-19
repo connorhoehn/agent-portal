@@ -7,7 +7,7 @@ import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorec
 import { EM_KIT } from '../../../mock/interviews-behavioural.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import type { OpeningKit } from '../types.js';
-import { blueprintBoard } from '../board/templates.js';
+import { architectureBoard, blueprintBoard } from '../board/templates.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
 
@@ -344,11 +344,11 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(r.ok && r.value.rounds.map((x) => x.surface)).toEqual(['pad', 'pad', 'pad', undefined]);
   });
 
-  it('the seeded System design round is a board round, and its questions carry the two templates', () => {
+  it('the seeded System design round is a board round, and its questions carry the three templates', () => {
     const kit = seedKit('op-backend');
     expect(kit.rounds.find((r) => r.id === 'rd-design')!.surface).toBe('board');
     const boards = kit.questions.filter((q) => q.board).map((q) => q.board!.name);
-    expect(boards).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Prompt and empty frames']);
+    expect(boards).toEqual(['Frames with starter notes', 'Prompt and empty frames', 'Architecture kit']);
     const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
     const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
     expect(frames).toEqual(['Clarifying questions', 'Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
@@ -365,18 +365,17 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(prompt.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
   });
 
-  it('"Design Twitter" opens on its prompt card above five empty frames, and the kit keeps it as seeded', () => {
+  it('"Design Twitter" opens on the Architecture kit: prompt card, Notes, the palette and an empty Design frame', () => {
     const kit = seedKit('op-backend');
     const q = kit.questions.find((x) => x.id === 'q-be-twitter')!;
     expect(q).toMatchObject({ competencyId: 'system-design', roundType: 'technical' });
-    expect(q.board!.name).toBe('Prompt and empty frames');
-    const texts = q.board!.elements.filter((e) => e['type'] === 'text').map((e) => e['originalText']);
-    expect(texts).toEqual(['Design Twitter']);
+    expect(q.board).toEqual(architectureBoard('Design Twitter'));
+    expect(q.board!.name).toBe('Architecture kit');
     const frames = q.board!.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
-    expect(frames).toEqual(['Clarifying questions', 'Functional', 'Non-functional', 'High-level design', 'Deep dive']);
-    // Only the prompt card: every frame is empty.
-    expect(q.board!.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
-    expect(q.board!.elements.filter((e) => e['frameId']).length).toBe(0);
+    expect(frames).toEqual(['Notes', 'Components', 'Design']);
+    expect(q.board!.elements.some((e) => e['type'] === 'text' && e['originalText'] === 'Design Twitter')).toBe(true);
+    // The Design frame starts empty: the candidate builds the diagram there.
+    expect(q.board!.elements.filter((e) => e['frameId'] === 'ak-design').length).toBe(0);
     const idx = q.board!.elements.map((e) => String(e['index']));
     expect([...idx].sort()).toEqual(idx);
     const r = checkKit(kit);

@@ -20,7 +20,7 @@
 // Candidates are records, never users (decision 3); the four cast users are in
 // providers/identity.ts FALLBACK_USERS with a grant only in `interviews`.
 
-import { INTERVIEW_SECTIONS, blueprintBoard, promptBoard } from '../lib/interviews/board/templates.js';
+import { architectureBoard, blueprintBoard, promptBoard } from '../lib/interviews/board/templates.js';
 import { clock, defineFixture } from './core/index.js';
 import { seedAt } from './interviews-days.js';
 import { EM_KIT } from './interviews-behavioural.js';
@@ -116,11 +116,11 @@ const BACKEND_KIT: OpeningKit = {
       ],
     },
     {
-      // The classic open question: the prompt card and five empty frames, so the candidate drives the whole board.
+      // The classic open question on the Architecture kit: notes, a palette of components and an empty Design frame.
       id: 'q-be-twitter', competencyId: 'system-design', roundType: 'technical',
       prompt: 'Design Twitter: people post short messages, follow other people and read a home timeline of the posts of the people they follow.',
       followUps: ['How is the home timeline built: when a post is written, or when the timeline is read?', 'What changes for an account with tens of millions of followers?'],
-      board: promptBoard('Design Twitter', INTERVIEW_SECTIONS),
+      board: architectureBoard('Design Twitter'),
       clarifying: [
         'What is the read to write ratio?',
         'How many daily active users?',
