@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T02:36:56.927Z",
-  "serverHandlerSha": "05847737305c493de6bbf2e239c90e4ec671a280c9ecbd507c11e6b6e849bc7a",
+  "capturedAt": "2026-11-19T03:00:42.074Z",
+  "serverHandlerSha": "64a659368bb89a6f1936cc6bef598d9d6a3712bfc5a7c3a660e2ca356575b9df",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -7038,7 +7038,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}

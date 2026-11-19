@@ -2338,7 +2338,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:193"
+      "source": "src/routes/interview-invite.ts:198"
     },
     {
       "method": "GET",
@@ -2353,17 +2353,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:108"
+      "source": "src/routes/interview-invite.ts:109"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:142"
+      "source": "src/routes/interview-invite.ts:143"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:179"
+      "source": "src/routes/interview-invite.ts:180"
     },
     {
       "method": "POST",
@@ -2383,12 +2383,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:161"
+      "source": "src/routes/interview-invite.ts:162"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:204"
+      "source": "src/routes/interview-invite.ts:209"
     },
     {
       "method": "GET",
@@ -2523,7 +2523,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/end",
-      "source": "src/routes/interviews/room.ts:81"
+      "source": "src/routes/interviews/room.ts:82"
     },
     {
       "method": "DELETE",
@@ -2623,7 +2623,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/room",
-      "source": "src/routes/interviews/room.ts:50"
+      "source": "src/routes/interviews/room.ts:51"
     },
     {
       "method": "GET",
@@ -2668,7 +2668,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/start",
-      "source": "src/routes/interviews/room.ts:80"
+      "source": "src/routes/interviews/room.ts:81"
     },
     {
       "method": "GET",
