@@ -162,7 +162,7 @@ describe('the lead', () => {
   it('nothing when the candidate declined Milo, and no money is held', async () => {
     interviewConsentsFixture.rows().splice(0);
     accept(IV, false);
-    expect((await read(WEN)).body).toEqual({ suggestion: null, paused: null, retryAfterMs: 120_000 });
+    expect((await read(WEN)).body).toEqual({ suggestion: null, paused: null, retryAfterMs: 15_000 });
     expect(spendHolds.rows().filter((h) => h.source === 'interviews')).toHaveLength(0);
   });
 

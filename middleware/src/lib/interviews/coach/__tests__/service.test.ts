@@ -153,7 +153,7 @@ describe('who and when', () => {
     ['Milo declined', { transcription: true, milo: false }],
   ])('consent off (%s): no suggestion, the transcript is not read and no money is held', async (_l, c) => {
     consent = c;
-    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: 120_000 });
+    expect(await read()).toEqual({ suggestion: null, paused: null, retryAfterMs: 15_000 });
     expect(deps.transcript).not.toHaveBeenCalled();
     expect(deps.reserve).not.toHaveBeenCalled();
   });

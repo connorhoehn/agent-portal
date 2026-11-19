@@ -24,7 +24,7 @@ export const SUGGESTION_GAP_MS = 90_000;
 export const MAX_ATTEMPTS_PER_INTERVIEW = 20;
 /** How soon the room should ask again in each case (the page's poll; D7 `retryAfterMs`). */
 export const RETRY_NOT_LIVE_MS = 30_000;
-export const RETRY_NO_CONSENT_MS = 120_000;
+export const RETRY_NO_CONSENT_MS = 15_000; // consent usually lands within seconds of the lead joining
 export const RETRY_WAITING_MS = 15_000;
 export const RETRY_NO_LINES_MS = 15_000;
 export const RETRY_IN_FLIGHT_MS = 5_000;
