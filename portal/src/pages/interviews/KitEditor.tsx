@@ -9,7 +9,8 @@ import {
   Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, EditIcon, FormField, IconButton, Inline, Input, NumberInput, Select,
   Stack, T, Textarea, TrashIcon, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useRef, type ReactNode } from 'react';
+import { RowKeys } from '../../lib/rowKeys';
 import { boardSceneKey } from '../../lib/interviewsBoard';
 import { BoardScene } from './board/BoardScene';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
@@ -235,6 +236,8 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
   index: number; question: KitQuestion; kit: OpeningKit; problems: ReadonlyMap<string, string>; onChange: (q: KitQuestion) => void; onDone: () => void;
 }) {
   const at = `questions.${index}`;
+  const followUpRows = useRef(new RowKeys()).current;
+  const followUpKeys = followUpRows.for(q.followUps.length);
   const kinds = [...new Set([...kit.rounds.map((r) => r.type), q.roundType])];
   const starters = PAD_LANGUAGES.filter((l) => q.starter?.[l] !== undefined);
   const unused = PAD_LANGUAGES.filter((l) => q.starter?.[l] === undefined);
@@ -275,12 +278,12 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
         {q.followUps.length === 0 && <T size="xs" tone="tertiary">None yet. Follow-ups are what to ask next when an answer stays general.</T>}
         {problems.get(`${at}.followUps`) && <T size="xs" tone="danger">{problems.get(`${at}.followUps`)}</T>}
         {q.followUps.map((f, j) => (
-          <Inline key={j} gap="xs" wrap={false} align="start">
+          <Inline key={followUpKeys[j]} gap="xs" wrap={false} align="start">
             <FormField label={`Follow-up ${j + 1}`} error={problems.get(`${at}.followUps.${j}`)} className="flex-1">
               {(w) => <Input {...w} size="sm" value={f} onChange={(e) => onChange({ ...q, followUps: q.followUps.map((x, k) => (k === j ? e.target.value : x)) })} />}
             </FormField>
             <IconButton size="sm" variant="ghost" aria-label={`Remove follow-up ${j + 1}`} icon={<TrashIcon size={14} />} className="mt-6"
-              onClick={() => onChange({ ...q, followUps: q.followUps.filter((_, k) => k !== j) })} />
+              onClick={() => { followUpRows.remove(j); onChange({ ...q, followUps: q.followUps.filter((_, k) => k !== j) }); }} />
           </Inline>
         ))}
       </Stack>
@@ -327,6 +330,8 @@ function ClarifyingQuestions({ question: q, at, index, problems, onChange }: {
 }) {
   const list = q.clarifying ?? [];
   const setList = (next: string[]) => { const { clarifying: _drop, ...rest } = q; onChange(next.length ? { ...rest, clarifying: next } : rest); };
+  const rows = useRef(new RowKeys()).current;
+  const keys = rows.for(list.length);
   return (
     <Stack gap="xs" data-testid="interviews-kit-clarifying">
       <Inline justify="between" align="center">
@@ -338,12 +343,12 @@ function ClarifyingQuestions({ question: q, at, index, problems, onChange }: {
         : 'When the candidate has asked none of these a few minutes in, Milo suggests one to the lead.'}</T>
       {problems.get(`${at}.clarifying`) && <T size="xs" tone="danger">{problems.get(`${at}.clarifying`)}</T>}
       {list.map((c, j) => (
-        <Inline key={j} gap="xs" wrap={false} align="start">
+        <Inline key={keys[j]} gap="xs" wrap={false} align="start">
           <FormField label={`Clarifying question ${j + 1}`} error={problems.get(`${at}.clarifying.${j}`)} className="flex-1">
             {(w) => <Input {...w} size="sm" value={c} onChange={(e) => setList(list.map((x, k) => (k === j ? e.target.value : x)))} />}
           </FormField>
           <IconButton size="sm" variant="ghost" aria-label={`Remove clarifying question ${j + 1} of question ${index + 1}`} icon={<TrashIcon size={14} />} className="mt-6"
-            onClick={() => setList(list.filter((_, k) => k !== j))} />
+            onClick={() => { rows.remove(j); setList(list.filter((_, k) => k !== j)); }} />
         </Inline>
       ))}
     </Stack>
