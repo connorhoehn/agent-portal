@@ -4,6 +4,7 @@ jest.mock('../../../../config.js', () => ({ config: { mock: { aurora: true } } }
 import { KIT_LIMITS, checkBoard } from '../../kit.js';
 import { checkBoardScene } from '../snapshots.js';
 import { MASTER_SECTIONS, masterBoard, providedDesignBoard, type MasterPromptSpec, type ProvidedDesignSpec } from '../templates.js';
+import { TWITTER_DESIGN } from '../../../../mock/interviews-design-twitter.js';
 
 const spec: MasterPromptSpec = {
   title: 'Design a parcel locker network',
@@ -119,5 +120,47 @@ describe('Master template: the provided design (C), the answer key\'s own board'
     expect(els.filter((e) => e['type'] === 'frame').map((f) => f['name'])).toEqual(['High-level design', 'Purpose(s) of each service', 'API signatures', 'Data model', 'Answers']);
     expect(texts(els).join('\n')).toContain('reserveLocker(parcelId: string): Locker');
     expect(texts(els).map(flat).join('\n')).toContain('1. Senders, recipients and the courier.');
+  });
+});
+
+describe('the seeded "Design Twitter" provided design reads cleanly', () => {
+  const els = providedDesignBoard(TWITTER_DESIGN).elements;
+  type Box = { x1: number; y1: number; x2: number; y2: number };
+  const box = (e: Record<string, unknown>): Box => ({ x1: Number(e['x']), y1: Number(e['y']), x2: Number(e['x']) + Number(e['width']), y2: Number(e['y']) + Number(e['height']) });
+  const overlaps = (a: Box, b: Box) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+  const grow = (b: Box, by: number): Box => ({ x1: b.x1 - by, y1: b.y1 - by, x2: b.x2 + by, y2: b.y2 + by });
+  const nodes = els.filter((e) => String(e['id']).startsWith('pd-node-') && e['type'] !== 'text');
+  const arrows = els.filter((e) => e['type'] === 'arrow');
+  const ends = (a: Record<string, unknown>) => { const [[, ], [dx, dy]] = a['points'] as number[][]; const x = Number(a['x']); const y = Number(a['y']); return { x, y, ex: x + dx!, ey: y + dy! }; };
+  // Excalidraw centres an arrow's bound label on the arrow's midpoint; a generous width per character (wider than the template's own estimate).
+  const labelBox = (a: Record<string, unknown>): Box => {
+    const t = els.find((e) => e['containerId'] === a['id'])!;
+    const { x, y, ex, ey } = ends(a);
+    const w = String(t['text']).length * Number(t['fontSize']) * 0.6;
+    const h = Number(t['fontSize']) * 1.25;
+    return { x1: (x + ex) / 2 - w / 2, y1: (y + ey) / 2 - h / 2, x2: (x + ex) / 2 + w / 2, y2: (y + ey) / 2 + h / 2 };
+  };
+
+  it('no arrow label sits on a box or a circle', () => {
+    const hits = arrows.flatMap((a) => nodes.filter((n) => overlaps(labelBox(a), grow(box(n), 6))).map((n) => `${String(els.find((e) => e['containerId'] === a['id'])!['text'])} on ${String(n['id'])}`));
+    expect(hits).toEqual([]);
+  });
+
+  it('no arrow runs through a part it does not join', () => {
+    const through = arrows.flatMap((a) => {
+      const { x, y, ex, ey } = ends(a);
+      return nodes.filter((n) => {
+        const b = grow(box(n), -2);
+        if ((x >= b.x1 - 4 && x <= b.x2 + 4 && y >= b.y1 - 4 && y <= b.y2 + 4) || (ex >= b.x1 - 4 && ex <= b.x2 + 4 && ey >= b.y1 - 4 && ey <= b.y2 + 4)) return false;
+        return Array.from({ length: 41 }, (_, k) => k / 40).some((t) => { const px = x + (ex - x) * t; const py = y + (ey - y) * t; return px > b.x1 && px < b.x2 && py > b.y1 && py < b.y2; });
+      }).map((n) => `${String(a['id'])} through ${String(n['id'])}`);
+    });
+    expect(through).toEqual([]);
+  });
+
+  it('the diagram fits its frame: every part, arrow and label inside the High-level design frame', () => {
+    const frame = box(els.find((e) => e['id'] === 'pd-hld')!);
+    const parts = [...nodes.map(box), ...arrows.map(labelBox), ...arrows.map((a) => { const { x, y, ex, ey } = ends(a); return { x1: Math.min(x, ex), y1: Math.min(y, ey), x2: Math.max(x, ex), y2: Math.max(y, ey) }; })];
+    expect(parts.filter((b) => b.x1 < frame.x1 || b.y1 < frame.y1 || b.x2 > frame.x2 || b.y2 > frame.y2)).toEqual([]);
   });
 });

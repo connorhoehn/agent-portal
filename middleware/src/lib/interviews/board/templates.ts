@@ -572,14 +572,34 @@ function link(i: number, from: { x: number; y: number }, to: { x: number; y: num
   ];
 }
 
+/** How wide an arrow's label reads, a little wider than the text estimate elsewhere (Excalidraw centres it on the arrow). */
+const LABEL_CHAR = 0.6;
+/** The least room between two boxes side by side, and what a label in that gap keeps clear of them on each side. */
+const MIN_GAP = 80;
+const LABEL_CLEAR = 24;
+
+/**
+ * The diagram's column step: wide enough that the label of every arrow joining two boxes side by side fits in the gap
+ * between them with room to spare (an arrow across rows puts its label in the band between the rows, which ROW_STEP
+ * leaves room for). The frame grows to fit rather than squeezing the columns.
+ */
+function columnStep(spec: ProvidedDesignSpec): number {
+  const at = new Map(spec.nodes.map((n) => [n.id, n]));
+  const widest = Math.max(0, ...spec.links.filter((l) => at.get(l.from)?.row === at.get(l.to)?.row && Math.abs(at.get(l.from)!.col - at.get(l.to)!.col) === 1)
+    .map((l) => l.label.length * HINT * LABEL_CHAR));
+  return NODE_W + Math.max(MIN_GAP, widest + 2 * LABEL_CLEAR);
+}
+
 /** "Provided design": the heading and rule, the reference diagram, then the purposes, API, data model and answers two by two. */
 export function providedDesignBoard(spec: ProvidedDesignSpec): KitBoard {
-  const out: El[] = [...headed('pd', 0, 'Provided design', C_W + 60 + COL_W)];
-  const hldY = 130;
-  const hld = sectionFrame('pd', 'hld', 'High-level design', [], 0, hldY, C_W, 0);
   const cols = Math.max(1, ...spec.nodes.map((n) => n.col + 1));
   const rows = Math.max(1, ...spec.nodes.map((n) => n.row + 1));
-  const step = Math.min(COL_STEP, (C_W - 2 * PAD - NODE_W) / Math.max(1, cols - 1));
+  const step = columnStep(spec);
+  const hldW = Math.max(C_W, 2 * (PAD + 16) + (cols - 1) * step + NODE_W);
+  const colX = hldW + 60;
+  const out: El[] = [...headed('pd', 0, 'Provided design', colX + COL_W)];
+  const hldY = 130;
+  const hld = sectionFrame('pd', 'hld', 'High-level design', [], 0, hldY, hldW, 0);
   const at = new Map(spec.nodes.map((n) => [n.id, { x: PAD + 16 + n.col * step, y: hld.top + 20 + n.row * ROW_STEP }]));
   for (const n of spec.nodes) out.push(...node(n, at.get(n.id)!.x, at.get(n.id)!.y, 'pd-hld'));
   spec.links.forEach((l, i) => {
@@ -604,7 +624,6 @@ export function providedDesignBoard(spec: ProvidedDesignSpec): KitBoard {
   const apis = spec.apis.map((a) => wrap(a, mono(HALF_W))).join('\n');
   written('purposes', 'Purpose(s) of each service', purposes, 2, 0, rowY, HALF_W);
   written('api', 'API signatures', apis, 3, HALF_W + CELL_GAP, rowY, HALF_W);
-  const colX = C_W + 60;
   const dataH = written('data', 'Data model', [wrap(spec.dataModel.kind, chars(COL_W)), '', ...spec.dataModel.tables.map((t) => wrap(t, mono(COL_W)))].join('\n'), 3, colX, hldY, COL_W);
   written('answers', 'Answers', numbered(spec.answers, chars(COL_W)), 2, colX, hldY + dataH + 40, COL_W);
   return { name: 'Provided design', elements: indexed(out) };

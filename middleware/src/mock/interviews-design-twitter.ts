@@ -40,8 +40,8 @@ export const TWITTER_DESIGN: ProvidedDesignSpec = {
     { id: 'fanout', name: 'Fan-out worker', kind: 'worker', col: 4, row: 1 },
     { id: 'timeline', name: 'Timeline service', kind: 'service', col: 2, row: 2 },
     { id: 'timeline-cache', name: 'Timeline cache', kind: 'store', col: 3, row: 2 },
-    { id: 'users', name: 'User and follow service', kind: 'service', col: 2, row: 3 },
-    { id: 'follow-graph', name: 'Follow graph', kind: 'store', col: 3, row: 3 },
+    { id: 'users', name: 'User and follow service', kind: 'service', col: 1, row: 3 },
+    { id: 'follow-graph', name: 'Follow graph', kind: 'store', col: 4, row: 3 },
   ],
   links: [
     { from: 'clients', to: 'gateway', label: 'HTTPS' },
