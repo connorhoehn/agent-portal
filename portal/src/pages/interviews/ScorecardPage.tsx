@@ -21,7 +21,7 @@
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, ChatComposer, ChecklistSection, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
+  Button, ChatComposer, Checkbox, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
 import { redFlagGroups, toggleSeenFlag, type KitRedFlag } from '../../lib/interviewsAnswerKey';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -349,8 +349,9 @@ function ScorecardReadout({ card, competencies, round, recap, flags, testId }: {
 }
 
 /**
- * "Red flags seen" (a board round whose questions carry red flags): the library's checklist, one per group. The form
- * ticks them (`onToggle`); a submitted scorecard shows the ones its author ticked, read-only. Never scored, and not
+ * "Red flags seen" (a board round whose questions carry red flags): a checkbox per flag, grouped. The form ticks them
+ * (`onToggle`); a submitted scorecard lists the ones its author ticked. (Not the library's ChecklistSection: it strikes a
+ * ticked item through as done, which reads as dismissed; queued in docs/ui-components-queue.md.) Never scored, and not
  * part of Milo's recommendation.
  */
 function RedFlagsSeen({ flags, seen, onToggle }: { flags: readonly KitRedFlag[]; seen: readonly string[]; onToggle?: (text: string) => void }) {
@@ -360,9 +361,15 @@ function RedFlagsSeen({ flags, seen, onToggle }: { flags: readonly KitRedFlag[];
       hint={onToggle ? 'Tick what this candidate’s design showed. It goes with your scorecard and is not scored.' : undefined}>
       <Stack gap="sm">
         {groups.map((g) => (
-          <ChecklistSection key={g.group} variant="label" as="h4" title={g.label} data-testid="interviews-scorecard-red-flag-group"
-            items={g.items.map((text) => ({ id: text, text, done: seen.includes(text) }))}
-            {...(onToggle ? { onToggle: (id: string) => onToggle(id) } : { readOnlyReason: 'Submitted with the scorecard.' })} />
+          <Stack key={g.group} gap="xs" data-testid="interviews-scorecard-red-flag-group">
+            <T size="xs" weight="medium" tone="secondary">{g.label}</T>
+            {g.items.map((text) => (onToggle
+              ? <Inline key={text} gap="sm" align="center" wrap={false}>
+                  <Checkbox checked={seen.includes(text)} onChange={() => onToggle(text)} aria-label={text} />
+                  <T size="sm" wrap>{text}</T>
+                </Inline>
+              : <T key={text} size="sm" wrap>{`• ${text}`}</T>))}
+          </Stack>
         ))}
       </Stack>
     </DetailSection>

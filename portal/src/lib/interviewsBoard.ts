@@ -190,16 +190,25 @@ export function sceneBounds(elements: ReadonlyArray<Record<string, unknown>>): S
   return b;
 }
 
-/** The master template's part A, the prompt (middleware board/templates.ts masterBoard names its elements `mt-a-*`). */
-export const OPENING_PREFIX = 'mt-a-';
-/** The part of a board it opens on: the prompt's box, or null when the board has none (it is fitted whole). */
+/**
+ * The parts a board opens on, first found wins (middleware board/templates.ts names them): the master template's
+ * part A, the prompt (`mt-a-*`), and a provided design's High-level design frame (`pd-hld`).
+ */
+const OPENING_PARTS: ReadonlyArray<(id: string) => boolean> = [(id) => id.startsWith('mt-a-'), (id) => id === 'pd-hld'];
+/** The part of a board it opens on, or null when the board has none (it is fitted whole). */
 export function openingRegion(elements: ReadonlyArray<Record<string, unknown>>): SceneBounds | null {
-  return sceneBounds(elements.filter((e) => typeof e['id'] === 'string' && (e['id'] as string).startsWith(OPENING_PREFIX)));
+  for (const part of OPENING_PARTS) {
+    const region = sceneBounds(elements.filter((e) => typeof e['id'] === 'string' && part(e['id'] as string)));
+    if (region) return region;
+  }
+  return null;
 }
 
 /** Below this the prompt's 24 px body text stops reading (about 14 px on screen). */
 export const OPENING_MIN_ZOOM = 0.6;
 const OPENING_MARGIN = 32;
+/** Room above the prompt's title for Excalidraw's floating toolbar, which sits over the canvas's top. */
+const OPENING_TOP = 80;
 const ZOOM_STEP = 0.1;
 export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: number; deltaY: number }
 
@@ -207,7 +216,8 @@ export interface OpeningView { zoom: number; zoomOutSteps: number; deltaX: numbe
  * How a board opens on its prompt, as Excalidraw's own controls do it: after its "Zoom to fit" the view is centred on
  * the whole board; "Reset zoom" (zoom 1, about that centre), `zoomOutSteps` of "Zoom out" (0.1 each) to the widest zoom
  * at which the prompt's column fits the canvas (never below OPENING_MIN_ZOOM), then one wheel scroll of
- * (`deltaX`, `deltaY`) puts the prompt's top-left corner OPENING_MARGIN px inside the canvas. The rest of the board
+ * (`deltaX`, `deltaY`) puts the prompt's top-left corner inside the canvas (OPENING_MARGIN from the left, OPENING_TOP
+ * from the top, clear of Excalidraw's floating toolbar). The rest of the board
  * (Your design) is reached by scrolling. Null when the board has no prompt part.
  */
 export function openingView(elements: ReadonlyArray<Record<string, unknown>>, canvas: { width: number; height: number }): OpeningView | null {
@@ -220,7 +230,7 @@ export function openingView(elements: ReadonlyArray<Record<string, unknown>>, ca
   const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
   // Excalidraw's wheel scroll: the visible left edge moves by deltaX / zoom scene units.
   const deltaX = ((region.x1 - OPENING_MARGIN / zoom) - (cx - canvas.width / (2 * zoom))) * zoom;
-  const deltaY = ((region.y1 - OPENING_MARGIN / zoom) - (cy - canvas.height / (2 * zoom))) * zoom;
+  const deltaY = ((region.y1 - OPENING_TOP / zoom) - (cy - canvas.height / (2 * zoom))) * zoom;
   return { zoom: Math.round(zoom * 10) / 10, zoomOutSteps, deltaX, deltaY };
 }
 

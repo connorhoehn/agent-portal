@@ -10,7 +10,8 @@ import type { RunView } from './interviewsPad.ts';
 /** The pad log's read (contract U3), as the panel's route answers it. */
 export interface PadLogEvent {
   /** `tests`, `imports` and `helper`: Milo's own edits (its interview tools), written by the server on side `milo`. */
-  seq: number; kind: 'edit' | 'paste' | 'snapshot' | 'language' | 'insert' | 'tests' | 'imports' | 'helper'; at: string;
+  /** `reveal`: the lead put a question's provided design on the shared board (POST /board/reveal), with `questionId`. */
+  seq: number; kind: 'edit' | 'paste' | 'snapshot' | 'language' | 'insert' | 'tests' | 'imports' | 'helper' | 'reveal'; at: string;
   who: { id: string; name: string; side: 'panel' | 'candidate' | 'milo' };
   inserted?: number; lines?: number; via?: 'paste' | 'drop'; language?: string; questionId?: string; text?: string;
 }
@@ -92,6 +93,9 @@ export function markersOf(input: {
       out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'question', label: prompt ? clip(prompt) : 'A question was put in the pad', detail: prompt ? `Put in the pad: ${prompt}` : 'A question was put in the pad' });
     } else if (e.kind === 'paste') {
       out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'paste', label: pasteLabel(e), detail: `${e.who.name}: ${pasteLabel(e)}` });
+    } else if (e.kind === 'reveal') {
+      const prompt = input.questions.find((q) => q.id === e.questionId)?.prompt ?? null;
+      out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'reveal', label: 'Provided design shown', detail: `${e.who.name} showed the provided design${prompt ? ` for "${prompt}"` : ''} to the candidate` });
     } else if (e.kind === 'tests' || e.kind === 'imports' || e.kind === 'helper') {
       out.push({ atMs: msFrom(input.startedAt, e.at), kind: 'milo', label: MILO_EDIT_LABEL[e.kind], detail: `${MILO_EDIT_LABEL[e.kind]} (${e.lines ?? 0} line${e.lines === 1 ? '' : 's'})` });
     }
@@ -102,6 +106,11 @@ export function markersOf(input: {
   });
   const sorted = out.sort((a, b) => a.atMs - b.atMs);
   return input.durationMs && input.durationMs > 0 ? mergeCloseMarkers(sorted, input.durationMs) : sorted.map(({ runNo: _n, ...m }) => m);
+}
+
+/** A board round's record: when the lead showed the provided design, for its Moments list. */
+export function revealMoments(events: readonly PadLogEvent[], startedAt: string | null): Array<{ atMs: number; label: string; by: string }> {
+  return events.filter((e) => e.kind === 'reveal').map((e) => ({ atMs: msFrom(startedAt, e.at), label: 'Provided design shown to the candidate', by: e.who.name }));
 }
 
 /** Markers of one kind this close (a share of the playback's length) draw on top of each other on the slider. */

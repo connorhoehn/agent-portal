@@ -42,6 +42,8 @@ import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '.
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import { BoardTab } from './room/BoardTab';
+import { ProvidedDesignTab } from './room/ProvidedDesignTab';
+import { answerKeyQuestions } from '../../lib/interviewsAnswerKey';
 import { flushBoardWithin, surfaceOf, type BoardCheckpoints } from '../../lib/interviewsBoard';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
@@ -298,11 +300,17 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
   }, [here, chat?.focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const milo = useMiloPane(room);
   const surface = surfaceOf(room.round);
-  const plainTabs = useMemo(() => roomTabs(type, surface), [type, surface]);
+  const design = surface === 'board' && answerKeyQuestions(room.questions).length > 0;
+  const plainTabs = useMemo(() => roomTabs(type, surface, design), [type, surface, design]);
   const tabs = useMemo(() => withUnreadBadges(plainTabs, here ? { chat: unread.chat, milo: unread.milo } : {}), [plainTabs, here, unread.chat, unread.milo]);
   return <SidePane title={roomCallTitle(room)} subtitle={`${room.round.minutes} min · ${type === 'technical' ? 'Technical' : 'Behavioural'} round`}
-    paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t))}
+    paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t, design))}
     data-testid="interview-room-pane">
+    {/* A board round's board stays mounted under the other tabs: its canvas, its follow and its live document survive a
+        visit to Questions or Provided design (the reveal lands on it from there), shown again as it was. */}
+    {surface === 'board' && <Stack gap="none" className={tab === 'pad' ? 'min-h-0 flex-1' : 'hidden'} data-testid="interview-room-tab-pad">
+      <BoardTab room={room} onCheckpoints={onBoardCheckpoints} />
+    </Stack>}
     {tab === 'chat'
       ? <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-chat">
         {chat?.callId && here ? <HuddleChatBody showCall={false} />
@@ -311,9 +319,9 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
       : tab === 'pad'
       // Full-bleed, as on the candidate's side: the surface's own toolbar row carries the pane's inset (its first
       // control under the first tab's label) and the canvas or editor takes the rest of the column.
-      ? <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-tab-pad">
-        {surface === 'board' ? <BoardTab room={room} onCheckpoints={onBoardCheckpoints} /> : <PadTab room={room} />}
-      </Stack>
+      ? (surface === 'board' ? null : <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-tab-pad"><PadTab room={room} /></Stack>)
+      : tab === 'design'
+      ? <ProvidedDesignTab room={room} onRevealed={() => setTab('pad')} />
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}

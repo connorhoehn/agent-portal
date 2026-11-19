@@ -6,6 +6,7 @@ import { INTERVIEWS_API, type RoundType } from './interviews.ts';
 import type { KitCompetency, PadLanguage } from './interviewsKit.ts';
 import { writeJson } from './writeJson.ts';
 import type { KitBoard, RoundSurface } from './interviewsBoard.ts';
+import type { AnswerKey } from './interviewsAnswerKey.ts';
 
 // ── C1: the call's lobby ────────────────────────────────────────────────────
 const LOBBY_PREFIX = 'interviews:interview:';
@@ -41,6 +42,8 @@ export interface RoomQuestion {
   starter: Array<{ language: PadLanguage; code: string }>;
   /** A board round question's starting board (WHITEBOARD-PLAN step 2). */
   board?: KitBoard;
+  /** The answer key (lib/interviewsAnswerKey.ts): the room sends it to the lead and the panel only. */
+  answerKey?: AnswerKey;
 }
 export interface RoomView {
   id: string;
@@ -419,20 +422,21 @@ export const askedByLabel = (by: MiloAskedItem['by']): string | null => (by === 
 // ── The room as decision 21 draws it (UI round 1, lane ROOM; contracts U1, U6) ──────────────────────────────
 
 /** The one pane's tabs (U1), in order: a technical round leads with the pad, a behavioural one with the plan. */
-export type RoomTabId = 'pad' | 'questions' | 'plan' | 'milo' | 'chat';
-const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', questions: 'Questions', plan: 'Plan', milo: 'Milo', chat: 'Chat' };
-export function roomTabIds(type: RoundType): RoomTabId[] {
-  return type === 'technical' ? ['pad', 'questions', 'milo', 'chat'] : ['plan', 'milo', 'chat'];
+export type RoomTabId = 'pad' | 'design' | 'questions' | 'plan' | 'milo' | 'chat';
+const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', design: 'Provided design', questions: 'Questions', plan: 'Plan', milo: 'Milo', chat: 'Chat' };
+/** `design`: the round's questions carry an answer key, so a board round gets "Provided design" after the board. */
+export function roomTabIds(type: RoundType, design = false): RoomTabId[] {
+  return type === 'technical' ? ['pad', ...(design ? ['design' as const] : []), 'questions', 'milo', 'chat'] : ['plan', 'milo', 'chat'];
 }
 /** The tab row; a board round's `pad` tab holds the whiteboard and says so (WHITEBOARD-PLAN step 1). */
-export const roomTabs = (type: RoundType, surface?: RoundSurface | null): Array<{ id: RoomTabId; label: string }> =>
-  roomTabIds(type).map((id) => ({ id, label: id === 'pad' && surface === 'board' ? 'Board' : TAB_LABELS[id] }));
+export const roomTabs = (type: RoundType, surface?: RoundSurface | null, answerKey = false): Array<{ id: RoomTabId; label: string }> =>
+  roomTabIds(type, surface === 'board' && answerKey).map((id) => ({ id, label: id === 'pad' && surface === 'board' ? 'Board' : TAB_LABELS[id] }));
 export const defaultRoomTab = (type: RoundType): RoomTabId => (type === 'technical' ? 'pad' : 'plan');
 /** The footer's Message opens the pane on its chat tab (never a second pane). */
 export const ROOM_MESSAGE_TAB: RoomTabId = 'chat';
 /** A tab id from the library's tab row, kept to this round's tabs (anything else keeps the current one). */
-export function roomTabOf(type: RoundType, id: string, current: RoomTabId): RoomTabId {
-  return (roomTabIds(type) as string[]).includes(id) ? (id as RoomTabId) : current;
+export function roomTabOf(type: RoundType, id: string, current: RoomTabId, design = false): RoomTabId {
+  return (roomTabIds(type, design) as string[]).includes(id) ? (id as RoomTabId) : current;
 }
 /** The pane's floor and ceiling (U1, decision 21): code needs room; Milo's context stays narrow. */
 export const ROOM_PANE_FLOOR = { technical: { min: 560, max: 760 }, behavioural: { min: 360, max: 460 } } as const;

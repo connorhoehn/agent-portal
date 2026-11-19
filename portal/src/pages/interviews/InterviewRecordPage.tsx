@@ -31,7 +31,7 @@ import {
 } from '../../lib/interviewsRecord';
 import { runOutputModel, type RunView } from '../../lib/interviewsPad';
 import { NO_SEAT_NOT_FOUND, roomHref, roomPath } from '../../lib/interviewsRoom';
-import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
+import { framesOf, markersOf, mergeCloseMarkers, revealMoments, padLogUrl, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PlaybackMarker } from '../../lib/interviewsPlayback';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
 
@@ -133,7 +133,9 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   }, [shift]);
   useEffect(() => { if (atMs !== null) moveTo(atMs); }, [atMs, moveTo]);
 
-  const padLog = usePadLog(interview.id, technical);
+  // A board round reads the log too: the lead's reveal of the provided design is in it.
+  const padLog = usePadLog(interview.id, technical || board);
+  const reveals = useMemo(() => (board ? revealMoments(padLog.events ?? [], interview.startedAt) : []), [board, padLog.events, interview.startedAt]);
   const runs: RunView[] = record.runs ?? [];
   const frames = useMemo(() => framesOf(padLog.events ?? [], interview.startedAt), [padLog.events, interview.startedAt]);
   // The length comes from the unmerged moments; the markers drawn merge the ones that would sit on each other.
@@ -194,8 +196,18 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
 
   const moments = (
     <DetailSection variant="heading" as="h2" title="Moments" hint="When a question was asked. Choosing one moves the transcript there." data-testid="interviews-record-markers">
-      {markers.length ? (
+      {markers.length || reveals.length ? (
         <Stack gap="xs">
+          {reveals.map((r) => (
+            <Button key={`reveal:${r.atMs}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
+              onClick={() => moveTo(markerTime(r))} data-testid="interviews-record-reveal">
+              <Inline gap="sm" align="center" wrap={false} className="min-w-0">
+                <T size="xs" tone="tertiary" tabular>{clockOf(markerTime(r))}</T>
+                <Chip size="sm" tone="warning">Revealed</Chip>
+                <T size="sm" truncate title={`${r.label}, by ${r.by}`}>{r.label}</T>
+              </Inline>
+            </Button>
+          ))}
           {markers.map((m) => (
             <Button key={`${m.kind}:${m.atMs}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
               onClick={() => moveTo(markerTime(m))} data-testid="interviews-record-marker">

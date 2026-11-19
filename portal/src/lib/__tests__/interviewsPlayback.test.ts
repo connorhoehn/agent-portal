@@ -2,7 +2,7 @@
 // to, the whole log read through its pages, and the run a moment belongs to.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { framesOf, markersOf, mergeCloseMarkers, padLogUrl, pasteLabel, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PadLogPage } from '../interviewsPlayback.ts';
+import { framesOf, markersOf, revealMoments, mergeCloseMarkers, padLogUrl, pasteLabel, playbackDurationMs, readWholePadLog, runAtTime, type PadLogEvent, type PadLogPage } from '../interviewsPlayback.ts';
 import type { RunView } from '../interviewsPad.ts';
 
 const START = '2026-11-10T14:00:00.000Z';
@@ -115,4 +115,11 @@ test('different kinds never merge, and pastes and questions name each other', ()
   ] as const;
   const out = mergeCloseMarkers(near as unknown as Parameters<typeof mergeCloseMarkers>[0], 3_600_000);
   assert.deepEqual(out.map((x) => x.label), ['2 pastes at 1:40: Paste, 3 lines, Paste, 9 lines', 'Run 1']);
+});
+
+test('the lead\'s reveal of the provided design is a moment of its own, named for the question', () => {
+  const reveal: PadLogEvent = { seq: 9, kind: 'reveal', at: at(1500), who: HUGO, questionId: 'q-design' };
+  const m = markersOf({ events: [reveal], startedAt: START, recordMarkers: [], runs: [], questions: [{ id: 'q-design', prompt: 'Design Twitter: people post short messages.' }] });
+  assert.deepEqual(m, [{ atMs: 1_500_000, kind: 'reveal', label: 'Provided design shown', detail: 'Hugo Marchetti showed the provided design for "Design Twitter: people post short messages." to the candidate' }]);
+  assert.deepEqual(revealMoments([reveal], START), [{ atMs: 1_500_000, label: 'Provided design shown to the candidate', by: 'Hugo Marchetti' }]);
 });

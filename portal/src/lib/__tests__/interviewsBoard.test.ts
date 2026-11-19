@@ -239,7 +239,7 @@ test('a master template board opens on its prompt at a readable zoom, not fitted
   const all = sceneBounds(board)!;
   const prompt = openingRegion(board)!;
   assert.ok(prompt.x1 <= all.x1 + 1 && prompt.x2 < all.x2 / 2, 'the prompt is the board\'s left part');
-  // A room pane about 900 px wide: zoom 1 (the prompt's 620 px column fits), the prompt's top-left 32 px in.
+  // A room pane about 900 px wide: zoom 1 (the prompt's 620 px column fits), the prompt's left edge 32 px in, its top 80 px down (under the floating toolbar).
   const W = 900, H = 620;
   const v = openingView(board, { width: W, height: H })!;
   assert.equal(v.zoom, 1);
@@ -247,13 +247,17 @@ test('a master template board opens on its prompt at a readable zoom, not fitted
   const cx = (all.x1 + all.x2) / 2, cy = (all.y1 + all.y2) / 2;
   // After the fit and the reset the view's centre is the board's; the wheel moves its left edge to the prompt's.
   assert.equal(cx - W / 2 + v.deltaX / v.zoom, prompt.x1 - 32);
-  assert.equal(cy - H / 2 + v.deltaY / v.zoom, prompt.y1 - 32);
+  assert.equal(cy - H / 2 + v.deltaY / v.zoom, prompt.y1 - 80);
   // A narrow pane zooms out in Excalidraw's 0.1 steps, never below the readable floor.
   const narrow = openingView(board, { width: 520, height: 600 })!;
   assert.equal(narrow.zoom, 0.7);
   assert.equal(narrow.zoomOutSteps, 3);
   assert.equal(openingView(board, { width: 200, height: 600 })!.zoom, OPENING_MIN_ZOOM);
-  // A board without a prompt part (the record of another round, a provided design) keeps the whole-board fit.
+  // A provided design opens on its high-level design (its frame), the part the interviewer reads first.
+  const pd = providedDesignBoard(TWITTER_DESIGN).elements;
+  const hld = pd.find((e) => e['id'] === 'pd-hld')!;
+  assert.deepEqual(openingRegion(pd), { x1: hld['x'], y1: hld['y'], x2: Number(hld['x']) + Number(hld['width']), y2: Number(hld['y']) + Number(hld['height']) });
+  // A board without either (the record of another round, a starting board of frames) keeps the whole-board fit.
   assert.equal(openingRegion(blueprintBoard().elements), null);
   assert.equal(openingView(blueprintBoard().elements, { width: W, height: H }), null);
   assert.equal(openingView([], { width: W, height: H }), null);
