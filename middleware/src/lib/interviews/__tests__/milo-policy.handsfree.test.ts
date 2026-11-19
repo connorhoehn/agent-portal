@@ -46,7 +46,10 @@ beforeEach(async () => {
   consent = ALL_YES;
   setInterviewConsentSource(async () => consent);
   resetMiloTools();
-  setSpeakDeps({ callOf: async () => CALL.callId, miloJoinedAt: async () => Date.now() - 15 * 60_000 });
+  // Rows list by when they were said, then by id: lines logged within one millisecond would otherwise come back in the order of
+  // their random ids (the flake on 19 Nov). Ids that count up keep the order they were logged in.
+  let ids = 0;
+  setSpeakDeps({ callOf: async () => CALL.callId, miloJoinedAt: async () => Date.now() - 15 * 60_000, newId: () => `said-${String(++ids).padStart(6, '0')}` });
   setMiloToolDeps({
     interview: async (id) => (id === IV ? interview : null),
     guestOf: async (u, id) => u === guest && id === IV,
