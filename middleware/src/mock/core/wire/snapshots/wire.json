@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T12:23:22.471Z",
-  "serverHandlerSha": "984ae33f1ced30a8b50a1e557a2a91d14335c5df7c641e47632fc688ce0456ce",
+  "capturedAt": "2026-11-19T12:49:07.107Z",
+  "serverHandlerSha": "ef4ce3784d28ad290fdb85e00791097907af6d92b055e20a9bdbd1922d02a435",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
