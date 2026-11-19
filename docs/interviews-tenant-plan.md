@@ -248,7 +248,7 @@ This narrows decision 6 for the scorecard only. The recommendation is not a mode
 
 The rule, in order (the kit rates every competency 1 to 4):
 
-1. No ready recap, a competency the round requires that nobody rated, or evidence in the recap for fewer than half of the required competencies: no recommendation; the banner says there is not enough evidence and why.
+1. The lead interviewer's scorecard not in yet (a panelist's alone never yields a recommendation; the page reads the round's lead from the server), no ready recap, a competency the round requires that nobody rated, or evidence in the recap for fewer than half of the required competencies: no recommendation; the banner says there is not enough evidence and why.
 2. Each competency's score is the average of its ratings (the viewer's own scorecard while it is being filled; once submitted, every submitted scorecard for this round the viewer may read). The overall score is the average of those.
 3. **Don't advance**: overall under 2.25, or two or more competencies under 2.
 4. **Advance**: overall 3 or more, no competency under 2, and evidence for every required competency.

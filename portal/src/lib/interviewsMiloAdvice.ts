@@ -98,7 +98,16 @@ export const DONT_ADVANCE_BELOW = 2.25;
 const names = (xs: ReadonlyArray<{ name: string }>): string => xs.length <= 2 ? xs.map((x) => x.name).join(' and ') : `${xs.slice(0, -1).map((x) => x.name).join(', ')} and ${xs[xs.length - 1]!.name}`;
 
 /**
+ * Is the lead's scorecard in? Their submitted card among `cards` (this round's), or, while someone fills the form,
+ * their own draft when the one drafting holds the lead's seat. A panelist's card or draft alone never is.
+ */
+export function leadCardIn(input: { leadId: string; draftingSeat: 'lead' | 'panel' | null; cards: ReadonlyArray<{ interviewer: { id: string } }> }): boolean {
+  return input.draftingSeat === 'lead' || input.cards.some((c) => c.interviewer.id === input.leadId);
+}
+
+/**
  * The rule, in order:
+ * 0. The lead's scorecard not in yet (leadCardIn): no recommendation.
  * 1. No ready recap, a required competency nobody rated, or evidence for fewer than half the required competencies:
  *    not enough evidence, and no recommendation.
  * 2. Each competency's score is the average of its ratings; the overall score is the average of those.
@@ -111,10 +120,13 @@ export function miloAdvice(input: {
   required: ReadonlyArray<{ id: string; name: string }>;
   ratings: Readonly<Record<string, readonly number[]>>;
   recap: Pick<RecapBody, 'state' | 'competencies'> | null;
+  /** Whether the lead's scorecard is in (leadCardIn). */
+  leadIn: boolean;
 }): MiloAdvice {
   const out = (outcome: MiloAdviceOutcome, reasons: string[]): MiloAdvice => ({ outcome, label: MILO_ADVICE_LABELS[outcome], tone: MILO_ADVICE_TONES[outcome], reasons: reasons.slice(0, 2) });
   const { required, ratings, recap } = input;
   if (required.length === 0) return out('not-enough', ['This round has no competencies to weigh.']);
+  if (!input.leadIn) return out('not-enough', ['The lead interviewer\'s scorecard is not in yet.']);
   if (!recap || recap.state !== 'ready') return out('not-enough', ['Milo has no recap of the transcript for this round, so there is no evidence to weigh.']);
   const unrated = required.filter((c) => !(ratings[c.id]?.length));
   if (unrated.length) return out('not-enough', [`${names(unrated)} ${unrated.length === 1 ? 'is' : 'are'} not rated yet.`]);

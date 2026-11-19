@@ -50,6 +50,8 @@ export interface ScorecardPageView {
     opening: { id: string; title: string };
     /** The viewer's seat; null for the recruiter, the hiring manager and the admin, who read and never submit. */
     seat: Seat | null;
+    /** Who leads the round: their scorecard is the one Milo's recommendation waits for. */
+    leadId: string;
   };
   /**
    * What this scorecard rates, with what each point of the scale means, in the kit's order (scorecard.ts
@@ -99,6 +101,7 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
       candidate: { id: candidate.id, name: candidate.name },
       opening: { id: opening.id, title: opening.title },
       seat,
+      leadId: i.leadId,
     },
     ...structuredClone(scorecardCompetencies(i, opening.kit, versionsOf(ix.world.scorecards, i.id, viewer.id))),
     mine,

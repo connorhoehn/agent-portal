@@ -38,6 +38,8 @@ export interface ScorecardPageView {
     candidate: { id: string; name: string };
     opening: { id: string; title: string };
     seat: 'lead' | 'panel' | null;
+    /** Who leads the round: their scorecard is the one Milo's recommendation waits for. */
+    leadId: string;
   };
   competencies: KitCompetency[];
   /** The competencies the round assesses: each must be rated. `competencies` adds only what the viewer's own latest version rated outside them (optional, kept on a correction). */

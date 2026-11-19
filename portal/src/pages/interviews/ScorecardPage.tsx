@@ -35,7 +35,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import { MILO_QUESTION_MAX, NO_SEAT_NOT_FOUND, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
-import { draftRatings, evidenceRow, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
+import { draftRatings, evidenceRow, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
   SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
@@ -83,10 +83,13 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const recapRead = useFetch<{ recap: RecapBody }>(interview.endedAt !== null && pastRating && !recap ? recapUrl(interview.id) : null);
   const recapNow = recap ?? recapRead.data?.recap ?? null;
   const thisRound = view.others.filter((o) => o.interviewId === interview.id);
+  const cards = [...(mine ? [mine] : []), ...thisRound];
   const advice = miloAdvice({
     required: round.required,
-    ratings: editing ? draftRatings(draft.ratings) : pooledRatings([...(mine ? [mine] : []), ...thisRound]),
+    ratings: editing ? draftRatings(draft.ratings) : pooledRatings(cards),
     recap: recapNow,
+    // Nothing is recommended until the lead's scorecard is in (or the lead is the one rating now).
+    leadIn: leadCardIn({ leadId: interview.leadId, draftingSeat: editing ? interview.seat : null, cards }),
   });
   const adviceBanner = interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404 ? <MiloAdviceBanner advice={advice} /> : null;
   const missing = missingFrom(draft, competencies, limits, basedOn > 0, round.required);

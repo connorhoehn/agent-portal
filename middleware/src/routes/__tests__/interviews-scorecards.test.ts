@@ -211,6 +211,10 @@ describe('others hidden until yours is in', () => {
     expect(after.others.map((s: { interviewer: { id: string }; round: string }) => [s.interviewer.id, s.round])).toEqual([['u-wen', expect.any(String)]]);
   });
 
+  it('every reader learns who leads the round, so a page can tell the lead\'s scorecard from a panelist\'s', async () => {
+    for (const as of [WEN, HUGO, GRETA, AMARA]) expect((await read(as, NADIA)).body.scorecard.interview.leadId).toBe('u-wen');
+  });
+
   it('the recruiter and the opening\'s hiring manager read each submission as it arrives', async () => {
     await submit(WEN, NADIA);
     for (const as of [GRETA, AMARA]) {
