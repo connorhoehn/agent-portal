@@ -762,6 +762,31 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   scale with legible labels. The kit editor's "Add a starting board" now offers Empty, Blueprint, Prompt only and Architecture
   kit; the server builds the template around the question's title (`GET /board-templates`, recruiters). Known: when the room
   fits the board, the prompt card sits under Excalidraw's tool island (the fit, not the template).
+- System design master template (19 November 2026), the owner's format for a board round, three parts left to right.
+  A, the prompt: the title, two or three short paragraphs, a "Note:" scoping something out, and "Requirements / User
+  stories" as "<Actor> can:" lists, then "Maybe:" stretch stories. B, "Your design" under a rule: High-level design (room for
+  the diagram, the Architecture kit's palette as an optional strip), then in a column beside it Purpose(s) of each service,
+  API signatures, Data model and "Please answer the following questions" (numbered, the last may be the enhancement that
+  changes the diagram), each with a grey hint line. C, the provided design: the interviewer's reference diagram (services
+  as boxes, stores as circles, labelled arrows), the services' purposes, API signatures, the data model and the answers.
+  A and B are the question's starting board (`masterBoard`, offered as "Master template" by `GET /board-templates`); C is
+  its own board in the kit question. Plain text in Excalidraw's normal font at four sizes. "Design Twitter" is seeded in this
+  format with our own wording (`mock/interviews-design-twitter.ts`): 92 elements on the board, 55 in the provided design.
+- The answer key rule. A board question may carry `providedDesign` (a board, its own 192 KB cap), `designQuestions` (up to
+  6, each with the interviewer's answer, the last may be the enhancement) and `redFlags` (up to 12, grouped
+  over-engineering, responsibility, naming or other). They are the lead's and the panel's only: the room view gives them to
+  its seats; nothing the candidate can reach carries them. Every candidate-side reader takes a question through
+  `candidateQuestion` (lib/interviews/answer-key.ts), which copies only the fields it names, so a field added later stays
+  off the candidate's side until added there on purpose; Milo's tools read questions through it, and only `board` is ever
+  inserted into the shared board from a question. The guest sweep (routes/__tests__/interviews-invite-sweep.test.ts) runs
+  a live Design Twitter round: the admitted guest and another interview's guest walk every GET route and Milo's request and
+  meet no answer, red flag or provided-design id, while the lead's room has them. The provided design goes on the shared
+  board only when the lead reveals it (`POST /interviews/:id/board/reveal`: the lead, the live round, a chosen question
+  with one), logged as a server-only `reveal` event in the interview's pad log; after that it is part of the board and
+  its checkpoints. Red flags are for the lead's scorecard as an unchecked checklist, never auto-scored.
+- Open (master template): the room pane's "Provided design" tab and the lead's "Reveal to the candidate" button (the
+  route is in), the reveal marker on the record's playback, the scorecard's "Red flags seen" checklist, and the kit
+  editor's canvas and forms for the answer key.
 - Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
 ## Call chat unread (19 November 2026)
