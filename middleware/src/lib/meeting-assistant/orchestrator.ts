@@ -1844,7 +1844,10 @@ export class AssistantRuntime {
     const serverCall = !voiceTool(e.name) && !!serverTool(e.name) && !!run.policy.runTool;
     const refused = async (why: string, text = ''): Promise<void> => {
       if (serverCall) this.answer(run, e.callId, { refused: why }, null, { continue: false }); else await this.refuse(run, e.callId, why);
-      if (serverCall) { trace('call.refused', { call: e.callId, why: why.replace(/ /g, '-') }); await this.store.bumpRefused(callId); await this.fallBackNow(run, asker, text); }
+      if (serverCall) {
+        trace('call.refused', { call: e.callId, why: why.replace(/ /g, '-') });
+        try { await this.store.bumpRefused(callId); await this.fallBackNow(run, asker, text); } finally { run.session?.resumeTools?.(); }
+      }
     };
     if (!canSpeakOnRecord(record, asker)) { await refused('not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
@@ -1888,7 +1891,7 @@ export class AssistantRuntime {
       if (serverTool(name)?.who === 'pad' && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
       // The asker's request already got the fallback line: a call that lands after it does not run (it would contradict it).
       const ask = run.asks?.get(asker);
-      if (ask?.fellBack) { trace('call.refused', { call: e.callId, why: 'after-fallback' }); this.answer(run, e.callId, { refused: 'too late' }, null, { continue: false }); return; }
+      if (ask?.fellBack) { trace('call.refused', { call: e.callId, why: 'after-fallback' }); this.answer(run, e.callId, { refused: 'too late' }, null, { continue: false }); run.session?.resumeTools?.(); return; }
       if (ask) ask.ran = true;
       await this.runServerTool(run, e, asker, `${requestKey}|${name}`);
       return;
@@ -1941,7 +1944,7 @@ export class AssistantRuntime {
   private async runServerTool(run: CallRun, e: SessionEvents['toolCall'], asker: string, key: string): Promise<void> {
     const runs = (run.serverRuns ??= new Set());
     // Answered with no continuation: the server says what was done, so the model is not asked to go on (no reply to wait for).
-    if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }, null, { continue: false }); return; }
+    if (runs.has(key)) { trace('call.server', { call: e.callId, repeat: true }); this.answer(run, e.callId, { status: 'done', already: true }, null, { continue: false }); run.session?.resumeTools?.(); return; }
     runs.add(key);
     if (runs.size > 200) runs.delete(runs.values().next().value as string);
     this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' }, null, { continue: false });
@@ -1954,7 +1957,12 @@ export class AssistantRuntime {
     if (retry) { runs.delete(key); if (out.note) run.session?.appendContext(out.note); }
     const line = retry ? out.line : out;
     trace('call.server', { call: e.callId, said: line !== null, ...(retry ? { retry: true } : {}) });
-    if (line !== null) await this.sayHeld(run, asker, line);
+    try {
+      if (line !== null) await this.sayHeld(run, asker, line);
+    } finally {
+      // The line is said (or there is none): the delegated work gets its held-back continuation now (session.ts `resumeTools`).
+      run.session?.resumeTools?.();
+    }
   }
 
   /**

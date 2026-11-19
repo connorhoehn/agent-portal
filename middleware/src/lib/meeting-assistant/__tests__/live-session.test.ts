@@ -333,7 +333,7 @@ describe('tool calls', () => {
     await s.close();
   });
 
-  it('a server tool\'s answer asks for no continuation: nothing is waited for, and a held line goes out at once', async () => {
+  it('a server tool\'s answer holds the continuation back: nothing is waited for, the held line goes out at once, then resumeTools sends it', async () => {
     const { s } = make();
     await s.start(START);
     frame(callEvent('call_s', 'pad_add_tests', '{"cases":[]}'));
@@ -345,22 +345,35 @@ describe('tool calls', () => {
     expect(s.answerToolCall('call_s', '{"status":"done"}', { continue: false })).toBe(true);
     await tick();
     expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(0);
-    expect(received.filter((e) => e['type'] === 'response.item.create')).toHaveLength(1);
     expect(sent).toBe(1); // busy cleared with no answer-wait: the line was sent at once
-    expect(received.filter((e) => e['type'] === 'session.commentary.append')).toHaveLength(1);
+    s.resumeTools();
+    await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1); // the delegated work is continued
+    s.resumeTools();
+    await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1); // once
     await s.close();
   });
 
-  it('a round with one call that asks to continue still gets exactly one continuation', async () => {
+  it('a held-back continuation is never left unsent: the session sends it itself after its bound', async () => {
+    const { s } = make({ continueDeferMs: 30 });
+    await s.start(START);
+    frame(callEvent('call_s', 'pad_add_import', '{}'));
+    await tick();
+    s.answerToolCall('call_s', '{}', { continue: false });
+    await tick();
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(0);
+    await new Promise((r) => setTimeout(r, 60));
+    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
+    await s.close();
+  });
+
+  it('a round with one call that asks to continue gets its continuation at once', async () => {
     const { s } = make();
     await s.start(START);
     frame(callEvent('call_x', 'pad_add_tests', '{}')); frame(callEvent('call_y', 'search', '{"query":"y"}'));
     await tick();
     s.answerToolCall('call_x', '{}', { continue: false }); s.answerToolCall('call_y', '{}'); await tick();
-    expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
-    // The next round starts clean: a server tool alone asks for none.
-    frame(callEvent('call_z', 'pad_add_import', '{}')); await tick();
-    s.answerToolCall('call_z', '{}', { continue: false }); await tick();
     expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
     await s.close();
   });

@@ -69,10 +69,14 @@ export interface LiveMeetingSession {
   sendText(userId: string, text: string): void;
   /**
    * The result of a tool call. True when it was sent; false when the call was unknown, already answered, or the session is closed.
-   * `continue: false`: the server says what was done (a family's server tool, policy.ts `runTool`), so the model is not asked to go
-   * on after the output: no continuation is requested, and nothing of the model's follows. The default asks it to continue.
+   * `continue: false`: the server says what was done (a family's server tool, policy.ts `runTool`), so the continuation is held
+   * back: nothing is waited for and the server's line goes out at once. The delegated work still needs its continuation (without
+   * one the session takes no further request: measured 18 November, two of two), so it is owed: sent by `resumeTools` once the
+   * server's line is said, or by the session itself after a bound. The default asks the model to continue at once.
    */
   answerToolCall(callId: string, output: string, opts?: { continue?: boolean }): boolean;
+  /** Send the continuation a `continue: false` answer held back (nothing when none is owed). */
+  resumeTools?(): void;
   /** Silent context for the model ("the card was declined"). False when the session cannot take it. */
   appendContext(text: string): boolean;
   /**

@@ -65,6 +65,8 @@ import { trace } from './trace.js';
 import { readAloudContent, saidVerbatim } from './approved-speech.js';
 
 /** Tool-call arguments over this many bytes are not parsed at all. */
+/** The longest a held-back continuation waits for the server's line to be said before the session sends it itself. */
+export const CONTINUE_DEFER_MS = 12_000;
 export const MAX_RAW_ARGS_BYTES = 64 * 1024;
 export interface OpenAiLiveSessionOptions {
   model: string;
@@ -86,6 +88,8 @@ export interface OpenAiLiveSessionOptions {
    * asked for, before it counts as quiet (default 1000 ms).
    */
   answerWaitMs?: number;
+  /** Tests: CONTINUE_DEFER_MS. */
+  continueDeferMs?: number;
   /** The most a response of the second model counts as running without a terminal event (default 30 s). */
   responseStuckMs?: number;
   /** Timer functions, injectable so a test can move time by hand. */
@@ -233,17 +237,35 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   answerToolCall(callId: string, output: string, opts: { continue?: boolean } = {}): boolean {
     if (this.ended || !this.open.delete(callId)) return false;
     this.send({ type: 'response.item.create', event_id: this.eventId(), item: { type: 'function_call_output', call_id: callId, output } });
-    if (opts.continue !== false) this.continueOwed = true;
-    // One continuation per round: only when no other call of the round is still waiting (spec, "Outbound result"), and only
-    // when a call of the round asked for one. A round of server tools only (the server says what was done) asks for none: the
-    // model has nothing to add, so no reply is waited for and a line the server holds goes out at once (measured 18 November:
-    // the continuation cost about 1 s of answer-wait before the held line, and the model's own words after the output).
+    if (opts.continue !== false) this.continueNow = true;
+    // One continuation per round: only when no other call of the round is still waiting (spec, "Outbound result"). A round of
+    // server tools only (the server says what was done) holds it back (`deferred`): nothing is waited for, so the line the server
+    // holds goes out at once (measured 18 November: the continuation cost about 1 s of answer-wait before that line); it is sent
+    // once the line is said (`resumeTools`), or after CONTINUE_DEFER_MS whatever happens, so the session never stalls on it.
     if (this.open.size === 0) {
-      const owed = this.continueOwed;
-      this.continueOwed = false;
-      if (owed) { this.send({ type: 'response.create', event_id: this.eventId() }); this.waitForAnswer(); } else this.pumpSay();
+      const now = this.continueNow;
+      this.continueNow = false;
+      if (now) this.sendContinuation();
+      else { this.deferContinuation(); this.pumpSay(); }
     }
     return true;
+  }
+
+  resumeTools(): void {
+    if (this.deferred) this.sendContinuation();
+  }
+
+  private sendContinuation(): void {
+    if (this.deferred) { clearTimeout(this.deferred); this.deferred = null; }
+    if (this.ended) return;
+    this.send({ type: 'response.create', event_id: this.eventId() });
+    this.waitForAnswer();
+  }
+
+  private deferContinuation(): void {
+    if (this.deferred) clearTimeout(this.deferred);
+    this.deferred = setTimeout(() => { this.deferred = null; trace('continue.bound', { t: this.sinceStart() }); this.sendContinuation(); }, this.opts.continueDeferMs ?? CONTINUE_DEFER_MS);
+    this.deferred.unref?.();
   }
 
   appendContext(text: string): boolean {
@@ -278,8 +300,10 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
    * claimed one not yet over), a line already sent has not been claimed yet, a response of the second model is running or a
    * function call awaits its output, or the provider may be about to answer and the wait for its evidence is not over.
    */
-  /** A call answered in this round asked the model to continue (`answerToolCall`). */
-  private continueOwed = false;
+  /** A call answered in this round asked the model to continue at once (`answerToolCall`). */
+  private continueNow = false;
+  /** A continuation held back for a server tool's round, and its bound (`deferContinuation`). */
+  private deferred: ReturnType<typeof setTimeout> | null = null;
 
   private busy(): boolean {
     return this.input !== null || this.answerWait !== null || this.output !== null || this.tailLeft > 0 || this.saying !== null || this.sayQueue.length > 0
@@ -389,7 +413,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.clearOutputTimer();
     this.endAnswerWait();
     this.responseOver(null);
-    this.input = null; this.output = null; this.open.clear(); this.awaitingItem = false; this.continueOwed = false;
+    this.input = null; this.output = null; this.open.clear(); this.awaitingItem = false; this.continueNow = false; if (this.deferred) { clearTimeout(this.deferred); this.deferred = null; }
     this.sayQueue = []; this.sayWaiting = []; this.saying = null;
     this.emit('closed', { reason });
     this.onClosed?.();
