@@ -5,13 +5,15 @@
 // the interview's media by the retention sweep. The newest board is always kept: a post sooner than
 // BOARD_SNAPSHOT_GAP_MS after the last checkpoint, or one at the cap, replaces the last checkpoint instead of adding one.
 //
-// A snapshot is the scene as the library's Excalidraw binding holds it: a JSON array of elements. Only its shape and
-// its size are checked; a snapshot identical to the last one is not stored again.
+// A snapshot is the scene as the library's Excalidraw binding holds it: a JSON array of elements. Its shape and size
+// are checked, only the element kinds a board draws are kept (elements.ts), and a snapshot identical to the last one is
+// not stored again.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../../../config.js';
 import { interviewBoardSnapshotsFixture } from '../../../mock/interviews-board-snapshots.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { isoOf, type SqlExec } from '../store-sql.js';
+import { boardElement } from './elements.js';
 import { INTERVIEWS_TENANT, type Interview } from '../types.js';
 
 /** At most this many checkpoints an interview (one a minute covers a three-hour round), each at most this big. */
@@ -172,15 +174,17 @@ export function mayCheckpoint(interview: Pick<Interview, 'state' | 'leadId' | 'p
   return since >= 0 && since <= BOARD_END_GRACE_MS;
 }
 
-/** A posted scene: a list of elements, each a plain object with a string `id` and `type`; the live ones are kept. */
+/**
+ * A posted scene: a list of elements, each a plain object with a string `id` and `type`. The live ones of a kind a board
+ * keeps are stored, without links (elements.ts); an embedded page, an iframe or an image is left out.
+ */
 export function checkBoardScene(raw: unknown): { scene: string; elements: number } | null {
   if (!Array.isArray(raw) || raw.length > MAX_BOARD_ELEMENTS) return null;
   const live: unknown[] = [];
   for (const e of raw) {
-    if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
-    const r = e as Record<string, unknown>;
-    if (typeof r['id'] !== 'string' || typeof r['type'] !== 'string') return null;
-    if (r['isDeleted'] !== true) live.push(r);
+    const kept = boardElement(e);
+    if (kept === null) return null;
+    if (kept !== 'kind' && kept['isDeleted'] !== true) live.push(kept);
   }
   const scene = JSON.stringify(live);
   return Buffer.byteLength(scene, 'utf8') > MAX_BOARD_SCENE_BYTES ? null : { scene, elements: live.length };

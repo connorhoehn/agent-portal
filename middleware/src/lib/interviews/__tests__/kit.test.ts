@@ -312,6 +312,20 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     expect(checkBoard(null)).toEqual({ ok: false, why: 'unreadable' });
     expect(checkBoard({ name: 'x', elements: [] })).toEqual({ ok: false, why: 'empty' });
   });
+
+  it('a starting board holds only the kinds a board draws, and no links (review WB-1, item 8)', () => {
+    const r = checkBoard({ name: 'Sketch', elements: [{ id: 'a', type: 'rectangle', link: 'https://example.com' }, { id: 'b', type: 'frame', name: 'API' }] });
+    expect(r).toEqual({ ok: true, board: { name: 'Sketch', elements: [{ id: 'a', type: 'rectangle', link: null }, { id: 'b', type: 'frame', name: 'API' }] } });
+    for (const type of ['embeddable', 'iframe', 'image', 'magicframe', 'script']) {
+      expect(checkBoard({ name: 'Sketch', elements: [{ id: 'a', type: 'rectangle' }, { id: 'b', type, link: 'https://example.com' }] })).toEqual({ ok: false, why: 'kind' });
+    }
+    const kit = seedKit('op-backend');
+    const q = kit.questions.findIndex((x) => x.board);
+    kit.questions[q]!.board = { name: 'Sketch', elements: [{ id: 'x', type: 'embeddable', link: 'https://example.com' }] } as never;
+    const out = checkKit(kit);
+    expect(out.ok).toBe(false);
+    expect(JSON.stringify(out)).toContain('embedded page');
+  });
 });
 
 describe('a system design question\'s clarifying questions (WHITEBOARD-PLAN step 2b)', () => {

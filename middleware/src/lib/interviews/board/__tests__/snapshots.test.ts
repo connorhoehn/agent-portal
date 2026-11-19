@@ -81,6 +81,19 @@ describe('the service', () => {
     expect(checkBoardScene([{ id: 'a', type: 'text', text: 'x'.repeat(600 * 1024) }])).toBeNull();
   });
 
+  it('keeps only the element kinds a board draws: an embedded page, an iframe or an image is left out, and no element keeps a link', () => {
+    const scene = checkBoardScene([
+      { id: 'a', type: 'rectangle', link: 'javascript:alert(1)' },
+      { id: 'b', type: 'embeddable', link: 'https://example.com' },
+      { id: 'c', type: 'iframe' },
+      { id: 'd', type: 'image', fileId: 'f' },
+      { id: 'e', type: 'text', text: 'hi', link: null },
+      { id: 'f', type: 'magicframe' },
+    ]);
+    expect(scene).toEqual({ scene: '[{"id":"a","type":"rectangle","link":null},{"id":"e","type":"text","text":"hi","link":null}]', elements: 2 });
+    for (const t of ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'text', 'frame']) expect(checkBoardScene([{ id: 'x', type: t }])!.elements).toBe(1);
+  });
+
   it('stores a checkpoint, skips one that repeats the last, and at the cap the newest replaces the last, so the final board is kept', async () => {
     const hugo = { id: 'u-hugo', side: 'panel' as const };
     const t0 = Date.UTC(2026, 10, 18, 10, 0);

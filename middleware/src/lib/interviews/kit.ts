@@ -26,6 +26,7 @@ import {
   type InterviewsWorld, type KitBoard, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningState,
   type PadLanguage, type RoundSurface, type RoundType,
 } from './types.js';
+import { boardElement } from './board/elements.js';
 
 export const KIT_LIMITS = {
   rounds: 6,
@@ -72,9 +73,10 @@ export function roundSurface(round: Pick<KitRound, 'type' | 'surface'> | null | 
 
 /**
  * A starting board as the editor sent it: a short name and a list of Excalidraw elements, each a plain object with
- * a string `id` and `type`. Only the shape and the size are checked: the canvas draws what it understands.
+ * a string `id` and a type a board keeps (board/elements.ts: no embedded page, iframe or image, `kind` otherwise); links
+ * are taken off. The shape and the size are checked.
  */
-export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: false; why: 'unreadable' | 'name' | 'empty' | 'large' } {
+export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: false; why: 'unreadable' | 'name' | 'empty' | 'large' | 'kind' } {
   if (!isRecord(raw)) return { ok: false, why: 'unreadable' };
   const name = text(raw['name']);
   if (!name || name.length > KIT_LIMITS.boardName) return { ok: false, why: 'name' };
@@ -83,11 +85,17 @@ export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: 
   if (!list.some((e) => isRecord(e) && e['isDeleted'] !== true)) return { ok: false, why: 'empty' };
   if (list.length > KIT_LIMITS.boardElements) return { ok: false, why: 'large' };
   const ids = new Set<string>();
+  const kept: Array<Record<string, unknown>> = [];
   for (const e of list) {
-    if (!isRecord(e) || typeof e['id'] !== 'string' || !e['id'] || typeof e['type'] !== 'string' || ids.has(e['id'])) return { ok: false, why: 'unreadable' };
-    ids.add(e['id']);
+    const el = boardElement(e);
+    if (el === null) return { ok: false, why: 'unreadable' };
+    if (el === 'kind') return { ok: false, why: 'kind' };
+    const id = el['id'] as string;
+    if (ids.has(id)) return { ok: false, why: 'unreadable' };
+    ids.add(id);
+    kept.push(el);
   }
-  const elements = (list as Array<Record<string, unknown>>).filter((e) => e['isDeleted'] !== true).map((e) => structuredClone(e));
+  const elements = kept.filter((e) => e['isDeleted'] !== true);
   if (Buffer.byteLength(JSON.stringify(elements), 'utf8') > KIT_LIMITS.boardBytes) return { ok: false, why: 'large' };
   return { ok: true, board: { name, elements } };
 }
@@ -273,6 +281,7 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
           name: `Question ${n}'s board needs a short name, up to ${KIT_LIMITS.boardName} characters.`,
           empty: `Question ${n}'s board is empty; draw something on it or remove it.`,
           large: `Question ${n}'s board is too big for a starting board; keep it under ${KIT_LIMITS.boardElements} shapes.`,
+          kind: `Question ${n}'s board has an embedded page, an image or another shape a starting board cannot keep; remove it.`,
         }[checked.why]);
       } else out.board = checked.board;
     }
