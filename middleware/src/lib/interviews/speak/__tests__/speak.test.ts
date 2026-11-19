@@ -76,6 +76,8 @@ describe('the candidate\'s requests (decision 10)', () => {
     expect(candidateRequestOf('Milo, can you say that again?')).toBe('repeat');
     expect(candidateRequestOf('Milo, how much time is left?')).toBe('time');
     expect(candidateRequestOf('Milo, how long do I have?')).toBe('time');
+    for (const t of ['how are we on time', 'Milo, how are we doing on time?', 'time check', 'Milo, time check please', 'how much time do we have', 'how much time is left']) expect(candidateRequestOf(t)).toBe('time');
+    for (const t of ['could you repeat the question', 'can you say that again', 'Oh, so sorry, Milo, I was focusing. Could you repeat the question?', 'sorry, what was the question']) expect(candidateRequestOf(t)).toBe('repeat');
     expect(candidateRequestOf('Milo, give me a hint')).toBe('other');
     expect(candidateRequestOf('Milo, what is the time complexity of a heap?')).toBe('other');
   });

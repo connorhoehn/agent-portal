@@ -38,11 +38,11 @@ export type CandidateRequest = 'repeat' | 'time' | 'other';
 // The two requests are read from the WHOLE utterance (decision 10): a short request with at most a greeting, Milo's name, a
 // "can you" and a "please" around it. A sentence that merely contains "repeat" or "how much … left" (the candidate thinking
 // aloud, a hint asked as "repeat the answer", "how much time complexity …") is anything else, and gets the fixed sentence.
-const LEAD = String.raw`(?:(?:um|uh|sorry|so|ok|okay|hey|hi|and|but)\s+)*(?:(?:hey\s+)?milo\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?`;
+const LEAD = String.raw`(?:(?:um|uh|oh|sorry|so|ok|okay|hey|hi|and|but)\s+)*(?:(?:hey\s+)?milo\s+)?(?:i\s+was\s+(?:focusing|distracted|zoning\s+out|not\s+listening)\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?`;
 const TAIL = String.raw`(?:\s+(?:for\s+me|please|milo|again|thanks|thank\s+you))*`;
 const IN_ROUND = String.raw`(?:\s+(?:in|for)\s+(?:this|the)\s+(?:round|interview))?`;
 const REPEAT_CORE = String.raw`(?:repeat(?:\s+(?:the\s+(?:last\s+)?question|that|it))?|say\s+(?:that|it|the\s+question)\s+again|what\s+(?:was|is)\s+the\s+question|ask\s+(?:that|it|the\s+question)\s+again)`;
-const TIME_CORE = String.raw`(?:how\s+much\s+time\s+(?:is\s+|do\s+(?:i|we)\s+have\s+|have\s+(?:i|we)\s+got\s+)?(?:left|remaining)|how\s+much\s+time\s+do\s+(?:i|we)\s+have|how\s+long\s+(?:do|have)\s+(?:i|we)\s+(?:have|got)(?:\s+left)?|(?:time|minutes?)\s+(?:is\s+|are\s+)?(?:left|remaining))`;
+const TIME_CORE = String.raw`(?:how\s+are\s+we\s+(?:doing\s+)?(?:on|for)\s+time|time\s+check|how\s+much\s+time\s+(?:is\s+|do\s+(?:i|we)\s+have\s+|have\s+(?:i|we)\s+got\s+)?(?:left|remaining)|how\s+much\s+time\s+do\s+(?:i|we)\s+have|how\s+long\s+(?:do|have)\s+(?:i|we)\s+(?:have|got)(?:\s+left)?|(?:time|minutes?)\s+(?:is\s+|are\s+)?(?:left|remaining))`;
 const REPEAT = new RegExp(`^${LEAD}${REPEAT_CORE}${TAIL}$`);
 const TIME = new RegExp(`^${LEAD}${TIME_CORE}${IN_ROUND}${TAIL}$`);
 
