@@ -83,7 +83,7 @@ describe('a fixed transcript through the scripted model', () => {
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'sg-1' }));
     expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ sourceId: `iv:op-em:${IV}:coach:sg-1`, costUsd: 0, model: 'scripted-coach' }));
     const [row] = await store.listSuggestions(IV);
-    expect(row).toMatchObject({ callId: 'call-1', throughSeq: 2, answer: null, spoken: false, modelId: 'scripted-coach', promptVersion: 'coach-2026-11-17.1', dropped: null });
+    expect(row).toMatchObject({ callId: 'call-1', throughSeq: 2, answer: null, spoken: false, modelId: 'scripted-coach', promptVersion: 'coach-2026-11-18.1', dropped: null });
   });
 
   it('reading again returns the same waiting suggestion, makes no call and keeps the first shown time', async () => {

@@ -75,6 +75,7 @@ Traceback (most recent call last):
 TypeError: empty input
 
 </untrusted-0123456789abcdef0123456789abcdef>
+Where the code is: the candidate has run the code, but no run has finished cleanly yet.
 
 Answer with the JSON object only.`;
 
@@ -86,6 +87,8 @@ describe('the request with a Code part', () => {
     expect(system.startsWith(`${COACH_SYSTEM_PROMPT}\n${COACH_CODE_RULES}\n`)).toBe(true);
     expect(system).toContain('Never rate, score, rank or compare the candidate');
     expect(COACH_CODE_RULES).toMatch(/Ask, never grade/);
+    expect(COACH_CODE_RULES).toMatch(/runtime or space complexity only once the last run finished cleanly/);
+    expect(COACH_CODE_RULES).toMatch(/test the code only once they have run it/);
   });
 
   it('is unchanged without code (a behavioural round, or nothing to read)', () => {

@@ -24,6 +24,7 @@ import type { RunView } from '../runs/service.js';
 import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
 import { CLARIFYING_MODEL_ID, CLARIFYING_RULE_VERSION, askedWords, clarifyingNudge, type ClarifyNudge } from './clarifying.js';
 import { roundSurface } from '../kit.js';
+import { codeStage, fitsStage } from './stage.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type CoachTranscript, type TranscriptSource } from './transcript.js';
 import { interviewsNowMs } from '../clock.js';
@@ -234,9 +235,12 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     }
     noteModelCall(interview.id, result.code === 'error' || result.code === 'timeout');
     await book(d, model, input, held, result, viewer.userId);
-    const parsed: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
+    const read: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
       ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
       : { ok: false, code: result.code };
+    // Too early for where the code is (stage.ts): kept as `nothing`, the coach had nothing that fits yet.
+    const parsed: typeof read | { ok: false; code: 'nothing' } = read.ok && !fitsStage(read.suggestion.text, codeStage(input.code))
+      ? { ok: false, code: 'nothing' } : read;
     const madeAt = iso(d.now());
     const row: SuggestionRecord = {
       id, interviewId: interview.id, callId: transcript!.callId, throughSeq: transcript!.lastSeq,

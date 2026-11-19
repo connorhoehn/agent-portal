@@ -32,7 +32,7 @@ describe('the coach request', () => {
   it('is pinned as text for a fixed input', () => {
     const body = buildCoachRequest('amazon.nova-pro-v1:0', FIXED_INPUT, new Fence({ token: FENCE_TOKEN }));
     expect(JSON.stringify(body, null, 2)).toBe(PINNED);
-    expect(COACH_PROMPT_VERSION).toBe('coach-2026-11-17.1');
+    expect(COACH_PROMPT_VERSION).toBe('coach-2026-11-18.1');
   });
 
   it('carries text only: no names, times, audio, video or tone fields reach the model', () => {

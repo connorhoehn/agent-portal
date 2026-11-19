@@ -12,6 +12,7 @@ import { converseOnce, refusedBeforeRunning, type ConverseSend } from '../bedroc
 import { liveForced } from '../../meeting-assistant/live-flag.js';
 import { mockTranscriptEnabled } from '../../meeting-assistant/transcript-source.js';
 import { buildCoachRequest, coachUserText, COACH_SYSTEM_PROMPT, MAX_BASED_ON_CHARS, type CoachInput } from './prompt.js';
+import { codeStage, fitsStage } from './stage.js';
 
 /** Nova Pro: the coach's words reach a person judging another person, so it gets the stronger of the two text models. */
 export const DEFAULT_COACH_MODEL_ID = 'amazon.nova-pro-v1:0';
@@ -78,6 +79,8 @@ export class BedrockCoachModel implements CoachModel {
 //      questions asked), with its first bank question neither suggested nor asked;
 //   4. the first remaining follow-up of an asked or suggested question;
 //   5. nothing left: no answer (`nothing`).
+// In a technical round no step offers a question about complexity before working code, or about testing before a run
+// (stage.ts `fitsStage`).
 // Steps 2 to 4 are not keyed to a line and quote none. A question counts as asked when a panel line holds its opening
 // words (its first six), or when one panel line holds at least half of its content words.
 
@@ -120,7 +123,9 @@ export function scriptedSuggestion(input: CoachInput): { text: string; competenc
     return want.size >= 2 && panelWords.some((p) => overlap(want, p) * 2 >= want.size);
   };
   const suggested = new Set(input.previous.map((p) => p.text.replace(/\s+/g, ' ').trim()));
-  const fresh = (text: string) => !suggested.has(text) && !asked(text);
+  // In a technical round, nothing about complexity before working code and nothing about testing before a run (stage.ts).
+  const stage = codeStage(input.code);
+  const fresh = (text: string) => !suggested.has(text) && !asked(text) && fitsStage(text, stage);
   const chosen = input.chosenQuestionIds;
   const bank = [...input.questions].sort((a, b) => {
     const ia = chosen.indexOf(a.id); const ib = chosen.indexOf(b.id);
