@@ -463,10 +463,12 @@ function RatingStars({ rating, anchor }: { rating: number; anchor?: string | nul
   );
 }
 
-/** Milo's evidence for one competency: each row is the quote and its line; a row expands only when there is more to read. */
+/** Milo's evidence for one competency, closed until opened: each row is the quote and its line; a row expands only when there is more to read. */
 function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
   if (claims.length === 0) return <T size="sm" tone="tertiary">Nothing was said about this</T>;
   return (
+    <Disclosure density="compact" data-testid="interviews-recap-evidence"
+      summary={<T size="xs" tone="secondary">{`Milo's evidence (${claims.length} ${claims.length === 1 ? 'quote' : 'quotes'})`}</T>}>
     <Stack gap="xs">
       {claims.map((c) => {
         const row = evidenceRow(c);
@@ -488,6 +490,7 @@ function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
         );
       })}
     </Stack>
+    </Disclosure>
   );
 }
 
