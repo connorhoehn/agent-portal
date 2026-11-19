@@ -750,6 +750,18 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   fit-on-open holds while following. A mirror shows the candidate's top-left on a smaller canvas, so each canvas publishes
   its size beside its camera and a `contain` follow is queued for the library (`docs/ui-components-queue.md`). The "added to
   the board" notice clears itself after 4 s.
+
+- Architecture kit (19 November 2026), a third starting board, and the one "Design Twitter" (`q-be-twitter`) opens on: the
+  prompt card across the top; a Notes frame on the left with headed placeholders the candidate fills while talking (Clarifying
+  questions, Functional, Non-functional, Components with one line each on what and why, Deep dive); a Components frame with a
+  palette of twelve yellow, hand-drawn shapes, each one group with its label (Web client, Mobile client, CDN, Load balancer, App
+  servers, Auth, Cache, Message queue, Workers, Database primary and replica, and an arrow carrying Excalidraw's own label), so
+  a click selects the whole component and Alt-drag or Cmd/Ctrl+D copies it; and a large empty Design frame for the diagram. The
+  shapes are our own, drawn from the board's primitives per component (`ARCHITECTURE_COMPONENTS`, `architectureBoard(prompt,
+  { components })` so another question can pick a subset). 83 elements, about 45 KB, 1280 x 960 so a room pane fits it at half
+  scale with legible labels. The kit editor's "Add a starting board" now offers Empty, Blueprint, Prompt only and Architecture
+  kit; the server builds the template around the question's title (`GET /board-templates`, recruiters). Known: when the room
+  fits the board, the prompt card sits under Excalidraw's tool island (the fit, not the template).
 - Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
 ## Call chat unread (19 November 2026)
