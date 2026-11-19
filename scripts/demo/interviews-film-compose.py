@@ -17,8 +17,11 @@
 """
 import argparse
 import base64
+import datetime
+import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import wave
@@ -239,6 +242,59 @@ def assistant_voice(out):
     return res
 
 
+# Milo's introduction as the product will say it (screenplay v1.3); the stand-in says it even while the branch has the old text.
+INTRO_TEXT = "Hi, I'm Milo. I won't write your algorithm or anything like that, but use me if you want to speed things up or have a question."
+
+
+def standin_voice(out, tl, utts):
+    """SCRIPTED rehearsals only: each of Milo's utterances (the scripted session's tones) is replaced by its words, said by a third
+    TTS preset (interviews-film-standin.py), at the utterance's own start. The words are Milo's posts (timeline `miloSaid`), paired
+    with the utterances in order. A real take never comes here: its timeline has no `scripted` flag, and Milo's real voice is used."""
+    said = tl.get('miloSaid') or []
+    py = os.environ.get('IVFILM_TTS_PYTHON')
+    if not said or not py:
+        print("  stand-in: skipped (no miloSaid in the timeline or IVFILM_TTS_PYTHON unset); Milo's tones are kept")
+        return utts
+    # Each utterance takes the nearest post in time (within 8 s; a post can land before or after its voice); a post with no
+    # utterance near it (the join notice, said by nobody) is left out, and an utterance with no post keeps its tones.
+    posts = []
+    for s in said:
+        try:
+            at = datetime.datetime.fromisoformat(str(s.get('at')).replace('Z', '+00:00')).timestamp() * 1000
+        except ValueError:
+            continue
+        posts.append({'text': s['text'], 'at': at})
+    used, lines = set(), []
+    for u in utts:
+        near = [(abs(p['at'] - u['atMs']), k) for k, p in enumerate(posts) if k not in used and abs(p['at'] - u['atMs']) < 8000]
+        if not near:
+            lines.append(None)
+            continue
+        k = min(near)[1]
+        used.add(k)
+        text = posts[k]['text']
+        if re.match(r"^\s*(hi|hello)[,!.]?\s+i'?m milo\b", text, re.I):
+            text = INTRO_TEXT
+        lines.append({'key': hashlib.sha1(f'standin|{text}'.encode()).hexdigest()[:16], 'text': text})
+    cache = os.environ.get('IVFILM_STANDIN_CACHE') or os.path.join(out, 'standin')
+    spec = os.path.join(out, 'compose-standin.json')
+    json.dump([l for l in lines if l], open(spec, 'w'), indent=1)
+    if subprocess.run([py, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'interviews-film-standin.py'), spec, cache]).returncode != 0:
+        print("  stand-in: the TTS run failed; Milo's tones are kept")
+        return utts
+    res = []
+    for i, u in enumerate(utts):
+        if lines[i]:
+            p = os.path.join(cache, f"{lines[i]['key']}.wav")
+            with wave.open(p) as w:
+                secs = w.getnframes() / w.getframerate()
+            res.append({'who': 'milo', 'file': p, 'atMs': u['atMs'], 'secs': secs, 'text': lines[i]['text']})
+            print(f"  stand-in {i + 1}: {secs:.1f} s (tones {u['secs']:.1f} s) {lines[i]['text'][:60]}")
+        else:
+            res.append(u)
+    return res
+
+
 def compose(out, final):
     tl = json.load(open(os.path.join(out, 'timeline.json')))
     t0, t1 = tl['film']['fromMs'], tl['film']['toMs']
@@ -285,7 +341,10 @@ def compose(out, final):
         fil.append(f"[{last}][{idx}:v]overlay=0:{HEAD + CELL_H}:enable='between(t,{a:.2f},{b:.2f})'[c{k}]")
         last = f'c{k}'
     # sound
-    clips = [{'file': os.path.join(out, s['file']), 'atMs': s['atMs'], 'secs': s['durMs'] / 1000} for s in tl.get('speech', []) if s.get('file')] + assistant_voice(out)
+    milo = assistant_voice(out)
+    if tl['film'].get('scripted'):
+        milo = standin_voice(out, tl, milo)
+    clips = [{'file': os.path.join(out, s['file']), 'atMs': s['atMs'], 'secs': s['durMs'] / 1000} for s in tl.get('speech', []) if s.get('file')] + milo
     clips = [c for c in clips if t0 - 2000 <= c['atMs'] <= t1]
     amix = []
     for i, c in enumerate(clips):

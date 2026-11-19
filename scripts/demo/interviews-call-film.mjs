@@ -81,7 +81,6 @@ const MAX_MINUTES = Number(flag('--max-minutes') ?? 12);
 const IV = 'iv-k1p5w8ra';
 const HUGO = 'u-hugo';
 const GRETA = 'u-greta';
-const TIME_LINE = /(minutes? (are|is) left|minutes long|end of its time)/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film: set ${k} (see the header)`); process.exit(2); } return v; };
 
@@ -267,8 +266,10 @@ async function person(key, userId) {
 }
 /** Plays a line into its speaker's microphone; resolves when the clip ends. */
 const busy = { until: 0 };
-async function say(p, id, gapMs = 1800) {
-  const wait = busy.until + gapMs - Date.now();
+// v1.2: no pause over 0.6 s between two people's lines unless a screen action needs it (that action is awaited before say()).
+const GAP_MAX_MS = 400;
+async function say(p, id, gapMs = 1800, { heard } = {}) {
+  const wait = busy.until + Math.min(gapMs, GAP_MAX_MS) - Date.now();
   if (wait > 0) await sleep(wait);
   const c = CLIPS[id] ?? (LINES[id] ? { who: LINES[id][0], text: LINES[id][1], file: null, durMs: 900 + 62 * LINES[id][1].length } : null);
   if (!c) throw new Error(`no line ${id}`);
@@ -279,7 +280,7 @@ async function say(p, id, gapMs = 1800) {
   if (!c.file) await sleep(c.durMs); // a rehearsal without this take: its estimated length
   else await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`).catch((e) => note(`line ${id} did not play: ${String(e).slice(0, 120)}`));
   busy.until = Date.now();
-  await heardByScript(p, c.text);
+  if (heard !== false) await heardByScript(p, heard ?? c.text);
 }
 /**
  * --scripted: the scripted session hears no audio, so the line is handed to it as heard text when its clip ends (the dev
@@ -321,9 +322,10 @@ function keepMiloVoice(page) {
 }
 /** Waits until Milo has said something new (an utterance after `n`) and finished it. → true when he did. */
 async function miloSays(n, ms) {
-  const heard = await until(async () => milo.utterances > n, ms, 300);
+  // Short polls: the next line follows Milo's voice within the gap, not a poll later.
+  const heard = await until(async () => milo.utterances > n, ms, 100);
   if (!heard) return false;
-  await until(async () => Date.now() > busy.until + 300, 60_000, 300);
+  await until(async () => Date.now() > busy.until + 120, 60_000, 60);
   return true;
 }
 
@@ -418,11 +420,12 @@ async function moveSeenAfterReturn(page) {
   await page.keyboard.press('Shift+Home'); await page.keyboard.press('Shift+Home');
   await page.keyboard.press('Backspace');
   await page.keyboard.press('Backspace');
-  await sleep(500);
+  await sleep(200);
   const now = await padLines(page);
   await caretToLine(page, now.findIndex((l) => l.trimStart().startsWith('return [seen')));
   await page.keyboard.press('End');
-  await typeLine(page, MOVED_LINE);
+  await page.keyboard.press('Enter'); await page.keyboard.press('Shift+Home');
+  await page.keyboard.type(MOVED_LINE, { delay: 40 });
 }
 /** Types `text` on its own line just above `def two_sum` (the pad scrolled to the top first, so that line is drawn). */
 async function typeAboveDef(page, text) {
@@ -437,9 +440,11 @@ async function typeAboveDef(page, text) {
   await page.keyboard.press('Enter');
 }
 /** Run from the candidate's side; both output panes read, and the product's own run containers counted (docker events, bounded). */
-async function runAndRead(cp, hp, want) {
+async function runAndRead(cp, hp, want, lineId = null) {
   const since = Math.floor(Date.now() / 1000) - 1;
   const [was, wasLead] = [await outputText(cp), await outputText(hp)];
+  // Say, then do: the click lands as the line that announces the run ends (the glide and rest take about 1.1 s).
+  if (lineId) await nearEnd(lineId, 1100);
   await press(cp, cp.getByTestId('interview-pad-run'));
   // This run's output only: the pane still shows the last run's until the new one lands.
   const candOut = await until(async () => { const t = await outputText(cp); return t !== was && want.test(t) && /Finished/i.test(t) ? t : null; }, 60_000);
@@ -535,11 +540,11 @@ async function glide(page, locator, { pause = 450, ms = 700 } = {}) {
   return true;
 }
 /** The cursor travels to the control and rests on it, then it is pressed. */
-async function press(page, locator, { pause = 450, timeout = 30_000 } = {}) {
+async function press(page, locator, { pause = 450, timeout = 30_000, ms = 700 } = {}) {
   const t0 = Date.now();
   await locator.waitFor({ timeout });
   const t1 = Date.now();
-  await glide(page, locator, { pause });
+  await glide(page, locator, { pause, ms });
   const t2 = Date.now();
   await locator.click({ timeout });
   const t3 = Date.now();
@@ -644,19 +649,18 @@ try {
   const cp = cand.page;
   await cp.goto(`${PORTAL}${link}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   const firstStep = await Promise.any(['join-interview', 'join-consents'].map((id) => cp.getByTestId(id).first().waitFor({ timeout: 30_000 }).then(() => id))).catch(() => null);
+  // v1.2 trim 1: the cut also takes the invite's first page (no line on it), so the setup on screen starts at the three choices.
+  if (firstStep === 'join-interview') await cp.getByTestId('join-continue').first().click({ timeout: 10_000 });
+  await cp.getByTestId('join-consents').waitFor({ timeout: 30_000 });
   await cp.waitForTimeout(250);
   cutLink();
   scene(2, 'The candidate\'s door: no account, three plain choices.', '');
-  if (firstStep === 'join-interview') {
-    const invite = say(cand, 'p00', 0);
-    await glide(cp, cp.getByTestId('join-interview').first(), { pause: 600 });
-    await invite;
-    await press(cp, cp.getByTestId('join-continue').first());
-  }
-  await cp.getByTestId('join-consents').waitFor({ timeout: 30_000 });
   const radiosChecked = () => cp.evaluate(() => [...document.querySelectorAll('[data-testid="join-questions"] input[type="radio"]')].filter((r) => r.checked).length).catch(() => -1);
   const fresh = await radiosChecked();
-  const reading = say(cand, 'p01', 300);
+  const invite = say(cand, 'p00', 0);
+  await glide(cp, cp.getByTestId('join-consents').first(), { pause: 300 });
+  await invite;
+  const reading = say(cand, 'p01', 150);
   await scrollThrough(cp, cp.getByTestId('join-notice').first(), Math.max(1500, (CLIPS.p01?.durMs ?? 4400) - 2600));
   // The three choices, empty, held on screen through the end of the line before the first one is read.
   await glide(cp, cp.getByTestId('join-questions').first(), { pause: 300 });
@@ -669,7 +673,7 @@ try {
     await read;
   }
   step('2a nothing pre-selected', fresh === 0 && (await radiosChecked()) === 3, `radios checked when the questions first showed: ${fresh}; after the candidate's three answers: ${await radiosChecked()}`);
-  await press(cp, cp.getByTestId('join-consents-continue'), { pause: 250 });
+  await press(cp, cp.getByTestId('join-consents-continue'), { pause: 100 });
   const devices = say(cand, 'p05', 0);
   await cp.getByTestId('join-devices').waitFor({ timeout: 30_000 });
   await glide(cp, cp.getByTestId('join-devices').first(), { pause: 300 });
@@ -677,9 +681,10 @@ try {
   await press(cp, cp.getByTestId('join-devices-continue'), { pause: 200 });
   await devices;
   const admit = hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first();
-  await say(cand, 'p06', 200);
+  const waiting = say(cand, 'p06', 200);
   await admit.waitFor({ timeout: 30_000 });
-  const bringIn = say(lead, 'h01', 200);
+  await waiting;
+  const bringIn = say(lead, 'h01', 150);
   await glide(hp, admit, { pause: 200 });
   // He admits him as he says "let me bring him in": the call connects under the end of the line.
   await nearEnd('h01', 2000);
@@ -692,10 +697,14 @@ try {
   for (let i = 0; i < 40 && await join.isDisabled(); i++) await sleep(250);
   await press(cp, join, { pause: 150 });
   const now = cp.getByRole('button', { name: 'Join now', exact: true });
-  if (await now.first().waitFor({ timeout: 700 }).then(() => true, () => false)) await press(cp, now.first(), { pause: 150 });
-  await cp.getByTestId('join-room-time-left').first().waitFor({ timeout: 30_000 });
+  if (await now.first().waitFor({ timeout: 300 }).then(() => true, () => false)) await press(cp, now.first(), { pause: 150 });
   const cams = async (pg) => pg.evaluate(() => [...document.querySelectorAll('video')].filter((v) => v.videoWidth > 0 && v.readyState >= 2).length).catch(() => 0);
-  const tiles = await until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 250);
+  const tilesP = until(async () => ((await cams(hp)) >= 2 && (await cams(cp)) >= 2 ? true : null), 30_000, 150);
+  // Hugo greets him as the call connects (the tiles come up under the greeting), not after a silent wait for both cameras.
+  await Promise.race([tilesP, sleep(900)]);
+  const greeting = (async () => { await say(lead, 'h02', 0); await say(cand, 'c01', 300); })();
+  await cp.getByTestId('join-room-time-left').first().waitFor({ timeout: 30_000 });
+  const tiles = await tilesP;
   mark('camera tiles');
   step('2 both in the call with cameras', !!tiles, `live camera tiles: lead ${await cams(hp)}, candidate ${await cams(cp)}`);
   // From here until the lead ends the interview, the call must hold (the room's own lost-call notice on either side fails it).
@@ -722,7 +731,6 @@ try {
     if (typeof body.listeningSeconds === 'number') booked.listeningSeconds = body.listeningSeconds;
     return body;
   };
-  const greeting = (async () => { await say(lead, 'h02', 300); await say(cand, 'c01', 700); })();
   await warmMic(cp);
   for (const pg of [hp, cp]) await letSound(pg);
   const miloReady = (async () => {
@@ -750,7 +758,7 @@ try {
   const intro = A ? await miloSays(nIntro, 15_000) : false;
   if (A) step('3i Milo introduces itself aloud', intro, `Milo spoke=${intro} ${intro ? `${((milo.lastStartMs - introAt) / 1000).toFixed(1)} s after Hugo finished` : ''}`);
   await say(cand, 'c02', 500);
-  await say(lead, 'h04', 600); await say(cand, 'c03', 600);
+  // v1.2 trim 2: no "how's your week" exchange; the check that Milo hears the call runs under Hugo's next line.
   if (A) {
     const heard = await until(async () => { const l = (await (await lead.api.get(A('transcript?limit=50'))).json()).lines ?? []; return l.length ? l : null; }, 15_000, 1500);
     if (!heard) { note('Milo heard nothing; dismissed to stop the spend'); await lead.api.post(A('dismiss'), { data: {} }); await miloState().catch(() => undefined); A = null; }
@@ -769,8 +777,8 @@ try {
   await say(lead, 'h07', 600);
   const s1 = await s1p;
   const sync = await padReady;
-  await say(lead, 'h08', 500);
-  await say(cand, 'c05', 500);
+  // v1.3: h07 asks about Java itself (Hugo no longer reads the problem aloud); Mateo answers straight away.
+  await say(cand, 'c05', 300);
   const python = chooseLanguage(cp, 'Python').catch((e) => note(`language Python: ${String(e).slice(0, 100)}`));
   const h09 = say(lead, 'h09', 400);
   await python;
@@ -807,14 +815,16 @@ try {
   await typeAtEnd(cp, SECOND_CASE);
   await caseLine;
   const firstRunAt = Date.now();
-  const r1 = runAndRead(cp, hp, /\[0, 0\]/);
+  const r1 = runAndRead(cp, hp, /\[0, 0\]/, 'c11');
   await say(cand, 'c11', 300);
   await say(lead, 'h11', 400);
   const run1 = await r1;
-  const fix = (async () => { await sleep(4200); await moveSeenAfterReturn(cp); })();
-  await say(cand, 'c12', 600);
+  // Say, then do (rule 9): the pad is untouched while he explains the bug; the edit is typed under "Let me swap those two
+  // lines", the last two seconds of the clip, and lands as the line ends.
+  const fix = (async () => { await nearEnd('c12', 2100); await moveSeenAfterReturn(cp); })();
+  await say(cand, 'c12', 400);
   await fix;
-  const r2 = runAndRead(cp, hp, /\[0, 1\]\s*\[0, 1\]/);
+  const r2 = runAndRead(cp, hp, /\[0, 1\]\s*\[0, 1\]/, 'c13');
   await say(cand, 'c13', 300);
   await say(lead, 'h12', 300);
   const run2 = await r2;
@@ -833,8 +843,7 @@ try {
   await say(cand, 'c18', 500);
   await say(lead, 'h15', 500);
   await say(cand, 'c19', 500);
-  await say(lead, 'h16', 500);
-  await say(cand, 'c20', 500);
+  // v1.2 trim 3: no "day job" exchange; the sorted-array answer alone covers the suggestion arriving (a late one is noted).
   let testing = { deck: '', spoken: false, receipt: false, candQ: '', voiceAfterS: null, receiptText: '' }; let repeated = false; let repeatLine = '';
   if (A) {
     const waitFrom = Date.now();
@@ -857,9 +866,10 @@ try {
       testing.receipt = testing.receiptText === 'Milo asked it aloud';
       testing.candQ = squash(await until(async () => (await cp.getByTestId('guest-milo-question').first().innerText().catch(() => '')).trim() || null, 20_000) ?? '');
       const p1 = (await miloPosts()).length;
-      await say(cand, 'c33', 500);
       const n1 = milo.utterances;
-      await say(cand, 'c22', 200);
+      // v1.1: one line. The fast path matches "... repeat the question?" only from the start of a request (milo-tools toolOfPhrase),
+      // so the scripted session is handed the phrase it matches today; the Milo lane widens the phrases for the real take.
+      await say(cand, 'c36', 300, { heard: 'Milo, could you repeat the question?' });
       repeated = await miloSays(n1, 25_000);
       repeatLine = (await miloPosts()).slice(p1).find((t) => /test this function/i.test(t)) ?? '';
     }
@@ -884,7 +894,10 @@ try {
   const casePosts0 = A ? (await miloPosts()).length : 0;
   await say(cand, 'c34', 400);
   const nCases = milo.utterances;
-  await say(cand, 'c15', 200);
+  // --scripted: the stand-in serves the request in the same moment and never says "On it." (scripted-session.ts emitToolCall raises
+  // the delegation and the call together). To rehearse the real shape (request, cover lines while the slow tool works, the block,
+  // "Added ..."), the request reaches the stand-in only after the cover lines.
+  await say(cand, 'c15', 200, SCRIPTED ? { heard: false } : {});
   const askedAt = Date.now();
   const scrolled = padToEnd(cp, 1500);
   let caseCount = null;
@@ -895,8 +908,13 @@ try {
   };
   const filledAt = A ? scrolled.then(() => until(async () => ((await hasBlock()) ? Date.now() : null), 45_000, 400)) : Promise.resolve(null);
   const saidSince = async (re) => (await miloPosts()).slice(casePosts0).some((t) => re.test(t));
-  const onIt = A ? !!(await until(async () => (await saidSince(/^On it\b/i)) || null, 4000, 300)) : false;
+  const onIt = A && !SCRIPTED ? !!(await until(async () => (await saidSince(/^On it\b/i)) || null, 4000, 300)) : false;
   if (onIt) { await until(async () => Date.now() > busy.until + 200, 10_000, 200); await say(lead, 'h26', 300); await say(cand, 'c28', 400); }
+  if (A && SCRIPTED) {
+    await say(lead, 'h26', 300); await say(cand, 'c28', 300);
+    await heardByScript(cand, LINES.c15[1]);
+    note('scripted: the test-case request was handed to the stand-in after the cover lines (no "On it." from the stand-in)');
+  }
   // He speaks as soon as Milo's "Added ..." has been said (its voice, not its chat post, which lands later).
   if (A) await miloSays(nCases + (onIt ? 1 : 0), 45_000);
   const filled = await filledAt;
@@ -905,7 +923,7 @@ try {
   const step7t = async () => { const casesSaid = await casesSaidP; if (A) step('7t Milo fills the pad with twelve test cases', !!filled && caseCount === '12', `the block in the pad=${!!filled} (${caseCount ?? 0} cases)${filled ? ` ${((filled - askedAt) / 1000).toFixed(1)} s after the request` : ''}; "On it." posted=${onIt}; "Added ... test cases" posted=${casesSaid}`); };
   if (!filled) await step7t();
   if (filled) {
-    const r3 = runAndRead(cp, hp, /\bok\b/);
+    const r3 = runAndRead(cp, hp, /\bok\b/, 'c16');
     await say(cand, 'c16', 300);
     await step7t();
     await say(lead, 'h13', 400);
@@ -933,50 +951,57 @@ try {
   await wrapLine;
   await say(lead, 'h35', 500);
 
-  // Act 8. Time check and goodbye.
-  await say(lead, 'h36', 700);
-  const nT = milo.utterances;
-  const posts0 = A ? (await miloPosts()).length : 0;
-  await say(lead, 'h37', 250);
-  const timeSpoken = A ? await miloSays(nT, 30_000) : false;
-  const timeLine = A ? (await until(async () => (await miloPosts()).slice(posts0).find((t) => TIME_LINE.test(t)) ?? null, 8000, 800) ?? '') : '';
-  if (A) step('5 how much time is left (Hugo asks)', timeSpoken && !!timeLine, `Milo spoke=${timeSpoken}; Milo's post "${timeLine.slice(0, 100)}"`);
-  await say(lead, 'h38', 400);
-  await say(cand, 'c24', 500); await say(lead, 'h21', 500); await say(cand, 'c25', 500);
-  const bye = say(lead, 'h22', 500);
+  // Act 8. Goodbye (v1.2: no time check in the film).
+  await say(lead, 'h39', 400);
+  await say(cand, 'c24', 400); await say(lead, 'h21', 400); await say(cand, 'c25', 400);
+  const bye = say(lead, 'h22', 400);
   await nearEnd('h22', 1300);
   if (A) await miloState().catch((e) => note(`Milo's state at the end: ${String(e).slice(0, 120)}`));
+  // --scripted: Milo's words, for the compose step's spoken stand-in (its tones replaced by a third TTS voice; never a real take).
+  if (A && SCRIPTED) {
+    timeline.film.scripted = true;
+    const r = await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`).catch(() => null);
+    const msgs = r && r.ok() ? ((await r.json().catch(() => ({}))).messages ?? []) : [];
+    timeline.miloSaid = msgs.filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant'))
+      .map((m) => ({ text: squash(m.message ?? m.text ?? ''), at: m.timestamp ?? m.createdAt ?? m.sentAt ?? null })).filter((m) => m.text);
+  }
   clearInterval(watchDeck);
 
-  // Act 9. After the call: the ended page, the scorecard, the recap.
-  await press(hp, hp.getByTestId('interview-end'), { pause: 250 });
+  // Act 9. After the call. End and its confirmation land as "have a great rest of your day" ends; Mateo's ended page is on screen
+  // and held about a second (v1.4) before Hugo's one line (v1.2), which covers the ratings and the recap opening.
+  await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
+  await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { timeout: 10_000, pause: 150 });
+  const endedAt = Date.now();
   await bye;
   clearInterval(watchLost);
   const at = (t) => (t === null ? 'never' : `${Math.round((t - timeline.film.fromMs) / 1000)} s into the film`);
   step('C the call held', lostSeen.lead === null && lostSeen.cand === null, `the lead's room said the call dropped: ${at(lostSeen.lead)}; the candidate's page: ${at(lostSeen.cand)}`);
-  const scoring = say(lead, 'h28', 300);
-  await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { timeout: 10_000, pause: 200 });
-  const endedAt = Date.now();
   const candEnded = await cp.getByTestId('join-ended').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+  const endedSeenAt = Date.now();
+  mark('candidate ended page');
+  await sleep(1000);
+  const endedStill = await cp.getByTestId('join-ended').first().isVisible().catch(() => false);
+  const closingAt = Date.now();
+  const sourced = say(lead, 'h29', 0);
+  step('V the candidate\'s ended page shows before the closing line', candEnded && endedStill && endedSeenAt < closingAt,
+    `ended page seen ${((endedSeenAt - endedAt) / 1000).toFixed(1)} s after End, held ${((closingAt - endedSeenAt) / 1000).toFixed(1)} s before Hugo's line; still on screen=${endedStill}`);
   await hp.waitForURL(new RegExp(`/interviews/rounds/${IV}/scorecard$`), { timeout: 20_000 }).catch(() => undefined);
   const onScorecard = /\/scorecard$/.test(new URL(hp.url()).pathname);
   if (!onScorecard) await hp.goto(`${PORTAL}/interviews/rounds/${IV}/scorecard`, { waitUntil: 'domcontentloaded' });
   await hp.getByTestId('interviews-scorecard-form').first().waitFor({ timeout: 30_000 });
   scene(9, 'Hugo scores; Milo only supplies evidence.', '');
   const scorecardText = squash(await hp.getByTestId('interviews-scorecard-form').first().innerText().catch(() => ''));
-  // He rates each competency with the cursor; the recap line starts as he rates the last one and covers the recap opening.
+  // He rates each competency with the cursor (a brisker glide than elsewhere), then opens the recap, all under his line.
   const groups = hp.locator('[data-ui-control="rating"]');
   await groups.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
   const nGroups = await groups.count();
-  let rated = 0; let sourced = null;
+  let rated = 0;
   for (let i = 0; i < nGroups; i += 1) {
-    if (i === nGroups - 1) { await scoring; sourced = say(lead, 'h29', 200); }
-    await press(hp, groups.nth(i).getByRole('radio', { name: /^3 / }).first(), { pause: 150, timeout: 5000 }).then(() => { rated += 1; }, (e) => note(`rating ${i}: ${String(e).slice(0, 100)}`));
+    await press(hp, groups.nth(i).getByRole('radio', { name: /^3 / }).first(), { pause: 100, timeout: 5000, ms: 420 }).then(() => { rated += 1; }, (e) => note(`rating ${i}: ${String(e).slice(0, 100)}`));
   }
-  if (!sourced) { await scoring; sourced = say(lead, 'h29', 300); }
   try {
-    await press(hp, hp.getByTestId('interviews-scorecard-to-recap'), { pause: 150, timeout: 10_000 });
-    await press(hp, hp.getByTestId('interviews-scorecard-ask-option-open'), { pause: 150, timeout: 10_000 });
+    await press(hp, hp.getByTestId('interviews-scorecard-to-recap'), { pause: 100, timeout: 10_000, ms: 500 });
+    await press(hp, hp.getByTestId('interviews-scorecard-ask-option-open'), { pause: 100, timeout: 10_000, ms: 500 });
     await hp.getByTestId('interviews-scorecard-recap-step').first().waitFor({ timeout: 30_000 });
   } catch (e) { note(`recap step: ${String(e).slice(0, 120)}`); }
   const recapOk = await hp.getByTestId('interviews-recap-competency').first().waitFor({ timeout: 90_000 }).then(() => true, () => false);
@@ -997,7 +1022,9 @@ try {
     const recap = (await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}/recap`)).json().catch(() => ({}))).recap ?? {};
     const ps = (recap.competencies ?? []).find((c) => c.id === 'problem-solving');
     const quotes = (ps?.evidence ?? []).map((e) => e.source?.quote ?? '');
-    step('12 the recap cites the Two Sum and testing answers', recapOk && !!ps && quotes.some((q) => /hash map|brute force|dictionary|duplicate case|two pointers|linear time/i.test(q)) && quotes.some((q) => /\btest\b|duplicates|negative/i.test(q)) && !/Nothing was said about this/.test(recapText),
+    step('12 the recap cites the Two Sum and testing answers', recapOk && !!ps && quotes.some((q) => /hash map|brute force|dictionary|duplicate case|two pointers|linear time/i.test(q)) && quotes.some((q) => /\btest\b|duplicates|negative/i.test(q)),
+      // The screenplay asks for both answers cited. A competency no asked question was tagged with shows "Nothing was said about
+      // this" (the scripted recap covers a competency only through its own questions: recap/model.ts scriptedRecap); listed, not failed.
       `recap opened=${recapOk}, ${nClaims} statements; problem solving quotes ${JSON.stringify(quotes.map((q) => q.slice(0, 70)))}; not covered ${JSON.stringify((recap.notCovered ?? []).map((c) => c.name))}`);
   }
 

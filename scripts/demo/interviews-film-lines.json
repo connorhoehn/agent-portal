@@ -70,14 +70,6 @@
    "cand",
    "Nice to meet you, Milo!"
   ],
-  "h04": [
-   "hugo",
-   "So, how's your week going so far?"
-  ],
-  "c03": [
-   "cand",
-   "Pretty good, honestly! A little busy, but good."
-  ],
   "h05": [
    "hugo",
    "Great, let's get started. What's your experience with data structures and algorithms?"
@@ -92,11 +84,7 @@
   ],
   "h07": [
    "hugo",
-   "Okay, a coding problem. Given an array of integers and a target, return the indices of the two numbers that add up to the target."
-  ],
-  "h08": [
-   "hugo",
-   "We usually use Java here, but pick whatever you're comfortable with. What would you like to use?"
+   "Okay, a coding problem. I'm going to post it into the pad. But first, do you want to use Java today?"
   ],
   "c05": [
    "cand",
@@ -104,7 +92,7 @@
   ],
   "h09": [
    "hugo",
-   "Python it is. I'm dropping the problem into the pad now."
+   "Python it is. Here it comes."
   ],
   "c29": [
    "cand",
@@ -186,25 +174,13 @@
    "cand",
    "Then I'd use two pointers, one at each end, and walk them toward each other. That gets the extra space down to constant."
   ],
-  "h16": [
-   "hugo",
-   "Nice. Do you run into that pattern in your day job?"
-  ],
-  "c20": [
-   "cand",
-   "All the time, actually, especially when we reconcile payment batches against each other."
-  ],
   "h18": [
    "hugo",
    "Ooh, good one. Mateo, I'm going to let Milo ask you the next one."
   ],
-  "c33": [
+  "c36": [
    "cand",
-   "Sorry, I was still looking at the code."
-  ],
-  "c22": [
-   "cand",
-   "Milo, can you repeat the question?"
+   "Oh, so sorry, Milo, I was focusing. Could you repeat the question?"
   ],
   "c23": [
    "cand",
@@ -266,17 +242,9 @@
    "hugo",
    "Perfect. That's exactly what I'd do."
   ],
-  "h36": [
+  "h39": [
    "hugo",
-   "Let me check the clock."
-  ],
-  "h37": [
-   "hugo",
-   "Milo, how much time is left?"
-  ],
-  "h38": [
-   "hugo",
-   "Good, so there's time for your questions. What would you like to know?"
+   "That's most of our time. What would you like to ask me?"
   ],
   "c24": [
    "cand",
@@ -293,10 +261,6 @@
   "h22": [
    "hugo",
    "Thanks, Mateo. Take care, and have a great rest of your day."
-  ],
-  "h28": [
-   "hugo",
-   "Right, let me score this while it's fresh."
   ],
   "h29": [
    "hugo",
