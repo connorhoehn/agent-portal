@@ -41,7 +41,8 @@ test('a starting board goes in as one write, beside what is drawn, and a second 
   const prompt = promptBoard('Design a URL shortener for 100M links a month');
   assert.equal(insertBoard(doc, prompt), prompt.elements.length);
   const frames = readBoardElements(doc).filter((e) => e.type === 'frame').map((e) => e['name']);
-  assert.equal(frames.length, 12);
+  assert.equal(frames.length, 14);
+  assert.ok(frames.includes('Clarifying questions'));
   assert.ok(frames.includes('Non-functional requirements'));
 });
 
