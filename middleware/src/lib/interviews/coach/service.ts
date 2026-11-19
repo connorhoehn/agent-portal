@@ -17,6 +17,7 @@ import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { consentStore } from '../consent/store.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
+import { competenciesOfRound } from '../kit.js';
 import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, type CoachModel, type CoachModelResult } from './model.js';
 import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
@@ -131,7 +132,7 @@ export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: read
   const kit = ref.opening.kit;
   return {
     roundType: ref.interview.type,
-    competencies: kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
+    competencies: competenciesOfRound(kit, ref.interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
     questions: kit.questions.filter((q) => q.roundType === ref.interview.type)
       .map((q) => ({ id: q.id, prompt: q.prompt, followUps: q.followUps, competencyId: q.competencyId })),
     chosenQuestionIds: [...ref.interview.questionIds],
@@ -236,7 +237,7 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
     noteModelCall(interview.id, result.code === 'error' || result.code === 'timeout');
     await book(d, model, input, held, result, viewer.userId);
     const read: ParseResult | { ok: false; code: 'timeout' | 'error' | 'nothing' } = result.code === 'ok'
-      ? parseCoachAnswer(result.raw, { competencyIds: opening.kit.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
+      ? parseCoachAnswer(result.raw, { competencyIds: input.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
       : { ok: false, code: result.code };
     // Too early for where the code is (stage.ts): kept as `nothing`, the coach had nothing that fits yet.
     const parsed: typeof read | { ok: false; code: 'nothing' } = read.ok && !fitsStage(read.suggestion.text, codeStage(input.code))
