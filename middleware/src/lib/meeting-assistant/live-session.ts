@@ -118,6 +118,18 @@ export function pcm16Rms(pcm: Buffer): number {
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 /** A provider code, type or parameter name only when it looks like one: never free text. */
 const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
+const clientEventIdOf = (ev: Record<string, unknown>): string | null => {
+  const v = ev['client_event_id'] ?? (ev['error'] as { event_id?: unknown; client_event_id?: unknown } | undefined)?.client_event_id ?? (ev['error'] as { event_id?: unknown } | undefined)?.event_id;
+  return shortCode(v);
+};
+/** What a trace keeps of a top-level error: code, param, type and the client event it names, each only when code-shaped. */
+const errorFields = (ev: Record<string, unknown>): Record<string, string | undefined> => {
+  const err = ev['error'] as { code?: unknown; param?: unknown; type?: unknown } | undefined;
+  return {
+    code: shortCode(ev['code'] ?? err?.code) ?? undefined, param: shortCode(ev['param'] ?? err?.param) ?? undefined,
+    errType: shortCode(err?.type) ?? undefined, clientEventId: clientEventIdOf(ev) ?? undefined,
+  };
+};
 const responseIdOf = (raw: unknown): string | null => { const id = (raw as { id?: unknown } | undefined)?.id; return typeof id === 'string' && id ? id : null; };
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
@@ -176,6 +188,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private readonly responses = new Map<string, ReturnType<typeof setTimeout>>();
   /** The provider may be about to answer (a turn, a delegation, a continuation) and no event has said it is yet. */
   private answerWait: ReturnType<typeof setTimeout> | null = null;
+  /** The wait is for the voice's own reply to a person's turn (a server line waits it out), not for delegated work (pre-empted). */
+  private answerWaitTurn = false;
   /** Input transcripts emitted so far. */
   private inputCount = 0;
   private idle: ReturnType<typeof setTimeout> | null = null;
@@ -313,11 +327,25 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   }
 
   /**
+   * What holds a server line back (`pumpSay`): `busy` less the model's delegated work. A server line PRE-EMPTS a delegation, a
+   * response of the second model, a function call awaiting its output and the wait for a continuation (live film, 19 November: the
+   * ready line queued 2.9 to 21.6 s behind a delegated response, then the caller's quiet wait withheld it). It still waits for a
+   * person's turn, for the voice's reply a turn may still get (`answerWaitTurn`), for voice already running (the provider has no
+   * cancel and does not speak a commentary that lands inside its own utterance; while a line is held the caller relays nothing
+   * else, so the open response goes unheard: orchestrator.ts `onOutputAudio`), and for the lines sent before it (order kept).
+   */
+  private sayHeld(): boolean {
+    return this.input !== null || (this.answerWait !== null && this.answerWaitTurn) || this.output !== null || this.tailLeft > 0 || this.saying !== null
+      || this.sayQueue.length > 0;
+  }
+
+  /**
    * The provider may be about to answer: count as busy for `answerWaitMs` after `from` (now, or a person's last words) unless its
    * evidence comes first. Already past, nothing is awaited and a waiting line goes now.
    */
-  private waitForAnswer(from = this.sinceStart()): void {
+  private waitForAnswer(from = this.sinceStart(), turn = false): void {
     this.endAnswerWait();
+    this.answerWaitTurn = turn;
     const left = (this.opts.answerWaitMs ?? 1000) - (this.sinceStart() - from);
     if (left <= 0) { this.pumpSay(); return; }
     this.answerWait = setTimeout(() => { this.answerWait = null; this.pumpSay(); }, left);
@@ -331,12 +359,12 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
 
   /** At quiet: send the oldest waiting `say` line (the next goes at the next quiet, after this one is over). */
   private pumpSay(): void {
-    if (this.ended || this.closing !== null || !this.opened || this.busy() || this.sayWaiting.length === 0) return;
+    if (this.ended || this.closing !== null || !this.opened || this.sayHeld() || this.sayWaiting.length === 0) return;
     const r = this.sayWaiting.shift()!;
     r.eventId = this.eventId();
     this.send({ type: 'session.commentary.append', event_id: r.eventId, delegation_id: null, content: readAloudContent(r.text.slice(0, 1800)) });
     this.sayQueue.push(r);
-    trace('say.sent', { t: this.sinceStart(), waitedMs: this.sinceStart() - r.askedAt, waiting: this.sayWaiting.length });
+    trace('say.sent', { t: this.sinceStart(), waitedMs: this.sinceStart() - r.askedAt, waiting: this.sayWaiting.length, ...(this.busy() ? { preempted: true } : {}) });
     try { r.sent?.(); } catch { /* the caller's bound stands */ }
   }
 
@@ -445,6 +473,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         inner: typeof inner === 'string' ? inner : undefined, item: typeof item?.type === 'string' ? item.type : undefined,
         callId: typeof item?.call_id === 'string' ? item.call_id : undefined,
         sentenceEnd: type === 'session.input_transcript.delta' && typeof ev['delta'] === 'string' ? SENTENCE_END.test(ev['delta']) : undefined,
+        // An error's code-shaped fields only (never its message, which can echo the call, nor any request body).
+        ...(type === 'error' ? errorFields(ev) : {}),
       });
     }
     switch (type) {
@@ -487,6 +517,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         this.providerErrors.push(info);
         if (this.providerErrors.length > MAX_PROVIDER_ERRORS) this.providerErrors.shift();
         if (!this.started) { this.fail?.(new Error(message)); return; }
+        this.onTopLevelError(ev);
         this.emit('error', { message, info });
         return;
       }
@@ -648,7 +679,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     // A gap flush is made by the next words arriving after a pause: the person is speaking again, so nothing is sent into their
     // words (the reply wait from the earlier piece is long over by then). The line waits for the end of the turn now begun.
     if (why === 'gap') return;
-    if (p && text && why !== 'closed') { this.waitForAnswer(this.inputHeardAt); return; }
+    if (p && text && why !== 'closed') { this.waitForAnswer(this.inputHeardAt, true); return; }
     this.pumpSay();
   }
 
@@ -718,6 +749,26 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         cachedTokens: this.tokens.cachedTokens + Math.floor(cached),
       };
     }
+  }
+
+  /**
+   * A top-level `error` (live film, 19 November: one left the open response running, so lines waited out its 30 s expiry): the
+   * response it names, or every running one, is over, and so is a wait for a continuation (a rejected response.create gets no
+   * response). An error naming the event a line was sent with (`client_event_id`): that commentary was refused, so the line will
+   * not be said and ends now with no words (the caller posts it), unless its utterance is already running.
+   */
+  private onTopLevelError(ev: Record<string, unknown>): void {
+    const err = ev['error'] as { response_id?: unknown; event_id?: unknown } | undefined;
+    const rid = typeof ev['response_id'] === 'string' && ev['response_id'] ? ev['response_id'] : typeof err?.response_id === 'string' && err.response_id ? err.response_id : null;
+    const eventId = clientEventIdOf(ev);
+    const r = eventId !== null ? this.sayQueue.find((x) => x.eventId === eventId) : undefined;
+    if (r) {
+      this.sayQueue = this.sayQueue.filter((x) => x !== r);
+      trace('say.refused', { t: this.sinceStart() });
+      try { r.ended(null); } catch (e) { console.warn('[meeting-assistant] say listener threw', (e as Error).message); }
+    }
+    if (!this.answerWaitTurn) this.endAnswerWait();
+    this.responseOver(rid);
   }
 
   /** A response of the second model ended (by id; null: every running one): its work no longer keeps the session busy. */

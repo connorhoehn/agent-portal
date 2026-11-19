@@ -333,7 +333,7 @@ describe('tool calls', () => {
     await s.close();
   });
 
-  it('a server tool\'s answer holds the continuation back: nothing is waited for, the held line goes out at once, then resumeTools sends it', async () => {
+  it('a server tool\'s answer holds the continuation back: the held line goes out at once (it pre-empts the open call), then resumeTools sends it', async () => {
     const { s } = make();
     await s.start(START);
     frame(callEvent('call_s', 'pad_add_tests', '{"cases":[]}'));
@@ -341,11 +341,11 @@ describe('tool calls', () => {
     let sent = 0;
     s.sayVerbatim('held-1', 'Added twelve test cases at the bottom of the pad.', () => undefined, () => { sent += 1; });
     await tick();
-    expect(sent).toBe(0); // a function call awaits its output: busy
+    expect(sent).toBe(1); // a server line pre-empts delegated work: the open call does not hold it (live film, 19 November)
     expect(s.answerToolCall('call_s', '{"status":"done"}', { continue: false })).toBe(true);
     await tick();
     expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(0);
-    expect(sent).toBe(1); // busy cleared with no answer-wait: the line was sent at once
+    expect(sent).toBe(1); // sent once
     s.resumeTools();
     await tick();
     expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1); // the delegated work is continued

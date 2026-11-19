@@ -3,6 +3,8 @@
 // utterance that begins from quiet is claimed for the request: its frames and its final transcript carry `say`, and `ended` is called
 // once both its transcript has been flushed and its audio has ended.
 import { WebSocketServer, WebSocket } from 'ws';
+const mockTrace: Array<{ ev: string; f: Record<string, unknown> }> = [];
+jest.mock('../trace.js', () => ({ trace: (ev: string, f: Record<string, unknown> = {}) => { mockTrace.push({ ev, f }); } }));
 import type { AddressInfo } from 'node:net';
 import { _setVoiceWebSocket } from '../../voice/openai.js';
 import { OpenAiLiveSession } from '../live-session.js';
@@ -239,32 +241,46 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
-  it('delegated work the provider is answering keeps a line waiting until its responses are over (a continuation included)', async () => {
-    // Recorded (docs/voice/live-events.jsonl): a delegation the provider answers gets its response.created 0 to 3 ms later, and
-    // a continuation asked for with response.create gets its own 123 to 427 ms later.
+  it('a server line pre-empts delegated work: it goes at once while a delegation\'s response runs, its call awaits output and a continuation is awaited', async () => {
+    // Live film, 19 November: the ready line queued 2.9 to 21.6 s behind the model's delegated response (busy), then the caller's
+    // quiet wait withheld it. The server's words go first now; the next line still waits for the first one's utterance (order).
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 100 });
     await s.start(START);
-    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    mockTrace.length = 0;
+    const sent = () => received.filter((e) => e['type'] === 'session.commentary.append').map((e) => e['content']);
     const env = (event: Record<string, unknown>) => frame({ type: 'response.event', delegation_id: 'item_1', event });
     frame({ type: 'session.delegation.created', offset_ms: 100, delegation: { id: 'item_1', type: 'delegation', target: 'responses', response_id: 'resp_1' } });
     env({ type: 'response.created', response: { id: 'resp_1' } });
+    env({ type: 'response.output_item.done', item: { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{"query":"x"}' } });
     await tick(10);
     s.sayVerbatim('say_1', Q, () => undefined);
-    await tick(150); // longer than the wait: the running response is the evidence now
-    expect(commentaries()).toBe(0);
-    env({ type: 'response.output_item.done', item: { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{"query":"x"}' } });
-    env({ type: 'response.completed', response: { id: 'resp_1', usage: { input_tokens: 1, output_tokens: 1 } } });
-    await tick(150);
-    expect(commentaries()).toBe(0); // the call awaits its output
-    s.answerToolCall('call_1', '{"ok":true}');
-    await tick(40);
-    expect(commentaries()).toBe(0); // the continuation is asked for and not yet created (inside the wait)
-    env({ type: 'response.created', response: { id: 'resp_2' } });
-    await tick(150);
-    expect(commentaries()).toBe(0);
-    env({ type: 'response.completed', response: { id: 'resp_2', usage: { input_tokens: 1, output_tokens: 1 } } });
+    await tick(10);
+    expect(sent()).toEqual([readAloudContent(Q)]); // not behind the running response nor the open call
+    expect(mockTrace.find((t) => t.ev === 'say.sent')?.f['preempted']).toBe(true);
+    s.answerToolCall('call_1', '{"ok":true}'); // continuation asked for: its wait does not hold a line either
+    s.sayVerbatim('say_2', 'Second.', () => undefined);
     await tick(20);
-    expect(commentaries()).toBe(1);
+    expect(sent()).toEqual([readAloudContent(Q)]); // the first line is sent and not yet said: the second waits (order kept)
+    audio(3000); words(Q, 2000);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(120);
+    expect(sent()).toEqual([readAloudContent(Q), readAloudContent('Second.')]);
+    await s.close();
+  });
+
+  it('a server line still waits for voice already running (the provider cannot be cut)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 60 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'response.event', delegation_id: 'item_1', event: { type: 'response.created', response: { id: 'resp_1' } } });
+    audio(3000); words('The delegated answer', 0);
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(20);
+    expect(commentaries()).toBe(0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(80);
+    expect(commentaries()).toBe(1); // the voice is over; the response still running does not hold it
     await s.close();
   });
 
@@ -281,54 +297,49 @@ describe('sayVerbatim on the live session', () => {
     s.sayVerbatim('say_1', Q, () => undefined);
     frame({ type: 'session.usage.updated', usage: { seconds: 112 } });
     await tick(20);
-    expect(commentaries()).toBe(0); // inside the wait: the provider may still answer
-    await tick(80);
-    expect(commentaries()).toBe(1); // no evidence it is answering: the line goes
+    expect(commentaries()).toBe(1); // a delegation's wait is pre-empted: the line goes at once
     await s.close();
   });
 
-  it('a response that ends incomplete, or with an error, or never ends, does not keep a line waiting for the rest of the session', async () => {
-    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
+  it('a top-level error ends the open response (it used to run to its 30 s expiry) and its trace keeps code, param, type and client event id only', async () => {
+    const { s, seen } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 30_000 });
     await s.start(START);
-    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
-    const env = (event: Record<string, unknown>) => frame({ type: 'response.event', delegation_id: 'item_1', event });
-    // Ended as incomplete (a Responses terminal event the provider may send): over at once.
-    env({ type: 'response.created', response: { id: 'resp_1' } });
+    frame({ type: 'response.event', delegation_id: 'item_1', event: { type: 'response.created', response: { id: 'resp_1' } } });
     await tick(10);
-    s.sayVerbatim('say_1', Q, () => undefined);
-    await tick(40);
-    expect(commentaries()).toBe(0);
-    env({ type: 'response.incomplete', response: { id: 'resp_1' } });
-    await tick(20);
-    expect(commentaries()).toBe(1);
+    mockTrace.length = 0;
+    s.sayVerbatim('probe_1', Q, () => undefined);
+    expect(mockTrace.find((t) => t.ev === 'say.asked')?.f['busy']).toBe(true); // the response runs
+    s.cancelSay('probe_1');
+    frame({ type: 'error', error: { type: 'invalid_request_error', code: 'invalid_value', param: 'item.call_id', message: 'Said: how would you shard it', event_id: 'ma_7' } });
+    await tick(15);
+    const traced = mockTrace.find((t) => t.ev === 'provider' && t.f['type'] === 'error')!.f;
+    expect(traced).toEqual(expect.objectContaining({ code: 'invalid_value', param: 'item.call_id', errType: 'invalid_request_error', clientEventId: 'ma_7' }));
+    expect(JSON.stringify(traced)).not.toMatch(/shard|Said/);
+    expect(seen.error[0]).toEqual({ message: 'invalid_value', info: { code: 'invalid_value', param: 'item.call_id', type: 'invalid_request_error' } });
+    for (let i = 0; i < 4; i += 1) audio(0); // let the probe line's claim lapse
+    mockTrace.length = 0;
+    s.sayVerbatim('say_2', Q, () => undefined);
+    expect(mockTrace.find((t) => t.ev === 'say.asked')?.f['busy']).toBe(false); // the response is over
     await s.close();
+  });
 
-    // An error inside the response's envelope: over at once.
-    received = [];
-    const b = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
-    await b.s.start(START);
-    env({ type: 'response.created', response: { id: 'resp_2' } });
+  it('an error naming the event a line was sent with ends that line at once with no words (the commentary was refused)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20 });
+    await s.start(START);
+    const ended: Array<string | null> = [];
+    s.sayVerbatim('say_1', Q, (t) => ended.push(t));
     await tick(10);
-    b.s.sayVerbatim('say_2', Q, () => undefined);
-    await tick(40);
-    expect(commentaries()).toBe(0);
-    env({ type: 'error', response_id: 'resp_2', error: { code: 'server_error' } });
-    await tick(20);
-    expect(commentaries()).toBe(1);
-    await b.s.close();
-
-    // Never ended: the safety expiry lets the line go.
-    received = [];
-    const c = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20, responseStuckMs: 150 });
-    await c.s.start(START);
-    env({ type: 'response.created', response: { id: 'resp_3' } });
+    const sentId = received.find((e) => e['type'] === 'session.commentary.append')!['event_id'];
+    frame({ type: 'error', client_event_id: 'ma_999', error: { code: 'invalid_value' } }); // another event's: not this line
     await tick(10);
-    c.s.sayVerbatim('say_3', Q, () => undefined);
-    await tick(60);
-    expect(commentaries()).toBe(0);
-    await tick(150);
-    expect(commentaries()).toBe(1);
-    await c.s.close();
+    expect(ended).toEqual([]);
+    frame({ type: 'error', client_event_id: sentId, error: { code: 'invalid_value' } });
+    await tick(10);
+    expect(ended).toEqual([null]);
+    s.sayVerbatim('say_2', 'Next.', () => undefined); // the queue is free again
+    await tick(10);
+    expect(received.filter((e) => e['type'] === 'session.commentary.append').length).toBe(2);
+    await s.close();
   });
 
   it('one line at a time: the second goes out only after the first one\'s utterance is over', async () => {
