@@ -21,6 +21,12 @@ describe('the reveal of a provided design', () => {
     expect((await store.listAfter('iv-1', 0, 10)).map((r) => [r.kind, r.questionId, r.side, r.whoId])).toEqual([['reveal', 'q-t', 'panel', 'u-lead']]);
   });
 
+  it('logs a question once when two acks race (a double click, two tabs)', async () => {
+    const both = await Promise.all([recordReveal('iv-1', lead, 'q-t'), recordReveal('iv-1', lead, 'q-t'), recordReveal('iv-1', lead, 'q-t')]);
+    expect(both.sort()).toEqual(['already', 'already', 'logged']);
+    expect((await store.listAfter('iv-1', 0, 10)).filter((r) => r.kind === 'reveal')).toHaveLength(1);
+  });
+
   it('keeps each question apart', async () => {
     await recordReveal('iv-1', lead, 'q-a');
     expect(await revealStatus('iv-1', 'q-b')).toBe('new');

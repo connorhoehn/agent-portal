@@ -26,11 +26,26 @@ export async function revealStatus(interviewId: string, questionId: string): Pro
   return counts.events >= MAX_EVENTS_PER_INTERVIEW ? 'full' : 'new';
 }
 
+/**
+ * The acks in flight, per interview: the check and the append run one at a time for an interview (runs/service.ts's
+ * withLock pattern), so two acks for one question (a double click, two tabs) log it once.
+ */
+const recording = new Map<string, Promise<unknown>>();
+async function oneAtATime<T>(interviewId: string, fn: () => Promise<T>): Promise<T> {
+  const before = recording.get(interviewId) ?? Promise.resolve();
+  const run = before.catch(() => undefined).then(fn);
+  const tail = run.catch(() => undefined);
+  recording.set(interviewId, tail);
+  try { return await run; } finally { if (recording.get(interviewId) === tail) recording.delete(interviewId); }
+}
+
 /** Once the board holds it: log the reveal, once per question. */
-export async function recordReveal(interviewId: string, writer: PadWriter, questionId: string): Promise<'logged' | 'already' | 'full'> {
-  const status = await revealStatus(interviewId, questionId);
-  if (status !== 'new') return status;
-  const kept = await inTenant(() => appendPadEvents(interviewId, writer,
-    [{ kind: 'reveal', clientAt: new Date(interviewsNowMs()).toISOString(), questionId }], new Date(interviewsNowMs())));
-  return kept > 0 ? 'logged' : 'full';
+export function recordReveal(interviewId: string, writer: PadWriter, questionId: string): Promise<'logged' | 'already' | 'full'> {
+  return oneAtATime(interviewId, async () => {
+    const status = await revealStatus(interviewId, questionId);
+    if (status !== 'new') return status;
+    const kept = await inTenant(() => appendPadEvents(interviewId, writer,
+      [{ kind: 'reveal', clientAt: new Date(interviewsNowMs()).toISOString(), questionId }], new Date(interviewsNowMs())));
+    return kept > 0 ? 'logged' : 'full';
+  });
 }
