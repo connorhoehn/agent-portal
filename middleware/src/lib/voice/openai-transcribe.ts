@@ -118,8 +118,9 @@ export function openOpenAiTranscriber(opts: OpenAiTranscriberOptions): Promise<P
   let closed = false;
   let closedEmitted = false;
   // Segments committed (in order) that no provider item is bound to yet, and the binding of item ids to segments.
-  const unbound: Array<{ start: number; end: number }> = [];
-  const items = new Map<string, { start: number; end: number } | null>();
+  // `at`: wall ms of the commit, so the final's row can say how long the provider took after it (the lag split).
+  const unbound: Array<{ start: number; end: number; at: number }> = [];
+  const items = new Map<string, { start: number; end: number; at: number } | null>();
   const itemOrder: string[] = [];
   const bind = (itemId: string): void => {
     if (items.has(itemId)) { if (items.get(itemId) === null && unbound.length) items.set(itemId, unbound.shift()!); return; }
@@ -147,7 +148,7 @@ export function openOpenAiTranscriber(opts: OpenAiTranscriberOptions): Promise<P
       if (!send({ type: 'input_audio_buffer.append', audio: body.toString('base64') })) return;
       streamBytes += body.length;
       for (const [start, end] of vad.push(body)) {
-        unbound.push({ start, end });
+        unbound.push({ start, end, at: Date.now() });
         // An item may already be waiting for its segment (deltas came first).
         const waiting = itemOrder.find((id) => items.get(id) === null);
         if (waiting) items.set(waiting, unbound.shift()!);
@@ -221,6 +222,7 @@ export function openOpenAiTranscriber(opts: OpenAiTranscriberOptions): Promise<P
         bind(itemId);
         const seg = items.get(itemId) ?? null;
         const nowMs = Math.round(streamBytes / BYTES_PER_MS);
+        log({ event: 'transcribe-final', endMs: seg?.end ?? null, streamMs: nowMs, sinceCommitMs: seg ? Date.now() - seg.at : null });
         emit('final', { itemId, text: String(e['transcript'] ?? ''), startStreamMs: seg?.start ?? nowMs, endStreamMs: seg?.end ?? nowMs });
         return;
       }
@@ -235,7 +237,7 @@ export function openOpenAiTranscriber(opts: OpenAiTranscriberOptions): Promise<P
 }
 
 /** The listening side's factory over the real stream. */
-export function openAiTranscriberFactory(log?: (row: Record<string, unknown>) => void) {
+export function openAiTranscriberFactory(log?: (row: Record<string, unknown>) => void, opts: { quietMs?: number } = {}) {
   return (input: { callId: string; userId: string; keywords: readonly string[] }): Promise<PersonTranscriber> =>
-    openOpenAiTranscriber({ keywords: input.keywords, log: log ? (row) => log({ ...row, callId: input.callId }) : undefined });
+    openOpenAiTranscriber({ keywords: input.keywords, ...(opts.quietMs ? { quietMs: opts.quietMs } : {}), log: log ? (row) => log({ ...row, callId: input.callId, userId: input.userId }) : undefined });
 }

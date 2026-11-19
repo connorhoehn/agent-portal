@@ -232,7 +232,11 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   // The relayed utterance's words: kept until any of its audio is relayed (the verdict may hold it), then told once.
   let uttText: string | null = null; let uttPushed = false;
   const flushText = (): void => { if (uttText !== null && uttPushed) { input.onText?.(uttText, clock.nowMs()); uttText = null; uttPushed = false; } };
-  const listening = createListeningSide({ callId: input.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true });
+  const listening = createListeningSide({ callId: input.callId, transcriber: openAiTranscriberFactory(
+    // The stream's commits and finals (counts and ms only) for the lag split; a measuring run may shorten its end-of-speech quiet.
+    input.trace ? (row) => input.trace?.(`tx.${String(row['event']).replace('transcribe-', '')}`, { ...row, atMs: clock.nowMs() }) : undefined,
+    { quietMs: Number(process.env['HF_GATE_TX_QUIET_MS']) || undefined },
+  ), clock, consented: () => true });
   const rules = createHandsfreeRules({ record: async () => record, policy: () => policy, roster: () => names, admitWaitMs: 150 });
   // Server lines the orchestrator's way (orchestrator.ts `queueHeld` -> `sayHeld` -> `approvedFrame`), interviews family only.
   const lines = new Map<string, string>(); let lineNo = 0; let lineChain: Promise<void> = Promise.resolve();
