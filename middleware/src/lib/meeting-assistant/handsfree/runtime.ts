@@ -20,6 +20,8 @@ export interface HandsfreeRuntimeDeps {
   onLine: (line: HeardLine) => void;
   /** A person's display name, for their lane (the first audio of someone not yet joined opens one). */
   nameOf: (userId: string) => Promise<string>;
+  /** A fixed verdict's server line (router.ts `RouterDeps.sayFixed`). */
+  sayFixed?: (userId: string, line: string) => void;
   trace?: (event: string, data: Record<string, unknown>) => void;
 }
 
@@ -31,7 +33,7 @@ export class HandsfreeRuntime implements HandsfreeRun {
   private closing: Promise<void> | null = null;
 
   constructor(private readonly deps: HandsfreeRuntimeDeps) {
-    this.router = new Router({ clock: deps.clock, call: deps.call, rules: deps.rules, listening: deps.listening, talking: deps.talking, relay: deps.relay, ...(deps.trace ? { trace: deps.trace } : {}) });
+    this.router = new Router({ clock: deps.clock, call: deps.call, rules: deps.rules, listening: deps.listening, talking: deps.talking, relay: deps.relay, ...(deps.sayFixed ? { sayFixed: deps.sayFixed } : {}), ...(deps.trace ? { trace: deps.trace } : {}) });
     this.offs.push(deps.listening.on('line', (l) => { if (!this.closing) deps.onLine(l); }));
     this.sink = {
       append: () => { if (!this.closing) this.router.tick(); },

@@ -36,6 +36,8 @@ export interface RouterDeps {
   listening: Pick<ListeningSide, 'preRoll' | 'on'>;
   talking: Pick<TalkingSide, 'feed' | 'setAsker' | 'say'>;
   relay: RelayPort;
+  /** Say a fixed verdict's line for `userId` (the orchestrator posts it with the approved mark and says it as approved words). Absent: `talking.say`. */
+  sayFixed?: (userId: string, line: string) => void;
   /** Codes and ids only (never words or audio). */
   trace?: (event: string, data: Record<string, unknown>) => void;
 }
@@ -254,18 +256,20 @@ export class Router {
     let v: TriggerVerdict;
     try { v = await this.deps.rules.verdict(this.deps.call, { userId, text, via: 'name' }); } catch { return; }
     if (this.closed || v.kind !== 'fixed') return;
-    this.sayFixed(v.line);
+    this.sayFixed(userId, v.line);
   }
 
   private applyVerdict(t: Turn, v: TriggerVerdict): void {
     t.verdict = v;
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
     if (v.kind === 'request') { const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
-    if (v.kind === 'fixed') { this.drop(v.kind); this.sayFixed(v.line); return; }
+    if (v.kind === 'fixed') { this.drop(v.kind); this.sayFixed(t.userId, v.line); return; }
     this.drop(v.kind);
   }
 
-  private sayFixed(line: string): void {
+  /** A server line: the orchestrator's held-text path when given (posted with the approved mark, logged by the family), else said here. */
+  private sayFixed(userId: string, line: string): void {
+    if (this.deps.sayFixed) { this.deps.sayFixed(userId, line); return; }
     this.sayNo += 1;
     this.deps.talking.say(`hf-fixed-${this.sayNo}`, line, () => undefined);
   }

@@ -983,6 +983,8 @@ export class AssistantRuntime {
       },
       onLine: (l) => { void this.onHeardLine(run, l); },
       nameOf: (userId) => nameOf(userId),
+      // A fixed verdict's line goes the held-text way: posted with the approved mark, said as approved words, logged by the family.
+      sayFixed: (userId, line) => { void this.queueHeld(run, userId, line); },
       trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
     });
     hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; });
@@ -1283,8 +1285,10 @@ export class AssistantRuntime {
     }
     if (run.approvals.length) return;
     if (run.hf) {
-      // Hands-free: the router decides (relay, hold for the verdict, or drop); the voice gate is not used.
-      if (!run.voice || run.voiceHeld || run.finished || run.session !== session || !run.policy.relaysLiveSpeech(run.call)) return;
+      // Hands-free: the router decides (relay, hold for the verdict, or drop); the voice gate is not used. Who is routed is the
+      // authority, so a family that relays nothing on its own today (an interview: `relaysLiveSpeech` false) relays a `request`
+      // verdict's answer here (lane C's decision 2; its rules never route a candidate without pad help, its instructions forbid hints).
+      if (!run.voice || run.voiceHeld || run.finished || run.session !== session) return;
       run.hf.outputAudio(e.pcm, e.last === true);
       return;
     }

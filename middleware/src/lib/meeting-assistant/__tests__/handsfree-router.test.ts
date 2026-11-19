@@ -129,6 +129,20 @@ describe('hands-free router', () => {
     expect(w.talking.asker).toBeNull();
   });
 
+  it('a fixed verdict goes to the held-text path when the orchestrator gives one (for the asker, never the session)', async () => {
+    const clock = new FakeClock();
+    const listening = new FakeListening(clock);
+    const rules = new FakeRules();
+    rules.verdictFor = () => ({ kind: 'fixed', line: 'Ten minutes left.' });
+    const talking = new FakeTalking();
+    const fixed: Array<[string, string]> = [];
+    new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay: new FakeRelay(), sayFixed: (u, l) => fixed.push([u, l]) });
+    listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo' }); await settle();
+    listening.emit('sentence', { userId: UNA, sentenceId: 's1', text: 'Milo, how long?', startMs: 0, endMs: 0, named: true }); await settle();
+    expect(fixed).toEqual([[UNA, 'Ten minutes left.']]);
+    expect(talking.said).toEqual([]);
+  });
+
   it('a follow-up routes only the asker, needs no name, and closes 10 s after the last relayed frame', async () => {
     const w = world();
     w.talk(UNA, T_UNA, 5);
