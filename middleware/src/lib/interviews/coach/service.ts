@@ -18,7 +18,7 @@ import { consentStore } from '../consent/store.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
 import { competenciesOfRound } from '../kit.js';
-import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, type CoachModel, type CoachModelResult } from './model.js';
+import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, questionAsked, type CoachModel, type CoachModelResult } from './model.js';
 import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
 import type { RunView } from '../runs/service.js';
@@ -240,7 +240,10 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
       ? parseCoachAnswer(result.raw, { competencyIds: input.competencies.map((c) => c.id), lines, codeLines: codeLinesOf(input.code) })
       : { ok: false, code: result.code };
     // Too early for where the code is (stage.ts): kept as `nothing`, the coach had nothing that fits yet.
-    const parsed: typeof read | { ok: false; code: 'nothing' } = read.ok && !fitsStage(read.suggestion.text, codeStage(input.code))
+    // A bank question already asked in the call or posted into the pad is dropped the same way, whichever model offered it.
+    const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+    const repeats = (text: string) => input.questions.some((q) => flat(q.prompt) === flat(text) && questionAsked(input, q.prompt));
+    const parsed: typeof read | { ok: false; code: 'nothing' } = read.ok && (!fitsStage(read.suggestion.text, codeStage(input.code)) || repeats(read.suggestion.text))
       ? { ok: false, code: 'nothing' } : read;
     const madeAt = iso(d.now());
     const row: SuggestionRecord = {

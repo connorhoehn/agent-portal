@@ -2,7 +2,7 @@
 // no test reaches a provider.
 jest.mock('../../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true } } }));
 import type { ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { BedrockCoachModel, coachModelChoice, coachModelId, DEFAULT_COACH_MODEL_ID, ScriptedCoachModel, scriptedSuggestion } from '../model.js';
+import { BedrockCoachModel, coachModelChoice, coachModelId, DEFAULT_COACH_MODEL_ID, ScriptedCoachModel, questionAsked, scriptedSuggestion } from '../model.js';
 import type { CoachInput } from '../prompt.js';
 import { FIXED_INPUT } from './fixed-input.js';
 
@@ -92,5 +92,28 @@ describe('INTERVIEWS_COACH_MODEL', () => {
     const prod = { NODE_ENV: 'production', ...live } as NodeJS.ProcessEnv;
     expect(coachModelChoice({ ...prod, INTERVIEWS_COACH_MODEL: 'scripted' })).toBe(coachModelChoice(prod));
     expect(coachModelChoice({ INTERVIEWS_COACH_MODEL: 'bedrock' } as NodeJS.ProcessEnv)).toBe('bedrock');
+  });
+});
+
+describe('a question already asked is never suggested again', () => {
+  const TWO_SUM = 'Given an array of integers and a target, return the indices of the two numbers that add up to the target.';
+  const tech: CoachInput = {
+    ...FIXED_INPUT, roundType: 'technical',
+    questions: [{ id: 'q-two-sum', prompt: TWO_SUM, followUps: [], competencyId: 'communication' }],
+    chosenQuestionIds: ['q-two-sum'],
+    lines: [{ seq: 1, side: 'panel', text: 'Okay, a coding problem. I am going to post it into the pad.' }],
+    previous: [],
+  };
+  const pad = (text: string): CoachInput => ({ ...tech, code: { pad: { language: 'python', text, cut: false }, run: null } });
+  it('is suggested while nothing shows it was asked', () => {
+    expect(scriptedSuggestion(tech)?.text).toBe(TWO_SUM);
+  });
+  it('counts the prompt posted into the pad as a wrapped comment', () => {
+    const posted = '# Given an array of integers and a target, return the indices of the two\n# numbers that add up to the target.\n\ndef two_sum(nums, target):\n    pass\n';
+    expect(scriptedSuggestion(pad(posted))).toBeNull();
+    expect(questionAsked(pad(posted), TWO_SUM)).toBe(true);
+  });
+  it('is not fooled by a pad that only shares words with the question', () => {
+    expect(questionAsked(pad('def f(numbers, target):\n    return indices\n'), TWO_SUM)).toBe(false);
   });
 });

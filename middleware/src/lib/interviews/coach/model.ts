@@ -114,14 +114,24 @@ function quoteOf(text: string): string {
   return space > 40 ? cut.slice(0, space) : cut;
 }
 
-export function scriptedSuggestion(input: CoachInput): { text: string; competencyId: string; basedOn: string | null } | null {
+/** The pad's text with its comment marks off and its lines joined, so a prompt posted as a wrapped comment reads as one line. */
+const padFlat = (text: string): string => words(text.split('\n').map((l) => l.replace(/^\s*(?:#|\/\/|--|\/\*|\*)+/, '')).join(' '));
+
+/**
+ * Has this question been asked? A panel line holds its opening words or half of its content words, or the pad holds its
+ * opening words (the Prepare insert posts the prompt there as a wrapped comment); never a mere overlap with the pad's code.
+ */
+export function questionAsked(input: CoachInput, prompt: string): boolean {
   const panel = input.lines.filter((l) => l.side === 'panel').map((l) => l.text);
-  const panelWords = panel.map(plainContent);
-  const asked = (prompt: string) => {
-    if (panel.some((t) => said(opening(prompt), t))) return true;
-    const want = plainContent(prompt);
-    return want.size >= 2 && panelWords.some((p) => overlap(want, p) * 2 >= want.size);
-  };
+  if (panel.some((t) => said(opening(prompt), t))) return true;
+  const want = plainContent(prompt);
+  if (want.size >= 2 && panel.map(plainContent).some((p) => overlap(want, p) * 2 >= want.size)) return true;
+  const pad = input.code?.pad?.text;
+  return !!pad && said(opening(prompt), padFlat(pad));
+}
+
+export function scriptedSuggestion(input: CoachInput): { text: string; competencyId: string; basedOn: string | null } | null {
+  const asked = (prompt: string) => questionAsked(input, prompt);
   const suggested = new Set(input.previous.map((p) => p.text.replace(/\s+/g, ' ').trim()));
   // In a technical round, nothing about complexity before working code and nothing about testing before a run (stage.ts).
   const stage = codeStage(input.code);
