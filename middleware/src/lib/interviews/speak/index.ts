@@ -81,8 +81,8 @@ export function lastQuestion(rows: readonly SaidRecord[]): string | null {
 
 /** What one spoken line holds against the interview's cap while it is said (a short utterance of the session's audio). */
 export const SPEECH_HOLD_USD = 0.01;
-/** How long a speech hold lives if nothing releases it (longer than the orchestrator's longest say bound). */
-export const SPEECH_HOLD_TTL_MS = 120_000;
+/** How long a speech hold lives if nothing releases it: twice the longest say (a 30 s wait for quiet, a 45 s bound, 7 s for a silence to begin in). */
+export const SPEECH_HOLD_TTL_MS = 180_000;
 
 /** A speech hold: granted with its release, or refused (the words stay in the chat). */
 export type SpeechHold = { ok: true; release: () => Promise<void> } | { ok: false };
