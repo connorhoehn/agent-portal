@@ -422,12 +422,17 @@ function answerKey(p: Problems, q: Record<string, unknown>, at: string, n: numbe
     else if (list.length > 0 && behavioural) p.add(`${at}.redFlags`, `Question ${n} is for a behavioural round; red flags belong to a system design question.`);
     else if (list.length > KIT_LIMITS.redFlags) p.add(`${at}.redFlags`, `Question ${n} has more than ${KIT_LIMITS.redFlags} red flags.`);
     else if (list.length > 0) {
+      // A flag is ticked by its text on the scorecard: the same text twice in one question (case and spaces aside) is refused.
+      const seen = new Set<string>();
       out.redFlags = list.map((raw, j): KitRedFlag => {
         const f = isRecord(raw) ? raw : {};
         const group = (RED_FLAG_GROUPS as readonly string[]).includes(f['group'] as string) ? f['group'] as RedFlagGroup : null;
         if (!group) p.add(`${at}.redFlags.${j}`, `Red flag ${j + 1} on question ${n} needs a group: over-engineering, responsibility, naming or other.`);
         const flag = p.str(`${at}.redFlags.${j}`, f['text'], KIT_LIMITS.redFlag,
           `Red flag ${j + 1} on question ${n} is empty; write it or remove it.`, `Red flag ${j + 1} on question ${n} is longer than ${KIT_LIMITS.redFlag} characters.`);
+        const same = flag.replace(/\s+/g, ' ').trim().toLowerCase();
+        if (same && seen.has(same)) p.add(`${at}.redFlags.${j}`, `Red flag ${j + 1} on question ${n} repeats an earlier one; reword it or remove it.`);
+        seen.add(same);
         return { group: group ?? 'other', text: flag };
       });
     }

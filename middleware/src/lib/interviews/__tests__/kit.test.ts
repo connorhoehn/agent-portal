@@ -516,6 +516,9 @@ describe('a board question\'s answer key: provided design, design questions, red
     expect(paths(at({ redFlags: [{ group: 'style', text: 'a' }] }).r)).toEqual([`questions.${tech().i}.redFlags.0`]);
     expect(paths(at({ redFlags: Array.from({ length: KIT_LIMITS.redFlags + 1 }, () => ({ group: 'other', text: 'a' })) }).r)).toEqual([`questions.${tech().i}.redFlags`]);
     expect(paths(at({ redFlags: 'many' }).r)).toEqual([`questions.${tech().i}.redFlags`]);
+    // the same flag twice (as written, case and spaces aside) would be one tick on the scorecard: refused on the second
+    const twice = at({ redFlags: [{ group: 'naming', text: 'Vague names' }, { group: 'other', text: 'Other one' }, { group: 'responsibility', text: ' vague  NAMES ' }] }).r;
+    expect(paths(twice)).toEqual([`questions.${tech().i}.redFlags.2`]);
     expect(paths(at({ providedDesign: { name: 'Key', elements: 'x' } }).r)).toEqual([`questions.${tech().i}.providedDesign`]);
     // its own byte cap, under the starting board's
     const big = { name: 'Key', elements: Array.from({ length: 300 }, (_, n) => ({ id: `e${n}`, type: 'text', text: 'x'.repeat(700) })) };
