@@ -86,7 +86,9 @@ describe('served only by the guest\'s own router', () => {
   it('the guest routes are the seven of rows I2.1 to I2.3 and the room of row I2.4, and only routes/interview-invite.ts mints a token', () => {
     const routes = enumerateRoutes().routes.filter((r) => r.path.startsWith('/api/interview-invite')).map((r) => `${r.method} ${r.path}`);
     expect(routes.sort()).toEqual([
-      'GET /api/interview-invite/admission', 'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview', 'GET /api/interview-invite/realtime-token',
+      'GET /api/interview-invite/admission',
+      'GET /api/interview-invite/calls/:callId/chat/reads', // the candidate's call chat read position (routes/interview-invite-chat-reads.ts)
+      'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview', 'GET /api/interview-invite/realtime-token',
       'GET /api/interview-invite/room',
       'GET /api/interview-invite/runs', 'GET /api/interview-invite/runs/:runId', 'GET /api/interview-invite/runs/events', // lane RUNS (row I4.4)
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock',
@@ -94,6 +96,7 @@ describe('served only by the guest\'s own router', () => {
       'POST /api/interview-invite/milo/request', // lane SPEAK (rows I3.5, I3.8): the candidate's two requests (routes/interview-invite-milo.ts)
       'POST /api/interview-invite/pad/events', // row I4.3: the candidate's pad log writes (routes/interview-invite-pad.ts)
       'POST /api/interview-invite/runs', 'POST /api/interview-invite/runs/:runId/cancel', // lane RUNS (row I4.4)
+      'PUT /api/interview-invite/calls/:callId/chat/reads',
       'PUT /api/interview-invite/consents',
     ]);
     for (const file of ['routes/interviews/invite.ts', 'routes/interviews/admission.ts', 'routes/session.ts', 'index.ts']) {
