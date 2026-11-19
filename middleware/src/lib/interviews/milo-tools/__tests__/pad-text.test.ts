@@ -58,4 +58,30 @@ describe('pad text bounds (review 1, item 2)', () => {
     expect(functionOf('std::vector<int> twoSum(std::vector<int>& nums, int target) {\n', 'cpp')).toBe('twoSum');
     expect(functionOf('std::map<int, int> *build(int n)\n{\n', 'cpp')).toBe('build');
   });
+
+  // Review 2, item 1: the line bound does not stop a pattern's whitespace from running across newlines.
+  it('a pad of 100,000 newlines, or of `a b(` lines, is scanned within a few ms in all seven languages', () => {
+    const pads = ['\n'.repeat(100_000), 'a b(\n'.repeat(20_000), ' \n'.repeat(50_000), 'def\n'.repeat(20_000), 'func \n'.repeat(15_000)];
+    for (const language of LANGUAGES) {
+      for (const pad of pads) {
+        const took = Math.max(
+          timed(() => functionOf(pad, language)),
+          timed(() => afterImports(pad, language)),
+          timed(() => placeImports(pad, ['import os'], language)),
+          timed(() => placeHelper(pad, 'block\n', language)),
+          timed(() => questionForPad([question], pad, language)),
+          timed(() => checkHelper('a helper', pad.slice(0, 3000), language, 'two_sum')),
+          timed(() => entryOf({ [language]: pad }, language)),
+          timed(() => interviewBackendInstructions([question], { text: pad, language })),
+        );
+        expect({ language, pad: pad.slice(0, 6), fast: took < 100 }).toEqual({ language, pad: pad.slice(0, 6), fast: true });
+      }
+    }
+  });
+
+  it('a C++ declaration whose brace is on the next line is still found; one whose parameters run over lines is not looked for', () => {
+    expect(functionOf('int build(int n)\n{\n', 'cpp')).toBe('build');
+    expect(functionOf('int build(int n) const\n{\n', 'cpp')).toBe('build');
+    expect(functionOf('  func twoSum(_ nums: [Int]) -> [Int] {\n', 'swift')).toBe('twoSum');
+  });
 });

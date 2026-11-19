@@ -5,6 +5,8 @@
  */
 export const MAX_PAD_LINE = 500;
 export const MAX_PAD_TEXT = 100_000;
+/** A search for a declaration looks at this much of the pad's start, at most (review 2, item 1). */
+export const MAX_SCAN_TEXT = 20_000;
 
 /** Is a line of pad text too long for any pattern to look at? */
 export const lineTooLong = (line: string): boolean => line.length > MAX_PAD_LINE;

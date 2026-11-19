@@ -50,27 +50,28 @@ export function builtinFor(what: string, language: PadLanguage): string | null {
   return hit && checkedImportLines([hit.line], language) ? hit.line : null;
 }
 
-/** Signs a piece of code is NOT in a language (another language's tell): one is enough to refuse it. */
+/** Signs a piece of code is NOT in a language (another language's tell): one is enough to refuse it. Whitespace here is spaces
+ * and tabs only, so no run crosses a newline (review 2, item 1). */
 const FOREIGN: Readonly<Record<PadLanguage, RegExp>> = {
   // A line ending in `;` is not Python; one ending in `{` may open a dict, so it is not counted (review 1, minor).
-  python: /^\s*(?:function\s|const\s|let\s|var\s|public\s|private\s|func\s|#include|import\s+java)|;\s*$/m,
+  python: /^[ \t]*(?:function[ \t]|const[ \t]|let[ \t]|var[ \t]|public[ \t]|private[ \t]|func[ \t]|#include|import[ \t]+java)|;[ \t]*$/m,
   // A Python block opener (`if x:`, `def f():`) is not JavaScript; a switch's `case 1:` and `default:` are.
-  javascript: /^\s*(?:def\s|public\s+class|private\s|func\s|#include|from\s+\w+\s+import|(?:if|elif|else|for|while|try|except|with)\b[^{\n]*:\s*$)|\bself\./m,
-  typescript: /^\s*(?:def\s|public\s+class|func\s|#include|from\s+\w+\s+import)|\bself\./m,
-  java: /^\s*(?:def\s|function\s|func\s|#include|const\s|let\s)/m,
-  go: /^\s*(?:def\s|function\s|class\s|public\s|#include|const\s+\w+\s*=\s*require)/m,
-  swift: /^\s*(?:def\s|function\s|public\s+static\s+void|#include|package\s)/m,
-  cpp: /^\s*(?:def\s|function\s|func\s|package\s|import\s)/m,
+  javascript: /^[ \t]*(?:def[ \t]|public[ \t]+class|private[ \t]|func[ \t]|#include|from[ \t]+\w+[ \t]+import|(?:if|elif|else|for|while|try|except|with)\b[^{\n]*:[ \t]*$)|\bself\./m,
+  typescript: /^[ \t]*(?:def[ \t]|public[ \t]+class|func[ \t]|#include|from[ \t]+\w+[ \t]+import)|\bself\./m,
+  java: /^[ \t]*(?:def[ \t]|function[ \t]|func[ \t]|#include|const[ \t]|let[ \t])/m,
+  go: /^[ \t]*(?:def[ \t]|function[ \t]|class[ \t]|public[ \t]|#include|const[ \t]+\w+[ \t]*=[ \t]*require)/m,
+  swift: /^[ \t]*(?:def[ \t]|function[ \t]|public[ \t]+static[ \t]+void|#include|package[ \t])/m,
+  cpp: /^[ \t]*(?:def[ \t]|function[ \t]|func[ \t]|package[ \t]|import[ \t])/m,
 };
 /** A sign the code IS in the language: something it declares. */
 const NATIVE: Readonly<Record<PadLanguage, RegExp>> = {
-  python: /^\s*(?:def|class)\s+\w+/m,
-  javascript: /^\s*(?:class\s+\w+|function\s+\w+|(?:const|let)\s+\w+\s*=)/m,
-  typescript: /^\s*(?:(?:export\s+)?class\s+\w+|function\s+\w+|(?:const|let)\s+\w+\s*[:=]|interface\s+\w+|type\s+\w+\s*=)/m,
-  java: /^\s*(?:(?:public|private|protected|static|final)\s+)*(?:class|interface|record)\s+\w+/m,
-  go: /^\s*(?:type\s+\w+|func\s+)/m,
-  swift: /^\s*(?:(?:final\s+)?class|struct|func|enum)\s+\w+/m,
-  cpp: /^\s*(?:template\s*<|class\s+\w+|struct\s+\w+|[\w:<>]+\s+\w+\s*\()/m,
+  python: /^[ \t]*(?:def|class)[ \t]+\w+/m,
+  javascript: /^[ \t]*(?:class[ \t]+\w+|function[ \t]+\w+|(?:const|let)[ \t]+\w+[ \t]*=)/m,
+  typescript: /^[ \t]*(?:(?:export[ \t]+)?class[ \t]+\w+|function[ \t]+\w+|(?:const|let)[ \t]+\w+[ \t]*[:=]|interface[ \t]+\w+|type[ \t]+\w+[ \t]*=)/m,
+  java: /^[ \t]*(?:(?:public|private|protected|static|final)[ \t]+)*(?:class|interface|record)[ \t]+\w+/m,
+  go: /^[ \t]*(?:type[ \t]+\w+|func[ \t]+)/m,
+  swift: /^[ \t]*(?:(?:final[ \t]+)?class|struct|func|enum)[ \t]+\w+/m,
+  cpp: /^[ \t]*(?:template[ \t]*<|class[ \t]+\w+|struct[ \t]+\w+|[\w:<>]+[ \t]+\w+[ \t]*\()/m,
 };
 
 /**
