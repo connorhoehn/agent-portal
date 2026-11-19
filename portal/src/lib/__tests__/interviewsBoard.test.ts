@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
 import { blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
@@ -150,4 +150,33 @@ test('ending the round waits for the board\'s closing checkpoint, but never long
   assert.equal(await flushBoardWithin(hung, 30), false);
   assert.ok(Date.now() - started < 1000);
   assert.equal(await flushBoardWithin(null, 30), true, 'no board open: nothing to wait for');
+});
+
+test('the board fits itself until the person touches it, wherever the board\'s wrapper is drawn later; nothing outside it counts', () => {
+  const doc = new Y.Doc();
+  insertBoard(doc, blueprintBoard());
+  const listeners = new Map<string, (e: { isTrusted: boolean; target: unknown }) => void>();
+  const page = {
+    addEventListener: (type: string, fn: (e: { isTrusted: boolean; target: unknown }) => void) => { listeners.set(type, fn); },
+    removeEventListener: (type: string) => { listeners.delete(type); },
+  };
+  const timers: Array<() => void> = [];
+  let fits = 0;
+  const stop = watchBoardFit(doc, '[data-board="b"]', {
+    page, setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer: () => {}, fit: () => { fits += 1; },
+  });
+  const inBoard = { closest: (q: string) => (q === '[data-board="b"]' ? {} : null) };
+  const elsewhere = { closest: () => null };
+  timers.shift()!();
+  assert.equal(fits, 1, 'fits while untouched');
+  listeners.get('pointerdown')!({ isTrusted: true, target: elsewhere });
+  listeners.get('wheel')!({ isTrusted: false, target: inBoard });
+  timers.shift()!();
+  assert.equal(fits, 2, 'a press elsewhere, or a synthetic wheel, hands nothing over');
+  // The wrapper was drawn after the hook started (the canvas loads lazily): the press still reaches the page's listener.
+  listeners.get('wheel')!({ isTrusted: true, target: inBoard });
+  for (const t of timers.splice(0)) t();
+  assert.equal(fits, 2, 'after the person moved the view, no fit');
+  stop();
+  assert.equal(listeners.size, 0, 'the listeners go with the board');
 });

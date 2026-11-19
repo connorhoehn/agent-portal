@@ -155,6 +155,53 @@ export function fitBoardView(root: ParentNode | null | undefined): boolean {
 /** When the board fits itself after it opens, in ms: the canvas loads the scene over its first seconds. */
 export const BOARD_FIT_DELAYS_MS: readonly number[] = [400, 1200, 2500, 4500];
 
+type TouchEventLike = { isTrusted: boolean; target: unknown };
+export interface BoardFitEnv {
+  /** Where the person's presses land: the document (the board's wrapper may be drawn, or drawn again, after this starts). */
+  page: {
+    addEventListener(type: string, fn: (e: TouchEventLike) => void, opts?: AddEventListenerOptions): void;
+    removeEventListener(type: string, fn: (e: TouchEventLike) => void, opts?: EventListenerOptions): void;
+  };
+  setTimer(fn: () => void, ms: number): unknown;
+  clearTimer(t: unknown): void;
+  /** Fit the board now (fitBoardView on its wrapper). */
+  fit(): void;
+}
+
+/** The events by which the person takes the view: a press, a wheel, a key, their own (trusted) and inside the board. */
+const TOUCHES = ['pointerdown', 'wheel', 'keydown'] as const;
+
+/**
+ * Fit the board to its content while it opens (BOARD_FIT_DELAYS_MS, while it has content), and once more when an empty
+ * board first gets some, until the person touches it: their first trusted press, wheel or key inside `selector` hands
+ * the view to them. The listeners are on the page and match with `closest`, so a wrapper drawn later still counts. The
+ * cleanup to call when the board goes.
+ */
+export function watchBoardFit(ydoc: Y.Doc, selector: string, env: BoardFitEnv): () => void {
+  let touched = false;
+  const timers: unknown[] = [];
+  const fit = () => { if (!touched && readBoardElements(ydoc).length > 0) env.fit(); };
+  const schedule = (delays: readonly number[]) => { for (const ms of delays) timers.push(env.setTimer(fit, ms)); };
+  schedule(BOARD_FIT_DELAYS_MS);
+  let empty = readBoardElements(ydoc).length === 0;
+  const onUpdate = () => {
+    if (!empty || readBoardElements(ydoc).length === 0) return;
+    empty = false;
+    schedule([300, 1200]);
+  };
+  ydoc.on('update', onUpdate);
+  const hand = (e: TouchEventLike) => {
+    const target = e.target as { closest?: (q: string) => unknown } | null;
+    if (e.isTrusted && typeof target?.closest === 'function' && target.closest(selector)) touched = true;
+  };
+  for (const type of TOUCHES) env.page.addEventListener(type, hand, { capture: true, passive: true });
+  return () => {
+    timers.forEach((t) => env.clearTimer(t));
+    ydoc.off('update', onUpdate);
+    for (const type of TOUCHES) env.page.removeEventListener(type, hand, { capture: true });
+  };
+}
+
 // ── the record page's board ───────────────────────────────────────────────────
 
 /** One checkpoint the record page offers: when it was taken (ms from the interview's start), its label, its scene. */
