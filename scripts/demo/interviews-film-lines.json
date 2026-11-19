@@ -10,13 +10,21 @@
   }
  },
  "lines": {
+  "h27": [
+   "hugo",
+   "Okay, Mateo's coding round. Today's question is Two Sum."
+  ],
   "h00": [
    "hugo",
    "Alright, let's get this call started."
   ],
+  "p00": [
+   "cand",
+   "Okay, here's the invite for my coding round."
+  ],
   "p01": [
    "cand",
-   "Okay, before I join, let me read this first."
+   "Before I join, let me read this first. So it covers the recording, the transcript, and Milo."
   ],
   "p02": [
    "cand",
@@ -37,6 +45,10 @@
   "p06": [
    "cand",
    "Okay. Now I just wait for Hugo to let me in."
+  ],
+  "p07": [
+   "cand",
+   "Okay, joining now."
   ],
   "h01": [
    "hugo",
@@ -148,7 +160,7 @@
   ],
   "c16": [
    "cand",
-   "Oh, nice, twelve more. Let me run those too."
+   "Oh, nice, there they are. Let me run those too."
   ],
   "h13": [
    "hugo",
@@ -244,7 +256,27 @@
   ],
   "h25": [
    "hugo",
-   "And Mateo, if you'd like more test cases at any point, feel free to ask Milo."
+   "And Mateo, if you'd like more examples to check against at any point, just ask Milo."
+  ],
+  "h26": [
+   "hugo",
+   "While that comes in, checking for the pair before storing the number was a good fix."
+  ],
+  "c28": [
+   "cand",
+   "Thanks. The duplicate case gets me every time."
+  ],
+  "h28": [
+   "hugo",
+   "Right, let me score this while it's fresh."
+  ],
+  "h29": [
+   "hugo",
+   "And Milo's recap points every note back to what Mateo actually said."
+  ],
+  "h30": [
+   "hugo",
+   "Fair enough. That's our call to make, not Milo's."
   ]
  }
 }
