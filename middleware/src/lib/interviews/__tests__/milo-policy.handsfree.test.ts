@@ -151,6 +151,13 @@ describe('the panel side', () => {
     expect(await say(LEAD, "Milo's notes will be on the record page.")).toEqual({ kind: 'mention' });
   });
 
+  it('a re-ask within the repeat window is answered: hands-free hears each request once (gate iv-follow / fixed-follow, 19 November)', async () => {
+    // The model answered the first ask (its sentence split from the name), then the phrase asks come as follow-ups.
+    expect(await P.runTool!(CALL, { askedBy: PANEL, name: 'time_left', args: {} })).toMatch(/left in this round/);
+    expect(await say(PANEL, 'And how much time is left now?', 'follow-up')).toMatchObject({ kind: 'fixed', line: expect.stringMatching(/left in this round/) });
+    expect(await say(PANEL, 'So how long do we have?', 'follow-up')).toMatchObject({ kind: 'fixed', line: expect.stringMatching(/left in this round/) });
+  });
+
   it('a stranger gets nothing, named or not', async () => {
     expect(await say(STRANGER, 'Milo, how much time is left?')).toEqual({ kind: 'mention' });
   });

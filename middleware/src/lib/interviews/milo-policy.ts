@@ -202,7 +202,9 @@ function interviewHandsfree(call: PolicyCall): HandsfreeFamily {
       await loadTools();
       const tool = await phraseTool(INTERVIEW_FAMILY, text);
       if (!tool || (tool.name === 'introduce' && s.standing !== 'lead')) return null;
-      const out = await runServerTool(call, askedBy, tool.name, {}, 'phrase').catch(() => null);
+      // Hands-free judges each routed sentence once, and the model's call for a sentence it answered is refused as unasked: a
+      // phrase here is never the same request again, so the repeat window does not hold it (a re-ask 15 s on got silence).
+      const out = await runServerTool(call, askedBy, tool.name, {}, 'phrase', { heardOnce: true }).catch(() => null);
       return out?.line ?? '';
     },
     // Pure, for the early release: a superset of the three phrase tools' words (time left, repeat, introduce), so a request they

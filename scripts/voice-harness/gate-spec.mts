@@ -114,8 +114,10 @@ export function gateScenarios(): ScenarioSpec[] {
       steps: [ask('hugo', 'iv01', 'fixed', 800), ask('hugo', 's01', 'silent', 0, { overMiloAfterMs: 600, barge: 'stop' }), ask('hugo', 'iv02', 'fixed', 2500)] },
     { id: 'hold-late', about: 'hold to talk: the transcription arrives after the release; the late words of the hold\'s own sentence must not count as a barge-in', speakers: ['hugo'], runtimeOnly: true,
       steps: [ask('hugo', 'hl01', 'reply', 800, { hold: true, answer: 'madrid' }), ask('hugo', 'hl02', 'reply', 2500, { hold: true, answer: 'four|4' })] },
-    { id: 'fixed-follow', about: 'a follow-up without the name after a server line (candidate, fixed lines): answered by the server line again', speakers: ['cand'], candidateMayAsk: false, runtimeOnly: true,
-      steps: [ask('cand', 'ct03', 'fixed', 800), ask('cand', 'cf01', 'fixed', 2500), ask('cand', 'cf03', 'fixed', 2500)] },
+    // The lead, not the candidate: a candidate on fixed lines gets no follow-up window by design (rules.ts, step-0 decision), so
+    // the window after a server line is a routed person's. The lead speaks the candidate-worded follow-ups (iv-follow has the lead's own).
+    { id: 'fixed-follow', about: 'a follow-up without the name after a server line (the lead, interviews family; a fixed-lines candidate gets no window by design): answered by the server line again', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('hugo', 'ct03', 'fixed', 800), ask('hugo', 'cf01', 'fixed', 2500), ask('hugo', 'cf03', 'fixed', 2500)] },
     { id: 'iv-follow', about: 'interviews family: a follow-up without the name after a server line, same asker', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
       steps: [ask('hugo', 'iv01', 'fixed', 800), ask('hugo', 'cf04', 'fixed', 2500), ask('hugo', 'cf05', 'fixed', 2500)] },
     { id: 'cand-preface', about: 'candidate, fixed lines, name last with a preface ("before I start drawing, roughly how much time is left, Milo?"): the time line speaks', speakers: ['cand'], candidateMayAsk: false, runtimeOnly: true,

@@ -190,4 +190,15 @@ describe('the registry guards (server-tools.ts)', () => {
       expect(await runServerTool(call, ALICE, 'twice_agenda', {}, 'model')).toBeNull();
     } finally { off(); }
   });
+
+  it('a caller that hears each request once (hands-free: one verdict per sentence) is never held by the window', async () => {
+    const once: ServerToolDef<{ callId: string }> = { ...READ_AGENDA, name: 'once_agenda', repeatWindowMs: 60_000, run: async () => ({ line: AGENDA, kind: 'agenda' }) };
+    const off = registerServerTools({ ...STANDUP, family: 'orgiq:once', tools: [once] });
+    try {
+      const call = { callId: 'c9', lobby: 'orgiq:once:w', tenant: 'orgiq' };
+      expect(await runServerTool(call, ALICE, 'once_agenda', {}, 'model')).toEqual({ line: AGENDA, retry: false });
+      expect(await runServerTool(call, ALICE, 'once_agenda', {}, 'phrase', { heardOnce: true })).toEqual({ line: AGENDA, retry: false });
+      expect(await runServerTool(call, ALICE, 'once_agenda', {}, 'model')).toBeNull(); // the run is recorded: the model's call after it is held
+    } finally { off(); }
+  });
 });

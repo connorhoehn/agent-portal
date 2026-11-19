@@ -162,7 +162,7 @@ export interface ServerToolRun { line: string; retry: boolean; note?: string; de
  * time, the run, and the line logged by the family (unposted: the trigger posts and says it). Null: nothing to say (not one of this
  * family's tools, no tools in this call now, not one of its people, the same request heard twice).
  */
-export async function runServerTool(call: PolicyCall, askedBy: string, name: string, args: unknown, via: ServerToolVia): Promise<ServerToolRun | null> {
+export async function runServerTool(call: PolicyCall, askedBy: string, name: string, args: unknown, via: ServerToolVia, opts?: { heardOnce?: boolean }): Promise<ServerToolRun | null> {
   const f = familyOfCall(call);
   const def = f?.tools.find((t) => t.name === name);
   if (!f || !def) return null;
@@ -185,7 +185,9 @@ export async function runServerTool(call: PolicyCall, askedBy: string, name: str
     // One request heard twice (the phrase and the model's call for it) runs once. Two phrase runs are two utterances: a re-ask
     // ("how much time is left?" again 15 s later) is answered (hands-free gate, 19 November: it got silence).
     const last = recent.get(key);
-    if (last && now - last.at < def.repeatWindowMs && !(via === 'phrase' && last.via === 'phrase')) { note('repeat'); return null; }
+    // `heardOnce`: the caller hears each request once (hands-free judges a sentence once, and the model's call for a sentence it
+    // answered is refused as unasked), so nothing it runs is the same request again.
+    if (!opts?.heardOnce && last && now - last.at < def.repeatWindowMs && !(via === 'phrase' && last.via === 'phrase')) { note('repeat'); return null; }
   }
   // The repeat window is used up only by a run that said something.
   const used = (): void => {
