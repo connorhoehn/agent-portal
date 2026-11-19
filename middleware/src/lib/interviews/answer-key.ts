@@ -8,6 +8,7 @@
 // copies the fields it names and nothing else, so it fails closed: a field added to KitQuestion later is not on the
 // candidate's side until someone adds it here on purpose.
 import type { Interview, KitBoard, KitQuestion, Opening } from './types.js';
+import { scopeBoardIds } from './board/elements.js';
 
 /** The fields only the interviewers read. */
 export const ANSWER_KEY_FIELDS = ['providedDesign', 'designQuestions', 'redFlags'] as const;
@@ -32,11 +33,12 @@ export const NOTHING_TO_REVEAL = 'There is no provided design to show for this q
 
 /**
  * May `userId` reveal question `questionId`'s provided design on `interview`'s board now: the lead, while the round is
- * live, for a question chosen for it that carries one. The board to put on the shared board, or null (the route's 404).
+ * live, for a question chosen for it that carries one. The board to put on the shared board, its ids scoped to the
+ * question (board/elements.ts scopeBoardIds, so two questions' designs never collide), or null (the route's 404).
  */
 export function revealable(interview: Pick<Interview, 'leadId' | 'state' | 'type' | 'questionIds'>, opening: Pick<Opening, 'kit'> | null, userId: string, questionId: unknown): KitBoard | null {
   if (!opening || interview.leadId !== userId || interview.state !== 'live' || interview.type !== 'technical') return null;
   if (typeof questionId !== 'string' || !interview.questionIds.includes(questionId)) return null;
   const q = opening.kit.questions.find((k) => k.id === questionId);
-  return q?.providedDesign ? structuredClone(q.providedDesign) : null;
+  return q?.providedDesign ? { ...q.providedDesign, elements: scopeBoardIds(q.providedDesign.elements, q.id) } : null;
 }

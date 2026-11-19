@@ -192,9 +192,9 @@ export function sceneBounds(elements: ReadonlyArray<Record<string, unknown>>): S
 
 /**
  * The parts a board opens on, first found wins (middleware board/templates.ts names them): the master template's
- * part A, the prompt (`mt-a-*`), and a provided design's High-level design frame (`pd-hld`).
+ * part A, the prompt (`mt-a-*`), and a provided design's High-level design frame (`pd-hld`, or `<question>:pd-hld` once revealed).
  */
-const OPENING_PARTS: ReadonlyArray<(id: string) => boolean> = [(id) => id.startsWith('mt-a-'), (id) => id === 'pd-hld'];
+const OPENING_PARTS: ReadonlyArray<(id: string) => boolean> = [(id) => id.startsWith('mt-a-'), (id) => id === 'pd-hld' || id.endsWith(':pd-hld')];
 /** The part of a board it opens on, or null when the board has none (it is fitted whole). */
 export function openingRegion(elements: ReadonlyArray<Record<string, unknown>>): SceneBounds | null {
   for (const part of OPENING_PARTS) {

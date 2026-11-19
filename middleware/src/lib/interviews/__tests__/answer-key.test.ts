@@ -56,4 +56,27 @@ describe('who reads the seeded "Design Twitter" answer key', () => {
     expect(revealable(live, opening, 'u-hugo', 42)).toBeNull();
     expect(revealable(live, null, 'u-hugo', 'q-be-twitter')).toBeNull();
   });
+
+  it('two questions with one provided design reveal apart: every id and every reference is scoped to its question', () => {
+    const twitter = opening.kit.questions.find((q) => q.id === 'q-be-twitter')!;
+    const copy = { ...structuredClone(twitter), id: 'q-be-twitter-2' };
+    const both = { kit: { ...opening.kit, questions: [...opening.kit.questions, copy] } };
+    const two = { ...live, questionIds: ['q-be-twitter', 'q-be-twitter-2'] };
+    const a = revealable(two, both, 'u-hugo', 'q-be-twitter')!.elements;
+    const b = revealable(two, both, 'u-hugo', 'q-be-twitter-2')!.elements;
+    const idsA = new Set(a.map((e) => String(e['id'])));
+    expect(b.some((e) => idsA.has(String(e['id'])))).toBe(false);
+    for (const els of [a, b]) {
+      const ids = new Set(els.map((e) => String(e['id'])));
+      const refs = els.flatMap((e) => [e['frameId'], e['containerId'], ...((e['boundElements'] as Array<{ id: string }> | null) ?? []).map((x) => x.id),
+        (e['startBinding'] as { elementId?: string } | null)?.elementId, (e['endBinding'] as { elementId?: string } | null)?.elementId])
+        .filter((r): r is string => typeof r === 'string');
+      expect(refs.length).toBeGreaterThan(0);
+      expect(refs.filter((r) => !ids.has(r))).toEqual([]);
+    }
+    // the same question reveals the same ids again, so a second reveal adds nothing to the board
+    expect(revealable(two, both, 'u-hugo', 'q-be-twitter')!.elements.map((e) => e['id'])).toEqual([...idsA]);
+    // and the kit's own copy is untouched
+    expect(twitter.providedDesign!.elements[0]!['id']).toBe('pd-heading');
+  });
 });

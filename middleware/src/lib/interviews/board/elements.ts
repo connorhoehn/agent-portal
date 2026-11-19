@@ -24,3 +24,24 @@ export function boardElement(raw: unknown): Record<string, unknown> | 'kind' | n
   for (const f of EMPTIED) if (f in out) out[f] = null;
   return out;
 }
+
+/**
+ * A board's elements with every id, and every reference to one (frame, container, bound elements, arrow bindings,
+ * groups), put under `scope`: two copies of one design (two questions' provided designs from one template) then never
+ * share an id on the shared board, where the second would otherwise add nothing. The same scope gives the same ids.
+ */
+export function scopeBoardIds(elements: ReadonlyArray<Record<string, unknown>>, scope: string): Array<Record<string, unknown>> {
+  const own = (id: unknown): unknown => (typeof id === 'string' && id ? `${scope}:${id}` : id);
+  const binding = (b: unknown): unknown => (b && typeof b === 'object' && 'elementId' in b ? { ...(b as object), elementId: own((b as { elementId: unknown }).elementId) } : b);
+  return elements.map((raw) => {
+    const e = structuredClone(raw);
+    e['id'] = own(e['id']);
+    if ('frameId' in e) e['frameId'] = own(e['frameId']);
+    if ('containerId' in e) e['containerId'] = own(e['containerId']);
+    if (Array.isArray(e['boundElements'])) e['boundElements'] = (e['boundElements'] as Array<Record<string, unknown>>).map((x) => ({ ...x, id: own(x['id']) }));
+    if (Array.isArray(e['groupIds'])) e['groupIds'] = (e['groupIds'] as unknown[]).map(own);
+    if ('startBinding' in e) e['startBinding'] = binding(e['startBinding']);
+    if ('endBinding' in e) e['endBinding'] = binding(e['endBinding']);
+    return e;
+  });
+}
