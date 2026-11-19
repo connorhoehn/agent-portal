@@ -140,6 +140,37 @@ describe('the listening side', () => {
     expect(seen.lane).toEqual([{ userId: 'cand', state: 'down', reason: 'no-consent' }]);
   });
 
+  it('a person whose audio stops mid-sentence (muted) is streamed silence from the tick, so the sentence can still end', async () => {
+    const { side, streams, seen, clock, feed } = setup();
+    await side.open('u1', 'Una');
+    feed('u1', voiced(1000), 1000);
+    expect(streams[0]!.streamMs).toBe(1000);
+    // Audio placed up to the mixer's lateness behind the clock is not taken for a stop.
+    clock.t = 2400; side.tick();
+    expect(streams[0]!.streamMs).toBe(1000);
+    for (let t = 2500; t <= 6000; t += 100) { clock.t = t; side.tick(); }
+    // At most a second of silence after the last audio (enough for the stream's quiet detector), on the same timeline.
+    expect(streams[0]!.streamMs).toBe(2000);
+    // Unmuted later: the rest of the gap is silence as before, and stream ms still convert to session ms exactly.
+    feed('u1', voiced(200), 3500);
+    expect(streams[0]!.streamMs).toBe(2700);
+    streams[0]!.final('b', 'Okay.', 2500, 2700);
+    expect(seen.sentence.at(-1)).toMatchObject({ text: 'Okay.', startMs: 3500, endMs: 3700 });
+  });
+
+  it('a stream that closes mid-sentence ends the open sentence with the words heard so far', async () => {
+    const { side, streams, seen, clock, feed } = setup();
+    await side.open('u1', 'Una');
+    feed('u1', voiced(800), 1000);
+    streams[0]!.delta('a', 'Milo, what is ');
+    streams[0]!.delta('a', 'the time');
+    streams[0]!.drop();
+    expect(seen.sentence).toEqual([expect.objectContaining({ userId: 'u1', text: 'Milo, what is the time', named: true })]);
+    expect(seen.line).toHaveLength(1);
+    clock.advance(300); await flush();
+    expect(streams).toHaveLength(2);
+  });
+
   it('a closed stream reopens, at most 3 times a minute, then again after the minute', async () => {
     const { side, streams, seen, clock, feed } = setup();
     await side.open('u1', 'Una');

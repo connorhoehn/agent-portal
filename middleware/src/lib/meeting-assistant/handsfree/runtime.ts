@@ -38,7 +38,7 @@ export class HandsfreeRuntime implements HandsfreeRun {
     this.router = new Router({ clock: deps.clock, call: deps.call, rules: deps.rules, listening: deps.listening, talking: deps.talking, relay: deps.relay, ...(deps.sayFixed ? { sayFixed: deps.sayFixed } : {}), ...(deps.working ? { working: deps.working } : {}), ...(deps.trace ? { trace: deps.trace } : {}) });
     this.offs.push(deps.listening.on('line', (l) => { if (!this.closing) deps.onLine(l); }));
     this.sink = {
-      append: () => { if (!this.closing) this.router.tick(); },
+      append: () => { if (!this.closing) { deps.listening.tick(); this.router.tick(); } },
       placed: (userId, pcm, atMs) => {
         if (this.closing) return;
         // Audio exists only for people who acknowledged the notice: the first piece of someone new opens their lane.

@@ -47,6 +47,8 @@ export class FakeListening implements Pick<ListeningSide, 'preRoll' | 'on' | 'pl
     this.emit('frame', { userId, pcm, atMs: at });
   }
   placed(userId: string, pcm: Buffer, atMs: number): void { this.emit('frame', { userId, pcm, atMs }); }
+  ticks = 0;
+  tick(): void { this.ticks += 1; }
   async open(userId: string): Promise<void> { this.opened.push(userId); }
   closeLane(userId: string): void { this.closedLanes.push(userId); }
   preRoll(userId: string, fromMs: number, toMs = Infinity): Buffer[] {

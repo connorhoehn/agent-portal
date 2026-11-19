@@ -257,6 +257,8 @@ export class Router {
     const window = st.phase === 'follow-up' && st.userId === userId ? { untilMs: st.untilMs, verdict: prior?.verdict ?? null } : prior?.userId === userId ? prior.window : undefined;
     this.turn = { userId, via, sentenceId, verdict: via === 'hold' ? { kind: 'request' } : known, held: [], verdictTimer: null, ...(window ? { window } : {}) };
     this.setState({ phase: 'routing', userId, via, sinceMs: this.deps.clock.nowMs() });
+    // A routed turn always ends: given up if no sentence lands (a stream that died, a mic gone quiet), counted from the last words.
+    if (via !== 'hold') this.armGiveUp();
     if (this.turn.verdict) this.applyVerdict(this.turn, this.turn.verdict);
   }
 
@@ -269,6 +271,8 @@ export class Router {
     const heard = `${this.heard.get(key) ?? ''}${delta}`;
     this.lastWordsMs.set(userId, this.deps.clock.nowMs());
     this.heard.set(key, heard);
+    // The routed person is still talking: the turn's give-up counts from their last words.
+    if (this.st.phase === 'routing' && this.st.userId === userId && this.turn?.via !== 'hold') this.armGiveUp();
     if (this.heard.size > MAX_KEPT_VERDICTS) this.heard.delete(this.heard.keys().next().value as string);
     if (this.playing()) {
       const v = this.deps.rules.overlap(heard, this.saying);
@@ -496,7 +500,11 @@ export class Router {
   private armGiveUp(): void {
     this.clearGiveUp();
     const t = this.turn;
-    this.giveUpTimer = this.deps.clock.setTimeout(() => { this.giveUpTimer = null; if (this.turn === t && this.st.phase === 'routing') this.drop('stop'); }, ROUTE_GIVE_UP_MS);
+    this.giveUpTimer = this.deps.clock.setTimeout(() => {
+      this.giveUpTimer = null;
+      // Still routed, or the provider closed the turn but the rules never judged it (no sentence ever landed): over.
+      if (this.turn === t && (this.st.phase === 'routing' || (this.st.phase === 'answering' && t?.verdict === null))) this.drop('stop');
+    }, ROUTE_GIVE_UP_MS);
   }
 
   private clearGiveUp(): void { if (this.giveUpTimer !== null) { this.deps.clock.clearTimeout(this.giveUpTimer); this.giveUpTimer = null; } }

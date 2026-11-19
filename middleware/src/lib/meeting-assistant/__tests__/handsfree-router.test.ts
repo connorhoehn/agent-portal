@@ -330,6 +330,19 @@ describe('hands-free router', () => {
     expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
   });
 
+  it('a routed turn whose sentence never lands is given up 12 s after the last words (not 12 s after the route began)', async () => {
+    const w = world();
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    for (let i = 0; i < 15; i++) { w.quiet(10); w.words(UNA, 's1', ' and'); } // a long question: 15 s of words
+    expect(w.router.state()).toMatchObject({ phase: 'routing', userId: UNA });
+    w.clock.advance(ROUTE_GIVE_UP_MS - 1);
+    expect(w.router.state().phase).toBe('routing');
+    w.clock.advance(2);
+    expect(w.router.state()).toEqual({ phase: 'idle' });
+    expect(w.drops).toEqual(['stop']);
+  });
+
   it('barge-in clears the relay inside the frame that carried it; echo does not', async () => {
     const w = world();
     w.talk(UNA, T_UNA, 5);

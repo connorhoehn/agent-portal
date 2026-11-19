@@ -148,6 +148,11 @@ export interface ListeningSide {
    * A copy: the caller may keep it.
    */
   preRoll(userId: string, fromMs: number, toMs?: number): Buffer[];
+  /**
+   * The mixer's 100 ms tick (the run's `sink.append`). A person whose audio stopped (muted, their track gone) is streamed silence in
+   * its place, up to a second past their last audio, so the stream's quiet detector still ends their sentence (review 1, item 7).
+   */
+  tick(): void;
   on<K extends keyof ListeningEvents>(type: K, fn: (e: ListeningEvents[K]) => void): () => void;
   /** Close every lane and stream; resolves once all streams are closed (bounded). Idempotent. Emits no events after it resolves. */
   close(): Promise<void>;

@@ -33,6 +33,12 @@ export const NAME_KEYWORDS: readonly string[] = NAME_SPELLINGS.map((s) => s[0]!.
 
 /** Gaps in a person's audio up to this long are streamed as silence; longer ones are skipped (a break in the stream's timeline). */
 const STREAM_FILL_MS = 1_000;
+/**
+ * A person's audio this far behind the clock has stopped (the mixer places a chunk at most 400 ms late, mixer.ts `lateMs`): the tick
+ * streams silence in its place, up to STREAM_FILL_MS past their last audio.
+ */
+const STOPPED_AFTER_MS = 500;
+const SILENT_FRAME = Buffer.alloc(HANDSFREE.frameBytes);
 /** While a stream opens, at most this much of the person's audio is held for it. */
 const OPEN_QUEUE_MS = 2_000;
 /** Speech onset: a 20 ms window over this RMS after `ONSET_QUIET_MS` of quiet starts a sentence. */
@@ -68,8 +74,10 @@ interface Lane {
   /** Breaks of the current stream: from stream ms `streamMs` on, session ms = streamMs + offset. Ascending. */
   breaks: Array<{ streamMs: number; offset: number }>;
   streamMs: number;
-  /** Session ms just past the last frame streamed, or null before the first. */
+  /** Session ms just past the last frame streamed (the person's audio, or the tick's silence after it), or null before the first. */
   lastStreamedEnd: number | null;
+  /** Session ms just past the person's last frame of audio streamed (not the tick's silence). */
+  lastHeardEnd: number | null;
   sentences: Map<string, Sentence>;
   sentenceSeq: number;
   lastSentenceEndMs: number;
@@ -136,6 +144,8 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
   };
 
   const streamFrame = (lane: Lane, pcm: Buffer, atMs: number): void => {
+    // Already streamed: the tick's silence stood in for audio that came later than the mixer allows.
+    if (lane.lastStreamedEnd !== null && atMs < lane.lastStreamedEnd) return;
     if (lane.lastStreamedEnd === null) {
       lane.breaks = [{ streamMs: lane.streamMs, offset: atMs - lane.streamMs }];
     } else {
@@ -182,7 +192,12 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       s = { id: `${lane.userId}:${lane.generation}:${lane.sentenceSeq}`, text: '', named: false, startMs: Math.max(toSession(lane, e.startStreamMs), lane.lastSentenceEndMs), lastMs: endMs };
     }
     lane.sentences.delete(e.itemId);
-    const text = (e.text || s.text).trim();
+    finishSentence(lane, s, e.text || s.text, endMs);
+  };
+
+  /** A sentence is over: its final, or its stream closed under it (then it ends with the words heard so far, at its last word). */
+  const finishSentence = (lane: Lane, s: Sentence, said: string, endMs: number): void => {
+    const text = said.trim();
     const startMs = Math.min(s.startMs, endMs);
     lane.lastSentenceEndMs = Math.max(lane.lastSentenceEndMs, endMs);
     if (!text) return;
@@ -239,6 +254,7 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
     lane.stream = stream;
     lane.streamMs = 0;
     lane.lastStreamedEnd = null;
+    lane.lastHeardEnd = null;
     lane.breaks = [];
     lane.sentences.clear();
     lane.unsubs.forEach((u) => u());
@@ -249,6 +265,9 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
         if (gen !== lane.generation || lanes.get(lane.userId) !== lane || closing) return;
         log({ event: 'listening-stream-closed', userId: lane.userId, error: e.error ? String(e.error).slice(0, 80) : null });
         lane.stream = null;
+        // Its open sentences will never get a final from this stream: they end here, as heard.
+        const open = [...lane.sentences.values()]; lane.sentences.clear();
+        for (const s of open) finishSentence(lane, s, s.text, s.lastMs);
         setDown(lane, 'closed');
         scheduleReopen(lane);
       }),
@@ -268,7 +287,7 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       for (const f of lane.ring.write(pcm24k, atMs)) {
         trackOnset(lane, f.pcm, f.atMs);
         emit('frame', { userId, pcm: f.pcm, atMs: f.atMs });
-        if (lane.stream) streamFrame(lane, f.pcm, f.atMs);
+        if (lane.stream) { streamFrame(lane, f.pcm, f.atMs); lane.lastHeardEnd = f.atMs + HANDSFREE.frameMs; }
         else if (lane.opening) {
           lane.queue.push({ pcm: f.pcm, atMs: f.atMs });
           while (lane.queue.length > OPEN_QUEUE_MS / HANDSFREE.frameMs) lane.queue.shift();
@@ -285,7 +304,7 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       }
       const lane: Lane = {
         userId, speakerName, ring: new PersonRing(), stream: null, generation: 0, opening: false, queue: [], breaks: [], streamMs: 0,
-        lastStreamedEnd: null, sentences: new Map(), sentenceSeq: 0, lastSentenceEndMs: 0, onsets: [], quietMs: 0, voiced: false,
+        lastStreamedEnd: null, lastHeardEnd: null, sentences: new Map(), sentenceSeq: 0, lastSentenceEndMs: 0, onsets: [], quietMs: 0, voiced: false,
         reopens: [], retry: null, unsubs: [], down: false,
       };
       lanes.set(userId, lane);
@@ -309,6 +328,16 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       const s = lane.stream; lane.stream = null;
       if (s) void s.close().catch(() => {});
       emit('lane', { userId, state: 'down', reason: 'left' });
+    },
+
+    tick() {
+      if (closing) return;
+      const now = opts.clock.nowMs();
+      for (const lane of lanes.values()) {
+        if (!lane.stream || lane.lastStreamedEnd === null || lane.lastHeardEnd === null) continue;
+        const upTo = Math.min(now - STOPPED_AFTER_MS, lane.lastHeardEnd + STREAM_FILL_MS);
+        while (lane.lastStreamedEnd + HANDSFREE.frameMs <= upTo) streamFrame(lane, SILENT_FRAME, lane.lastStreamedEnd);
+      }
     },
 
     preRoll(userId, fromMs, toMs) {
