@@ -58,6 +58,9 @@ import { trace } from './trace.js';
 import { handsfreeEnabled } from './handsfree-flag.js';
 import { HandsfreeTalking } from './handsfree/talking.js';
 import { HandsfreeRuntime } from './handsfree/runtime.js';
+import { createListeningSide } from './handsfree/listening.js';
+import { createHandsfreeRules, handsfreeFamilyRules } from './handsfree/rules.js';
+import { openAiTranscriberFactory } from '../voice/openai-transcribe.js';
 import type { HandsfreeClock, HandsfreeRules, HandsfreeRun, HeardLine, ListeningSide } from './handsfree/types.js';
 import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_BREATH_MS, SAY_BREATH_WAIT_MS, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
@@ -178,7 +181,7 @@ export interface RuntimeDeps {
    * The hands-free sides for one call (handsfree/: lane A's listening side, lane C's rules), used only when MEETING_ASSISTANT_HANDSFREE
    * is on as the run starts. Absent (or null for this call): the call runs today's room-mix path even with the flag on.
    */
-  handsfree?: (call: PolicyCall, clock: HandsfreeClock) => { listening: ListeningSide; rules: HandsfreeRules } | null;
+  handsfree?: (call: PolicyCall, clock: HandsfreeClock, roster: () => readonly string[]) => { listening: ListeningSide; rules: HandsfreeRules } | null;
 }
 
 export interface FinishedEvent {
@@ -945,7 +948,9 @@ export class AssistantRuntime {
       // A call whose policy relays nothing the model says on its own (an interview) tells the model so: it never answers anyone,
       // it only reads the lines the system hands it (and, offered tools, hands what they do to its backend and says nothing).
       // Otherwise its own reply to a request runs over the line handed it to read.
-      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent, readAloudOnly: !run.policy.relaysLiveSpeech(run.call), delegates: tools.tools.length > 0 }),
+      instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent, readAloudOnly: !run.policy.relaysLiveSpeech(run.call), delegates: tools.tools.length > 0,
+        // Hands-free: the turn rules and the family's own (an interview: never solve or hint) replace the read-aloud rule.
+        ...(run.handsfree ? { handsfree: { familyRules: handsfreeFamilyRules(run.call, run.policy) } } : {}) }),
       ...tools,
     });
     run.session = session;
@@ -973,7 +978,7 @@ export class AssistantRuntime {
       setTimeout: (fn, ms) => setTimeout(fn, ms),
       clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
     };
-    const sides = this.deps.handsfree?.(run.call, clock) ?? null;
+    const sides = this.deps.handsfree?.(run.call, clock, () => run.ctx.roster) ?? null;
     if (!sides) { console.warn('[meeting-assistant] hands-free is on but no listening side is available: nothing is routed'); return null; }
     const hf = new HandsfreeRuntime({
       call: run.call, clock, listening: sides.listening, rules: sides.rules, talking,
@@ -2668,6 +2673,17 @@ function hookProposals(): void {
   proposalHook ??= onProposalConsented(async (p) => { await runtime?.startProposal(p.callId, p.id); });
   hookProposalNotices();
 }
+/**
+ * The process's hands-free sides for one call (used only with MEETING_ASSISTANT_HANDSFREE on): lane A's listening side over the
+ * provider's transcription stream, lane C's rules with the call's roster (a follow-up turned to a colleague by name is an aside).
+ * Audio reaches `placed` only for people the audio intake taps (they acknowledged); `admit` checks again at every trigger.
+ */
+export function productionHandsfree(call: PolicyCall, clock: HandsfreeClock, roster: () => readonly string[]): { listening: ListeningSide; rules: HandsfreeRules } {
+  return {
+    listening: createListeningSide({ callId: call.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true }),
+    rules: createHandsfreeRules({ roster: () => roster() }),
+  };
+}
 export function assistantRuntime(): AssistantRuntime {
   hookProposals();
   if (runtime) return runtime;
@@ -2679,6 +2695,7 @@ export function assistantRuntime(): AssistantRuntime {
   return (runtime = new AssistantRuntime({
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
     audio: assistantAudio(), watcher,
+    handsfree: productionHandsfree,
     // As the restart reconcile does: only a process with the media settings has taps of its own to arm again.
     taps: async () => { const media = await import('./media.js'); return media.mediaConfig() ? media.tapArmer() : null; },
   }));

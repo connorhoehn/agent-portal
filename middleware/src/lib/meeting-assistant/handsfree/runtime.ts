@@ -101,3 +101,99 @@ export class HandsfreeRuntime implements HandsfreeRun {
     this.deps.listening.open(userId, name).catch((e: unknown) => this.deps.trace?.('hf.lane.error', { userId, error: (e as Error).name }));
   }
 }
+
+// ── A standalone run for the voice gate (scripts/voice-harness/gate-port-runtime.mts) ──────────────────────────────────────────
+// The real runtime (router, lane A's listening side over the provider's transcription stream, lane C's rules, the live session
+// with delegation) with no orchestrator around it: a fake relay sink, the gate's own record and family. Nothing is stored.
+
+export interface StandaloneRunInput {
+  callId: string;
+  speakers: Array<{ userId: string; name: string }>;
+  /** False: `cand` (any speaker id starting with "cand") gets fixed lines only, as an interview's candidate without pad help. */
+  candidateMayAsk: boolean;
+  instructions: string;
+  /** Milo's voice as it plays out (one 100 ms tick's worth per call, on the run's clock; silence included). */
+  relay: (pcm24k: Buffer, atMs: number, kind: 'model' | 'fixed') => void;
+  onTool: (name: string, askedBy: string | null, atMs: number) => void;
+  onRouted: (userId: string, atMs: number, mixed: boolean) => void;
+}
+
+export interface StandaloneRun extends HandsfreeRun {
+  /** The player's tick: the run's clock is set to `atMs` (session ms) and the router and the relay's playout advance. */
+  tick(atMs: number): void;
+}
+
+export const GATE_FIXED_REFUSAL = 'Sorry, I can only tell you the time left or repeat the question.';
+
+export async function startHandsfreeRun(input: StandaloneRunInput): Promise<StandaloneRun> {
+  const [{ OpenAiLiveSession }, { voiceConfig }, { createListeningSide }, { createHandsfreeRules }, { openAiTranscriberFactory }, { HandsfreeTalking }, { HANDSFREE_TURN_RULES }, { policyForLobby }] = await Promise.all([
+    import('../live-session.js'), import('../../voice/config.js'), import('./listening.js'), import('./rules.js'),
+    import('../../voice/openai-transcribe.js'), import('./talking.js'), import('../instructions.js'), import('../policy.js'),
+  ]);
+  const FRAME_BYTES = 4800;
+  let tickAt = 0; let tickWall = Date.now();
+  const clock: HandsfreeClock = {
+    nowMs: () => tickAt + (Date.now() - tickWall),
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  };
+  const call: PolicyCall = { callId: input.callId, lobby: null, tenant: 'gate' };
+  const names = input.speakers.map((s) => s.name);
+  const isCandidate = (userId: string): boolean => userId.startsWith('cand');
+  const base = policyForLobby(null);
+  const family = {
+    admit: async (userId: string) => (!input.candidateMayAsk && isCandidate(userId) ? 'fixed-lines' as const : 'route' as const),
+    heldAnswer: async (r: { text: string; admission: string }) => (r.admission === 'fixed-lines' && /time/i.test(r.text) ? 'There are twenty minutes left.' : null),
+    refusal: GATE_FIXED_REFUSAL,
+    instructions: () => null,
+  };
+  const policy = Object.assign(Object.create(base) as typeof base, { handsfree: () => family, acknowledgement: () => 'in-call-notice' as const });
+  const record = { callId: input.callId, state: 'listening', acked: [...input.speakers.map((s) => s.userId), 'room'] } as unknown as import('../types.js').AssistantRecord;
+
+  const cfg = voiceConfig();
+  if (!cfg.delegationModel) throw new Error('no delegation model configured');
+  const inner = new OpenAiLiveSession({ model: cfg.model, voice: cfg.voice, delegationModel: cfg.delegationModel, clock: Date.now });
+  const talking = new HandsfreeTalking(inner);
+  let run: HandsfreeRuntime | null = null;
+  const ownerOf = (): string | null => { const st = run?.state(); return st && st.phase !== 'idle' ? st.userId : null; };
+  const feed = talking.feed.bind(talking);
+  talking.feed = (frames) => { const who = ownerOf(); if (who) for (const _f of frames) input.onRouted(who, clock.nowMs(), false); feed(frames); };
+
+  // The relay sink: a playout queue, one tick's worth played per tick (a cleared relay drops what has not played).
+  let queue: Array<{ pcm: Buffer; kind: 'model' | 'fixed' }> = [];
+  let nextKind: 'model' | 'fixed' = 'model';
+  const listening = createListeningSide({ callId: input.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true });
+  const rules = createHandsfreeRules({ record: async () => record, policy: () => policy, roster: () => names, admitWaitMs: 150 });
+  run = new HandsfreeRuntime({
+    call, clock, listening, rules, talking,
+    relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); }, clear: () => { queue = []; } },
+    onLine: () => undefined,
+    nameOf: async (userId) => input.speakers.find((s) => s.userId === userId)?.name ?? userId,
+  });
+  inner.on('inputTranscript', (e) => { if (e.turnEnded) run?.turnEnded(); });
+  inner.on('delegation', () => run?.turnEnded());
+  inner.on('outputTranscript', (e) => { if (e.say === undefined) run?.outputText(e.text); });
+  inner.on('outputAudio', (e) => { nextKind = e.say !== undefined ? 'fixed' : 'model'; run?.outputAudio(e.pcm, e.last === true, e.say); });
+  talking.on('toolCall', (e) => { input.onTool(e.name, e.askedBy ?? null, clock.nowMs()); inner.answerToolCall(e.callId, JSON.stringify({ ok: true })); });
+
+  await talking.start({
+    instructions: [input.instructions, HANDSFREE_TURN_RULES].join('\n\n'),
+    tools: [{ type: 'function', name: 'add_note', description: 'Add a short note to the meeting notes.', parameters: { type: 'object', properties: { text: { type: 'string', description: 'the note' } }, required: ['text'], additionalProperties: false }, strict: true } as never],
+    backendInstructions: 'When asked to add a note, call add_note once, then confirm in a few words.',
+  });
+  for (const s of input.speakers) run.personJoined(s.userId, s.name);
+
+  const hf = run;
+  const play = (atMs: number): void => {
+    let owed = FRAME_BYTES; const parts: Buffer[] = []; let kind: 'model' | 'fixed' = 'model';
+    while (owed > 0 && queue.length) {
+      const head = queue[0]!; kind = head.kind;
+      if (head.pcm.length <= owed) { parts.push(head.pcm); owed -= head.pcm.length; queue.shift(); }
+      else { parts.push(head.pcm.subarray(0, owed)); head.pcm = head.pcm.subarray(owed); owed = 0; }
+    }
+    if (parts.length) input.relay(Buffer.concat(parts), atMs, kind);
+  };
+  return Object.assign(hf, {
+    tick(atMs: number): void { tickAt = atMs; tickWall = Date.now(); hf.sink.append(Buffer.alloc(0)); play(atMs); },
+  }) as StandaloneRun;
+}
