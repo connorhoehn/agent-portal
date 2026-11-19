@@ -13,8 +13,9 @@
 // NOTHING ELSE may run jest against that Postgres while this suite runs: no second copy of this suite, no other gated
 // *-postgres suite pointed at the same container. Run it alone, with --runInBand.
 //
-// Written by the hardening pass on a machine without Docker: as of the commit that added it, it has never been run. Each
-// describe names the OWED line it answers.
+// The container needs the vector extension (the schema creates it): pgvector/pgvector:pg16, not the plain postgres image.
+// Written by the hardening pass on a machine without Docker; first run green with Milo's interview tools. Each describe
+// names the OWED line it answers.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false }, meetingAssistant: { enabled: true } } }));
 jest.mock('../../../providers/identity.js', () => ({
   ...jest.requireActual('../../../providers/identity.js'),
