@@ -1,6 +1,6 @@
 """Voices for the Candidates call film (scripts/demo/interviews-call-film.mjs): Qwen3-TTS CustomVoice (mlx-audio), one preset speaker
 per person with a style `instruct`, three seeds per line. Run with the mlx-audio environment's python:
-    <venv>/bin/python scripts/demo/interviews-film-voices.py scripts/demo/interviews-film-lines.json <dir> [--only id,id,...]
+    <venv>/bin/python scripts/demo/interviews-film-voices.py scripts/demo/interviews-film-lines.json <dir> [--only id,id,...] [--more K]
 Writes <dir>/takes/*.wav and <dir>/takes.json (with --only, only those lines are made again; the others are kept).
 
 Which take is kept: a take far longer than its words is a ramble and is dropped; so is one whose speaking pitch strays more than
@@ -15,6 +15,8 @@ from mlx_audio.tts.utils import load_model
 MAX_PITCH_STRAY = 3.0
 spec = json.load(open(sys.argv[1])); out = sys.argv[2]; os.makedirs(f"{out}/takes", exist_ok=True)
 only = set(sys.argv[sys.argv.index('--only') + 1].split(',')) if '--only' in sys.argv else None
+# --more K: three more takes per line on seeds shifted by K, added to the line's earlier takes (the pick sees them all).
+more = int(sys.argv[sys.argv.index('--more') + 1]) if '--more' in sys.argv else 0
 m = load_model(snapshot_download("mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit", local_files_only=True))
 print("speakers", m.get_supported_speakers(), flush=True)
 SR = 24000
@@ -45,12 +47,13 @@ for n, (lid, (who, text)) in enumerate(spec["lines"].items()):
     if only is not None and lid not in only: continue
     v = spec["voices"][who]; takes = []
     for s in range(3):
-        seed = 100 + 7 * s + n
+        seed = 100 + 7 * s + n + more
         mx.random.seed(seed)
         a = np.concatenate([np.array(r.audio) for r in m.generate(text=text, voice=v["speaker"], instruct=v["instruct"], lang_code="english", temperature=0.8)])
         p = os.path.abspath(f"{out}/takes/{lid}-s{seed}.wav"); sf.write(p, a, SR, subtype="PCM_16")
         sc, med, ev = score(a); dur = len(a) / SR
         takes.append(dict(file=p, seed=seed, f0_st_std=round(sc, 2), f0_median=round(med, 1), energy_cv=round(ev, 2), seconds=round(dur, 2), plausible=dur < 0.11 * len(text) + 2.0))
+    if more and lid in res and res[lid]['text'] == text: takes = res[lid]['takes'] + takes
     res[lid] = dict(who=who, text=text, takes=takes)
     print(lid, 'made', [(t['f0_median'], t['f0_st_std'], t['seconds']) for t in takes], flush=True)
 
