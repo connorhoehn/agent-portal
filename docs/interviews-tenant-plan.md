@@ -293,6 +293,18 @@ Next, not built: `pad_set_language`, `run_code`, `next_question`.
 
 The time to the call is the background model writing the arguments and varies run to run; neither cut touches it. Cut 1, kept: a server tool's call is answered with its continuation held back, so nothing is waited for and the confirmation goes at once; the continuation is sent when the line is said (or after 12 s). Sending none at all stopped the session taking the next request in two probes of two. Cut 2, not kept: the Live API documents no event that cancels the voice's own response, and an appended instruction to stop speaking at the hand-off still let a filler through ("Sure.") in the probe. The filler is never relayed in an interview (only approved words are), so the call does not hear it; one probe heard none at all.
 
+**Review 2 (18 November) and what changed.** A second Fable review found one blocker and one high; items 1 to 6 are fixed, each with a test that fails on the code before it:
+- No declaration pattern's whitespace crosses a newline, and the search reads at most the pad's first 20,000 characters (a Swift pad of 100,000 newlines took 5.7 s per search).
+- The solution check is asked about every technical question of the round, and a helper naming any of their functions, in any language, is refused (a renamed function made the check judge the wrong question).
+- A test batch goes to the check when any string in it has a space or is over 24 characters, or its strings total over 48.
+- The pad note is sized to fit before it is fenced, and goes only on a language change.
+- A Python import continued with a backslash is one statement; a bracket in a comment or a string does not close an import group.
+- U+2028 and U+2029 are escaped in every string literal Milo writes.
+
+**Known limits (review 2, not changed).**
+- The progressive audio bound (50 ms of audio per checked character, against roughly 67 ms per spoken character) holds back about the last quarter of each approved line until the final transcript arrives. It does not leak unchecked words. Still to do: measure whether the hold is audible in a real film take, and make `heardPart` record only the words actually heard.
+- A quiet speaker overlapping the asker, under `ENERGY_SHARE_MIN`, is not counted in the turn's speakers, so the single-speaker check (`clearlyAsked`) sees one speaker. `MAX_VERDICTS` is counted per process, not per cluster; the money stays bounded by the spend hold each verdict takes.
+
 ## I0.7 answer
 
 Written 16 November 2026 from this repository's code, the installed packages, and (read only) platform-api, realtime-modules and live-video-streaming. The websocket-gateway checkout has no source to read. Where this answer and "What exists" disagree on shared editing, this answer is the newer reading.
