@@ -5,9 +5,9 @@ row_I5.2() {
   exists $route "the recap routes"
   # Every statement has a quote and a line number: the guard drops one without, and the page shows both.
   needF "line.side === 'candidate' && quote.length > 0 && quotedFrom(quote, [line])" $parse "a statement is kept only when its quote is in the candidate's own line it names"
-  needF "e.source.seq" $page "the page shows the line number of each statement"
-  needF "e.source.quote" $page "the page shows the quote of each statement"
-  needF "Line \${e.source.seq} of the transcript" $page "the quote reads as a line of the transcript"
+  needF "{row.where}" $page "the page shows the line number of each statement"
+  needF "const row = evidenceRow(c);" $page "the page shows the quote of each statement as its row"
+  needF "where: \`Line \${claim.source.seq}\`" portal/src/lib/interviewsMiloAdvice.ts "the quote reads as a line of the transcript"
   # No Chip and no tone on the evidence: the recap view draws none.
   local view; view=$(awk '/^function RecapView/ { on = 1 } on { print } on && /^function AskFromRecap|^\/\*\* Under the recap/ { exit }' $page)
   if [ -z "$view" ]; then fail "RecapView not found in the scorecard page"; elif printf '%s' "$view" | grep -qE '<Chip|<Badge|<Tag|recommendationTone|tone="(success|danger|warning|accent|info)"|variant="(success|danger|warning)"'; then fail "a Chip or a tone in Milo's recap view"; else ok "no Chip and no tone in Milo's recap view"; fi

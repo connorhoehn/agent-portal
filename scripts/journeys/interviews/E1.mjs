@@ -228,7 +228,7 @@ export default async function run(ctx) {
     for (let i = 0; i < n; i += 1) await claims.nth(i).click();
     const texts = [];
     for (let i = 0; i < n; i += 1) texts.push(squash(await claims.nth(i).innerText()));
-    const sourced = n >= 1 && texts.every((t) => /Line \d+ of the transcript: “[^”]{3,}”/.test(t));
+    const sourced = n >= 1 && texts.every((t) => /Line \d+\s*“[^”]{3,}”/.test(t));
     const recapText = squash(await p.getByTestId('interviews-recap').innerText());
     let answer = '';
     if (question) {

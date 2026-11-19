@@ -74,7 +74,7 @@ export default async function run(ctx) {
       return { text: squash(await section.innerText()), blocks, n, claimTexts, tones: await tonesIn(section) };
     };
     const first = await readRecap();
-    const sourced = first.claimTexts.every((t) => /Line \d+ of the transcript: “[^”]{3,}”/.test(t));
+    const sourced = first.claimTexts.every((t) => /Line \d+\s*“[^”]{3,}”/.test(t));
     const own = (first.text.match(/Your rating[^A-Z]*3 of 4/g) ?? []).length;
     const stored = (await api(wen, 'GET', `/api/interviews/interviews/${JONAH}/recap`)).body?.recap;
     const shots = await shootPage(page, 'scorecard-recap');

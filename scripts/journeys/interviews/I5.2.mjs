@@ -81,7 +81,7 @@ export default async function run(ctx) {
       const section = p.getByTestId('interviews-recap');
       const text = squash(await section.innerText());
       readers.push({
-        name, n, sourced: texts.every((t) => /Line \d+ of the transcript: “[^”]{3,}”/.test(t)), tones: await tonesIn(section), yourRating: /Your rating/.test(text),
+        name, n, sourced: texts.every((t) => /Line \d+\s*“[^”]{3,}”/.test(t)), tones: await tonesIn(section), yourRating: /Your rating/.test(text),
         ask: await p.getByTestId('interviews-recap-ask').count(), field: await p.getByLabel('Your question for Milo').count(), scores: miloScoresIn(text), consent: consentIn(text),
       });
       if (name === 'recruiter') await shootPage(p, 'recap-reader');

@@ -13,10 +13,15 @@
 // Milo's evidence (each statement with the transcript line it quotes); "Back to my ratings" may change them, which the
 // scorecard then records as changed after the recap (the server's fact). The recruiter and the hiring manager read the
 // recap read-only under the scorecards. Milo's evidence carries no rating, tone or colour.
+//
+// At a glance (lib/interviewsMiloAdvice.ts): each rating reads as stars on the kit's 1 to 4 scale, each piece of evidence
+// is the quote itself with its transcript line (expanding only when there is more), and once the ratings are in, Milo's
+// recommendation sits on top as a coloured banner: Advance, Hold or Don't advance, a fixed rule over the ratings and the
+// recap's coverage (no model call), or "not enough evidence". The panel decides.
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
+  Banner, Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -30,10 +35,11 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import { MILO_QUESTION_MAX, NO_SEAT_NOT_FOUND, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
+import { draftRatings, evidenceRow, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
   SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
-  type Draft, type Rating, type RecapBody, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
+  type Draft, type Rating, type RecapBody, type RecapClaim, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
 type Trail = ReturnType<typeof useFlushTrailItems>;
@@ -71,6 +77,18 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   useEffect(() => { if (mine && view.canSubmit && loadDraft(interview.id, basedOn)?.reason) setCorrecting(true); }, [mine, view.canSubmit, interview.id, basedOn]);
 
   const round = useMemo(() => roundCompetencies(view), [view]);
+  // Milo's recap, read once for the whole page: the recap step (after the ratings were recorded), a submitted scorecard,
+  // or a reader's view. Never while the person is still rating from their own judgement.
+  const pastRating = editing ? draft.step !== 'rate' : (mine !== null || !seated);
+  const recapRead = useFetch<{ recap: RecapBody }>(interview.endedAt !== null && pastRating && !recap ? recapUrl(interview.id) : null);
+  const recapNow = recap ?? recapRead.data?.recap ?? null;
+  const thisRound = view.others.filter((o) => o.interviewId === interview.id);
+  const advice = miloAdvice({
+    required: round.required,
+    ratings: editing ? draftRatings(draft.ratings) : pooledRatings([...(mine ? [mine] : []), ...thisRound]),
+    recap: recapNow,
+  });
+  const adviceBanner = interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404 ? <MiloAdviceBanner advice={advice} /> : null;
   const missing = missingFrom(draft, competencies, limits, basedOn > 0, round.required);
   const status = roundStatus(interview.state);
 
@@ -156,6 +174,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           <Stack gap="sm">
             <RatingInput label={`Your rating for ${c.name}`} required={!optional} value={draft.ratings[c.id] ?? null} onChange={(v) => setRating(c.id, v)} options={scaleOf(c)}
               {...(optional ? { notRatedLabel: 'Not seen in this round' } : {})} data-testid="interviews-scorecard-rating" />
+            {draft.ratings[c.id] ? <RatingStars rating={draft.ratings[c.id]!} /> : null}
             {/* A note goes with a rating: an optional competency left unseen has none to support. */}
             {(!optional || !!draft.ratings[c.id]) && (
               <FormField label={`Note on ${c.name}`} hint="Optional: what you saw or heard that supports the rating.">
@@ -188,7 +207,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const recapStep = (
     <Stack gap="md" data-testid="interviews-scorecard-recap-step">
       {correctingLine}
-      <RecapView interviewId={interview.id} competencies={round.required} initial={recap} ratings={draft.ratings} />
+      {adviceBanner}
+      <RecapView recap={recapNow} error={recapRead.error} hidden={false} competencies={round.required} ratings={draft.ratings} />
       <AskFromRecap interviewId={interview.id} />
       <Inline gap="sm">
         <Button size="sm" variant="secondary" data-testid="interviews-scorecard-back-to-ratings" onClick={() => goTo(previousStep('recap'))}>Back to my ratings</Button>
@@ -200,6 +220,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const decideStep = (
     <Stack gap="md" data-testid="interviews-scorecard-decide-step">
       {correctingLine}
+      {adviceBanner}
       <DetailSection variant="heading" as="h2" title="Your recommendation" hint="Your own judgement of this round.">
         <Stack gap="sm">
           <RadioGroup<Recommendation | ''> name={`recommendation-${interview.id}`} orientation="horizontal" value={draft.recommendation ?? ''}
@@ -235,9 +256,10 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const lockedLine = reviewedLine(interview.state, mine !== null);
   const mineTab = editing ? form : mine ? (
     <Stack gap="md">
+      {adviceBanner}
       {lockedLine && <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-reviewed-line">{lockedLine}</T>}
       <ComposerPromptDeck prompts={prompts} scope={`interviews-scorecard:${interview.id}`} data-testid="interviews-scorecard-ask" />
-      <ScorecardReadout card={mine} competencies={competencies} testId="interviews-scorecard-mine" />
+      <ScorecardReadout card={mine} competencies={competencies} recap={recapNow} testId="interviews-scorecard-mine" />
     </Stack>
   ) : (
     <EmptyState title="No scorecard yet" description={view.refusal ?? 'You have not submitted a scorecard for this round.'} />
@@ -246,6 +268,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const othersNote = othersLine(view);
   const othersTab = (
     <Stack gap="md" data-testid="interviews-scorecard-others">
+      {!seated && adviceBanner}
       {othersNote && <T size="sm" tone="secondary" data-testid="interviews-scorecard-others-line">{othersNote}</T>}
       {view.others.map((s) => (
         <Stack key={s.id} gap="sm">
@@ -253,7 +276,9 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
           {s.earlier.length > 0 && <Versions versions={s.earlier} competencies={competencies} />}
         </Stack>
       ))}
-      {!seated && interview.endedAt !== null && <RecapView interviewId={interview.id} competencies={round.required} initial={null} ratings={null} />}
+      {!seated && interview.endedAt !== null && (
+        <RecapView recap={recapNow} error={recapRead.error} hidden={recapRead.failure?.status === 404} competencies={round.required} ratings={null} />
+      )}
     </Stack>
   );
 
@@ -279,8 +304,13 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   );
 }
 
-/** One submitted scorecard, read-only: the three steps it went through, then each competency's rating (1 to 4) beside its anchor sentence and note, the summary and the decision in words. */
-function ScorecardReadout({ card, competencies, round, testId }: { card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; testId: string }) {
+/**
+ * One submitted scorecard, read-only: the three steps it went through, then each competency's rating as stars beside its
+ * anchor sentence and note (and, on the viewer's own, Milo's evidence for it), the summary and the decision in words.
+ */
+function ScorecardReadout({ card, competencies, round, recap, testId }: {
+  card: ScorecardVersion; competencies: readonly KitCompetency[]; round?: string; recap?: RecapBody | null; testId: string;
+}) {
   const kit = new Map(competencies.map((c) => [c.id, c]));
   const when = dateLabel(card.submittedAt, Date.now(), undefined, true);
   return (
@@ -295,13 +325,13 @@ function ScorecardReadout({ card, competencies, round, testId }: { card: Scoreca
         {card.ratings.map((r) => {
           const anchor = r.anchor ?? kit.get(r.competencyId)?.anchors[r.rating] ?? null;
           return (
-            <Stack key={r.competencyId} gap="xs">
-              <Inline gap="md" align="end" wrap={false}>
-                <RatingInput label={r.competency} readOnly value={r.rating} onChange={() => undefined}
-                  options={([1, 2, 3, 4] as const).map((n) => ({ value: n, label: `${n} of 4` }))} />
-                {anchor && <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{anchor}</T>}
+            <Stack key={r.competencyId} gap="xs" data-testid="interviews-scorecard-rated">
+              <Inline gap="md" align="center" wrap>
+                <T size="sm" weight="medium">{r.competency}</T>
+                <RatingStars rating={r.rating} anchor={anchor} />
               </Inline>
-              {r.note && <T size="sm">{r.note}</T>}
+              {r.note && <T size="sm" wrap>{r.note}</T>}
+              {recap?.state === 'ready' && <EvidenceList claims={evidenceFor(recap, r.competencyId)} />}
             </Stack>
           );
         })}
@@ -321,18 +351,16 @@ function Versions({ versions, competencies }: { versions: readonly ScorecardVers
 
 
 /**
- * Milo's recap, per competency in the kit's order: the viewer's own rating (in the scorecard's recap step) beside Milo's
- * evidence, each statement with the transcript line it quotes, or "Nothing was said about this". Read-only for the
+ * Milo's recap, per competency in the kit's order: the viewer's own rating as stars (in the scorecard's recap step) beside
+ * Milo's evidence, each row the quote itself with its transcript line, or "Nothing was said about this". Read-only for the
  * recruiter and the hiring manager (no ratings). No rating, tone or colour is ever attached to Milo's evidence.
  */
-function RecapView({ interviewId, competencies, initial, ratings }: {
-  interviewId: string; competencies: readonly KitCompetency[]; initial: RecapBody | null; ratings: Draft['ratings'] | null;
+function RecapView({ recap, error, hidden, competencies, ratings }: {
+  recap: RecapBody | null; error: string | null | undefined; hidden: boolean; competencies: readonly KitCompetency[]; ratings: Draft['ratings'] | null;
 }) {
-  const { data, error, failure } = useFetch<{ recap: RecapBody }>(initial ? null : recapUrl(interviewId));
-  const recap = initial ?? data?.recap ?? null;
   const readers = ratings === null;
   // A reader who may not read it (the round has not ended) gets nothing drawn.
-  if (failure?.status === 404) return null;
+  if (hidden) return null;
   const body = (() => {
     if (error && !recap) return <T size="sm" tone="secondary">Milo&apos;s recap could not be loaded. Reload the page to try again.</T>;
     if (!recap) return <T size="sm" tone="tertiary">Loading Milo&apos;s recap…</T>;
@@ -341,25 +369,13 @@ function RecapView({ interviewId, competencies, initial, ratings }: {
     return (
       <Stack gap="md">
         {competencies.map((c) => {
-          const evidence = evidenceFor(recap, c.id);
           const mine = ratings?.[c.id] ?? null;
+          const evidence = evidenceFor(recap, c.id);
           return (
             <DetailSection key={c.id} variant="heading" title={c.name} data-testid="interviews-recap-competency">
               <KeyValue items={[
-                ...(readers ? [] : [{ label: 'Your rating', value: mine ? `${mine} of 4: ${c.anchors[mine]}` : 'Not rated', muted: !mine }]),
-                {
-                  label: 'Milo\'s evidence',
-                  muted: evidence.length === 0,
-                  value: evidence.length === 0 ? 'Nothing was said about this' : (
-                    <Stack gap="xs">
-                      {evidence.map((e) => (
-                        <Disclosure key={`${e.source.seq}:${e.text}`} variant="plain" summary={<T size="sm" wrap>{e.text}</T>} data-testid="interviews-recap-claim">
-                          <T size="sm" tone="secondary" wrap>{`Line ${e.source.seq} of the transcript: “${e.source.quote}”`}</T>
-                        </Disclosure>
-                      ))}
-                    </Stack>
-                  ),
-                },
+                ...(readers ? [] : [{ label: 'Your rating', value: mine ? <RatingStars rating={mine} anchor={c.anchors[mine]} /> : 'Not rated', muted: !mine }]),
+                { label: 'Milo\'s evidence', muted: evidence.length === 0, value: <EvidenceList claims={evidence} /> },
               ]} />
             </DetailSection>
           );
@@ -369,12 +385,11 @@ function RecapView({ interviewId, competencies, initial, ratings }: {
   })();
   return (
     <DetailSection variant="heading" title="Milo's recap" data-testid="interviews-recap"
-      hint="What the candidate said about each competency, each with the line of the transcript it comes from. Milo does not rate or recommend.">
+      hint="What the candidate said about each competency, each with the line of the transcript it comes from.">
       {body}
     </DetailSection>
   );
 }
-
 
 /** Under the recap, for a seat that has opened it: ask Milo where something was said. Private to the asker; the exchanges last this visit. */
 function AskFromRecap({ interviewId }: { interviewId: string }) {
@@ -435,5 +450,57 @@ function RecapExchangeView({ interviewId, exchange }: { interviewId: string; exc
         </>
       ) : <T size="sm" tone="secondary" wrap>{exchange.line ?? ''}</T>}
     </Stack>
+  );
+}
+
+/** A rating at a glance: stars on the kit's scale, then "3 of 4" and the anchor in words (what a screen reader reads). */
+function RatingStars({ rating, anchor }: { rating: number; anchor?: string | null }) {
+  return (
+    <Inline gap="sm" align="center" data-testid="interviews-scorecard-stars">
+      <T size="lg" tone="warning" aria-hidden>{starsOf(rating)}</T>
+      <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{anchor ? `${ratingWords(rating)}: ${anchor}` : ratingWords(rating)}</T>
+    </Inline>
+  );
+}
+
+/** Milo's evidence for one competency: each row is the quote and its line; a row expands only when there is more to read. */
+function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
+  if (claims.length === 0) return <T size="sm" tone="tertiary">Nothing was said about this</T>;
+  return (
+    <Stack gap="xs">
+      {claims.map((c) => {
+        const row = evidenceRow(c);
+        const line = (
+          <Inline gap="sm" align="center" wrap={false}>
+            <T size="xs" tone="tertiary" tabular>{row.where}</T>
+            <T size="sm" truncate>{`“${row.quote}”`}</T>
+          </Inline>
+        );
+        const key = `${row.seq}:${c.text}`;
+        if (!row.expandable) return <Stack key={key} gap="xs" data-testid="interviews-recap-claim">{line}</Stack>;
+        return (
+          <Disclosure key={key} variant="plain" summary={line} data-testid="interviews-recap-claim">
+            <Stack gap="xs">
+              {row.fullQuote && <T size="sm" wrap>{`“${row.fullQuote}”`}</T>}
+              {row.context && <T size="sm" tone="secondary" wrap>{row.context}</T>}
+            </Stack>
+          </Disclosure>
+        );
+      })}
+    </Stack>
+  );
+}
+
+/** Milo's recommendation at the top of the scorecard: green Advance, yellow Hold, red Don't advance, or no recommendation. */
+function MiloAdviceBanner({ advice }: { advice: MiloAdvice }) {
+  const recommends = advice.outcome !== 'not-enough';
+  return (
+    <Banner variant={advice.tone} layout="callout" accent="bar" icon data-testid="interviews-scorecard-milo-advice"
+      title={recommends ? `Milo recommends: ${advice.label}` : 'Milo has not enough evidence to recommend'}
+      meta={recommends ? 'Milo\'s recommendation from the ratings and the transcript evidence. The panel decides.' : 'The panel decides from the ratings and the recap.'}>
+      <Stack as="ul" gap="xs">
+        {advice.reasons.map((r) => <T as="li" key={r} size="sm" wrap data-testid="interviews-scorecard-milo-reason">{r}</T>)}
+      </Stack>
+    </Banner>
   );
 }
