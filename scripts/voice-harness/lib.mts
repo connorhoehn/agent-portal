@@ -4,6 +4,8 @@
 import { readFileSync, existsSync, appendFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { liveSocketSessionBody, openLiveSocket, type LiveSocket } from '../../middleware/src/lib/voice/openai.js';
+import { voiceConfig } from '../../middleware/src/lib/voice/config.js';
+import type { ResponsesFunctionTool } from '../../middleware/src/lib/voice/catalogue.js';
 
 export const RATE = 24_000;
 export const FRAME_MS = 100;
@@ -82,6 +84,8 @@ export function jsonlLogger(path: string | null): Logger {
 export interface LiveEvents {
   /** First voiced output 10 ms window: wall time it arrived + its offset in the frame. */
   onVoice?: (atWall: number) => void;
+  /** Every output frame as it arrives (memory only: the gate's echo loopback uses it; never keep it). */
+  onFrame?: (pcm: Buffer, atWall: number) => void;
   onOutputText?: (text: string, atWall: number) => void;
   onInputText?: (text: string, atWall: number, ev: Record<string, unknown>) => void;
   onOther?: (ev: Record<string, unknown>, atWall: number) => void;
@@ -98,9 +102,9 @@ export class LiveProbe {
   outputVoiced = false; lastVoiceWall = 0; framesIn = 0; voicedFramesIn = 0;
   constructor(private readonly ev: LiveEvents = {}) {}
 
-  start(input: { instructions: string; voice?: string | null; extra?: Record<string, unknown>; timeoutMs?: number }): Promise<Record<string, unknown>> {
+  start(input: { instructions: string; voice?: string | null; extra?: Record<string, unknown>; timeoutMs?: number; tools?: readonly ResponsesFunctionTool[]; delegation?: boolean }): Promise<Record<string, unknown>> {
     const socket = openLiveSocket(); this.socket = socket;
-    const body = { ...liveSocketSessionBody({ model: process.env['VOICE_LIVE_MODEL'] || 'gpt-live-1', instructions: input.instructions, delegationInstructions: '', voice: input.voice ?? 'marin', delegationModel: null, tools: [] }), ...(input.extra ?? {}) };
+    const body = { ...liveSocketSessionBody({ model: process.env['VOICE_LIVE_MODEL'] || 'gpt-live-1', instructions: input.instructions, delegationInstructions: input.delegation ? 'Call the tool the request needs, then answer in one short sentence.' : '', voice: input.voice ?? 'marin', delegationModel: input.delegation ? voiceConfig().delegationModel : null, tools: input.tools ?? [] }), ...(input.extra ?? {}) };
     return new Promise((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('start timeout')), input.timeoutMs ?? 10_000);
       socket.addEventListener('open', () => socket.send(JSON.stringify({ type: 'session.start', event_id: 'harness_start', session: body })));
@@ -132,6 +136,7 @@ export class LiveProbe {
   private onAudio(delta: unknown, atWall: number): void {
     if (typeof delta !== 'string') return;
     const pcm = Buffer.from(delta, 'base64'); // reduced to timing at once; never kept
+    this.ev.onFrame?.(pcm, atWall);
     this.framesIn += 1;
     const onset = voicedOnsetMs(pcm);
     if (onset >= 0) {

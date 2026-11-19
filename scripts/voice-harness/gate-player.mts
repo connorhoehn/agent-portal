@@ -31,6 +31,7 @@ export interface GatePort {
 }
 
 const RUN_GAP_MS = 1500; // voiced frames closer than this are one run of voice
+const TOOL_GAP_MS = 4000; // a delegated tool answer can follow the first words by seconds
 const REPLY_WAIT_MS = 10_000;
 const ROUTE_WINDOW_MS = 6000;
 
@@ -57,7 +58,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
 
   const ev: PortEvents = {
     voice: (at, kind) => {
-      const cont = at - lastVoiceAny < RUN_GAP_MS && runOwner !== null;
+      const cont = at - lastVoiceAny < (runOwner?.spec.expect === 'tool' ? TOOL_GAP_MS : RUN_GAP_MS) && runOwner !== null;
       lastVoiceAny = at;
       if (cont && runOwner) { runOwner.lastVoiceMs = at; if (kind === 'fixed') runOwner.fixedVoice = true; return; }
       const a = awaiting();
@@ -98,7 +99,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
     for (const r of recs) {
       if (r.done || !r.started || r.speechEndMs === null) continue;
       if (r.spec.expect === 'silent') { r.done = true; r.doneAt = r.speechEndMs; continue; }
-      if (r.firstVoiceMs !== null && r.lastVoiceMs !== null && nowMs - r.lastVoiceMs > RUN_GAP_MS) { r.done = true; r.doneAt = r.lastVoiceMs; }
+      if (r.firstVoiceMs !== null && r.lastVoiceMs !== null && nowMs - r.lastVoiceMs > (r.spec.expect === 'tool' ? TOOL_GAP_MS : RUN_GAP_MS)) { r.done = true; r.doneAt = r.lastVoiceMs; }
       else if (r.firstVoiceMs === null && r.spec.expect === 'tool' && r.toolCalls.length > 0 && nowMs - r.speechEndMs > 4000) { r.done = true; r.doneAt = nowMs; }
       else if (r.firstVoiceMs === null && nowMs - r.speechEndMs > REPLY_WAIT_MS) { r.done = true; r.noReply = true; r.doneAt = nowMs; }
     }
