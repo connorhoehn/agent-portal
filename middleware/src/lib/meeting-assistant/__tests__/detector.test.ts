@@ -100,6 +100,19 @@ describe('name matching', () => {
     expect(findAddress('Okay so Milo')?.rest).toBe('');
     expect(findAddress('Oh, nice! Hey Milo... It would be helpful to have another dozen test cases')?.rest).toBe('It would be helpful to have another dozen test cases');
   });
+
+  it('a name that closes its sentence after a comma speaks to Milo when one of the next two sentences asks it something', () => {
+    // The ask comes a sentence after the name (live take of 18 November: both such requests were refused as asked by nobody).
+    expect(findAddress('Oh. Pardon me, Milo. I drifted off. Could you repeat the question')?.rest).toBe('I drifted off. Could you repeat the question');
+    expect(findAddress('Off you go, Milo! She wants a memo cache. Can you add the import at the top for her')?.rest)
+      .toBe('She wants a memo cache. Can you add the import at the top for her');
+    // Thanks said to Milo, then talk to someone else: nothing is asked, so no request.
+    expect(findAddress('Oh, thanks, Milo! Then I would wrap the function and pass a tuple')).toBeNull();
+    // An ask three sentences on is for someone else.
+    expect(findAddress('Nice, Milo. That works. The tests pass. Can you explain the loop')).toBeNull();
+    // No comma before the name: Milo is not spoken to.
+    expect(findAddress('I trust Milo. Not sure yet. Can you check the totals')).toBeNull();
+  });
 });
 
 describe('fillers and cut detection', () => {

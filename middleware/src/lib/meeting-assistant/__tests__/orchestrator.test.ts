@@ -1987,6 +1987,20 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(await runtime.turnsFor(CALL, BOB)).toHaveLength(0);
   });
 
+  it('a request a sentence after the name that closes its own sentence ("Pardon me, Milo. I drifted off. Could you ...") has its asker', async () => {
+    const s = await realRuntime();
+    audioTap.sink!.placed(ALICE, loud(3_000), 0);
+    s.fire('inputTranscript', { text: 'Pardon me, Milo. I drifted off. Could you find the experts?', startMs: 0, endMs: 3_000, parts: [
+      { text: ' Pardon me, Milo', startMs: 0, endMs: 1_000 }, { text: '. I drifted off', startMs: 1_000, endMs: 2_000 },
+      { text: '. Could you find the experts?', startMs: 2_000, endMs: 3_000 },
+    ] });
+    await flush();
+    now += 3_500; s.fire('delegation', { atMs: 3_500 });
+    s.call('call_v', 'search', { query: 'experts' }, 3_700); await flush();
+    expect(s.answersFor('call_v').map(([, o]) => o)).not.toContain('{"refused":"could not tell who asked"}');
+    expect(await runtime.turnsFor(CALL, ALICE)).toHaveLength(1);
+  });
+
   it('speech with no addressing line in the window answers nobody and is not posted', async () => {
     const base = now;
     const s = await realRuntime();

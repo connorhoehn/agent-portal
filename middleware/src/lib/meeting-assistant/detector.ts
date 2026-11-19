@@ -16,7 +16,9 @@
 //     B. mid-sentence, it is followed by a comma / colon / dash ("so, Milo, can you"), or by
 //        "please", an imperative verb ("Milo write up ..."), a question word, or "can/could/would/will you".
 //     So "I think Milo could help with that budget question" is NOT a request (mid-sentence, "could"
-//     not followed by "you"), but "I think Milo, could you help" is.
+//     not followed by "you"), but "I think Milo, could you help" is. A name set off by a comma that closes
+//     its sentence ("So sorry, Milo. I was miles away. Could you repeat that?") is a request when one of the
+//     next two sentences asks so; a "Thanks, Milo!" followed by talk to someone else is not.
 //   C. the name is the last word of the caption (unless it follows thanks / bye): the request starts next caption.
 //   Mention. Talking about Milo to someone else is never an address: Milo as what the sentence acts on or names ("just ask
 //     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the words after the name ask it something ("let
@@ -142,10 +144,21 @@ const QUESTION_SUBJECTS: ReadonlySet<string> = new Set(['you', 'u', 'ya', 'we', 
  */
 const talksAboutName = (before: string, after: string, rest: string, initial: boolean): boolean => {
   const [first = '', second = ''] = norm(rest).split(' ');
-  const asks = IMPERATIVES.has(first) || (['can', 'could', 'would', 'will'].includes(first) && second === 'you');
-  if (!initial && !asks && NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '')) return true;
+  if (!initial && !asksSomething(rest) && NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '')) return true;
   return /^\s+\p{L}/u.test(after) && MODALS.has(first) && !QUESTION_SUBJECTS.has(second);
 };
+/** Do these words start by asking something: "please", an imperative, a question word, or "can/could/would/will you"? */
+const asksSomething = (text: string): boolean => {
+  const [first = '', second = ''] = norm(text).split(' ');
+  return IMPERATIVES.has(first) || (['can', 'could', 'would', 'will'].includes(first) && second === 'you');
+};
+/**
+ * How many sentences after a name that closes its own sentence after a comma ("So sorry, Milo.") the speaker may still be asking
+ * Milo something: "So sorry, Milo. I was miles away. Could you repeat that?" The ask further on is for someone else.
+ */
+const VOCATIVE_REACH_SENTENCES = 2;
+/** The name ends its sentence and a comma sets it off before ("Go for it, Milo!"): said to Milo, as a greeting or thanks may be. */
+const closesSentenceSpokenTo = (before: string, after: string): boolean => /,$/.test(before) && /^\s*[.!?…]/.test(after);
 const DANGLING = new Set(['and', 'or', 'but', 'to', 'for', 'the', 'a', 'an', 'of', 'with', 'that', 'in', 'on', 'so', 'then', 'about', 'at', 'is', 'it']);
 
 const words = (s: string): string[] => s.split(/\s+/).filter(Boolean);
@@ -197,10 +210,10 @@ export function findAddress(text: string): NameHit | null {
     if (!addressed && rest === '' && !/(thanks|thank you|bye|goodbye|cheers|sorry)[\s,.!]*$/i.test(before)) addressed = true;
     if (!addressed) {
       if (/^\s*([,:;—–-]|\.\.\.|…)/.test(after)) addressed = true;
-      else {
-        const [first = '', second = ''] = norm(rest).split(' ');
-        if (IMPERATIVES.has(first)) addressed = true;
-        else if (['can', 'could', 'would', 'will'].includes(first) && second === 'you') addressed = true;
+      else if (asksSomething(rest)) addressed = true;
+      // Spoken to Milo at the end of a sentence: a request only when one of the next sentences asks it something.
+      else if (closesSentenceSpokenTo(before, after)) {
+        addressed = rest.split(/(?<=[.!?…])\s+/).slice(0, VOCATIVE_REACH_SENTENCES).some(asksSomething);
       }
     }
     if (addressed) return { addressed, rest };
