@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T03:00:53.869Z",
-  "serverHandlerSha": "64a659368bb89a6f1936cc6bef598d9d6a3712bfc5a7c3a660e2ca356575b9df",
+  "capturedAt": "2026-11-19T02:53:50.932Z",
+  "serverHandlerSha": "c78cc6dc8eecb5f0df6d2e40843bd14b9167dd98ee5e451f077424f5293eb277",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -3199,6 +3199,12 @@
       }
     },
     "POST /api/interviews/interviews/:id/answer": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/interviews/interviews/:id/board/snapshots": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."

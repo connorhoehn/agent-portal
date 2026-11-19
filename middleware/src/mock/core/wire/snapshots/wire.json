@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T03:00:42.074Z",
-  "serverHandlerSha": "64a659368bb89a6f1936cc6bef598d9d6a3712bfc5a7c3a660e2ca356575b9df",
+  "capturedAt": "2026-11-19T02:53:39.253Z",
+  "serverHandlerSha": "c78cc6dc8eecb5f0df6d2e40843bd14b9167dd98ee5e451f077424f5293eb277",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5548,6 +5548,9 @@
         ]
       }
     },
+    "GET /api/interviews/interviews/:id/board/snapshots": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
     "GET /api/interviews/interviews/:id/consents": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
@@ -5789,6 +5792,7 @@
         "items[].rounds[].id": "string",
         "items[].rounds[].minutes": "number",
         "items[].rounds[].name": "string",
+        "items[].rounds[].surface": "string",
         "items[].rounds[].type": "string",
         "items[].scorecardsIn": "number",
         "items[].state": "string",
@@ -5899,6 +5903,7 @@
         "opening.rounds[].id": "string",
         "opening.rounds[].minutes": "number",
         "opening.rounds[].name": "string",
+        "opening.rounds[].surface": "string",
         "opening.rounds[].type": "string",
         "opening.scorecardsIn": "number",
         "opening.state": "string",
