@@ -616,6 +616,31 @@ export const MILO_USER_ID = 'agent:meeting-assistant';
  * holds. The server lets a guest read only Milo's approved lines (lib/call-chat.ts `guestMaySee`), as plain lines under Milo's
  * name; of those, the answers to the candidate's requests are left out. Returns the newer question, or `current` when none.
  */
+/** Milo's latest line the candidate's bar shows: a question it asked, or something it said (an answer, a confirmation, its intro). */
+export interface MiloLastLine { text: string; asked: boolean }
+
+/**
+ * The latest line of Milo's in `frame` (else `current`): `asked` for a question; a line the server marks as said (`miloLine:
+ * 'said'`, contract E9's one key) is not one. The fixed answers to the candidate's own two requests are left out (the bar shows
+ * those on their own line).
+ */
+export function lastMiloLineOf(frame: unknown, channel: string, current: MiloLastLine | null): MiloLastLine | null {
+  const f = frame && typeof frame === 'object' ? frame as Record<string, unknown> : null;
+  if (!f || f['channel'] !== channel || (f['type'] !== 'chat' && f['type'] !== 'chat:message' && f['type'] !== 'chat:history')) return current;
+  const list = Array.isArray(f['messages']) ? f['messages'] : f['message'] ? [f['message']] : [];
+  let found = current;
+  for (const m of list) {
+    const msg = m && typeof m === 'object' ? m as Record<string, unknown> : null;
+    if (!msg || msg['userId'] !== MILO_USER_ID) continue;
+    const meta = msg['metadata'] && typeof msg['metadata'] === 'object' ? msg['metadata'] as Record<string, unknown> : {};
+    if (meta['deleted'] === true) continue;
+    const text = typeof msg['message'] === 'string' ? msg['message'].trim() : '';
+    if (!text || isMiloAnswerLine(text)) continue;
+    found = { text: text.slice(0, 500), asked: meta['miloLine'] !== 'said' && meta['approvedAnswer'] !== true };
+  }
+  return found;
+}
+
 export function lastAskedOf(frame: unknown, channel: string, current: string | null): string | null {
   const f = frame && typeof frame === 'object' ? frame as Record<string, unknown> : null;
   if (!f || f['channel'] !== channel || (f['type'] !== 'chat' && f['type'] !== 'chat:message' && f['type'] !== 'chat:history')) return current;
@@ -625,7 +650,7 @@ export function lastAskedOf(frame: unknown, channel: string, current: string | n
     const msg = m && typeof m === 'object' ? m as Record<string, unknown> : null;
     if (!msg || msg['userId'] !== MILO_USER_ID) continue;
     const meta = msg['metadata'] && typeof msg['metadata'] === 'object' ? msg['metadata'] as Record<string, unknown> : {};
-    if (meta['deleted'] === true || meta['approvedAnswer'] === true) continue;
+    if (meta['deleted'] === true || meta['approvedAnswer'] === true || meta['miloLine'] === 'said') continue;
     const text = typeof msg['message'] === 'string' ? msg['message'].trim() : '';
     if (text && !isMiloAnswerLine(text)) found = text.slice(0, 500);
   }

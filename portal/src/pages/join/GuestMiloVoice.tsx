@@ -18,7 +18,7 @@ import { useAssistantVoice } from '../../lib/assistantVoice';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { useCallHost } from '../../lib/conversationCall';
-import { lastAskedOf } from '../../lib/interviewsRoom';
+import { lastMiloLineOf, type MiloLastLine } from '../../lib/interviewsRoom';
 import { NO_ASSISTANT } from '../../lib/meetingAssistantModel';
 import { GUEST_API } from './guestApi';
 import type { GuestRoom } from './steps';
@@ -38,15 +38,15 @@ export function GuestMiloVoice({ room, line = null }: { room: GuestRoom; line?: 
   const callId = useJoinedCallId(room);
   const voice = useAssistantVoice(callId, heardView(callId ?? ''));
   const { gateway } = useGatewayFrames();
-  const [asked, setAsked] = useState<string | null>(null);
+  const [last, setLast] = useState<MiloLastLine | null>(null);
   useEffect(() => {
-    setAsked(null);
+    setLast(null);
     if (!callId) return undefined;
     const channel = `orgiq:huddle:${callId}`;
-    return gateway.onMessage((frame) => setAsked((cur) => lastAskedOf(frame, channel, cur)));
+    return gateway.onMessage((frame) => setLast((cur) => lastMiloLineOf(frame, channel, cur)));
   }, [callId, gateway.onMessage]);
   // A repeat answers with the question already on the line (E4 #34): no second copy; the question is announced again instead.
-  const repeated = !!asked && !!line && line.trim() === asked.trim();
+  const repeated = !!last?.asked && !!line && line.trim() === last.text.trim();
   const announced = useRef(0);
   const [announce, setAnnounce] = useState(0);
   useEffect(() => { if (repeated) setAnnounce(++announced.current); }, [repeated, line]);
@@ -54,9 +54,10 @@ export function GuestMiloVoice({ room, line = null }: { room: GuestRoom; line?: 
   return <Inline gap="sm" align="center" className="min-w-0 px-4 py-1" data-testid="guest-milo-voice"
     data-voice-frames={voice.framesPlayed} data-voice-speaking={String(voice.speaking)}>
     {voice.speaking && <Chip size="xs" tone="info" icon={<SpeakerIcon size={12} />} data-testid="guest-milo-speaking">Milo is speaking</Chip>}
-    {/* One line that wraps: the label and the whole question, never cut. A repeat re-mounts it, so a screen reader reads it again. */}
-    {asked && <T key={announce} as="p" size="sm" role="status" className="min-w-0 flex-1" data-testid="guest-milo-question-line">
-      <T as="span" size="sm" weight="medium">Milo asked </T><T as="span" size="sm" data-testid="guest-milo-question">{asked}</T>
+    {/* One line that wraps: the label and Milo's whole line, never cut; "Milo asked" for a question, "Milo said" for anything else
+        (a confirmation, an answer, its introduction). A repeat re-mounts it, so a screen reader reads it again. */}
+    {last && <T key={announce} as="p" size="sm" role="status" className="min-w-0 flex-1" data-testid="guest-milo-question-line" data-milo-verb={last.asked ? 'asked' : 'said'}>
+      <T as="span" size="sm" weight="medium">{last.asked ? 'Milo asked ' : 'Milo said '}</T><T as="span" size="sm" data-testid="guest-milo-question">{last.text}</T>
     </T>}
     {voice.needsGesture && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="guest-milo-enable-sound">Click to hear Milo</Button>}
     {/* The server's sentence to the candidate's last request, on this line rather than in the bar, so the bar never wraps at 1280. */}

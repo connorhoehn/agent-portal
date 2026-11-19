@@ -1,7 +1,7 @@
 // Milo asks aloud in the room and the candidate's page (rows I3.5, I3.8; contract U9, U10): the pure parts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { isMiloAnswerLine, lastAskedOf, miloAskReceipt, onPadQuestion, queuePadQuestion, saidOf, sayPath, takePadQuestion } from '../interviewsRoom.ts';
+import { isMiloAnswerLine, lastAskedOf, lastMiloLineOf, miloAskReceipt, onPadQuestion, queuePadQuestion, saidOf, sayPath, takePadQuestion } from '../interviewsRoom.ts';
 
 test('said and line are read off an answer body, and nothing else', () => {
   assert.deepEqual(saidOf({ suggestion: null, said: 'spoken' }), { said: 'spoken' });
@@ -69,4 +69,17 @@ test('a question queued for the pad is taken once, and its listeners are told', 
   off();
   queuePadQuestion('iv-1', { id: 'q-2', prompt: 'x', starter: [] });
   assert.equal(told, 1);
+});
+
+test('the candidate\'s bar labels Milo\'s line by what it is: a question is "asked", a confirmation or the intro is "said" (film rehearsal)', () => {
+  const ch = 'orgiq:huddle:call-1';
+  const line = (message: string, said = false) => ({ id: message, userId: 'agent:meeting-assistant', message, metadata: { displayName: 'Milo', ...(said ? { miloLine: 'said' } : {}) } });
+  let cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('How would you design a rate limiter?') }, ch, null);
+  assert.deepEqual(cur, { text: 'How would you design a rate limiter?', asked: true });
+  cur = lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('Added eleven test cases at the bottom of the pad.', true) }, ch, cur);
+  assert.deepEqual(cur, { text: 'Added eleven test cases at the bottom of the pad.', asked: false });
+  // The fixed answers to the candidate's own requests stay on their own line.
+  assert.deepEqual(lastMiloLineOf({ type: 'chat', action: 'message', channel: ch, message: line('About 5 minutes are left in this round.', true) }, ch, cur), cur);
+  // The question for a repeat is still the last one asked, never the confirmation.
+  assert.equal(lastAskedOf({ type: 'chat', action: 'history', channel: ch, messages: [line('First?'), line('Added a helper.', true)] }, ch, null), 'First?');
 });

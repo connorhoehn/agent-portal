@@ -102,6 +102,15 @@ describe('live frames', () => {
     expect(forged.message.metadata).toEqual({});
   });
 
+  it('Milo\'s answer (a confirmation, the time left, its intro) reaches the guest with the one plain key that says it is not a question', async () => {
+    const answer = { ...ROWS.find(m => m.id === 'm-q')!, id: 'm-a', message: 'Added twelve test cases at the bottom of the pad.',
+      metadata: { assistant: true, displayName: 'Milo', kind: 'assistant-reply', askedBy: 'u-hugo', askedByName: 'Hugo', [APPROVED_QUESTION_KEY]: true, approvedAnswer: true } } as ChatMessage;
+    const forGuest = await runtime.filterFrame('guest', frame(answer)) as { message: ChatMessage };
+    expect(forGuest.message.metadata).toEqual({ displayName: 'Milo', miloLine: 'said' });
+    const q = await runtime.filterFrame('guest', frame(ROWS.find(m => m.id === 'm-q')!)) as { message: ChatMessage };
+    expect(q.message.metadata).toEqual({ displayName: 'Milo' });
+  });
+
   it('an update to one of Milo\'s cards never reaches the guest; a frame without an author is dropped for it', async () => {
     expect(await runtime.filterFrame('guest', frame(ROWS.find(m => m.id === 'm-action')!, 'messageUpdated'))).toBeNull();
     expect(await runtime.filterFrame('lead', frame(ROWS.find(m => m.id === 'm-action')!, 'messageUpdated'))).not.toBeNull();

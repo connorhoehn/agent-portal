@@ -399,6 +399,9 @@ export class CallChatRuntime implements CallLifecycleObserver {
     // A guest reads Milo's approved question as a plain line under Milo's name: none of the assistant's keys (E9).
     const assistant = !guest && isAssistantUserId(message.userId) ? parseAssistantMetadata(message.metadata) : null;
     if (assistant) Object.assign(metadata, clone(assistant));
+    // One plain key instead: a line of Milo's that is an answer (a confirmation, a time left, its introduction), not a question,
+    // so the candidate's bar says "Milo said" rather than "Milo asked" (film rehearsal, 18 November).
+    if (guest && isAssistantUserId(message.userId) && message.metadata?.['approvedAnswer'] === true) metadata['miloLine'] = 'said';
     const page = dmPageDescriptor(message.metadata?.['pageReference']);
     if (page) {
       const key = `${page.kind}:${page.id}`;
