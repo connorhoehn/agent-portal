@@ -223,6 +223,8 @@ export default async function run(ctx) {
     const rated = await rateAllUI(p, 3);
     await openRecapStep(p);
     await seen(p, 'interviews-recap-competency', 60_000);
+    // The evidence sits under a closed "Milo's evidence" disclosure per competency: open each first.
+    for (const d of await p.getByTestId('interviews-recap-evidence').all()) await d.getByText(/Milo.s evidence/).first().click();
     const claims = p.getByTestId('interviews-recap-claim');
     const n = await claims.count();
     for (let i = 0; i < n; i += 1) await claims.nth(i).click();

@@ -348,6 +348,8 @@ const CASES_BLOCK = /# --- Test cases from Milo \((\d+)\) ---/;
 const MOVED_LINE = '        seen[n] = i';
 /** The line the candidate types above the function once Milo has added the import (Act 7). */
 const DECORATOR = '@lru_cache(maxsize=None)';
+// The post Hugo drops into the call chat in Act 2 (the news index, not an invented post URL).
+const NEWS_URL = 'https://www.anthropic.com/news';
 const padOf = (page) => page.getByTestId('interview-pad').first();
 /**
  * Scrolls the pad's editor to its last line (or its first, `toTop`) over `ms` (0: at once), by the element that really scrolls (the editor draws only the
@@ -764,6 +766,23 @@ try {
     if (!heard) { note('Milo heard nothing; dismissed to stop the spend'); await lead.api.post(A('dismiss'), { data: {} }); await miloState().catch(() => undefined); A = null; }
   }
   await say(lead, 'h05', 600); await say(cand, 'c04', 600); await say(lead, 'h06', 600);
+  // The in-call chat (owner): Hugo drops the news page into the call's chat through the real composer; Mateo opens his Chat tab
+  // and sees it. Say, then do: the paste follows "I'll drop it in the chat".
+  const chatOk = await (async () => {
+    const tip = say(lead, 'h40', 400);
+    await nearEnd('h40', 1800);
+    await press(hp, hp.getByTestId('interview-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 });
+    const box = hp.getByTestId('interview-room-chat').getByRole('textbox').first();
+    await press(hp, box, { pause: 100, timeout: 8000 });
+    await hp.keyboard.type(NEWS_URL, { delay: 30 });
+    await hp.keyboard.press('Enter');
+    await tip;
+    await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 }).catch((e) => note(`candidate chat tab: ${String(e).slice(0, 100)}`));
+    const seen = !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
+    await say(cand, 'c40', 300);
+    return seen;
+  })().catch((e) => { note(`chat beat: ${String(e).slice(0, 120)}`); return false; });
+  step('2c the link in the call chat on both sides', chatOk && (await hp.getByTestId('interview-room-chat').innerText().catch(() => '')).includes(NEWS_URL), `candidate's chat shows ${NEWS_URL}=${chatOk}`);
 
   // Act 3. The problem. The coach's first suggestion is the chosen question itself: if it shows while Hugo reads it, he takes it
   // as his own (I'll ask it). The caption comes when the Python starter is on both screens.
@@ -788,6 +807,7 @@ try {
   const langBoth = !!(await until(async () => ((await padLanguage(hp)) === 'python' && (await padLanguage(cp)) === 'python') || null, 10_000, 400));
   const starter = !!(await until(async () => ((await padText(cp)) ?? '').includes('def two_sum(') || null, 10_000, 400));
   scene(4, 'Two Sum, in the candidate\'s language.', '');
+  const problemAt = Date.now();
   step('4 language switch and the question in the pad', sync && langBoth && starter,
     `both synced=${sync}; both read Python=${langBoth} (lead ${await padLanguage(hp)}, candidate ${await padLanguage(cp)}); Python starter in the candidate's pad=${starter}; the coach's first suggestion ${s1 ? `"${s1.slice(0, 60)}" (I'll ask it)` : 'not shown while Hugo read it'}`);
   // He looks at it: his cursor goes down the problem's comment lines while he reads under his breath.
@@ -828,6 +848,7 @@ try {
   await say(cand, 'c13', 300);
   await say(lead, 'h12', 300);
   const run2 = await r2;
+  const solvedAt = Date.now();
   await say(cand, 'c14', 400);
   await say(lead, 'h32', 500);
   step('6 first run fails the duplicate case', !!run1.cand && !!run1.lead, `candidate "${squash(run1.cand ?? run1.lastCand).slice(0, 120)}"; lead sees it=${!!run1.lead}`);
@@ -999,16 +1020,42 @@ try {
   for (let i = 0; i < nGroups; i += 1) {
     await press(hp, groups.nth(i).getByRole('radio', { name: /^3 / }).first(), { pause: 100, timeout: 5000, ms: 420 }).then(() => { rated += 1; }, (e) => note(`rating ${i}: ${String(e).slice(0, 100)}`));
   }
+  // His Problem solving note, typed through the form, with the film's own minutes from the problem in the pad to the green run.
+  const mins = Math.max(1, Math.round((solvedAt - problemAt) / 60_000));
+  const minsWords = mins === 1 ? 'about a minute' : `about ${['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][mins - 2] ?? mins} minutes`;
+  const psNoteText = `Understood the problem well and asked a clarifying question. Had a working solution in ${minsWords}; the first run failed on the duplicate case, and he explained and fixed it.`;
+  const psNote = hp.getByTestId('interviews-scorecard-required').filter({ hasText: /Problem solving/ }).first().getByTestId('interviews-scorecard-note');
+  const noted = await (async () => {
+    await press(hp, psNote, { pause: 100, timeout: 5000, ms: 500 });
+    await hp.keyboard.type(psNoteText, { delay: 22 });
+    return (await psNote.inputValue()) === psNoteText;
+  })().catch((e) => { note(`problem solving note: ${String(e).slice(0, 120)}`); return false; });
+  step('N Hugo\'s Problem solving note typed through the form', noted, `"${psNoteText}" (${((solvedAt - problemAt) / 1000).toFixed(0)} s from the problem to the green run)`);
   try {
     await press(hp, hp.getByTestId('interviews-scorecard-to-recap'), { pause: 100, timeout: 10_000, ms: 500 });
     await press(hp, hp.getByTestId('interviews-scorecard-ask-option-open'), { pause: 100, timeout: 10_000, ms: 500 });
     await hp.getByTestId('interviews-scorecard-recap-step').first().waitFor({ timeout: 30_000 });
   } catch (e) { note(`recap step: ${String(e).slice(0, 120)}`); }
   const recapOk = await hp.getByTestId('interviews-recap-competency').first().waitFor({ timeout: 90_000 }).then(() => true, () => false);
+  // Milo's recommendation pill stays on screen about 3 s and Hugo answers whatever it says.
+  await sourced;
+  const adviceBox = hp.getByTestId('interviews-scorecard-milo-advice').first();
+  const adviceShown = await adviceBox.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+  const adviceText = adviceShown ? squash(await adviceBox.innerText().catch(() => '')) : '';
+  if (adviceShown) {
+    const shownAt = Date.now();
+    await glide(hp, adviceBox, { pause: 300 });
+    const verdict = /Don.t advance/i.test(adviceText) ? 'h41d' : /Inconclusive/i.test(adviceText) ? 'h41i' : /Advance/i.test(adviceText) ? 'h41a' : null;
+    if (verdict) await say(lead, verdict, 300);
+    const held = Date.now() - shownAt; if (held < 3200) await sleep(3200 - held);
+  }
+  step('M Milo\'s recommendation on screen', adviceShown && /Milo recommends (Advance|Inconclusive|Don.t advance)/i.test(adviceText), `pill "${adviceText.slice(0, 160)}"`);
+  // The evidence sits under a closed "Milo's evidence" disclosure: open it, then a quote row.
+  const evidence = hp.getByTestId('interviews-recap-evidence').first();
+  if (await evidence.count()) await press(hp, evidence.getByText(/Milo.s evidence/).first(), { pause: 150, timeout: 5000 }).catch((e) => note(`evidence disclosure: ${String(e).slice(0, 100)}`));
   const claims = hp.getByTestId('interviews-recap-claim');
   const nClaims = await claims.count();
-  if (nClaims) await press(hp, claims.first()).catch(() => undefined);
-  await sourced;
+  if (nClaims) await press(hp, claims.first(), { timeout: 5000 }).catch(() => undefined);
   const recapText = squash(await hp.getByTestId('interviews-scorecard-recap-step').first().innerText().catch(() => ''));
   step('K the scorecard shows only the Coding round\'s competencies', !/System design/i.test(scorecardText) && /Problem solving/i.test(scorecardText), `scorecard reads "${scorecardText.slice(0, 200)}"`);
   const designSaid = Object.values(LINES).filter(([, t]) => /design/i.test(t));

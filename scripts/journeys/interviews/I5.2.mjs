@@ -73,6 +73,8 @@ export default async function run(ctx) {
       const p = await who.newPage();
       await p.goto(`${portal}/interviews/rounds/${I.jonahLeadership}/scorecard`, { waitUntil: 'domcontentloaded' });
       await seen(p, 'interviews-recap-competency');
+      // The evidence sits under a closed "Milo's evidence" disclosure per competency: open each first.
+      for (const d of await p.getByTestId('interviews-recap-evidence').all()) await d.getByText(/Milo.s evidence/).first().click();
       const claims = p.getByTestId('interviews-recap-claim');
       const n = await claims.count();
       for (let i = 0; i < n; i += 1) await claims.nth(i).click();

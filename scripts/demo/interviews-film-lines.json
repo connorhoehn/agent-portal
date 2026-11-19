@@ -82,6 +82,14 @@
    "hugo",
    "Same here! That's exactly why we still do this round."
   ],
+  "h40": [
+   "hugo",
+   "Oh yeah, that frontier model, did you see the latest blog post? I'll drop it in the chat, check it out!"
+  ],
+  "c40": [
+   "cand",
+   "Oh nice, I'll read it after!"
+  ],
   "h07": [
    "hugo",
    "Okay, a coding problem. I'm going to post it into the pad. But first, do you want to use Java today?"
@@ -112,11 +120,11 @@
   ],
   "c06": [
    "cand",
-   "Can I use the same number twice? And is there always exactly one answer?"
+   "Can I assume there's always exactly one answer?"
   ],
   "h10": [
    "hugo",
-   "Good questions. There's always exactly one answer, and you can't use the same element twice."
+   "Yes, exactly one."
   ],
   "c07": [
    "cand",
@@ -265,6 +273,18 @@
   "h29": [
    "hugo",
    "And Milo's recap points every note back to what Mateo actually said."
+  ],
+  "h41a": [
+   "hugo",
+   "Milo suggests advance, and I agree."
+  ],
+  "h41i": [
+   "hugo",
+   "Milo says inconclusive. Fair, I'll put my notes in for the panel."
+  ],
+  "h41d": [
+   "hugo",
+   "Milo says don't advance. I see why, and the panel decides."
   ]
  }
 }
