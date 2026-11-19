@@ -306,7 +306,7 @@ async function miloPosts() {
   if (!callId) return [];
   const r = await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`).catch(() => null);
   if (!r?.ok()) return [];
-  return ((await r.json().catch(() => ({}))).messages ?? []).filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => String(m.text ?? m.body ?? ''));
+  return ((await r.json().catch(() => ({}))).messages ?? []).filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => String(m.message ?? m.text ?? m.body ?? ''));
 }
 /** One Milo turn, measured: the asking line's end to Milo's first audio, and what he said (his new post). */
 async function turn(kind, asker, asked, endMs, n, posts0, spoke) {
@@ -498,7 +498,9 @@ try {
   // Hugo opens the room and starts the call; the recruiter's link; the candidate's door; admitted; both in the call.
   await hp.goto(`${PORTAL}/interviews/rounds/${IV}/room`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await hp.getByTestId('interview-room').first().waitFor({ timeout: 60_000 });
-  if (NO_CALL) await lead.api.post(api(`/${IV}/start`), { data: { revision: (await row()).revision } }); else await joinCall(hp);
+  // --milo: the round is started by the API and Hugo joins the call only once the candidate has consented, so the coach's first
+  // read already sees the consent (a read before it backs off two minutes).
+  if (NO_CALL || MILO) await lead.api.post(api(`/${IV}/start`), { data: { revision: (await row()).revision } }); else await joinCall(hp);
   await until(async () => ((await row()).state === 'live' ? true : null), 20_000, 1000);
   const link = (await (await greta.api.post(api(`/${IV}/invite`), { data: {} })).json().catch(() => ({}))).linkPath;
   if (!link) throw new Error('no invite link');
@@ -511,8 +513,10 @@ try {
   for (const part of ['recording', 'transcription', 'milo']) await cp.getByTestId(`join-consent-${part}-choice`).locator('label').filter({ hasText: /^Yes$/ }).first().click({ timeout: 5000 });
   await cp.getByTestId('join-consents-continue').click({ timeout: 8000 });
   await cp.getByTestId('join-devices-continue').click({ timeout: 30_000 });
-  await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first().click({ timeout: 30_000 });
-  const join = cp.getByTestId('join-room-bar-start').or(cp.getByTestId('join-room-bar-join')).first();
+  await hp.getByTestId('interview-room-ask').getByRole('button', { name: /^Admit$/ }).first().click({ timeout: 30_000 })
+    .catch(async (e) => { if (!MILO) throw e; note('Admit not on the page before the call; admitted by the API'); await lead.api.post(api(`/${IV}/admit`), { data: { admit: true } }); });
+  if (MILO && !NO_CALL) await joinCall(hp);
+  const join = cp.getByTestId('join-room-bar-start').or(cp.getByTestId('join-room-bar-join')).or(cp.getByTestId('join-room-bar').getByRole('button', { name: /join|start/i })).first();
   await join.waitFor({ timeout: 30_000 });
   if (!NO_CALL) {
     await until(async () => !(await join.isDisabled()), 10_000, 250);
