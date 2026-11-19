@@ -168,7 +168,7 @@ const { joinCall, letSound } = await import('../journeys/interviews/h8-room.mjs'
 // ── The record ──
 const VIEW = { width: 1280, height: 800 };
 const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
-const report = { startedAt: new Date().toISOString(), interview: null, steps: [], notes: [], turns: [] };
+const report = { startedAt: new Date().toISOString(), interview: null, steps: [], notes: [], turns: [], floorReads: {} };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
 // Scenes are numbered in the order they come (a --milo take has more of them).
@@ -252,6 +252,8 @@ async function person(key, userId) {
   timeline.videos[key] = { startMs: Date.now(), file: null };
   const p = { key, context, page, api: context.request, errors: [] };
   page.on('pageerror', (e) => p.errors.push(e.message.slice(0, 160)));
+  // Milo's floor is pushed after one read: every GET of an assistant `/floor` is logged so repeats show up.
+  page.on('request', (r) => { if (r.method() === 'GET' && /\/floor(\?|$)/.test(new URL(r.url()).pathname + (new URL(r.url()).search ? '?' : ''))) (report.floorReads[key] ??= []).push({ atS: Number(((Date.now() - (timeline.film?.fromMs ?? Date.now())) / 1000).toFixed(1)), path: new URL(r.url()).pathname }); });
   return p;
 }
 
@@ -355,18 +357,29 @@ async function bargeOver(n) {
 }
 /** --handsfree: Hugo holds the bar's talk button through line `id`, then lets go; his answer measured from the release. */
 async function askByHold(kind, id, expect) {
-  const btn = lead.page.getByTestId('milo-hold-button').first();
+  const btn = lead.page.getByTestId('assistant-bar-hold').first();
   const b = await btn.boundingBox({ timeout: 8000 }).catch(() => null);
   if (!b) { note('no hold-to-talk button in Hugo\'s bar'); return null; }
   await moveTo(lead.page, b.x + b.width / 2, b.y + b.height / 2, 700);
   const n = milo.utterances; const posts0 = (await miloPosts()).length;
   await sleep(Math.max(0, busy.until + 300 - Date.now()));
   await lead.page.mouse.down();
-  const holding = await until(async () => ((await lead.page.getByTestId('milo-hold').first().getAttribute('data-holding').catch(() => null)) === 'true' ? true : null), 3000, 100);
-  const chips = { lead: squash(await lead.page.getByTestId('milo-floor').first().textContent({ timeout: 1500 }).catch(() => '')),
-    cand: squash(await cand.page.getByTestId('milo-floor').first().textContent({ timeout: 1500 }).catch(() => '')) };
+  const holding = await until(async () => ((await lead.page.getByTestId('assistant-bar').first().getAttribute('data-holding').catch(() => null)) === 'true' ? true : null), 3000, 100);
   report.holdAtS = Number(((Date.now() - timeline.film.fromMs) / 1000).toFixed(1));
-  await say(id, 0, { now: true });
+  const line = say(id, 0, { now: true });
+  // Both seats during the hold: the "<who> is talking to Milo" chip, the bar's floor holder, and the ring on the speaker's tile (each framed once).
+  const seat = async (p, bar) => {
+    await until(async () => ((await p.page.getByTestId(`${bar}-floor`).first().isVisible().catch(() => false)) ? true : null), 2500, 100);
+    const r = { chip: squash(await p.page.getByTestId(`${bar}-floor`).first().textContent({ timeout: 500 }).catch(() => '')),
+      floor: await p.page.getByTestId(bar).first().getAttribute('data-floor').catch(() => null),
+      rings: await p.page.getByTestId('tile-highlight-ring').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).length).catch(() => -1),
+      atS: Number(((Date.now() - timeline.film.fromMs) / 1000).toFixed(1)) };
+    await p.page.screenshot({ path: path.join(OUT, `hold-${p.key}.png`) }).catch(() => {});
+    return r;
+  };
+  const [cl, cc] = await Promise.all([seat(lead, 'assistant-bar'), seat(cand, 'guest-milo-requests')]);
+  const chips = { lead: cl, cand: cc };
+  await line;
   await sleep(300);
   await lead.page.mouse.up();
   const relMs = Date.now();
