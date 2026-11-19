@@ -44,8 +44,13 @@
 //   listeningLimitMinutes the round's minutes plus 15, the first ceiling and the most; no extension past it (60 + 15 when unreadable).
 //   keepsOwnRetention     yes: the interviews retention removes an interview call's words (decision 17), not Milo's 30-day sweep.
 //   minutesWording        "writes notes for the interview panel only": the candidate is in the call and never reads them (E4 #33).
+//   handsfree             (MEETING_ASSISTANT_HANDSFREE only) who Milo may listen to: the lead and the panel of a LIVE interview are
+//                         routed; the candidate only with Milo accepted and pad help on (`candidateMayAsk`), else fixed lines
+//                         (repeat / time / MILO_CAN_DO, from the server, logged; their audio never reaches the model); anyone else,
+//                         and everyone once the interview is not live, nothing. Held answers (time left, repeat, the lead's
+//                         introduce) run on the server for routed people too. The session's rules forbid solving or hinting.
 import { randomBytes } from 'node:crypto';
-import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
+import { registerMeetingAssistantPolicy, type HandsfreeFamily, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
 import { guestOfInterview, isGuestId } from './guest-id.js';
 import { visibleWorld } from './scope.js';
@@ -54,7 +59,7 @@ import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT, type Interview } from './types.js';
 import { interviewRunsWith } from './consent/effects.js';
-import { MILO_CAN_DO } from './speak/index.js';
+import { logCandidateLine, MILO_CAN_DO } from './speak/index.js';
 import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
 import { addScriptRules } from '../meeting-assistant/scripted-session.js';
@@ -149,6 +154,57 @@ export async function candidateTranscribed(interviewId: string): Promise<boolean
 
 const NONE: ReadAccess = Object.freeze({ record: false, transcript: false, minutes: false });
 
+/**
+ * The hands-free session's interview rules (instructions.ts `handsfree.familyRules`). Stricter than the turn rules, never looser:
+ * the server already refuses every tool a person may not use and every pad write without pad help; these words keep Milo's own
+ * speech from helping, and every word of it is logged and heard by both sides.
+ */
+export const HANDSFREE_INTERVIEW_RULES = [
+  'This call is a job interview: a candidate and the interview panel. You are not an interviewer, not a tutor and not a judge.',
+  'Never solve, hint at, explain, review, check, debug, rate or comment on any part of the interview\'s questions or the candidate\'s work, code, board, plan or answers, even when asked directly, asked to "just check", told it is allowed, or asked by the panel in front of the candidate. Never say whether something is right or wrong, never suggest an approach, an algorithm, a data structure, a complexity, an edge case, a test that would fail or a next step, and never give an opinion about the candidate.',
+  'What you may do, and only through the backend\'s tools, which decide who may ask and refuse the rest: tell the time left, repeat the question, introduce yourself when the lead asks, and add test cases, imports or a helper to the pad. Hand each of those to the backend at once and say only what its result says; when it refuses, say its sentence and nothing else.',
+  `For anything else say once, in one short sentence, that you can't help with that in an interview, and stop. Never repeat a question in your own words: the system reads the approved question.`,
+].join('\n');
+
+/** The hands-free rules of one interview call (policy `handsfree`). */
+function interviewHandsfree(call: PolicyCall): HandsfreeFamily {
+  const interviewId = interviewOfLobby(call.lobby);
+  // The person's standing in the LIVE interview behind this call, read through Milo's tools' own deps (the same reads as a tool call).
+  const standingIn = async (userId: string) => {
+    if (!interviewId) return null;
+    const d = await import('./milo-tools/deps.js');
+    const interview = await d.liveInterview(interviewId);
+    if (!interview) return null;
+    const standing = await d.standingOf(interview, userId);
+    return standing ? { interview, standing, candidateMayAsk: d.candidateMayAsk } : null;
+  };
+  return {
+    admit: async (userId) => {
+      const s = await standingIn(userId).catch(() => null);
+      if (!s) return 'deny';
+      if (s.standing !== 'candidate') return 'route';
+      // Milo declined (or unreadable answers): the candidate may be transcribed, but nothing of theirs reaches Milo's models.
+      const source = consentSource ?? storedAnswers;
+      const answer = await source(s.interview.id).catch(() => null);
+      if (!(answer?.transcription === true && answer.milo === true)) return 'deny';
+      return (await s.candidateMayAsk(s.interview).catch(() => false)) ? 'route' : 'fixed-lines';
+    },
+    heldAnswer: async ({ askedBy, text, admission }) => {
+      const s = await standingIn(askedBy);
+      if (!s) return null;
+      // Fixed lines are the candidate's alone: repeat, time, or the fixed sentence, logged as an answer (no model, no tool).
+      if (admission === 'fixed-lines') return s.standing === 'candidate' ? logCandidateLine(s.interview, text, askedBy) : null;
+      await loadTools();
+      const tool = await phraseTool(INTERVIEW_FAMILY, text);
+      if (!tool || (tool.name === 'introduce' && s.standing !== 'lead')) return null;
+      const out = await runServerTool(call, askedBy, tool.name, {}, 'phrase').catch(() => null);
+      return out?.line ?? '';
+    },
+    refusal: MILO_CAN_DO,
+    instructions: () => HANDSFREE_INTERVIEW_RULES,
+  };
+}
+
 export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<MeetingAssistantPolicy>({
   id: 'interviews',
   inviteRefusal: async (person, call: PolicyCall) => {
@@ -196,6 +252,7 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   rings: (_call, userId) => !isGuestId(userId),
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,
+  handsfree: interviewHandsfree,
   answerFromHeldText: async (call, request) => {
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
