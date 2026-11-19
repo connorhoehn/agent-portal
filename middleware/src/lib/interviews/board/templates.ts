@@ -27,7 +27,7 @@ function hash(s: string): number {
   return (h >>> 0) % 2_000_000_000;
 }
 
-function base(id: string, type: string, x: number, y: number, width: number, height: number, extra: El = {}): El {
+export function base(id: string, type: string, x: number, y: number, width: number, height: number, extra: El = {}): El {
   return {
     id, type, x, y, width, height, angle: 0, strokeColor: '#1e1e1e', backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2,
     strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null, seed: hash(id), version: 1,
@@ -38,7 +38,7 @@ function base(id: string, type: string, x: number, y: number, width: number, hei
 const FONT = 16;
 const LINE = 1.25;
 /** Break text at spaces so each line holds about `chars` characters. */
-function wrap(text: string, chars: number): string {
+export function wrap(text: string, chars: number): string {
   const lines: string[] = [];
   let cur = '';
   for (const w of text.split(/\s+/)) {
@@ -113,7 +113,7 @@ function sections(prefix: string, top: number, stickies: boolean, list: Readonly
   return out;
 }
 
-const indexed = (els: El[]): El[] => els.map((e, n) => ({ ...e, index: boardIndex(n) }));
+export const indexed = (els: El[]): El[] => els.map((e, n) => ({ ...e, index: boardIndex(n) }));
 
 /**
  * A board with a person's stickies added: each into the free fourth place of a section's frame (`frame` is the
@@ -153,10 +153,10 @@ export function promptBoard(prompt: string, frames: ReadonlyArray<{ id: string; 
 
 /** The one fill of every component, so the diagram reads as one set. */
 export const COMPONENT_FILL = '#ffd43b';
-const HINT_COLOR = '#868e96';
+export const HINT_COLOR = '#868e96';
 /** A component's icon is drawn in a box of this size; its label sits below. */
-const ICON_W = 100;
-const ICON_H = 64;
+export const ICON_W = 100;
+export const ICON_H = 64;
 /** A label's size: Excalidraw's own default, so a label typed later matches. */
 const LABEL_FONT = 20;
 
@@ -165,12 +165,12 @@ type LinePart = { type: 'line' | 'arrow'; x: number; y: number; to: Array<[numbe
 type Part = ShapePart | LinePart;
 
 /** A free text element (no container), `color` its stroke. */
-function freeText(id: string, x: number, y: number, text: string, opts: { fontSize?: number; color?: string; align?: 'left' | 'center'; width?: number; frameId?: string | null } = {}): El {
+export function freeText(id: string, x: number, y: number, text: string, opts: { fontSize?: number; color?: string; align?: 'left' | 'center'; width?: number; frameId?: string | null; fontFamily?: number } = {}): El {
   const fontSize = opts.fontSize ?? FONT;
   const lines = text.split('\n');
   const width = opts.width ?? Math.max(...lines.map((l) => l.length)) * fontSize * 0.55;
   return base(id, 'text', x, y, width, lines.length * fontSize * LINE, {
-    strokeColor: opts.color ?? '#1e1e1e', frameId: opts.frameId ?? null, text, originalText: text, fontSize, fontFamily: 2,
+    strokeColor: opts.color ?? '#1e1e1e', frameId: opts.frameId ?? null, text, originalText: text, fontSize, fontFamily: opts.fontFamily ?? 2,
     textAlign: opts.align ?? 'left', verticalAlign: 'top', containerId: null, autoResize: true, lineHeight: LINE,
   });
 }
