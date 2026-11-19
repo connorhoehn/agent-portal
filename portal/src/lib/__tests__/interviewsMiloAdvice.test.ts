@@ -2,7 +2,7 @@
 // the quote and expand only when there is more, and Milo's recommendation rule, each outcome.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MILO_ADVICE_LABELS, MILO_ADVICE_TONES, draftRatings, evidenceRow, isGenericClaim, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf } from '../interviewsMiloAdvice.ts';
+import { MILO_ADVICE_LABELS, MILO_ADVICE_TONES, adviceWords, draftRatings, evidenceRow, isGenericClaim, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf } from '../interviewsMiloAdvice.ts';
 
 const REQ = [{ id: 'a', name: 'Ownership' }, { id: 'b', name: 'Clarity' }, { id: 'c', name: 'Testing' }, { id: 'd', name: 'Design' }];
 const claim = (seq: number, quote = 'I paged the on-call lead.') => ({ text: 'The candidate said this in answer to the question.', source: { kind: 'transcript' as const, seq, quote } });
@@ -123,4 +123,14 @@ test('the lead\'s card is in: their submitted card on this round, or their own d
 test('the pill has three labels and a tone each; there is no label for no recommendation', () => {
   assert.deepEqual(MILO_ADVICE_LABELS, { advance: 'Advance', inconclusive: 'Inconclusive', 'dont-advance': 'Don\'t advance' });
   assert.deepEqual(MILO_ADVICE_TONES, { advance: 'success', inconclusive: 'warning', 'dont-advance': 'danger' });
+});
+
+test('the words: "Milo recommends" and the pill with one sentence that names the sources and says the panel decides; none without that heading', () => {
+  const advance = adviceWords(miloAdvice({ required: REQ, ratings: r(4, 3, 3, 4), recap: all, leadIn: true }));
+  assert.deepEqual(advance, {
+    heading: 'Milo recommends', pill: { label: 'Advance', tone: 'success' },
+    sentence: 'Rated 3.5 of 4 on average across 4 competencies. From the panel\'s ratings and the transcript evidence; the panel decides.',
+  });
+  const none = adviceWords(miloAdvice({ required: REQ, ratings: r(4, 4, 4, 4), recap: all, leadIn: false }));
+  assert.deepEqual(none, { heading: 'Milo has no recommendation yet', pill: null, sentence: 'The lead interviewer\'s scorecard is not in yet.' });
 });

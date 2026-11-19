@@ -35,7 +35,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import { MILO_QUESTION_MAX, NO_SEAT_NOT_FOUND, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
-import { draftRatings, evidenceRow, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
+import { adviceWords, draftRatings, evidenceRow, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
   SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
@@ -499,15 +499,14 @@ function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
 
 /** Milo's recommendation at the top of the scorecard: a green Advance, yellow Inconclusive or red Don't advance pill, or no recommendation. */
 function MiloAdvicePill({ advice }: { advice: MiloAdvice }) {
+  const words = adviceWords(advice);
   return (
     <Stack gap="xs" data-testid="interviews-scorecard-milo-advice">
       <Inline gap="sm" align="center">
-        <T size="lg" weight="semibold">Milo recommends</T>
-        <Chip tone={advice.outcome === 'not-enough' ? 'info' : advice.tone} size="md">{advice.outcome === 'not-enough' ? 'No recommendation yet' : advice.label}</Chip>
+        <T size="lg" weight="semibold">{words.heading}</T>
+        {words.pill && <Chip tone={words.pill.tone} size="md">{words.pill.label}</Chip>}
       </Inline>
-      <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-milo-reason">
-        {`${advice.reasons[0]} The panel decides.`}
-      </T>
+      <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-milo-reason">{words.sentence}</T>
     </Stack>
   );
 }

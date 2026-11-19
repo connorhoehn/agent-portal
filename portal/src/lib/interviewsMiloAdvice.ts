@@ -160,3 +160,16 @@ export function miloAdvice(input: {
   why.push(average);
   return out('inconclusive', why[0]!, why[1]);
 }
+
+/** The sentence's ending under a recommendation: where it comes from, and who decides. */
+export const ADVICE_SOURCES = 'From the panel\'s ratings and the transcript evidence; the panel decides.';
+
+/**
+ * What the scorecard shows (docs/interviews-tenant-plan.md, "Milo's recommendation on the scorecard"): a recommendation
+ * reads "Milo recommends" with its pill and one sentence, the deciding reason then where it comes from and that the panel
+ * decides; with none, the heading says Milo has no recommendation yet, and the sentence says why.
+ */
+export function adviceWords(advice: MiloAdvice): { heading: string; pill: { label: string; tone: 'success' | 'warning' | 'danger' } | null; sentence: string } {
+  if (advice.outcome === 'not-enough') return { heading: 'Milo has no recommendation yet', pill: null, sentence: advice.reasons[0] };
+  return { heading: 'Milo recommends', pill: { label: advice.label, tone: advice.tone }, sentence: `${advice.reasons[0]} ${ADVICE_SOURCES}` };
+}
