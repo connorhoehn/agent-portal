@@ -6,6 +6,7 @@
 
 import { INTERVIEWS_API, type OpeningRow, type RoundType } from './interviews.ts';
 import { writeJson } from './writeJson.ts';
+import type { KitDesignQuestion, KitRedFlag } from './interviewsAnswerKey.ts';
 
 export type PadLanguage = 'python' | 'swift' | 'javascript' | 'typescript' | 'java' | 'go' | 'cpp';
 export const PAD_LANGUAGES: readonly PadLanguage[] = ['python', 'swift', 'javascript', 'typescript', 'java', 'go', 'cpp'];
@@ -33,6 +34,10 @@ export interface KitQuestion {
   board?: { name: string; elements: Array<Record<string, unknown>> };
   /** A system design question's expected clarifying questions (the coach nudges the lead when none was asked). */
   clarifying?: string[];
+  /** The answer key (lib/interviewsAnswerKey.ts): the interviewers' reference design, the design questions with answers, the red flags. Never the candidate's. */
+  providedDesign?: { name: string; elements: Array<Record<string, unknown>> };
+  designQuestions?: KitDesignQuestion[];
+  redFlags?: KitRedFlag[];
 }
 export interface OpeningKit { rounds: KitRound[]; competencies: KitCompetency[]; questions: KitQuestion[] }
 

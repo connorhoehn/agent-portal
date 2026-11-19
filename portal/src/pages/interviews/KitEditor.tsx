@@ -13,6 +13,7 @@ import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { RowKeys } from '../../lib/rowKeys';
 import { BOARD_TEMPLATE_NAMES, boardSceneKey, boardTitleOf, readBoardTemplate } from '../../lib/interviewsBoard';
 import { BoardScene } from './board/BoardScene';
+import { AnswerKeyEditor } from './AnswerKeyEditor';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
 import {
   PAD_LANGUAGES, PAD_LANGUAGE_LABELS, blankCompetency, blankQuestion, blankRound, moved, newId, padLine, roundHasPad, rowsWithProblems, starterLine,
@@ -257,7 +258,7 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
   };
   const setType = (roundType: RoundType) => {
     // A behavioural round has no code pad or whiteboard, so its questions carry no starter code or board (row I1.8).
-    const { starter: _drop, board: _board, clarifying: _clarifying, ...rest } = q;
+    const { starter: _drop, board: _board, clarifying: _clarifying, providedDesign: _pd, designQuestions: _dq, redFlags: _rf, ...rest } = q;
     onChange(roundHasPad(roundType) ? { ...q, roundType } : { ...rest, roundType });
   };
   // A starting board is offered when the kit has a whiteboard round (or the question already carries one).
@@ -330,6 +331,7 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
 
       {boardOffered && <ClarifyingQuestions question={q} at={at} index={index} problems={problems} onChange={onChange} />}
       {boardOffered && <StartingBoard question={q} problem={problems.get(`${at}.board`)} onChange={onChange} />}
+      {boardOffered && <AnswerKeyEditor question={q} at={at} index={index} problems={problems} onChange={onChange} />}
     </RowForm>
   );
 }
