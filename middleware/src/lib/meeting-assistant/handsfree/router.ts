@@ -269,7 +269,7 @@ export class Router {
   private applyVerdict(t: Turn, v: TriggerVerdict): void {
     t.verdict = v;
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
-    if (v.kind === 'request') { const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
+    if (v.kind === 'request') { this.syncAsker(); const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
     if (v.kind === 'fixed') { this.drop(v.kind); this.sayFixed(t.userId, v.line); return; }
     this.drop(v.kind);
   }
@@ -474,8 +474,19 @@ export class Router {
 
   private setState(s: RouteState): void {
     this.st = s;
-    this.deps.talking.setAsker(s.phase === 'idle' ? null : s.userId);
+    this.syncAsker();
     this.emit('state', s);
+  }
+
+  /**
+   * Who a tool call is for: the routed person once their turn is a request (a hold is one), pending while the rules have not
+   * judged it (the talking side holds the call), nobody otherwise. A name alone never authorises a tool (review 1, item 1).
+   */
+  private syncAsker(): void {
+    const t = this.turn;
+    if (this.st.phase === 'idle' || !t) this.deps.talking.setAsker(null);
+    else if (t.verdict === null) this.deps.talking.setAsker(t.userId, true);
+    else this.deps.talking.setAsker(t.verdict.kind === 'request' ? t.userId : null);
   }
 
   private emit<K extends keyof RouterEvents>(type: K, e: RouterEvents[K]): void {

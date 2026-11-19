@@ -158,8 +158,29 @@ describe('the hands-free seam', () => {
     expect(runtime.handsfreeRun(CALL)!.state()).toMatchObject({ phase: 'routing', userId: ALICE });
     inner().call('c-1', 'search', { query: 'cookie' });
     await flush();
+    // Held until the rules call it a request (the name alone is not one).
+    expect(await runtime.turnsFor(CALL, ALICE)).toHaveLength(0);
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, search for cookie', startMs: 0, endMs: 1200, named: true });
+    await flush();
     const turns = await runtime.turnsFor(CALL, ALICE);
     expect(turns.map((t) => t.tool.name)).toEqual(['search']);
+  });
+
+  it('a write the model starts on the name delta never runs when the sentence turns out to be a mention (and posts nothing)', async () => {
+    await boot('1');
+    rules.verdictFor = () => ({ kind: 'mention' });
+    listening!.emit('name', { userId: ALICE, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 300, textSoFar: "Milo's summary" });
+    await flush();
+    inner().call('c-w', 'create', { kind: 'work-item', fields: { title: 'delete that item' } });
+    await flush();
+    expect(inner().answers.find(([id]) => id === 'c-w')).toBeUndefined();
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: "Milo's summary is wrong, delete that item", startMs: 0, endMs: 1800, named: true });
+    await flush();
+    expect(inner().answers.find(([id]) => id === 'c-w')?.[1]).toMatch(/refused|could not/);
+    expect(await runtime.turnsFor(CALL, ALICE)).toHaveLength(0);
+    expect(mockPosts.actions).toHaveLength(0);
+    // Nobody asked, so nobody is told to ask again.
+    expect(mockPosts.replies).toHaveLength(0);
   });
 
   it('Milo\'s voice goes through the router: nothing relayed while idle, the answer relayed once the request is judged', async () => {

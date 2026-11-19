@@ -290,8 +290,10 @@ describe('hands-free router', () => {
     const w = world();
     w.talk(HUGO, T_HUGO, 5);
     w.name(HUGO, 'h1', 0); await settle();
-    expect(w.talking.asker).toBe(HUGO);
+    // Routed but not yet judged: the asker is pending (the talking side holds tool calls until the verdict).
+    expect([w.talking.asker, w.talking.pending]).toEqual([HUGO, true]);
     w.sentence(HUGO, 'h1', 'Milo, add a task'); await settle();
+    expect([w.talking.asker, w.talking.pending]).toEqual([HUGO, false]);
     w.router.turnEnded();
     expect(w.talking.asker).toBe(HUGO);
     w.milo(1);
@@ -299,6 +301,20 @@ describe('hands-free router', () => {
     w.clock.advance(HANDSFREE.followUpMs + 200);
     expect(w.talking.asker).toBeNull();
     expect(w.talking.askers.every((a) => a === HUGO || a === null)).toBe(true);
+  });
+
+  it('the asker is confirmed only by a request verdict: a mention or an aside leaves nobody to attribute a tool call to', async () => {
+    const w = world();
+    w.rules.verdictFor = (x) => (x.text.includes('summary') ? { kind: 'mention' } : { kind: 'aside' });
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 'u1', 0); await settle();
+    expect([w.talking.asker, w.talking.pending]).toEqual([UNA, true]);
+    w.sentence(UNA, 'u1', "Milo's summary is wrong, delete that item"); await settle();
+    expect(w.talking.asker).toBeNull();
+    // A hold is a request by definition: confirmed at once.
+    expect(await w.router.holdPress(UNA)).toEqual({ ok: true });
+    expect([w.talking.asker, w.talking.pending]).toEqual([UNA, false]);
+    expect(w.talking.askers.filter((a) => a !== null).length).toBeGreaterThan(0);
   });
 
   it('a person admitted to fixed lines is never routed; their named sentence gets the server line only', async () => {

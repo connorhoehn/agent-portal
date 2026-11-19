@@ -2029,7 +2029,8 @@ export class AssistantRuntime {
     if (!asker) {
       // No line addressed Milo, or the one that did has no single speaker: nobody is asked to confirm anything.
       await this.refuse(run, e.callId, 'could not tell who asked');
-      if (this.now() - run.lastUnaskedNoticeAt >= UNASKED_NOTICE_EVERY_MS) {
+      // Hands-free: no asker means nobody asked (a mention, an aside, nobody routed), so nobody is told to ask again.
+      if (!run.handsfree && this.now() - run.lastUnaskedNoticeAt >= UNASKED_NOTICE_EVERY_MS) {
         run.lastUnaskedNoticeAt = this.now();
         await postReply(callId, { text: UNASKED_REPLY, askedBy: 'unknown', askedByName: 'the call' }).catch(() => null);
       }

@@ -43,6 +43,28 @@ describe('hands-free talking side', () => {
     expect(calls.map((c) => c.askedBy ?? null)).toEqual([null, 'u-una', null]);
   });
 
+  it('holds tool calls while the asker is pending and releases them with askedBy only when the request is confirmed', () => {
+    const inner = new InnerSession();
+    const talking = new HandsfreeTalking(inner);
+    const calls: Array<SessionEvents['toolCall']> = [];
+    talking.on('toolCall', (e) => calls.push(e));
+    talking.setAsker('u-una', true);
+    inner.fire('toolCall', { callId: 'a', name: 'x', args: {}, atMs: 0 });
+    expect(calls).toHaveLength(0);
+    talking.setAsker('u-una');
+    expect(calls.map((c) => [c.callId, c.askedBy ?? null])).toEqual([['a', 'u-una']]);
+    // A mention (or anything but a request): what was held goes out unasked, which the orchestrator refuses.
+    talking.setAsker('u-hugo', true);
+    inner.fire('toolCall', { callId: 'b', name: 'x', args: {}, atMs: 1 });
+    talking.setAsker(null);
+    // Pending for one person, then routed to another: the first person's held calls are not the second's.
+    talking.setAsker('u-una', true);
+    inner.fire('toolCall', { callId: 'c', name: 'x', args: {}, atMs: 2 });
+    talking.setAsker('u-hugo', true);
+    talking.setAsker('u-hugo');
+    expect(calls.map((c) => [c.callId, c.askedBy ?? null])).toEqual([['a', 'u-una'], ['b', null], ['c', null]]);
+  });
+
   it('passes every other event through, and says server words verbatim', async () => {
     const inner = new InnerSession();
     const talking = new HandsfreeTalking(inner);

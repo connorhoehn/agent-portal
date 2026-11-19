@@ -74,10 +74,12 @@ export class FakeTalking implements Pick<TalkingSide, 'feed' | 'setAsker' | 'say
   /** Each tick's frames, in order. */
   readonly ticks: Buffer[][] = [];
   asker: string | null = null;
+  /** The asker is routed but not judged yet (tool calls wait). */
+  pending = false;
   readonly askers: Array<string | null> = [];
   readonly said: string[] = [];
   feed(frames: readonly Buffer[]): void { this.ticks.push([...frames]); }
-  setAsker(userId: string | null): void { this.asker = userId; this.askers.push(userId); }
+  setAsker(userId: string | null, pending = false): void { this.asker = userId; this.pending = pending; this.askers.push(userId); }
   say(_id: string, text: string): boolean { this.said.push(text); return true; }
   /** Every frame the session heard so far, as tags (0 = silence). */
   heard(): number[] { return this.ticks.flat().map(tagOf); }

@@ -1,5 +1,6 @@
 // Hands-free Milo: the talking side (types.ts `TalkingSide`). The live session wrapped so it hears only what the router feeds it,
-// and so every tool call it emits names the routed person as `askedBy` (null: none, which the orchestrator refuses as unasked).
+// and so every tool call it emits names the routed person as `askedBy` (null: none, which the orchestrator refuses as unasked). A
+// tool call made while the routed person's sentence is not judged yet waits here for the verdict: only a request names them.
 //
 // It is also a `LiveMeetingSession`, so the orchestrator wires it exactly as it wires the session today (events, answers, usage);
 // only two things differ: `appendAudio` (the room mix) is dropped, since the router's `feed` is the only way audio reaches the
@@ -11,6 +12,9 @@ const EVENTS: readonly SessionEventName[] = ['inputTranscript', 'outputTranscrip
 
 export class HandsfreeTalking extends SessionEmitter implements LiveMeetingSession, TalkingSide {
   private asker: string | null = null;
+  /** The asker is routed but not judged: tool calls wait in `held` for the router's next word. */
+  private pending = false;
+  private held: Array<SessionEvents['toolCall']> = [];
   private readonly offs: Array<() => void> = [];
 
   constructor(readonly inner: LiveMeetingSession) {
@@ -27,6 +31,7 @@ export class HandsfreeTalking extends SessionEmitter implements LiveMeetingSessi
   private forward<K extends SessionEventName>(type: K, e: SessionEvents[K]): void {
     if (type === 'toolCall') {
       const { askedBy: _theirs, ...call } = e as SessionEvents['toolCall'];
+      if (this.pending) { this.held.push(call); return; }
       this.emit('toolCall', this.asker ? { ...call, askedBy: this.asker } : call);
       return;
     }
@@ -43,8 +48,16 @@ export class HandsfreeTalking extends SessionEmitter implements LiveMeetingSessi
     return this.inner.sayVerbatim?.(id, text, ended) ?? false;
   }
 
-  setAsker(userId: string | null): void { this.asker = userId; }
-  currentAsker(): string | null { return this.asker; }
+  setAsker(userId: string | null, pending = false): void {
+    const waitedFor = this.asker;
+    this.asker = userId;
+    this.pending = pending && userId !== null;
+    if (!this.held.length || (this.pending && userId === waitedFor)) return;
+    // The held calls were the waited-for person's: theirs only if their request is now confirmed, otherwise nobody's.
+    const by = !this.pending && userId === waitedFor ? userId : null;
+    for (const call of this.held.splice(0)) this.emit('toolCall', by ? { ...call, askedBy: by } : call);
+  }
+  currentAsker(): string | null { return this.pending ? null : this.asker; }
 
   // LiveMeetingSession ---------------------------------------------------------------------------------------------------------
 
@@ -62,6 +75,7 @@ export class HandsfreeTalking extends SessionEmitter implements LiveMeetingSessi
   pendingInputText(): string { return this.inner.pendingInputText(); }
 
   async close(): Promise<void> {
+    this.held = [];
     try { await this.inner.close(); } finally { for (const off of this.offs.splice(0)) off(); }
   }
 }

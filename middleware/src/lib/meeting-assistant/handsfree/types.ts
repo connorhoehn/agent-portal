@@ -240,11 +240,13 @@ export interface TalkingSide {
   /** Say server-held words verbatim (fixed lines, "Have Milo ask"). False when the session cannot take it now. */
   say(id: string, text: string, ended: (transcript: string | null) => void): boolean;
   /**
-   * The person a tool call is attributed to: set by the router on every state change; the talking side stamps it as `askedBy` on
-   * every `toolCall` it emits. Null (idle, or a `fixed` turn): the tool call is emitted without `askedBy`, which the orchestrator
-   * refuses as unasked.
+   * The person a tool call is attributed to, set by the router whenever it changes. Confirmed (`pending` false: the turn's verdict
+   * is `request`, or a hold): every `toolCall` is emitted with `askedBy`. Pending (routed, the rules have not judged the sentence):
+   * tool calls are held, then emitted with `askedBy` if the next call confirms the same person, else without it. Null (idle, a
+   * mention, an aside, a `fixed` turn): emitted without `askedBy`, which the orchestrator refuses as unasked.
+   * (Contract change, review 1 item 1, 19 Nov: was "stamped in any non-idle phase", so a write could run before `mention` landed.)
    */
-  setAsker(userId: string | null): void;
+  setAsker(userId: string | null, pending?: boolean): void;
   close(): Promise<void>;
 }
 
