@@ -68,10 +68,12 @@ export async function openBody(ctx, who, interviewId, rating = 3) {
 export function miloScoresIn(text) {
   const t = squash(text)
     .replace(/Milo does not rate or recommend\./g, ' ')
-    // The owner's scorecard banner (docs/interviews-tenant-plan.md, "Milo's recommendation on the scorecard"): a fixed rule
-    // over the people's ratings, not a model's judgement, so its own fixed words are taken out like the hints.
-    .replace(/Milo recommends: (?:Advance|Inconclusive|Don't advance)/g, ' ')
-    .replace(/Milo's recommendation from the ratings and the transcript evidence\./g, ' ')
+    // The owner's scorecard recommendation (docs/interviews-tenant-plan.md, "Milo's recommendation on the scorecard"): a
+    // fixed rule over the people's ratings, not a model's judgement, so its own fixed words are taken out like the hints:
+    // the heading with its pill (portal lib/interviewsMiloAdvice.ts adviceWords; a page read may run them together), and
+    // the heading shown when there is none. Pinned against the rule's real words in tests/interviews-milo-words.test.mjs.
+    .replace(/Milo recommends ?(?:Advance|Inconclusive|Don['’]t advance)\b/g, ' ')
+    .replace(/Milo has no recommendation yet/g, ' ')
     .replace(/Milo finds what was said, and where; it does not judge the candidate\./g, ' ')
     .replace(/Milo can only find what was said[^.]*\./g, ' ');
   // Milo as the one who rates ("Milo rates", "Milo's rating", "recommended by Milo"), not the page's own words near its name.
