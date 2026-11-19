@@ -5,10 +5,10 @@ import { fixtureRegistry } from '../../../../mock/core/index.js';
 import { interviewApplicationsFixture, interviewOpeningsFixture, interviewsFixture } from '../../../../mock/interviews.js';
 import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggestions.js';
 import {
-  CLARIFY_AFTER_MS, CLARIFY_UNTIL_MS, CLARIFYING_MODEL_ID, asks, clarifyingNudge, keywords, type ClarifyFacts,
+  CLARIFY_AFTER_MS, CLARIFY_INVITATION, CLARIFY_UNTIL_MS, CLARIFYING_MODEL_ID, asks, clarifyingNudge, keywords, type ClarifyFacts,
 } from '../clarifying.js';
 import type { CoachLine } from '../prompt.js';
-import { setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
+import { answerSuggestion, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore, type SuggestionRecord } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
 
@@ -128,6 +128,27 @@ describe('the coach in a whiteboard round', () => {
     const again = await suggestionFor(ref, lead);
     expect((again as { body: { suggestion: { id: string } } }).body.suggestion.id).toBe('sg-b1');
     expect(await store.listSuggestions('iv-board-test')).toHaveLength(1);
+  });
+
+  it('Have Milo ask on the nudge says a neutral invitation to the candidate, never the lead\'s coaching note', async () => {
+    const ref = boardRef();
+    const lead = { userId: ref.interview.leadId };
+    const shown = await suggestionFor(ref, lead);
+    const note = (shown as { body: { suggestion: { id: string; text: string } } }).body.suggestion;
+    const posted: string[] = [];
+    const speak = {
+      post: jest.fn(async (_i: unknown, _c: unknown, input: { text: string }) => { posted.push(input.text); return { row: { id: 'said-1', text: input.text, askedBy: lead.userId }, posted: true } as never; }),
+      say: jest.fn(async (_i: unknown, row: { text: string }) => { posted.push(row.text); return { spoken: true }; }),
+    };
+    setCoachDeps({
+      store: () => store, consents: async () => ({ transcription: true, milo: true }), transcript: async () => transcript, model, reserve,
+      settle: jest.fn(), release: jest.fn(), now: () => now, newId: () => `sg-b${++n}`, speak,
+    } as unknown as CoachDeps);
+    expect(await answerSuggestion(ref, lead, note.id, 'milo-ask')).toEqual({ kind: 'ok', said: 'spoken' });
+    expect(posted).toEqual([CLARIFY_INVITATION, CLARIFY_INVITATION]);
+    expect(posted.join(' ')).not.toContain('strong candidate');
+    // The lead's log keeps the note it was shown.
+    expect((await store.listSuggestions('iv-board-test')).find((r) => r.id === note.id)).toMatchObject({ text: note.text, answer: 'milo-ask' });
   });
 
   it('no nudge when the candidate asked, too early, or on the code pad', async () => {

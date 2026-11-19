@@ -12,6 +12,9 @@
 //   a candidate line asked one: it shares two of a clarifying question's words, or it is a question ("?") sharing one
 //   of them or a word every clarifying question is about (users, scale, latency, ...).
 // Otherwise the nudge names the question's first clarifying question.
+//
+// The nudge's text is a note to the lead (it names what a strong candidate would ask). "Have Milo ask" on it never says
+// that note: Milo says CLARIFY_INVITATION, a neutral invitation that gives the candidate no answer (`askedWords`).
 import type { RoundSurface } from '../types.js';
 import type { CoachLine } from './prompt.js';
 import type { SuggestionRecord } from './store.js';
@@ -21,6 +24,13 @@ export const CLARIFY_UNTIL_MS = 15 * 60_000;
 /** The log's `modelId` and `promptVersion` for this rule's rows: no model ran. */
 export const CLARIFYING_MODEL_ID = 'rules:clarifying';
 export const CLARIFYING_RULE_VERSION = 'clarifying-1';
+/** What Milo says to the candidate when the lead answers the nudge with "Have Milo ask". */
+export const CLARIFY_INVITATION = 'Before you start, is there anything you\'d like to clarify about the problem?';
+
+/** The words Milo puts to the candidate for a suggestion the lead sent with "Have Milo ask". */
+export function askedWords(row: Pick<SuggestionRecord, 'modelId' | 'text'>): string {
+  return row.modelId === CLARIFYING_MODEL_ID ? CLARIFY_INVITATION : row.text;
+}
 
 export interface ClarifyFacts {
   surface: RoundSurface | null;

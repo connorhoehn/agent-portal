@@ -22,7 +22,7 @@ import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
 import type { RunView } from '../runs/service.js';
 import { decideCoach, RETRY_WAITING_MS, SUGGESTION_GAP_MS } from './rules.js';
-import { CLARIFYING_MODEL_ID, CLARIFYING_RULE_VERSION, clarifyingNudge, type ClarifyNudge } from './clarifying.js';
+import { CLARIFYING_MODEL_ID, CLARIFYING_RULE_VERSION, askedWords, clarifyingNudge, type ClarifyNudge } from './clarifying.js';
 import { roundSurface } from '../kit.js';
 import { suggestionStore, type SuggestionAnswer, type SuggestionRecord, type SuggestionStore } from './store.js';
 import { assistantTranscript, type CoachTranscript, type TranscriptSource } from './transcript.js';
@@ -315,7 +315,7 @@ export async function answerSuggestion(ref: CoachRef, viewer: { userId: string }
     if (!t) return { kind: 'ok', said: 'none', why: 'not-in-call' };
     const speak = d.speak ?? { post: logAndPost, say: sayLogged };
     // E9: a plain question with the server's approved mark (no asker named), the one kind of Milo's message the candidate reads.
-    const out = await speak.post(interview.id, t.callId, { kind: 'question', source: 'suggestion', text: written.row.text, askedBy: viewer.userId, suggestionId: written.row.id });
+    const out = await speak.post(interview.id, t.callId, { kind: 'question', source: 'suggestion', text: askedWords(written.row), askedBy: viewer.userId, suggestionId: written.row.id });
     posted = out.posted;
     const row = out.row;
     if (!posted) return { kind: 'ok', said: 'none', why: 'not-in-call' };
