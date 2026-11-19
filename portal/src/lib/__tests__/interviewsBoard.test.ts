@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import type * as YT from 'yjs';
-import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
+import { BOARD_DOCUMENT_PREFIX, BOARD_TEMPLATE_NAMES, boardCheckpoints, boardTitleOf, readBoardTemplate, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
-import { INTERVIEW_SECTIONS, blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
+import { architectureBoard, blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
 
 // The library's binding is CommonJS and requires yjs itself; under node the Y.Doc must come from that same copy (the
 // browser bundle has one copy).
@@ -46,13 +46,29 @@ test('a starting board goes in as one write, beside what is drawn, and a second 
   assert.ok(frames.includes('Non-functional requirements'));
 });
 
-test('"Design Twitter" goes in as its prompt card and five empty frames', () => {
+test('"Design Twitter" goes in as the Architecture kit: Notes, the palette of grouped components, an empty Design frame', () => {
   const doc = new Y.Doc();
-  const twitter = promptBoard('Design Twitter', INTERVIEW_SECTIONS);
+  const twitter = architectureBoard('Design Twitter');
   assert.equal(insertBoard(doc, twitter), twitter.elements.length);
   const els = readBoardElements(doc);
-  assert.deepEqual(els.filter((e) => e.type === 'frame').map((e) => e['name']), ['Clarifying questions', 'Functional', 'Non-functional', 'High-level design', 'Deep dive']);
-  assert.deepEqual(els.filter((e) => e.type === 'text').map((e) => e['originalText']), ['Design Twitter']);
+  assert.deepEqual(els.filter((e) => e.type === 'frame').map((e) => e['name']), ['Notes', 'Components', 'Design']);
+  assert.ok(els.some((e) => e.type === 'text' && e['originalText'] === 'Design Twitter'));
+  // The binding keeps each component's group: one group per palette component, as built.
+  const groups = new Set(els.filter((e) => e['frameId'] === 'ak-palette').flatMap((e) => e.groupIds ?? []));
+  assert.equal(groups.size, 12);
+});
+
+test('the kit editor offers the three templates, built around the question\'s title', async () => {
+  assert.deepEqual([...BOARD_TEMPLATE_NAMES], [blueprintBoard().name, promptBoard('x').name, architectureBoard('x').name]);
+  assert.equal(boardTitleOf('Design Twitter: people post short messages.'), 'Design Twitter');
+  assert.equal(boardTitleOf('Design a URL shortener for 100M links a month. Then scale it.'), 'Design a URL shortener for 100M links a month');
+  assert.equal(boardTitleOf('  '), 'The prompt');
+  let asked = '';
+  const fetcher = (async (url: string) => { asked = url; return new Response(JSON.stringify({ items: [blueprintBoard(), architectureBoard('Design Twitter')] })); }) as unknown as typeof fetch;
+  assert.equal((await readBoardTemplate('Architecture kit', 'Design Twitter', fetcher))!.name, 'Architecture kit');
+  assert.match(asked, /\/board-templates\?title=Design%20Twitter$/);
+  assert.equal(await readBoardTemplate('Nope', 'x', fetcher), null);
+  assert.equal(await readBoardTemplate('Blueprint', 'x', (async () => new Response('', { status: 403 })) as unknown as typeof fetch), null);
 });
 
 test('a second document, fed the first one\'s update, holds the same board (what the other seat sees)', () => {

@@ -154,6 +154,14 @@ describe('the recruiter writes', () => {
     expect(res.body).toEqual({ items: [{ id: 'u-amara', name: 'Amara Okafor' }] });
   });
 
+  it('offers the starting boards a question can begin from, around the title it is given', async () => {
+    const res = await GRETA.get('/board-templates?title=Design%20a%20chat%20app');
+    expect(res.body.items.map((b: { name: string }) => b.name)).toEqual(['Blueprint', 'Prompt only', 'Architecture kit']);
+    const kit = res.body.items[2] as { elements: Array<Record<string, unknown>> };
+    expect(kit.elements.find((e) => e['id'] === 'ak-prompt-text')!['originalText']).toBe('Design a chat app');
+    expect((await AMARA.get('/board-templates')).status).toBe(403);
+  });
+
   it('the cross-tenant admin passes, break-glass', async () => {
     const { kit, revision } = await kitOf('op-ios');
     expect((await who('u-operator', 'orgiq', 'admin').put('/openings/op-ios/kit', { revision, kit })).status).toBe(200);

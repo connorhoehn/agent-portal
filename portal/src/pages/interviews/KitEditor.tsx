@@ -6,12 +6,12 @@
 // before saving or discarding (OpeningPage.tsx).
 
 import {
-  Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, EditIcon, FilterChip, FormField, IconButton, Inline, Input, NumberInput, Select,
+  Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, DropdownMenu, EditIcon, FilterChip, FormField, IconButton, Inline, Input, NumberInput, Select,
   Stack, T, Textarea, TrashIcon, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
-import { useCallback, useRef, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { RowKeys } from '../../lib/rowKeys';
-import { boardSceneKey } from '../../lib/interviewsBoard';
+import { BOARD_TEMPLATE_NAMES, boardSceneKey, boardTitleOf, readBoardTemplate } from '../../lib/interviewsBoard';
 import { BoardScene } from './board/BoardScene';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
 import {
@@ -365,12 +365,28 @@ function ClarifyingQuestions({ question: q, at, index, problems, onChange }: {
   );
 }
 
+/** What each starting-board template holds, under its name in the "Add a starting board" menu. */
+const TEMPLATE_HINTS: Readonly<Record<(typeof BOARD_TEMPLATE_NAMES)[number], string>> = {
+  'Blueprint': 'Seven labelled frames with starter stickies.',
+  'Prompt only': 'The prompt card above seven empty frames.',
+  'Architecture kit': 'Notes, a palette of components to copy, an empty Design frame.',
+};
+
 /**
  * A board round question's starting board (WHITEBOARD-PLAN step 2): its name and the scene, drawn in the room's own
  * canvas (BoardScene, editable). The lead's "Start from a board" puts it on the room's board.
  */
 function StartingBoard({ question: q, problem, onChange }: { question: KitQuestion; problem: string | undefined; onChange: (q: KitQuestion) => void }) {
   const board = q.board;
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const startFrom = useCallback(async (name: string) => {
+    setLoading(true);
+    setFailed(false);
+    const template = await readBoardTemplate(name, boardTitleOf(q.prompt));
+    setLoading(false);
+    if (template) onChange({ ...q, board: template }); else setFailed(true);
+  }, [onChange, q]);
   const onElements = useCallback((elements: Array<Record<string, unknown>>) => {
     if (!board || boardSceneKey(elements) === boardSceneKey(board.elements)) return;
     onChange({ ...q, board: { ...board, elements } });
@@ -381,9 +397,14 @@ function StartingBoard({ question: q, problem, onChange }: { question: KitQuesti
         <T size="sm" weight="medium">Starting board</T>
         {board
           ? <Button size="sm" variant="ghost" onClick={() => { const { board: _drop, ...rest } = q; onChange(rest); }} data-testid="interviews-kit-remove-board">Remove the board</Button>
-          : <Button size="sm" variant="ghost" onClick={() => onChange({ ...q, board: { name: 'Starting board', elements: [] } })} data-testid="interviews-kit-add-board">Add a starting board</Button>}
+          : <DropdownMenu trigger="Add a starting board" triggerLabel="Add a starting board" triggerVariant="default" triggerClassName="whitespace-nowrap"
+              disabled={loading} triggerTestId="interviews-kit-add-board" sections={[{ items: [
+                { label: 'Empty board', description: 'Draw it here yourself.', onSelect: () => onChange({ ...q, board: { name: 'Starting board', elements: [] } }) },
+                ...BOARD_TEMPLATE_NAMES.map((name) => ({ label: name, description: TEMPLATE_HINTS[name], onSelect: () => { void startFrom(name); } })),
+              ] }]} />}
       </Inline>
-      {!board && <T size="xs" tone="tertiary">None. The whiteboard opens empty, or with a board you draw here: frames, stickies, a prompt card.</T>}
+      {!board && <T size="xs" tone="tertiary">None. The whiteboard opens empty, or with a board you start here: empty, or from a template you then edit.</T>}
+      {failed && <T size="xs" tone="danger" data-testid="interviews-kit-board-failed">That template could not be loaded. Try again.</T>}
       {problem && <T size="xs" tone="danger" data-testid="interviews-kit-board-problem">{problem}</T>}
       {board && <>
         <FormField label="Board name" hint="What the lead picks from Start from a board.">

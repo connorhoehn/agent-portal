@@ -18,6 +18,28 @@ export type RoundSurface = 'pad' | 'board';
 /** A question's starting board as the kit carries it. */
 export interface KitBoard { name: string; elements: Array<Record<string, unknown>> }
 
+/**
+ * The starting boards the kit editor offers beside an empty one (the server builds them: GET /board-templates, from
+ * middleware board/templates.ts). "Architecture kit" is the notes column, the component palette and a Design frame.
+ */
+export const BOARD_TEMPLATE_NAMES = ['Blueprint', 'Prompt only', 'Architecture kit'] as const;
+
+/** The prompt card's text for a question: its prompt up to the first colon or full stop ("Design Twitter: …" → "Design Twitter"). */
+export function boardTitleOf(prompt: string): string {
+  const head = prompt.trim().split(/[:.\n]/, 1)[0]!.trim();
+  return (head.length > 80 ? `${head.slice(0, 79).trimEnd()}…` : head) || 'The prompt';
+}
+
+/** The template named `name`, built around `title`; null when the server could not be reached or does not have it. */
+export async function readBoardTemplate(name: string, title: string, fetcher: typeof fetch = fetch): Promise<KitBoard | null> {
+  try {
+    const res = await fetcher(`${INTERVIEWS_API}/board-templates?title=${encodeURIComponent(title)}`, { credentials: 'include' });
+    if (!res.ok) return null;
+    const body = await res.json() as { items?: KitBoard[] };
+    return body.items?.find((b) => b.name === name) ?? null;
+  } catch { return null; }
+}
+
 export function boardDocumentId(interviewId: string): string | null {
   return INTERVIEW_ID.test(interviewId) ? `${BOARD_DOCUMENT_PREFIX}${interviewId}` : null;
 }
