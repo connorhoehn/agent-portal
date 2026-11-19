@@ -326,6 +326,19 @@
   "w02": [
    "cand",
    "Right, and one more thing about the schedule."
-  ]
- }
+  ],
+    "ct01": ["cand", "Before I start drawing, roughly how much time is left, Milo?"],
+    "ct02": ["cand", "Quick question, how much time do I have left, Milo?"],
+    "ct03": ["cand", "Milo, how much time is left?"],
+    "cf01": ["cand", "And how much time is left now?"],
+    "cf03": ["cand", "So how long do I have?"],
+    "cr01": ["cand", "Before I answer, could you repeat the question, Milo?"],
+    "cr02": ["cand", "Sorry, can you say that question again, Milo?"],
+    "iv01": ["hugo", "Milo, how much time is left?"],
+    "iv02": ["hugo", "Milo, could you repeat the question?"],
+    "cf04": ["hugo", "And how much time is left now?"],
+    "cf05": ["hugo", "So how long do we have?"],
+    "hl01": ["hugo", "What is the capital of Spain?"],
+    "hl02": ["hugo", "What is two plus two?"]
+  }
 }

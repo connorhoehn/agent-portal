@@ -80,6 +80,11 @@ async function main(): Promise<number> {
         runs.push({ scenario: sc.id, steps: sc.steps.map((s, i) => emptyStep(i, s)), skipped: (e as Error).message, errors: [] });
         continue;
       }
+      if (sc.needsSeam && !(port.seams ?? []).includes(sc.needsSeam)) {
+        console.log(`skipping ${sc.id}: needs seam ${sc.needsSeam}`);
+        runs.push({ scenario: sc.id, steps: sc.steps.map((s, i) => emptyStep(i, s)), skipped: `needs seam: ${sc.needsSeam}`, errors: [] });
+        continue;
+      }
       console.log(`running ${sc.id} (${sc.steps.length} steps)...`);
       const r = await playScenario(sc, port, { clips, clock: realClock, instructions: INSTRUCTIONS, maxMs: 300_000 });
       runs.push(r);

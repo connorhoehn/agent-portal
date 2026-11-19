@@ -16,7 +16,18 @@ export const GATE = Object.freeze({
   barge: { relaySilentMs: 700 },
   colleague: { relayedFrames: 0 },
   echo: { triggers: 0 },
+  // The film's gaps (HF-FILM-DIAG.md, "GATE additions"): server lines through the interviews family, barge-in over one, a hold's
+  // late words, a follow-up after a fixed answer, a preface before a candidate's name-last question, the mixer path's final lag.
+  serverLine: { tries: 4, p50Ms: 1300, p90Ms: 1800, serverVoice: 4 },
+  fixedBarge: { relaySilentMs: 700 },
+  hold: { tries: 2, bargeInDrops: 0 },
+  fixedFollow: { tries: 2, answered: 2, p90Ms: 1600 },
+  preface: { tries: 2, answered: 2, p90Ms: 3200 },
+  finalLag: { tries: 6, p50Ms: 400, p90Ms: 700 },
 });
+
+/** Seams the real runtime must export (`HANDSFREE_GATE_SEAMS`) for a scenario that needs them to run; without them it is skipped. */
+export const SEAMS = Object.freeze({ interviews: 'interviews-family' });
 
 export type Expect = 'reply' | 'silent' | 'tool' | 'fixed';
 
@@ -39,6 +50,8 @@ export interface StepSpec {
   barge?: 'talk-over' | 'stop';
   /** From this step on, Milo's own output is played back into a room mic (memory only, never stored). */
   loopback?: boolean;
+  /** The speaker presses the hold button at the step's start and releases it at its speech end (late words follow the release). */
+  hold?: boolean;
   /** The answer must match this (case-insensitive regex source) to count as understood. */
   answer?: string;
 }
@@ -53,6 +66,12 @@ export interface ScenarioSpec {
   runtimeOnly?: boolean;
   /** Settings the scenario needs from the run. */
   candidateMayAsk?: boolean;
+  /** The run's family: `interviews` = the interviews policy's family and the orchestrator's server-line path (a seam), default the gate's own. */
+  family?: 'gate' | 'interviews';
+  /** A seam the runtime must export (SEAMS); without it the scenario is skipped, not failed. */
+  needsSeam?: string;
+  /** Audio reaches the listening side through the production mixer path (24 kHz -> 16 kHz chunks -> CallMixer -> placed pieces). */
+  viaMixer?: boolean;
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0');
@@ -84,6 +103,28 @@ export function gateScenarios(): ScenarioSpec[] {
   const mentions: StepSpec[] = ['m01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08']
     .map((clip, i) => ({ speaker: i % 2 === 0 ? 'hugo' : 'cand', clip, gapMs: 1000, expect: 'silent' as const }));
   const tools: StepSpec[] = [['hugo', 't01'], ['cand', 't02'], ['hugo', 't03'], ['cand', 't04']].map(([speaker, clip]) => ({ speaker: speaker!, clip: clip!, gapMs: 1500, expect: 'tool' as const }));
+  const ask = (speaker: string, clip: string, expect: Expect, gapMs: number, extra: Partial<StepSpec> = {}): StepSpec => ({ speaker, clip, gapMs, expect, ...extra });
+  const lagSteps: StepSpec[] = ['q01', 'qc01', 'q02', 'qc02', 'q03', 'qc03'].map((clip, i) => ask(i % 2 === 0 ? 'hugo' : 'cand', clip, 'reply', 1200));
+  const gate2: ScenarioSpec[] = [
+    { id: 'iv-name-first', about: 'interviews family, name first, phrase-tool questions (time, repeat): answered by a server line, name-first latency', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('hugo', 'iv01', 'fixed', 1200), ask('hugo', 'iv02', 'fixed', 2500), ask('hugo', 'iv01', 'fixed', 2500), ask('hugo', 'iv02', 'fixed', 2500)] },
+    { id: 'fixed-barge', about: 'barge-in over a server line ("Milo, stop" 600 ms into the candidate\'s time answer): the relay goes silent, the next ask is answered', speakers: ['hugo', 'cand'], candidateMayAsk: false, runtimeOnly: true,
+      steps: [ask('cand', 'ct03', 'fixed', 800), ask('hugo', 's01', 'silent', 0, { overMiloAfterMs: 600, barge: 'stop' }), ask('cand', 'ct03', 'fixed', 2500)] },
+    { id: 'iv-barge', about: 'interviews family: barge-in over a server line', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('hugo', 'iv01', 'fixed', 800), ask('hugo', 's01', 'silent', 0, { overMiloAfterMs: 600, barge: 'stop' }), ask('hugo', 'iv02', 'fixed', 2500)] },
+    { id: 'hold-late', about: 'hold to talk: the transcription arrives after the release; the late words of the hold\'s own sentence must not count as a barge-in', speakers: ['hugo'], runtimeOnly: true,
+      steps: [ask('hugo', 'hl01', 'reply', 800, { hold: true, answer: 'madrid' }), ask('hugo', 'hl02', 'reply', 2500, { hold: true, answer: 'four|4' })] },
+    { id: 'fixed-follow', about: 'a follow-up without the name after a server line (candidate, fixed lines): answered by the server line again', speakers: ['cand'], candidateMayAsk: false, runtimeOnly: true,
+      steps: [ask('cand', 'ct03', 'fixed', 800), ask('cand', 'cf01', 'fixed', 2500), ask('cand', 'cf03', 'fixed', 2500)] },
+    { id: 'iv-follow', about: 'interviews family: a follow-up without the name after a server line, same asker', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('hugo', 'iv01', 'fixed', 800), ask('hugo', 'cf04', 'fixed', 2500), ask('hugo', 'cf05', 'fixed', 2500)] },
+    { id: 'cand-preface', about: 'candidate, fixed lines, name last with a preface ("before I start drawing, roughly how much time is left, Milo?"): the time line speaks', speakers: ['cand'], candidateMayAsk: false, runtimeOnly: true,
+      steps: [ask('cand', 'ct01', 'fixed', 800), ask('cand', 'ct02', 'fixed', 2500)] },
+    { id: 'cand-preface-repeat', about: 'candidate, name last with a preface, asking for the question again: the repeat line speaks', speakers: ['cand'], candidateMayAsk: false, family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('cand', 'cr01', 'fixed', 800), ask('cand', 'cr02', 'fixed', 2500)] },
+    { id: 'final-lag', about: 'control: audio fed straight to the listening side; transcription final vs speech end', speakers: ['hugo', 'cand'], runtimeOnly: true, steps: lagSteps },
+    { id: 'mixer-lag', about: 'audio through the production mixer path (24k -> 16k chunks -> CallMixer -> placed pieces): transcription final vs speech end', speakers: ['hugo', 'cand'], viaMixer: true, runtimeOnly: true, steps: lagSteps },
+  ];
   return [
     { id: 'name-first', about: 'name first, two voices: speech end to Milo first audible frame', speakers: ['hugo', 'cand'], steps: first },
     { id: 'name-last', about: 'name last: the sentence is replayed from the buffer; Milo must understand it', speakers: ['hugo', 'cand'], steps: last },
@@ -125,6 +166,7 @@ export function gateScenarios(): ScenarioSpec[] {
       id: 'echo', about: "Milo's own voice played into a mic: no trigger", speakers: ['hugo'],
       steps: [{ speaker: 'hugo', clip: 'g02', gapMs: 800, expect: 'reply', loopback: true }, { speaker: 'hugo', clip: null, gapMs: 7000, expect: 'silent' }],
     },
+    ...gate2,
   ];
 }
 
@@ -158,6 +200,10 @@ export interface StepObs {
   /** The step's name/trigger count (echo): triggers the run reported for this window. */
   triggers: number;
   noReply: boolean;
+  /** Session ms of the last transcription final (a finished sentence) of this step's speaker inside its window. */
+  finalMs?: number | null;
+  /** The router's drop reasons attributed to this step (e.g. `barge-in`). */
+  drops?: string[];
 }
 
 export interface RunObs {
@@ -275,9 +321,67 @@ export function scoreScenario(scenarioId: string, run: RunObs): Check[] {
       const triggers = steps.reduce((a, s) => a + s.triggers, 0); const extra = steps.slice(1).reduce((a, s) => a + s.strayRuns, 0) + steps[0]!.strayRuns;
       return [check('trigger', "triggers from Milo's own voice", `${triggers} triggers, ${extra} extra answers`, `= ${GATE.echo.triggers}`, triggers === GATE.echo.triggers && extra === 0 && steps.every((s) => (s.routed['room'] ?? 0) === 0))];
     }
+    case 'iv-name-first': return serverLineChecks(check, steps, GATE.serverLine);
+    case 'cand-preface-repeat':
+    case 'cand-preface': {
+      const t = GATE.preface; const ok = steps.filter((s) => s.firstVoiceMs !== null && s.fixedVoice); const p90 = pct(ok.map(latency).filter((x): x is number => x !== null), 90);
+      return [
+        check('answered', 'preface questions answered by the server line', `${ok.length}/${asked.length}`, `${t.answered}/${t.tries}`, ok.length === t.answered && asked.length === t.tries),
+        check('p90', 'p90', ms(p90), `<= ${t.p90Ms} ms`, le(p90, t.p90Ms)),
+        check('model', 'the model spoke instead', String(steps.filter((s) => s.firstVoiceMs !== null && !s.fixedVoice).length), '= 0', steps.every((s) => s.firstVoiceMs === null || s.fixedVoice)),
+      ];
+    }
+    case 'iv-barge':
+    case 'fixed-barge': {
+      const bs = steps.filter((s) => s.barge !== undefined); const worst = bs.length ? Math.max(...bs.map((s) => s.relaySilentMs ?? Infinity)) : null;
+      const first = steps[0]!; const next = steps[2];
+      return [
+        check('line', 'the server line began before the interruption', first.firstVoiceMs !== null && first.fixedVoice ? 'yes' : 'no', 'yes', first.firstVoiceMs !== null && first.fixedVoice),
+        check('silent', 'relay silent after the interruption', ms(worst === Infinity ? null : worst), `<= ${GATE.fixedBarge.relaySilentMs} ms`, bs.length === 1 && le(worst === Infinity ? null : worst, GATE.fixedBarge.relaySilentMs)),
+        check('next', 'the next ask answered', next?.firstVoiceMs != null ? 'yes' : 'no', 'yes', next?.firstVoiceMs != null),
+      ];
+    }
+    case 'hold-late': {
+      const t = GATE.hold; const answered = steps.filter((s, i) => s.firstVoiceMs !== null && understoodAnswer(s, i)).length;
+      const drops = steps.flatMap((s) => s.drops ?? []).filter((d) => d === 'barge-in').length;
+      return [
+        check('answered', 'held questions answered', `${answered}/${asked.length}`, `${t.tries}/${t.tries}`, answered === t.tries && asked.length === t.tries),
+        check('bargeIn', "barge-in drops from the hold's own late words", String(drops), `= ${t.bargeInDrops}`, drops === t.bargeInDrops),
+      ];
+    }
+    case 'iv-follow':
+    case 'fixed-follow': {
+      const t = GATE.fixedFollow; const f = steps.slice(1); const ok = f.filter((s) => s.firstVoiceMs !== null && s.fixedVoice); const p90 = pct(ok.map(latency).filter((x): x is number => x !== null), 90);
+      return [
+        check('answered', 'follow-ups after a server line answered by it', `${ok.length}/${f.length}`, `${t.answered}/${t.tries}`, ok.length === t.answered && f.length === t.tries),
+        check('p90', 'follow-up p90', ms(p90), `<= ${t.p90Ms} ms`, le(p90, t.p90Ms)),
+      ];
+    }
+    case 'final-lag':
+    case 'mixer-lag': {
+      const t = GATE.finalLag; const lags = steps.map((s) => (s.finalMs != null && s.speechEndMs !== null ? Math.round(s.finalMs - s.speechEndMs) : null)).filter((x): x is number => x !== null);
+      const p50 = pct(lags, 50); const p90 = pct(lags, 90);
+      return [
+        check('seen', 'transcription finals seen', `${lags.length}/${t.tries}`, `${t.tries}/${t.tries}`, lags.length === t.tries),
+        check('p50', 'final lag after speech end, p50', ms(p50), `<= ${t.p50Ms} ms`, le(p50, t.p50Ms)),
+        check('p90', 'final lag after speech end, p90', ms(p90), `<= ${t.p90Ms} ms`, le(p90, t.p90Ms)),
+        check('answered', 'answered', `${lat.length}/${asked.length}`, `${t.tries}/${t.tries}`, lat.length === t.tries && asked.length === t.tries),
+      ];
+    }
     default:
       return [check('known', 'known scenario', scenarioId, 'listed', false)];
   }
+}
+
+function serverLineChecks(check: (id: string, label: string, value: string, threshold: string, pass: boolean | null) => Check, steps: StepObs[], t: typeof GATE.serverLine): Check[] {
+  const ok = steps.filter((s) => s.firstVoiceMs !== null); const lat = ok.map(latency).filter((x): x is number => x !== null); const p50 = pct(lat, 50); const p90 = pct(lat, 90);
+  const server = steps.filter((s) => s.firstVoiceMs !== null && s.fixedVoice).length;
+  return [
+    check('answered', 'phrase-tool questions answered', `${ok.length}/${steps.length}`, `${t.tries}/${t.tries}`, ok.length === t.tries && steps.length === t.tries),
+    check('server', 'answered by the server line', `${server}/${steps.length}`, `${t.serverVoice}/${t.tries}`, server === t.serverVoice),
+    check('p50', 'p50', ms(p50), `<= ${t.p50Ms} ms`, le(p50, t.p50Ms)),
+    check('p90', 'p90', ms(p90), `<= ${t.p90Ms} ms`, le(p90, t.p90Ms)),
+  ];
 }
 
 function understoodAnswer(s: StepObs, i: number): boolean {

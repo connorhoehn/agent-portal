@@ -13,11 +13,19 @@ export interface PortEvents {
   text(delta: string, atMs: number): void;
   /** The listening side decided someone addressed Milo (a name or hold trigger). */
   trigger(speaker: string, atMs: number): void;
+  /** A finished sentence (a transcription final) of this person reached the listening side. */
+  sentence?(speaker: string, atMs: number): void;
+  /** The router dropped the relay of the current turn (`barge-in`, `stop`, `fixed`, ...). */
+  drop?(reason: string, atMs: number): void;
 }
 
-export interface PortOpen { scenario: string; speakers: string[]; instructions: string; candidateMayAsk: boolean }
+export interface PortOpen { scenario: string; speakers: string[]; instructions: string; candidateMayAsk: boolean; family?: 'gate' | 'interviews'; viaMixer?: boolean }
 
 export interface GatePort {
+  /** The runtime seams this driver has (SEAMS in gate-spec.mts); a scenario that needs one this lacks is skipped. Absent = none. */
+  seams?: readonly string[];
+  /** The speaker presses (true) or releases (false) the hold button. */
+  hold?(speaker: string, on: boolean): void;
   open(input: PortOpen, ev: PortEvents): Promise<void>;
   /** A step starts (a scripted fake uses it to know what is being said; a real driver ignores it). */
   begin?(i: number, step: StepSpec, clipMs: number): void;
@@ -37,6 +45,7 @@ const ROUTE_WINDOW_MS = 6000;
 
 interface Rec extends StepObs {
   spec: StepSpec;
+  released?: boolean;
   started: boolean; clipStartMs: number; done: boolean; doneAt: number; pos: number; pcm: Buffer | null; clipMs: number;
 }
 
@@ -47,7 +56,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
   const recs: Rec[] = sc.steps.map((spec, i) => ({
     spec, i, clip: spec.clip, speaker: spec.speaker, expect: spec.expect, ...(spec.barge ? { barge: spec.barge } : {}),
     speechEndMs: null, firstVoiceMs: null, lastVoiceMs: null, fixedVoice: false, relayedFrames: 0, strayRuns: 0, routed: {}, mixed: false, text: '', toolCalls: [],
-    relaySilentMs: null, triggers: 0, noReply: false,
+    relaySilentMs: null, triggers: 0, noReply: false, finalMs: null, drops: [],
     started: false, clipStartMs: 0, done: false, doneAt: 0, pos: 0, pcm: spec.clip ? opts.clips[spec.clip]! : null,
     clipMs: spec.clip ? ((opts.clips[spec.clip]!.length / HANDSFREE_FRAME_BYTES) * HANDSFREE_FRAME_MS) : 0,
   }));
@@ -81,10 +90,15 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
       if (r) r.text += delta;
     },
     // only a trigger from a mic that is not one of the scenario's people counts: the echo room (their own names are the point)
+    sentence: (speaker, at) => {
+      const r = recs.findLast((x) => x.started && x.speaker === speaker && x.pcm !== null && x.clipStartMs <= at);
+      if (r && (r.speechEndMs === null || at - r.speechEndMs < 6000)) r.finalMs = at;
+    },
+    drop: (reason) => { latestStarted()?.drops?.push(reason); },
     trigger: (speaker) => { if (sc.speakers.includes(speaker)) return; const r = latestStarted(); if (r) r.triggers += 1; },
   };
 
-  await port.open({ scenario: sc.id, speakers: sc.speakers, instructions: opts.instructions, candidateMayAsk: sc.candidateMayAsk ?? true }, ev);
+  await port.open({ scenario: sc.id, speakers: sc.speakers, instructions: opts.instructions, candidateMayAsk: sc.candidateMayAsk ?? true, family: sc.family ?? 'gate', viaMixer: sc.viaMixer ?? false }, ev);
   const silence = Buffer.alloc(HANDSFREE_FRAME_BYTES);
   const t0 = clock.now() + 50; let k = 0; let nextIdx = 0; let loop = false;
   const busy = (speaker: string): boolean => recs.some((r) => r.started && r.speaker === speaker && r.pcm !== null && r.pos < r.pcm.length);
@@ -117,6 +131,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
         if (r.pcm === null) { r.speechEndMs = nowMs; }
         if (s.loopback && !loop) { loop = true; port.loopback(true); }
         port.begin?.(r.i, s, r.clipMs);
+        if (s.hold) port.hold?.(s.speaker, true);
         nextIdx += 1;
       }
     }
@@ -133,6 +148,7 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
       }
       port.frame(sp, f, nowMs);
     }
+    for (const r of recs) if (r.spec.hold && r.started && r.pcm !== null && r.pos >= r.pcm.length && !r.released) { r.released = true; port.hold?.(r.speaker, false); }
     port.tick(nowMs);
   }
 
@@ -147,6 +163,6 @@ export async function playScenario(sc: ScenarioSpec, port: GatePort, opts: PlayO
   void ROUTE_WINDOW_MS;
   return {
     scenario: sc.id, errors, billedLiveSeconds: closed.billedLiveSeconds, txSeconds: closed.txSeconds,
-    steps: recs.map(({ spec: _s, started: _a, clipStartMs: _b, done: _c, doneAt: _d, pos: _e, pcm: _f, clipMs: _g, ...obs }) => obs),
+    steps: recs.map(({ spec: _s, started: _a, clipStartMs: _b, done: _c, doneAt: _d, pos: _e, pcm: _f, clipMs: _g, released: _h, ...obs }) => obs),
   };
 }

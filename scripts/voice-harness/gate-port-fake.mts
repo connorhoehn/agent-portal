@@ -25,6 +25,11 @@ export interface FakeProfile {
   queuedSecond: 'after' | 'never' | 'first';
   /** A mention (silent step) set off a tool call. */
   toolOnMention: boolean;
+  /** Speech end to the transcription final of a step (ms); the mixer path adds `mixerExtraMs` in a viaMixer scenario. */
+  finalLagMs: number;
+  mixerExtraMs: number;
+  /** A hold's late words dropped the relay as a barge-in. */
+  holdLateBargeIn: boolean;
 }
 
 export const idealProfile: FakeProfile = {
@@ -39,6 +44,9 @@ export const idealProfile: FakeProfile = {
   candidateLeaks: false,
   queuedSecond: 'after',
   toolOnMention: false,
+  finalLagMs: 200,
+  mixerExtraMs: 100,
+  holdLateBargeIn: false,
 };
 
 export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opened: PortOpen | null } {
@@ -50,10 +58,14 @@ export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opene
   /** The answer last scheduled, and when the floor it holds frees (its start + its talk). */
   let lastAnswer: { item: { at: number; run: () => void }; freeAt: number } | null = null;
   const port = {
+    seams: ['interviews-family'] as readonly string[],
+    hold() { /* the scripted driver has no button: holdLateBargeIn decides */ },
     get opened() { return opened; },
     async open(input: PortOpen, e: PortEvents) { opened = input; ev = e; },
     begin(i: number, step: StepSpec, clipMs: number) {
       const startMs = nowMs; const endMs = startMs + clipMs; stepNo = i;
+      if (step.clip && step.expect !== 'silent') pending.push({ at: endMs + p.finalLagMs + (opened?.viaMixer ? p.mixerExtraMs : 0), run: () => ev?.sentence?.(step.speaker, nowMs) });
+      if (step.hold && p.holdLateBargeIn) pending.push({ at: endMs + 1000, run: () => ev?.drop?.('barge-in', nowMs) });
       if (step.overMiloAfterMs !== undefined && window && window.end > nowMs) {
         window.end = Math.min(window.end, nowMs + p.bargeStopMs); // the relay drops after the configured delay
         return;

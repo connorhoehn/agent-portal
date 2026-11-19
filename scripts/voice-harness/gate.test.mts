@@ -26,7 +26,7 @@ test('the scenario set matches the plan (counts, voices)', () => {
   assert.equal(by['chatter']!.steps.length, GATE.chatter.runs * 5);
   assert.equal(by['mentions']!.steps.length, GATE.mentions.clips);
   assert.deepEqual(new Set(by['asker']!.steps.map((s) => s.speaker)), new Set(['hugo', 'cand']));
-  assert.equal(gateScenarios().length, 11);
+  assert.equal(gateScenarios().length, 21);
 });
 
 test('percentile is nearest-rank', () => {
@@ -95,4 +95,32 @@ test('two at once and echo and candidate-off', async () => {
   assert.deepEqual(failing(scoreScenario('two-at-once', await run('two-at-once', { queuedSecond: 'first' }))), ['two-at-once.first', 'two-at-once.second']);
   assert.deepEqual(failing(scoreScenario('echo', await run('echo', { echoTriggers: 1 }))), ['echo.trigger']);
   assert.deepEqual(failing(scoreScenario('candidate-off', await run('candidate-off', { candidateLeaks: true }))), ['candidate-off.routed', 'candidate-off.fixed']);
+});
+
+test('the film gaps: each new scenario fails only on its own behaviour', async () => {
+  const f = async (id: string, profile: Partial<FakeProfile>): Promise<string[]> => failing(scoreScenario(id, await run(id, profile)));
+  // server-line questions: slow, or answered by the model instead of the server
+  assert.deepEqual(await f('iv-name-first', { latencyMs: () => 2000 }), ['iv-name-first.p50', 'iv-name-first.p90']);
+  assert.deepEqual(await f('iv-name-first', { latencyMs: (s) => (s.clip === 'iv02' ? null : 1100) }), ['iv-name-first.answered', 'iv-name-first.server']);
+  // barge-in over a server line
+  assert.deepEqual(await f('fixed-barge', { bargeStopMs: 1500 }), ['fixed-barge.silent']);
+  assert.deepEqual(await f('iv-barge', { bargeStopMs: 600 }), []);
+  // hold: late words counted as a barge-in
+  assert.deepEqual(await f('hold-late', { holdLateBargeIn: true }), ['hold-late.bargeIn']);
+  // follow-up after a fixed answer never answered; a preface question never answered
+  assert.deepEqual(await f('fixed-follow', { latencyMs: (s) => (s.clip === 'cf01' ? null : 1100) }), ['fixed-follow.answered']);
+  assert.deepEqual(await f('cand-preface', { latencyMs: (s) => (s.clip === 'ct01' ? null : 1100) }), ['cand-preface.answered']);
+  assert.deepEqual(await f('cand-preface', { latencyMs: () => 3500 }), ['cand-preface.p90']);
+  // the final's lag: film-sized lag fails both rows; the mixer scenario adds the mixer's own delay
+  assert.deepEqual(await f('final-lag', { finalLagMs: 1650 }), ['final-lag.p50', 'final-lag.p90']);
+  assert.deepEqual(await f('mixer-lag', { finalLagMs: 350, mixerExtraMs: 200 }), ['mixer-lag.p50']);
+});
+
+test('a scenario that needs a seam the driver lacks is skipped by the gate, not failed', async () => {
+  const sc = gateScenarios().find((x) => x.id === 'iv-name-first')!;
+  assert.equal(sc.needsSeam, 'interviews-family');
+  const r = await run('iv-name-first'); r.skipped = `needs seam: ${sc.needsSeam}`;
+  const res = scoreGate([r]);
+  assert.equal(res.ok, true); assert.equal(res.fail, 0); assert.ok(res.skipped > 0);
+  assert.equal(scoreGate([r], { requireAll: true }).ok, false);
 });
