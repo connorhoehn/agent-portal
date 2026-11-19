@@ -26,7 +26,7 @@ import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/
 import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
 import { Button, EmptyState, Inline, LoadingState, PageHeader, Stack, T } from '@connorhoehn/ui-components/shared';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
-import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
+import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallBlockPlacement, useCallHost } from '../../lib/conversationCall';
 import { RoomCallDockedPane, RoomCallGallery, useRoomCallMode } from '../../components/calls/RoomCallGallery';
 import { usePublishCollaborationFloor } from '../../components/shell/footerPanel';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
@@ -192,6 +192,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   // pill, switched from the widget and remembered; minimised, its media plays from the footer's mounted outlet.
   const [callMode, setCallMode] = useRoomCallMode('join.room.call-mode', 'floating');
   const footerRef = useRef<HTMLElement>(null);
+  const paneClaimed = useCallBlockPlacement() === 'pane';
   usePublishCollaborationFloor(footerRef);
   const callId = host?.call.call?.callId ?? null;
   // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
@@ -211,7 +212,8 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
     testId: view === 'lost' ? 'join-room-call-lost' : view === 'rejoin' ? 'join-room-left' : 'join-room-idle',
   };
   const footer = <Stack as="footer" ref={footerRef} gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
-    <CallMediaOutlet />
+    {/* A page that claims the pane (the floating or docked call) draws the recording note itself, as the shell's outlet does. */}
+    <CallMediaOutlet {...(paneClaimed ? { recordingConsent: false as const } : {})} />
     <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
       <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloAnswer} />
     </Inline>
