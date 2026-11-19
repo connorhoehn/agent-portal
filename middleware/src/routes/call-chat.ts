@@ -2,11 +2,15 @@
 // reactions travel over the gateway's `orgiq:huddle:<callId>` chat channel
 // under the same participant authority (lib/call-chat.ts); this route only
 // tells a current participant which channel that is, who is in it, whether
-// they may post, and their replay from their join boundary.
+// they may post, and their replay from their join boundary. `/chat/reads` is the
+// caller's own read position per pane tab (lib/call-chat-reads.ts), which the
+// call's unread bubble counts from.
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { resolveSession } from '../lib/authz.js';
 import { callChatRuntime } from '../lib/call-chat.js';
+import { callChatReads } from '../lib/call-chat-reads.js';
+import { socialChat } from '../lib/social-chat.js';
 import type { Session } from '../lib/session.js';
 
 export const callChatRouter = Router();
@@ -24,4 +28,14 @@ callChatRouter.get('/:callId/chat', asyncHandler(async (req, res) => {
     throw new ValidationError('limit must be between 1 and 100');
   }
   res.json(await callChatRuntime().get(callId(req), session(req), raw === undefined ? 50 : Number(raw)));
+}));
+
+// The call chat's read receipts live in the gateway's chat store (the same one the gateway's `read` frame moves).
+const reads = callChatReads({ store: () => socialChat().readReceiptStore, assertMember: (id, s) => callChatRuntime().assertMember(id, s) });
+callChatRouter.get('/:callId/chat/reads', asyncHandler(async (req, res) => {
+  res.json(await reads.get(callId(req), session(req)));
+}));
+callChatRouter.put('/:callId/chat/reads', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  res.json(await reads.mark(callId(req), session(req), body['tab'], body['readAt']));
 }));
