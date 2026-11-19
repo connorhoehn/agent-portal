@@ -89,7 +89,7 @@ describe.each([
 
   it('keeps the kit, the history, the panel and the ratings whole', () => {
     const backend = world.openings.find((o) => o.id === 'op-backend')!;
-    expect(backend.kit.rounds.map((r) => r.name)).toEqual(['Coding', 'System design', 'Working together']);
+    expect(backend.kit.rounds.map((r) => r.name)).toEqual(['Technical screen', 'Coding', 'System design', 'Working together']);
     expect(backend.kit.questions.find((q) => q.id === 'q-be-ratelimit')!.starter!.python).toContain('class RateLimiter');
     expect(world.applications.find((a) => a.id === 'app-vfzc2x6g')!.history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing', 'debrief']);
     expect(world.interviews.find((i) => i.id === 'iv-n5z9f2cq')!.panelIds).toEqual(['u-hugo']);
@@ -211,7 +211,7 @@ describe.each([
   it('keeps what each round assesses, and a kit saved without it reads back without it (every competency)', async () => {
     const seeded = (await store.listOpenings()).find((o) => o.id === 'op-backend')!.kit;
     expect(seeded.rounds.map((r) => r.competencyIds)).toEqual([
-      ['problem-solving', 'code-quality', 'communication'], ['system-design', 'communication'], ['communication', 'collaboration'],
+      ['problem-solving', 'code-quality', 'communication'], ['problem-solving', 'code-quality', 'communication'], ['system-design', 'communication'], ['communication', 'collaboration'],
     ]);
     const named: OpeningKit = { ...KIT, rounds: [{ ...KIT.rounds[0]!, competencyIds: ['ownership'] }] };
     expect((await store.replaceOpeningKit('op-em', named, 1)).ok).toBe(true);

@@ -95,7 +95,7 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(res.body.items).toHaveLength(12);
     const mateo = res.body.items.find((r: { candidate: { name: string } }) => r.candidate.name === 'Mateo Álvarez');
     expect(mateo).toMatchObject({ opening: { title: 'Senior Backend Engineer' }, stage: 'interviewing',
-      nextInterview: { roundName: 'Coding', lead: { name: 'Hugo Marchetti' } }, lastResult: { recommendation: 'yes', roundName: 'Coding' } });
+      nextInterview: { roundName: 'Coding', lead: { name: 'Hugo Marchetti' } }, lastResult: { recommendation: 'yes', roundName: 'Technical screen' } });
     expect(res.headers['cache-control']).toBe('no-store');
   });
 

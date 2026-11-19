@@ -81,11 +81,11 @@ describe('each round names the competencies it assesses', () => {
 
   it('a round with no list (a kit saved before rounds named theirs), or an unknown round, reads every competency', () => {
     const kit = seedKit('op-backend');
-    delete kit.rounds[0]!.competencyIds;
+    delete kit.rounds[1]!.competencyIds;
     const all = kit.competencies.map((c) => c.id);
     expect(competencyIdsOfRound(kit, 'rd-coding')).toEqual(all);
     expect(competencyIdsOfRound(kit, 'rd-nowhere')).toEqual(all);
-    expect(competencyIdsOfRound({ ...kit, rounds: [{ ...kit.rounds[1]!, competencyIds: [] }] }, 'rd-design')).toEqual(all);
+    expect(competencyIdsOfRound({ ...kit, rounds: [{ ...kit.rounds[2]!, competencyIds: [] }] }, 'rd-design')).toEqual(all);
   });
 
   it('questionsOfRound: of the round\'s type, for a competency it assesses', () => {
@@ -102,7 +102,7 @@ describe('each round names the competencies it assesses', () => {
     const old = seedKit('op-backend');
     for (const round of old.rounds) delete round.competencyIds;
     const o = checkKit(old);
-    expect(o.ok && o.value.rounds.map((x) => 'competencyIds' in x)).toEqual([false, false, false]);
+    expect(o.ok && o.value.rounds.map((x) => 'competencyIds' in x)).toEqual([false, false, false, false]);
   });
 
   it('a round with none, or with a competency the kit does not have, is refused on its own path', () => {
@@ -122,8 +122,8 @@ describe('each round names the competencies it assesses', () => {
     const kit = seedKit('op-backend');
     kit.competencies = kit.competencies.filter((c) => c.id !== 'collaboration');
     kit.questions = kit.questions.filter((q) => q.competencyId !== 'collaboration');
-    expect(paths(checkKit(kit))).toEqual(['rounds.2.competencyIds']);
-    kit.rounds[2]!.competencyIds = ['communication'];
+    expect(paths(checkKit(kit))).toEqual(['rounds.3.competencyIds']);
+    kit.rounds[3]!.competencyIds = ['communication'];
     expect(paths(checkKit(kit))).toEqual([]);
   });
 });
@@ -227,7 +227,7 @@ describe('what an interview or a scorecard points at stays', () => {
 
   it('kitInUse: the rounds booked, the questions chosen and the competencies rated on the opening', () => {
     const u = inUse();
-    expect([...u.roundIds].sort()).toEqual(['rd-coding', 'rd-design', 'rd-together']);
+    expect([...u.roundIds].sort()).toEqual(['rd-coding', 'rd-design', 'rd-screen', 'rd-together']);
     expect(u.questionIds.has('q-be-ratelimit')).toBe(true);
     expect(u.competencyIds.has('problem-solving')).toBe(true);
     expect(kitInUse(world(), 'op-nowhere')).toEqual(NOTHING_IN_USE);
@@ -252,7 +252,7 @@ describe('what an interview or a scorecard points at stays', () => {
     const kit = structuredClone(before);
     kit.rounds[0]!.name = 'Live coding';
     expect(checkKit(kit, before, inUse()).ok).toBe(true);
-    kit.rounds[2]!.type = 'technical';
+    kit.rounds[3]!.type = 'technical';
     expect(messages(checkKit(kit, before, inUse()))).toContain('The "Working together" round has interviews on it, so it stays behavioural.');
   });
 

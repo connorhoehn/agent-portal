@@ -82,8 +82,8 @@ describe('the wire shapes', () => {
     expect(mateo.opening.title).toBe('Senior Backend Engineer');
     expect(mateo.stage).toBe('interviewing');
     expect(mateo.nextInterview).toMatchObject({ roundName: 'Coding', state: 'ready', lead: { name: 'Hugo Marchetti' } });
-    expect(mateo.lastResult).toMatchObject({ recommendation: 'yes', roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
-    expect([mateo.roundsDone, mateo.roundsTotal]).toEqual([1, 3]);
+    expect(mateo.lastResult).toMatchObject({ recommendation: 'yes', roundName: 'Technical screen', interviewer: { name: 'Hugo Marchetti' } });
+    expect([mateo.roundsDone, mateo.roundsTotal]).toEqual([1, 4]);
     const ingrid = rows.find((r) => r.candidate.name === 'Ingrid Solberg')!;
     expect(ingrid.lastResult).toMatchObject({ roundName: 'Working together', interviewer: { name: 'Wen Zhao' } });
     expect(rows.find((r) => r.candidate.name === 'Jonah Whitaker')!.scorecardDue).toBe(true);
