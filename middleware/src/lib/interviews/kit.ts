@@ -198,11 +198,14 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
   const roundsIn = listOf(input['rounds']);
   if (roundsIn.length === 0) p.add('rounds', 'Add at least one round.');
   if (roundsIn.length > KIT_LIMITS.rounds) p.add('rounds', `A kit holds at most ${KIT_LIMITS.rounds} rounds.`);
-  // Each round's competency ids, checked once the competencies are read below; absent keeps a kit saved before rounds named theirs.
+  // Each round's competency ids, checked once the competencies are read below. A round sent without a list keeps the one
+  // the saved kit holds for the same round id (checked again like a sent one); with none saved it stays without one.
   const roundCompetencies: Array<unknown> = [];
+  const savedLists = new Map(previous.rounds.map((r) => [r.id, r.competencyIds]));
   const rounds: KitRound[] = roundsIn.map((raw, i) => {
     const r = isRecord(raw) ? raw : {};
-    roundCompetencies.push(r['competencyIds']);
+    const sent = r['competencyIds'];
+    roundCompetencies.push(sent === undefined || sent === null ? savedLists.get(text(r['id'])) : sent);
     const at = `rounds.${i}`;
     const n = i + 1;
     const id = text(r['id']);

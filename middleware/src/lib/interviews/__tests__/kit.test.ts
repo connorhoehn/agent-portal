@@ -105,6 +105,29 @@ describe('each round names the competencies it assesses', () => {
     expect(o.ok && o.value.rounds.map((x) => 'competencyIds' in x)).toEqual([false, false, false, false]);
   });
 
+  it('a save that sends a round without its list keeps the list the saved kit holds for that round id', () => {
+    const saved = seedKit('op-backend');
+    const sent = seedKit('op-backend');
+    for (const round of sent.rounds) delete round.competencyIds;
+    sent.rounds.reverse();
+    sent.rounds.push({ id: 'rd-new', name: 'New round', type: 'behavioural', minutes: 30 });
+    const r = checkKit(sent, saved);
+    expect(paths(r)).toEqual([]);
+    const byId = new Map(saved.rounds.map((x) => [x.id, x.competencyIds]));
+    expect(r.ok && r.value.rounds.slice(0, 4).map((x) => x.competencyIds)).toEqual(sent.rounds.slice(0, 4).map((x) => byId.get(x.id)));
+    // A round the saved kit does not have stays without a list (it reads every competency).
+    expect(r.ok && 'competencyIds' in r.value.rounds[4]!).toBe(false);
+  });
+
+  it('a carried list is checked like a sent one: dropping a competency it names refuses that round', () => {
+    const saved = seedKit('op-backend');
+    const sent = seedKit('op-backend');
+    for (const round of sent.rounds) delete round.competencyIds;
+    sent.competencies = sent.competencies.filter((c) => c.id !== 'collaboration');
+    sent.questions = sent.questions.filter((q) => q.competencyId !== 'collaboration');
+    expect(paths(checkKit(sent, saved))).toEqual(['rounds.3.competencyIds']);
+  });
+
   it('a round with none, or with a competency the kit does not have, is refused on its own path', () => {
     const kit = seedKit('op-backend');
     kit.rounds[0]!.competencyIds = [];
