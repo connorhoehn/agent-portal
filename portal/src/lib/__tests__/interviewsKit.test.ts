@@ -2,12 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  blankQuestion, changesLine, kitChanges, kitLine, kitTitle, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
-  type OpeningKit,
+  blankQuestion, blankRound, changesLine, kitChanges, kitLine, kitTitle, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
+  toggledCompetency, withoutCompetency, type OpeningKit,
 } from '../interviewsKit.ts';
 
 const KIT: OpeningKit = {
-  rounds: [{ id: 'rd-a', name: 'Coding', type: 'technical', minutes: 60 }, { id: 'rd-b', name: 'Leadership', type: 'behavioural', minutes: 45 }],
+  rounds: [{ id: 'rd-a', name: 'Coding', type: 'technical', minutes: 60, competencyIds: ['c-1'] }, { id: 'rd-b', name: 'Leadership', type: 'behavioural', minutes: 45, competencyIds: ['c-1'] }],
   competencies: [{ id: 'c-1', name: 'Delivery', lookFor: 'Sees slips early.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } }],
   questions: [
     { id: 'q-1', prompt: 'One', followUps: [], competencyId: 'c-1', roundType: 'technical', starter: { go: 'x\n', python: 'y\n' } },
@@ -72,4 +72,21 @@ test('problems map to their fields, and to the rows they sit on', () => {
   assert.deepEqual([...rowsWithProblems(m, 'questions')], [2]);
   assert.deepEqual([...rowsWithProblems(m, 'competencies')], [0]);
   assert.deepEqual([...rowsWithProblems(m, 'rounds')], []);
+});
+
+test('a round ticks and unticks the competencies it assesses, kept in the kit\'s order; a new round starts with none', () => {
+  const kit: OpeningKit = { ...KIT, competencies: [...KIT.competencies, { ...KIT.competencies[0]!, id: 'c-2', name: 'Design' }] };
+  assert.deepEqual(blankRound('rd-new').competencyIds, []);
+  assert.deepEqual(toggledCompetency(kit, { competencyIds: ['c-1'] }, 'c-2'), ['c-1', 'c-2']);
+  assert.deepEqual(toggledCompetency(kit, { competencyIds: ['c-2'] }, 'c-1'), ['c-1', 'c-2']);
+  assert.deepEqual(toggledCompetency(kit, { competencyIds: ['c-1', 'c-2'] }, 'c-1'), ['c-2']);
+  // Ticking a competency is an edit of the round.
+  assert.deepEqual(kitChanges(kit, { ...kit, rounds: [{ ...kit.rounds[0]!, competencyIds: ['c-1', 'c-2'] }, kit.rounds[1]!] }), ['1 round edited']);
+});
+
+test('removing a competency unticks it in every round that assessed it', () => {
+  const after = withoutCompetency(KIT, 'c-1');
+  assert.deepEqual(after.competencies, []);
+  assert.deepEqual(after.rounds.map((r) => r.competencyIds), [[], []]);
+  assert.deepEqual(after.questions, KIT.questions);
 });

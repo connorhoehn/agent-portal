@@ -51,6 +51,12 @@ export interface KitRound {
   minutes: number;
   /** A technical round's surface; absent on behavioural rounds and on kits saved before the board. */
   surface?: RoundSurface;
+  /**
+   * The competencies this round assesses, by id, in any order (the kit's order is the one shown). Every screen that
+   * lists a round's competencies reads them through `competenciesOfRound` (kit.ts). Absent on a kit saved before rounds
+   * named theirs: such a round assesses every competency of the kit, as it did then; the next save writes the list.
+   */
+  competencyIds?: string[];
 }
 
 /**

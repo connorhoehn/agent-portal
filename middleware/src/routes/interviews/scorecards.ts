@@ -2,7 +2,7 @@
 // Mounted in routes/interviews.ts with one line, after the router's ViewInterviews gate.
 //
 //   GET  /interviews/:id/scorecard   the lead and each panel member: their own latest scorecard with its earlier
-//                                    versions (or none), the kit's competencies with their anchors, whether they may
+//                                    versions (or none), the competencies the round assesses with their anchors, whether they may
 //                                    submit now, and the others' scorecards on the candidate only once their own is in
 //                                    (scope.ts othersRevealed). The recruiter, the opening's hiring manager and the
 //                                    admin read every submission as it arrives, and submit nothing.
@@ -27,7 +27,7 @@ import { indexFor, param } from '../../lib/interviews/request.js';
 import { ratingsAtRecap } from '../../lib/interviews/recap/index.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
 import {
-  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, roundCompetencyIds, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  NO_SCORECARD_HERE, SCORECARD_LIMITS, checkScorecard, scorecardCompetencies, isScoredNow, newScorecardVersion, stateRefusal, submitMove, versionsOf,
 } from '../../lib/interviews/scorecard.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
@@ -51,9 +51,12 @@ export interface ScorecardPageView {
     /** The viewer's seat; null for the recruiter, the hiring manager and the admin, who read and never submit. */
     seat: Seat | null;
   };
-  /** What each competency is judged on and what each point of the scale means, in the kit's order. */
+  /**
+   * What this scorecard rates, with what each point of the scale means, in the kit's order (scorecard.ts
+   * scorecardCompetencies): the round's competencies, plus any the viewer's own latest version rated outside them.
+   */
   competencies: KitCompetency[];
-  /** The ids of the competencies this round requires (its chosen questions'), in the kit's order; the rest are optional (E4 #30). */
+  /** The ids of the competencies the round assesses (kit.ts competenciesOfRound), in the kit's order: each must be rated. */
   required: string[];
   /** The viewer's own latest scorecard with the versions before it; null before they submit (and for readers). */
   mine: ScorecardView | null;
@@ -80,13 +83,12 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
   const seat = seatOf(i, viewer.id);
   // An interviewer's scope is already their own seats; this keeps a reassigned-away interviewer out too.
   if (!seat && reachOf(viewer.role) === 'assigned') return null;
-  const names = new Map(opening.kit.competencies.map((k) => [k.id, k.name]));
   const roundName = (iv: Interview) => opening.kit.rounds.find((r) => r.id === iv.roundId)?.name ?? 'Round';
-  const mine = seat ? ix.scorecardViews(i.id, names).find((s) => s.interviewer.id === viewer.id) ?? null : null;
+  const mine = seat ? ix.scorecardViews(i.id, opening.kit.competencies).find((s) => s.interviewer.id === viewer.id) ?? null : null;
   // The world is scoped: an interviewer's holds the others' only once theirs is in (scope.ts othersRevealed).
   const othersHidden = reachOf(viewer.role) === 'assigned' && !othersRevealed(ix.world, viewer.id, app.id);
   const rounds = interviews.filter((x) => x.applicationId === app.id).sort((a, b) => (a.id === i.id ? -1 : b.id === i.id ? 1 : 0));
-  const others = othersHidden ? [] : rounds.flatMap((iv) => ix.scorecardViews(iv.id, names)
+  const others = othersHidden ? [] : rounds.flatMap((iv) => ix.scorecardViews(iv.id, opening.kit.competencies)
     .filter((s) => s.interviewer.id !== viewer.id || iv.id !== i.id)
     .map((s) => ({ ...s, interviewId: iv.id, round: roundName(iv) })));
   const refusal = seat ? stateRefusal(i.state, mine !== null) : READ_ONLY;
@@ -98,8 +100,7 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
       opening: { id: opening.id, title: opening.title },
       seat,
     },
-    competencies: structuredClone(opening.kit.competencies),
-    required: roundCompetencyIds(i, opening.kit),
+    ...structuredClone(scorecardCompetencies(i, opening.kit, versionsOf(ix.world.scorecards, i.id, viewer.id))),
     mine,
     canSubmit: refusal === null,
     refusal,
@@ -145,7 +146,8 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
   if (!opening) throw new NotFoundError(NO_SCORECARD_HERE);
 
   res.setHeader('Cache-Control', 'no-store');
-  const checked = checkScorecard(req.body, opening.kit.competencies, roundCompetencyIds(i, opening.kit));
+  const rates = scorecardCompetencies(i, opening.kit, versionsOf(world.scorecards, i.id, session.sub));
+  const checked = checkScorecard(req.body, rates.competencies, rates.required);
   if (!checked.ok) { res.status(400).json({ error: checked.fields[0]!.message, fields: checked.fields }); return; }
   const { reason, basedOn, ...input } = checked.value;
 

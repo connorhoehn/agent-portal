@@ -189,6 +189,9 @@ function KitView({ o }: { o: OpeningRecord }) {
     { key: 'name', header: 'Round', render: (r) => <T size="sm" weight="medium">{r.name}</T> },
     { key: 'type', header: 'Type', render: (r) => <T size="sm">{ROUND_TYPE_LABELS[r.type]}</T> },
     { key: 'minutes', header: 'Length', numeric: true, render: (r) => <T size="sm">{r.minutes} min</T> },
+    { key: 'assesses', header: 'Assesses', render: (r) => (
+      <T size="sm" wrap data-testid="interviews-round-assesses">{r.competencyIds.map((id) => names.get(id)).filter(Boolean).join(', ') || '—'}</T>
+    ) },
     { key: 'pad', header: 'Code pad', render: (r) => <T size="sm" tone={r.type === 'technical' ? 'primary' : 'tertiary'} data-testid="interviews-round-pad">{padLine(r.type)}</T> },
   ];
   const competencyColumns: DataTableColumn<KitCompetency>[] = [

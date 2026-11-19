@@ -26,6 +26,12 @@ describe('the export service', () => {
     expect(doc.interview).toMatchObject({ candidateId: 'cand-x', round: { name: 'Coding' }, state: 'ended' });
     expect(doc.exportedAt).toBe('2026-11-17T10:00:00.000Z');
   });
+
+  it('carries the competencies the round assesses, and none when the opening could not be read', async () => {
+    const named = await buildMiloExport({ ...ctx, competencies: [{ id: 'problem-solving', name: 'Problem solving' }] });
+    expect(named.interview.round.competencies).toEqual([{ id: 'problem-solving', name: 'Problem solving' }]);
+    expect((await buildMiloExport(ctx)).interview.round.competencies).toEqual([]);
+  });
 });
 
 // Lane H5 (OWED O-164, O-270): the export over the mock world's seeded stores, with the sections as the route registers them.

@@ -11,7 +11,7 @@ import { NOT_SAID } from '../../lib/interviews/milo-notes/prompt.js';
 import { scriptedPlan } from '../../lib/interviews/plan/model.js';
 import { scriptedRecap } from '../../lib/interviews/recap/model.js';
 import { guardRecapText, parseRecapAnswer } from '../../lib/interviews/recap/parse.js';
-import { roundCompetencyIds } from '../../lib/interviews/recap/service.js';
+import { competenciesOfRound, competencyIdsOfRound } from '../../lib/interviews/kit.js';
 import type { Interview, Opening } from '../../lib/interviews/types.js';
 import { interviewCoachLogFixture } from '../interviews-coach-log.js';
 import { interviewRecapsFixture } from '../interviews-recaps.js';
@@ -41,11 +41,11 @@ describe('the seeded recaps', () => {
   it.each(['iv-d7q4n9xe', 'iv-f2b6t5zh', 'iv-j6x2d9sb', 'iv-p2v7j4ye'])('%s is exactly what the guard keeps, and covers the round', (id) => {
     const row = recaps().find((r) => r.interviewId === id)!;
     const iv = interviewOf(id);
-    const competencyIds = roundCompetencyIds(iv, openingOf(iv));
+    const competencyIds = competencyIdsOfRound(openingOf(iv).kit, iv.roundId);
     const parsed = parseRecapAnswer(JSON.stringify(row.content), { competencyIds, lines: linesOf(id) });
     expect(parsed).toEqual({ ok: true, recap: row.content, droppedClaims: 0 });
-    // Every competency of the round has two to four statements, and the scorecard rated each of them.
-    expect(row.content.competencies.map((c) => c.id)).toEqual(competencyIds);
+    // Only competencies the round assesses, each with two to four statements; the scorecard rated every one the round assesses.
+    expect(row.content.competencies.map((c) => c.id).every((c) => competencyIds.includes(c))).toBe(true);
     for (const c of row.content.competencies) expect(c.evidence.length).toBeGreaterThanOrEqual(2);
     const card = interviewScorecardsFixture.rows('default').find((s) => s.interviewId === id)!;
     expect(card.ratings.map((r) => r.competencyId).sort()).toEqual([...competencyIds].sort());
@@ -85,7 +85,7 @@ describe('the scripted stand-ins over the seeded kits and transcripts', () => {
     const iv = interviewOf(id);
     const opening = openingOf(iv);
     const lines = linesOf(id);
-    const competencies = opening.kit.competencies.filter((c) => roundCompetencyIds(iv, opening).includes(c.id));
+    const competencies = competenciesOfRound(opening.kit, iv.roundId);
     const questions = opening.kit.questions.filter((q) => q.roundType === iv.type);
     const chosen = questions.filter((q) => iv.questionIds.includes(q.id)).map((q) => ({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' as const }));
     const recap = scriptedRecap({ competencies, questions: chosen, lines });

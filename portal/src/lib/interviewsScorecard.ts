@@ -24,7 +24,8 @@ export interface ScorecardVersion {
   submittedAt: string;
   version: number;
   correctionReason: string | null;
-  ratings: Array<CompetencyRating & { competency: string }>;
+  /** Each rating with its competency's name and the anchor sentence for the rating given, as rated (whatever the round assesses now). */
+  ratings: Array<CompetencyRating & { competency: string; anchor?: string | null }>;
 }
 export interface ScorecardView extends ScorecardVersion { earlier: ScorecardVersion[] }
 export type OtherScorecard = ScorecardView & { interviewId: string; round: string };
@@ -39,7 +40,7 @@ export interface ScorecardPageView {
     seat: 'lead' | 'panel' | null;
   };
   competencies: KitCompetency[];
-  /** The competencies this round requires (its chosen questions'); the kit's others are optional, "Not seen in this round" (E4 #30). */
+  /** The competencies the round assesses: each must be rated. `competencies` adds only what the viewer's own latest version rated outside them (optional, kept on a correction). */
   required: string[];
   mine: ScorecardView | null;
   canSubmit: boolean;
@@ -98,7 +99,7 @@ export function draftFrom(card: ScorecardView): Draft {
 /** Every competency the round requires rated: what "Continue to the recap" needs. Pass the required ones only. */
 export const allRated = (d: Pick<Draft, 'ratings'>, required: readonly KitCompetency[]): boolean => required.every((c) => !!d.ratings[c.id]);
 
-/** The round's required competencies first, then the kit's optional others, each group in the kit's order (E4 #30). */
+/** The round's competencies first (each required), then any the viewer's own earlier version rated outside them (optional), each group in the kit's order. */
 export function roundCompetencies(view: Pick<ScorecardPageView, 'competencies' | 'required'>): { required: KitCompetency[]; optional: KitCompetency[] } {
   const need = new Set(view.required ?? view.competencies.map((c) => c.id));
   return { required: view.competencies.filter((c) => need.has(c.id)), optional: view.competencies.filter((c) => !need.has(c.id)) };

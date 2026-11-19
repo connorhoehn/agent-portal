@@ -4,7 +4,7 @@
 // A recap on each of the four finished, scored rounds of mock/interviews.ts: Ingrid's coding and "Working together"
 // rounds, Mateo's coding round and Ravi's coding round in Swift. Jonah's leadership round has none yet: Wen has not
 // rated it, and the first open writes it. Each recap covers the competencies of the round's chosen questions, with
-// two to four statements each; every statement is a short plain sentence in the words of the candidate line it cites
+// two to four statements each (a coding round's Communication, which the round also assesses, reads as not covered); every statement is a short plain sentence in the words of the candidate line it cites
 // (mock/interviews-records.ts holds the lines), so the screen shows the statement once and the quoted line beside it.
 // The seeded content is exactly what the recap guard (lib/interviews/recap/parse.ts) keeps of it: no statement is
 // dropped for drift, repetition or a missing source, and the rest of each cited answer is already cited
@@ -25,10 +25,10 @@ const at = seedAt;
 /** One statement: Milo's short sentence, and the candidate line it rests on (its number and its words, whole). */
 const claim = (text: string, seq: number, quote: string) => ({ text, seq, quote });
 
-const recap = (interviewId: string, writtenAt: string, competencies: RecapRecord['content']['competencies']): RecapRecord => ({
+const recap = (interviewId: string, writtenAt: string, competencies: RecapRecord['content']['competencies'], notCovered: string[] = []): RecapRecord => ({
   interviewId, state: 'ready', writtenAt, modelId: MODEL, promptVersion: PROMPT_VERSION, attempts: 1, droppedCodes: [], droppedClaims: 0,
-  // Every competency of the round's questions has statements, so nothing of the round is "not covered".
-  content: { competencies, notCovered: [] },
+  // Every competency of the round's questions has statements; what else the round assesses is "not covered" on read.
+  content: { competencies, notCovered },
 });
 
 export const interviewRecapsFixture = defineFixture<RecapRecord>({
@@ -57,7 +57,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
           claim("A day: longer than the retry window plus the provider's dedupe window.", 20,
             "Longer than the longest retry window plus the provider's own dedupe window, so a day is a reasonable default."),
         ] },
-      ]),
+      ], ['communication']),
       // Ingrid's "Working together" round (Wen; ended at -6 13:45): an incident she led, then a disagreement.
       recap('iv-f2b6t5zh', at(-6, 14, 50), [
         { id: 'communication', evidence: [
@@ -102,7 +102,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
           claim('Saves the key before the first call, so the next attempt reuses it.', 29,
             "Then the next attempt reuses the stored key, the provider returns the original result, and we record it. That's why the key has to be saved before the first call."),
         ] },
-      ]),
+      ], ['communication']),
       // Ravi's coding round in Swift (Wen; ended at -2 16:00): a paged list, then a debounced search.
       recap('iv-p2v7j4ye', at(-2, 17, 10), [
         { id: 'swift', evidence: [
@@ -125,7 +125,7 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
           claim('The pages already loaded, a small banner and a retry.', 16,
             'The pages already loaded, and a small banner saying the next page could not be reached, with a retry.'),
         ] },
-      ]),
+      ], ['problem-solving', 'communication']),
     ],
     empty: () => [],
   },
@@ -137,13 +137,13 @@ export const interviewRecapOpensFixture = defineFixture<RecapOpen>({
     default: () => [
       // The leads opened the recap after rating, with the ratings their scorecards then kept (so nothing changed after it).
       { interviewId: 'iv-d7q4n9xe', interviewerId: 'u-hugo', openedAt: at(-9, 15, 40),
-        ratings: [{ competencyId: 'problem-solving', rating: 4 }, { competencyId: 'code-quality', rating: 4 }] },
+        ratings: [{ competencyId: 'problem-solving', rating: 4 }, { competencyId: 'code-quality', rating: 4 }, { competencyId: 'communication', rating: 4 }] },
       { interviewId: 'iv-f2b6t5zh', interviewerId: 'u-wen', openedAt: at(-6, 14, 50),
         ratings: [{ competencyId: 'communication', rating: 3 }, { competencyId: 'collaboration', rating: 3 }] },
       { interviewId: 'iv-j6x2d9sb', interviewerId: 'u-hugo', openedAt: at(-3, 16, 0),
-        ratings: [{ competencyId: 'problem-solving', rating: 3 }, { competencyId: 'code-quality', rating: 3 }] },
+        ratings: [{ competencyId: 'problem-solving', rating: 3 }, { competencyId: 'code-quality', rating: 3 }, { competencyId: 'communication', rating: 3 }] },
       { interviewId: 'iv-p2v7j4ye', interviewerId: 'u-wen', openedAt: at(-2, 17, 10),
-        ratings: [{ competencyId: 'app-architecture', rating: 3 }, { competencyId: 'swift', rating: 3 }] },
+        ratings: [{ competencyId: 'problem-solving', rating: 3 }, { competencyId: 'swift', rating: 3 }, { competencyId: 'app-architecture', rating: 3 }, { competencyId: 'communication', rating: 3 }] },
     ],
     empty: () => [],
   },

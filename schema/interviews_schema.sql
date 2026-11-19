@@ -21,10 +21,14 @@
 -- The middleware's statements are middleware/src/lib/interviews/store-sql.ts.
 
 -- ── openings ────────────────────────────────────────────────────────────────
--- The kit is one JSONB document: { rounds: [{ id, name, type, minutes }],
+-- The kit is one JSONB document: { rounds: [{ id, name, type, minutes,
+-- competencyIds? }],
 -- competencies: [{ id, name, lookFor, anchors: { "1".."4" } }], questions:
 -- [{ id, prompt, followUps: [text], competencyId, roundType, starter?:
--- { <language>: code } }] }, each list in the order shown. It is replaced as
+-- { <language>: code } }] }, each list in the order shown. A round's
+-- competencyIds (what it assesses) is absent on kits saved before rounds named
+-- theirs: such a round assesses every competency (kit.ts competenciesOfRound),
+-- so no backfill is needed. It is replaced as
 -- a whole by the kit editor (row I1.3), checked first by
 -- middleware/src/lib/interviews/kit.ts, and read as a whole by every
 -- interview of the opening. `revision` is bumped by every write; a write

@@ -37,6 +37,7 @@ const recordOrAssistantTranscript: TranscriptSource = async (i) => {
 import type { CoachLine } from '../coach/prompt.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
+import { competenciesOfRound, competencyIdsOfRound } from '../kit.js';
 import { estimateRecapTokens, makeRecapModel, RECAP_TIMEOUT_MS, type RecapModel } from './model.js';
 import { parseRecapAnswer, type RecapContent } from './parse.js';
 import { RECAP_MAX_LINES, RECAP_PROMPT_VERSION, type RecapInput, type RecapQuestion } from './prompt.js';
@@ -117,27 +118,15 @@ const iso = (ms: number): string => new Date(ms).toISOString();
 const emptyBody = (state: RecapBody['state']): RecapBody => ({ state, paused: state === 'paused' ? 'budget' : null, writtenAt: null, competencies: [], notCovered: [] });
 
 /**
- * The round's competencies, in the kit's order (E4 finding 40): those of the questions the lead chose and of the
- * suggestions taken in the round. A round with neither reads the whole kit. A recap reads, covers and lists as "not
- * covered" only these: a coding round does not report that nothing was said about collaboration.
- */
-export function roundCompetencyIds(interview: Pick<Interview, 'questionIds'>, opening: Opening, taken: readonly { competencyId: string }[] = []): string[] {
-  const kit = opening.kit;
-  const bank = new Map(kit.questions.map((q) => [q.id, q.competencyId]));
-  const want = new Set([...interview.questionIds.flatMap((id) => (bank.has(id) ? [bank.get(id)!] : [])), ...taken.map((t) => t.competencyId)]);
-  const ids = kit.competencies.map((c) => c.id);
-  return want.size ? ids.filter((id) => want.has(id)) : ids;
-}
-
-/**
  * The stored recap as E3's body, with the kit's names, in the kit's order. Given the interview, "not covered" lists only
- * the round's competencies (and any the stored recap listed itself); without it, every other competency of the kit.
+ * the competencies its round assesses (competenciesOfRound, and any the stored recap listed itself); without it, every
+ * other competency of the kit. Evidence the stored recap holds is shown whatever the round, as it was written.
  */
-export function recapBody(row: RecapRecord | null, opening: Opening, interview?: Pick<Interview, 'questionIds'>): RecapBody {
+export function recapBody(row: RecapRecord | null, opening: Opening, interview?: Pick<Interview, 'roundId'>): RecapBody {
   if (!row || row.state !== 'ready') return emptyBody('none');
   const kit = opening.kit.competencies;
   const byId = new Map(row.content.competencies.map((c) => [c.id, c]));
-  const round = interview ? new Set([...roundCompetencyIds(interview, opening), ...row.content.notCovered]) : null;
+  const round = interview ? new Set([...competencyIdsOfRound(opening.kit, interview.roundId), ...row.content.notCovered]) : null;
   return {
     state: 'ready', paused: null, writtenAt: row.writtenAt,
     competencies: kit.filter((k) => byId.get(k.id)?.evidence.length).map((k) => ({
@@ -156,9 +145,8 @@ export function recapInput(
   const bank = new Map(kit.questions.map((q) => [q.id, q]));
   const chosen: RecapQuestion[] = ref.interview.questionIds.map((id) => bank.get(id)).filter((q): q is NonNullable<typeof q> => !!q)
     .map((q) => ({ text: q.prompt, competencyId: q.competencyId, how: 'chosen' }));
-  const round = new Set(roundCompetencyIds(ref.interview, ref.opening, taken));
   return {
-    competencies: kit.competencies.filter((c) => round.has(c.id)).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
+    competencies: competenciesOfRound(kit, ref.interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
     questions: [...chosen, ...taken.map((t): RecapQuestion => ({ text: t.text, competencyId: t.competencyId, how: t.answer }))],
     lines: withMiloQuestions(lines.filter((l) => l.text.trim().length > 0).slice(-RECAP_MAX_LINES), said),
   };
@@ -270,10 +258,13 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
 }
 
 /**
- * Each competency of `required` (default: the whole kit) rated once, 1 to 4, any other kit competency at most once, and
- * nothing else: the ratings an open stores, in the kit's order; null when they are not (E4 #30: the round's own).
+ * Each competency of `required` (default: the whole kit) rated once, 1 to 4, any other of `allowed` (default: the whole
+ * kit) at most once, and nothing else: the ratings an open stores, in the kit's order; null when they are not. The route
+ * passes the scorecard's own (scorecard.ts scorecardCompetencies), so an open never carries a rating its round does not assess.
  */
-export function checkOpenRatings(body: unknown, opening: Opening, required: readonly string[] = opening.kit.competencies.map((k) => k.id)): OpenRating[] | null {
+export function checkOpenRatings(
+  body: unknown, opening: Opening, required: readonly string[] = opening.kit.competencies.map((k) => k.id), allowed: readonly string[] = opening.kit.competencies.map((k) => k.id),
+): OpenRating[] | null {
   const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>)['ratings'] : undefined;
   if (!Array.isArray(raw)) return null;
   const kit = opening.kit.competencies;
@@ -281,7 +272,7 @@ export function checkOpenRatings(body: unknown, opening: Opening, required: read
   for (const r of raw) {
     if (!r || typeof r !== 'object') return null;
     const { competencyId, rating } = r as Record<string, unknown>;
-    if (typeof competencyId !== 'string' || !kit.some((k) => k.id === competencyId) || seen.has(competencyId)) return null;
+    if (typeof competencyId !== 'string' || !allowed.includes(competencyId) || !kit.some((k) => k.id === competencyId) || seen.has(competencyId)) return null;
     if (rating !== 1 && rating !== 2 && rating !== 3 && rating !== 4) return null;
     seen.set(competencyId, rating);
   }

@@ -10,6 +10,7 @@
 // answers (decision 5). No average, no total, no ranking (decision 6): what people wrote, side by side.
 
 import { latestByAuthor, seatedOf } from '../scorecard.js';
+import { competencyIdsOfRound } from '../kit.js';
 import { reachOf } from '../scope.js';
 import type { ApplicationStage, Interview, InterviewState, KitCompetency, Recommendation, RoundType, StageChange } from '../types.js';
 import type { PersonRef, WorldIndex } from '../views.js';
@@ -41,6 +42,8 @@ export interface DebriefRound {
   panel: PersonRef[];
   scheduledAt: string | null;
   endedAt: string | null;
+  /** The ids of the competencies the round assesses (kit.ts competenciesOfRound), in the kit's order. */
+  competencyIds: string[];
   /** Each seat's latest scorecard, lead first, then the panel in seat order. */
   scorecards: DebriefScorecard[];
   /** Seats whose scorecard is not in on a round that has been held; empty before the round runs. */
@@ -74,7 +77,10 @@ export interface DebriefApplication {
   history: DebriefMove[];
   /** The length of the history as read: a decision names it, so a stale page never decides. */
   basedOn: number;
-  /** The kit's competencies in order, with what each point of the scale means: the rows of the side-by-side table. */
+  /**
+   * The competencies this application's rounds assess (and any a scorecard rated besides), in the kit's order, with what
+   * each point of the scale means: the rows of the side-by-side table. A competency no round assesses is not a row.
+   */
   competencies: Array<{ id: string; name: string; anchors: KitCompetency['anchors'] }>;
   rounds: DebriefRound[];
   /** Only for the opening's hiring manager; null for everyone else (they read and do not decide). */
@@ -94,7 +100,7 @@ export const readsDebrief = (role: string): boolean => {
   return reach === 'everything' || reach === 'own-openings';
 };
 
-function roundOf(ix: WorldIndex, i: Interview, names: ReadonlyMap<string, string>, roundName: string): DebriefRound {
+function roundOf(ix: WorldIndex, i: Interview, names: ReadonlyMap<string, string>, roundName: string, competencyIds: string[]): DebriefRound {
   const all = ix.world.scorecards.filter((s) => s.interviewId === i.id);
   const latest = latestByAuthor(all);
   const seats = seatedOf(i);
@@ -102,7 +108,7 @@ function roundOf(ix: WorldIndex, i: Interview, names: ReadonlyMap<string, string
   const held = HELD.has(i.state);
   return {
     interviewId: i.id, name: roundName, type: i.type, minutes: i.minutes, state: i.state,
-    lead: ix.people(i.leadId), panel: i.panelIds.map((p) => ix.people(p)), scheduledAt: i.scheduledAt, endedAt: i.endedAt,
+    lead: ix.people(i.leadId), panel: i.panelIds.map((p) => ix.people(p)), scheduledAt: i.scheduledAt, endedAt: i.endedAt, competencyIds,
     scorecards: [...latest].sort((a, b) => order(a.interviewerId) - order(b.interviewerId)).map((s) => ({
       id: s.id, interviewer: ix.people(s.interviewerId), version: s.version, submittedAt: s.submittedAt, recommendation: s.recommendation, summary: s.summary,
       ratings: s.ratings.map((r) => ({ competencyId: r.competencyId, competency: names.get(r.competencyId) ?? r.competencyId, rating: r.rating, note: r.note })),
@@ -125,8 +131,10 @@ export function debriefView(ix: WorldIndex, candidateId: string): DebriefView | 
     if (!o) return [];
     const names = new Map(o.kit.competencies.map((k) => [k.id, k.name]));
     const interviews = ix.interviewsOf(a.id);
-    const rounds = interviews.map((i) => roundOf(ix, i, names, o.kit.rounds.find((r) => r.id === i.roundId)?.name ?? 'Round'));
+    const rounds = interviews.map((i) => roundOf(ix, i, names, o.kit.rounds.find((r) => r.id === i.roundId)?.name ?? 'Round', competencyIdsOfRound(o.kit, i.roundId)));
     const cards = ix.world.scorecards.filter((s) => interviews.some((i) => i.id === s.interviewId));
+    // The rows: what this application's rounds assess, and anything a scorecard rated besides (kept as rated).
+    const shown = new Set([...rounds.flatMap((r) => r.competencyIds), ...cards.flatMap((s) => s.ratings.map((r) => r.competencyId))]);
     const decides = ix.viewer.role === 'hiring-manager' && o.hiringManagerId === ix.viewer.id;
     return [{
       applicationId: a.id,
@@ -137,7 +145,7 @@ export function debriefView(ix: WorldIndex, candidateId: string): DebriefView | 
         decision: isDecisionChange(h) ? h.decision : null, scorecardsMissing: isDecisionChange(h) ? h.scorecardsMissing : null,
       })),
       basedOn: a.history.length,
-      competencies: o.kit.competencies.map((k) => ({ id: k.id, name: k.name, anchors: { ...k.anchors } })),
+      competencies: o.kit.competencies.filter((k) => shown.has(k.id)).map((k) => ({ id: k.id, name: k.name, anchors: { ...k.anchors } })),
       rounds,
       decide: decides ? {
         options: DECISIONS.map((d) => {

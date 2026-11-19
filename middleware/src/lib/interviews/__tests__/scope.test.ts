@@ -3,6 +3,7 @@
 import { MemoryInterviewsStore, loadWorld } from '../store.js';
 import { reachOf, visibleWorld } from '../scope.js';
 import { WorldIndex, bucketFor, type People } from '../views.js';
+import { debriefView } from '../debrief/view.js';
 import type { InterviewsWorld } from '../types.js';
 
 const NAMES: Record<string, string> = { 'u-greta': 'Greta Lindqvist', 'u-hugo': 'Hugo Marchetti', 'u-wen': 'Wen Zhao', 'u-amara': 'Amara Okafor' };
@@ -81,7 +82,7 @@ describe('the wire shapes', () => {
     expect(mateo.opening.title).toBe('Senior Backend Engineer');
     expect(mateo.stage).toBe('interviewing');
     expect(mateo.nextInterview).toMatchObject({ roundName: 'Coding', state: 'ready', lead: { name: 'Hugo Marchetti' } });
-    expect(mateo.lastResult).toMatchObject({ recommendation: 'yes', roundName: 'System design', interviewer: { name: 'Hugo Marchetti' } });
+    expect(mateo.lastResult).toMatchObject({ recommendation: 'yes', roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
     expect([mateo.roundsDone, mateo.roundsTotal]).toEqual([1, 3]);
     const ingrid = rows.find((r) => r.candidate.name === 'Ingrid Solberg')!;
     expect(ingrid.lastResult).toMatchObject({ roundName: 'Working together', interviewer: { name: 'Wen Zhao' } });
@@ -143,8 +144,27 @@ describe('the wire shapes', () => {
     const ix = index('u-hugo', 'interviewer');
     const rec = ix.interviewRecord(ix.world.interviews.find((i) => i.id === 'iv-j6x2d9sb')!)!;
     expect(rec.questionsChosen.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry']);
+    expect(rec.competencies.map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'Communication']);
+    expect(rec.bank.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
     expect(rec.scorecards).toHaveLength(1);
-    expect(rec.scorecards[0]!.ratings.map((r) => r.competency)).toEqual(['Problem solving', 'Code quality']);
+    expect(rec.scorecards[0]!.ratings.map((r) => r.competency)).toEqual(['Problem solving', 'Code quality', 'Communication']);
+  });
+
+  it('the debrief: each round names what it assesses, and the rows are only what the application\'s rounds assess', () => {
+    const ix = index('u-greta', 'recruiter');
+    const app = debriefView(ix, 'cand-qz63q3a3')!.applications[0]!;
+    expect(app.rounds.map((r) => [r.name, r.competencyIds])).toEqual([
+      ['Coding', ['problem-solving', 'code-quality', 'communication']], ['Working together', ['communication', 'collaboration']],
+    ]);
+    expect(app.competencies.map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'Communication', 'Collaboration']);
+  });
+
+  it('the kit as read names every round\'s competencies, a round saved without them included (all of them)', () => {
+    const ix = index('u-greta', 'recruiter');
+    const backend = ix.world.openings.find((o) => o.id === 'op-backend')!;
+    const old = { ...backend, kit: { ...backend.kit, rounds: backend.kit.rounds.map(({ competencyIds: _c, ...r }) => r) } };
+    expect(ix.openingRow(old).rounds.map((r) => r.competencyIds)).toEqual(backend.kit.rounds.map(() => backend.kit.competencies.map((c) => c.id)));
+    expect(ix.openingRow(backend).rounds[0]!.competencyIds).toEqual(['problem-solving', 'code-quality', 'communication']);
   });
 
   it('a candidate record lists their applications with the interviews the viewer may read', () => {

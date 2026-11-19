@@ -8,11 +8,12 @@
 //   end     the lead, from End interview: `live` → `ended`, with `endedAt`. Already `ended` is no change.
 //
 // The room's read carries the round, the seats with names, the chosen questions (competency, prompt,
-// follow-ups, starter code) and the kit's competencies with their anchors. Never the candidate's contact
+// follow-ups, starter code) and the competencies the round assesses (kit.ts competenciesOfRound) with their
+// anchors, never the kit's others. Never the candidate's contact
 // details or résumé: the panel reads the candidate's name and nothing else about them here.
 
 import { seatOf } from './assign.js';
-import { roundSurface } from './kit.js';
+import { competenciesOfRound, roundSurface } from './kit.js';
 import type { Interview, InterviewState, KitBoard, KitCompetency, Opening, PadLanguage, RoundSurface, Seat } from './types.js';
 
 /** C1: the interview's call lobby (lib/interviews/lobby.ts `interviewLobbyName` once SEAT is in; the same string). */
@@ -78,7 +79,7 @@ export function roomView(i: Interview, opening: Opening, candidateName: string, 
       return [{ id: q.id, prompt: q.prompt, followUps: [...q.followUps], competencyId: q.competencyId, competency: names.get(q.competencyId) ?? null, starter,
         ...(q.board ? { board: structuredClone(q.board) } : {}) }];
     }),
-    competencies: structuredClone(opening.kit.competencies),
+    competencies: structuredClone(competenciesOfRound(opening.kit, i.roundId)),
     revision: i.revision,
   };
 }

@@ -11,7 +11,8 @@ export interface MiloExport {
   exportedAt: string;
   interview: {
     id: string; applicationId: string; candidateId: string | null; openingId: string | null;
-    round: { id: string; name: string; type: string; minutes: number };
+    /** `competencies`: what the round assesses (kit.ts competenciesOfRound), so the suggestions' competency ids read against it. */
+    round: { id: string; name: string; type: string; minutes: number; competencies: Array<{ id: string; name: string }> };
     scheduledAt: string | null; endedAt: string | null; state: string;
   };
   sections: Record<string, unknown>;
@@ -22,6 +23,8 @@ export interface ExportContext {
   candidateId: string | null;
   openingId: string | null;
   roundName: string;
+  /** The competencies the round assesses (kit.ts competenciesOfRound); none when the opening could not be read. */
+  competencies?: ReadonlyArray<{ id: string; name: string }>;
 }
 
 export async function buildMiloExport(ctx: ExportContext, now: Date = interviewsNow()): Promise<MiloExport> {
@@ -38,7 +41,7 @@ export async function buildMiloExport(ctx: ExportContext, now: Date = interviews
     exportedAt: now.toISOString(),
     interview: {
       id: i.id, applicationId: i.applicationId, candidateId: ctx.candidateId, openingId: ctx.openingId,
-      round: { id: i.roundId, name: ctx.roundName, type: i.type, minutes: i.minutes },
+      round: { id: i.roundId, name: ctx.roundName, type: i.type, minutes: i.minutes, competencies: (ctx.competencies ?? []).map((c) => ({ id: c.id, name: c.name })) },
       scheduledAt: i.scheduledAt, endedAt: i.endedAt, state: i.state,
     },
     sections,

@@ -21,6 +21,7 @@ import { coachConsents } from '../coach/service.js';
 import { suggestionStore, type SuggestionRecord } from '../coach/store.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import type { Interview, Opening } from '../types.js';
+import { competenciesOfRound } from '../kit.js';
 import { estimateAskTokens, makeMiloModel, type MiloModel, type MiloModelResult } from './model.js';
 import { competencyNotes, notesStartMs, timeCheck, type MiloNotesView } from './notes.js';
 import { parseAskAnswer, type AskParseResult } from './parse.js';
@@ -120,7 +121,7 @@ export async function notesFor(ref: MiloRef): Promise<{ notes: MiloNotesView }> 
   const suggestions = consent?.transcription && consent.milo ? await d.suggestions(interview.id) : [];
   const panelLines = (transcript?.lines ?? []).filter((l) => sideOf(l.userId) === 'panel').map((l) => l.text);
   const competencies = competencyNotes({
-    competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name })), chosen: chosenOf(ref), panelLines, suggestions,
+    competencies: competenciesOfRound(opening.kit, interview.roundId).map((c) => ({ id: c.id, name: c.name })), chosen: chosenOf(ref), panelLines, suggestions,
   });
   const time = timeCheck(notesStartMs(interview.scheduledAt, transcript?.startedAtMs ?? null, interview.startedAt ?? null), interview.minutes, d.now());
   return { notes: { competencies, time } };
@@ -206,7 +207,7 @@ export async function askMilo(ref: MiloRef, viewer: { userId: string }, question
     const lines = coachLinesOf(recent);
     const input: AskInput = {
       roundType: interview.type,
-      competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
+      competencies: competenciesOfRound(opening.kit, interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
       questions: chosenOf(ref),
       lines,
       question,
@@ -311,7 +312,7 @@ export async function askMiloAfterCall(ref: MiloRef, viewer: { userId: string },
     const lines = recent.map((l) => ({ seq: l.seq, side: l.side, text: l.text }));
     const input: AskInput = {
       roundType: interview.type,
-      competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
+      competencies: competenciesOfRound(opening.kit, interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
       questions: chosenOf(ref),
       lines,
       question,

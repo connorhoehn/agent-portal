@@ -6,7 +6,8 @@
 //   when    while the round is `accepted` or `ready`: never before the lead accepts, never once it is live,
 //           ended, declined or cancelled.
 //   what    ids from that opening's kit only, each once, in the order given, at most MAX_QUESTIONS; a technical
-//           round takes technical questions and a behavioural round behavioural ones (the kit's own typing).
+//           round takes technical questions and a behavioural round behavioural ones (the kit's own typing), each
+//           for a competency the round assesses (kit.ts questionsOfRound, the bank the page offers).
 //   leaves  `ready` when a time is set and at least one question is chosen, else `accepted` (readyState).
 //
 // `ready` is a fact about three things (the lead accepted, a time is set, questions are chosen), and two of them
@@ -15,7 +16,7 @@
 // says. A recruiter clearing the time leaves the stored state `ready` until the next write; the record
 // (views.ts) and the page show `readyState`, so nobody sees a ready round that is not ready.
 
-import type { Checked, FieldProblem } from './kit.js';
+import { competencyIdsOfRound, type Checked, type FieldProblem } from './kit.js';
 import { hasAccepted } from './assign.js';
 import type { Interview, InterviewState, OpeningKit } from './types.js';
 
@@ -48,7 +49,7 @@ export function missingLine(i: Readiness): string | null {
 export const mayChoose = (i: Pick<Interview, 'leadId'>, userId: string): boolean => i.leadId === userId;
 
 export function checkQuestions(
-  input: unknown, i: Pick<Interview, 'state' | 'type' | 'leadId' | 'acceptances'>, kit: OpeningKit,
+  input: unknown, i: Pick<Interview, 'state' | 'type' | 'leadId' | 'acceptances' | 'roundId'>, kit: OpeningKit,
 ): Checked<{ questionIds: string[] }> {
   if (!PREPARABLE.has(i.state) || !hasAccepted(i, i.leadId, 'lead')) {
     return { ok: false, problems: [{ path: 'state', message:
@@ -63,12 +64,14 @@ export function checkQuestions(
   if (ids.length > MAX_QUESTIONS) return bad(`Choose at most ${MAX_QUESTIONS} questions for one round.`);
   if (new Set(ids).size !== ids.length) return bad('A question can be in the plan only once.');
   const problems: FieldProblem[] = [];
+  const assessed = new Set(competencyIdsOfRound(kit, i.roundId));
   for (const id of ids) {
     const q = kit.questions.find((k) => k.id === id);
     if (!q) problems.push({ path: 'questionIds', message: 'One of those questions is not in this opening\'s question bank any more.' });
     else if (q.roundType !== i.type) problems.push({ path: 'questionIds', message: i.type === 'technical'
       ? 'A technical round takes technical questions: one of those is a behavioural question.'
       : 'A behavioural round takes behavioural questions: one of those is a technical question.' });
+    else if (!assessed.has(q.competencyId)) problems.push({ path: 'questionIds', message: 'One of those questions is for a competency this round does not assess. Choose from the list below.' });
   }
   if (problems.length) return { ok: false, problems: problems.slice(0, 1) };
   return { ok: true, value: { questionIds: ids } };

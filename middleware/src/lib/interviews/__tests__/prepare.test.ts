@@ -2,8 +2,9 @@
 import { checkQuestions, mayChoose, MAX_QUESTIONS, missingLine, readyState } from '../prepare.js';
 import type { Interview, OpeningKit } from '../types.js';
 
+const comp = (id: string) => ({ id, name: id, lookFor: 'x', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } });
 const kit: OpeningKit = {
-  rounds: [], competencies: [],
+  rounds: [], competencies: [comp('c')],
   questions: [
     { id: 'qt1', prompt: 'a', followUps: [], competencyId: 'c', roundType: 'technical' },
     { id: 'qt2', prompt: 'b', followUps: [], competencyId: 'c', roundType: 'technical' },
@@ -11,8 +12,8 @@ const kit: OpeningKit = {
   ],
 };
 const lead = 'u-lead';
-const iv = (o: Partial<Interview> = {}): Pick<Interview, 'state' | 'type' | 'leadId' | 'acceptances' | 'scheduledAt' | 'questionIds'> => ({
-  state: 'accepted', type: 'technical', leadId: lead, acceptances: [{ userId: lead, seat: 'lead', at: 'x' }], scheduledAt: null, questionIds: [], ...o,
+const iv = (o: Partial<Interview> = {}): Pick<Interview, 'state' | 'type' | 'leadId' | 'acceptances' | 'scheduledAt' | 'questionIds' | 'roundId'> => ({
+  state: 'accepted', type: 'technical', roundId: 'rd-1', leadId: lead, acceptances: [{ userId: lead, seat: 'lead', at: 'x' }], scheduledAt: null, questionIds: [], ...o,
 });
 
 describe('readyState', () => {
@@ -58,10 +59,27 @@ describe('what', () => {
   });
 });
 
+describe('a round takes questions for the competencies it assesses', () => {
+  const named: OpeningKit = {
+    rounds: [{ id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, competencyIds: ['c'] }],
+    competencies: [comp('c'), comp('design')],
+    questions: [...kit.questions, { id: 'qd1', prompt: 'd', followUps: [], competencyId: 'design', roundType: 'technical' }],
+  };
+  it('takes one for an assessed competency and refuses one for a competency the round does not assess', () => {
+    expect(checkQuestions({ questionIds: ['qt1'] }, iv({ roundId: 'rd-coding' }), named).ok).toBe(true);
+    const r = checkQuestions({ questionIds: ['qt1', 'qd1'] }, iv({ roundId: 'rd-coding' }), named);
+    expect(r).toEqual({ ok: false, problems: [{ path: 'questionIds', message: expect.stringContaining('does not assess') }] });
+  });
+  it('a round that names none (a kit saved before rounds named theirs) takes a question for any competency', () => {
+    const old: OpeningKit = { ...named, rounds: [{ id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60 }] };
+    expect(checkQuestions({ questionIds: ['qt1', 'qd1'] }, iv({ roundId: 'rd-coding' }), old).ok).toBe(true);
+  });
+});
+
 // Hardening (H1, O-036): the ceiling is a number of questions, so the limit itself is taken and one more is not.
 describe('the ceiling of questions in a plan', () => {
   const big: OpeningKit = {
-    rounds: [], competencies: [],
+    rounds: [], competencies: [comp('c')],
     questions: Array.from({ length: MAX_QUESTIONS + 1 }, (_, n) => ({ id: `qt${n}`, prompt: `q${n}`, followUps: [], competencyId: 'c', roundType: 'technical' as const })),
   };
   it('takes exactly the most it allows, in the order sent, and refuses one more with a sentence', () => {

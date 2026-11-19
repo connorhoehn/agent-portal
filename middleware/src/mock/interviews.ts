@@ -54,10 +54,10 @@ const COMMUNICATION = {
 
 const BACKEND_KIT: OpeningKit = {
   rounds: [
-    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad' },
+    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad', competencyIds: ['problem-solving', 'code-quality', 'communication'] },
     // The system design round is drawn on the shared whiteboard (WHITEBOARD-PLAN step 1).
-    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60, surface: 'board' },
-    { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
+    { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60, surface: 'board', competencyIds: ['system-design', 'communication'] },
+    { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45, competencyIds: ['communication', 'collaboration'] },
   ],
   competencies: [
     { id: 'problem-solving', name: 'Problem solving', lookFor: 'Breaks the problem down out loud, picks an approach for a reason and tests it against the edges before calling it done.',
@@ -150,8 +150,9 @@ const BACKEND_KIT: OpeningKit = {
 
 const IOS_KIT: OpeningKit = {
   rounds: [
-    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad' },
-    { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45 },
+    { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad', competencyIds: ['problem-solving', 'swift', 'app-architecture', 'communication'] },
+    // The crash story (q-ios-crash) is a problem-solving question asked in this round.
+    { id: 'rd-together', name: 'Working together', type: 'behavioural', minutes: 45, competencyIds: ['problem-solving', 'communication'] },
   ],
   competencies: [
     { id: 'problem-solving', name: 'Problem solving', lookFor: 'Breaks the problem down out loud, picks an approach for a reason and tests it against the edges before calling it done.',
@@ -289,7 +290,7 @@ export const interviewsFixture = defineFixture<Interview>({
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 15, ended: at(-9, 15) }),
       interview({ id: 'iv-f2b6t5zh', app: 'app-vfzc2x6g', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'scored',
         questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 13, 45) }),
-      interview({ id: 'iv-j6x2d9sb', app: 'app-7b69njmx', round: 'rd-design', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 60, state: 'scored',
+      interview({ id: 'iv-j6x2d9sb', app: 'app-7b69njmx', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 60, state: 'scored',
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 15) }),
       interview({ id: 'iv-p2v7j4ye', app: 'app-j7zuguu3', round: 'rd-coding', type: 'technical', lead: WEN, start: at(-2, 15), minutes: 60, state: 'scored',
         questions: ['q-ios-feed', 'q-ios-debounce'], assignedDaysAgo: 7, ended: at(-2, 16) }),
@@ -327,6 +328,7 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
         ratings: [
           rate('problem-solving', 4, 'Had the bucket passing in about sixteen minutes, fixed her own missing-argument call from the run, and kept the lock per key.'),
           rate('code-quality', 4, 'Named the fake-clock refill test unprompted; one idempotency key per charge, kept for a day, and only safe errors retried.'),
+          rate('communication', 4, 'Said which approach she was taking and why before typing, and stopped to check I followed the locking.'),
         ] },
       { id: 'sc-ju3s5t85', interviewId: 'iv-f2b6t5zh', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-6, 15, 5),
@@ -337,10 +339,11 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
         ] },
       { id: 'sc-qadtme79', interviewId: 'iv-j6x2d9sb', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-3, 16, 10),
-        summary: 'A solid round. Correct and careful; spoke to concurrency only once asked. Worth the system design round.',
+        summary: 'A solid round. Correct and careful; spoke to concurrency only once asked. Worth a second coding round.',
         ratings: [
           rate('problem-solving', 3, 'Had a working limiter in about fifteen minutes; explained the fixed window\'s burst at the reset once asked.'),
           rate('code-quality', 3, 'Passed the clock in so it could be tested without sleeping. Saved the idempotency key before the first call.'),
+          rate('communication', 3, 'Clear once he started explaining; went quiet while coding and needed a nudge to talk through the retry path.'),
         ] },
       { id: 'sc-b75vwqbq', interviewId: 'iv-p2v7j4ye', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-2, 17, 40),
@@ -348,6 +351,8 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
         ratings: [
           rate('app-architecture', 3, 'Kept paging state out of the view; described the offline cache but did not build it.'),
           rate('swift', 3, 'Used async/await and cancelled the stale search task correctly.'),
+          rate('problem-solving', 3, 'Broke the feed into paging, caching and cancellation before writing any code, and tested the empty page.'),
+          rate('communication', 3, 'Explained the paging trade-off plainly and said where she was unsure about the cache.'),
         ] },
     ],
     empty: () => [],

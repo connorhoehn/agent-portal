@@ -6,8 +6,10 @@
 //            always the signed-in person: the body has no field naming one, so nobody submits for someone else.
 //            Milo never writes one (decision 6): there is no route, no field and no default a model could fill.
 //   when     once the interview is `ended`; a correction also while it is `scored` (and nothing after review).
-//   what     the round's own competencies rated 1 to 4 against their anchors (roundCompetencyIds, E4 #30), the
-//            kit's others optional ("Not seen in this round"), a note per rated competency allowed, a recommendation (strong no, no, yes, strong yes) and a summary. SCORECARD_LIMITS says how long.
+//   what     each competency the round assesses (kit.ts competenciesOfRound) rated 1 to 4 against its anchors; the
+//            kit's other competencies are neither shown nor accepted, except one the author's own earlier version
+//            rated, which a correction may keep (scorecardCompetencies). A note per rated competency allowed, a
+//            recommendation (strong no, no, yes, strong yes) and a summary. SCORECARD_LIMITS says how long.
 //   versions a submitted scorecard is never edited: a correction is a new version with a reason, made against the
 //            latest version the page read (stale otherwise). Every version stays and is read by whoever may read
 //            the scorecard.
@@ -21,6 +23,7 @@
 // first version and for every correction alike. Never opened: null, and it stays false.
 
 import { seatOf } from './assign.js';
+import { competenciesOfRound } from './kit.js';
 import type { CompetencyRating, Interview, InterviewState, KitCompetency, OpeningKit, Recommendation, Scorecard } from './types.js';
 import { RECOMMENDATIONS } from './types.js';
 
@@ -96,21 +99,24 @@ export function submitMove(i: Pick<Interview, 'leadId' | 'panelIds' | 'state'>, 
 }
 
 /**
- * The competencies a round's scorecard requires, in the kit's order (E4 #30): those its chosen questions gather
- * evidence for; with none chosen, those its round type's questions gather; with no such question, every one. The
- * kit's other competencies stay optional, so a behavioural round never demands "System design".
+ * What a scorecard on interview `i` rates: `required`, the competencies its round assesses (competenciesOfRound), and
+ * `competencies`, those plus any the author's own latest version rated outside them (a round whose competencies were
+ * narrowed after it was rated), so a correction keeps what was rated and nothing is dropped from a submitted card.
+ * Both in the kit's order. The kit's other competencies are not shown and not accepted.
  */
-export function roundCompetencyIds(i: Pick<Interview, 'questionIds' | 'type'>, kit: Pick<OpeningKit, 'competencies' | 'questions'>): string[] {
-  const of = (qs: readonly { competencyId: string }[]) => new Set(qs.map((q) => q.competencyId));
-  const chosen = of(kit.questions.filter((q) => i.questionIds.includes(q.id)));
-  const pick = chosen.size ? chosen : of(kit.questions.filter((q) => q.roundType === i.type));
-  const ids = kit.competencies.map((c) => c.id).filter((id) => pick.has(id));
-  return ids.length ? ids : kit.competencies.map((c) => c.id);
+export function scorecardCompetencies(
+  i: Pick<Interview, 'roundId'>, kit: Pick<OpeningKit, 'rounds' | 'competencies'>, mine: readonly Pick<Scorecard, 'version' | 'ratings'>[] = [],
+): { competencies: KitCompetency[]; required: string[] } {
+  const round = competenciesOfRound(kit, i.roundId);
+  const latest = mine.reduce<Pick<Scorecard, 'version' | 'ratings'> | null>((a, s) => (!a || s.version > a.version ? s : a), null);
+  const keep = new Set([...round.map((c) => c.id), ...(latest?.ratings ?? []).map((r) => r.competencyId)]);
+  return { competencies: kit.competencies.filter((c) => keep.has(c.id)), required: round.map((c) => c.id) };
 }
 
 /**
- * Check a submit's body against the kit: every competency in `required` rated (default: all of them), any other
- * competency of the kit optional. A correction must carry a reason; a first version must not.
+ * Check a submit's body against `competencies` (what this scorecard rates, scorecardCompetencies): every one in
+ * `required` rated (default: all of them), the rest optional, anything else refused. A correction must carry a
+ * reason; a first version must not.
  */
 export function checkScorecard(body: unknown, competencies: readonly KitCompetency[], required: readonly string[] = competencies.map((c) => c.id)): Checked<ScorecardInput & { reason: string | null; basedOn: number }> {
   const fields: FieldProblem[] = [];

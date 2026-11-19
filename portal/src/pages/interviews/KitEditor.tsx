@@ -6,7 +6,7 @@
 // before saving or discarding (OpeningPage.tsx).
 
 import {
-  Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, EditIcon, FormField, IconButton, Inline, Input, NumberInput, Select,
+  Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, EditIcon, FilterChip, FormField, IconButton, Inline, Input, NumberInput, Select,
   Stack, T, Textarea, TrashIcon, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { useCallback, useRef, type ReactNode } from 'react';
@@ -16,6 +16,7 @@ import { BoardScene } from './board/BoardScene';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
 import {
   PAD_LANGUAGES, PAD_LANGUAGE_LABELS, blankCompetency, blankQuestion, blankRound, moved, newId, padLine, roundHasPad, rowsWithProblems, starterLine,
+  toggledCompetency, withoutCompetency,
   type KitCompetency, type KitQuestion, type KitRound, type OpeningKit, type PadLanguage,
 } from '../../lib/interviewsKit';
 
@@ -82,6 +83,15 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
       <NumberInput size="sm" aria-label={`Round ${i + 1} length in minutes`} value={r.minutes} min={15} max={180} step={5} unit="min"
         invalid={problems.has(`rounds.${i}.minutes`)} onChange={(v) => setRound(i, { minutes: v })} />
     ) },
+    { key: 'assesses', header: 'Assesses', render: (r, i) => (kit.competencies.length
+      ? <Inline gap="xs" wrap role="group" aria-label={`Competencies round ${i + 1} assesses`} data-testid="interviews-kit-round-competencies">
+        {kit.competencies.map((c) => (
+          <FilterChip key={c.id} size="xs" active={r.competencyIds.includes(c.id)} data-testid="interviews-kit-round-competency"
+            aria-label={`${c.name || 'Unnamed competency'}: ${r.competencyIds.includes(c.id) ? 'assessed' : 'not assessed'} in round ${i + 1}`}
+            onClick={() => setRound(i, { competencyIds: toggledCompetency(kit, r, c.id) })}>{c.name || 'Unnamed competency'}</FilterChip>
+        ))}
+      </Inline>
+      : <T size="sm" tone="tertiary">Add a competency first</T>) },
     { key: 'pad', header: 'Works on', width: '148px', render: (r, i) => (roundHasPad(r.type)
       ? <Select size="sm" aria-label={`Round ${i + 1} works on`} value={r.surface === 'board' ? 'board' : 'pad'} options={SURFACE_OPTIONS}
           invalid={problems.has(`rounds.${i}.surface`)} onChange={(e) => setRound(i, { surface: e.target.value as 'pad' | 'board' })} data-testid="interviews-kit-round-surface" />
@@ -137,7 +147,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
         actions={<Button size="sm" variant="ghost" data-testid="interviews-kit-add-round"
           onClick={() => set({ rounds: [...kit.rounds, blankRound(newId('rd', allIds(kit)), kinds.includes('technical') ? 'behavioural' : 'technical')] })}>Add round</Button>}>
         <Stack gap="xs">
-          <DataTable narrow aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id} staticRows="Each round of the kit, edited in the row"
+          <DataTable narrow rowHeight="content" aria-label="Rounds" data={kit.rounds} columns={roundColumns} keyField={(r) => r.id} staticRows="Each round of the kit, edited in the row"
             emptyMessage="No rounds yet. Add the first one."
             rowActions={(r) => {
               const i = kit.rounds.indexOf(r);
@@ -161,7 +171,7 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
               return <RowControls what={`competency ${i + 1}`} index={i} count={kit.competencies.length}
                 onEdit={() => toggle('competencies', c.id)} onMove={(d) => set({ competencies: moved(kit.competencies, i, d) })}
                 removeBlocked={n ? `${n === 1 ? 'A question probes' : `${n} questions probe`} this competency; move ${n === 1 ? 'it' : 'them'} to another first.` : undefined}
-                onRemove={() => { set({ competencies: kit.competencies.filter((x) => x.id !== c.id) }); if (open?.id === c.id) onOpen(null); }} />;
+                onRemove={() => { onChange(withoutCompetency(kit, c.id)); if (open?.id === c.id) onOpen(null); }} />;
             }} />
           <ListProblems problems={problems} list="competencies" />
           {openCompetency >= 0 && (

@@ -15,7 +15,12 @@ export const PAD_LANGUAGE_LABELS: Readonly<Record<PadLanguage, string>> = {
 export type OpeningState = 'open' | 'paused' | 'closed';
 export const OPENING_STATE_LABELS: Readonly<Record<OpeningState, string>> = { open: 'Open', paused: 'Paused', closed: 'Closed' };
 
-export interface KitRound { id: string; name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board' }
+/**
+ * A round, with the competencies it assesses (ids, in the kit's order). The server names them for every round it
+ * answers (a kit saved before rounds named theirs reads as all of them), so the editor always saves the list; a new
+ * round starts with none and the server asks for at least one. A technical round names its surface (pad or board).
+ */
+export interface KitRound { id: string; name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board'; competencyIds: string[] }
 export interface KitCompetency { id: string; name: string; lookFor: string; anchors: { 1: string; 2: string; 3: string; 4: string } }
 export interface KitQuestion {
   id: string;
@@ -140,7 +145,24 @@ export function moved<T>(list: readonly T[], index: number, delta: -1 | 1): T[] 
   return next;
 }
 
-export const blankRound = (id: string, type: RoundType = 'technical'): KitRound => ({ id, name: '', type, minutes: type === 'technical' ? 60 : 45 });
+export const blankRound = (id: string, type: RoundType = 'technical'): KitRound => ({ id, name: '', type, minutes: type === 'technical' ? 60 : 45, competencyIds: [] });
+
+/** The round's list with `competencyId` ticked or unticked, kept in the kit's order. */
+export function toggledCompetency(kit: Pick<OpeningKit, 'competencies'>, round: Pick<KitRound, 'competencyIds'>, competencyId: string): string[] {
+  const on = new Set(round.competencyIds);
+  if (on.has(competencyId)) on.delete(competencyId); else on.add(competencyId);
+  return kit.competencies.map((c) => c.id).filter((id) => on.has(id));
+}
+
+/**
+ * The kit without competency `id`, unticked from every round that assessed it. Whether it may go is the server's
+ * "in use" rule (a competency rated on a scorecard stays); a round left with none is refused there too.
+ */
+export const withoutCompetency = (kit: OpeningKit, id: string): OpeningKit => ({
+  ...kit,
+  competencies: kit.competencies.filter((c) => c.id !== id),
+  rounds: kit.rounds.map((r) => (r.competencyIds.includes(id) ? { ...r, competencyIds: r.competencyIds.filter((x) => x !== id) } : r)),
+});
 export const blankCompetency = (id: string): KitCompetency => ({ id, name: '', lookFor: '', anchors: { 1: '', 2: '', 3: '', 4: '' } });
 export const blankQuestion = (id: string, roundType: RoundType, competencyId: string): KitQuestion => ({ id, prompt: '', followUps: [], competencyId, roundType });
 

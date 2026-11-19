@@ -2,7 +2,7 @@
 // Mounted in routes/interviews.ts with one line, after the router's ViewInterviews gate.
 //
 //   POST /interviews/:id/recap/open   ConductInterview plus a seat on the interview, once it has ended. Body
-//                                     `{ ratings: [{ competencyId, rating 1..4 }] }`, the round's own competencies rated (scorecard.ts roundCompetencyIds).
+//                                     `{ ratings: [{ competencyId, rating 1..4 }] }`, the round's own competencies rated (scorecard.ts scorecardCompetencies).
 //                                     Stores the ratings for (interview, this person) the first time only, writes the
 //                                     recap when it is not there yet, and answers `{ recap: RecapBody }`.
 //   GET  /interviews/:id/recap        `{ recap: RecapBody }`, never writing:
@@ -36,7 +36,7 @@ import { askMiloAfterCall, checkQuestion } from '../../lib/interviews/milo-notes
 import { MAX_QUESTION_CHARS } from '../../lib/interviews/milo-notes/prompt.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { othersRevealed, reachOf } from '../../lib/interviews/scope.js';
-import { roundCompetencyIds } from '../../lib/interviews/scorecard.js';
+import { scorecardCompetencies, versionsOf } from '../../lib/interviews/scorecard.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { loadWorld } from '../../lib/interviews/store.js';
 import type { Interview, InterviewsWorld } from '../../lib/interviews/types.js';
@@ -104,7 +104,8 @@ recapRouter.post('/interviews/:id/recap/open', conduct, asyncHandler(async (req,
   if (!ref || !seatOf(ref.interview, session.sub)) throw new NotFoundError(NO_RECAP);
   res.setHeader('Cache-Control', 'no-store');
   if (!ENDED.has(ref.interview.state)) { res.status(409).json({ error: NOT_ENDED }); return; }
-  const ratings = checkOpenRatings(req.body, ref.opening, roundCompetencyIds(ref.interview, ref.opening.kit));
+  const rates = scorecardCompetencies(ref.interview, ref.opening.kit, versionsOf(world.scorecards, ref.interview.id, session.sub));
+  const ratings = checkOpenRatings(req.body, ref.opening, rates.required, rates.competencies.map((c) => c.id));
   if (!ratings) { res.status(400).json({ error: RATE_ALL, fields: [{ field: 'ratings', message: RATE_ALL }] }); return; }
   res.json({ recap: forInterviewer(await openRecap(ref, { userId: session.sub }, ratings)) });
 }));

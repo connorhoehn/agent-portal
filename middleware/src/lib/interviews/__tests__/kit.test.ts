@@ -1,6 +1,7 @@
 // The kit and an opening's details, checked before anything is written (lib/interviews/kit.ts; rows I1.3, I1.8).
 import {
-  EMPTY_KIT, KIT_LIMITS, NOTHING_IN_USE, checkBoard, checkKit, checkOpeningDetails, kitInUse, openingIdFor, problemsLine, roundHasPad, roundSurface,
+  EMPTY_KIT, KIT_LIMITS, NOTHING_IN_USE, checkBoard, checkKit, checkOpeningDetails, competenciesOfRound, competencyIdsOfRound, kitInUse,
+  openingIdFor, problemsLine, questionsOfRound, roundHasPad, roundSurface,
 } from '../kit.js';
 import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { EM_KIT } from '../../../mock/interviews-behavioural.js';
@@ -66,6 +67,64 @@ describe('required fields, each a plain sentence on its own path', () => {
     const r = checkKit({ rounds: [{ id: 'BAD ID' }], competencies: [{}], questions: [{ competencyId: 'nope', roundType: 'x', starter: { cobol: '' } }] });
     for (const m of messages(r)) expect(m).not.toMatch(/\b(rd|q|op)-|competencyId|roundType|lookFor|\.\d/);
     expect(messages(r).length).toBeGreaterThan(5);
+  });
+});
+
+describe('each round names the competencies it assesses', () => {
+  it('competenciesOfRound: the round\'s own, in the kit\'s order; a coding round never has system design', () => {
+    const kit = seedKit('op-backend');
+    expect(competenciesOfRound(kit, 'rd-coding').map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'Communication']);
+    expect(competencyIdsOfRound(kit, 'rd-design')).toEqual(['system-design', 'communication']);
+    expect(competencyIdsOfRound(kit, 'rd-together')).toEqual(['communication', 'collaboration']);
+    expect(competencyIdsOfRound(seedKit('op-em'), 'rd-leadership')).toEqual(['people-leadership', 'delivery', 'influence', 'communication']);
+  });
+
+  it('a round with no list (a kit saved before rounds named theirs), or an unknown round, reads every competency', () => {
+    const kit = seedKit('op-backend');
+    delete kit.rounds[0]!.competencyIds;
+    const all = kit.competencies.map((c) => c.id);
+    expect(competencyIdsOfRound(kit, 'rd-coding')).toEqual(all);
+    expect(competencyIdsOfRound(kit, 'rd-nowhere')).toEqual(all);
+    expect(competencyIdsOfRound({ ...kit, rounds: [{ ...kit.rounds[1]!, competencyIds: [] }] }, 'rd-design')).toEqual(all);
+  });
+
+  it('questionsOfRound: of the round\'s type, for a competency it assesses', () => {
+    const kit = seedKit('op-backend');
+    expect(questionsOfRound(kit, 'rd-coding', 'technical').map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
+    expect(questionsOfRound(kit, 'rd-design', 'technical').map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-reconcile']);
+  });
+
+  it('checkKit keeps the list in the kit\'s order, once each; a kit without lists still passes and stays without them', () => {
+    const kit = seedKit('op-backend');
+    kit.rounds[0]!.competencyIds = ['communication', 'problem-solving', 'communication'];
+    const r = checkKit(kit);
+    expect(r.ok && r.value.rounds[0]!.competencyIds).toEqual(['problem-solving', 'communication']);
+    const old = seedKit('op-backend');
+    for (const round of old.rounds) delete round.competencyIds;
+    const o = checkKit(old);
+    expect(o.ok && o.value.rounds.map((x) => 'competencyIds' in x)).toEqual([false, false, false]);
+  });
+
+  it('a round with none, or with a competency the kit does not have, is refused on its own path', () => {
+    const kit = seedKit('op-backend');
+    kit.rounds[0]!.competencyIds = [];
+    kit.rounds[1]!.competencyIds = ['system-design', 'gone'];
+    kit.rounds[2]!.competencyIds = 'communication' as unknown as string[];
+    const r = checkKit(kit);
+    expect(r.ok ? [] : r.problems).toEqual([
+      { path: 'rounds.0.competencyIds', message: 'Round 1 needs at least one competency to assess.' },
+      { path: 'rounds.1.competencyIds', message: 'Round 2 assesses a competency that is not in this kit; choose its competencies again.' },
+      { path: 'rounds.2.competencyIds', message: 'Round 3\'s competencies could not be read; choose them again.' },
+    ]);
+  });
+
+  it('removing a competency a round assesses refuses the round until it is unticked there', () => {
+    const kit = seedKit('op-backend');
+    kit.competencies = kit.competencies.filter((c) => c.id !== 'collaboration');
+    kit.questions = kit.questions.filter((q) => q.competencyId !== 'collaboration');
+    expect(paths(checkKit(kit))).toEqual(['rounds.2.competencyIds']);
+    kit.rounds[2]!.competencyIds = ['communication'];
+    expect(paths(checkKit(kit))).toEqual([]);
   });
 });
 

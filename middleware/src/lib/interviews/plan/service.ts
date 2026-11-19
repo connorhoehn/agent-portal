@@ -17,6 +17,7 @@ import { coachLogStore, type CoachLogCode, type CoachLogRecord, type CoachLogSto
 import { isPreparable } from '../prepare.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
 import type { Interview, Opening } from '../types.js';
+import { competenciesOfRound, questionsOfRound } from '../kit.js';
 import { makePlanModel, type PlanModel } from './model.js';
 import { parsePlan, type PlanQuestion } from './parse.js';
 import { estimatePlanTokens, PLAN_PROMPT_VERSION, planCap, type PlanInput } from './prompt.js';
@@ -65,14 +66,14 @@ export type PlanOutcome = { kind: 'not-found' } | { kind: 'not-preparable'; body
 const inFlight = new Set<string>();
 const body = (plan: PlanQuestion[] | null, paused: null | 'budget' = null, line: string | null = null): PlanBody => ({ plan: plan ? { questions: plan } : null, paused, line });
 
-/** The model's input: the kit's competencies and the bank's questions for the round's type. */
+/** The model's input: the competencies the round assesses and the bank's questions for them (kit.ts competenciesOfRound, questionsOfRound). */
 export function planInputOf(ref: PlanRef): PlanInput {
   const { interview, opening } = ref;
   return {
     roundType: interview.type,
     minutes: interview.minutes,
-    competencies: opening.kit.competencies.map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
-    questions: opening.kit.questions.filter((q) => q.roundType === interview.type).map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId, followUps: q.followUps })),
+    competencies: competenciesOfRound(opening.kit, interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor })),
+    questions: questionsOfRound(opening.kit, interview.roundId, interview.type).map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId, followUps: q.followUps })),
   };
 }
 

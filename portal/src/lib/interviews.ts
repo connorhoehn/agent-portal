@@ -52,7 +52,8 @@ export interface OpeningRow {
   openedAt: string;
   hiringManager: PersonRef | null;
   recruiter: PersonRef;
-  rounds: Array<{ id: string; name: string; type: RoundType; minutes: number }>;
+  /** Each round with the ids of the competencies it assesses, in the kit's order (the server names them for every round). */
+  rounds: Array<{ id: string; name: string; type: RoundType; minutes: number; competencyIds: string[] }>;
   candidates: number;
   byStage: Partial<Record<ApplicationStage, number>>;
   upcoming: number;

@@ -11,6 +11,7 @@ import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { Seat } from './types.js';
 import { latestByAuthor } from './scorecard.js';
+import { competenciesOfRound, competencyIdsOfRound, questionsOfRound } from './kit.js';
 
 export interface PersonRef { id: string; name: string }
 export type People = (id: string) => PersonRef;
@@ -114,7 +115,8 @@ export interface ScorecardVersionView {
   version: number;
   /** Why this version corrects the one before it; null on a first version (row I5.3). */
   correctionReason: string | null;
-  ratings: Array<CompetencyRating & { competency: string }>;
+  /** Each rating with its competency's name and the anchor sentence for the rating given (null once the kit lost it). */
+  ratings: Array<CompetencyRating & { competency: string; anchor: string | null }>;
 }
 
 /** An author's latest scorecard on an interview, with the versions before it, oldest first (decision 14). */
@@ -206,12 +208,14 @@ export class WorldIndex {
   }
 
   /** The scorecards the viewer may read on an interview, each author's latest with its earlier versions (row I5.3). */
-  scorecardViews(interviewId: string, competencyNames: ReadonlyMap<string, string>): ScorecardView[] {
+  scorecardViews(interviewId: string, competencies: readonly KitCompetency[]): ScorecardView[] {
     const all = this.world.scorecards.filter((s) => s.interviewId === interviewId);
+    const kit = new Map(competencies.map((k) => [k.id, k]));
+    // What was rated stays as rated, whatever the round assesses now.
     const view = (s: Scorecard): ScorecardVersionView => ({
       id: s.id, interviewer: this.people(s.interviewerId), recommendation: s.recommendation, summary: s.summary,
       submittedAt: s.submittedAt, version: s.version, correctionReason: s.correctionReason,
-      ratings: s.ratings.map((r) => ({ ...r, competency: competencyNames.get(r.competencyId) ?? r.competencyId })),
+      ratings: s.ratings.map((r) => ({ ...r, competency: kit.get(r.competencyId)?.name ?? r.competencyId, anchor: kit.get(r.competencyId)?.anchors[r.rating] ?? null })),
     });
     return latestByAuthor(all).map((s) => ({
       ...view(s),
@@ -278,7 +282,8 @@ export class WorldIndex {
       id: o.id, title: o.title, level: o.level, team: o.team, location: o.location, state: o.state, openedAt: o.openedAt,
       hiringManager: o.hiringManagerId ? this.people(o.hiringManagerId) : null,
       recruiter: this.people(o.recruiterId),
-      rounds: o.kit.rounds,
+      // Every round names what it assesses as read, a round saved before rounds named theirs included (all of them).
+      rounds: o.kit.rounds.map((r) => ({ ...r, competencyIds: competencyIdsOfRound(o.kit, r.id) })),
       kitSize: {
         competencies: o.kit.competencies.length,
         questions: { technical: o.kit.questions.filter((q) => q.roundType === 'technical').length, behavioural: o.kit.questions.filter((q) => q.roundType === 'behavioural').length },
@@ -353,7 +358,7 @@ export class WorldIndex {
     return {
       ...row,
       state: readyState(i),
-      bank: o.kit.questions.filter((q) => q.roundType === i.type).map((q) => ({
+      bank: questionsOfRound(o.kit, i.roundId, i.type).map((q) => ({
         id: q.id, prompt: q.prompt, competencyId: q.competencyId, competency: names.get(q.competencyId) ?? q.competencyId,
         hasStarter: Object.values(q.starter ?? {}).some((c) => !!c),
       })),
@@ -361,8 +366,8 @@ export class WorldIndex {
       missing: missingLine(i),
       maxQuestions: MAX_QUESTIONS,
       questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q),
-      competencies: o.kit.competencies,
-      scorecards: this.scorecardViews(i.id, names),
+      competencies: competenciesOfRound(o.kit, i.roundId),
+      scorecards: this.scorecardViews(i.id, o.kit.competencies),
     };
   }
 

@@ -1,9 +1,9 @@
 // The scorecard's rules (lib/interviews/scorecard.ts; row I5.3) and the hidden-until-yours rule (scope.ts
 // othersRevealed, visibleWorld), per role, over the seed world.
-import { interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
+import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import {
-  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, roundCompetencyIds, latestByAuthor, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, scorecardCompetencies, latestByAuthor, newScorecardVersion, stateRefusal, submitMove, versionsOf,
 } from '../scorecard.js';
 import { othersRevealed, visibleWorld } from '../scope.js';
 import type { Interview, InterviewsWorld, KitCompetency, Scorecard } from '../types.js';
@@ -56,32 +56,51 @@ describe('what a complete scorecard is', () => {
   });
 });
 
-describe('a round requires only its own competencies (E4 #30)', () => {
-  it('the chosen questions\' competencies; with none chosen, its type\'s bank; with no such question, the whole kit', () => {
-    const backend = interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.kit;
-    expect(roundCompetencyIds({ type: 'behavioural', questionIds: ['q-be-incident', 'q-be-disagree'] }, backend)).toEqual(['communication', 'collaboration']);
-    expect(roundCompetencyIds({ type: 'technical', questionIds: ['q-be-ledger'] }, backend)).toEqual(['system-design']);
-    expect(roundCompetencyIds({ type: 'technical', questionIds: [] }, backend)).toEqual(['problem-solving', 'code-quality', 'system-design']);
-    expect(roundCompetencyIds({ type: 'behavioural', questionIds: [] }, { competencies: KIT, questions: [] })).toEqual(['ownership', 'clarity']);
+describe('a scorecard rates the competencies its round assesses', () => {
+  const backend = () => interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.kit;
+
+  it('a coding round rates problem solving, code quality and communication, never system design', () => {
+    const sc = scorecardCompetencies({ roundId: 'rd-coding' }, backend());
+    expect(sc.required).toEqual(['problem-solving', 'code-quality', 'communication']);
+    expect(sc.competencies.map((c) => c.name)).not.toContain('System design');
+    expect(scorecardCompetencies({ roundId: 'rd-design' }, backend()).required).toEqual(['system-design', 'communication']);
+    expect(scorecardCompetencies({ roundId: 'rd-together' }, backend()).required).toEqual(['communication', 'collaboration']);
   });
 
-  it('the rest are optional, and may still be rated', () => {
-    const one = { ...GOOD, ratings: [{ competencyId: 'clarity', rating: 3 }] };
-    expect(checkScorecard(one, KIT, ['clarity']).ok).toBe(true);
-    expect(checkScorecard(one, KIT, ['ownership'])).toMatchObject({ ok: false, fields: [{ field: 'ratings.ownership', message: 'Rate Ownership.' }] });
-    expect(checkScorecard(GOOD, KIT, ['clarity']).ok).toBe(true);
+  it('a round saved before rounds named theirs rates every competency of the kit', () => {
+    const old = { rounds: [{ id: 'rd-1', name: 'Old', type: 'technical' as const, minutes: 60 }], competencies: KIT };
+    expect(scorecardCompetencies({ roundId: 'rd-1' }, old)).toEqual({ competencies: KIT, required: ['ownership', 'clarity'] });
+  });
+
+  it('each of the round\'s competencies must be rated, and one it does not assess is refused', () => {
+    const kit = { rounds: [{ id: 'rd-1', name: 'One', type: 'behavioural' as const, minutes: 45, competencyIds: ['clarity'] }], competencies: KIT };
+    const sc = scorecardCompetencies({ roundId: 'rd-1' }, kit);
+    expect(sc).toEqual({ competencies: [KIT[1]], required: ['clarity'] });
+    expect(checkScorecard({ ...GOOD, ratings: [{ competencyId: 'clarity', rating: 3 }] }, sc.competencies, sc.required).ok).toBe(true);
+    expect(checkScorecard({ ...GOOD, ratings: [] }, sc.competencies, sc.required)).toMatchObject({ ok: false, fields: [{ field: 'ratings.clarity', message: 'Rate Clarity.' }] });
+    expect(checkScorecard(GOOD, sc.competencies, sc.required)).toMatchObject({ ok: false, fields: [{ field: 'ratings' }] });
+  });
+
+  it('a correction keeps what the author\'s latest version rated outside the round, and never requires it', () => {
+    const kit = { rounds: [{ id: 'rd-1', name: 'One', type: 'behavioural' as const, minutes: 45, competencyIds: ['clarity'] }], competencies: KIT };
+    const v1 = { version: 1, ratings: [{ competencyId: 'ownership', rating: 3 as const, note: '' }, { competencyId: 'clarity', rating: 3 as const, note: '' }] };
+    const sc = scorecardCompetencies({ roundId: 'rd-1' }, kit, [v1]);
+    expect(sc).toEqual({ competencies: KIT, required: ['clarity'] });
+    expect(checkScorecard({ ...GOOD, basedOn: 1, reason: 'Typo.' }, sc.competencies, sc.required).ok).toBe(true);
   });
 
   it('every seeded scorecard passes its round\'s check', () => {
     const openings = interviewOpeningsFixture.rows();
     const ivs = interviewsFixture.rows();
     const cards = interviewScorecardsFixture.rows();
+    const apps = interviewApplicationsFixture.rows();
     expect(cards.length).toBeGreaterThan(0);
     for (const c of cards) {
       const i = ivs.find((x) => x.id === c.interviewId)!;
-      const kit = openings.find((o) => o.kit.rounds.some((r) => r.id === i.roundId) && o.kit.questions.some((q) => i.questionIds.includes(q.id)))!.kit;
+      const kit = openings.find((o) => o.id === apps.find((a) => a.id === i.applicationId)!.openingId)!.kit;
       const body = { ratings: c.ratings, recommendation: c.recommendation, summary: c.summary, basedOn: 0 };
-      expect([c.id, checkScorecard(body, kit.competencies, roundCompetencyIds(i, kit)).ok]).toEqual([c.id, true]);
+      const sc = scorecardCompetencies(i, kit);
+      expect([c.id, checkScorecard(body, sc.competencies, sc.required).ok]).toEqual([c.id, true]);
     }
   });
 });

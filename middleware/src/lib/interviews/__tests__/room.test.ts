@@ -3,6 +3,7 @@
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import { HUGO, WEN, interviewCandidatesFixture, interviewOpeningsFixture, interviewsFixture, interviewApplicationsFixture } from '../../../mock/interviews.js';
 import { endMove, roomLobbyName, roomView, startMove } from '../room.js';
+import { competenciesOfRound } from '../kit.js';
 import type { Interview, InterviewState } from '../types.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
@@ -53,7 +54,9 @@ describe('the room view', () => {
     expect(v.seats).toEqual([{ person: people(WEN), seat: 'lead' }, { person: people(HUGO), seat: 'panel' }]);
     expect(v.questions.map((q) => q.id)).toEqual(i.questionIds);
     for (const q of v.questions) { expect(q.competency).toBeTruthy(); expect(q.starter).toEqual([]); }
-    expect(v.competencies).toEqual(opening.kit.competencies);
+    // The round's own competencies (kit.ts competenciesOfRound), never the kit's others: a leadership round has no system design.
+    expect(v.competencies).toEqual(competenciesOfRound(opening.kit, i.roundId));
+    expect(v.competencies.map((c) => c.id)).toEqual(['people-leadership', 'delivery', 'influence', 'communication']);
     expect(v.competencies[0]!.anchors[4]).toBeTruthy();
   });
 

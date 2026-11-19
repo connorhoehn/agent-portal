@@ -97,6 +97,7 @@ describe('the edges (hardening H3, O-120): the notes over the meeting assistant\
   const ref = (scheduledAt: string | null = null): MiloRef => ({
     interview: { id: IV, callId: CALL, questionIds: ['q-incident', 'q-ship'], scheduledAt, minutes: 60, type: 'behavioural', leadId: 'u-wen' } as never,
     opening: { kit: {
+      rounds: [],
       competencies: [{ id: 'communication', name: 'Communication' }, { id: 'delivery', name: 'Delivery' }],
       questions: [{ id: 'q-incident', prompt: INCIDENT, competencyId: 'communication' }, { id: 'q-ship', prompt: SHIP, competencyId: 'delivery' }],
     } } as never,

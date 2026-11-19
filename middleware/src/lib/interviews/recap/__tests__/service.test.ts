@@ -135,8 +135,8 @@ describe('the first open', () => {
       evidence: [{ text: 'The candidate said this in answer to the question.',
         source: { kind: 'transcript', seq: 2, quote: 'One engineer kept missing reviews, so I set up a weekly one-to-one and we agreed a plan.' } }],
     }]);
-    // The round chose one question, so its one competency is the round's: nothing of the round is left uncovered.
-    expect(body.notCovered).toEqual([]);
+    // Not covered: the round's other competencies (kit.ts competenciesOfRound), never the kit's others (system design).
+    expect(body.notCovered.map((c) => c.id)).toEqual(['delivery', 'influence', 'communication']);
     expect(await ratingsAtRecap(IV, 'u-wen')).toEqual(ratings(3));
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ interviewId: IV, part: 'coach', key: 'recap-1-abcd' }));
     expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0, provider: 'local' }));

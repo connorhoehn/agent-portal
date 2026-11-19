@@ -6,7 +6,7 @@
 // a list of problems, one plain sentence per field, keyed by a path the editor maps to its field:
 //
 //   rounds | competencies | questions               the list itself (too few, too many, a removal)
-//   rounds.<i>.<field>                              name, type, minutes, surface
+//   rounds.<i>.<field>                              name, type, minutes, surface, competencyIds
 //   competencies.<i>.<field>                        name, lookFor, anchors.<1-4>
 //   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board, clarifying.<j>
 //   <field>                                         an opening's details: title, level, team, location, ...
@@ -14,6 +14,10 @@
 // <i> is the item's position in the list as sent, so the editor needs no ids to place a message.
 //
 // What the kit promises the rows that read it unchanged:
+//   - Each round names the competencies it assesses (`competencyIds`, at least one, each in the kit). Every screen
+//     that lists a round's competencies (the room, the scorecard, Prepare, the recap, the debrief, the coach, the
+//     export) reads them through `competenciesOfRound`, so a coding round never shows or asks about System design.
+//     A round saved before rounds named theirs has no list and assesses every competency, as it did then.
 //   - I3.3 (the coach) reads competencies with what good looks like, and questions with their follow-ups.
 //   - I4.2 (the pad) inserts a technical question's starter code in the pad's language; a behavioural
 //     round has no pad (roundHasPad), so a behavioural question never carries code.
@@ -102,6 +106,29 @@ export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: 
 
 export const EMPTY_KIT: OpeningKit = { rounds: [], competencies: [], questions: [] };
 
+/**
+ * The competencies round `roundId` assesses, in the kit's order: the ones the round names. A round that names none
+ * (saved before rounds named theirs) or an id the kit no longer has reads every competency of the kit, as before.
+ * The one place a round's competencies are worked out; no screen filters the kit's list itself.
+ */
+export function competenciesOfRound(kit: Pick<OpeningKit, 'rounds' | 'competencies'>, roundId: string): KitCompetency[] {
+  const named = kit.rounds.find((r) => r.id === roundId)?.competencyIds;
+  if (!named?.length) return kit.competencies;
+  const want = new Set(named);
+  const of = kit.competencies.filter((c) => want.has(c.id));
+  return of.length ? of : kit.competencies;
+}
+
+/** The ids of `competenciesOfRound`, for the rules that compare ids. */
+export const competencyIdsOfRound = (kit: Pick<OpeningKit, 'rounds' | 'competencies'>, roundId: string): string[] =>
+  competenciesOfRound(kit, roundId).map((c) => c.id);
+
+/** The bank's questions a round may ask: of its type, for a competency it assesses (competenciesOfRound), in the bank's order. */
+export function questionsOfRound(kit: OpeningKit, roundId: string, type: RoundType): KitQuestion[] {
+  const assessed = new Set(competencyIdsOfRound(kit, roundId));
+  return kit.questions.filter((q) => q.roundType === type && assessed.has(q.competencyId));
+}
+
 export interface FieldProblem {
   path: string;
   message: string;
@@ -171,8 +198,11 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
   const roundsIn = listOf(input['rounds']);
   if (roundsIn.length === 0) p.add('rounds', 'Add at least one round.');
   if (roundsIn.length > KIT_LIMITS.rounds) p.add('rounds', `A kit holds at most ${KIT_LIMITS.rounds} rounds.`);
+  // Each round's competency ids, checked once the competencies are read below; absent keeps a kit saved before rounds named theirs.
+  const roundCompetencies: Array<unknown> = [];
   const rounds: KitRound[] = roundsIn.map((raw, i) => {
     const r = isRecord(raw) ? raw : {};
+    roundCompetencies.push(r['competencyIds']);
     const at = `rounds.${i}`;
     const n = i + 1;
     const id = text(r['id']);
@@ -216,6 +246,20 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
     return { id, name, lookFor, anchors: { 1: anchor(1), 2: anchor(2), 3: anchor(3), 4: anchor(4) } };
   });
   duplicates(p, 'competencies', competencies, 'Competency', 'competencies');
+
+  // what each round assesses: at least one competency, each from this kit, kept in the kit's order
+  const known = new Set(competencies.map((c) => c.id));
+  rounds.forEach((round, i) => {
+    const raw = roundCompetencies[i];
+    if (raw === undefined || raw === null) return;
+    const at = `rounds.${i}.competencyIds`;
+    const n = i + 1;
+    if (!Array.isArray(raw) || raw.some((id) => typeof id !== 'string')) { p.add(at, `Round ${n}'s competencies could not be read; choose them again.`); return; }
+    const ids = new Set((raw as string[]).map((id) => id.trim()));
+    if (ids.size === 0) { p.add(at, `Round ${n} needs at least one competency to assess.`); return; }
+    if ([...ids].some((id) => !known.has(id))) { p.add(at, `Round ${n} assesses a competency that is not in this kit; choose its competencies again.`); return; }
+    round.competencyIds = competencies.map((c) => c.id).filter((id) => ids.has(id));
+  });
 
   // questions
   const questionsIn = listOf(input['questions']);

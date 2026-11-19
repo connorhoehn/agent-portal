@@ -14,6 +14,7 @@ import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { resolveSession } from '../../lib/authz.js';
 import { consentStore } from '../../lib/interviews/consent/store.js';
 import { buildMiloExport } from '../../lib/interviews/export/service.js';
+import { competenciesOfRound } from '../../lib/interviews/kit.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 
 export const recordsRouter = Router();
@@ -77,8 +78,10 @@ recordsRouter.get('/interviews/:id/milo-export', asyncHandler(async (req, res) =
   const interview = ix.world.interviews.find((i) => i.id === param(req, 'id'));
   if (!interview) throw new NotFoundError(NO_INTERVIEW);
   const app = ix.applications.get(interview.applicationId);
+  const opening = app ? ix.openings.get(app.openingId) : undefined;
   const doc = await buildMiloExport({
     interview, candidateId: app?.candidateId ?? null, openingId: app?.openingId ?? null, roundName: ix.brief(interview).roundName,
+    competencies: opening ? competenciesOfRound(opening.kit, interview.roundId) : [],
   });
   // That an export happened, and nothing of what it held.
   console.info(JSON.stringify({ event: 'interviews.milo-export', by: session.sub, interviewId: interview.id, at: doc.exportedAt }));

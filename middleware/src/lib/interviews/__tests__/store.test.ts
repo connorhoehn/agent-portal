@@ -11,6 +11,7 @@
 // it names is declared there.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { competencyIdsOfRound } from '../kit.js';
 import { MemoryInterviewsStore, ORDER, loadWorld, type InterviewsStore } from '../store.js';
 import {
   GET_OPENING_SQL, INSERT_OPENING_SQL, INTERVIEWS_STATEMENTS, LIST_APPLICATIONS_SQL, LIST_CANDIDATES_SQL, LIST_INTERVIEWS_SQL, LIST_OPENINGS_SQL,
@@ -92,7 +93,7 @@ describe.each([
     expect(backend.kit.questions.find((q) => q.id === 'q-be-ratelimit')!.starter!.python).toContain('class RateLimiter');
     expect(world.applications.find((a) => a.id === 'app-vfzc2x6g')!.history.map((h) => h.stage)).toEqual(['applied', 'screening', 'interviewing', 'debrief']);
     expect(world.interviews.find((i) => i.id === 'iv-n5z9f2cq')!.panelIds).toEqual(['u-hugo']);
-    expect(world.scorecards.find((s) => s.id === 'sc-szbsws4n')!.ratings.map((r) => r.rating)).toEqual([4, 4]);
+    expect(world.scorecards.find((s) => s.id === 'sc-szbsws4n')!.ratings.map((r) => r.rating)).toEqual([4, 4, 4]);
     expect(world.openings.find((o) => o.id === 'op-ios')!.hiringManagerId).toBeNull();
   });
 });
@@ -205,6 +206,20 @@ describe.each([
     const r = await store.replaceOpeningKit('op-em', KIT, 1);
     expect(r).toMatchObject({ ok: true, row: { kit: KIT, title: 'Engineering Manager', revision: 2 } });
     expect((await store.listOpenings()).find((o) => o.id === 'op-em')!.kit).toEqual(KIT);
+  });
+
+  it('keeps what each round assesses, and a kit saved without it reads back without it (every competency)', async () => {
+    const seeded = (await store.listOpenings()).find((o) => o.id === 'op-backend')!.kit;
+    expect(seeded.rounds.map((r) => r.competencyIds)).toEqual([
+      ['problem-solving', 'code-quality', 'communication'], ['system-design', 'communication'], ['communication', 'collaboration'],
+    ]);
+    const named: OpeningKit = { ...KIT, rounds: [{ ...KIT.rounds[0]!, competencyIds: ['ownership'] }] };
+    expect((await store.replaceOpeningKit('op-em', named, 1)).ok).toBe(true);
+    expect((await store.listOpenings()).find((o) => o.id === 'op-em')!.kit.rounds[0]!.competencyIds).toEqual(['ownership']);
+    expect((await store.replaceOpeningKit('op-em', KIT, 2)).ok).toBe(true);
+    const old = (await store.listOpenings()).find((o) => o.id === 'op-em')!.kit;
+    expect('competencyIds' in old.rounds[0]!).toBe(false);
+    expect(competencyIdsOfRound(old, 'rd-talk')).toEqual(['ownership']);
   });
 
   it('a stale revision writes nothing and answers the row as it now is; an unknown id is not found', async () => {

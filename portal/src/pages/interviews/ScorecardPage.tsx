@@ -293,13 +293,13 @@ function ScorecardReadout({ card, competencies, round, testId }: { card: Scoreca
           <Chip tone={recommendationTone(card.recommendation)} size="sm" data-testid="interviews-scorecard-verdict">{recommendationVerdict(card.recommendation)}</Chip>
         </Inline>
         {card.ratings.map((r) => {
-          const c = kit.get(r.competencyId);
+          const anchor = r.anchor ?? kit.get(r.competencyId)?.anchors[r.rating] ?? null;
           return (
             <Stack key={r.competencyId} gap="xs">
               <Inline gap="md" align="end" wrap={false}>
                 <RatingInput label={r.competency} readOnly value={r.rating} onChange={() => undefined}
                   options={([1, 2, 3, 4] as const).map((n) => ({ value: n, label: `${n} of 4` }))} />
-                {c && <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{c.anchors[r.rating]}</T>}
+                {anchor && <T size="sm" tone="secondary" data-testid="interviews-scorecard-anchor">{anchor}</T>}
               </Inline>
               {r.note && <T size="sm">{r.note}</T>}
             </Stack>
