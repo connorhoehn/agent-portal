@@ -500,6 +500,92 @@ describe('hands-free router', () => {
     expect(w.router.state()).toEqual({ phase: 'idle' });
   });
 
+  describe('early release on a provisional request (review 1, item 9)', () => {
+    it('relays from the first output frame when the words so far are a provisional request; the asker stays pending until the final verdict', async () => {
+      const w = world();
+      let resolve!: (v: { kind: 'request' }) => void;
+      w.rules.verdictFor = () => new Promise((r) => { resolve = r; });
+      w.rules.provisionalFor = (s) => (s.text.startsWith('Milo, what') ? 'request' : null);
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.words(UNA, 's1', "Milo, what's the capital of France");
+      w.router.turnEnded();
+      w.milo(2);
+      expect(w.relay.pushed.map((p) => p.tag)).toEqual([T_MILO, T_MILO]);
+      expect(w.talking.asker).toBe(UNA);
+      expect(w.talking.pending).toBe(true); // tool calls still wait for the final verdict
+      expect(w.rules.provisionals).toEqual([{ userId: UNA, text: "Milo, what's the capital of France", via: 'name' }]);
+      w.clock.advance(HANDSFREE.verdictWaitMs + 100); // no verdict timeout once released
+      expect(w.drops).toEqual([]);
+      w.sentence(UNA, 's1', "Milo, what's the capital of France?");
+      resolve({ kind: 'request' }); await settle();
+      expect(w.talking.pending).toBe(false);
+      expect(w.talking.asker).toBe(UNA);
+    });
+
+    it('uses the final text when the sentence is already final, and holds as before when there is no provisional request', async () => {
+      const w = world();
+      w.rules.verdictFor = () => new Promise(() => undefined);
+      w.rules.provisionalFor = () => null;
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.sentence(UNA, 's1', 'Milo, hi');
+      w.milo(2);
+      expect(w.relay.pushed).toHaveLength(0);
+      expect(w.rules.provisionals.map((p) => p.text)).toEqual(['Milo, hi']);
+    });
+
+    it('a final mention after an early release clears the relay and frees the floor', async () => {
+      const w = world();
+      let resolve!: (v: { kind: 'mention' }) => void;
+      w.rules.verdictFor = () => new Promise((r) => { resolve = r; });
+      w.rules.provisionalFor = () => 'request';
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.words(UNA, 's1', 'Milo, what');
+      w.milo(2);
+      expect(w.relay.pushed).toHaveLength(2);
+      w.sentence(UNA, 's1', 'Milo, what a day it was yesterday.');
+      resolve({ kind: 'mention' }); await settle();
+      expect(w.relay.clears).toBe(1);
+      expect(w.drops).toEqual(['mention']);
+      expect(w.router.state()).toEqual({ phase: 'idle' });
+      expect(w.talking.asker).toBeNull();
+      w.router.outputAudio(frame(T_MILO), true);
+      expect(w.relay.pushed).toHaveLength(2); // the rest is unheard
+    });
+
+    it('an early answer that finished before a final mention does not leave its window open', async () => {
+      const w = world();
+      let resolve!: (v: { kind: 'mention' }) => void;
+      w.rules.verdictFor = () => new Promise((r) => { resolve = r; });
+      w.rules.provisionalFor = () => 'request';
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.words(UNA, 's1', 'Milo, what');
+      w.milo(3);
+      expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+      w.sentence(UNA, 's1', 'Milo, what a day.');
+      resolve({ kind: 'mention' }); await settle();
+      expect(w.router.state()).toEqual({ phase: 'idle' });
+      expect(w.talking.asker).toBeNull();
+    });
+
+    it('a follow-up turn warms the asker\'s admission so its early verdict can use it', async () => {
+      const w = world();
+      w.rules.provisionalFor = () => 'request';
+      w.talk(UNA, T_UNA, 10);
+      w.name(UNA, 's1', 0); await settle();
+      w.sentence(UNA, 's1', 'Milo, what is two plus two?'); await settle();
+      w.milo(3);
+      expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+      w.quiet(5); // his voice has played out
+      const admits = w.rules.admits;
+      w.words(UNA, 's2', 'And three');
+      expect(w.rules.admits).toBe(admits + 1);
+    });
+  });
+
   describe('hold', () => {
     it('routes at once with no name or verdict, and uses the same floor (one holder)', async () => {
       const w = world();

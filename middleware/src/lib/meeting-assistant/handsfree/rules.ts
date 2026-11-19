@@ -37,6 +37,23 @@ export interface HandsfreeRulesDeps {
   roster?: (callId: string) => readonly string[];
   /** Bound for `admit` (default HANDSFREE.admitWaitMs; tests shorten it). */
   admitWaitMs?: number;
+  /** The clock for the admission cache (default Date.now). */
+  now?: () => number;
+  /** How long an admission is reused for the same person (default ADMISSION_TTL_MS). */
+  admissionTtlMs?: number;
+}
+
+/** An admission is reused this long (a trigger, its verdict and the early release ask it within a second or two). */
+export const ADMISSION_TTL_MS = 3_000;
+
+/** The rules plus the early verdict the router asks at the first output frame (review 1, item 9). */
+export interface EarlyHandsfreeRules extends HandsfreeRules {
+  /**
+   * Pure and synchronous, on the words so far: 'request' when the final verdict will very likely be a request the model answers
+   * (a cached `route` admission, words addressed to Milo or a follow-up that continues, not a cancel, and nothing the family may
+   * hold), so the answer may be relayed before it; null otherwise. Never runs a held answer or anything with side effects.
+   */
+  provisional(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null;
 }
 
 /** A promise's value, or `fallback` once `ms` pass or it rejects. */
@@ -206,13 +223,33 @@ export function overlapOf(heard: string, saying: string): OverlapVerdict {
 /** The call's policy: by its lobby, as everywhere else. */
 const policyOf = (call: PolicyCall): MeetingAssistantPolicy => policyForLobby(call.lobby);
 
-export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): HandsfreeRules {
+export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): EarlyHandsfreeRules {
   const recordOf = deps.record ?? ((callId: string) => assistantStore().get(callId));
   const policyFor = deps.policy ?? policyOf;
   const rosterOf = deps.roster ?? (() => [] as const);
   const wait = deps.admitWaitMs ?? HANDSFREE.admitWaitMs;
+  const now = deps.now ?? Date.now;
+  const ttl = deps.admissionTtlMs ?? ADMISSION_TTL_MS;
+  /** Admissions that settled, per `${callId}|${userId}` (a failed read and a deny are not kept). */
+  const admitted = new Map<string, { a: Admission; at: number }>();
+  const cached = (call: PolicyCall, userId: string): Admission | null => {
+    const hit = admitted.get(`${call.callId}|${userId}`);
+    return hit && now() - hit.at < ttl ? hit.a : null;
+  };
 
   async function decideAdmission(call: PolicyCall, userId: string): Promise<Admission> {
+    const hit = cached(call, userId);
+    if (hit) return hit;
+    const a = await readAdmission(call, userId);
+    const key = `${call.callId}|${userId}`;
+    admitted.delete(key);
+    // A deny is asked again every time (someone who has just acknowledged the notice is heard at once).
+    if (a !== 'deny') admitted.set(key, { a, at: now() });
+    if (admitted.size > 256) admitted.delete(admitted.keys().next().value as string);
+    return a;
+  }
+
+  async function readAdmission(call: PolicyCall, userId: string): Promise<Admission> {
     if (typeof userId !== 'string' || !userId) return 'deny';
     const record = await recordOf(call.callId);
     if (!record || record.callId !== call.callId || record.state !== 'listening') return 'deny';
@@ -251,8 +288,21 @@ export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): HandsfreeRu
     return family?.refusal ? { kind: 'fixed', line: family.refusal } : { kind: 'mention' };
   }
 
+  function provisional(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null {
+    if (cached(call, s.userId) !== 'route') return null;
+    const text = String(s.text ?? '');
+    let request: string | null;
+    if (s.via === 'name' || HAS_NAME.test(text)) request = addressedRequest(text);
+    else request = followUpKind(text, rosterOf(call.callId)) === 'request' ? text : null;
+    if (request === null || parseCommand(request) === 'cancel') return null;
+    const family = policyFor(call).handsfree?.(call);
+    if (family?.heldAnswer && (!family.mayBeHeld || family.mayBeHeld({ text: request }) !== false)) return null;
+    return 'request';
+  }
+
   return {
     admit: (call, userId) => within(decideAdmission(call, userId), wait, 'deny'),
+    provisional: (call, s) => { try { return provisional(call, s); } catch { return null; } },
     verdict: (call, sentence) => decideVerdict(call, sentence).catch((): TriggerVerdict => ({ kind: 'mention' })),
     overlap: (heard, saying) => {
       try { return overlapOf(String(heard ?? ''), String(saying ?? '')); } catch { return 'unclear'; }

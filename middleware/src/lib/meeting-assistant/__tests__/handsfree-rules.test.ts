@@ -242,3 +242,53 @@ describe('instructions: Work and Social are conversational under the flag; the f
     expect(meetingInstructions({ ...base, readAloudOnly: true })).toContain('Never answer anyone and never speak on your own');
   });
 });
+
+describe('provisional: the early verdict on words so far (review 1, item 9), and the admission cache', () => {
+  const withFamily = (f: Partial<HandsfreeFamily>): MeetingAssistantPolicy => ({ ...DEFAULT_POLICY, handsfree: () => ({ admit: async () => 'route', instructions: () => null, ...f }) });
+
+  it('is a request only for a person whose route admission is cached, on words addressed to Milo; never runs a held answer', async () => {
+    const held = jest.fn(async () => 'There are ten minutes left.');
+    const rules = rulesWith(record(), { policy: () => withFamily({ heldAnswer: held, mayBeHeld: ({ text }) => /time/.test(text) }) });
+    expect(rules.provisional(CALL, { userId: UNA, text: "Milo, what's the capital of France", via: 'name' })).toBeNull(); // never admitted yet
+    expect(await rules.admit(CALL, UNA)).toBe('route');
+    expect(rules.provisional(CALL, { userId: UNA, text: "Milo, what's the capital of France", via: 'name' })).toBe('request');
+    expect(rules.provisional(CALL, { userId: UNA, text: "I saw Milo's summary", via: 'name' })).toBeNull();
+    expect(rules.provisional(CALL, { userId: UNA, text: 'Milo, never mind', via: 'name' })).toBeNull();
+    expect(rules.provisional(CALL, { userId: UNA, text: 'Milo, how much time is left', via: 'name' })).toBeNull(); // may be held
+    expect(rules.provisional(CALL, { userId: UNA, text: 'And in a leap year?', via: 'follow-up' })).toBe('request');
+    expect(rules.provisional(CALL, { userId: UNA, text: 'Thanks.', via: 'follow-up' })).toBeNull();
+    expect(held).not.toHaveBeenCalled();
+  });
+
+  it('a family with a held answer and no mayBeHeld is never released early; fixed-lines and deny never', async () => {
+    const rules = rulesWith(record(), { policy: () => withFamily({ heldAnswer: async () => null }) });
+    await rules.admit(CALL, UNA);
+    expect(rules.provisional(CALL, { userId: UNA, text: 'Milo, what is two plus two', via: 'name' })).toBeNull();
+    const fixed = rulesWith(record(), { policy: () => withFamily({ admit: async () => 'fixed-lines' }) });
+    await fixed.admit(CALL, UNA);
+    expect(fixed.provisional(CALL, { userId: UNA, text: 'Milo, what is two plus two', via: 'name' })).toBeNull();
+    const none = rulesWith(record());
+    await none.admit(CALL, LATE);
+    expect(none.provisional(CALL, { userId: LATE, text: 'Milo, what is two plus two', via: 'name' })).toBeNull();
+  });
+
+  it('caches an admission per person for about 3 s (injectable clock), then asks again; a failed read is not cached', async () => {
+    let now = 1_000; let reads = 0; let rec: AssistantRecord | null = record();
+    const rules = createHandsfreeRules({ record: async () => { reads += 1; return rec; }, now: () => now });
+    expect(await rules.admit(CALL, UNA)).toBe('route');
+    rec = record({ state: 'paused' });
+    now += 2_900;
+    expect(await rules.admit(CALL, UNA)).toBe('route');
+    expect(await rules.verdict(CALL, { userId: UNA, text: 'Milo, what is two plus two?', via: 'name' })).toEqual({ kind: 'request' });
+    expect(reads).toBe(1);
+    expect(await rules.admit(CALL, VERA)).toBe('deny'); // per person
+    now += 200;
+    expect(await rules.admit(CALL, UNA)).toBe('deny');
+    expect(rules.provisional(CALL, { userId: UNA, text: 'Milo, what is two plus two', via: 'name' })).toBeNull();
+    let fail = true;
+    const flaky = createHandsfreeRules({ record: async () => { if (fail) throw new Error('down'); return record(); }, now: () => now });
+    expect(await flaky.admit(CALL, UNA)).toBe('deny');
+    fail = false;
+    expect(await flaky.admit(CALL, UNA)).toBe('route');
+  });
+});

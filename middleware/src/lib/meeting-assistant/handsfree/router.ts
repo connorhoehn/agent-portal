@@ -32,7 +32,8 @@ export interface RelayPort {
 export interface RouterDeps {
   clock: HandsfreeClock;
   call: PolicyCall;
-  rules: HandsfreeRules;
+  /** `provisional` (rules.ts `EarlyHandsfreeRules`): absent, every answer waits for the final verdict. */
+  rules: HandsfreeRules & { provisional?(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null };
   listening: Pick<ListeningSide, 'preRoll' | 'on'>;
   talking: Pick<TalkingSide, 'feed' | 'setAsker' | 'say'>;
   relay: RelayPort;
@@ -57,6 +58,9 @@ interface Turn {
   verdictTimer: unknown;
   /** The hold ran out once while the person was still talking: the early reply was dropped and the turn kept. */
   reheld?: boolean;
+  /** The words so far were a provisional request: the answer is relayed before the final verdict, which confirms or revokes it. */
+  early?: boolean;
+  earlyAsked?: boolean;
   /** Opened inside the asker's follow-up window: Milo's echo goes back to it (when it ends, and the request it carried). */
   window?: { untilMs: number; verdict: TriggerVerdict | null };
 }
@@ -97,6 +101,10 @@ export class Router {
   /** Words heard so far per `${userId}|${sentenceId}` (the echo / barge-in check's `heard`). */
   private heard = new Map<string, string>();
   private verdicts = new Map<string, TriggerVerdict>();
+  /** Final sentence texts per `${userId}|${sentenceId}` (the early verdict reads them when the final came before Milo's first frame). */
+  private finals = new Map<string, string>();
+  /** The sentence whose answer was released early and whose final verdict has not come. */
+  private earlyKey: string | null = null;
   /** Sentences of people admitted only to fixed lines, named: their final text gets a verdict and maybe a server line. */
   private fixedSentences = new Set<string>();
   /** One queued sentence (latest wins): when it was queued, and where it ended once its final came. */
@@ -280,13 +288,15 @@ export class Router {
       if (v === 'echo') return;
     }
     // The asker speaks again inside their window: a follow-up turn on this sentence (judged when it is final).
-    if (this.st.phase === 'follow-up' && this.st.userId === userId) this.openTurn(userId, 'follow-up', sentenceId);
-    else if (this.turn && this.turn.userId === userId && this.turn.via === 'follow-up' && this.turn.sentenceId === null) this.turn.sentenceId = sentenceId;
+    if (this.st.phase === 'follow-up' && this.st.userId === userId) { this.openTurn(userId, 'follow-up', sentenceId); this.warmAdmission(userId); }
+    else if (this.turn && this.turn.userId === userId && this.turn.via === 'follow-up' && this.turn.sentenceId === null) { this.turn.sentenceId = sentenceId; this.warmAdmission(userId); }
   }
 
   private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number, endMs: number): void {
     if (this.closed) return;
     this.heard.delete(`${userId}|${sentenceId}`);
+    this.finals.set(`${userId}|${sentenceId}`, text);
+    if (this.finals.size > MAX_KEPT_VERDICTS) this.finals.delete(this.finals.keys().next().value as string);
     // Milo's own words coming back through this mic (it began while he played or just after): not a request of anyone's.
     if (this.inEchoTail(startMs) && this.echoes(text)) { this.echoed(userId, sentenceId); return; }
     const key = `${userId}|${sentenceId}`;
@@ -313,8 +323,13 @@ export class Router {
     this.verdicts.set(key, v);
     if (this.verdicts.size > MAX_KEPT_VERDICTS) this.verdicts.delete(this.verdicts.keys().next().value as string);
     const t = this.turn;
+    const early = this.earlyKey === key;
+    if (early) this.earlyKey = null;
     if (t && t.userId === userId && t.sentenceId === sentenceId && t.verdict === null) this.applyVerdict(t, v);
-    else if (this.queued && this.queued.userId === userId && this.queued.sentenceId === sentenceId && v.kind !== 'request') this.queued = null;
+    else if (early && t && t.userId === userId && t.via === 'follow-up' && t.sentenceId === null && t.verdict === null) {
+      // The early answer ended and opened its window before the verdict: the window carries the request, or goes with it.
+      if (v.kind === 'request') { t.verdict = v; this.syncAsker(); } else { if (this.playing()) this.stopPlayout(); this.applyVerdict(t, v); }
+    } else if (this.queued && this.queued.userId === userId && this.queued.sentenceId === sentenceId && v.kind !== 'request') this.queued = null;
   }
 
   private async judgeFixed(userId: string, text: string): Promise<void> {
@@ -327,6 +342,8 @@ export class Router {
   private applyVerdict(t: Turn, v: TriggerVerdict): void {
     t.verdict = v;
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
+    // Released early and not a request after all: what already went out stops playing.
+    if (v.kind !== 'request' && t.early && !this.uttering && this.playing()) this.stopPlayout();
     if (v.kind === 'request') { this.syncAsker(); const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
     if (v.kind === 'fixed') { this.drop(v.kind); this.sayFixed(t.userId, v.line); return; }
     this.drop(v.kind);
@@ -367,12 +384,47 @@ export class Router {
     if (this.st.phase === 'routing') this.setState({ ...this.st, phase: 'answering' });
     if (this.st.phase === 'follow-up') this.setState({ phase: 'answering', userId: t.userId, via: t.via, sinceMs: this.deps.clock.nowMs() });
     this.clearGiveUp();
+    if (t.verdict === null && !t.early && !t.earlyAsked && !t.held.length) this.tryEarly(t);
+    if (t.verdict === null && t.early) { this.relayFrame(pcm, last); return; }
     if (t.verdict === null) {
       t.held.push({ pcm, last });
       if (t.verdictTimer === null) t.verdictTimer = this.deps.clock.setTimeout(() => { t.verdictTimer = null; if (this.turn === t && t.verdict === null) this.verdictLate(t); }, HANDSFREE.verdictWaitMs);
       return;
     }
     if (t.verdict.kind === 'request') this.relayFrame(pcm, last);
+  }
+
+  /**
+   * At the answer's first frame, before the final verdict: the rules' side-effect-free early verdict on the person's words so far
+   * (the final text when it is in). A provisional request is relayed now; the final verdict confirms it (the asker, and so tool
+   * calls, wait for that) or revokes it (the relay is cleared). Review 1, item 9.
+   */
+  private tryEarly(t: Turn): void {
+    t.earlyAsked = true;
+    const provisional = this.deps.rules.provisional;
+    if (!provisional || t.sentenceId === null) return;
+    const key = `${t.userId}|${t.sentenceId}`;
+    if (this.verdicts.has(key)) return;
+    const text = this.finals.get(key) ?? this.heard.get(key);
+    if (!text) return;
+    let p: 'request' | null = null;
+    try { p = provisional.call(this.deps.rules, this.deps.call, { userId: t.userId, text, via: t.via === 'follow-up' ? 'follow-up' : 'name' }); } catch { p = null; }
+    if (p !== 'request') return;
+    t.early = true;
+    this.earlyKey = key;
+    this.trace('verdict.early', { userId: t.userId });
+  }
+
+  /** Ask the person's admission now, so the rules' cache has it when their follow-up's first answer frame comes. */
+  private warmAdmission(userId: string): void {
+    if (!this.deps.rules.provisional) return;
+    this.deps.rules.admit(this.deps.call, userId).catch(() => undefined);
+  }
+
+  /** Whatever of Milo's voice is still playing out stops (the relay's queue is cleared). */
+  private stopPlayout(): void {
+    this.deps.relay.clear();
+    this.playingUntil = this.deps.clock.nowMs();
   }
 
   /**

@@ -155,3 +155,20 @@ describe('the panel side', () => {
     expect(await say(STRANGER, 'Milo, how much time is left?')).toEqual({ kind: 'mention' });
   });
 });
+
+describe('the early verdict in an interview (review 1, item 9): only what no held answer could take', () => {
+  it('mayBeHeld covers every phrase the server answers, and lets an ordinary request through', () => {
+    const family = P.handsfree!(CALL);
+    for (const text of ['how much time is left?', 'time check', 'how long do we have left', 'repeat the question', 'say that again', 'what was the question', 'introduce yourself', 'say hello to the candidate']) {
+      expect([text, family.mayBeHeld!({ text })]).toEqual([text, true]);
+    }
+    for (const text of ['add twelve test cases.', 'what is a hash map?']) expect([text, family.mayBeHeld!({ text })]).toEqual([text, false]);
+  });
+
+  it('the lead\'s ordinary request is a provisional request once admitted; a time question never is, and nothing runs', async () => {
+    const r = rules();
+    expect(await r.admit(CALL, LEAD)).toBe('route');
+    expect(r.provisional(CALL, { userId: LEAD, text: 'Milo, add twelve test cases', via: 'name' })).toBe('request');
+    expect(r.provisional(CALL, { userId: LEAD, text: 'Milo, how much time is left', via: 'name' })).toBeNull();
+  });
+});

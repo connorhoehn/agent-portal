@@ -67,7 +67,12 @@ export class FakeRules implements HandsfreeRules {
   verdictFor: (s: { userId: string; text: string; via: 'name' | 'follow-up' }) => TriggerVerdict | Promise<TriggerVerdict> = () => ({ kind: 'request' });
   overlapFor: (heard: string, saying: string) => OverlapVerdict = () => 'barge-in';
   readonly verdicts: Array<{ userId: string; text: string; via: string }> = [];
-  async admit(_call: unknown, userId: string): Promise<Admission> { return this.admission.get(userId) ?? 'route'; }
+  /** The early verdict on words so far (rules.ts `provisional`); default: none, so answers wait for the final verdict. */
+  provisionalFor: (s: { userId: string; text: string; via: 'name' | 'follow-up' }) => 'request' | null = () => null;
+  readonly provisionals: Array<{ userId: string; text: string; via: string }> = [];
+  admits = 0;
+  async admit(_call: unknown, userId: string): Promise<Admission> { this.admits += 1; return this.admission.get(userId) ?? 'route'; }
+  provisional(_call: unknown, s: { userId: string; text: string; via: 'name' | 'follow-up' }): 'request' | null { this.provisionals.push(s); return this.provisionalFor(s); }
   async verdict(_call: unknown, s: { userId: string; text: string; via: 'name' | 'follow-up' }): Promise<TriggerVerdict> { this.verdicts.push(s); return this.verdictFor(s); }
   overlap(heard: string, saying: string): OverlapVerdict { return this.overlapFor(heard, saying); }
 }

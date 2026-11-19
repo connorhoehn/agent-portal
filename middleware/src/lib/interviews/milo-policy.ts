@@ -59,7 +59,9 @@ import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
 import { INTERVIEWS_TENANT, type Interview } from './types.js';
 import { interviewRunsWith } from './consent/effects.js';
-import { logCandidateLine, MILO_CAN_DO } from './speak/index.js';
+import { candidateRequestOf, logCandidateLine, MILO_CAN_DO } from './speak/index.js';
+import { isIntroduction } from './speak/intro.js';
+import { utterance } from './speak/utterance.js';
 import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
 import { addScriptRules } from '../meeting-assistant/scripted-session.js';
@@ -166,6 +168,9 @@ export const HANDSFREE_INTERVIEW_RULES = [
   `For anything else say once, in one short sentence, that you can't help with that in an interview, and stop. Never repeat a question in your own words: the system reads the approved question.`,
 ].join('\n');
 
+/** Words any of the interview's phrase tools may answer (introduce yourself, say hello, the time, the question again). */
+const MAY_BE_HELD = /\b(?:introduce|introduction|yourself|hello|hi|time|minutes?|long|left|remaining|repeat|again|question)\b/;
+
 /** The hands-free rules of one interview call (policy `handsfree`). */
 function interviewHandsfree(call: PolicyCall): HandsfreeFamily {
   const interviewId = interviewOfLobby(call.lobby);
@@ -200,6 +205,9 @@ function interviewHandsfree(call: PolicyCall): HandsfreeFamily {
       const out = await runServerTool(call, askedBy, tool.name, {}, 'phrase').catch(() => null);
       return out?.line ?? '';
     },
+    // Pure, for the early release: a superset of the three phrase tools' words (time left, repeat, introduce), so a request they
+    // might take always waits for the final verdict. A new phrase tool in the family must be covered here.
+    mayBeHeld: ({ text }) => candidateRequestOf(text) !== 'other' || isIntroduction(text) || MAY_BE_HELD.test(utterance(text)),
     refusal: MILO_CAN_DO,
     instructions: () => HANDSFREE_INTERVIEW_RULES,
   };

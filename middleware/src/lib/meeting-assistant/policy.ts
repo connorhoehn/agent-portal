@@ -199,6 +199,12 @@ export interface HandsfreeFamily {
    * always one: null from here gives them `refusal`.
    */
   heldAnswer?(request: { askedBy: string; text: string; admission: Exclude<Admission, 'deny'> }): Promise<string | null>;
+  /**
+   * Pure and synchronous (the frame path): could `heldAnswer` answer these words (the request after Milo's name)? False lets a
+   * routed person's answer be relayed at its first frame, before the final verdict (review 1, item 9); it must be a superset of
+   * what `heldAnswer` takes. Absent while `heldAnswer` exists: always maybe (never released early).
+   */
+  mayBeHeld?(request: { text: string }): boolean;
   /** What a `fixed-lines` person gets for anything `heldAnswer` does not answer. Absent: nothing is said. */
   readonly refusal?: string;
   /** The family's own rules for the hands-free session's instructions (instructions.ts `handsfree.familyRules`); null: none. */
