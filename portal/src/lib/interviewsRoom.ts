@@ -105,8 +105,28 @@ export interface Admission {
   decidedAt: string | null;
 }
 export const waitingPath = (interviewId: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/waiting`;
-/** How often the lead's room asks whether the candidate is waiting. */
+/** How often the lead's room asks whether the candidate is waiting (the consents read keeps this pace too). */
 export const WAITING_POLL_MS = 5_000;
+/** The slow fallback under the live hint: a knock or an end reaches the page as an event (middleware lib/interviews/live-hint.ts). */
+export const WAITING_FALLBACK_MS = 15_000;
+
+// The room's live hints: the server publishes them on the interview's lobby name; both sides read the activity feed.
+export const INTERVIEW_HINT_KNOCK = 'interview.knock';
+export const INTERVIEW_HINT_ENDED = 'interview.ended';
+/**
+ * What the feed says since the reader last looked: whether this interview was knocked on or ended, and where to resume.
+ * A hint carries no state; the page reads again and the read decides.
+ */
+export function hintsAfter(events: ReadonlyArray<{ eventType: string; detail?: Record<string, unknown> }>, seen: number, interviewId: string): { next: number; knock: boolean; ended: boolean } {
+  const from = seen > events.length ? events.length : Math.max(0, seen);
+  let knock = false; let ended = false;
+  for (const e of events.slice(from)) {
+    if (e.detail?.['interviewId'] !== interviewId) continue;
+    if (e.eventType === INTERVIEW_HINT_KNOCK) knock = true;
+    else if (e.eventType === INTERVIEW_HINT_ENDED) ended = true;
+  }
+  return { next: events.length, knock, ended };
+}
 
 /** The lead asks while the room is open and the candidate is not yet in; a panel member never does. */
 export const pollsWaiting = (seat: 'lead' | 'panel' | null, admission: Admission | null, state: RoomState | null): boolean =>

@@ -36,13 +36,14 @@ import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
 import { usePageChromeFold } from '../../components/shell/pageChrome';
 import { scorecardPath } from '../../lib/interviewsScorecard';
+import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHintListener';
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
-  MY_INTERVIEWS_HREF, WAITING_POLL_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
+  MY_INTERVIEWS_HREF, WAITING_POLL_MS, WAITING_FALLBACK_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
   suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
@@ -55,6 +56,7 @@ import {
 const OPEN_STATES = new Set(['accepted', 'ready', 'live']);
 /** The lead's room stops asking after an hour and a half of nobody knocking (bounded, like every poll here). */
 const WAITING_MAX_READS = Math.ceil((90 * 60_000) / WAITING_POLL_MS);
+const WAITING_FALLBACK_MAX_READS = Math.ceil((90 * 60_000) / WAITING_FALLBACK_MS);
 
 export default function InterviewRoomPage() {
   const { id = '' } = useParams();
@@ -102,18 +104,22 @@ function InterviewRoom({ id }: { id: string }) {
   // C3: the lead's room asks whether the candidate is waiting, every few seconds, until they are in.
   const [admission, setAdmission] = useState<Admission | null>(null);
   const polling = pollsWaiting(room?.seat ?? null, admission, room?.state ?? null);
+  // A knock reaches the room as a live hint (InterviewHintListener below); this poll is only the slow fallback under it.
+  const readNow = useRef<() => void>(() => undefined);
   useEffect(() => {
-    if (!polling) return;
+    if (!polling) { readNow.current = () => undefined; return; }
     let live = true;
     let reads = 0;
     const read = () => {
-      if (!live || reads++ >= WAITING_MAX_READS) { window.clearInterval(timer); return; }
+      if (!live || reads++ >= WAITING_FALLBACK_MAX_READS) { window.clearInterval(timer); return; }
       void readAdmission(id).then((a) => { if (live) setAdmission(a); });
     };
-    const timer = window.setInterval(read, WAITING_POLL_MS);
+    const timer = window.setInterval(read, WAITING_FALLBACK_MS);
+    readNow.current = () => { if (live) void readAdmission(id).then((a) => { if (live) setAdmission(a); }); };
     read();
-    return () => { live = false; window.clearInterval(timer); };
+    return () => { live = false; readNow.current = () => undefined; window.clearInterval(timer); };
   }, [polling, id]);
+  const onHint = useCallback((hint: InterviewHint) => { if (hint.knock) readNow.current(); }, []);
 
   // C4: what the candidate answered, as one footer chip: "Not answered yet" until they have, then what is off.
   // Any seat reads it: the interviewer is told what is off (decision 5). A knock means the answers exist: read again.
@@ -195,6 +201,7 @@ function InterviewRoom({ id }: { id: string }) {
   if (!room) return <LoadingState label={isLoading ? 'Loading the interview room…' : 'Loading…'} />;
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
+    {polling && <InterviewHintListener interviewId={id} onHint={onHint} />}
     {drawn
       // The recording note is drawn here, not by the library's pane (ShellCallMedia turns that one off): its banner ran edge to
       // edge with no gutter and the tile's centring left a gap under it. The note takes the tiles' gutter and the page's stack gap.

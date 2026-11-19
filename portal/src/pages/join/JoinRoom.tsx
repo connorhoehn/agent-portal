@@ -33,6 +33,7 @@ import { GuestRoomPane, type GuestPaneTab } from './GuestRoomPane';
 import { useGuestMediaBinding } from './guestMedia.ts';
 import { readRoom } from './guestApi.ts';
 import { GuestRealtimeOff, guestTokenSource } from './guestRealtime.ts';
+import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHintListener';
 import { ROOM_POLL_MS, guestCallStartMs, roomMaxPolls, roomStepAfterRead, roomView, type GuestPanel, type GuestRoom } from './steps.ts';
 
 export interface GuestInterview {
@@ -52,12 +53,13 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
   const [attempt, setAttempt] = useState(0);
 
   // D1, read now and every few seconds until it says the room is over (bounded by the round's length).
+  // The lead's end arrives as a live hint (InterviewHintListener below); this poll is the slow fallback under it.
+  const readNow = useRef<() => void>(() => undefined);
   useEffect(() => {
     let live = true;
     let reads = 0;
     const max = roomMaxPolls(interview.round.minutes);
-    const read = () => {
-      if (!live || reads++ >= max) { window.clearInterval(timer); return; }
+    const once = () => {
       void readRoom().then((r) => {
         if (!live) return;
         const next = roomStepAfterRead(r);
@@ -65,10 +67,16 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
         if (next === 'ended') { live = false; window.clearInterval(timer); setOver(true); }
       });
     };
+    const read = () => {
+      if (!live || reads++ >= max) { window.clearInterval(timer); return; }
+      once();
+    };
     const timer = window.setInterval(read, ROOM_POLL_MS);
+    readNow.current = () => { if (live) once(); };
     read();
-    return () => { live = false; window.clearInterval(timer); };
+    return () => { live = false; readNow.current = () => undefined; window.clearInterval(timer); };
   }, [interview.round.minutes]);
+  const onHint = useCallback((hint: InterviewHint) => { if (hint.ended) readNow.current(); }, []);
 
   // The guest's realtime token: its own route only. Not-found means no call from this page.
   useEffect(() => {
@@ -100,6 +108,7 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
   if (!room || token.kind === 'loading') return <RoomFrame interview={interview}><LoadingState label="Opening the call" /></RoomFrame>;
 
   return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self} panel={interview.panel ?? null} leadCallId={room.leadCallId ?? null}>
+    <InterviewHintListener interviewId={room.interviewId} onHint={onHint} />
     <GuestRoomCall room={room} role={interview.opening.title} panel={interview.panel ?? null} over={over} onEnded={finish} />
   </GuestCallHost>;
 }

@@ -182,8 +182,8 @@ export interface GuestRoom {
 /** One read of the room: its answer, not-found (not let in now, or the link died), or no answer at all. */
 export type RoomRead = { kind: 'room'; room: GuestRoom } | { kind: 'gone' } | { kind: 'failed' };
 
-/** How often the room asks whether the interview is still on, and the bound: the round's length and an hour more. */
-export const ROOM_POLL_MS = 5000;
+/** The slow fallback under the lead's live end hint, and the bound it sets: the round's length and an hour more. */
+export const ROOM_POLL_MS = 15_000;
 export function roomMaxPolls(minutes: number): number {
   const length = Number.isFinite(minutes) && minutes > 0 ? minutes : 60;
   return Math.ceil(((length + 60) * 60_000) / ROOM_POLL_MS);

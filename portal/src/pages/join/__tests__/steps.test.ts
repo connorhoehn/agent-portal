@@ -185,3 +185,7 @@ test('an admission read after the knock: no answer changes nothing; not-knocked 
   assert.deepEqual(waitingAfterRead(adm('admitted')), { kind: 'admitted' });
   assert.deepEqual(waitingAfterRead(adm('turned-away')), { kind: 'turned-away' });
 });
+
+test("the candidate room read is only a slow fallback: the lead end arrives as a live hint (lib/interviewsRoom.ts hintsAfter)", () => {
+  assert.equal(ROOM_POLL_MS, 15_000);
+});

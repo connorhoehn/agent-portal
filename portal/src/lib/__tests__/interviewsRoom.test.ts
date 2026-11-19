@@ -4,6 +4,7 @@ import {
   codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, SUGGESTIONS_MODEL_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
   suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, pollsConsents,
+  INTERVIEW_HINT_ENDED, INTERVIEW_HINT_KNOCK, hintsAfter, WAITING_FALLBACK_MS,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
 
@@ -317,4 +318,23 @@ test('the lost call: the server\'s lobby report is the answer a waking client al
   assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: 'c-3' }, 'c-1'), null);
   assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: 'c-3' }, null), null);
   assert.equal(nextCallLoss(null, { kind: 'lobby', callId: null, held: null }, 'c-1'), null);
+});
+
+// The room's live hints: one event is enough to read again now; the poll is only the slow fallback.
+const ev = (eventType: string, interviewId = 'iv-1') => ({ eventType, detail: { interviewId } });
+
+test('hintsAfter: a knock and an end each read as one hint, once, from where the reader left off', () => {
+  const events = [ev(INTERVIEW_HINT_KNOCK), ev(INTERVIEW_HINT_ENDED)];
+  assert.deepEqual(hintsAfter(events, 0, 'iv-1'), { next: 2, knock: true, ended: true });
+  assert.deepEqual(hintsAfter(events, 1, 'iv-1'), { next: 2, knock: false, ended: true });
+  assert.deepEqual(hintsAfter(events, 2, 'iv-1'), { next: 2, knock: false, ended: false });
+});
+
+test('hintsAfter: another interview\'s hint, a foreign event and a shorter list are not this room\'s', () => {
+  assert.deepEqual(hintsAfter([ev(INTERVIEW_HINT_KNOCK, 'iv-2'), ev('work-graph.changed')], 0, 'iv-1'), { next: 2, knock: false, ended: false });
+  assert.deepEqual(hintsAfter([ev(INTERVIEW_HINT_KNOCK)], 5, 'iv-1'), { next: 1, knock: false, ended: false });
+});
+
+test('the fallback poll is slow now that hints carry the news', () => {
+  assert.equal(WAITING_FALLBACK_MS, 15_000);
 });
