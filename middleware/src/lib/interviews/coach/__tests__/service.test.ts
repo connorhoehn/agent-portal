@@ -7,7 +7,7 @@ import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggest
 import { ScriptedCoachModel, type CoachModel } from '../model.js';
 import type { CoachLine } from '../prompt.js';
 import { MAX_ATTEMPTS_PER_INTERVIEW, SUGGESTION_GAP_MS } from '../rules.js';
-import { MODEL_FAILURES_BEFORE_PAUSE, MODEL_FAILURES_KEPT, answerSuggestion, modelFailuresOf, noteModelCall, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
+import { MODEL_FAILURES_BEFORE_PAUSE, MODEL_FAILURES_KEPT, answerSuggestion, coachBank, coachInput, modelFailuresOf, noteModelCall, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore } from '../store.js';
 import type { CoachTranscript } from '../transcript.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps } from '../../speak/index.js';
@@ -68,6 +68,24 @@ const read = async (viewer = WEN, ref = refOf()) => {
   if (out.kind !== 'ok') throw new Error(out.kind);
   return out.body;
 };
+
+describe('the bank the coach draws on is the round\'s own (kit.ts questionsOfRound)', () => {
+  const backend = () => interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!;
+  const on = (roundId: string, questionIds: string[] = []): CoachRef => ({
+    interview: { ...refOf().interview, roundId, type: 'technical', questionIds }, opening: backend(),
+  });
+
+  it('a Coding round offers no System design question, and a System design round no coding one', () => {
+    expect(coachInput(on('rd-coding'), [], []).questions.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
+    expect(coachInput(on('rd-design'), [], []).questions.map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-shortener', 'q-be-twitter', 'q-be-reconcile']);
+  });
+
+  it('the clarifying nudge reads the chosen questions, else the round\'s own bank, never another round\'s', () => {
+    expect(coachBank(on('rd-design')).map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-shortener', 'q-be-twitter', 'q-be-reconcile']);
+    expect(coachBank(on('rd-coding')).map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
+    expect(coachBank(on('rd-design', ['q-be-twitter'])).map((q) => q.id)).toEqual(['q-be-twitter']);
+  });
+});
 
 describe('a fixed transcript through the scripted model', () => {
   it('suggests the next competency\'s question (not keyed to a line, so it quotes none), logs it shown, and books the hold', async () => {

@@ -16,8 +16,8 @@ import { estimateUsageCost } from '../../pricing.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { consentStore } from '../consent/store.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend, type InterviewReserveInput, type InterviewReserveOutcome, type InterviewSettleInput } from '../spend.js';
-import { INTERVIEWS_TENANT, type Interview, type Opening } from '../types.js';
-import { competenciesOfRound } from '../kit.js';
+import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type Opening } from '../types.js';
+import { competenciesOfRound, questionsOfRound } from '../kit.js';
 import { COACH_TIMEOUT_MS, DEFAULT_COACH_MODEL_ID, estimateCoachTokens, makeCoachModel, questionAsked, type CoachModel, type CoachModelResult } from './model.js';
 import { parseCoachAnswer, type ParseResult } from './parse.js';
 import { COACH_PROMPT_VERSION, MAX_PREVIOUS, codeLinesOf, coachCode, type CoachCode, type CoachInput, type CoachLine } from './prompt.js';
@@ -128,12 +128,22 @@ export function modelFailuresOf(interviewId: string): number { return modelFailu
 /** The interview and the opening that holds its kit, found in the viewer's scope by the route. */
 export interface CoachRef { interview: Interview; opening: Opening }
 
+/** The bank's questions this round may ask (kit.ts questionsOfRound): of its type, for a competency it assesses. */
+const roundBank = (ref: CoachRef) => questionsOfRound(ref.opening.kit, ref.interview.roundId, ref.interview.type);
+
+/** What the clarifying nudge reads: the interview's chosen questions, else the round's own bank. */
+export function coachBank(ref: CoachRef): KitQuestion[] {
+  const { interview, opening: { kit } } = ref;
+  const chosen = interview.questionIds.map((id) => kit.questions.find((q) => q.id === id)).filter((q): q is KitQuestion => Boolean(q));
+  return chosen.length ? chosen : roundBank(ref);
+}
+
 export function coachInput(ref: CoachRef, lines: readonly CoachLine[], log: readonly SuggestionRecord[], code: CoachCode | null = null): CoachInput {
   const kit = ref.opening.kit;
   return {
     roundType: ref.interview.type,
     competencies: competenciesOfRound(kit, ref.interview.roundId).map((c) => ({ id: c.id, name: c.name, lookFor: c.lookFor, anchors: c.anchors })),
-    questions: kit.questions.filter((q) => q.roundType === ref.interview.type)
+    questions: roundBank(ref)
       .map((q) => ({ id: q.id, prompt: q.prompt, followUps: q.followUps, competencyId: q.competencyId })),
     chosenQuestionIds: [...ref.interview.questionIds],
     lines: [...lines],
@@ -267,12 +277,11 @@ export async function suggestionFor(ref: CoachRef, viewer: { userId: string }): 
 /** The clarifying nudge the rule gives now (clarifying.ts), from the interview's round and questions; null for none. */
 function clarifyingFor(ref: CoachRef, log: readonly SuggestionRecord[], lines: readonly CoachLine[], nowMs: number): ClarifyNudge | null {
   const { interview, opening: { kit } } = ref;
-  const chosen = interview.questionIds.map((id) => kit.questions.find((q) => q.id === id)).filter((q): q is NonNullable<typeof q> => Boolean(q));
   return clarifyingNudge({
     surface: roundSurface(kit.rounds.find((r) => r.id === interview.roundId)),
     startedAtMs: interview.startedAt ? Date.parse(interview.startedAt) : null,
     nowMs,
-    questions: chosen.length ? chosen : kit.questions.filter((q) => q.roundType === interview.type),
+    questions: coachBank(ref),
     lines,
     log,
   });
