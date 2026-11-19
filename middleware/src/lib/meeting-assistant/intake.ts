@@ -95,8 +95,10 @@ export class LineIntake {
     });
     if (!stored) return { stored: null, reason: 'duplicate', events: [] };
     this.tellStored(stored);
-    const whole = await this.isWholeRequest(callId, stored.text);
     const detector = this.detectors.get(callId) ?? this.newDetector(callId);
+    // The words after the name on this line, or the speaker's open request with this line stitched on ("...Milo" then
+    // ", introduce yourself"): either can be a request the family knows whole.
+    const whole = await this.isWholeRequest(callId, findAddress(stored.text)?.rest ?? detector.stitched(stored.userId, stored.text));
     const events = detector.push(stored, { turnEnded: raw.turnEnded === true, whole });
     await this.apply(callId, events);
     return { stored, events };
@@ -140,18 +142,16 @@ export class LineIntake {
   }
 
   /**
-   * Judge whether the words after Milo's name on a line are a whole request (the call's family knows them, word for word): the
-   * detector then closes it at once. A judge that throws says no.
+   * Judge whether the words after Milo's name on a line, or an open request with the line stitched on, are a whole request (the
+   * call's family knows them, word for word): the detector then closes it at once. A judge that throws says no.
    */
   onWholeRequest(judge: (callId: string, request: string) => Promise<boolean>): () => void {
     this.wholeJudges.add(judge);
     return () => { this.wholeJudges.delete(judge); };
   }
 
-  private async isWholeRequest(callId: string, text: string): Promise<boolean> {
-    if (!this.wholeJudges.size) return false;
-    const rest = findAddress(text)?.rest;
-    if (!rest) return false;
+  private async isWholeRequest(callId: string, rest: string | null | undefined): Promise<boolean> {
+    if (!this.wholeJudges.size || !rest) return false;
     for (const judge of [...this.wholeJudges]) if (await judge(callId, rest).catch(() => false)) return true;
     return false;
   }

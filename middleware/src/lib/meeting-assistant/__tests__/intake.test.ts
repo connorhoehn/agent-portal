@@ -94,6 +94,20 @@ it('"Milo, stop listening" pauses as that speaker; "Milo, leave" dismisses and s
   expect(await source.inject('call-1', { userId: 'u-vera', text: 'anyone there' })).toBe(0);
 });
 
+it('a request the family knows whole closes on the line that completes it, when the name ended the line before (live take of 19 November)', async () => {
+  // The transcript cut "Milo" / ", introduce yourself" at a 1.2 s pause: the intro waited the 4 s for a cut-looking line.
+  const off = intake.onWholeRequest(async (_c, request) => /^[\s,]*introduce yourself[.!]?$/i.test(request));
+  try {
+    await inject('u-vera', "I've also brought in Milo, our AI support for the interview. Milo");
+    expect((await get()).pendingRequests).toEqual([]);
+    const done = await intake.handle('call-1', { userId: 'u-vera', text: ', introduce yourself' });
+    expect(done.events).toEqual([expect.objectContaining({ type: 'request', askedBy: 'u-vera', lines: [1, 2], text: ', introduce yourself' })]);
+    // Words the family does not know whole still wait for more.
+    await inject('u-vera', 'Okay, Milo');
+    expect((await intake.handle('call-1', { userId: 'u-vera', text: 'summarise the call so far' })).events).toEqual([]);
+  } finally { off(); }
+});
+
 it('without a source the assistant cannot start listening, plainly', () => {
   const dead = new LineIntake(store, { tickMs: 0, source: notConfiguredTranscriptSource });
   expect(() => dead.start('call-1')).toThrow(TranscriptSourceNotConfigured);

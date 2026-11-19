@@ -36,7 +36,8 @@
 //     quiet for 1.5 s since their last caption arrived; the wait stretches to 4 s when that caption looks
 //     cut off (no closing . ? ! or a dangling word like "and") or the request has under three words so far
 //     (a bare "Milo, please."). Hard caps: 12 captions or 60 s per request. A request the call's family knows
-//     whole by its words ("Milo, introduce yourself") closes at once.
+//     whole by its words ("Milo, introduce yourself") closes at once, also on the line that completes it ("...Milo" then
+//     ", introduce yourself": the live transcript cuts at a pause after the name).
 //   Other speakers' captions never join; each speaker has at most one open request.
 //   Half-cut words. A caption ending in `pr-` followed by one starting with lowercase `iya` is joined: "priya".
 //   Slivers. A caption of at most two words that is exactly a known Whisper filler is not stitched and
@@ -291,8 +292,8 @@ export class RequestDetector {
   hasOpen(userId: string): boolean { return this.open.has(userId); }
 
   /**
-   * `whole`: the words after the name on this line are a request the call's family knows whole (a fixed phrase, intake.ts
-   * `onWholeRequest`), so it closes now, however few words it has.
+   * `whole`: the words after the name on this line, or the speaker's open request with this line stitched on (`stitched`), are a
+   * request the call's family knows whole (a fixed phrase, intake.ts `onWholeRequest`), so it closes now, however few words it has.
    * `turnEnded`: the provider itself ended the speaker's turn with this line (it began answering or handed the request on), so a
    * request with enough words closes now instead of waiting out `cutWaitMs`. The Live API puts a sentence's closing punctuation at
    * the START of the next delta, so a finished request ("Milo, how much time is left") looks cut by its text alone.
@@ -342,7 +343,22 @@ export class RequestDetector {
     o.lastClock = now;
     o.lastLooksCut = looksCut(text);
     o.captions += 1;
+    // The request so far is one the call's family knows whole: no more words are coming for it.
+    if (opts.whole === true) { events.push(...this.close(o)); return events; }
     return this.capped(o, events, now, opts.turnEnded === true);
+  }
+
+  /**
+   * The speaker's open request as it reads with `text` stitched on (their next line, with no fresh mention of the name), for the
+   * intake to judge whole; null when there is nothing to stitch it to.
+   */
+  stitched(userId: string | null, text: string): string | null {
+    const o = userId === null ? undefined : this.open.get(userId);
+    const t = text.trim();
+    if (!o || !t || isFillerSliver(t) || findAddress(t)) return null;
+    const parts = [...o.parts];
+    appendText(parts, t);
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
   }
 
   /** Close every request whose quiet time or cap has passed on the clock. */

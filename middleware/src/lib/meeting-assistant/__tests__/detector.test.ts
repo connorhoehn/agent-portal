@@ -429,6 +429,14 @@ describe('the provider ended the turn', () => {
       d.push({ callId: 'call-1', seq: ++seq, userId, participantId: `p-${userId}`, speakerName: userId, text, at: now, captionId: `c-${seq}` }, { whole: true });
     expect(requests(whole('u-lead', 'Okay. Milo, introduce yourself'))).toEqual([expect.objectContaining({ text: 'introduce yourself', lines: [1] })]);
   });
+  it('the line that completes a request known whole closes it at once, when the name ended the line before (live take of 19 November)', () => {
+    const whole = (userId: string, text: string): DetectorEvent[] =>
+      d.push({ callId: 'call-1', seq: ++seq, userId, participantId: `p-${userId}`, speakerName: userId, text, at: now, captionId: `c-${seq}` }, { whole: true });
+    expect(requests(say('u-lead', 'our AI support for the interview. Milo'))).toHaveLength(0);
+    expect(d.stitched('u-lead', ', introduce yourself')).toBe(', introduce yourself');
+    expect(d.stitched('u-cand', ', introduce yourself')).toBeNull();
+    expect(requests(whole('u-lead', ', introduce yourself'))).toEqual([expect.objectContaining({ text: ', introduce yourself', lines: [1, 2] })]);
+  });
   it('without the provider\'s end, an unpunctuated request still waits the long time', () => {
     say('u-cand', 'Milo, how much time is left');
     expect(requests(wait(DETECTOR_LIMITS.quietMs))).toHaveLength(0);
