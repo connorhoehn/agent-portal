@@ -144,6 +144,8 @@ describe('the wire shapes', () => {
     const ix = index('u-hugo', 'interviewer');
     const rec = ix.interviewRecord(ix.world.interviews.find((i) => i.id === 'iv-j6x2d9sb')!)!;
     expect(rec.questionsChosen.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry']);
+    // only what the prepare page reads: never the kit question's boards, answer key or starter code
+    for (const q of rec.questionsChosen) expect(Object.keys(q).sort()).toEqual(['competencyId', 'id', 'prompt']);
     expect(rec.competencies.map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'Communication']);
     expect(rec.bank.map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
     expect(rec.scorecards).toHaveLength(1);

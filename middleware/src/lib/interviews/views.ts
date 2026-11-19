@@ -127,7 +127,8 @@ export interface ScorecardView extends ScorecardVersionView {
 }
 
 export interface InterviewRecord extends InterviewRow {
-  questionsChosen: KitQuestion[];
+  /** The chosen questions as the prepare page reads them: never a kit question's boards, answer key or starter code. */
+  questionsChosen: Array<Pick<KitQuestion, 'id' | 'prompt' | 'competencyId'>>;
   competencies: KitCompetency[];
   scorecards: ScorecardView[];
   /** The opening's questions for this round's type, to choose from (row I1.7). No money, nothing about anyone. */
@@ -368,7 +369,8 @@ export class WorldIndex {
       canPrepare: mayChoose(i, this.viewer.id) && isPreparable(i.state) && hasAccepted(i, i.leadId, 'lead'),
       missing: missingLine(i),
       maxQuestions: MAX_QUESTIONS,
-      questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q),
+      questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q)
+        .map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId })),
       competencies: competenciesOfRound(o.kit, i.roundId),
       scorecards: this.scorecardViews(i.id, o.kit.competencies),
     };
