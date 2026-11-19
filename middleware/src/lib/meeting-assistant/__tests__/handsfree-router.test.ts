@@ -586,6 +586,85 @@ describe('hands-free router', () => {
     });
   });
 
+  describe('barge-in by voice: the relay pauses on a voiced onset in a mic that is not Milo\'s echo (review 1, item 8)', () => {
+    /** A 100 ms frame of a square wave at `amp` (RMS = amp). */
+    const tone = (amp: number): Buffer => { const b = Buffer.alloc(HANDSFREE.frameBytes); for (let i = 0; i < b.length / 2; i++) b.writeInt16LE(i % 2 ? amp : -amp, i * 2); return b; };
+    /** Milo's loudness, frame by frame: speech with short dips, and a 400 ms pause at frames 20-23. */
+    const MILO_AMPS = Array.from({ length: 50 }, (_, i) => (i >= 20 && i < 24 ? 0 : i % 4 === 3 ? 400 : 2_500 + (i % 5) * 300));
+
+    /** Una asked; Milo answers 5 s (relayed at once, playing out in real time). */
+    async function answering() {
+      const w = world();
+      w.talk(UNA, T_UNA, 5);
+      w.name(UNA, 's1', 0); await settle();
+      w.sentence(UNA, 's1', 'Milo, tell me a story'); await settle();
+      const t0 = w.clock.nowMs();
+      MILO_AMPS.forEach((a, i) => w.router.outputAudio(tone(a), i === MILO_AMPS.length - 1));
+      w.router.outputText('Once upon a time there was a fox');
+      /** One 100 ms step with Hugo's mic at `amp`. */
+      const hugo = (amp: number) => { w.clock.advance(100); w.listening.placed(HUGO, tone(amp), w.clock.nowMs()); w.router.tick(); };
+      /** What Milo's playout put in a mic `lag` frames later, scaled (an open speaker). */
+      const leak = (lag: number) => MILO_AMPS[Math.round((w.clock.nowMs() - t0) / 100) - lag] ?? 0;
+      return { ...w, t0, hugo, leak };
+    }
+
+    it('a clean mic\'s 200 ms of voice pauses the relay (not cleared for good); words that talk over him confirm it', async () => {
+      const w = await answering();
+      expect(w.relay.pushed).toHaveLength(MILO_AMPS.length);
+      for (let i = 0; i < 25; i++) w.hugo(0);
+      expect(w.relay.clears).toBe(0);
+      w.hugo(3_000);
+      expect(w.relay.clears).toBe(0); // 100 ms is not an onset
+      w.hugo(3_000);
+      expect(w.relay.clears).toBe(1); // paused at 200 ms
+      expect(w.drops).toEqual([]);
+      expect(w.router.playing()).toBe(true);
+      w.rules.overlapFor = () => 'barge-in';
+      w.words(HUGO, 'h1', 'hang on a second');
+      expect(w.drops).toEqual(['barge-in']);
+      const pushed = w.relay.pushed.length;
+      w.clock.advance(3_000);
+      w.router.tick();
+      expect(w.relay.pushed).toHaveLength(pushed); // what was paused is never played
+    });
+
+    it('his own words heard back (echo) resume the relay where it paused', async () => {
+      const w = await answering();
+      for (let i = 0; i < 25; i++) w.hugo(0);
+      w.hugo(3_000); w.hugo(3_000);
+      expect(w.relay.clears).toBe(1);
+      const before = w.relay.pushed.length;
+      w.rules.overlapFor = () => 'echo';
+      w.words(HUGO, 'h1', 'upon a time');
+      expect(w.drops).toEqual([]);
+      // The frames not yet played are relayed again, in order, and the answer's last frame still ends it.
+      const again = w.relay.pushed.slice(before);
+      expect(again.length).toBeGreaterThanOrEqual(MILO_AMPS.length - 28);
+      expect(again.at(-1)!.last).toBe(true);
+    });
+
+    it('a pause no words confirm is resumed after 1.5 s', async () => {
+      const w = await answering();
+      for (let i = 0; i < 25; i++) w.hugo(0);
+      w.hugo(3_000); w.hugo(3_000);
+      const before = w.relay.pushed.length;
+      for (let i = 0; i < 14; i++) w.hugo(0);
+      expect(w.relay.pushed).toHaveLength(before);
+      w.hugo(0); w.hugo(0);
+      expect(w.relay.pushed.length).toBeGreaterThan(before);
+      expect(w.drops).toEqual([]);
+    });
+
+    it('a mic whose loudness follows his earlier playout (leaky) stays words-only; a mic with no history too', async () => {
+      const w = await answering();
+      for (let i = 0; i < 30; i++) w.hugo(Math.round(w.leak(2) * 0.4));
+      expect(w.relay.clears).toBe(0); // its echo after the pause is an onset, but the mic is leaky
+      const fresh = await answering();
+      fresh.hugo(3_000); fresh.hugo(3_000); fresh.hugo(3_000);
+      expect(fresh.relay.clears).toBe(0); // nothing of his playout heard in that mic yet: no way to tell
+    });
+  });
+
   describe('hold', () => {
     it('routes at once with no name or verdict, and uses the same floor (one holder)', async () => {
       const w = world();

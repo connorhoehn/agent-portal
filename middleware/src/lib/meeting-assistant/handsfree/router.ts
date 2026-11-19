@@ -24,6 +24,49 @@ const MAX_QUEUED_FRAMES = HANDSFREE.ringMs / HANDSFREE.frameMs;
 const SILENCE = Buffer.alloc(HANDSFREE.frameBytes);
 const MAX_KEPT_VERDICTS = 64;
 
+// Barge-in by voice (review 1, item 8). Words confirm a barge-in about a second after it starts; a voiced onset in a mic that does
+// not carry Milo's playout pauses the relay at once (what has not played is kept), and the words then confirm it (cleared) or not
+// (resumed). A mic is judged on its earlier loudness against his earlier playout: one that follows it is leaky (an open speaker:
+// its onsets are his echo), and stays words-only, as does a mic heard during too little of his playout to tell.
+/** This much voice (20 ms windows over ONSET_RMS, gaps under 60 ms bridged) is an onset; 300 ms of quiet re-arms it. */
+export const PAUSE_ONSET_MS = 200;
+const ONSET_RMS = 300;
+const ONSET_GAP_MS = 60;
+const ONSET_REARM_MS = 300;
+/** A pause no words confirm is resumed after this long. */
+export const PAUSE_MAX_MS = 1_500;
+/** Loudness history kept per mic and for Milo's playout, in 100 ms bins (30 s). */
+const LEAK_BINS = 300;
+/** At least this many voiced bins of his playout heard in a mic before it can be judged clean. */
+const LEAK_MIN_BINS = 15;
+/** Echo lags tried (bins: up to 600 ms after he played). */
+const LEAK_MAX_LAG = 6;
+/** A mic whose loudness correlates with his playout below this at every lag is clean. */
+const LEAK_CLEAN_CORR = 0.3;
+/** The newest bins are left out of the judgement (the onset being judged is not history). */
+const LEAK_SKIP_BINS = 5;
+
+/** RMS of 16-bit LE samples in [from, to) bytes. */
+function rmsOf(pcm: Buffer, from = 0, to = pcm.length): number {
+  let sum = 0; let n = 0;
+  for (let i = from; i + 1 < to; i += 2) { const v = pcm.readInt16LE(i); sum += v * v; n += 1; }
+  return n ? Math.sqrt(sum / n) : 0;
+}
+/** A frame's loudness on a log scale (what the echo check correlates). */
+const loudness = (pcm: Buffer): number => Math.log10(1 + rmsOf(pcm));
+const VOICED_LOUDNESS = Math.log10(1 + ONSET_RMS);
+/** Pearson correlation; 0 when either side does not vary (a silent mic carries nothing of his). */
+function pearson(xs: readonly number[], ys: readonly number[]): number {
+  const n = xs.length;
+  if (n < 2) return 0;
+  let mx = 0; let my = 0;
+  for (let i = 0; i < n; i++) { mx += xs[i]!; my += ys[i]!; }
+  mx /= n; my /= n;
+  let sxy = 0; let sxx = 0; let syy = 0;
+  for (let i = 0; i < n; i++) { const dx = xs[i]! - mx; const dy = ys[i]! - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+  return sxx > 1e-9 && syy > 1e-9 ? sxy / Math.sqrt(sxx * syy) : 0;
+}
+
 export interface RelayPort {
   push(pcm: Buffer, last: boolean): void;
   clear(): void;
@@ -115,6 +158,15 @@ export class Router {
   private windowTimer: unknown = null;
   private giveUpTimer: unknown = null;
   private sayNo = 0;
+  /** Frames relayed and when each ends playing (session ms), while they may still be playing: what a pause takes back. */
+  private playout: Array<{ pcm: Buffer; last: boolean; endMs: number }> = [];
+  /** Milo's played loudness and each mic's, per 100 ms bin (log RMS). */
+  private readonly miloBins = new Map<number, number>();
+  private readonly micBins = new Map<string, Map<number, number>>();
+  private readonly onsets = new Map<string, { voicedMs: number; quietMs: number; fired: boolean }>();
+  /** The relay is paused for a voiced onset in `userId`'s mic: frames not yet played, and frames since, wait here. */
+  private paused: { userId: string; timer: unknown } | null = null;
+  private pausedFrames: Array<{ pcm: Buffer; last: boolean; said: boolean; replay: boolean }> = [];
   private closed = false;
   private readonly listeners = new Map<string, Set<(e: never) => void>>();
   private readonly offs: Array<() => void>;
@@ -123,7 +175,7 @@ export class Router {
     this.lastTickMs = deps.clock.nowMs();
     const l = deps.listening;
     this.offs = [
-      l.on('frame', (e) => this.onFrame(e.userId, e.pcm)),
+      l.on('frame', (e) => this.onFrame(e.userId, e.pcm, e.atMs)),
       l.on('name', (e) => { void this.onName(e.userId, e.sentenceId, e.sentenceStartMs, e.nameEndMs, e.textSoFar); }),
       l.on('words', (e) => this.onWords(e.userId, e.sentenceId, e.delta)),
       l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named, e.startMs, e.endMs)),
@@ -141,7 +193,7 @@ export class Router {
   }
 
   /** Milo's voice is playing (triggers are ignored, words are checked for barge-in). */
-  playing(): boolean { return this.uttering || this.deps.clock.nowMs() < this.playingUntil; }
+  playing(): boolean { return this.paused !== null || this.uttering || this.deps.clock.nowMs() < this.playingUntil; }
 
   /** Something that began at `atMs` may be Milo's voice heard back: it started while he played or inside the echo grace after. */
   private inEchoTail(atMs: number): boolean { return this.playing() || atMs < this.playingUntil + HANDSFREE.echoGraceMs; }
@@ -185,7 +237,8 @@ export class Router {
     if (this.st.phase === 'answering' && t?.verdict?.kind === 'request' && !this.deps.working?.()) this.answerEnded();
   }
 
-  private onFrame(userId: string, pcm: Buffer): void {
+  private onFrame(userId: string, pcm: Buffer, atMs: number): void {
+    if (!this.closed) this.trackMic(userId, pcm, atMs);
     if (this.closed || !this.live || this.st.phase === 'idle' || this.st.userId !== userId) return;
     this.out.push(pcm);
     if (this.out.length > MAX_QUEUED_FRAMES) this.out.shift();
@@ -285,7 +338,8 @@ export class Router {
     if (this.playing()) {
       const v = this.deps.rules.overlap(heard, this.saying);
       if (v === 'barge-in') { this.bargeIn(userId); return; }
-      if (v === 'echo') return;
+      if (v === 'echo') { if (this.paused?.userId === userId) this.resume('echo'); return; }
+      if (this.paused?.userId === userId) return; // unclear: still paused, the next words tell
     }
     // The asker speaks again inside their window: a follow-up turn on this sentence (judged when it is final).
     if (this.st.phase === 'follow-up' && this.st.userId === userId) { this.openTurn(userId, 'follow-up', sentenceId); this.warmAdmission(userId); }
@@ -294,6 +348,8 @@ export class Router {
 
   private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number, endMs: number): void {
     if (this.closed) return;
+    // The sentence that paused the relay ended and its words never talked over him: he goes on.
+    if (this.paused?.userId === userId) this.resume('sentence');
     this.heard.delete(`${userId}|${sentenceId}`);
     this.finals.set(`${userId}|${sentenceId}`, text);
     if (this.finals.size > MAX_KEPT_VERDICTS) this.finals.delete(this.finals.keys().next().value as string);
@@ -423,8 +479,10 @@ export class Router {
 
   /** Whatever of Milo's voice is still playing out stops (the relay's queue is cleared). */
   private stopPlayout(): void {
+    this.discardPause();
     this.deps.relay.clear();
     this.playingUntil = this.deps.clock.nowMs();
+    this.forgetUnplayed(this.playingUntil);
   }
 
   /**
@@ -447,12 +505,112 @@ export class Router {
   }
 
   private relayFrame(pcm: Buffer, last: boolean, said = false): void {
-    const now = this.deps.clock.nowMs();
     if (!this.uttering) this.utteringSay = said;
     this.uttering = !last;
+    // Paused: it waits with the rest (its end, and the asker's window, come when it plays).
+    if (this.paused) { this.pausedFrames.push({ pcm, last, said, replay: false }); return; }
+    this.pushOut(pcm, last);
+    if (last && !said) this.answerEnded();
+  }
+
+  /** Into the relay, on the playout clock: it plays for 100 ms after the frame before it. */
+  private pushOut(pcm: Buffer, last: boolean): void {
+    const now = this.deps.clock.nowMs();
     this.playingUntil = Math.max(now, this.playingUntil) + TICK_MS;
     this.deps.relay.push(pcm, last);
-    if (last && !said) this.answerEnded();
+    this.playout = this.playout.filter((p) => p.endMs > now);
+    this.playout.push({ pcm, last, endMs: this.playingUntil });
+    const bin = Math.floor((this.playingUntil - TICK_MS) / TICK_MS);
+    this.miloBins.set(bin, loudness(pcm));
+    for (const b of this.miloBins.keys()) { if (b > bin - LEAK_BINS) break; this.miloBins.delete(b); }
+  }
+
+  // ---------------------------------------------------------------------------------------------------------------------------
+  // Barge-in by voice: pause on an onset in a clean mic, the words confirm or resume
+
+  private trackMic(userId: string, pcm: Buffer, atMs: number): void {
+    const bin = Math.floor(atMs / TICK_MS);
+    const bins = this.micBins.get(userId) ?? new Map<number, number>();
+    bins.delete(bin); bins.set(bin, loudness(pcm));
+    for (const b of bins.keys()) { if (bins.size <= LEAK_BINS) break; bins.delete(b); }
+    this.micBins.set(userId, bins);
+    const o = this.onsets.get(userId) ?? { voicedMs: 0, quietMs: ONSET_REARM_MS, fired: false };
+    this.onsets.set(userId, o);
+    const win = (HANDSFREE.sampleRate * 2) / 50; // 20 ms
+    for (let at = 0; at + win <= pcm.length; at += win) {
+      if (rmsOf(pcm, at, at + win) > ONSET_RMS) { o.voicedMs += 20; o.quietMs = 0; }
+      else {
+        o.quietMs += 20;
+        if (o.quietMs >= ONSET_GAP_MS) o.voicedMs = 0;
+        if (o.quietMs >= ONSET_REARM_MS) o.fired = false;
+      }
+      if (!o.fired && o.voicedMs >= PAUSE_ONSET_MS) { o.fired = true; this.voicedOnset(userId, bin); }
+    }
+  }
+
+  private voicedOnset(userId: string, bin: number): void {
+    if (this.paused || !(this.uttering || this.deps.clock.nowMs() < this.playingUntil)) return;
+    const mic = this.micLeak(userId, bin - LEAK_SKIP_BINS);
+    if (mic !== 'clean') { this.trace('pause.skipped', { userId, mic }); return; }
+    this.pause(userId);
+  }
+
+  /** Does this mic carry Milo's playout? Its loudness against his, at the best echo lag, up to bin `before`. */
+  private micLeak(userId: string, before: number): 'clean' | 'leaky' | 'unknown' {
+    const mic = this.micBins.get(userId);
+    if (!mic) return 'unknown';
+    let voiced = 0;
+    for (const [b, e] of this.miloBins) if (b < before && mic.has(b) && e > VOICED_LOUDNESS) voiced += 1;
+    if (voiced < LEAK_MIN_BINS) return 'unknown';
+    let best = -1;
+    for (let lag = 0; lag <= LEAK_MAX_LAG; lag++) {
+      const xs: number[] = []; const ys: number[] = [];
+      for (const [b, e] of this.miloBins) {
+        const y = mic.get(b + lag);
+        if (b + lag < before && y !== undefined) { xs.push(e); ys.push(y); }
+      }
+      best = Math.max(best, pearson(xs, ys));
+    }
+    return best < LEAK_CLEAN_CORR ? 'clean' : 'leaky';
+  }
+
+  private pause(userId: string): void {
+    const now = this.deps.clock.nowMs();
+    const unplayed = this.playout.filter((p) => p.endMs > now);
+    this.deps.relay.clear();
+    this.forgetUnplayed(now);
+    this.pausedFrames = unplayed.map((p) => ({ pcm: p.pcm, last: p.last, said: false, replay: true }));
+    this.paused = { userId, timer: this.deps.clock.setTimeout(() => this.resume('timeout'), PAUSE_MAX_MS) };
+    this.trace('relay.paused', { userId, frames: unplayed.length });
+  }
+
+  /** Not a barge-in after all: what was paused plays from where it stopped. */
+  private resume(why: string): void {
+    const p = this.paused;
+    if (!p) return;
+    this.deps.clock.clearTimeout(p.timer);
+    this.paused = null;
+    const frames = this.pausedFrames.splice(0);
+    this.trace('relay.resumed', { userId: p.userId, why, frames: frames.length });
+    for (const f of frames) {
+      if (!f.replay) { this.relayFrame(f.pcm, f.last, f.said); continue; }
+      this.pushOut(f.pcm, f.last);
+    }
+  }
+
+  /** The pause ends with nothing played (a barge-in, a drop): what waited is gone. */
+  private discardPause(): void {
+    if (!this.paused) return;
+    this.deps.clock.clearTimeout(this.paused.timer);
+    this.paused = null;
+    this.pausedFrames = [];
+  }
+
+  /** The relay was cleared at `now`: his playout after it never happened. */
+  private forgetUnplayed(now: number): void {
+    this.playout = [];
+    const from = Math.floor(now / TICK_MS);
+    for (const b of [...this.miloBins.keys()]) if (b >= from) this.miloBins.delete(b);
   }
 
   /** The relayed answer's last frame: the asker keeps the floor for the follow-up window, unless someone is queued. */
@@ -487,6 +645,8 @@ export class Router {
     if (t.sentenceId !== sentenceId && !(t.sentenceId === null && t.via === 'follow-up')) return;
     if (t.via === 'hold') return;
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
+    // Released early to his own echo: what already went out stops.
+    if (t.early) { if (this.earlyKey === `${userId}|${sentenceId}`) this.earlyKey = null; this.stopPlayout(); this.uttering = false; }
     t.held = [];
     this.dropUtt = this.speaking;
     const w = t.window;
@@ -499,7 +659,9 @@ export class Router {
 
   private bargeIn(userId: string): void {
     const t = this.turn;
+    this.discardPause();
     this.deps.relay.clear();
+    this.forgetUnplayed(this.deps.clock.nowMs());
     this.playingUntil = this.deps.clock.nowMs();
     this.emit('drop', { userId: t?.userId ?? userId, reason: 'barge-in', atMs: this.deps.clock.nowMs() });
     this.dropUtt = this.speaking;
@@ -518,7 +680,8 @@ export class Router {
     if (!t) return;
     t.held = [];
     if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
-    if (this.uttering || reason === 'hold-cancel' || reason === 'stop') { this.deps.relay.clear(); this.playingUntil = this.deps.clock.nowMs(); }
+    this.discardPause();
+    if (this.uttering || reason === 'hold-cancel' || reason === 'stop') { this.deps.relay.clear(); this.playingUntil = this.deps.clock.nowMs(); this.forgetUnplayed(this.playingUntil); }
     // The session may talk on, unheard, to the end of its utterance.
     this.dropUtt = this.speaking;
     this.uttering = false;
@@ -610,7 +773,7 @@ export class Router {
     this.closed = true;
     const t = this.turn;
     if (t?.verdictTimer) this.deps.clock.clearTimeout(t.verdictTimer);
-    this.clearWindow(); this.clearGiveUp(); this.clearHold();
+    this.clearWindow(); this.clearGiveUp(); this.clearHold(); this.discardPause();
     this.out = []; this.turn = null; this.queued = null;
     for (const off of this.offs.splice(0)) off();
     this.listeners.clear();
