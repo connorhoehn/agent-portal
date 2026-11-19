@@ -216,13 +216,16 @@ def assistant_voice(out):
     frames = [json.loads(line) for line in open(src) if line.strip()]
     utts, cur = [], None
     for f in frames:
-        if cur and (f['runId'] != cur['runId'] or f['seq'] != cur['seq'] + 1):
+        # A gap over 1.5 s starts a new utterance even when the seq runs on: hands-free Milo can stop one mid-way (a drop, a
+        # barge-in) without its last frame, and the next answer's frames continue the count.
+        if cur and (f['runId'] != cur['runId'] or f['seq'] != cur['seq'] + 1 or f['atMs'] - cur['lastAt'] > 1500):
             utts.append(cur)
             cur = None
         if cur is None:
-            cur = {'runId': f['runId'], 'at': f['atMs'], 'rate': f.get('sampleRate') or 24000, 'pcm': bytearray(), 'seq': f['seq']}
+            cur = {'runId': f['runId'], 'at': f['atMs'], 'rate': f.get('sampleRate') or 24000, 'pcm': bytearray(), 'seq': f['seq'], 'lastAt': f['atMs']}
         cur['pcm'] += base64.b64decode(f['pcm'])
         cur['seq'] = f['seq']
+        cur['lastAt'] = f['atMs']
         if f.get('last'):
             utts.append(cur)
             cur = None
