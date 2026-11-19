@@ -12,11 +12,14 @@ import { EmptyState, Stack } from '@connorhoehn/ui-components/shared';
 import { GUEST_PAD_BASE } from '../../lib/interviewsPad';
 import { roomPaneWidth } from '../../lib/interviewsRoom';
 import { RunnablePad } from '../interviews/pad/RunnablePad';
+import { InterviewBoard } from '../interviews/board/InterviewBoard';
+import { surfaceOf } from '../../lib/interviewsBoard';
 import { GuestRoomChatBody } from './GuestRoomChat';
 import type { GuestRoom } from './steps.ts';
 
 export type GuestPaneTab = 'pad' | 'chat';
 const TECHNICAL_TABS = [{ id: 'pad', label: 'Pad' }, { id: 'chat', label: 'Chat' }] as const;
+const BOARD_TABS = [{ id: 'pad', label: 'Board' }, { id: 'chat', label: 'Chat' }] as const;
 
 export function GuestRoomPane({ room, callId, tab, onTab, onClose }: {
   /** The call joined now, or null (not joined, or the call failed): the pad stays, the chat waits for the call. */
@@ -27,13 +30,17 @@ export function GuestRoomPane({ room, callId, tab, onTab, onClose }: {
   useEffect(() => { reveal(); }, [reveal]);
   const type = room.round.type;
   const technical = type === 'technical';
+  // A system design round draws on the shared whiteboard where the pad would be (WHITEBOARD-PLAN step 1).
+  const board = surfaceOf(room.round) === 'board';
   const shown: GuestPaneTab = technical ? tab : 'chat';
   return <SidePane title={room.round.name} subtitle={`${room.round.minutes} min · ${technical ? 'Technical' : 'Behavioural'} round`}
-    paneId="interview-room" widthPx={roomPaneWidth(type)} onClose={onClose} closeLabel={technical ? 'Hide the pad and chat' : 'Hide the chat'}
-    {...(technical ? { tabs: TECHNICAL_TABS, value: shown, onValueChange: (id: string) => onTab(id === 'chat' ? 'chat' : 'pad') } : {})}
+    paneId="interview-room" widthPx={roomPaneWidth(type)} onClose={onClose} closeLabel={technical ? (board ? 'Hide the board and chat' : 'Hide the pad and chat') : 'Hide the chat'}
+    {...(technical ? { tabs: board ? BOARD_TABS : TECHNICAL_TABS, value: shown, onValueChange: (id: string) => onTab(id === 'chat' ? 'chat' : 'pad') } : {})}
     data-testid="join-room-pane">
     {technical && <Stack gap="none" className={shown === 'pad' ? 'min-h-0 flex-1' : 'hidden'} data-testid="join-room-pad">
-      <RunnablePad interviewId={room.interviewId} base={GUEST_PAD_BASE} self={room.self} seat="candidate" />
+      {board
+        ? <InterviewBoard interviewId={room.interviewId} self={room.self} seat="candidate" />
+        : <RunnablePad interviewId={room.interviewId} base={GUEST_PAD_BASE} self={room.self} seat="candidate" />}
     </Stack>}
     <Stack gap="none" className={shown === 'chat' ? 'min-h-0 flex-1' : 'hidden'} data-testid="join-room-chat">
       {callId

@@ -40,6 +40,8 @@ import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHi
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
+import { BoardTab } from './room/BoardTab';
+import { surfaceOf } from '../../lib/interviewsBoard';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
@@ -285,7 +287,8 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
     lastFocus.current = chat?.focusRequest ?? 0;
   }, [here, chat?.focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   const milo = useMiloPane(room);
-  const tabs = useMemo(() => roomTabs(type), [type]);
+  const surface = surfaceOf(room.round);
+  const tabs = useMemo(() => roomTabs(type, surface), [type, surface]);
   return <SidePane title={roomCallTitle(room)} subtitle={`${room.round.minutes} min · ${type === 'technical' ? 'Technical' : 'Behavioural'} round`}
     paneId="interview-room" widthPx={roomPaneWidth(type)} tabs={tabs} value={tab} onValueChange={(id) => setTab((t) => roomTabOf(type, id, t))}
     data-testid="interview-room-pane">
@@ -295,7 +298,7 @@ function RoomPane({ room, here }: { room: RoomView; here: boolean }) {
           : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
       </Stack>
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
-        {tab === 'pad' && <PadTab room={room} />}
+        {tab === 'pad' && (surface === 'board' ? <BoardTab room={room} /> : <PadTab room={room} />)}
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}

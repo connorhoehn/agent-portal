@@ -15,7 +15,7 @@ export const PAD_LANGUAGE_LABELS: Readonly<Record<PadLanguage, string>> = {
 export type OpeningState = 'open' | 'paused' | 'closed';
 export const OPENING_STATE_LABELS: Readonly<Record<OpeningState, string>> = { open: 'Open', paused: 'Paused', closed: 'Closed' };
 
-export interface KitRound { id: string; name: string; type: RoundType; minutes: number }
+export interface KitRound { id: string; name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board' }
 export interface KitCompetency { id: string; name: string; lookFor: string; anchors: { 1: string; 2: string; 3: string; 4: string } }
 export interface KitQuestion {
   id: string;
@@ -24,6 +24,8 @@ export interface KitQuestion {
   competencyId: string;
   roundType: RoundType;
   starter?: Partial<Record<PadLanguage, string>>;
+  /** A board round question's starting board (WHITEBOARD-PLAN step 2). */
+  board?: { name: string; elements: Array<Record<string, unknown>> };
 }
 export interface OpeningKit { rounds: KitRound[]; competencies: KitCompetency[]; questions: KitQuestion[] }
 

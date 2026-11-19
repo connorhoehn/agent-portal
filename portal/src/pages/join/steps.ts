@@ -171,7 +171,8 @@ export interface GuestRoom {
   interviewId: string;
   lobbyName: string;
   self: { userId: string; displayName: string };
-  round: { name: string; type: 'technical' | 'behavioural'; minutes: number };
+  /** `surface`: the code pad or the whiteboard; missing from an older server (read as the pad). */
+  round: { name: string; type: 'technical' | 'behavioural'; minutes: number; surface?: 'pad' | 'board' | null };
   scheduledAt: string | null;
   startedAt: string | null;
   state: 'open' | 'ended';

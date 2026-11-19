@@ -5,6 +5,7 @@
 import { INTERVIEWS_API, type RoundType } from './interviews.ts';
 import type { KitCompetency, PadLanguage } from './interviewsKit.ts';
 import { writeJson } from './writeJson.ts';
+import type { KitBoard, RoundSurface } from './interviewsBoard.ts';
 
 // ── C1: the call's lobby ────────────────────────────────────────────────────
 const LOBBY_PREFIX = 'interviews:interview:';
@@ -38,13 +39,16 @@ export interface RoomQuestion {
   competencyId: string;
   competency: string | null;
   starter: Array<{ language: PadLanguage; code: string }>;
+  /** A board round question's starting board (WHITEBOARD-PLAN step 2). */
+  board?: KitBoard;
 }
 export interface RoomView {
   id: string;
   lobbyName: string;
   opening: { id: string; title: string };
   candidate: { name: string };
-  round: { id: string; name: string; type: RoundType; minutes: number };
+  /** `surface`: the code pad or the whiteboard (lib/interviewsBoard.ts surfaceOf); missing from an older server. */
+  round: { id: string; name: string; type: RoundType; minutes: number; surface?: RoundSurface | null };
   scheduledAt: string | null;
   endedAt: string | null;
   state: RoomState;
@@ -420,7 +424,9 @@ const TAB_LABELS: Record<RoomTabId, string> = { pad: 'Pad', questions: 'Question
 export function roomTabIds(type: RoundType): RoomTabId[] {
   return type === 'technical' ? ['pad', 'questions', 'milo', 'chat'] : ['plan', 'milo', 'chat'];
 }
-export const roomTabs = (type: RoundType): Array<{ id: RoomTabId; label: string }> => roomTabIds(type).map((id) => ({ id, label: TAB_LABELS[id] }));
+/** The tab row; a board round's `pad` tab holds the whiteboard and says so (WHITEBOARD-PLAN step 1). */
+export const roomTabs = (type: RoundType, surface?: RoundSurface | null): Array<{ id: RoomTabId; label: string }> =>
+  roomTabIds(type).map((id) => ({ id, label: id === 'pad' && surface === 'board' ? 'Board' : TAB_LABELS[id] }));
 export const defaultRoomTab = (type: RoundType): RoomTabId => (type === 'technical' ? 'pad' : 'plan');
 /** The footer's Message opens the pane on its chat tab (never a second pane). */
 export const ROOM_MESSAGE_TAB: RoomTabId = 'chat';
