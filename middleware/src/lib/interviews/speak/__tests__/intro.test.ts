@@ -91,3 +91,9 @@ describe('the policy\'s held answers', () => {
     expect(await said.list(IV)).toEqual([]);
   });
 });
+
+describe('the fixed introduction', () => {
+  it('is the owner\'s wording', () => {
+    expect(MILO_INTRO).toBe("Hi, I'm Milo. I won't write your algorithm or anything like that, but use me if you want to speed things up or have a question.");
+  });
+});

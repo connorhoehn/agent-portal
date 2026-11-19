@@ -14,7 +14,7 @@
 //           the solution." and the pad is unchanged
 import { staffRoom, joinCall, guestRoom, until, why, inviteMilo, voice, hear, letSound, chatText, padTab, padText, synced } from './h8-room.mjs';
 
-const INTRO = "Hi, I'm Milo. I'm here to take notes and help with logistics.";
+const INTRO = "Hi, I'm Milo. I won't write your algorithm or anything like that, but use me if you want to speed things up or have a question.";
 const PAD_OFF = "The lead hasn't turned on pad help from Milo for this round.";
 const TESTS_ADDED = 'Added twelve test cases at the bottom of the pad.';
 const IMPORT_ADDED = 'Added the import at the top of the pad.';

@@ -17,7 +17,7 @@ import { sayApproved, type Said } from './index.js';
 import { saidStore, type SaidRecord } from './store.js';
 
 /** What Milo says when the lead introduces it. */
-export const MILO_INTRO = "Hi, I'm Milo. I'm here to take notes and help with logistics. I won't judge your answers, and you can ask me things like how much time is left.";
+export const MILO_INTRO = "Hi, I'm Milo. I won't write your algorithm or anything like that, but use me if you want to speed things up or have a question.";
 
 /** The lead's receipt when Milo has already introduced itself in this interview. */
 export const ALREADY_INTRODUCED = 'Milo has already introduced itself in this interview.';
