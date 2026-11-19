@@ -285,6 +285,25 @@ describe('nothing Milo writes breaks the pad (review 1, item 4)', () => {
   });
 });
 
+describe('imports never land inside a statement (review 2, item 5)', () => {
+  it('a Python import continued with a backslash is one statement', () => {
+    const py = 'from typing import List, \\\n    Dict\nimport os\n\ndef two_sum(nums, target):\n    pass\n';
+    expect(py.slice(0, afterImports(py, 'python'))).toBe('from typing import List, \\\n    Dict\nimport os\n');
+    const last = 'import os\nfrom typing import List, \\\n    Dict\n\ndef f():\n    pass\n';
+    expect(last.slice(0, afterImports(last, 'python'))).toBe('import os\nfrom typing import List, \\\n    Dict\n');
+    // A continuation never finished: placed before it.
+    const open = 'import os\nfrom typing import List, \\';
+    expect(open.slice(0, afterImports(open, 'python'))).toBe('import os\n');
+  });
+
+  it('a bracket inside a comment or a string does not close a Go or Python group', () => {
+    const go = 'package main\n\nimport (\n\t"fmt" // fmt.Println(x)\n\t"strings" // )\n\tx ")"\n)\n\nfunc main() {}\n';
+    expect(go.slice(0, afterImports(go, 'go'))).toBe('package main\n\nimport (\n\t"fmt" // fmt.Println(x)\n\t"strings" // )\n\tx ")"\n)\n');
+    const py = 'from typing import (  # (see below\n    List,  # )\n    Dict,\n)\n\ndef f():\n    pass\n';
+    expect(py.slice(0, afterImports(py, 'python'))).toBe('from typing import (  # (see below\n    List,  # )\n    Dict,\n)\n');
+  });
+});
+
 describe('the session hears the pad change (review 1, item 7)', () => {
   const contexts: Array<[string, string]> = [];
   beforeEach(() => { contexts.length = 0; resetPadNotes(); });

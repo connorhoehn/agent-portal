@@ -145,27 +145,52 @@ export function afterImports(current: string, language: PadLanguage): number {
   const rows = current.split('\n');
   let after = -1;
   // An import that opens a bracket (Go's `import (`, Python's `from x import (`, a TypeScript `import {` over several lines)
-  // runs until the bracket closes: nothing is placed inside the group (review 1, item 4). One never closed ends the scan.
+  // runs until the bracket closes: nothing is placed inside the group (review 1, item 4). A Python line ending in `\` runs on
+  // to the next (review 2, item 5). One never closed ends the scan.
   let depth = 0;
+  let continued = false;
+  const backslash = (row: string) => language === 'python' && /\\$/.test(row.replace(/[ \t\r]+$/, ''));
   for (let i = 0; i < rows.length && !lineTooLong(rows[i]!); i += 1) {
     const row = rows[i]!;
-    if (depth > 0) {
-      depth += bracketBalance(row);
-      if (depth <= 0) { depth = 0; after = i; }
+    if (depth > 0 || continued) {
+      depth += bracketBalance(row, language);
+      continued = backslash(row);
+      if (depth <= 0 && !continued) { depth = 0; after = i; }
       continue;
     }
     if (!LEADING[language].test(row)) break;
     if (!IMPORT_LINE[language].test(row)) continue;
-    const open = bracketBalance(row);
-    if (open > 0) depth = open; else after = i;
+    const open = bracketBalance(row, language);
+    continued = backslash(row);
+    if (open > 0) depth = open; else if (!continued) after = i;
   }
   return after < 0 ? 0 : Math.min(rows.slice(0, after + 1).join('\n').length + 1, current.length);
 }
 
-/** Opening minus closing round and curly brackets on a line (outside strings and comments is close enough for import lines). */
-function bracketBalance(row: string): number {
+/**
+ * Opening minus closing round and curly brackets on a line, outside its strings and comments (a `)` in `// see (x)` or in
+ * `")"` does not close a group; review 2, item 5). A comment is `#` in Python, else `//` or a `/* … *\/` on the line.
+ */
+function bracketBalance(row: string, language: PadLanguage): number {
   let n = 0;
-  for (const ch of row) { if (ch === '(' || ch === '{') n += 1; else if (ch === ')' || ch === '}') n -= 1; }
+  let quote: string | null = null;
+  for (let k = 0; k < row.length; k += 1) {
+    const ch = row[k]!;
+    if (quote) {
+      if (ch === '\\' && quote !== '`') k += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+    if (language === 'python' ? ch === '#' : ch === '/' && row[k + 1] === '/') break;
+    if (language !== 'python' && ch === '/' && row[k + 1] === '*') {
+      const end = row.indexOf('*/', k + 2);
+      if (end < 0) break;
+      k = end + 1;
+      continue;
+    }
+    if (ch === '(' || ch === '{') n += 1; else if (ch === ')' || ch === '}') n -= 1;
+  }
   return n;
 }
 
