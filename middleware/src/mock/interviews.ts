@@ -54,6 +54,7 @@ const COMMUNICATION = {
 
 const BACKEND_KIT: OpeningKit = {
   rounds: [
+    { id: 'rd-screen', name: 'Technical screen', type: 'technical', minutes: 45, surface: 'pad', competencyIds: ['problem-solving', 'code-quality', 'communication'] },
     { id: 'rd-coding', name: 'Coding', type: 'technical', minutes: 60, surface: 'pad', competencyIds: ['problem-solving', 'code-quality', 'communication'] },
     // The system design round is drawn on the shared whiteboard (WHITEBOARD-PLAN step 1).
     { id: 'rd-design', name: 'System design', type: 'technical', minutes: 60, surface: 'board', competencyIds: ['system-design', 'communication'] },
@@ -290,8 +291,8 @@ export const interviewsFixture = defineFixture<Interview>({
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 15, ended: at(-9, 15) }),
       interview({ id: 'iv-f2b6t5zh', app: 'app-vfzc2x6g', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'scored',
         questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 13, 45) }),
-      interview({ id: 'iv-j6x2d9sb', app: 'app-7b69njmx', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 60, state: 'scored',
-        questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 15) }),
+      interview({ id: 'iv-j6x2d9sb', app: 'app-7b69njmx', round: 'rd-screen', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 45, state: 'scored',
+        questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 8, ended: at(-3, 14, 45) }),
       interview({ id: 'iv-p2v7j4ye', app: 'app-j7zuguu3', round: 'rd-coding', type: 'technical', lead: WEN, start: at(-2, 15), minutes: 60, state: 'scored',
         questions: ['q-ios-feed', 'q-ios-debounce'], assignedDaysAgo: 7, ended: at(-2, 16) }),
       // Finished yesterday; Wen's scorecard is still due.
@@ -339,7 +340,7 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
         ] },
       { id: 'sc-qadtme79', interviewId: 'iv-j6x2d9sb', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-3, 16, 10),
-        summary: 'A solid round. Correct and careful; spoke to concurrency only once asked. Worth a second coding round.',
+        summary: 'A solid round. Correct and careful; spoke to concurrency only once asked. Worth the coding round.',
         ratings: [
           rate('problem-solving', 3, 'Had a working limiter in about fifteen minutes; explained the fixed window\'s burst at the reset once asked.'),
           rate('code-quality', 3, 'Passed the clock in so it could be tested without sleeping. Saved the idempotency key before the first call.'),
