@@ -1198,7 +1198,17 @@
     {
       "method": "GET",
       "path": "/api/calls/:callId/chat",
-      "source": "src/routes/call-chat.ts:21"
+      "source": "src/routes/call-chat.ts:25"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calls/:callId/chat/reads",
+      "source": "src/routes/call-chat.ts:35"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/calls/:callId/chat/reads",
+      "source": "src/routes/call-chat.ts:38"
     },
     {
       "method": "DELETE",
@@ -2338,7 +2348,17 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:198"
+      "source": "src/routes/interview-invite.ts:200"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/calls/:callId/chat/reads",
+      "source": "src/routes/interview-invite-chat-reads.ts:43"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/interview-invite/calls/:callId/chat/reads",
+      "source": "src/routes/interview-invite-chat-reads.ts:47"
     },
     {
       "method": "GET",
@@ -2353,17 +2373,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:109"
+      "source": "src/routes/interview-invite.ts:110"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:143"
+      "source": "src/routes/interview-invite.ts:145"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:180"
+      "source": "src/routes/interview-invite.ts:182"
     },
     {
       "method": "POST",
@@ -2383,12 +2403,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:162"
+      "source": "src/routes/interview-invite.ts:164"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:209"
+      "source": "src/routes/interview-invite.ts:211"
     },
     {
       "method": "GET",

@@ -51,6 +51,8 @@ const GUEST_ADMITTED_ROUTES = new Set([
   'POST /api/interview-invite/runs/:runId/cancel',
   'POST /api/interview-invite/milo/request',
   'POST /api/interview-invite/media/participant',
+  'GET /api/interview-invite/calls/:callId/chat/reads',
+  'PUT /api/interview-invite/calls/:callId/chat/reads',
 ]);
 
 /** The routes rounds 3 to 6 added (OWED O-184), as the routers name them. */
@@ -392,8 +394,9 @@ describe('lane H6: every guest route, from the router', () => {
     'POST /api/interview-invite/runs': RUN_BODY('h6-sweep-run-0001'),
     'POST /api/interview-invite/milo/request': { request: 'time' },
     'POST /api/interview-invite/media/participant': { callId: 'h6-no-such-call', participantId: 'guest:inv-x-abc' },
+    'PUT /api/interview-invite/calls/:callId/chat/reads': { tab: 'chat', readAt: '2026-10-10T12:00:00.000Z' },
   };
-  const pathOf = (key: string) => key.split(' ')[1]!.replace(':runId', 'run-kwame-01');
+  const pathOf = (key: string) => key.split(' ')[1]!.replace(':runId', 'run-kwame-01').replace(':callId', 'h6-no-such-call');
 
   beforeAll(async () => {
     expect((await fetch(`${base}/api/__mock/reset`, { method: 'POST' })).status).toBe(200);
@@ -416,7 +419,7 @@ describe('lane H6: every guest route, from the router', () => {
     const named = new Set([...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]);
     expect([...mounted].filter((k) => !named.has(k)).sort()).toEqual([]);
     expect([...named].filter((k) => !mounted.has(k)).sort()).toEqual([]);
-    expect(mounted.size).toBe(16);
+    expect(mounted.size).toBe(18);
   });
 
   it('refuses each guest route to no cookie and to a staff session, with the one not-found', async () => {
@@ -444,13 +447,17 @@ describe('lane H6: every guest route, from the router', () => {
 
   it('answers an admitted guest of a live round on its own routes', async () => {
     for (const key of GUEST_ADMITTED_ROUTES) {
-      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant') continue; // a stream; a call the mock has not started
+      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant' || key.includes('/chat/reads')) continue; // a stream; a call the mock has not started
       const [method] = key.split(' ');
       const a = await call(method!, pathOf(key), admittedKwame, BODIES[key] ?? {});
       expect([key, a.status < 300]).toEqual([key, true]);
     }
     // No call is running, so the media binding is the same not-found as any other (the bound case is interview-invite-media's).
     expect((await call('POST', '/api/interview-invite/media/participant', admittedKwame, BODIES['POST /api/interview-invite/media/participant'])).status).toBe(404);
+    // The call chat's read position is the guest's only in a call of their interview they are seated in: none runs here.
+    for (const method of ['GET', 'PUT']) {
+      expect((await call(method, pathOf('GET /api/interview-invite/calls/:callId/chat/reads'), admittedKwame, BODIES['PUT /api/interview-invite/calls/:callId/chat/reads'])).status).toBe(404);
+    }
   });
 
   it('keeps one live round\'s guest out of another live round\'s runs', async () => {
