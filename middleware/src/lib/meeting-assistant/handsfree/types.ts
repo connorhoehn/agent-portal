@@ -231,8 +231,10 @@ export interface RouterEvents {
 export interface TalkingSide {
   /**
    * One tick of the session clock (the mixer's 100 ms `append` cadence). `frames`: what the router chose for this tick: none (the
-   * talking side sends one frame of silence), one live frame, or a replay burst (the router keeps replays within
-   * `replayMaxRate` / `replayBurstMs`; the talking side forwards as given and never mixes two people).
+   * talking side sends nothing: an idle tick is how the router pays a replay's lead back), one frame (live, or silence the router
+   * made so the provider can close a turn), or a replay burst (the router keeps replays within `replayMaxRate` / `replayBurstMs`;
+   * the talking side forwards as given and never mixes two people).
+   * (Contract change, lane B, 19 Nov: was "none = one frame of silence", which left no tick to pay a replay's lead back on.)
    */
   feed(frames: readonly Buffer[]): void;
   /** Say server-held words verbatim (fixed lines, "Have Milo ask"). False when the session cannot take it now. */
