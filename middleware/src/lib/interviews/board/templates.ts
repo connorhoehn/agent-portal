@@ -77,8 +77,8 @@ const FRAME_W = 440;
 const FRAME_H = 300;
 const GAP = 60;
 const STICKY_W = 190;
-/** Frames per row: the seven sections sit four above three. */
-const COLUMNS = 4;
+/** Frames per row: three, so a narrow room pane fits the board at a readable zoom (the seventh sits alone below). */
+const COLUMNS = 3;
 const STICKY_H = 90;
 const STICKY_FILL = '#ffec99';
 const NOTE_FILL = '#b2f2bb';

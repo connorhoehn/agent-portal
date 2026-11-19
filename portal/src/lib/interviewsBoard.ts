@@ -88,11 +88,23 @@ export async function readBoardSnapshots(interviewId: string, fetcher: typeof fe
  * Zoom a mounted board so its content fills the pane: Excalidraw's own "Zoom to fit" (its Shift+1 shortcut, which it
  * allows in view mode too), sent to the canvas's container. The library's canvas takes no fit option yet
  * (docs/ui-components-queue.md); once it does, this goes. Whether a canvas was there to fit.
+ *
+ * Excalidraw 0.18 keeps clear of its toolbar using the toolbar's bottom in WINDOW coordinates, so a canvas that sits
+ * lower on the page fits into a sliver at its bottom. For the one synchronous keystroke no toolbar is found (their
+ * class is lifted and put straight back, with no render between), and the fit takes the whole canvas, between the
+ * floating toolbar above and the menu bar below.
  */
 export function fitBoardView(root: ParentNode | null | undefined): boolean {
-  const canvas = root?.querySelector('.excalidraw');
-  if (!canvas) return false;
-  canvas.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true, cancelable: true }));
+  const container = root?.querySelector('.excalidraw');
+  if (!container) return false;
+  // Every one: a narrow canvas draws a second toolbar along its bottom, which would be found instead.
+  const toolbars = [...container.querySelectorAll('.App-toolbar')];
+  for (const t of toolbars) t.classList.remove('App-toolbar');
+  try {
+    container.dispatchEvent(new KeyboardEvent('keydown', { key: '!', code: 'Digit1', shiftKey: true, bubbles: true, cancelable: true }));
+  } finally {
+    for (const t of toolbars) t.classList.add('App-toolbar');
+  }
   return true;
 }
 

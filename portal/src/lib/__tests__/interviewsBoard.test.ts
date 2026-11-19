@@ -54,19 +54,25 @@ test('a second document, fed the first one\'s update, holds the same board (what
   assert.equal(sceneKey(readBoardElements(candidate)), sceneKey(readBoardElements(lead)));
 });
 
-test('fitting a board sends Excalidraw its own "Zoom to fit" (Shift+1) at the canvas, and finds nothing to fit without one', () => {
+test('fitting a board sends Excalidraw its own "Zoom to fit" (Shift+1) with its toolbars out of the way for that keystroke only; nothing to fit without a canvas', () => {
   const g = globalThis as { KeyboardEvent?: unknown };
   const had = g.KeyboardEvent;
-  g.KeyboardEvent ??= class extends Event { constructor(type: string, init: Record<string, unknown>) { super(type, init); this.code = String(init['code']); this.shiftKey = Boolean(init['shiftKey']); } code: string; shiftKey: boolean; };
+  class Fake extends Event { code: string; shiftKey: boolean; constructor(type: string, init: Record<string, unknown>) { super(type, init); this.code = String(init['code'] ?? ''); this.shiftKey = Boolean(init['shiftKey']); } }
+  g.KeyboardEvent = Fake;
   try {
-    const sent: Array<{ type: string; code: string; shiftKey: boolean; bubbles: boolean }> = [];
-    const canvas = { dispatchEvent: (e: { type: string; code: string; shiftKey: boolean; bubbles: boolean }) => { sent.push(e); return true; } };
-    const asked: string[] = [];
-    const root = { querySelector: (q: string) => { asked.push(q); return canvas; } } as unknown as ParentNode;
+    const classes = new Set(['App-toolbar']);
+    const bottom = new Set(['App-toolbar']);
+    const toolbar = { classList: { remove: (c: string) => classes.delete(c), add: (c: string) => classes.add(c) } };
+    const footer = { classList: { remove: (c: string) => bottom.delete(c), add: (c: string) => bottom.add(c) } };
+    const sent: Array<{ type: string; code: string; shiftKey: boolean; bubbles: boolean; toolbarFound: boolean }> = [];
+    const container = {
+      querySelectorAll: (q: string) => (q === '.App-toolbar' ? [toolbar, footer] : []),
+      dispatchEvent: (e: Fake) => { sent.push({ type: e.type, code: e.code, shiftKey: e.shiftKey, bubbles: e.bubbles, toolbarFound: classes.has('App-toolbar') || bottom.has('App-toolbar') }); return true; },
+    };
+    const root = { querySelector: (q: string) => (q === '.excalidraw' ? container : null) } as unknown as ParentNode;
     assert.equal(fitBoardView(root), true);
-    assert.deepEqual(asked, ['.excalidraw']);
-    assert.equal(sent.length, 1);
-    assert.deepEqual([sent[0]!.type, sent[0]!.code, sent[0]!.shiftKey, sent[0]!.bubbles], ['keydown', 'Digit1', true, true]);
+    assert.deepEqual(sent, [{ type: 'keydown', code: 'Digit1', shiftKey: true, bubbles: true, toolbarFound: false }]);
+    assert.ok(classes.has('App-toolbar') && bottom.has('App-toolbar'), 'both toolbars have their class back');
     assert.equal(fitBoardView({ querySelector: () => null } as unknown as ParentNode), false);
     assert.equal(fitBoardView(null), false);
   } finally { g.KeyboardEvent = had; }

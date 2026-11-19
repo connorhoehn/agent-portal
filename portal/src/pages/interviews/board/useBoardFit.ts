@@ -25,7 +25,8 @@ export function useBoardFit(ydoc: Y.Doc | null | undefined, selector: string): v
       if (readBoardElements(ydoc).length > 0) { empty = false; schedule([300, 1200]); }
     };
     ydoc.on('update', onUpdate);
-    const hand = () => { touched.current = true; };
+    // Only a person's own press or wheel hands the view over.
+    const hand = (e: Event) => { if (e.isTrusted) touched.current = true; };
     const root = document.querySelector(selector);
     root?.addEventListener('pointerdown', hand, { capture: true });
     root?.addEventListener('wheel', hand, { capture: true, passive: true });
