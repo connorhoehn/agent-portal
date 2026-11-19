@@ -290,7 +290,7 @@ function keepMiloVoice(page) {
     const now = Date.now();
     milo.frames += 1;
     const c = milo.cur;
-    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; timeline.milo.push(milo.cur); }
+    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1 || now - (c.lastAtMs ?? now) > 1500) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; timeline.milo.push(milo.cur); }
     const u = milo.cur;
     u.seq = f.data.seq; u.done = f.data.last === true; u.lastAtMs = now;
     u.ms += (Buffer.from(f.data.pcm, 'base64').length / 2 / (f.data.sampleRate || 24000)) * 1000;
@@ -301,11 +301,12 @@ function keepMiloVoice(page) {
 /** Waits until Milo has said something new (an utterance after `n`) and finished it; → true when he did. */
 async function miloSays(n, ms) {
   if (!(await until(async () => milo.utterances > n, ms, 100))) return false;
-  await until(async () => Date.now() > busy.until + 120, 60_000, 60);
+  const quiet = async () => (Date.now() > busy.until + 120 && Date.now() - (milo.cur?.lastAtMs ?? 0) > 600 ? true : null);
+  await until(quiet, 60_000, 60);
   // --handsfree: one answer can come as two utterances (the model's first words, then the server's held answer said over them),
   // so a short settle: an utterance starting within 1 s belongs to the same answer.
   for (let k = milo.utterances; HANDSFREE && (await until(async () => (milo.utterances > k ? true : null), 1000, 50)); k = milo.utterances) {
-    await until(async () => Date.now() > busy.until + 120, 60_000, 60);
+    await until(quiet, 60_000, 60);
   }
   return true;
 }
