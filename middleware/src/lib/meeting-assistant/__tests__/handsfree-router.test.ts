@@ -15,7 +15,8 @@ function world() {
   const rules = new FakeRules();
   const talking = new FakeTalking();
   const relay = new FakeRelay();
-  const router = new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay });
+  const work = { open: false };
+  const router = new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay, working: () => work.open });
   const states: RouteState[] = [];
   const drops: string[] = [];
   router.on('state', (s) => states.push(s));
@@ -29,7 +30,7 @@ function world() {
   const name = (u: string, sid: string, startMs: number, nameEndMs = clock.nowMs()) => listening.emit('name', { userId: u, sentenceId: sid, sentenceStartMs: startMs, nameEndMs, textSoFar: 'Milo' });
   const sentence = (u: string, sid: string, text: string, named = true, startMs = 0) => listening.emit('sentence', { userId: u, sentenceId: sid, text, startMs, endMs: clock.nowMs(), named });
   const words = (u: string, sid: string, delta: string) => listening.emit('words', { userId: u, sentenceId: sid, delta, atMs: clock.nowMs() });
-  return { clock, listening, rules, talking, relay, router, states, drops, step, talk, quiet, milo, name, sentence, words };
+  return { clock, listening, rules, talking, relay, router, states, drops, step, talk, quiet, milo, name, sentence, words, work };
 }
 
 describe('hands-free router', () => {
@@ -284,6 +285,49 @@ describe('hands-free router', () => {
     await settle();
     expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
     expect(w.talking.heard()).not.toContain(T_HUGO);
+  });
+
+  it("an answer whose last frame never comes ends 2 s after its last frame: the relay is closed and the asker's window opens", async () => {
+    const w = world();
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, what time is it?'); await settle();
+    w.router.turnEnded();
+    for (let i = 0; i < 3; i++) w.router.outputAudio(frame(T_MILO), false);
+    w.quiet(HANDSFREE.answerQuietMs / 100 - 1);
+    expect(w.router.state().phase).toBe('answering');
+    w.quiet(2);
+    expect(w.relay.pushed.at(-1)).toMatchObject({ last: true });
+    expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+  });
+
+  it('an utterance cut off upstream (its last frame never reaches the router) does not swallow the next answer', async () => {
+    const w = world();
+    w.rules.verdictFor = (x) => (x.userId === UNA ? { kind: 'mention' } : { kind: 'request' });
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.router.outputAudio(frame(T_MILO), false);
+    w.sentence(UNA, 's1', "I saw Milo's notes"); await settle(); // dropped; the session talks on, its tail never arrives
+    w.quiet(25);
+    w.talk(HUGO, T_HUGO, 3);
+    w.name(HUGO, 'h1', w.clock.nowMs() - 300); await settle();
+    w.sentence(HUGO, 'h1', 'Milo, what time is it?'); await settle();
+    w.milo(2);
+    expect(w.relay.pushed.map((p) => p.tag)).toEqual([T_MILO, T_MILO]);
+  });
+
+  it('answering with no frame at all (dropped upstream) frees the floor after 2 s, but not while a tool call is open', async () => {
+    const w = world();
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, add a task'); await settle();
+    w.work.open = true;
+    w.router.turnEnded();
+    w.quiet(40);
+    expect(w.router.state().phase).toBe('answering');
+    w.work.open = false;
+    w.quiet(21);
+    expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
   });
 
   it('barge-in clears the relay inside the frame that carried it; echo does not', async () => {

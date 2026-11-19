@@ -36,6 +36,8 @@ export interface RouterDeps {
   listening: Pick<ListeningSide, 'preRoll' | 'on'>;
   talking: Pick<TalkingSide, 'feed' | 'setAsker' | 'say'>;
   relay: RelayPort;
+  /** The session is working on a request (a tool call open): a turn with no voice yet is not over. Absent: never. */
+  working?: () => boolean;
   /** Say a fixed verdict's line for `userId` (the orchestrator posts it with the approved mark and says it as approved words). Absent: `talking.say`. */
   sayFixed?: (userId: string, line: string) => void;
   /** Codes and ids only (never words or audio). */
@@ -73,8 +75,11 @@ export class Router {
   private lastTickMs: number;
   /** Milo's voice is playing out until this session ms (each relayed frame adds 100 ms after the previous one). */
   private playingUntil = 0;
-  /** A relayed utterance has started and its last frame has not come. */
+  /** A relayed utterance has started and its last frame has not come (and whether it is server-held words, a `say`). */
   private uttering = false;
+  private utteringSay = false;
+  /** The session's last output frame, or the moment the turn closed (session ms): the quiet check's clock. */
+  private lastOutputMs = 0;
   /** The session is mid-utterance (a frame came, its last has not), relayed or not. */
   private speaking = false;
   /** The rest of the session's current utterance is unheard (its turn was dropped, or nobody asked for it). */
@@ -155,6 +160,21 @@ export class Router {
       frames.push(SILENCE); this.tokens -= TICK_MS;
     }
     this.deps.talking.feed(frames);
+    this.checkQuiet(now);
+  }
+
+  /**
+   * No output frame for `answerQuietMs`: whatever the session was saying is over, though its `last` frame never came (dropped before
+   * the router, or the provider stopped). A relayed utterance is closed (a silent last frame, so the browser ends it too; an answer
+   * opens the asker's window), an unheard one stops swallowing frames, and an answer that never reached the relay frees the floor
+   * unless the session is still working on the request.
+   */
+  private checkQuiet(now: number): void {
+    if (now - this.lastOutputMs < HANDSFREE.answerQuietMs) return;
+    if (this.speaking || this.dropUtt) { this.speaking = false; this.dropUtt = false; this.trace('output.quiet', {}); }
+    if (this.uttering) { this.relayFrame(SILENCE, true, this.utteringSay); return; }
+    const t = this.turn;
+    if (this.st.phase === 'answering' && t?.verdict?.kind === 'request' && !this.deps.working?.()) this.answerEnded();
   }
 
   private onFrame(userId: string, pcm: Buffer): void {
@@ -333,6 +353,7 @@ export class Router {
   /** One frame of the session's voice. `say` frames (server-held words) are relayed as they are; the rest follow the floor. */
   outputAudio(pcm: Buffer, last: boolean, say?: string): void {
     if (this.closed) return;
+    this.lastOutputMs = this.deps.clock.nowMs();
     if (say !== undefined) { this.relayFrame(pcm, last, true); return; }
     this.speaking = !last;
     if (this.dropUtt) { if (last) this.dropUtt = false; return; }
@@ -371,6 +392,7 @@ export class Router {
 
   private relayFrame(pcm: Buffer, last: boolean, said = false): void {
     const now = this.deps.clock.nowMs();
+    if (!this.uttering) this.utteringSay = said;
     this.uttering = !last;
     this.playingUntil = Math.max(now, this.playingUntil) + TICK_MS;
     this.deps.relay.push(pcm, last);
@@ -537,6 +559,7 @@ export class Router {
   // ---------------------------------------------------------------------------------------------------------------------------
 
   private setState(s: RouteState): void {
+    if (s.phase === 'answering' && this.st.phase !== 'answering') this.lastOutputMs = this.deps.clock.nowMs();
     this.st = s;
     this.syncAsker();
     this.emit('state', s);

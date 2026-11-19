@@ -60,6 +60,11 @@ export const HANDSFREE = Object.freeze({
    * voice.ts VOICE_ECHO_TAIL_MS): words, names and sentences that start inside it are checked against what he said (review 1, item 4).
    */
   echoGraceMs: 1_500,
+  /**
+   * The session's voice counts as finished this long after its last frame (or after the turn closed with none) when no `last` frame
+   * came: frames dropped before the router (an approval pending, the voice off) or a provider that stopped mid-utterance (review 1, item 6).
+   */
+  answerQuietMs: 2_000,
   /** Target: from a barge-in's first word in a transcript delta to the relay going silent. Gate scenario, not a timer. */
   bargeInStopMs: 700,
   /** A closed transcription stream is reopened at most this many times per person per minute; past it the lane is down until the next minute. */

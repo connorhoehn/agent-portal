@@ -990,6 +990,8 @@ export class AssistantRuntime {
       nameOf: (userId) => nameOf(userId),
       // A fixed verdict's line goes the held-text way: posted with the approved mark, said as approved words, logged by the family.
       sayFixed: (userId, line) => { void this.queueHeld(run, userId, line); },
+      // A tool call still open: the request's answer may come later, so a turn with no voice yet is not over.
+      working: () => [...run.calls.values()].includes('open'),
       trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
     });
     hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; });
