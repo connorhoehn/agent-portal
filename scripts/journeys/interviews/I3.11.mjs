@@ -1,5 +1,5 @@
 // Piece I3.11: Milo's interview tools (docs/interviews-tenant-plan.md, "Milo's interview tools"). On the scripted session only:
-// its stand-in for the background agent passes fixed arguments (mock/interviews-testcases.ts), so nothing here reaches a model or
+// its stand-in for the background agent passes fixed arguments (middleware/src/lib/interviews/milo-tools/scripted.ts), so nothing here reaches a model or
 // costs anything. The lead and the candidate IN the call on Mateo's coding round (Two Sum chosen; h8-room.mjs), Milo invited with
 // its voice on. The words are injected as heard lines; the film says the same words.
 //   I3.11a  the call bar offers the lead Introduce Milo; the lead says "Milo, introduce yourself" → Milo's fixed introduction in

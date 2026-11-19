@@ -18,6 +18,7 @@
 // meeting assistant's detector and answered through the interviews policy (milo-policy.ts `answerFromHeldText`, which only logs:
 // the orchestrator posts and says it), and the two buttons on the candidate's page (routes/interview-invite-milo.ts), which call
 // `answerCandidate` here.
+import { utterance } from './utterance.js';
 import { randomBytes } from 'node:crypto';
 import { interviewsNowMs } from '../clock.js';
 import type { SayResult, SayWithheldWhy } from '../../meeting-assistant/approved-speech.js';
@@ -46,7 +47,6 @@ const REPEAT = new RegExp(`^${LEAD}${REPEAT_CORE}${TAIL}$`);
 const TIME = new RegExp(`^${LEAD}${TIME_CORE}${IN_ROUND}${TAIL}$`);
 
 /** Lower case, punctuation as spaces (apostrophes dropped), one space between words. */
-const utterance = (text: string): string => text.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 
 /** Which fixed request this text is (the words after Milo's name, or the whole line). */
 export function candidateRequestOf(text: string): CandidateRequest {

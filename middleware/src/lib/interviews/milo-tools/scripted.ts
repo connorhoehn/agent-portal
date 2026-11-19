@@ -1,4 +1,4 @@
-// The mock world's stand-in for Milo's interview tools: what the scripted session's "background agent" passes as the arguments of
+// The scripted stand-in for Milo's interview tools (beside the scripted verdict, verdict.ts): what the scripted session's "background agent" passes as the arguments of
 // its tool calls (docs/interviews-tenant-plan.md, "Milo's interview tools"), so walks, tests and the film drive the tools with no
 // model and no spend. The interviews policy adds these rules to the scripted session (meeting-assistant/scripted-session.ts
 // `addScriptRules`); a session follows one only when it was offered that tool (an interview's).
@@ -9,8 +9,8 @@
 //                                        puts `from functools import lru_cache` in instead (the language has it)
 //   "...trie..." / "...helper..."        pad_add_helper with a small Python trie
 //   "...solve it..." / "...solution..."  pad_add_helper whose code defines the question's function: the server refuses it
-import type { ScriptRule } from '../lib/meeting-assistant/scripted-session.js';
-import type { TestCase } from '../lib/interviews/testcases/render.js';
+import type { ScriptRule } from '../../meeting-assistant/scripted-session.js';
+import type { TestCase } from '../testcases/render.js';
 
 export const DEFAULT_TEST_CASES = 12;
 export const MAX_TEST_CASES = 20;

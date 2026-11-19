@@ -3,7 +3,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { AddressInfo } from 'node:net';
 import { _setVoiceWebSocket } from '../../voice/openai.js';
-import { OpenAiLiveSession } from '../live-session.js';
+import { OpenAiLiveSession, MAX_RAW_ARGS_BYTES } from '../live-session.js';
 import { SessionTextUnsupported, type SessionEvents } from '../session.js';
 import type { ResponsesFunctionTool } from '../../voice/catalogue.js';
 
@@ -362,6 +362,18 @@ describe('tool calls', () => {
     frame(callEvent('call_z', 'pad_add_import', '{}')); await tick();
     s.answerToolCall('call_z', '{}', { continue: false }); await tick();
     expect(received.filter((e) => e['type'] === 'response.create')).toHaveLength(1);
+    await s.close();
+  });
+
+  it('measures the arguments as sent: their raw size rides on the call, and over MAX_RAW_ARGS_BYTES they are not parsed (review 1, minor)', async () => {
+    const { s, seen } = make();
+    await s.start(START);
+    const padded = `{"lines":["import heapq"]${' '.repeat(20_000)}}`;
+    frame(callEvent('call_raw', 'pad_add_import', padded));
+    frame(callEvent('call_big', 'pad_add_import', `{"x":"${'a'.repeat(MAX_RAW_ARGS_BYTES)}"}`));
+    await tick();
+    expect(seen.toolCall[0]).toMatchObject({ callId: 'call_raw', args: { lines: ['import heapq'] }, argsBytes: Buffer.byteLength(padded) });
+    expect(seen.toolCall[1]).toMatchObject({ callId: 'call_big', args: null });
     await s.close();
   });
 

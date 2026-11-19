@@ -19,7 +19,8 @@ export interface TestCase { args: unknown[]; expected?: unknown }
 /** The block's first line in every language, after the comment marker: how a reader (and the record) finds Milo's block. */
 export const TEST_CASES_TITLE = 'Test cases from Milo';
 
-const COMMENT: Readonly<Record<PadLanguage, string>> = { python: '#', swift: '//', javascript: '//', typescript: '//', java: '//', go: '//', cpp: '//' };
+/** Each pad language's line comment (the one map). */
+export const COMMENT: Readonly<Record<PadLanguage, string>> = { python: '#', swift: '//', javascript: '//', typescript: '//', java: '//', go: '//', cpp: '//' };
 
 /** The note under the title: what the cases are and are not. With expected values, each one agreed with the question's reference. */
 export const TEST_CASES_NOTE = [

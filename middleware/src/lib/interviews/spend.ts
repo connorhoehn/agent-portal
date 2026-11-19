@@ -38,8 +38,9 @@ import { INTERVIEWS_TENANT, type InterviewsWorld, type Opening } from './types.j
 export const INTERVIEWS_SOURCE: SpendSource = 'interviews';
 
 /** What an interview spends on. */
-export type InterviewSpendPart = 'listening' | 'coach' | 'speech' | 'run';
-export const INTERVIEW_SPEND_PARTS: readonly InterviewSpendPart[] = ['listening', 'coach', 'speech', 'run'];
+/** `tools`: Milo's interview tools (the solution check behind a helper or a batch of cases; milo-tools/verdict.ts). */
+export type InterviewSpendPart = 'listening' | 'coach' | 'speech' | 'run' | 'tools';
+export const INTERVIEW_SPEND_PARTS: readonly InterviewSpendPart[] = ['listening', 'coach', 'speech', 'run', 'tools'];
 
 /** The cap per interview when an opening sets none: an hour of Milo listening (about $3) and room for the coach, speech and runs. */
 export const DEFAULT_INTERVIEW_CAP_USD = 10;

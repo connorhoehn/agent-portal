@@ -1,7 +1,7 @@
-// What the lead lets Milo do for the candidate in one interview (docs/interviews-tenant-plan.md, "Milo writes test cases").
+// What the lead lets Milo do for the candidate in one interview (docs/interviews-tenant-plan.md, "Milo's interview tools").
 // `interview_milo_settings`: one row per interview once the lead has changed something; no row reads as the defaults.
 //
-//   candidateMayAsk  the candidate may ask Milo to change the pad for them (milo-tools: add test cases, add an import). Off by
+//   candidateMayAsk  the candidate may ask Milo to change the pad for them (milo-tools: test cases, imports, a helper). Off by
 //                    default: that is help the candidate would not otherwise have, so whether a round offers it is the lead's
 //                    choice, made in the round and kept with who made it and when (the record says what help was on offer).
 //                    Turned off, a request gets one polite fixed sentence and costs nothing. The lead may always ask.

@@ -7,7 +7,7 @@
 // (`INTERVIEWS_COACH_MODEL=scripted`, the coach's one switch) carries fixed verdicts: SOLUTION when the code names the
 // question's function or reads like its approach (a target and a complement), else HELPER; it costs nothing.
 //
-// Money: a hold under the interview's `coach` part before the model is asked, settled with what it cost (zero for the
+// Money: a hold under the interview's `tools` part (Milo's tools, within the interview's cap) before the model is asked, settled with what it cost (zero for the
 // stand-in), as Milo's private answers book theirs; booked to the lead, who turned the candidate's requests on.
 import { randomBytes } from 'node:crypto';
 import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
@@ -87,7 +87,7 @@ export async function judgeHelper(interviewId: string, leadId: string, input: Ve
   const model = makeVerdictModel();
   const usage0 = estimate(input);
   const held = await reserveInterviewSpend({
-    interviewId, part: 'coach', key: `helper-${randomBytes(6).toString('hex')}`,
+    interviewId, part: 'tools', key: `helper-${randomBytes(6).toString('hex')}`,
     estimateUsd: estimateUsageCost(model.modelId, usage0) ?? estimateUsageCost(DEFAULT_COACH_MODEL_ID, usage0) ?? 0.01, expiresInMs: 60_000,
   }).catch(() => ({ ok: false as const }));
   if (!held.ok) return 'solution';

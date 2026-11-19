@@ -14,14 +14,14 @@ import { MILO_INTRO } from '../../speak/intro.js';
 import type { Interview, KitQuestion, PadLanguage } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
-  notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_NOTE_EVERY_MS, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
+  MAX_VERDICTS, notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_NOTE_EVERY_MS, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
 } from '../index.js';
 import { builtinFor, checkHelper, MAX_HELPER_LINES } from '../helper.js';
 import { afterImports, checkedImportLines, placeImports } from '../imports.js';
 import { renderTestCases } from '../../testcases/render.js';
 import { runInNewContext } from 'node:vm';
 import { referenceFor } from '../references.js';
-import { INTERVIEW_SCRIPT_RULES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../../../../mock/interviews-testcases.js';
+import { INTERVIEW_SCRIPT_RULES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../scripted.js';
 
 const IV = 'iv-tools';
 const LEAD = 'u-hugo';
@@ -274,6 +274,31 @@ describe('the session hears the pad change (review 1, item 7)', () => {
       expect(contexts.at(-1)![1]).toContain('return 1;');
       expect(await notePadChange(IV, snap('function twoSum() { return 1; }'), t0 + 3 * PAD_NOTE_EVERY_MS)).toBe(false); // unchanged
     } finally { spy.mockRestore(); }
+  });
+});
+
+describe('review 1, the minor list', () => {
+  it('a JavaScript switch and a Python dict opened at a line end are the language\'s own', () => {
+    const sw = 'function kindOf(n) {\n  switch (n % 3) {\n    case 0:\n      return "a";\n    default:\n      return "b";\n  }\n}';
+    expect(checkHelper('a classifier', sw, 'javascript', 'twoSum')).toMatchObject({ ok: true });
+    const dict = 'class Costs:\n    TABLE = {\n        "a": 1,\n        "b": 2,\n    }';
+    expect(checkHelper('a cost table', dict, 'python', 'two_sum')).toMatchObject({ ok: true });
+    expect(checkHelper('a box', 'class Box:\n    def get(self):\n        return 1', 'javascript', 'twoSum')).toEqual({ ok: false, why: 'language' });
+  });
+
+  it('solution checks are counted per interview: past MAX_VERDICTS a helper is refused with no model call', async () => {
+    verdict = 'solution';
+    for (let i = 0; i < MAX_VERDICTS; i += 1) await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY });
+    expect(judged).toBe(MAX_VERDICTS);
+    verdict = 'helper';
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY })).toBe(NOT_SOLUTION);
+    expect(judged).toBe(MAX_VERDICTS);
+  });
+
+  it('the interviews policy and the tools import nothing from the mock world', () => {
+    for (const f of ['../../milo-policy.ts', '../index.ts', '../helper.ts', '../tests.ts', '../verdict.ts', '../scripted.ts']) {
+      expect({ f, mock: /from '[./]*mock\//.test(readFileSync(join(__dirname, f), 'utf8')) }).toEqual({ f, mock: false });
+    }
   });
 });
 

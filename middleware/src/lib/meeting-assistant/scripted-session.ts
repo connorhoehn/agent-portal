@@ -36,7 +36,7 @@ export const SCRIPT_RULES: readonly ScriptRule[] = [
 ];
 
 /**
- * Rules a family adds for its own tools (the interviews tenant's: mock/interviews-testcases.ts), tried before the table above. A
+ * Rules a family adds for its own tools (the interviews tenant's: interviews/milo-tools/scripted.ts), tried before the table above. A
  * session follows one only when it was offered the tool the rule calls, so another family's call never sees it.
  */
 const familyRules: ScriptRule[] = [];

@@ -1,4 +1,5 @@
-// Milo writes into an interview's code pad (docs/interviews-tenant-plan.md, "Milo writes test cases").
+// Milo writes into an interview's code pad for its interview tools (docs/interviews-tenant-plan.md, "Milo's interview tools":
+// test cases, imports and a helper, ../milo-tools). A write that fails after typing part of its block takes that part out again.
 //
 // The server edits the pad the way a person's pad does: over the BFF's own /ws gateway, as a Yjs peer on the pad's channel,
 // so the CRDT service applies, stores and fans the edit out exactly as it does a person's, and the pad's own authority

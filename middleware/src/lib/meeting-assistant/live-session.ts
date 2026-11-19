@@ -64,6 +64,8 @@ import {
 import { trace } from './trace.js';
 import { readAloudContent, saidVerbatim } from './approved-speech.js';
 
+/** Tool-call arguments over this many bytes are not parsed at all. */
+export const MAX_RAW_ARGS_BYTES = 64 * 1024;
 export interface OpenAiLiveSessionOptions {
   model: string;
   /** A built-in voice name or a `voice_…` id; null = the model's default. */
@@ -656,11 +658,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       if (item?.['type'] !== 'function_call') return;
       const callId = item['call_id'], name = item['name'];
       if (typeof callId !== 'string' || !/^[\w-]{1,128}$/.test(callId) || typeof name !== 'string' || !/^[\w-]{1,64}$/.test(name)) return;
+      // The raw size first: arguments over MAX_RAW_ARGS_BYTES are never parsed (null: the orchestrator refuses them), and the size
+      // the orchestrator caps is the one the provider sent, not the parsed value's (review 1, minor).
+      const raw = typeof item['arguments'] === 'string' ? item['arguments'] : 'null';
+      const argsBytes = Buffer.byteLength(raw);
       let args: unknown = null;
-      try { args = JSON.parse(typeof item['arguments'] === 'string' ? item['arguments'] : 'null'); } catch { /* null: the orchestrator refuses it */ }
+      if (argsBytes <= MAX_RAW_ARGS_BYTES) { try { args = JSON.parse(raw); } catch { /* null: the orchestrator refuses it */ } }
       if (this.open.has(callId)) return;
       this.open.add(callId);
-      this.emit('toolCall', { callId, name, args, atMs: this.sinceStart() });
+      this.emit('toolCall', { callId, name, args, argsBytes, atMs: this.sinceStart() });
     } else if (e['type'] === 'response.completed') {
       this.responseOver(responseIdOf(e['response']));
       const response = e['response'] as { id?: unknown; usage?: Record<string, unknown> } | undefined;

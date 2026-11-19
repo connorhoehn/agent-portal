@@ -1,6 +1,8 @@
-// Milo's seat on an interview's code pad (docs/interviews-tenant-plan.md, "Milo writes test cases").
+// Milo's seat on an interview's code pad (docs/interviews-tenant-plan.md, "Milo's interview tools").
 //
-// When the candidate asks Milo for test cases, the server writes them into the pad itself: it opens its own socket to the
+// When the lead (or the candidate, if the lead allows it) asks Milo to change the pad (test cases, imports, a helper:
+// ../milo-tools), the server writes the change into the pad itself; it also reads the pad through this seat for the session's
+// context, writing nothing: it opens its own socket to the
 // BFF's /ws gateway and edits the shared Yjs document there, exactly as a person's pad does (./milo-writer.ts). That socket
 // needs an identity, and the gateway decides every one of its subscribes and writes with the pad's own rule
 // (./authority.ts admitPadChannel). This module is that identity and its rule, and nothing else.

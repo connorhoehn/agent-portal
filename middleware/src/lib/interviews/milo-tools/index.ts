@@ -18,6 +18,8 @@ import { randomBytes } from 'node:crypto';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { INTERVIEW_TOOLS, responsesFunctionTools, serverTool, type ResponsesFunctionTool } from '../../voice/catalogue.js';
 import { interviewsNowMs } from '../clock.js';
+import { guestOfInterview, isGuestId } from '../guest-id.js';
+import { utterance } from '../speak/utterance.js';
 import { miloSettingsStore, type MiloSettings } from '../milo-settings.js';
 import { appendPadEvents, MILO_WRITER_ID } from '../pad/log/service.js';
 import type { PadEventIn } from '../pad/log/rules.js';
@@ -56,6 +58,12 @@ export const TESTS_LIMIT = 'Milo has already added test cases three times in thi
 export const ON_IT = 'On it.';
 /** The most times Milo writes test cases in one interview. */
 export const MAX_TEST_CASE_BATCHES = 3;
+/** At most this many pad changes by Milo in one interview (test cases, imports and helpers together). */
+export const MAX_PAD_CHANGES = 12;
+/** At most this many solution checks (a model call each) in one interview, whatever they found. */
+export const MAX_VERDICTS = 10;
+export const PAD_CHANGES_LIMIT = 'Milo has made all the pad changes it can in this interview.';
+const verdictsRun = new Map<string, number>();
 
 const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 export const countWords = (n: number): string => NUMBER_WORDS[n] ?? String(n);
@@ -91,8 +99,6 @@ export interface MiloToolDeps {
   newId: () => string;
 }
 
-const GUEST = /^guest:(.+)$/;
-
 async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
   const store = interviewsStore();
   const [applications, openings] = await runWithDbTenant(INTERVIEWS_TENANT, () => Promise.all([store.listApplications(), store.listOpenings()]));
@@ -104,12 +110,7 @@ async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
 
 const DEFAULTS: MiloToolDeps = {
   interview: async (id) => (await runWithDbTenant(INTERVIEWS_TENANT, () => interviewsStore().listInterviews())).find((i) => i.id === id) ?? null,
-  guestOf: async (userId, interviewId) => {
-    const inviteId = GUEST.exec(userId)?.[1];
-    if (!inviteId) return false;
-    const { inviteStore } = await import('../invite/store.js');
-    return (await inviteStore().getInvite(inviteId).catch(() => null))?.interviewId === interviewId;
-  },
+  guestOf: guestOfInterview,
   settings: (id) => runWithDbTenant(INTERVIEWS_TENANT, () => miloSettingsStore().get(id)),
   questions: roundQuestions,
   write: writeIntoPad,
@@ -127,7 +128,7 @@ const deps = (): MiloToolDeps => ({ ...DEFAULTS, ...overrides });
 export async function standingOf(interview: Interview, userId: string): Promise<Standing | null> {
   if (userId === interview.leadId) return 'lead';
   if (interview.panelIds.includes(userId)) return 'panel';
-  if (GUEST.test(userId) && (await deps().guestOf(userId, interview.id).catch(() => false))) return 'candidate';
+  if (isGuestId(userId) && (await deps().guestOf(userId, interview.id).catch(() => false))) return 'candidate';
   return null;
 }
 
@@ -143,7 +144,7 @@ export async function toolOfPhrase(text: string): Promise<'time_left' | 'repeat_
   if (r === 'time') return 'time_left';
   if (r === 'repeat') return 'repeat_question';
   const { isIntroduction } = await import('../speak/intro.js');
-  const t = text.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const t = utterance(text);
   return INTRO.test(t) || isIntroduction(text) ? 'introduce' : null;
 }
 
@@ -218,10 +219,17 @@ export async function runMiloTool(interviewId: string, askedBy: string, name: st
 async function runPadTool(interview: Interview, standing: Standing, name: string, args: unknown): Promise<Ran> {
   const d = deps();
   const a = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>;
-  if (name === 'pad_add_tests') {
-    const earlier = (await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interview.id))).filter((r) => r.source === 'tests').length;
-    if (earlier >= MAX_TEST_CASE_BATCHES) return { line: TESTS_LIMIT, source: 'refusal' };
-  }
+  const said = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interview.id));
+  if (said.filter((r) => r.source === 'tests' || r.source === 'imports' || r.source === 'helper').length >= MAX_PAD_CHANGES) return { line: PAD_CHANGES_LIMIT, source: 'refusal' };
+  if (name === 'pad_add_tests' && said.filter((r) => r.source === 'tests').length >= MAX_TEST_CASE_BATCHES) return { line: TESTS_LIMIT, source: 'refusal' };
+  // Each solution check is a model call: counted per interview, and refused (fail closed) past MAX_VERDICTS.
+  const judge = (input: VerdictInput): Promise<'helper' | 'solution'> => {
+    const n = verdictsRun.get(interview.id) ?? 0;
+    if (n >= MAX_VERDICTS) return Promise.resolve('solution');
+    verdictsRun.set(interview.id, n + 1);
+    if (verdictsRun.size > 500) verdictsRun.delete(verdictsRun.keys().next().value as string);
+    return d.judge(interview.id, interview.leadId, input).catch(() => 'solution' as const);
+  };
   const questions = await d.questions(interview).catch(() => []);
   let refusal: string | null = null;
   let retryNote: string | undefined;
@@ -236,7 +244,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
       // A long string value could carry the algorithm: such a batch is judged like a helper, and refused with no question to judge by.
       if (made.longStrings) {
         if (!question?.prompt.trim()) { refusal = TESTS_NOT_ADDED; return null; }
-        const verdict = await d.judge(interview.id, interview.leadId, { question: question.prompt, code: made.block, entry: entryOf(question.starter, language), kind: 'tests' }).catch(() => 'solution' as const);
+        const verdict = await judge({ question: question.prompt, code: made.block, entry: entryOf(question.starter, language), kind: 'tests' });
         if (verdict !== 'helper') { refusal = TESTS_NOT_ADDED; return null; }
       }
       done = { line: testsAddedLine(made.count, made.checked), source: 'tests' };
@@ -274,7 +282,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     }
     // Every helper is judged, whoever asked; with no question to judge it by, it is refused (fail closed; review 1, item 3).
     if (!question?.prompt.trim()) { refusal = HELPER_NOT_ADDED; return null; }
-    const verdict = await d.judge(interview.id, interview.leadId, { question: question.prompt, code: checked.code, entry: entryOf(question.starter, language), kind: 'helper' }).catch(() => 'solution' as const);
+    const verdict = await judge({ question: question.prompt, code: checked.code, entry: entryOf(question.starter, language), kind: 'helper' });
     if (verdict !== 'helper') { refusal = NOT_SOLUTION; return null; }
     kind = 'helper';
     const block = helperBlock(checked.code, what, language);
@@ -365,7 +373,7 @@ export async function acknowledgementLine(interviewId: string, askedBy: string, 
 }
 
 /** Tests: forget the repeat window and the in-flight writes. */
-export function resetMiloTools(): void { recent.clear(); writing.clear(); }
+export function resetMiloTools(): void { recent.clear(); writing.clear(); verdictsRun.clear(); }
 
 export type { PadLanguage };
 

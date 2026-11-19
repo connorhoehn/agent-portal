@@ -10,6 +10,7 @@
 // Either way it is the one speaking path: logged first, posted, then said verbatim under the voice gate's `approved` reason,
 // one utterance at a time and only into quiet, behind the speech hold. Once a row with these words has reached the call chat
 // (`posted`), Milo has introduced itself in this interview and neither way says them again.
+import { utterance } from './utterance.js';
 import { interviewsNowMs } from '../clock.js';
 import type { Interview } from '../types.js';
 import { sayApproved, type Said } from './index.js';
@@ -23,7 +24,6 @@ export const ALREADY_INTRODUCED = 'Milo has already introduced itself in this in
 
 // The lead's spoken introduction, read from the words after Milo's name (the detector drops the name and what came before it):
 // "<Milo>'s here …", "<Milo> is here …", "<Milo> is joining us …", or "<Milo>, introduce yourself / say hello / say hi …".
-const utterance = (text: string): string => text.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const HERE = /^(?:s|is)?\s*(?:here|joining\s+us|with\s+us|on\s+the\s+call)(?:\s|$)/;
 const ASKED = /^(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?(?:introduce\s+yourself|say\s+(?:hello|hi)|tell\s+(?:them|us|everyone|the\s+candidate)\s+(?:who|what)\s+you\s+are)(?:\s|$)/;
 /** At most this many words: an introduction is short; a long sentence that happens to start "Milo's here" is anything else. */

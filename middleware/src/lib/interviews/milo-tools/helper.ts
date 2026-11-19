@@ -16,13 +16,12 @@
 // candidate, the panel and the record can tell it from the candidate's own code.
 import { lineTooLong } from '../pad-text.js';
 import type { PadLanguage } from '../types.js';
-import { functionOf } from '../testcases/render.js';
+import { COMMENT, functionOf } from '../testcases/render.js';
 import { afterImports, checkedImportLines } from './imports.js';
 
 export const MAX_HELPER_LINES = 60;
 export const MAX_HELPER_CHARS = 6000;
 
-const COMMENT: Readonly<Record<PadLanguage, string>> = { python: '#', swift: '//', javascript: '//', typescript: '//', java: '//', go: '//', cpp: '//' };
 
 /** Standard-library imports that ARE what was asked for, by language: the import goes in instead of written code. */
 const BUILTINS: Readonly<Partial<Record<PadLanguage, ReadonlyArray<{ asked: RegExp; line: string }>>>> = {
@@ -53,8 +52,10 @@ export function builtinFor(what: string, language: PadLanguage): string | null {
 
 /** Signs a piece of code is NOT in a language (another language's tell): one is enough to refuse it. */
 const FOREIGN: Readonly<Record<PadLanguage, RegExp>> = {
-  python: /^\s*(?:function\s|const\s|let\s|var\s|public\s|private\s|func\s|#include|import\s+java)|[;{]\s*$/m,
-  javascript: /^\s*(?:def\s|public\s+class|private\s|func\s|#include|from\s+\w+\s+import)|\bself\.|:\s*$/m,
+  // A line ending in `;` is not Python; one ending in `{` may open a dict, so it is not counted (review 1, minor).
+  python: /^\s*(?:function\s|const\s|let\s|var\s|public\s|private\s|func\s|#include|import\s+java)|;\s*$/m,
+  // A Python block opener (`if x:`, `def f():`) is not JavaScript; a switch's `case 1:` and `default:` are.
+  javascript: /^\s*(?:def\s|public\s+class|private\s|func\s|#include|from\s+\w+\s+import|(?:if|elif|else|for|while|try|except|with)\b[^{\n]*:\s*$)|\bself\./m,
   typescript: /^\s*(?:def\s|public\s+class|func\s|#include|from\s+\w+\s+import)|\bself\./m,
   java: /^\s*(?:def\s|function\s|func\s|#include|const\s|let\s)/m,
   go: /^\s*(?:def\s|function\s|class\s|public\s|#include|const\s+\w+\s*=\s*require)/m,

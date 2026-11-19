@@ -1866,7 +1866,7 @@ export class AssistantRuntime {
     if (!voiceTool(name) && !onServer) { await this.refuse(run, e.callId, 'unknown tool'); return; }
     // The arguments are model output: an object, and small (the family may allow more for its own tools: a pad's test cases).
     const maxArgs = run.policy.maxToolArgsBytes?.(run.call, name) ?? MAX_ARGS_BYTES;
-    const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && Buffer.byteLength(JSON.stringify(e.args)) <= maxArgs;
+    const argsOk = e.args !== null && typeof e.args === 'object' && !Array.isArray(e.args) && (e.argsBytes ?? Buffer.byteLength(JSON.stringify(e.args))) <= maxArgs;
     // (c) The asker's own role.
     const roles = await this.deps.rolesOf(asker, tenant);
     const allowed = await run.policy.mayUseTool(run.call, { userId: asker, roles }, name);

@@ -46,6 +46,7 @@
 import { randomBytes } from 'node:crypto';
 import { registerMeetingAssistantPolicy, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
+import { guestOfInterview, isGuestId } from './guest-id.js';
 import { visibleWorld } from './scope.js';
 import { interviewsPayer } from './spend.js';
 import { loadWorld } from './store.js';
@@ -57,7 +58,7 @@ import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
 import { addScriptRules } from '../meeting-assistant/scripted-session.js';
 import { onPadEventsAppended } from './pad/log/service.js';
-import { INTERVIEW_SCRIPT_RULES } from '../../mock/interviews-testcases.js';
+import { INTERVIEW_SCRIPT_RULES } from './milo-tools/scripted.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
 
@@ -83,13 +84,10 @@ export const UNREADABLE_ROUND_MINUTES = 60;
 export const CANNOT_LISTEN_PAST_ROUND = "Milo can't listen past the end of this round.";
 
 const LOBBY = /^interviews:interview:([^:]+)$/;
-const GUEST = /^guest:(.+)$/;
-
 /** The interview a lobby names, or null when it names none. */
 export const interviewOfLobby = (lobby: string | null | undefined): string | null => LOBBY.exec(lobby ?? '')?.[1] ?? null;
 
-/** Is this user id a candidate's guest identity (lib/interviews/invite/realtime.ts `guestSubject`)? */
-export const isGuestId = (userId: string): boolean => GUEST.test(userId);
+export { isGuestId } from './guest-id.js';
 
 // ── The candidate's acknowledgement from elsewhere (contract C8) ────────────────────────────────────────────────────────
 
@@ -104,14 +102,6 @@ let consentSource: InterviewConsentSource | null = null;
  */
 export function setInterviewConsentSource(fn: InterviewConsentSource | null): void { consentSource = fn; }
 
-/** The invite a guest id was minted from belongs to this interview (a guest's seat is checked by the gateway; this is the second look). */
-async function guestOfInterview(userId: string, interviewId: string): Promise<boolean> {
-  const inviteId = GUEST.exec(userId)?.[1];
-  if (!inviteId) return false;
-  const { inviteStore } = await import('./invite/store.js');
-  const invite = await inviteStore().getInvite(inviteId).catch(() => null);
-  return invite?.interviewId === interviewId;
-}
 
 // ── The interview behind a call ─────────────────────────────────────────────────────────────────────────────────────────
 
