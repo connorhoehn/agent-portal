@@ -34,7 +34,8 @@ import { checkHelper, entryOf, helperBlock, placeHelper } from './helper.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 import { testCasesFor, questionForPad } from './tests.js';
 import { atEnd } from '../pad/milo-writer.js';
-import { hasPad, interviewBackendInstructions } from './context.js';
+import { hasPad, interviewBackendInstructions, padContextNote } from './context.js';
+import type { ServerToolRetry } from '../../meeting-assistant/policy.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
 
@@ -156,7 +157,8 @@ export const REPEAT_WINDOW_MS = 20_000;
 const recent = new Map<string, number>();
 const writing = new Set<string>();
 
-interface Ran { line: string; source: SaidSource }
+/** `retryNote`: refused for the pad's language, which the session may not know yet; the context to send it (review 1, item 7). */
+interface Ran { line: string; source: SaidSource; retryNote?: string }
 
 async function logLine(interview: Interview, askedBy: string, ran: Ran): Promise<string> {
   const d = deps();
@@ -171,7 +173,7 @@ async function logLine(interview: Interview, askedBy: string, ran: Ran): Promise
  * Run tool `name` for `askedBy` in the interview: who may ask, the tool, the line logged (unposted). The line to post and say,
  * or null for nothing (not a live interview, not one of its people, a repeat of the same request, already introduced).
  */
-export async function runMiloTool(interviewId: string, askedBy: string, name: string, args: unknown): Promise<string | null> {
+export async function runMiloTool(interviewId: string, askedBy: string, name: string, args: unknown): Promise<string | ServerToolRetry | null> {
   const d = deps();
   const spec = serverTool(name);
   if (!spec) return null;
@@ -201,7 +203,9 @@ export async function runMiloTool(interviewId: string, askedBy: string, name: st
   if (writing.has(interview.id)) return logLine(interview, askedBy, { line: PAD_BUSY, source: 'refusal' });
   writing.add(interview.id);
   try {
-    return logLine(interview, askedBy, await runPadTool(interview, standing, name, args));
+    const ran = await runPadTool(interview, standing, name, args);
+    const line = await logLine(interview, askedBy, ran);
+    return ran.retryNote !== undefined ? { line, retry: true, note: ran.retryNote } : line;
   } catch (e) {
     console.warn('[interviews] Milo pad tool failed', (e as Error)?.name ?? 'error');
     return logLine(interview, askedBy, { line: PAD_FAILED, source: 'refusal' }).catch(() => PAD_FAILED);
@@ -220,6 +224,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
   }
   const questions = await d.questions(interview).catch(() => []);
   let refusal: string | null = null;
+  let retryNote: string | undefined;
   let done: Ran | null = null;
   let kind: 'tests' | 'imports' | 'helper' = 'tests';
   const plan: MiloPadPlan = async ({ text, language }) => {
@@ -252,7 +257,12 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     // pad_add_helper
     const what = typeof a['what'] === 'string' ? a['what'] : '';
     const checked = checkHelper(what, a['code'], language, entryOf(question?.starter, language));
-    if (!checked.ok) { refusal = checked.why === 'entry' ? NOT_SOLUTION : HELPER_NOT_ADDED; return null; }
+    if (!checked.ok) {
+      refusal = checked.why === 'entry' ? NOT_SOLUTION : HELPER_NOT_ADDED;
+      // Code in another language: likely written for the pad as the session last knew it. Not the request's one run.
+      if (checked.why === 'language') retryNote = padContextNote({ text, language });
+      return null;
+    }
     if (checked.kind === 'import') {
       kind = 'imports';
       return (current) => {
@@ -275,7 +285,7 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
   };
   const out = await d.write(interview.id, plan);
   if (!out.ok) {
-    if (refusal) return { line: refusal, source: 'refusal' };
+    if (refusal) return { line: refusal, source: 'refusal', ...(retryNote !== undefined ? { retryNote } : {}) };
     console.warn('[interviews] Milo pad write not done', out.code);
     // Part of it reached the pad before the write failed: the attempt is logged, typed and taken out again (deleted the same
     // count) when the gateway confirmed it, with the pad as it then stood (review 1, item 4).
@@ -314,6 +324,9 @@ export async function sessionToolsFor(interviewId: string): Promise<{ tools: Res
   const tools = INTERVIEW_TOOLS.filter((t) => pad || t.who !== 'pad');
   let seen: { text: string; language: PadLanguage } | null = null;
   if (pad) await d.write(interview.id, ({ text, language }) => { seen = { text, language }; return null; }).catch(() => null);
+  // What the session starts with: a later change of the pad is told it (notePadChange).
+  const start = seen as { text: string; language: PadLanguage } | null;
+  if (start) padNoted.set(interview.id, { language: start.language, text: start.text, at: d.now() });
   const questions = pad ? await d.questions(interview).catch(() => []) : [];
   return { tools: responsesFunctionTools(tools), backendInstructions: interviewBackendInstructions(questions, seen) };
 }
@@ -355,3 +368,38 @@ export async function acknowledgementLine(interviewId: string, askedBy: string, 
 export function resetMiloTools(): void { recent.clear(); writing.clear(); }
 
 export type { PadLanguage };
+
+// ── The pad's changes reach the session (review 1, item 7) ───────────────────────────────────────────────────────────────
+
+/** A changed text reaches the session at most this often (the portal posts a snapshot every 30 s); a language change at once. */
+export const PAD_NOTE_EVERY_MS = 15_000;
+const padNoted = new Map<string, { language: string; text: string; at: number }>();
+
+/**
+ * What the pad log took in (pad/log/service.ts `appendPadEvents`): when the pad's language changed, or its text did and the last
+ * note is PAD_NOTE_EVERY_MS old, the live session of the interview's call is told the pad as it is now (silent context), so a
+ * helper or a test asked for next is written for the pad's language and text, not the ones the session started with.
+ */
+export async function notePadChange(interviewId: string, events: readonly PadEventIn[], now = Date.now()): Promise<boolean> {
+  const snap = [...events].reverse().find((e) => e.kind === 'snapshot' && typeof e.text === 'string');
+  const lang = [...events].reverse().find((e) => (e.kind === 'language' || e.kind === 'snapshot') && typeof e.language === 'string')?.language;
+  if (!snap && !lang) return false;
+  const last = padNoted.get(interviewId);
+  const language = (lang ?? last?.language ?? '') as PadLanguage;
+  const text = snap?.text ?? last?.text ?? '';
+  const languageChanged = !!last && last.language !== language;
+  const textChanged = !last || last.text !== text;
+  if (last && !languageChanged && (!textChanged || now - last.at < PAD_NOTE_EVERY_MS)) return false;
+  if (!language) return false;
+  padNoted.set(interviewId, { language, text, at: now });
+  if (padNoted.size > 500) padNoted.delete(padNoted.keys().next().value as string);
+  if (!last) return false; // the first look: the session started with this pad
+  const d = deps();
+  const interview = await d.interview(interviewId).catch(() => null);
+  if (!interview || interview.state !== 'live' || !interview.callId || !hasPad(interview)) return false;
+  const { peekAssistantRuntime } = await import('../../meeting-assistant/orchestrator.js');
+  return peekAssistantRuntime()?.addSessionContext(interview.callId, padContextNote({ text, language })) ?? false;
+}
+
+/** Tests: forget what was noted. */
+export function resetPadNotes(): void { padNoted.clear(); }

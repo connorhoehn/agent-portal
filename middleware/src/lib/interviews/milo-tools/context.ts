@@ -34,5 +34,11 @@ export function interviewBackendInstructions(questions: readonly KitQuestion[], 
   return parts.join('\n\n').slice(0, 20_000);
 }
 
+/** Silent context for the session when the pad changed after it started: its language and text now (review 1, item 7). */
+export function padContextNote(pad: { text: string; language: PadLanguage }, fence: Fence = new Fence()): string {
+  const text = pad.text.length > MAX_CONTEXT_PAD_CHARS ? pad.text.slice(0, MAX_CONTEXT_PAD_CHARS) : pad.text;
+  return `The pad changed. It is now in ${pad.language}; write anything for it in ${pad.language}. Its text now:\n${fence.wrap(text, { kind: 'code', maxChars: MAX_CONTEXT_PAD_CHARS })}`;
+}
+
 /** Only an interview with a pad has pad tools; the context is asked of a technical round only. */
 export const hasPad = (interview: Pick<Interview, 'type'>): boolean => interview.type === 'technical';

@@ -56,6 +56,7 @@ import { MILO_CAN_DO } from './speak/index.js';
 import { GUEST_DISPLAY_NAME } from './invite/realtime.js';
 import { interviewsNowMs } from './clock.js';
 import { addScriptRules } from '../meeting-assistant/scripted-session.js';
+import { onPadEventsAppended } from './pad/log/service.js';
 import { INTERVIEW_SCRIPT_RULES } from '../../mock/interviews-testcases.js';
 
 export const INTERVIEW_FAMILY = 'interviews:interview';
@@ -232,7 +233,8 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
     const tool = await toolOfPhrase(request.text);
     // Only the lead's words introduce Milo; anyone else saying them is left to the model (which may call `introduce`, refused).
     if (!tool || (tool === 'introduce' && request.askedBy !== interview.leadId)) return null;
-    return (await runMiloTool(interview.id, request.askedBy, tool, {}).catch(() => null)) ?? '';
+    const out = await runMiloTool(interview.id, request.askedBy, tool, {}).catch(() => null);
+    return (out !== null && typeof out === 'object' ? out.line : out) ?? '';
   },
   heldFallback: async (call, request) => {
     const interviewId = interviewOfLobby(call.lobby);
@@ -293,7 +295,11 @@ export function registerInterviewsMiloPolicy(env: NodeJS.ProcessEnv = process.en
   const policy = registerMeetingAssistantPolicy(INTERVIEW_FAMILY, INTERVIEWS_MILO_POLICY);
   // The scripted session's stand-in for the tools' background agent (only a session offered an interview's tools follows them).
   const rules = addScriptRules(INTERVIEW_SCRIPT_RULES);
-  unregister = () => { policy(); rules(); };
+  // The pad's changes reach the live session (milo-tools `notePadChange`; review 1, item 7).
+  const padNotes = onPadEventsAppended((interviewId, events) => {
+    void import('./milo-tools/index.js').then(({ notePadChange }) => notePadChange(interviewId, events)).catch(() => false);
+  });
+  unregister = () => { policy(); rules(); padNotes(); };
   return true;
 }
 

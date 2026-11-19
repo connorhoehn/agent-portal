@@ -54,7 +54,8 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   appendAudio() { /* nothing */ }
   sendText(): void { throw new SessionTextUnsupported(); }
   answerToolCall() { return false; }
-  appendContext() { return true; }
+  contexts: string[] = [];
+  appendContext(text: string) { this.contexts.push(text); return true; }
   sayVerbatim(id: string, text: string, ended: (t: string | null) => void, sent?: () => void) {
     this.asked.push({ id, text, ended, ...(sent ? { sent } : {}) });
     if (!this.busy) sent?.();
@@ -729,6 +730,27 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       await intake.tick(); await flush();
       await new Promise((r) => setTimeout(r, 300)); await flush();
       expect(mockPosts.approved[0]).toBe('On it.');
+    } finally { off(); }
+  });
+
+  it('a call refused for the pad\'s language does not use up the request\'s run, and the session is told the pad now (review 1, item 7)', async () => {
+    let calls = 0;
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', {
+      ...TOOLS,
+      runTool: async (_c, r) => { calls += 1; ran.push({ askedBy: r.askedBy, name: r.name, bytes: 0 }); return calls === 1 ? { line: 'Not in the pad\'s language.', retry: true as const, note: 'The pad is now in javascript.' } : LINE; },
+    });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:servertools:r7');
+      await intake.handle(CALL, { userId: ALICE, text: 'Milo, add an LRU cache helper', at: now });
+      now += 1000; await flush();
+      fake().fire('toolCall', { callId: 'call_r7a', name: 'pad_add_helper', args: { what: 'x', code: 'y' }, atMs: now - T0 });
+      await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
+      expect(fake().contexts).toContain('The pad is now in javascript.');
+      fake().fire('toolCall', { callId: 'call_r7b', name: 'pad_add_helper', args: { what: 'x', code: 'z' }, atMs: now - T0 });
+      await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
+      expect(calls).toBe(2); // the same request ran again
+      expect(mockPosts.approved).toContain(LINE);
     } finally { off(); }
   });
 

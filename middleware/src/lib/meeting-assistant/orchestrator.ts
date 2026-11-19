@@ -1403,6 +1403,16 @@ export class AssistantRuntime {
   }
 
   /** Is Milo answering in this call: its voice going out now, or one of its tool calls still open? (The watcher waits while it is.) */
+  /**
+   * Silent context for the call's live session (a pad's language or text changed: interviews/milo-tools `notePadChange`): what
+   * its background agent works from next. Not news to speak about (no gate poke). False when Milo has no session in the call.
+   */
+  addSessionContext(callId: string, text: string): boolean {
+    const run = this.runs.get(callId);
+    if (!run || run.finished || !run.session) return false;
+    return run.session.appendContext(text.slice(0, 6000));
+  }
+
   assistantAnswering(callId: string): boolean {
     const run = this.runs.get(callId);
     if (!run || run.finished) return false;
@@ -1935,11 +1945,15 @@ export class AssistantRuntime {
     runs.add(key);
     if (runs.size > 200) runs.delete(runs.values().next().value as string);
     this.answer(run, e.callId, { status: 'done', note: 'The system tells the call what was done. Say nothing about it.' }, null, { continue: false });
-    const line = await run.policy.runTool!(run.call, { askedBy: asker, name: e.name, args: e.args }).catch((err: unknown) => {
+    const out = await run.policy.runTool!(run.call, { askedBy: asker, name: e.name, args: e.args }).catch((err: unknown) => {
       console.warn('[meeting-assistant] server tool failed', (err as Error).message);
       return null;
     });
-    trace('call.server', { call: e.callId, said: line !== null });
+    // Refused for something the model can put right: the run is not used up, and the model is told what changed (review 1, item 7).
+    const retry = out !== null && typeof out === 'object';
+    if (retry) { runs.delete(key); if (out.note) run.session?.appendContext(out.note); }
+    const line = retry ? out.line : out;
+    trace('call.server', { call: e.callId, said: line !== null, ...(retry ? { retry: true } : {}) });
     if (line !== null) await this.sayHeld(run, asker, line);
   }
 

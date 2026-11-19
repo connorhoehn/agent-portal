@@ -29,7 +29,16 @@ export async function appendPadEvents(interviewId: string, writer: PadWriter, ev
     from: e.from ?? null, inserted: e.inserted ?? null, deleted: e.deleted ?? null, length: e.length ?? null, lines: e.lines ?? null,
     via: e.via ?? null, language: e.language ?? null, questionId: e.questionId ?? null, text: e.kind === 'snapshot' ? (e.text ?? '') : null,
   })));
+  for (const l of appendedListeners) { try { l(interviewId, kept); } catch { /* a listener never fails the append */ } }
   return kept.length;
+}
+
+type AppendedListener = (interviewId: string, events: readonly PadEventIn[]) => void;
+const appendedListeners = new Set<AppendedListener>();
+/** Be told of every batch the pad log took in (Milo's tools keep the live session's view of the pad current). */
+export function onPadEventsAppended(listener: AppendedListener): () => void {
+  appendedListeners.add(listener);
+  return () => { appendedListeners.delete(listener); };
 }
 
 /** A stored row as U3's `PadEvent`: only the fields it has, and the writer's name. */

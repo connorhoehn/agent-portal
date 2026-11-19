@@ -14,7 +14,7 @@ import { MILO_INTRO } from '../../speak/intro.js';
 import type { Interview, KitQuestion, PadLanguage } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
-  PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
+  notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_NOTE_EVERY_MS, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
 } from '../index.js';
 import { builtinFor, checkHelper, MAX_HELPER_LINES } from '../helper.js';
 import { afterImports, checkedImportLines, placeImports } from '../imports.js';
@@ -163,7 +163,8 @@ describe('pad_add_helper', () => {
     expect(checkHelper('a big class', long, 'python', 'two_sum')).toEqual({ ok: false, why: 'size' });
     expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a big class', code: long })).toBe(HELPER_NOT_ADDED);
     expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'an LRU class', code: SCRIPTED_LRU_JS.replace('LRUCache', 'Box') })).toBe('Added the import at the top of the pad.');
-    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a box', code: SCRIPTED_LRU_JS.replace('LRUCache', 'Box') })).toBe(HELPER_NOT_ADDED);
+    // Code in another language: refused, and the request's run is not used up; the session is told the pad as it is.
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a box', code: SCRIPTED_LRU_JS.replace('LRUCache', 'Box') })).toMatchObject({ line: HELPER_NOT_ADDED, retry: true, note: expect.stringContaining('It is now in python') });
     expect(pad.text).not.toContain('class Box');
   });
 
@@ -247,6 +248,32 @@ describe('nothing Milo writes breaks the pad (review 1, item 4)', () => {
     const open = 'import os\nfrom typing import (\n    List,\n';
     expect(open.slice(0, afterImports(open, 'python'))).toBe('import os\n');
     expect(placeImports(go, ['import "sort"'], 'go')!.index).toBe(go.indexOf(')\n') + 2);
+  });
+});
+
+describe('the session hears the pad change (review 1, item 7)', () => {
+  const contexts: Array<[string, string]> = [];
+  beforeEach(() => { contexts.length = 0; resetPadNotes(); });
+  const runtimeWith = async () => {
+    const orchestrator = await import('../../../meeting-assistant/orchestrator.js');
+    return jest.spyOn(orchestrator, 'peekAssistantRuntime').mockReturnValue({ addSessionContext: (c: string, t: string) => { contexts.push([c, t]); return true; } } as never);
+  };
+
+  it('a language change is told at once with the pad text now; a text change at most every PAD_NOTE_EVERY_MS', async () => {
+    const spy = await runtimeWith();
+    try {
+      interview = { ...interview, callId: 'call-tools' } as Interview;
+      await sessionToolsFor(IV); // the session starts with the Python pad
+      const t0 = Date.now();
+      expect(await notePadChange(IV, [{ kind: 'language', clientAt: new Date(t0).toISOString(), language: 'javascript' }], t0)).toBe(true);
+      expect(contexts.at(-1)![0]).toBe('call-tools');
+      expect(contexts.at(-1)![1]).toContain('It is now in javascript');
+      const snap = (text: string) => [{ kind: 'snapshot' as const, clientAt: new Date(t0).toISOString(), text, language: 'javascript' }];
+      expect(await notePadChange(IV, snap('function twoSum() {}'), t0 + 1000)).toBe(false); // too soon after the last note
+      expect(await notePadChange(IV, snap('function twoSum() { return 1; }'), t0 + PAD_NOTE_EVERY_MS + 1)).toBe(true);
+      expect(contexts.at(-1)![1]).toContain('return 1;');
+      expect(await notePadChange(IV, snap('function twoSum() { return 1; }'), t0 + 3 * PAD_NOTE_EVERY_MS)).toBe(false); // unchanged
+    } finally { spy.mockRestore(); }
   });
 });
 

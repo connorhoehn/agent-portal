@@ -51,6 +51,12 @@ export interface Payer { actorId: string; initiativeId: string | null; source: S
 /** What the live session is offered: its function tools, and the second model's instructions about them. */
 export interface SessionTools { tools: readonly ResponsesFunctionTool[]; backendInstructions: string }
 
+/**
+ * A server tool's outcome that does not use up the request's one run (`runTool`): refused for something the model can put right
+ * (the pad's language changed since it was told), with `note`, silent context for the model, so a call made again can succeed.
+ */
+export interface ServerToolRetry { line: string; retry: true; note?: string }
+
 export interface MeetingAssistantPolicy {
   /** A name for logs and tests. */
   readonly id: string;
@@ -86,7 +92,7 @@ export interface MeetingAssistantPolicy {
    * words (logged by the family, unposted, as `answerFromHeldText` logs its own), or null for nothing to say. Absent: the family
    * has no server tools, and a call naming one is refused as unknown.
    */
-  runTool?(call: PolicyCall, request: { askedBy: string; name: string; args: unknown }): Promise<string | null>;
+  runTool?(call: PolicyCall, request: { askedBy: string; name: string; args: unknown }): Promise<string | ServerToolRetry | null>;
   /** The largest arguments, in bytes, a call to `tool` may carry in this family's calls. Absent: MAX_ARGS_BYTES (orchestrator.ts). */
   maxToolArgsBytes?(call: PolicyCall, tool: string): number;
   /**
