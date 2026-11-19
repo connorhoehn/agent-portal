@@ -141,8 +141,18 @@ export class HandsfreeRuntime implements HandsfreeRun {
 // The real runtime (router, lane A's listening side over the provider's transcription stream, lane C's rules, the live session
 // with delegation) with no orchestrator around it: a fake relay sink, the gate's own record and family. Nothing is stored.
 
+/** Seams the voice gate checks for (scripts/voice-harness/gate-port-runtime.mts): scenarios that need one run only when it is here. */
+export const HANDSFREE_GATE_SEAMS = ['interviews-family'] as const;
+
 export interface StandaloneRunInput {
   callId: string;
+  /**
+   * `gate` (default): the gate's own family. `interviews`: the real interviews policy over one live interview held in memory
+   * (gate-interviews.ts), its session tools, and server lines said the orchestrator's way: queued one after another, their words
+   * told to the router at their first frame, their audio through the router as approved say frames, a server tool's call muting
+   * the session's own words until its line plays (router `serverLine`).
+   */
+  family?: 'gate' | 'interviews';
   speakers: Array<{ userId: string; name: string }>;
   /** False: `cand` (any speaker id starting with "cand") gets fixed lines only, as an interview's candidate without pad help. */
   candidateMayAsk: boolean;
@@ -178,6 +188,12 @@ export function gateFamily(candidateMayAsk: boolean, isCandidate: (userId: strin
   };
 }
 
+/** The family's own session rules (policy `handsfree(call).instructions`), or null. */
+function family0(policy: import('../policy.js').MeetingAssistantPolicy, call: PolicyCall): string | null {
+  const f = policy.handsfree?.(call) as { instructions?: () => string | null } | undefined;
+  return f?.instructions?.() ?? null;
+}
+
 export async function startHandsfreeRun(input: StandaloneRunInput): Promise<StandaloneRun> {
   const [{ OpenAiLiveSession }, { voiceConfig }, { createListeningSide }, { createHandsfreeRules }, { openAiTranscriberFactory }, { HandsfreeTalking }, { HANDSFREE_TURN_RULES }, { policyForLobby }] = await Promise.all([
     import('../live-session.js'), import('../../voice/config.js'), import('./listening.js'), import('./rules.js'),
@@ -190,13 +206,16 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
     setTimeout: (fn, ms) => setTimeout(fn, ms),
     clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
   };
-  const call: PolicyCall = { callId: input.callId, lobby: null, tenant: 'gate' };
   const names = input.speakers.map((s) => s.name);
   const isCandidate = (userId: string): boolean => userId.startsWith('cand');
+  const interviews = input.family === 'interviews'
+    ? await (await import('./gate-interviews.js')).gateInterviews({ callId: input.callId, candidateMayAsk: input.candidateMayAsk })
+    : null;
+  const call: PolicyCall = interviews?.call ?? { callId: input.callId, lobby: null, tenant: 'gate' };
   const base = policyForLobby(null);
   const family = gateFamily(input.candidateMayAsk, isCandidate);
-  const policy = Object.create(base, { handsfree: { value: () => family }, acknowledgement: { value: () => 'in-call-notice' } }) as typeof base;
-  const record = { callId: input.callId, state: 'listening', acked: [...input.speakers.map((s) => s.userId), 'room'] } as unknown as import('../types.js').AssistantRecord;
+  const policy = interviews?.policy ?? Object.create(base, { handsfree: { value: () => family }, acknowledgement: { value: () => 'in-call-notice' } }) as typeof base;
+  const record = { callId: input.callId, tenant: call.tenant, lobby: call.lobby, state: 'listening', acked: [...input.speakers.map((s) => s.userId), 'room'] } as unknown as import('../types.js').AssistantRecord;
 
   const cfg = voiceConfig();
   if (!cfg.delegationModel) throw new Error('no delegation model configured');
@@ -215,10 +234,22 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   const flushText = (): void => { if (uttText !== null && uttPushed) { input.onText?.(uttText, clock.nowMs()); uttText = null; uttPushed = false; } };
   const listening = createListeningSide({ callId: input.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true });
   const rules = createHandsfreeRules({ record: async () => record, policy: () => policy, roster: () => names, admitWaitMs: 150 });
+  // Server lines the orchestrator's way (orchestrator.ts `queueHeld` -> `sayHeld` -> `approvedFrame`), interviews family only.
+  const lines = new Map<string, string>(); let lineNo = 0; let lineChain: Promise<void> = Promise.resolve();
+  const sayLine = (line: string): void => {
+    lineChain = lineChain.then(() => new Promise<void>((done) => {
+      const id = `hf-line-${++lineNo}`; lines.set(id, line);
+      const bound = setTimeout(done, 15_000);
+      const finish = (): void => { clearTimeout(bound); lines.delete(id); done(); };
+      // The router learns the words at the line's first frame (below); a line that never plays is forgotten when it ends.
+      if (!talking.say(id, line, finish)) finish();
+    }));
+  };
   run = new HandsfreeRuntime({
     call, clock, listening, rules, talking,
     relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); uttPushed = true; flushText(); }, clear: () => { queue = []; } },
     onLine: () => undefined,
+    ...(interviews ? { sayFixed: (_userId: string, line: string) => sayLine(line) } : {}),
     nameOf: async (userId) => input.speakers.find((s) => s.userId === userId)?.name ?? userId,
     ...(input.trace ? { trace: input.trace } : {}),
   });
@@ -234,10 +265,31 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
     if (e.final && e.say === undefined) { uttText = e.text; flushText(); }
   });
   let outN = 0;
-  inner.on('outputAudio', (e) => { if (outN++ % 20 === 0 || e.last) tr('s.audio', { last: !!e.last, queued: queue.length }); nextKind = e.say !== undefined ? 'fixed' : 'model'; run?.outputAudio(e.pcm, e.last === true, e.say); });
-  talking.on('toolCall', (e) => { input.onTool(e.name, e.askedBy ?? null, clock.nowMs()); inner.answerToolCall(e.callId, JSON.stringify({ ok: true })); });
+  inner.on('outputAudio', (e) => { if (outN++ % 20 === 0 || e.last) tr('s.audio', { last: !!e.last, queued: queue.length }); nextKind = e.say !== undefined ? 'fixed' : 'model';
+    // A server line's words go to the router at its first frame (orchestrator.ts `approvedFrame`).
+    const line = e.say !== undefined ? lines.get(e.say) : undefined;
+    if (line !== undefined) { run?.outputText(line, true); lines.delete(e.say!); }
+    run?.outputAudio(e.pcm, e.last === true, e.say);
+  });
+  talking.on('toolCall', (e) => {
+    input.onTool(e.name, e.askedBy ?? null, clock.nowMs());
+    if (!interviews || !policy.runTool || !e.askedBy) { inner.answerToolCall(e.callId, JSON.stringify({ ok: true })); return; }
+    // The orchestrator's server tool (orchestrator.ts `runServerTool`): the session's words meanwhile are unheard, the model is told
+    // the system says what was done, then the family's line is said as a server line.
+    run?.serverLine(true);
+    inner.answerToolCall(e.callId, JSON.stringify({ status: 'done', note: 'The system tells the call what was done. Say nothing about it.' }), { continue: false });
+    void policy.runTool(call, { askedBy: e.askedBy, name: e.name, args: e.args }).catch(() => null).then((out) => {
+      const said = out !== null && typeof out === 'object' ? out.line : out;
+      if (said === null || said === undefined) run?.serverLine(false); else sayLine(said);
+    });
+  });
 
-  await talking.start({
+  const ivTools = interviews ? await policy.sessionTools(call) : null;
+  await talking.start(ivTools ? {
+    instructions: [input.instructions, HANDSFREE_TURN_RULES, family0(policy, call)].filter(Boolean).join('\n\n'),
+    tools: ivTools.tools as never,
+    backendInstructions: ivTools.backendInstructions,
+  } : {
     instructions: [input.instructions, HANDSFREE_TURN_RULES, 'You have one tool through the backend: to add a note, delegate the request; never say you added it yourself.'].join('\n\n'),
     tools: [{ type: 'function', name: 'add_note', description: 'Add a short note to the meeting notes.', parameters: { type: 'object', properties: { text: { type: 'string', description: 'the note' } }, required: ['text'], additionalProperties: false }, strict: true } as never],
     backendInstructions: 'When asked to add a note, call add_note once, then confirm in a few words.',
