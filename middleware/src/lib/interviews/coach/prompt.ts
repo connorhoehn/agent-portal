@@ -53,6 +53,11 @@ export interface CoachPrevious { text: string; competencyId: string; answer: Coa
 export interface CoachCode {
   pad: { language: string | null; text: string; cut: boolean } | null;
   run: { language: string; status: string; exitCode: number | null; output: string; cut: boolean } | null;
+  /**
+   * Bank questions the lead posted into the pad (the pad log's insert events), by id. They count as asked at once: the pad's
+   * text reaches the log only in a snapshot every 30 seconds, so `pad` can still be the text from before the insert.
+   */
+  posted?: readonly string[];
 }
 
 export interface CoachInput {
@@ -86,14 +91,16 @@ export function tailOf(text: string, max: number): { text: string; cut: boolean 
 export function coachCode(
   pad: { text: string; language: string | null } | null,
   run: { language: string; status: string; result: { exitCode: number | null; stdout: string; stderr: string } | null } | null,
+  posted: readonly string[] = [],
 ): CoachCode | null {
-  if (!pad && !run) return null;
+  if (!pad && !run && !posted.length) return null;
   const output = run?.result ? [run.result.stdout, run.result.stderr].filter((s) => s.length > 0).join('\n') : '';
   const tail = tailOf(output, MAX_OUTPUT_TAIL_CHARS);
   const padCut = pad ? cutHeadTail(pad.text, MAX_PAD_CHARS) : null;
   return {
     pad: pad && padCut ? { language: pad.language, text: padCut.text, cut: padCut.cut } : null,
     run: run ? { language: run.language, status: run.status, exitCode: run.result?.exitCode ?? null, output: tail.text, cut: tail.cut } : null,
+    ...(posted.length ? { posted: [...posted] } : {}),
   };
 }
 
@@ -149,6 +156,7 @@ function codeText(code: CoachCode, fence: Fence): string {
   } else {
     parts.push('Last run: (none yet)');
   }
+  if (code.posted?.length) parts.push(`Posted into the pad by the interviewer (already asked): ${code.posted.join(', ')}.`);
   const stage = codeStage(code);
   if (stage) parts.push(`Where the code is: ${STAGE_WORDS[stage]}.`);
   return parts.join('\n');

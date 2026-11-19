@@ -9,7 +9,7 @@ import { interviewApplicationsFixture, interviewOpeningsFixture, interviewsFixtu
 import { interviewSuggestionsFixture } from '../../../../mock/interviews-suggestions.js';
 import { parseCoachAnswer } from '../parse.js';
 import {
-  buildCoachRequest, codeLinesOf, coachCode, COACH_CODE_RULES, COACH_SYSTEM_PROMPT, cutHeadTail, MAX_OUTPUT_TAIL_CHARS, MAX_PAD_CHARS, type CoachInput,
+  buildCoachRequest, codeLinesOf, coachCode, coachUserText, COACH_CODE_RULES, COACH_SYSTEM_PROMPT, cutHeadTail, MAX_OUTPUT_TAIL_CHARS, MAX_PAD_CHARS, type CoachInput,
 } from '../prompt.js';
 import { coachCodeFor, setCoachCodeSource, setCoachDeps, suggestionFor, type CoachDeps, type CoachRef } from '../service.js';
 import { MemorySuggestionStore } from '../store.js';
@@ -210,5 +210,20 @@ describe('the code source as the coach reads it', () => {
       status: 'failed', queuedAt: RUN.queuedAt, startedAt: RUN.startedAt, endedAt: RUN.endedAt, result: RUN.result, events: [], holdId: null, spendSourceId: null,
     });
     expect(await coachCodeFor({ id: TECH, type: 'technical' })).toEqual({ pad: null, run: { language: 'python', status: 'failed', exitCode: 1, output: `6\n\n${RUN.result!.stderr}`, cut: false } });
+    // The lead's insert of a question reaches the pad log within seconds; the source names it before any snapshot holds it.
+    const { interviewPadLogFixture } = await import('../../../../mock/interviews-pad-log.js');
+    interviewPadLogFixture.rows().push({
+      interviewId: TECH, seq: 9001, at: RUN.queuedAt, clientAt: RUN.queuedAt, whoId: 'u-lead', side: 'panel', kind: 'insert',
+      from: null, inserted: null, deleted: null, length: null, lines: null, via: null, language: null, questionId: 'q-be-twosum', text: null,
+    });
+    expect((await coachCodeFor({ id: TECH, type: 'technical' }))?.posted).toEqual(['q-be-twosum']);
+  });
+
+  it('a question posted into the pad makes a Code part on its own, and the request names it as asked', async () => {
+    setCoachCodeSource(async () => ({ pad: null, lastRun: null, posted: ['q-be-twosum'] }));
+    const code = await coachCodeFor({ id: TECH, type: 'technical' });
+    expect(code).toEqual({ pad: null, run: null, posted: ['q-be-twosum'] });
+    expect(coachUserText({ ...FIXED_INPUT, code })).toContain('Posted into the pad by the interviewer (already asked): q-be-twosum.');
+    setCoachCodeSource(null);
   });
 });

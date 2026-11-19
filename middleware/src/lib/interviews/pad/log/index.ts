@@ -3,6 +3,7 @@
 //   checkPadPost / capPost         ./rules.ts: a post checked field by field, and the interview's caps
 //   appendPadEvents / readPadLog   for routes/interviews/pad.ts and routes/interview-invite-pad.ts
 //   latestPadSnapshot              U3: the pad as last snapshotted, for the coach (through the integrator's seam) and the record
+//   postedPadQuestionIds           the questions inserted into the pad (insert events), for the coach's "asked"
 //   erasePadLog                    registered as the `pad-log` eraser, class `media` (decision 17: the code log is media)
 //
 // Panel side only (decision 4): nothing here is exported to the candidate, and the record's export of what Milo showed
@@ -22,6 +23,14 @@ export { CANDIDATE_NAME, READ_PAGE_EVENTS, READ_TEXT_BUDGET, appendPadEvents, pa
 export async function latestPadSnapshot(interviewId: string): Promise<{ text: string; language: string | null; at: string } | null> {
   const row = await runWithDbTenant(INTERVIEWS_TENANT, () => padLogStore().latestSnapshot(interviewId));
   return row ? { text: row.text ?? '', language: row.language, at: row.at } : null;
+}
+
+/**
+ * The bank questions posted into the interview's pad (its `insert` events), first first. The coach counts these as asked:
+ * an insert is posted within seconds, while the pad's text reaches the log only in a snapshot every 30 seconds.
+ */
+export async function postedPadQuestionIds(interviewId: string): Promise<string[]> {
+  return runWithDbTenant(INTERVIEWS_TENANT, () => padLogStore().postedQuestionIds(interviewId));
 }
 
 /** Remove these interviews' pad logs; how many events went. Runs in the interviews tenant's db context. */

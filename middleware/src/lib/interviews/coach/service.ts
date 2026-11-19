@@ -79,7 +79,12 @@ export function setCoachDeps(next: Partial<CoachDeps> | null): void { overrides 
 const deps = (): CoachDeps => ({ ...DEFAULTS, ...overrides });
 
 /** I4.5: what the coach reads of an interview's code: the pad's current text and the last run. */
-export type CoachCodeSource = (interviewId: string) => Promise<{ pad: { text: string; language: string | null } | null; lastRun: RunView | null }>;
+export type CoachCodeSource = (interviewId: string) => Promise<{
+  pad: { text: string; language: string | null } | null;
+  lastRun: RunView | null;
+  /** The bank questions posted into the pad (the pad log's insert events), by id. */
+  posted?: readonly string[];
+}>;
 let codeSource: CoachCodeSource | null = null;
 /**
  * U4: where the coach reads the code. Default: no code. lib/interviews/runs/index.ts registers one (its `lastRun`, no pad)
@@ -92,7 +97,7 @@ export async function coachCodeFor(interview: Pick<Interview, 'id' | 'type'>): P
   if (interview.type !== 'technical' || !codeSource) return null;
   try {
     const got = await codeSource(interview.id);
-    return coachCode(got.pad, got.lastRun ? { language: got.lastRun.language, status: got.lastRun.status, result: got.lastRun.result } : null);
+    return coachCode(got.pad, got.lastRun ? { language: got.lastRun.language, status: got.lastRun.status, result: got.lastRun.result } : null, got.posted ?? []);
   } catch (e) {
     console.warn('[interviews] coach code not read', (e as Error)?.name ?? 'error');
     return null;

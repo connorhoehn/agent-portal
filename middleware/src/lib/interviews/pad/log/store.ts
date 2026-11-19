@@ -52,6 +52,8 @@ export interface PadLogStore {
   listAfter(interviewId: string, afterSeq: number, limit: number): Promise<PadEventRecord[]>;
   /** The interview's last snapshot, or null. */
   latestSnapshot(interviewId: string): Promise<PadEventRecord | null>;
+  /** The question ids the interview's `insert` events name (a question posted into the pad), first insert first, each once. */
+  postedQuestionIds(interviewId: string): Promise<string[]>;
   /** Remove every event of these interviews; how many went. */
   erase(interviewIds: readonly string[]): Promise<number>;
 }
@@ -83,6 +85,11 @@ export class MemoryPadLogStore implements PadLogStore {
     const snaps = this.of(interviewId).filter((r) => r.kind === 'snapshot').sort(bySeq);
     const last = snaps[snaps.length - 1];
     return last ? copy(last) : null;
+  }
+
+  async postedQuestionIds(interviewId: string): Promise<string[]> {
+    const ids = this.of(interviewId).filter((r) => r.kind === 'insert' && r.questionId).sort(bySeq).map((r) => r.questionId!);
+    return [...new Set(ids)];
   }
 
   async erase(interviewIds: readonly string[]): Promise<number> {

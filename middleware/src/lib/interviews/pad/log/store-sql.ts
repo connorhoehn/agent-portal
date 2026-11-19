@@ -26,9 +26,11 @@ export const LIST_PAD_EVENTS_SQL = `SELECT ${COLUMNS} FROM interview_pad_events
   WHERE interview_id = :interview_id AND seq > :after_seq ORDER BY seq LIMIT :limit`;
 export const LATEST_PAD_SNAPSHOT_SQL = `SELECT ${COLUMNS} FROM interview_pad_events
   WHERE interview_id = :interview_id AND kind = 'snapshot' ORDER BY seq DESC LIMIT 1`;
+export const POSTED_QUESTION_IDS_SQL = `SELECT question_id FROM interview_pad_events
+  WHERE interview_id = :interview_id AND kind = 'insert' AND question_id IS NOT NULL ORDER BY seq`;
 export const ERASE_PAD_EVENTS_SQL = `DELETE FROM interview_pad_events WHERE interview_id = ANY(string_to_array(:interview_ids, ',')) RETURNING seq`;
 
-export const PAD_LOG_STATEMENTS = [COUNT_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LIST_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, ERASE_PAD_EVENTS_SQL] as const;
+export const PAD_LOG_STATEMENTS = [COUNT_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LIST_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, POSTED_QUESTION_IDS_SQL, ERASE_PAD_EVENTS_SQL] as const;
 
 const text = (name: string, value: string): SqlParameter => ({ name, value: { stringValue: value } });
 const long = (name: string, value: number): SqlParameter => ({ name, value: { longValue: value } });
@@ -82,6 +84,11 @@ export class SqlPadLogStore implements PadLogStore {
   async latestSnapshot(interviewId: string): Promise<PadEventRecord | null> {
     const row = (await this.exec(LATEST_PAD_SNAPSHOT_SQL, [text('interview_id', interviewId)]))[0];
     return row ? padEventFromRow(row) : null;
+  }
+
+  async postedQuestionIds(interviewId: string): Promise<string[]> {
+    const rows = await this.exec(POSTED_QUESTION_IDS_SQL, [text('interview_id', interviewId)]);
+    return [...new Set(rows.map((r) => strOrNull(r['question_id'])).filter((id): id is string => id !== null))];
   }
 
   async erase(interviewIds: readonly string[]): Promise<number> {

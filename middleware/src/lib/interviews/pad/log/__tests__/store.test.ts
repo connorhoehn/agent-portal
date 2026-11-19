@@ -5,7 +5,7 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { SqlExec } from '../../../store-sql.js';
 import { MemoryPadLogStore, setPadLogStore, type NewPadEvent, type PadLogStore } from '../store.js';
 import {
-  COUNT_PAD_EVENTS_SQL, ERASE_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, LIST_PAD_EVENTS_SQL, PAD_LOG_STATEMENTS, SqlPadLogStore,
+  COUNT_PAD_EVENTS_SQL, ERASE_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, LIST_PAD_EVENTS_SQL, PAD_LOG_STATEMENTS, POSTED_QUESTION_IDS_SQL, SqlPadLogStore,
 } from '../store-sql.js';
 import { erasePadLog, latestPadSnapshot } from '../index.js';
 import { fixtureRegistry } from '../../../../../mock/core/index.js';
@@ -50,6 +50,9 @@ function padTableExec(opts: { raceOnce?: boolean } = {}): SqlExec & { inserts: n
     }
     if (sql === LIST_PAD_EVENTS_SQL) return out(mine(s('interview_id')).filter((r) => Number(r['seq']) > l('after_seq')).slice(0, l('limit')));
     if (sql === LATEST_PAD_SNAPSHOT_SQL) return out(mine(s('interview_id')).filter((r) => r['kind'] === 'snapshot').slice(-1));
+    if (sql === POSTED_QUESTION_IDS_SQL) {
+      return mine(s('interview_id')).filter((r) => r['kind'] === 'insert' && r['question_id'] !== null).map((r) => ({ question_id: r['question_id'] }));
+    }
     if (sql === ERASE_PAD_EVENTS_SQL) {
       const ids = String(s('interview_ids')).split(',');
       const gone = table.filter((r) => ids.includes(String(r['interview_id'])));
@@ -102,6 +105,15 @@ describe.each([
     await store.append('iv-1', [snap(1, 'a = 1\n'), edit(2), snap(3, 'a = 2\n')]);
     expect(await store.latestSnapshot('iv-1')).toMatchObject({ seq: 3, text: 'a = 2\n', language: 'python', kind: 'snapshot' });
     expect((await store.counts('iv-1')).snapshots).toBe(2);
+  });
+
+  it('names the questions posted into the pad, first insert first, each once, and only that interview\'s', async () => {
+    const store = make();
+    const insert = (second: number, questionId: string) => edit(second, { kind: 'insert', side: 'panel', whoId: 'u-lead', from: null, inserted: null, deleted: null, length: null, questionId });
+    expect(await store.postedQuestionIds('iv-1')).toEqual([]);
+    await store.append('iv-1', [insert(1, 'q-b'), edit(2), insert(3, 'q-a'), insert(4, 'q-b')]);
+    await store.append('iv-2', [insert(5, 'q-c')]);
+    expect(await store.postedQuestionIds('iv-1')).toEqual(['q-b', 'q-a']);
   });
 
   it('erases by interview and nothing else', async () => {
