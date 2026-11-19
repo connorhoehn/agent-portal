@@ -2543,17 +2543,27 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/board/reveal",
-      "source": "src/routes/interviews/board.ts:48"
+      "source": "src/routes/interviews/board.ts:65"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/board/reveal/shown",
+      "source": "src/routes/interviews/board.ts:73"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/board/reveals",
+      "source": "src/routes/interviews/board.ts:81"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/board/snapshots",
-      "source": "src/routes/interviews/board.ts:41"
+      "source": "src/routes/interviews/board.ts:44"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/board/snapshots",
-      "source": "src/routes/interviews/board.ts:30"
+      "source": "src/routes/interviews/board.ts:33"
     },
     {
       "method": "GET",

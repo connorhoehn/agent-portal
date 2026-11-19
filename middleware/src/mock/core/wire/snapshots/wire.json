@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T13:17:33.842Z",
-  "serverHandlerSha": "f4b4b3a4745d6b430e84b2b798669dad26debf93aba5ca64130f0ce143c446e9",
+  "capturedAt": "2026-11-19T13:47:51.378Z",
+  "serverHandlerSha": "288fd3ea3fd68ba086f33f7a91cc3a34df5dee99068630aa24d3e88bf843490a",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5577,16 +5577,8 @@
         "interview.questionsChosen": "array",
         "interview.questionsChosen[]": "object",
         "interview.questionsChosen[].competencyId": "string",
-        "interview.questionsChosen[].followUps": "array",
-        "interview.questionsChosen[].followUps[]": "string",
         "interview.questionsChosen[].id": "string",
         "interview.questionsChosen[].prompt": "string",
-        "interview.questionsChosen[].roundType": "string",
-        "interview.questionsChosen[].starter": "object",
-        "interview.questionsChosen[].starter.go": "string",
-        "interview.questionsChosen[].starter.java": "string",
-        "interview.questionsChosen[].starter.python": "string",
-        "interview.questionsChosen[].starter.typescript": "string",
         "interview.revision": "number",
         "interview.round": "object",
         "interview.round.id": "string",
@@ -5632,6 +5624,9 @@
           "scored"
         ]
       }
+    },
+    "GET /api/interviews/interviews/:id/board/reveals": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/board/snapshots": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"

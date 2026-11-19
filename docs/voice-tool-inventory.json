@@ -11,19 +11,19 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-19T13:17:45.662Z",
-  "serverHandlerSha": "f4b4b3a4745d6b430e84b2b798669dad26debf93aba5ca64130f0ce143c446e9"
+  "capturedAt": "2026-11-19T13:48:03.208Z",
+  "serverHandlerSha": "288fd3ea3fd68ba086f33f7a91cc3a34df5dee99068630aa24d3e88bf843490a"
  },
  "summary": {
-  "routes": 972,
-  "routesInSnapshot": 962,
+  "routes": 974,
+  "routesInSnapshot": 964,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
   "pages": 113,
   "byKind": {
    "dev": 14,
-   "write": 422,
-   "read": 497,
+   "write": 423,
+   "read": 498,
    "internal": 39,
    "navigate": 113
   },
@@ -277,17 +277,17 @@
     }
    },
    "other": {
-    "total": 83,
-    "read": 42,
-    "write": 41,
+    "total": 85,
+    "read": 43,
+    "write": 42,
     "navigate": 0,
     "internal": 0,
     "dev": 0,
     "covered": 0,
     "v2": {
      "n/a": 11,
-     "not-yet": 46,
-     "never": 26
+     "not-yet": 47,
+     "never": 27
     }
    },
    "approvals": {
@@ -380,14 +380,14 @@
    "access": 27,
    "orgiq": 422,
    "assessment": 112,
-   "interviews": 67,
+   "interviews": 69,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 919,
-  "peopleReads": 497,
-  "peopleWrites": 422,
+  "peopleRoutes": 921,
+  "peopleReads": 498,
+  "peopleWrites": 423,
   "coveredRoutes": 236,
   "coveredReads": 161,
   "coveredWrites": 75,
@@ -397,9 +397,9 @@
   "serverTools": 6,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 228,
+   "not-yet": 229,
    "read": 161,
-   "never": 415,
+   "never": 416,
    "confirm": 74,
    "n/a": 40,
    "open": 1
@@ -424,7 +424,7 @@
    "list": 84,
    "queue_work": 6,
    "decide": 14,
-   "get": 67,
+   "get": 68,
    "search": 4,
    "budget": 16,
    "update": 17,
@@ -522,17 +522,27 @@
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/board/reveal",
-    "source": "src/routes/interviews/board.ts:48"
+    "source": "src/routes/interviews/board.ts:65"
+   },
+   {
+    "method": "POST",
+    "path": "/api/interviews/interviews/:id/board/reveal/shown",
+    "source": "src/routes/interviews/board.ts:73"
+   },
+   {
+    "method": "GET",
+    "path": "/api/interviews/interviews/:id/board/reveals",
+    "source": "src/routes/interviews/board.ts:81"
    },
    {
     "method": "GET",
     "path": "/api/interviews/interviews/:id/board/snapshots",
-    "source": "src/routes/interviews/board.ts:41"
+    "source": "src/routes/interviews/board.ts:44"
    },
    {
     "method": "POST",
     "path": "/api/interviews/interviews/:id/board/snapshots",
-    "source": "src/routes/interviews/board.ts:30"
+    "source": "src/routes/interviews/board.ts:33"
    },
    {
     "method": "GET",
@@ -778,7 +788,7 @@
    "refused:destructive": 47,
    "refused:interviews-clock": 1,
    "allowed": 125,
-   "refused:unclassified": 140,
+   "refused:unclassified": 141,
    "refused:spends": 25,
    "refused:fires": 26,
    "skipped": 31,
@@ -4376,7 +4386,7 @@
    "note": "the candidate's guest door, not a staff route"
   },
   {
-   "pattern": "^POST \\/api\\/interviews\\/interviews\\/:[^/]+\\/(pad\\/events|board\\/snapshots|board\\/reveal|runs|runs\\/:[^/]+\\/cancel)$",
+   "pattern": "^POST \\/api\\/interviews\\/interviews\\/:[^/]+\\/(pad\\/events|board\\/snapshots|board\\/reveal|board\\/reveal\\/shown|runs|runs\\/:[^/]+\\/cancel)$",
    "decision": "never",
    "tool": null,
    "note": "the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"
@@ -5077,9 +5087,11 @@
   {"method":"GET","path":"/api/interviews/interviews/:id","source":"src/routes/interviews.ts:115","declaredAt":"src/routes/interviews.ts:115","stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":"ViewInterviews","actions":["ViewInterviews"],"unresolvedGates":["interviewsFlagGate"],"holders":["interviews/hiring-manager","interviews/interviewer","interviews/recruiter"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/admit","source":"src/routes/interviews/admission.ts:58","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/answer","source":"src/routes/interviews/assignments.ts:124","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"accept or decline a seat on a round (ConductInterview)"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/board/reveal","source":"src/routes/interviews/board.ts:48","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
-  {"method":"GET","path":"/api/interviews/interviews/:id/board/snapshots","source":"src/routes/interviews/board.ts:41","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/interviews/interviews/:id/board/snapshots","source":"src/routes/interviews/board.ts:30","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/board/reveal","source":"src/routes/interviews/board.ts:65","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/board/reveal/shown","source":"src/routes/interviews/board.ts:73","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/board/reveals","source":"src/routes/interviews/board.ts:81","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"GET","path":"/api/interviews/interviews/:id/board/snapshots","source":"src/routes/interviews/board.ts:44","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
+  {"method":"POST","path":"/api/interviews/interviews/:id/board/snapshots","source":"src/routes/interviews/board.ts:33","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the code pad's log, the whiteboard's checkpoints and the runs belong to the room, never to the voice navigator"}},
   {"method":"GET","path":"/api/interviews/interviews/:id/consents","source":"src/routes/interviews/consents.ts:29","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"read","family":"other","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/interviews/interviews/:id/end","source":"src/routes/interviews/room.ts:82","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"letting the candidate in, starting and ending the interview are the lead's acts in the room"}},
   {"method":"DELETE","path":"/api/interviews/interviews/:id/invite","source":"src/routes/interviews/invite.ts:101","declaredAt":null,"stale":false,"snapshot":true,"tenants":["interviews"],"kind":"write","family":"other","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"an invite link is a secret shown once on the page; never read aloud"}},
