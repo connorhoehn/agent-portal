@@ -127,3 +127,7 @@ export function boardMoments(snapshots: readonly BoardSnapshot[], startedAt: str
     return { seq: s.seq, atMs, final, label: final ? `Final, ${clock(atMs)}` : clock(atMs), elements: s.elements };
   });
 }
+
+/** sceneKey for a kit's stored board (plain objects): the editor writes the question only when this moved. */
+export const boardSceneKey = (elements: ReadonlyArray<Record<string, unknown>>): string =>
+  elements.filter((e) => !e['isDeleted']).map((e) => `${String(e['id'])}:${Number(e['version']) || 0}`).sort().join('|');

@@ -9,7 +9,9 @@ import {
   Button, ChevronIcon, Chip, CodeEditor, DataTable, DetailSection, EditIcon, FormField, IconButton, Inline, Input, NumberInput, Select,
   Stack, T, Textarea, TrashIcon, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
-import type { ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
+import { boardSceneKey } from '../../lib/interviewsBoard';
+import { BoardScene } from './board/BoardScene';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
 import {
   PAD_LANGUAGES, PAD_LANGUAGE_LABELS, blankCompetency, blankQuestion, blankRound, moved, newId, padLine, roundHasPad, rowsWithProblems, starterLine,
@@ -26,6 +28,8 @@ interface Props {
   open: OpenRow | null;
   onOpen: (row: OpenRow | null) => void;
 }
+
+const SURFACE_OPTIONS = [{ value: 'pad', label: 'Code pad' }, { value: 'board', label: 'Whiteboard' }];
 
 const allIds = (kit: OpeningKit) => new Set([...kit.rounds, ...kit.competencies, ...kit.questions].map((x) => x.id));
 const ROUND_OPTIONS = (['technical', 'behavioural'] as const).map((t) => ({ value: t, label: ROUND_TYPE_LABELS[t] }));
@@ -77,7 +81,10 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
       <NumberInput size="sm" aria-label={`Round ${i + 1} length in minutes`} value={r.minutes} min={15} max={180} step={5} unit="min"
         invalid={problems.has(`rounds.${i}.minutes`)} onChange={(v) => setRound(i, { minutes: v })} />
     ) },
-    { key: 'pad', header: 'Code pad', width: '120px', render: (r) => <T size="sm" tone={roundHasPad(r.type) ? 'primary' : 'tertiary'}>{padLine(r.type)}</T> },
+    { key: 'pad', header: 'Works on', width: '148px', render: (r, i) => (roundHasPad(r.type)
+      ? <Select size="sm" aria-label={`Round ${i + 1} works on`} value={r.surface === 'board' ? 'board' : 'pad'} options={SURFACE_OPTIONS}
+          invalid={problems.has(`rounds.${i}.surface`)} onChange={(e) => setRound(i, { surface: e.target.value as 'pad' | 'board' })} data-testid="interviews-kit-round-surface" />
+      : <T size="sm" tone="tertiary">{padLine(r.type)}</T>) },
   ];
 
   // ── competencies ────────────────────────────────────────────────────────
@@ -236,10 +243,12 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
     onChange(Object.keys(next).length ? { ...rest, starter: next } : rest);
   };
   const setType = (roundType: RoundType) => {
-    // A behavioural round has no code pad, so its questions carry no starter code (row I1.8).
-    const { starter: _drop, ...rest } = q;
+    // A behavioural round has no code pad or whiteboard, so its questions carry no starter code or board (row I1.8).
+    const { starter: _drop, board: _board, ...rest } = q;
     onChange(roundHasPad(roundType) ? { ...q, roundType } : { ...rest, roundType });
   };
+  // A starting board is offered when the kit has a whiteboard round (or the question already carries one).
+  const boardOffered = roundHasPad(q.roundType) && (Boolean(q.board) || kit.rounds.some((r) => roundHasPad(r.type) && r.surface === 'board'));
   return (
     <RowForm title={`Question ${index + 1}`} onDone={onDone} testId="interviews-kit-question-form">
       <FormField label="Question" required error={problems.get(`${at}.prompt`)} hint="The words the interviewer asks.">
@@ -305,6 +314,38 @@ function QuestionForm({ index, question: q, kit, problems, onChange, onDone }: {
           </Stack>
         ))}
       </Stack>
+
+      {boardOffered && <StartingBoard question={q} problem={problems.get(`${at}.board`)} onChange={onChange} />}
     </RowForm>
+  );
+}
+
+/**
+ * A board round question's starting board (WHITEBOARD-PLAN step 2): its name and the scene, drawn in the room's own
+ * canvas (BoardScene, editable). The lead's "Start from a board" puts it on the room's board.
+ */
+function StartingBoard({ question: q, problem, onChange }: { question: KitQuestion; problem: string | undefined; onChange: (q: KitQuestion) => void }) {
+  const board = q.board;
+  const onElements = useCallback((elements: Array<Record<string, unknown>>) => {
+    if (!board || boardSceneKey(elements) === boardSceneKey(board.elements)) return;
+    onChange({ ...q, board: { ...board, elements } });
+  }, [board, onChange, q]);
+  return (
+    <Stack gap="xs" data-testid="interviews-kit-board">
+      <Inline justify="between" align="center">
+        <T size="sm" weight="medium">Starting board</T>
+        {board
+          ? <Button size="sm" variant="ghost" onClick={() => { const { board: _drop, ...rest } = q; onChange(rest); }} data-testid="interviews-kit-remove-board">Remove the board</Button>
+          : <Button size="sm" variant="ghost" onClick={() => onChange({ ...q, board: { name: 'Starting board', elements: [] } })} data-testid="interviews-kit-add-board">Add a starting board</Button>}
+      </Inline>
+      {!board && <T size="xs" tone="tertiary">None. The whiteboard opens empty, or with a board you draw here: frames, stickies, a prompt card.</T>}
+      {problem && <T size="xs" tone="danger" data-testid="interviews-kit-board-problem">{problem}</T>}
+      {board && <>
+        <FormField label="Board name" hint="What the lead picks from Start from a board.">
+          {(w) => <Input {...w} size="sm" value={board.name} maxLength={40} onChange={(e) => onChange({ ...q, board: { ...board, name: e.target.value } })} data-testid="interviews-kit-board-name" />}
+        </FormField>
+        <BoardScene sceneId={`kit-${q.id}`} elements={board.elements} editable onElements={onElements} className="h-[28rem] overflow-hidden" data-testid="interviews-kit-board-canvas" />
+      </>}
+    </Stack>
   );
 }

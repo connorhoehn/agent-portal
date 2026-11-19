@@ -88,3 +88,16 @@ test('the record page offers the final board and a few timed checkpoints spread 
   assert.equal(boardMoments(twelve.slice(0, 3), start).length, 3, 'fewer than the cap: every one');
   assert.equal(boardMoments([snap(1, 2)], null)[0]!.atMs, 0, 'no start: the clock reads 0');
 });
+
+test('the kit editor writes a starting board only when its scene moved: same ids and versions read as the same board', async () => {
+  const { boardSceneKey } = await import('../interviewsBoard.ts');
+  const a = [{ id: 'f', type: 'frame', version: 2 }, { id: 's', type: 'rectangle', version: 1 }];
+  assert.equal(boardSceneKey(a), boardSceneKey([...a].reverse()), 'order does not matter');
+  assert.notEqual(boardSceneKey(a), boardSceneKey([{ ...a[0]!, version: 3 }, a[1]!]), 'a moved shape does');
+  assert.equal(boardSceneKey([...a, { id: 'x', type: 'text', version: 4, isDeleted: true }]), boardSceneKey(a), 'a deleted shape is not on the board');
+  // A board read back off the canvas (the binding's elements) keys the same as the kit's stored copy.
+  const ydoc = new Y.Doc();
+  insertBoard(ydoc, blueprintBoard());
+  const read = readBoardElements(ydoc) as unknown as Array<Record<string, unknown>>;
+  assert.equal(boardSceneKey(read), boardSceneKey(read.map((e) => ({ ...e }))));
+});
