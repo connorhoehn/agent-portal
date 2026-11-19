@@ -227,8 +227,11 @@ export function findAddress(text: string): NameHit | null {
       // Mid-sentence, the name straight followed by the ask ("so Milo please summarise the call").
       else if (!closesSentence(after)) addressed = asksSomething(rest);
       // Spoken to Milo at the end of a sentence, not in thanks: a request only when one of the next sentences asks it something.
+      // The request is that sentence on: the words before it ("I was focusing.") would hide a fixed phrase ("repeat the question").
       else if (closesSentenceSpokenTo(before, after) && !THANKS_OR_BYE.test(before)) {
-        addressed = rest.split(/(?<=[.!?…])\s+/).slice(0, VOCATIVE_REACH_SENTENCES).some(asksSomething);
+        const sentences = rest.split(/(?<=[.!?…])\s+/);
+        const asking = sentences.slice(0, VOCATIVE_REACH_SENTENCES).findIndex(asksSomething);
+        if (asking >= 0) return { addressed: true, rest: sentences.slice(asking).join(' ') };
       }
     }
     if (addressed) return { addressed, rest };

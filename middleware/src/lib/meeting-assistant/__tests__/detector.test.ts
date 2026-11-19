@@ -101,11 +101,11 @@ describe('name matching', () => {
     expect(findAddress('Oh, nice! Hey Milo... It would be helpful to have another dozen test cases')?.rest).toBe('It would be helpful to have another dozen test cases');
   });
 
-  it('a name that closes its sentence after a comma speaks to Milo when one of the next two sentences asks it something', () => {
+  it('a name that closes its sentence after a comma speaks to Milo when one of the next two sentences asks it something; the request is that sentence on', () => {
     // The ask comes a sentence after the name (live take of 18 November: both such requests were refused as asked by nobody).
-    expect(findAddress('Oh. Pardon me, Milo. I drifted off. Could you repeat the question')?.rest).toBe('I drifted off. Could you repeat the question');
+    expect(findAddress('Oh. Pardon me, Milo. I drifted off. Could you repeat the question')?.rest).toBe('Could you repeat the question');
     expect(findAddress('Off you go, Milo! She wants a memo cache. Can you add the import at the top for her')?.rest)
-      .toBe('She wants a memo cache. Can you add the import at the top for her');
+      .toBe('Can you add the import at the top for her');
     // Thanks said to Milo, then talk to someone else: nothing is asked, so no request.
     expect(findAddress('Oh, thanks, Milo! Then I would wrap the function and pass a tuple')).toBeNull();
     // An ask three sentences on is for someone else.
@@ -125,7 +125,7 @@ describe('name matching', () => {
     expect(findAddress('Thanks, Milo. That was great. Could you walk me through your approach?')).toBeNull();
     expect(findAddress('Bye, Milo! Now, could you explain the loop')).toBeNull();
     // An apology is not thanks: the ask that follows it is still Milo's (live take of 18 November).
-    expect(findAddress('So sorry, Milo. I was focusing. Could you repeat the question?')).not.toBeNull();
+    expect(findAddress('So sorry, Milo. I was focusing. Could you repeat the question?')?.rest).toBe('Could you repeat the question?');
   });
 });
 
