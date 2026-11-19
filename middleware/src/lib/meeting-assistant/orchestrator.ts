@@ -394,6 +394,11 @@ interface CallRun {
   chain: Promise<void>;
   /** Every stored line of this run, in the order it arrived: a tool call is judged only after the lines that came before it are written. */
   lineChain: Promise<void>;
+  /**
+   * The detector's held answers, said one after another in the order their requests closed. Apart from `lineChain`: a held answer
+   * resolves only once it is spoken, and the lines heard meanwhile are stored as they arrive.
+   */
+  heldChain: Promise<void>;
   /** Provider error events across this run's sessions: how many, and the latest few as codes only. */
   providerErrorCount: number;
   /** Transcript pieces judged to be Milo's own voice and not stored. */
@@ -731,7 +736,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), heldChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -1695,7 +1700,12 @@ export class AssistantRuntime {
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
         // An empty held answer: one of the family's requests, handled, with nothing to say (a request heard twice).
-        if (held !== null) { if (held) await this.sayHeld(run, e.askedBy, held); continue; }
+        // It is said after the held answers before it, but not awaited here: this runs inside storing the request's line, and the
+        // lines after it must not wait for Milo to finish speaking.
+        if (held !== null) {
+          if (held) run.heldChain = run.heldChain.then(() => this.sayHeld(run, e.askedBy, held)).catch((err: unknown) => { console.warn('[meeting-assistant] held answer failed', (err as Error).message); });
+          continue;
+        }
         // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
         this.awaitToolCallOrFallback(run, e.askedBy, e.text, e.endedAt);
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening

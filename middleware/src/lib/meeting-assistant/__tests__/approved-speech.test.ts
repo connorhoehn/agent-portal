@@ -31,6 +31,7 @@ import { READ_ALOUD_DELEGATE_RULE, READ_ALOUD_ONLY_RULE } from '../instructions.
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
+import type { AudioSink } from '../audio-intake.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
 import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
@@ -40,6 +41,8 @@ const T0 = Date.parse('2026-11-17T12:00:00.000Z');
 const QUESTION = 'Walk me through how you would design a rate limiter for a public API.';
 const flush = async () => { for (let i = 0; i < 8; i += 1) await new Promise<void>((r) => setImmediate(r)); };
 const TONE = SCRIPT_TONE_FRAMES + OUTPUT_TAIL_FRAMES;
+/** Waits, in real time and at most 2 s, until `ok()`: a held answer is said at the relay's own pace, apart from the line that asked. */
+const until = async (ok: () => boolean, ms = 2_000) => { const end = Date.now() + ms; while (!ok() && Date.now() < end) await new Promise((r) => setTimeout(r, 5)); };
 
 /** A provider-shaped session the test drives: it records `sayVerbatim` requests and the test finishes them. */
 class FakeSession extends SessionEmitter implements LiveMeetingSession {
@@ -80,7 +83,14 @@ let sent: Array<{ seq: number; last?: boolean }>;
 let sentBytes: number[];
 let factory: () => LiveMeetingSession;
 
-async function startCall(lobby: string): Promise<void> {
+/** Hands the runtime's audio sink to the test, so it can say who was voiced when (a heard line is credited from it). */
+const tap = {
+  sink: null as AudioSink | null,
+  attach(_c: string, sink: AudioSink) { this.sink = sink; }, suspend() { this.sink = null; }, detach() { this.sink = null; },
+};
+const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+
+async function startCall(lobby: string, opts: { audio?: boolean } = {}): Promise<void> {
   await store.create({
     callId: CALL, tenant: 'orgiq', lobby, initiativeId: null, state: 'listening', invitedBy: ALICE, invitedAt: now,
     pausedBy: null, leftAt: null, leftBy: null, acked: [ALICE, GUEST], attendees: [ALICE, GUEST], presentAtInvite: [ALICE, GUEST],
@@ -89,6 +99,7 @@ async function startCall(lobby: string): Promise<void> {
   const ctx: StartContext = { callId: CALL, tenant: 'orgiq', inviterId: ALICE, roster: ['Alice'], recordName: 'Round' };
   runtime = new AssistantRuntime({
     store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async () => ['member'],
+    ...(opts.audio ? { audio: tap } : {}),
     voiceSink: (_ch, frame) => { sent.push({ seq: frame.data.seq, ...(frame.data.last ? { last: true } : {}) }); sentBytes.push(Buffer.from(frame.data.pcm, 'base64')[0]!); return true; },
   }, { tickMs: 0 });
   await runtime.start(ctx);
@@ -553,7 +564,7 @@ describe('6. a held answer (the policy\'s fixed requests) never reaches the mode
       const s = scripted();
       const sendText = jest.spyOn(s, 'sendText');
       await intake.handle(CALL, { userId: GUEST, text: 'Milo, how much time is left?', at: now });
-      now += 5000; await intake.tick(); await flush();
+      now += 5000; await intake.tick(); await flush(); await until(() => noted.length > 0);
       expect(sendText).not.toHaveBeenCalled();
       expect(mockPosts.approved).toEqual(['About 20 minutes are left in this round.']);
       expect(mockPosts.replies).toEqual([]);
@@ -589,6 +600,29 @@ describe('6b. a fixed request the family knows whole by its words', () => {
       expect(mockPosts.approved).toEqual(['Hi, I am Milo.']);
     } finally { off(); }
   });
+
+  it('is said without holding up the lines heard after it: the next person\'s line is stored while Milo is still speaking', async () => {
+    const HELD: MeetingAssistantPolicy = {
+      ...NO_RELAY, id: 'held-whole-lines',
+      wholeRequest: async (_c, request) => /^introduce yourself\.?$/i.test(request.trim()),
+      answerFromHeldText: async (_c, r) => (/introduce yourself/i.test(r.text) ? 'Hi, I am Milo.' : null),
+    };
+    const off = registerMeetingAssistantPolicy('orgiq:heldlines', HELD);
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:heldlines:r1', { audio: true });
+      tap.sink!.placed(ALICE, loud(2_000), 0);
+      now += 2_000;
+      fake().fire('inputTranscript', { text: 'Milo, introduce yourself.', startMs: 0, endMs: 2_000 });
+      await flush();
+      expect(fake().asked.map((a) => a.text)).toEqual(['Hi, I am Milo.']); // asked of the session, not yet spoken
+      tap.sink!.placed(GUEST, loud(1_000), 3_000);
+      now += 2_000;
+      fake().fire('inputTranscript', { text: 'Nice to meet you.', startMs: 3_000, endMs: 4_000 });
+      await flush();
+      expect((await store.lines(CALL, 0, 10)).map((l) => [l.userId, l.text])).toEqual([[ALICE, 'Milo, introduce yourself.'], [GUEST, 'Nice to meet you.']]);
+    } finally { off(); }
+  });
 });
 
 describe('7. the fixed refusal for a request heard again, and the asker\'s name', () => {
@@ -603,7 +637,12 @@ describe('7. the fixed refusal for a request heard again, and the asker\'s name'
     const off = registerMeetingAssistantPolicy('orgiq:refusaltest', HELD);
     try {
       await startCall('orgiq:refusaltest:r1');
-      const ask = async (text: string, by = GUEST) => { await intake.handle(CALL, { userId: by, text, at: now }); now += 5000; await intake.tick(); await flush(); };
+      // Each ask is answered (said, or skipped as the same refusal again) before the next is heard.
+      const answered = () => mockTrace.filter((t) => t.ev === 'voice.approved' || t.ev === 'held.repeat').length;
+      const ask = async (text: string, by = GUEST) => {
+        const before = answered();
+        await intake.handle(CALL, { userId: by, text, at: now }); now += 5000; await intake.tick(); await flush(); await until(() => answered() > before);
+      };
       await ask('Milo, what is two plus two?');
       now += 25_000;
       await ask('Milo, what is two plus two?'); // the same audio, looped 30 s later
