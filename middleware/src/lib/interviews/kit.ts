@@ -8,7 +8,8 @@
 //   rounds | competencies | questions               the list itself (too few, too many, a removal)
 //   rounds.<i>.<field>                              name, type, minutes, surface, competencyIds
 //   competencies.<i>.<field>                        name, lookFor, anchors.<1-4>
-//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board, clarifying.<j>
+//   questions.<i>.<field>                           prompt, competencyId, roundType, followUps.<j>, starter.<language>, board, clarifying.<j>,
+//                                                   providedDesign, designQuestions[.<j>.text|answer], redFlags[.<j>]
 //   <field>                                         an opening's details: title, level, team, location, ...
 //
 // <i> is the item's position in the list as sent, so the editor needs no ids to place a message.
@@ -26,8 +27,8 @@
 // round's or chosen question's type changed), so those rows never meet a dangling id.
 
 import {
-  OPENING_STATES, PAD_LANGUAGES, ROUND_SURFACES, ROUND_TYPES,
-  type InterviewsWorld, type KitBoard, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningState,
+  OPENING_STATES, PAD_LANGUAGES, RED_FLAG_GROUPS, ROUND_SURFACES, ROUND_TYPES,
+  type InterviewsWorld, type KitBoard, type KitDesignQuestion, type KitRedFlag, type RedFlagGroup, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningState,
   type PadLanguage, type RoundSurface, type RoundType,
 } from './types.js';
 import { boardElement } from './board/elements.js';
@@ -50,6 +51,15 @@ export const KIT_LIMITS = {
   boardElements: 400,
   /** A starting board as JSON, in bytes. */
   boardBytes: 256 * 1024,
+  /** The answer key's own board (a question's provided design), as JSON, in bytes. */
+  providedDesignBytes: 192 * 1024,
+  /** The numbered design questions under "Your design", and each one's and its answer's length. */
+  designQuestions: 6,
+  designQuestion: 240,
+  designAnswer: 600,
+  /** The answer key's red flags, and each one's length. */
+  redFlags: 12,
+  redFlag: 200,
   minutesMin: 15,
   minutesMax: 180,
 } as const;
@@ -80,7 +90,7 @@ export function roundSurface(round: Pick<KitRound, 'type' | 'surface'> | null | 
  * a string `id` and a type a board keeps (board/elements.ts: no embedded page, iframe or image, `kind` otherwise); links
  * are taken off. The shape and the size are checked.
  */
-export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: false; why: 'unreadable' | 'name' | 'empty' | 'large' | 'kind' } {
+export function checkBoard(raw: unknown, maxBytes: number = KIT_LIMITS.boardBytes): { ok: true; board: KitBoard } | { ok: false; why: 'unreadable' | 'name' | 'empty' | 'large' | 'kind' } {
   if (!isRecord(raw)) return { ok: false, why: 'unreadable' };
   const name = text(raw['name']);
   if (!name || name.length > KIT_LIMITS.boardName) return { ok: false, why: 'name' };
@@ -100,7 +110,7 @@ export function checkBoard(raw: unknown): { ok: true; board: KitBoard } | { ok: 
     kept.push(el);
   }
   const elements = kept.filter((e) => e['isDeleted'] !== true);
-  if (Buffer.byteLength(JSON.stringify(elements), 'utf8') > KIT_LIMITS.boardBytes) return { ok: false, why: 'large' };
+  if (Buffer.byteLength(JSON.stringify(elements), 'utf8') > maxBytes) return { ok: false, why: 'large' };
   return { ok: true, board: { name, elements } };
 }
 
@@ -332,6 +342,7 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
         }[checked.why]);
       } else out.board = checked.board;
     }
+    answerKey(p, q, at, n, roundType, out);
     return out;
   });
   duplicates(p, 'questions', questions, 'Question', 'questions');
@@ -359,6 +370,68 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
 
   if (p.list.length) return { ok: false, problems: p.list };
   return { ok: true, value: { rounds, competencies, questions } };
+}
+
+/**
+ * A question's answer key (types.ts KitQuestion: providedDesign, designQuestions, redFlags), technical questions only.
+ * Each is optional and an old kit has none; an empty list is dropped, so a saved question carries a list only with items.
+ */
+function answerKey(p: Problems, q: Record<string, unknown>, at: string, n: number, roundType: RoundType, out: KitQuestion): void {
+  const behavioural = roundType === 'behavioural';
+  const designIn = q['providedDesign'];
+  if (designIn !== undefined && designIn !== null) {
+    const checked = checkBoard(designIn, KIT_LIMITS.providedDesignBytes);
+    if (behavioural) p.add(`${at}.providedDesign`, `Question ${n} is for a behavioural round, which has no whiteboard, so it cannot carry a provided design.`);
+    else if (!checked.ok) {
+      p.add(`${at}.providedDesign`, {
+        unreadable: `Question ${n}'s provided design could not be read; remove it and draw it again.`,
+        name: `Question ${n}'s provided design needs a short name, up to ${KIT_LIMITS.boardName} characters.`,
+        empty: `Question ${n}'s provided design is empty; draw the reference design or remove it.`,
+        large: `Question ${n}'s provided design is too big; keep it under ${KIT_LIMITS.boardElements} shapes and ${plain(KIT_LIMITS.providedDesignBytes / 1024)} KB.`,
+        kind: `Question ${n}'s provided design has an embedded page, an image or another shape a board cannot keep; remove it.`,
+      }[checked.why]);
+    } else out.providedDesign = checked.board;
+  }
+  const designQs = q['designQuestions'];
+  if (designQs !== undefined && designQs !== null) {
+    const list = Array.isArray(designQs) ? designQs : null;
+    if (!list) p.add(`${at}.designQuestions`, `Question ${n}'s design questions could not be read; add them again.`);
+    else if (list.length > 0 && behavioural) p.add(`${at}.designQuestions`, `Question ${n} is for a behavioural round; design questions belong to a system design question.`);
+    else if (list.length > KIT_LIMITS.designQuestions) p.add(`${at}.designQuestions`, `Question ${n} has more than ${KIT_LIMITS.designQuestions} design questions.`);
+    else if (list.length > 0) {
+      out.designQuestions = list.map((raw, j): KitDesignQuestion => {
+        const d: Record<string, unknown> = isRecord(raw) ? raw : { text: raw };
+        const k = `${at}.designQuestions.${j}`;
+        const one: KitDesignQuestion = { text: p.str(`${k}.text`, d['text'], KIT_LIMITS.designQuestion,
+          `Design question ${j + 1} on question ${n} is empty; write it or remove it.`, `Design question ${j + 1} on question ${n} is longer than ${KIT_LIMITS.designQuestion} characters.`) };
+        const answer = text(d['answer']);
+        if (answer.length > KIT_LIMITS.designAnswer) p.add(`${k}.answer`, `The answer to design question ${j + 1} on question ${n} is longer than ${KIT_LIMITS.designAnswer} characters.`);
+        if (answer) one.answer = answer;
+        if (d['enhancement'] === true) {
+          if (j !== list.length - 1) p.add(`${k}.enhancement`, `Only the last design question on question ${n} can be the enhancement.`);
+          one.enhancement = true;
+        }
+        return one;
+      });
+    }
+  }
+  const flags = q['redFlags'];
+  if (flags !== undefined && flags !== null) {
+    const list = Array.isArray(flags) ? flags : null;
+    if (!list) p.add(`${at}.redFlags`, `Question ${n}'s red flags could not be read; add them again.`);
+    else if (list.length > 0 && behavioural) p.add(`${at}.redFlags`, `Question ${n} is for a behavioural round; red flags belong to a system design question.`);
+    else if (list.length > KIT_LIMITS.redFlags) p.add(`${at}.redFlags`, `Question ${n} has more than ${KIT_LIMITS.redFlags} red flags.`);
+    else if (list.length > 0) {
+      out.redFlags = list.map((raw, j): KitRedFlag => {
+        const f = isRecord(raw) ? raw : {};
+        const group = (RED_FLAG_GROUPS as readonly string[]).includes(f['group'] as string) ? f['group'] as RedFlagGroup : null;
+        if (!group) p.add(`${at}.redFlags.${j}`, `Red flag ${j + 1} on question ${n} needs a group: over-engineering, responsibility, naming or other.`);
+        const flag = p.str(`${at}.redFlags.${j}`, f['text'], KIT_LIMITS.redFlag,
+          `Red flag ${j + 1} on question ${n} is empty; write it or remove it.`, `Red flag ${j + 1} on question ${n} is longer than ${KIT_LIMITS.redFlag} characters.`);
+        return { group: group ?? 'other', text: flag };
+      });
+    }
+  }
 }
 
 /** Two items with one id, or two rounds or competencies with one name. */

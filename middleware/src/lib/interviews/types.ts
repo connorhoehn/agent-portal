@@ -105,6 +105,27 @@ export interface KitQuestion {
    * round (coach/clarifying.ts). Technical questions only; absent when there are none.
    */
   clarifying?: string[];
+  // ── the answer key (the master template's part C): the interviewer's, never the candidate's ──
+  // These three are read by the lead, the panel and the kit's editors only. Every payload a candidate can reach (the
+  // guest's routes, the board document, Milo's tools in the call) carries a question through answer-key.ts
+  // candidateQuestion, which keeps only the fields it names, so a field added here stays off the candidate's side.
+  /** The reference design, a board scene like `board`: shown in the lead's and panel's "Provided design" tab, and put on the shared board only when the lead reveals it. */
+  providedDesign?: KitBoard;
+  /** The numbered "Please answer the following questions", each with the interviewer's short answer; the last may be the enhancement that changes the diagram. */
+  designQuestions?: KitDesignQuestion[];
+  /** What a weak design shows, grouped: the lead's unchecked checklist on the scorecard (never auto-scored). */
+  redFlags?: KitRedFlag[];
+}
+
+export const RED_FLAG_GROUPS = ['over-engineering', 'responsibility', 'naming', 'other'] as const;
+export type RedFlagGroup = typeof RED_FLAG_GROUPS[number];
+export interface KitRedFlag { group: RedFlagGroup; text: string }
+export interface KitDesignQuestion {
+  text: string;
+  /** The interviewer's answer (answer key). */
+  answer?: string;
+  /** The last question only: the enhancement that makes the candidate update the diagram. */
+  enhancement?: true;
 }
 
 /** An opening's kit: its rounds, the competencies they judge and the question bank, each list in the order shown. */

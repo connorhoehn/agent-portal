@@ -468,3 +468,59 @@ describe('a system design question\'s clarifying questions (WHITEBOARD-PLAN step
     expect(r.ok && r.value.questions.filter((q) => !q.clarifying).every((q) => !('clarifying' in q))).toBe(true);
   });
 });
+
+describe('a board question\'s answer key: provided design, design questions, red flags (the master template\'s part C)', () => {
+  const tech = () => {
+    const kit = seedKit('op-backend') as unknown as { questions: Array<Record<string, unknown>> };
+    const i = kit.questions.findIndex((q) => q['id'] === 'q-be-shortener');
+    return { kit, i };
+  };
+  const at = (q: Record<string, unknown>) => { const { kit, i } = tech(); Object.assign(kit.questions[i]!, q); return { i, r: checkKit(kit) }; };
+
+  it('an old question has none of the three, and still saves unchanged', () => {
+    const { i, r } = at({});
+    expect(r.ok).toBe(true);
+    const q = r.ok ? r.value.questions[i]! : null;
+    expect(q && ['providedDesign', 'designQuestions', 'redFlags'].some((k) => k in q)).toBe(false);
+  });
+
+  it('keeps a provided design, the design questions with answers and an enhancement last, and grouped red flags', () => {
+    const providedDesign = blueprintBoard();
+    const { i, r } = at({
+      providedDesign,
+      designQuestions: [{ text: ' Who are the actors? ', answer: ' Users and the API. ' }, { text: 'Add trending topics.', enhancement: true }],
+      redFlags: [{ group: 'naming', text: ' APIs named as nouns ' }, { group: 'over-engineering', text: 'A service per noun' }],
+    });
+    expect(paths(r)).toEqual([]);
+    const q = r.ok ? r.value.questions[i]! : null;
+    expect(q?.providedDesign).toEqual(providedDesign);
+    expect(q?.designQuestions).toEqual([{ text: 'Who are the actors?', answer: 'Users and the API.' }, { text: 'Add trending topics.', enhancement: true }]);
+    expect(q?.redFlags).toEqual([{ group: 'naming', text: 'APIs named as nouns' }, { group: 'over-engineering', text: 'A service per noun' }]);
+    // empty lists are dropped
+    const empty = at({ designQuestions: [], redFlags: [] });
+    expect(empty.r.ok && !('designQuestions' in empty.r.value.questions[empty.i]!) && !('redFlags' in empty.r.value.questions[empty.i]!)).toBe(true);
+  });
+
+  it('refuses too many, too long, an enhancement before the last, an unknown group, and an unreadable or oversized design', () => {
+    const q = (n: number) => Array.from({ length: n }, (_, j) => ({ text: `Q${j}` }));
+    expect(paths(at({ designQuestions: q(KIT_LIMITS.designQuestions + 1) }).r)).toEqual([`questions.${tech().i}.designQuestions`]);
+    expect(paths(at({ designQuestions: [{ text: 'x'.repeat(KIT_LIMITS.designQuestion + 1) }] }).r)).toEqual([`questions.${tech().i}.designQuestions.0.text`]);
+    expect(paths(at({ designQuestions: [{ text: 'a', answer: 'x'.repeat(KIT_LIMITS.designAnswer + 1) }] }).r)).toEqual([`questions.${tech().i}.designQuestions.0.answer`]);
+    expect(paths(at({ designQuestions: [{ text: 'a', enhancement: true }, { text: 'b' }] }).r)).toEqual([`questions.${tech().i}.designQuestions.0.enhancement`]);
+    expect(paths(at({ redFlags: [{ group: 'style', text: 'a' }] }).r)).toEqual([`questions.${tech().i}.redFlags.0`]);
+    expect(paths(at({ redFlags: Array.from({ length: KIT_LIMITS.redFlags + 1 }, () => ({ group: 'other', text: 'a' })) }).r)).toEqual([`questions.${tech().i}.redFlags`]);
+    expect(paths(at({ redFlags: 'many' }).r)).toEqual([`questions.${tech().i}.redFlags`]);
+    expect(paths(at({ providedDesign: { name: 'Key', elements: 'x' } }).r)).toEqual([`questions.${tech().i}.providedDesign`]);
+    // its own byte cap, under the starting board's
+    const big = { name: 'Key', elements: Array.from({ length: 300 }, (_, n) => ({ id: `e${n}`, type: 'text', text: 'x'.repeat(700) })) };
+    expect(checkBoard(big).ok).toBe(true);
+    expect(paths(at({ providedDesign: big }).r)).toEqual([`questions.${tech().i}.providedDesign`]);
+  });
+
+  it('a behavioural question carries none of them', () => {
+    const kit = seedKit('op-backend') as unknown as { questions: Array<Record<string, unknown>> };
+    const b = kit.questions.findIndex((q) => q['roundType'] === 'behavioural');
+    Object.assign(kit.questions[b]!, { providedDesign: blueprintBoard(), designQuestions: [{ text: 'a' }], redFlags: [{ group: 'other', text: 'a' }] });
+    expect(paths(checkKit(kit))).toEqual([`questions.${b}.providedDesign`, `questions.${b}.designQuestions`, `questions.${b}.redFlags`]);
+  });
+});

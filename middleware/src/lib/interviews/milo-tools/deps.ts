@@ -11,7 +11,8 @@ import { writeIntoPad, type MiloPadPlan, type MiloPadWriteResult } from '../pad/
 import { saidStore, type SaidSource } from '../speak/store.js';
 import { interviewsStore } from '../store-select.js';
 import { roundSurface } from '../kit.js';
-import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type RoundSurface } from '../types.js';
+import { candidateQuestion, type CandidateQuestion } from '../answer-key.js';
+import { INTERVIEWS_TENANT, type Interview, type RoundSurface } from '../types.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
@@ -63,7 +64,8 @@ export interface MiloToolDeps {
   /** The guest id was minted for this interview (milo-policy.ts). */
   guestOf: (userId: string, interviewId: string) => Promise<boolean>;
   settings: (interviewId: string) => Promise<MiloSettings>;
-  questions: (interview: Interview) => Promise<KitQuestion[]>;
+  /** The round's questions as the candidate's side may hold them (answer-key.ts): Milo speaks and writes in the candidate's call. */
+  questions: (interview: Interview) => Promise<CandidateQuestion[]>;
   /** Where the interview's round is worked (kit.ts `roundSurface`). */
   surface: (interview: Interview) => Promise<RoundSurface | null>;
   write: (interviewId: string, plan: MiloPadPlan) => Promise<MiloPadWriteResult>;
@@ -79,11 +81,11 @@ async function openingOf(interview: Interview) {
   return openings.find((o) => o.id === applications.find((a) => a.id === interview.applicationId)?.openingId) ?? null;
 }
 
-async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
+async function roundQuestions(interview: Interview): Promise<CandidateQuestion[]> {
   const opening = await openingOf(interview);
   const bank = opening?.kit.questions ?? [];
   const chosen = interview.questionIds.length ? bank.filter((q) => interview.questionIds.includes(q.id)) : bank;
-  return chosen.filter((q) => q.roundType === 'technical');
+  return chosen.filter((q) => q.roundType === 'technical').map(candidateQuestion);
 }
 
 const DEFAULTS: MiloToolDeps = {
