@@ -83,3 +83,16 @@ describe('the service', () => {
     ]);
   });
 });
+
+describe('the mock world', () => {
+  afterAll(() => setBoardSnapshotStore(null));
+  it('Mateo\'s finished system design round has four checkpoints, each the Blueprint with more of his notes, the last with all seven', async () => {
+    setBoardSnapshotStore(null);
+    const read = await readBoardSnapshots('iv-j6x2d9sb', (id) => id);
+    expect(read.map((s) => s.seq)).toEqual([1, 2, 3, 4]);
+    const notes = read.map((s) => (s.elements as Array<{ id: string; type: string }>).filter((e) => e.type === 'rectangle' && e.id.endsWith('-note')).length);
+    expect(notes).toEqual([0, 2, 4, 6]); // the clarifying note waits for its frame (step 2b)
+    expect(read.every((s, i) => i === 0 || Date.parse(s.at) > Date.parse(read[i - 1]!.at))).toBe(true);
+    expect(await readBoardSnapshots('iv-nothing-here', (id) => id)).toEqual([]);
+  });
+});

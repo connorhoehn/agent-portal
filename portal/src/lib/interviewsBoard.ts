@@ -98,3 +98,32 @@ export function fitBoardView(root: ParentNode | null | undefined): boolean {
 
 /** When the board fits itself after it opens, in ms: the canvas loads the scene over its first seconds. */
 export const BOARD_FIT_DELAYS_MS: readonly number[] = [400, 1200, 2500, 4500];
+
+// ── the record page's board ───────────────────────────────────────────────────
+
+/** One checkpoint the record page offers: when it was taken (ms from the interview's start), its label, its scene. */
+export interface BoardMoment { seq: number; atMs: number; label: string; final: boolean; elements: Array<Record<string, unknown>> }
+
+const clock = (ms: number): string => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+
+/**
+ * The checkpoints the record page shows, oldest first: the last one (the final board) always, and up to `max - 1`
+ * earlier ones spread evenly over the round. Times count from the interview's start (the page's one clock).
+ */
+export function boardMoments(snapshots: readonly BoardSnapshot[], startedAt: string | null, max = 5): BoardMoment[] {
+  if (!snapshots.length || max < 1) return [];
+  const start = startedAt ? Date.parse(startedAt) : NaN;
+  const last = snapshots.length - 1;
+  const earlier = Math.min(max - 1, last);
+  const picked = new Set<number>([last]);
+  for (let k = 0; k < earlier; k++) picked.add(Math.round((k * (last - 1)) / Math.max(1, earlier - 1)));
+  return [...picked].sort((a, b) => a - b).map((i) => {
+    const s = snapshots[i]!;
+    const atMs = Number.isFinite(start) ? Math.max(0, Date.parse(s.at) - start) : 0;
+    const final = i === last;
+    return { seq: s.seq, atMs, final, label: final ? `Final, ${clock(atMs)}` : clock(atMs), elements: s.elements };
+  });
+}

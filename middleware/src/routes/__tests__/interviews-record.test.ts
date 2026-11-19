@@ -136,7 +136,7 @@ describe('who reads the record', () => {
 describe('the parts', () => {
   it('the seeded stand-in: header, recording facts, the transcript with names, the markers', async () => {
     const r = (await HUGO(record(MATEO))).body.record;
-    expect(r.interview).toMatchObject({ state: 'scored', round: { name: 'System design', type: 'technical', minutes: 60 }, candidate: { id: 'cand-rx6tcaqj', name: 'Mateo Álvarez' },
+    expect(r.interview).toMatchObject({ state: 'scored', round: { name: 'System design', type: 'technical', minutes: 60, surface: 'board' }, candidate: { id: 'cand-rx6tcaqj', name: 'Mateo Álvarez' },
       opening: { id: 'op-backend' } });
     expect(r.recording).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
     expect(r.transcript.state).toBe('available');

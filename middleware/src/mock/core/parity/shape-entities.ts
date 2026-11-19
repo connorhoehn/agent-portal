@@ -520,6 +520,15 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (r: { interviewId: string; seq: number }) => `${r.interviewId}#${r.seq}`,
   },
   {
+    name: 'interview_board_snapshots',
+    fixture: 'interviews.board-snapshots',
+    describes: 'Mateo\'s finished system design round on the whiteboard: four checkpoints over the hour, the Blueprint with the notes he had added by each.',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_board_snapshots',
+    mockRows: async () => (await import('../../interviews-board-snapshots.js')).interviewBoardSnapshotsFixture.rows('default'),
+    mockId: (r: { interviewId: string; seq: number }) => `${r.interviewId}#${r.seq}`,
+  },
+  {
     name: 'interview_consents',
     fixture: 'interviews.consents',
     describes: 'The candidate\'s three answers per interview: the five finished interviews said yes to all three under the current notice; the upcoming ones have none yet.',

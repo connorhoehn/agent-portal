@@ -7,7 +7,8 @@ import { deletionStore, type DeletionRow } from '../retention/store.js';
 import { runView, listRuns, type RunView } from '../runs/index.js';
 import { INTERVIEWS_TENANT } from '../types.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
-import type { Application, Candidate, Interview, InterviewState, Opening, RoundType } from '../types.js';
+import type { Application, Candidate, Interview, InterviewState, Opening, RoundSurface, RoundType } from '../types.js';
+import { roundSurface } from '../kit.js';
 import { recordMarkers, type RecordMarker } from './markers.js';
 import { partState, recordingPart, removedKinds, type PartState, type RecordingPart } from './recording.js';
 import { recordTranscript, type RecordSide, type RecordTranscript } from './transcript.js';
@@ -23,7 +24,8 @@ export interface RecordLineView { seq: number; atMs: number; side: RecordSide; s
 export interface InterviewRecordView {
   interview: {
     id: string; state: InterviewState; startedAt: string | null; endedAt: string | null;
-    round: { name: string; type: RoundType; minutes: number };
+    /** `surface`: the code pad or the whiteboard for a technical round, null for a behavioural one (kit.ts roundSurface). */
+    round: { name: string; type: RoundType; minutes: number; surface: RoundSurface | null };
     candidate: { id: string; name: string };
     opening: { id: string; title: string };
   };
@@ -95,7 +97,7 @@ export async function readRecord(s: RecordSubject): Promise<InterviewRecordView>
   return {
     interview: {
       id: i.id, state: i.state, startedAt, endedAt: i.endedAt,
-      round: { name: round?.name ?? 'Round', type: i.type, minutes: i.minutes },
+      round: { name: round?.name ?? 'Round', type: i.type, minutes: i.minutes, surface: roundSurface({ type: i.type, surface: round?.surface }) },
       candidate: { id: s.candidate.id, name: s.candidate.name },
       opening: { id: s.opening.id, title: s.opening.title },
     },

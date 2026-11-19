@@ -8,6 +8,7 @@
 // its size are checked; a snapshot identical to the last one is not stored again.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../../../config.js';
+import { interviewBoardSnapshotsFixture } from '../../../mock/interviews-board-snapshots.js';
 import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { isoOf, type SqlExec } from '../store-sql.js';
 import { INTERVIEWS_TENANT } from '../types.js';
@@ -49,7 +50,13 @@ export interface BoardSnapshotStore {
 // ── memory ───────────────────────────────────────────────────────────────────
 
 export class MemoryBoardSnapshotStore implements BoardSnapshotStore {
-  private readonly rows: BoardSnapshotRecord[] = [];
+  private readonly source: () => BoardSnapshotRecord[];
+  /** `rows`: the live list to keep (the mock world's fixture); a fresh empty one without it. */
+  constructor(rows?: () => BoardSnapshotRecord[]) {
+    const own: BoardSnapshotRecord[] = [];
+    this.source = rows ?? (() => own);
+  }
+  private get rows(): BoardSnapshotRecord[] { return this.source(); }
   private of(id: string): BoardSnapshotRecord[] { return this.rows.filter((r) => r.interviewId === id).sort((a, b) => a.seq - b.seq); }
   async count(interviewId: string): Promise<number> { return this.of(interviewId).length; }
   async latest(interviewId: string): Promise<BoardSnapshotRecord | null> { const mine = this.of(interviewId); return mine.length ? { ...mine[mine.length - 1]! } : null; }
@@ -123,7 +130,7 @@ export class SqlBoardSnapshotStore implements BoardSnapshotStore {
 let current: BoardSnapshotStore | null = null;
 export function boardSnapshotStore(): BoardSnapshotStore {
   return (current ??= config.mock?.aurora
-    ? new MemoryBoardSnapshotStore()
+    ? new MemoryBoardSnapshotStore(() => interviewBoardSnapshotsFixture.rows())
     : new SqlBoardSnapshotStore(async (sql, params) => (await import('../../../providers/aurora.js')).exec(sql, params)));
 }
 export function setBoardSnapshotStore(next: BoardSnapshotStore | null): void { current = next; }

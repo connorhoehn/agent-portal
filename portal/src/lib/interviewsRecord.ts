@@ -21,7 +21,8 @@ export interface RecordMarker { kind: MarkerKind; atMs: number; label: string }
 export interface InterviewRecordView {
   interview: {
     id: string; state: InterviewState; startedAt: string | null; endedAt: string | null;
-    round: { name: string; type: RoundType; minutes: number };
+    /** The code pad or the whiteboard (a technical round); an older server sends none, read as the pad. */
+    round: { name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board' | null };
     candidate: { id: string; name: string };
     opening: { id: string; title: string };
   };

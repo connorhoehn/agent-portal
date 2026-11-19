@@ -70,3 +70,21 @@ test('fitting a board sends Excalidraw its own "Zoom to fit" (Shift+1) at the ca
     assert.equal(fitBoardView(null), false);
   } finally { g.KeyboardEvent = had; }
 });
+
+test('the record page offers the final board and a few timed checkpoints spread over the round', async () => {
+  const { boardMoments } = await import('../interviewsBoard.ts');
+  const start = '2026-11-18T10:00:00.000Z';
+  const snap = (seq: number, min: number) => ({ seq, at: new Date(Date.parse(start) + min * 60_000).toISOString(), who: { id: 'u', name: 'Lead' }, elements: [{ id: `e${seq}`, type: 'rectangle' }] });
+  assert.deepEqual(boardMoments([], start), []);
+  const one = boardMoments([snap(1, 3)], start);
+  assert.deepEqual(one.map((m) => [m.seq, m.label, m.final, m.atMs]), [[1, 'Final, 3:00', true, 180_000]]);
+  const twelve = Array.from({ length: 12 }, (_, i) => snap(i + 1, i + 1));
+  const five = boardMoments(twelve, start);
+  assert.equal(five.length, 5);
+  assert.deepEqual(five.map((m) => m.seq), [1, 4, 8, 11, 12]);
+  assert.deepEqual(five.map((m) => m.final), [false, false, false, false, true]);
+  assert.equal(five[0]!.label, '1:00');
+  assert.equal(boardMoments(twelve, start, 3).length, 3);
+  assert.equal(boardMoments(twelve.slice(0, 3), start).length, 3, 'fewer than the cap: every one');
+  assert.equal(boardMoments([snap(1, 2)], null)[0]!.atMs, 0, 'no start: the clock reads 0');
+});

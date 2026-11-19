@@ -78,6 +78,7 @@ const GAP = 60;
 const STICKY_W = 190;
 const STICKY_H = 90;
 const STICKY_FILL = '#ffec99';
+const NOTE_FILL = '#b2f2bb';
 
 /** The six frames in a 3 x 2 grid starting at `top`, with the Blueprint's stickies when `stickies` is set. */
 function sections(prefix: string, top: number, stickies: boolean): El[] {
@@ -98,6 +99,23 @@ function sections(prefix: string, top: number, stickies: boolean): El[] {
 }
 
 const indexed = (els: El[]): El[] => els.map((e, n) => ({ ...e, index: boardIndex(n) }));
+
+/**
+ * A board with a person's stickies added: each into the free fourth place of a section's frame (`frame` is the
+ * section's id, as DESIGN_SECTIONS names it), green like a note the candidate wrote. For the mock world's checkpoints.
+ */
+export function withNotes(board: KitBoard, notes: ReadonlyArray<{ frame: string; text: string }>): KitBoard {
+  const frames = new Map(board.elements.filter((e) => e['type'] === 'frame').map((e) => [String(e['id']), e]));
+  const added: El[] = [];
+  for (const n of notes) {
+    const frame = [...frames.entries()].find(([id]) => id.endsWith(`-${n.frame}`))?.[1];
+    if (!frame) continue;
+    const id = `${String(frame['id'])}-note`;
+    added.push(...card(id, Number(frame['x']) + 20 + STICKY_W + 20, Number(frame['y']) + 30 + STICKY_H + 20, STICKY_W, STICKY_H, n.text, { fill: NOTE_FILL, frameId: String(frame['id']) }));
+  }
+  const n0 = board.elements.length;
+  return { name: board.name, elements: [...board.elements, ...added.map((e, i) => ({ ...e, index: boardIndex(n0 + i) }))] };
+}
 
 /** "Blueprint": the six frames, each with its starter stickies. */
 export function blueprintBoard(): KitBoard {

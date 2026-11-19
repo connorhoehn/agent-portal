@@ -19,6 +19,7 @@ import { RecordingPlayer, TranscriptPanel, type RecordingPlayerHandle } from '@c
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
+import { BoardSnapshots } from './board/BoardSnapshots';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -111,7 +112,9 @@ function usePadLog(interviewId: string, technical: boolean): { events: PadLogEve
 
 function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail: Trail }) {
   const { interview, recording, transcript, markers } = record;
-  const technical = interview.round.type === 'technical';
+  // A system design round worked on the whiteboard: its checkpoints stand where the code would be.
+  const board = interview.round.type === 'technical' && interview.round.surface === 'board';
+  const technical = interview.round.type === 'technical' && !board;
   const { media, stalled: mediaStalled, retry: retryMedia } = useInterviewMedia(record);
   const playing = media?.state === 'playable' && media.url ? media.url : null;
   // The record counts from the interview's start; a real recording from its own. `shift` is how far the recording's clock is ahead.
@@ -211,7 +214,15 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
   const left = (
     <Stack gap="md" className="h-full min-h-0 min-w-0 pr-3" data-testid="interviews-record-body">
       {!standIn && <DetailSection variant="heading" as="h2" first title="Recording" data-testid="interviews-record-recording">{recordingPart}</DetailSection>}
-      {technical
+      {board
+        ? <Stack gap="xs" className="min-h-0 flex-1" data-testid="interviews-record-board-section">
+            <Inline gap="sm" align="baseline" wrap={false}>
+              <T size="sm" weight="medium">Whiteboard</T>
+              <T size="xs" tone="tertiary">The final board, and the board at a few times in the round</T>
+            </Inline>
+            <BoardSnapshots interviewId={interview.id} startedAt={interview.startedAt} onMoveTo={moveTo} />
+          </Stack>
+        : technical
         ? <Stack gap="xs" className="min-h-0 flex-1" data-testid="interviews-record-code-section">
             <Inline gap="sm" align="baseline" wrap={false}>
               <T size="sm" weight="medium">Code</T>
