@@ -272,7 +272,8 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   inner.on('outputAudio', (e) => { if (outN++ % 20 === 0 || e.last) tr('s.audio', { last: !!e.last, queued: queue.length }); nextKind = e.say !== undefined ? 'fixed' : 'model';
     // A server line's words go to the router at its first frame (orchestrator.ts `approvedFrame`).
     const line = e.say !== undefined ? lines.get(e.say) : undefined;
-    if (line !== undefined) { run?.outputText(line, true); lines.delete(e.say!); }
+    // The gate hears the line's words too: which server line spoke is checked, not only that one did (film 2 F1).
+    if (line !== undefined) { run?.outputText(line, true); lines.delete(e.say!); input.onText?.(line, clock.nowMs()); }
     run?.outputAudio(e.pcm, e.last === true, e.say);
   });
   talking.on('toolCall', (e) => {

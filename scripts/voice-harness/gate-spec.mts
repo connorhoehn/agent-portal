@@ -28,6 +28,9 @@ export const GATE = Object.freeze({
 
 /** Seams the real runtime must export (`HANDSFREE_GATE_SEAMS`) for a scenario that needs them to run; without them it is skipped. */
 export const SEAMS = Object.freeze({ interviews: 'interviews-family' });
+/** The interviews family's time line ("About 30 minutes are left in this round.") and its repeat line (the gate's one question). */
+const TIME_LINE = 'left in this round|minutes long';
+const REPEAT_LINE = 'second largest number';
 
 export type Expect = 'reply' | 'silent' | 'tool' | 'fixed';
 
@@ -120,10 +123,12 @@ export function gateScenarios(): ScenarioSpec[] {
       steps: [ask('hugo', 'ct03', 'fixed', 800), ask('hugo', 'cf01', 'fixed', 2500), ask('hugo', 'cf03', 'fixed', 2500)] },
     { id: 'iv-follow', about: 'interviews family: a follow-up without the name after a server line, same asker', speakers: ['hugo'], family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
       steps: [ask('hugo', 'iv01', 'fixed', 800), ask('hugo', 'cf04', 'fixed', 2500), ask('hugo', 'cf05', 'fixed', 2500)] },
-    { id: 'cand-preface', about: 'candidate, fixed lines, name last with a preface ("before I start drawing, roughly how much time is left, Milo?"): the time line speaks', speakers: ['cand'], candidateMayAsk: false, runtimeOnly: true,
-      steps: [ask('cand', 'ct01', 'fixed', 800), ask('cand', 'ct02', 'fixed', 2500)] },
+    // The interviews family (the real candidate lines), and the line's words must be the right one: film 2 F1 heard the fixed
+    // "I can..." sentence while the gate family's stand-in counted any server line. ct01 is the film's line word for word.
+    { id: 'cand-preface', about: 'candidate, fixed lines, name last with a preface ("Before I start drawing, roughly how much time is left, Milo?", the film\'s line): the time line speaks', speakers: ['cand'], candidateMayAsk: false, family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
+      steps: [ask('cand', 'ct01', 'fixed', 800, { answer: TIME_LINE }), ask('cand', 'ct02', 'fixed', 2500, { answer: TIME_LINE })] },
     { id: 'cand-preface-repeat', about: 'candidate, name last with a preface, asking for the question again: the repeat line speaks', speakers: ['cand'], candidateMayAsk: false, family: 'interviews', needsSeam: SEAMS.interviews, runtimeOnly: true,
-      steps: [ask('cand', 'cr01', 'fixed', 800), ask('cand', 'cr02', 'fixed', 2500)] },
+      steps: [ask('cand', 'cr01', 'fixed', 800, { answer: REPEAT_LINE }), ask('cand', 'cr02', 'fixed', 2500, { answer: REPEAT_LINE })] },
     { id: 'final-lag', about: 'control: audio fed straight to the listening side; transcription final vs speech end', speakers: ['hugo', 'cand'], runtimeOnly: true, steps: lagSteps },
     { id: 'mixer-lag', about: 'audio through the production mixer path (24k -> 16k chunks -> CallMixer -> placed pieces): transcription final vs speech end', speakers: ['hugo', 'cand'], viaMixer: true, runtimeOnly: true, steps: lagSteps },
   ];
@@ -326,7 +331,7 @@ export function scoreScenario(scenarioId: string, run: RunObs): Check[] {
     case 'iv-name-first': return serverLineChecks(check, steps, GATE.serverLine);
     case 'cand-preface-repeat':
     case 'cand-preface': {
-      const t = GATE.preface; const ok = steps.filter((s) => s.firstVoiceMs !== null && s.fixedVoice); const p90 = pct(ok.map(latency).filter((x): x is number => x !== null), 90);
+      const t = GATE.preface; const ok = steps.filter((s, i) => s.firstVoiceMs !== null && s.fixedVoice && understoodAnswer(s, i)); const p90 = pct(ok.map(latency).filter((x): x is number => x !== null), 90);
       return [
         check('answered', 'preface questions answered by the server line', `${ok.length}/${asked.length}`, `${t.answered}/${t.tries}`, ok.length === t.answered && asked.length === t.tries),
         check('p90', 'p90', ms(p90), `<= ${t.p90Ms} ms`, le(p90, t.p90Ms)),

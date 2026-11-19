@@ -141,6 +141,20 @@ export function addressedRequest(sentence: string): string | null {
   return hit.rest;
 }
 
+const TRAILING_NAME = new RegExp(`[\\s,;:]*(?:hey\\s+)?(?:${NAME_ALTERNATION})[\\s.!?…,]*$`, 'iu');
+/**
+ * The words a server line is chosen from (a phrase tool, a candidate's fixed lines): `addressedRequest`, except for the name as
+ * the last word. findAddress reads that request as still to come (rest ''), but a server line is chosen from the words alone,
+ * so it is the sentence before the name ("Before I start drawing, roughly how much time is left, Milo?", film 2 F1).
+ */
+export function heldRequest(sentence: string): string | null {
+  const rest = addressedRequest(sentence);
+  if (rest !== '') return rest;
+  const before = sentence.replace(TRAILING_NAME, '').trim();
+  if (before === sentence.trim()) return rest;
+  return before.split(/(?<=[.!?…])\s+/).filter((p) => p.trim()).at(-1)?.trim() ?? rest;
+}
+
 // ── Follow-up: still talking to Milo, or turned to someone else ─────────────────────────────────────────────────────────
 
 const QUESTION_OPENERS: ReadonlySet<string> = new Set([
@@ -287,7 +301,8 @@ export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): EarlyHandsf
     }
     if (parseCommand(request) === 'cancel') return { kind: 'mention' };
     const family = policyFor(call).handsfree?.(call);
-    const held = family?.heldAnswer ? await family.heldAnswer({ askedBy: s.userId, text: request, admission }) : null;
+    const asked = request === '' ? heldRequest(text) ?? '' : request;
+    const held = family?.heldAnswer ? await family.heldAnswer({ askedBy: s.userId, text: asked, admission }) : null;
     if (held !== null) return held.trim() ? { kind: 'fixed', line: held } : { kind: 'mention' };
     if (admission === 'route') return { kind: 'request' };
     return family?.refusal ? { kind: 'fixed', line: family.refusal } : { kind: 'mention' };
@@ -297,7 +312,7 @@ export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): EarlyHandsf
     if (cached(call, s.userId) !== 'route') return null;
     const text = String(s.text ?? '');
     let request: string | null;
-    if (s.via === 'name' || HAS_NAME.test(text)) request = addressedRequest(text);
+    if (s.via === 'name' || HAS_NAME.test(text)) request = heldRequest(text);
     else request = followUpKind(text, rosterOf(call.callId)) === 'request' ? text : null;
     if (request === null || parseCommand(request) === 'cancel') return null;
     const family = policyFor(call).handsfree?.(call);
@@ -308,7 +323,7 @@ export function createHandsfreeRules(deps: HandsfreeRulesDeps = {}): EarlyHandsf
   function mayBeFixed(call: PolicyCall, s: { userId: string; text: string; via: 'name' | 'follow-up' }): boolean {
     if (cached(call, s.userId) !== 'route') return false;
     const text = String(s.text ?? '');
-    const request = s.via === 'name' || HAS_NAME.test(text) ? addressedRequest(text) : text;
+    const request = s.via === 'name' || HAS_NAME.test(text) ? heldRequest(text) : text;
     if (request === null || !request.trim() || parseCommand(request) === 'cancel') return false;
     const family = policyFor(call).handsfree?.(call);
     return !!family?.heldAnswer && !!family.mayBeHeld && family.mayBeHeld({ text: request });

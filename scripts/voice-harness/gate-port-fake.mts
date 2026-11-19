@@ -30,6 +30,8 @@ export interface FakeProfile {
   mixerExtraMs: number;
   /** A hold's late words dropped the relay as a barge-in. */
   holdLateBargeIn: boolean;
+  /** A server line spoke, but the wrong one (film 2 F1: the fixed "I can..." sentence for a name-last time question). */
+  wrongLine?: (step: StepSpec) => boolean;
 }
 
 export const idealProfile: FakeProfile = {
@@ -90,7 +92,7 @@ export function fakePort(profile: Partial<FakeProfile> = {}): GatePort & { opene
       if (queued && p.queuedSecond === 'after') at = Math.max(at, lastAnswer!.freeAt + latency);
       if (queued && p.queuedSecond === 'first') { at = endMs + 300; lastAnswer!.item.at = at + p.talkMs + latency; }
       const talk = step.clip && /^g0[12]$/.test(step.clip) ? 8000 : p.talkMs;
-      const item = { at, run: () => { window = { start: nowMs, end: nowMs + talk, kind }; if (step.answer) ev?.text(step.answer.split('|')[0]!, nowMs); else ev?.text('Sure.', nowMs); } };
+      const item = { at, run: () => { window = { start: nowMs, end: nowMs + talk, kind }; if (p.wrongLine?.(step)) ev?.text('I can repeat the question or tell you how much time is left.', nowMs); else if (step.answer) ev?.text(step.answer.split('|')[0]!, nowMs); else ev?.text('Sure.', nowMs); } };
       pending.push(item);
       lastAnswer = { item, freeAt: at + talk };
       if (step.expect === 'tool') pending.push({ at: endMs + 600, run: () => ev?.tool('add_note', p.askedBy(step), nowMs) });

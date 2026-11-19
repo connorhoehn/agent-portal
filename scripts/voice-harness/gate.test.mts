@@ -111,6 +111,9 @@ test('the film gaps: each new scenario fails only on its own behaviour', async (
   assert.deepEqual(await f('fixed-follow', { latencyMs: (s) => (s.clip === 'cf01' ? null : 1100) }), ['fixed-follow.answered']);
   assert.deepEqual(await f('cand-preface', { latencyMs: (s) => (s.clip === 'ct01' ? null : 1100) }), ['cand-preface.answered']);
   assert.deepEqual(await f('cand-preface', { latencyMs: () => 3500 }), ['cand-preface.p90']);
+  // film 2 F1: a server line spoke, but the fixed "I can..." sentence, not the time (the gate counted any server line)
+  assert.deepEqual(await f('cand-preface', { wrongLine: (s) => s.clip === 'ct01' }), ['cand-preface.answered']);
+  assert.deepEqual(await f('cand-preface-repeat', { wrongLine: (s) => s.clip === 'cr02' }), ['cand-preface-repeat.answered']);
   // the final's lag: film-sized lag fails both rows; the mixer scenario adds the mixer's own delay
   assert.deepEqual(await f('final-lag', { finalLagMs: 1650 }), ['final-lag.p50', 'final-lag.p90']);
   assert.deepEqual(await f('mixer-lag', { finalLagMs: 350, mixerExtraMs: 200 }), ['mixer-lag.p50']);

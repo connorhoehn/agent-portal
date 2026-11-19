@@ -108,6 +108,17 @@ describe('the candidate with pad help off: server lines only, never the model', 
     ]);
   });
 
+  it('the name last, after a preface, is the request before the name (film 2 F1: the words after the name are empty)', async () => {
+    for (const ask of [
+      'Before I start drawing, roughly how much time is left, Milo?',
+      'Okay. Before I start drawing, roughly how much time is left, Milo?',
+      'Before I start drawing roughly how much time is left Milo',
+      'Before I start drawing, roughly how much time is left? Milo?',
+    ]) expect([ask, await say(guest, ask)]).toEqual([ask, { kind: 'fixed', line: 'About 30 minutes are left in this round.' }]);
+    expect(await say(guest, 'Sorry, I lost my train of thought, could you repeat the question, Milo?')).toEqual({ kind: 'fixed', line: NO_QUESTION_YET });
+    expect(await say(guest, 'Is my solution right, Milo?')).toEqual({ kind: 'fixed', line: MILO_CAN_DO });
+  });
+
   it('a mention is dropped, and without the name there is no window: nothing', async () => {
     expect(await say(guest, "I think Milo's timer is wrong.")).toEqual({ kind: 'mention' });
     expect(await say(guest, 'How much time is left?', 'follow-up')).toEqual({ kind: 'aside' });
