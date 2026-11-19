@@ -21,7 +21,7 @@
 
 import { RatingInput } from '@connorhoehn/ui-components';
 import {
-  Banner, Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
+  Button, ChatComposer, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -498,12 +498,14 @@ function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
 function MiloAdviceBanner({ advice }: { advice: MiloAdvice }) {
   const recommends = advice.outcome !== 'not-enough';
   return (
-    <Banner variant={advice.tone} layout="callout" accent="bar" icon data-testid="interviews-scorecard-milo-advice"
-      title={recommends ? `Milo recommends: ${advice.label}` : 'Milo has not enough evidence to recommend'}
-      meta={recommends ? 'Milo\'s recommendation from the ratings and the transcript evidence. The panel decides.' : 'The panel decides from the ratings and the recap.'}>
-      <Stack as="ul" gap="xs">
-        {advice.reasons.map((r) => <T as="li" key={r} size="sm" wrap data-testid="interviews-scorecard-milo-reason">{r}</T>)}
-      </Stack>
-    </Banner>
+    <Stack gap="xs" data-testid="interviews-scorecard-milo-advice">
+      <Inline gap="sm" align="center">
+        <T size="lg" weight="semibold">Milo recommends</T>
+        <Chip tone={advice.tone === 'error' ? 'danger' : advice.tone} size="md">{recommends ? advice.label : 'No recommendation yet'}</Chip>
+      </Inline>
+      <T size="sm" tone="secondary" wrap data-testid="interviews-scorecard-milo-reason">
+        {`${advice.reasons[0] ?? 'Not enough evidence in the transcript yet.'} The panel decides.`}
+      </T>
+    </Stack>
   );
 }
