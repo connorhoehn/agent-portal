@@ -234,6 +234,10 @@ export const REPLY_CONTEXT_TTL_MS = 20_000;
  * before that first item is the short acknowledgement the voice gives as it hands the work over (the real provider speaks it at
  * once, before the function call arrives). `asker` is who addressed Milo at `at` (judged then, audit S2), for a delegated plain answer.
  */
+interface PendingAsk { at: number; ran: boolean; fellBack: boolean }
+/** A delegation up to this long before the request's words ended still counts as its own (the paid runs saw 0.2 to 2 s). */
+const ASK_DELEGATION_SKEW_MS = 3_000;
+
 interface Delegation {
   at: number;
   /**
@@ -373,7 +377,11 @@ interface CallRun {
   /** What Milo last answered each asker in the chat (held text or a reply): the fixed refusal is not posted twice in a row (`heldRefusal`). */
   lastAnswerTo?: Map<string, string>;
   /** When each asker's latest tool call reached the server: a request the held text left to the model waits for one (`heldFallback`). */
-  toolCallAt?: Map<string, number>;
+  /**
+   * Each asker's latest request the held text left to the model (`awaitToolCallOrFallback`): `ran` once a call of theirs actually
+   * runs; `fellBack` once the family's fallback line is due, after which a late call of theirs does not run (review 1, item 6).
+   */
+  asks?: Map<string, PendingAsk>;
   /** The server tools already run, by request (`asker|addressing seq|tool`): one request runs a tool once however often it is called. */
   serverRuns?: Set<string>;
   /** True only while the held frames of a checked approved utterance are being handed to the gate (its reason is then `approved`). */
@@ -1672,7 +1680,7 @@ export class AssistantRuntime {
         // An empty held answer: one of the family's requests, handled, with nothing to say (a request heard twice).
         if (held !== null) { if (held) await this.sayHeld(run, e.askedBy, held); continue; }
         // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
-        this.awaitToolCallOrFallback(run, e.askedBy, e.text);
+        this.awaitToolCallOrFallback(run, e.askedBy, e.text, e.endedAt);
         // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
         // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
         const record = await this.store.get(callId);
@@ -1821,11 +1829,17 @@ export class AssistantRuntime {
       return;
     }
     trace('call.asker', { call: e.callId, asker, judgedAt: atMs });
-    (run.toolCallAt ??= new Map()).set(asker, this.now());
-    if (!canSpeakOnRecord(record, asker)) { await this.refuse(run, e.callId, 'not addressed'); return; }
+    // A server tool's call that is refused leaves its asker's request unanswered: the family's fallback is said now, not after
+    // the wait (a refused call never counts as the request answered; review 1, item 6).
+    const serverCall = !voiceTool(e.name) && !!serverTool(e.name) && !!run.policy.runTool;
+    const refused = async (why: string, text = ''): Promise<void> => {
+      if (serverCall) this.answer(run, e.callId, { refused: why }, null, { continue: false }); else await this.refuse(run, e.callId, why);
+      if (serverCall) { trace('call.refused', { call: e.callId, why: why.replace(/ /g, '-') }); await this.store.bumpRefused(callId); await this.fallBackNow(run, asker, text); }
+    };
+    if (!canSpeakOnRecord(record, asker)) { await refused('not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
-    if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await this.refuse(run, e.callId, 'not addressed'); return; }
+    if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await refused('not addressed'); return; }
     run.addressedCalls.add(e.callId); run.gate.poke();
     // (b2) At most MAX_CALLS_PER_REQUEST calls per addressed request: text inside a record must not be able to lead the
     // model into an open-ended chain of reads. A request is the asker plus the line that addressed Milo in the window.
@@ -1834,7 +1848,7 @@ export class AssistantRuntime {
     const made = (run.requestCalls.get(requestKey) ?? 0) + 1;
     run.requestCalls.set(requestKey, made);
     if (run.requestCalls.size > 200) run.requestCalls.delete(run.requestCalls.keys().next().value as string);
-    if (made > MAX_CALLS_PER_REQUEST) { await this.refuse(run, e.callId, 'too many steps'); return; }
+    if (made > MAX_CALLS_PER_REQUEST) { await refused('too many steps', addressing?.text); return; }
     const askerName = await nameOf(asker);
     const name = e.name;
     // A server tool (voice/catalogue.ts INTERVIEW_TOOLS) runs only in a family that runs them (`runTool`).
@@ -1848,6 +1862,9 @@ export class AssistantRuntime {
     const allowed = await run.policy.mayUseTool(run.call, { userId: asker, roles }, name);
     if (!allowed) {
       trace('call.refused', { call: e.callId, why: 'role' });
+      // The refusal below answers the asker: no fallback after it.
+      const ask = run.asks?.get(asker);
+      if (ask && !ask.ran) ask.fellBack = true;
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
       await this.store.bumpRefused(callId);
       // The reason goes to the asker alone (their notifications); the call sees only a neutral line that puts nothing on them.
@@ -1855,17 +1872,14 @@ export class AssistantRuntime {
       await postReply(callId, { text: NOT_PERMITTED_PUBLIC, askedBy: asker, askedByName: askerName });
       return;
     }
-    if (!argsOk) { await this.refuse(run, e.callId, 'invalid arguments'); return; }
+    if (!argsOk) { await refused('invalid arguments', addressing?.text); return; }
     if (onServer) {
       // A server tool that writes runs with no confirm card, so the request must be the asker's beyond doubt (review 1, item 1).
-      if (serverTool(name)?.who === 'pad' && !clearlyAsked(lines, addressing ?? null, asker, atMs)) {
-        trace('call.refused', { call: e.callId, why: 'not-clearly-asked' });
-        this.answer(run, e.callId, { refused: 'not clearly asked' }, null, { continue: false });
-        await this.store.bumpRefused(callId);
-        const line = run.policy.heldFallback ? await run.policy.heldFallback(run.call, { askedBy: asker, text: addressing?.text ?? '' }).catch(() => null) : null;
-        if (line) await this.sayHeld(run, asker, line);
-        return;
-      }
+      if (serverTool(name)?.who === 'pad' && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
+      // The asker's request already got the fallback line: a call that lands after it does not run (it would contradict it).
+      const ask = run.asks?.get(asker);
+      if (ask?.fellBack) { trace('call.refused', { call: e.callId, why: 'after-fallback' }); this.answer(run, e.callId, { refused: 'too late' }, null, { continue: false }); return; }
+      if (ask) ask.ran = true;
       await this.runServerTool(run, e, asker, `${requestKey}|${name}`);
       return;
     }
@@ -1958,30 +1972,46 @@ export class AssistantRuntime {
    * model has not handed anything to its background agent and `delegatedMs` once it has (a call that writes a dozen test cases takes
    * seconds to arrive); with none, the family's fixed line. Never blocks the detector.
    */
-  private awaitToolCallOrFallback(run: CallRun, askedBy: string, text: string): void {
+  private awaitToolCallOrFallback(run: CallRun, askedBy: string, text: string, requestEndedAt: number = this.now()): void {
     const policy = run.policy;
     if (!policy.heldFallback && !policy.heldAcknowledgement) return;
     const wait = policy.heldFallbackWait ?? { quietMs: 4_000, delegatedMs: 15_000 };
-    const askedAt = this.now();
-    const called = () => (run.toolCallAt?.get(askedBy) ?? -Infinity) >= askedAt;
-    const delegated = () => run.delegations.some((d) => d.at >= askedAt - 1_000);
+    // From when the request's words ended, not when they were stored: storing can take over a second, and the delegation that
+    // came before it must still count (review 1, item 6). The lines' clock and the server's differ by up to the skew.
+    const askedAt = Math.min(this.now(), requestEndedAt);
+    const ask: PendingAsk = { at: askedAt, ran: false, fellBack: false };
+    (run.asks ??= new Map()).set(askedBy, ask);
+    if (run.asks.size > 200) run.asks.delete(run.asks.keys().next().value as string);
+    const settled = () => ask.ran || ask.fellBack || run.asks?.get(askedBy) !== ask;
+    const delegated = () => run.delegations.some((d) => d.at >= askedAt - ASK_DELEGATION_SKEW_MS);
     const step = 250;
     void (async () => {
       let acknowledged = false;
       // Polled, so the acknowledgement follows the delegation at once (it lands 1 to 2 s after the words, measured 18 November).
-      for (let waited = 0; !called() && !run.finished && waited < (acknowledged ? wait.delegatedMs : wait.quietMs); waited += step) {
+      for (let waited = 0; !settled() && !run.finished && waited < (acknowledged ? wait.delegatedMs : wait.quietMs); waited += step) {
         if (!acknowledged && delegated()) {
           acknowledged = true;
           // A slow tool's call is on its way: the family's short acknowledgement now, not after the call lands.
           const ack = policy.heldAcknowledgement ? await policy.heldAcknowledgement(run.call, { askedBy, text }).catch(() => null) : null;
-          if (ack !== null && !called()) void this.sayHeld(run, askedBy, ack).catch(() => undefined);
+          if (ack !== null && !settled()) void this.sayHeld(run, askedBy, ack).catch(() => undefined);
         }
         await this.wait(step);
       }
-      if (called() || run.finished) return;
-      const line = policy.heldFallback ? await policy.heldFallback(run.call, { askedBy, text }).catch(() => null) : null;
-      if (line !== null && !called() && !run.finished) await this.sayHeld(run, askedBy, line);
+      if (settled() || run.finished) return;
+      await this.fallBackNow(run, askedBy, text);
     })().catch((err: unknown) => console.warn('[meeting-assistant] fallback failed', (err as Error).message));
+  }
+
+  /**
+   * The family's fallback line for the asker's request, once: the request is marked fallen back first (so a call landing while the
+   * line is fetched or said does not run), then the line is said. Nothing when the request already ran or already fell back.
+   */
+  private async fallBackNow(run: CallRun, askedBy: string, text: string): Promise<void> {
+    const ask = run.asks?.get(askedBy);
+    if (ask && (ask.ran || ask.fellBack)) return;
+    if (ask) ask.fellBack = true;
+    const line = run.policy.heldFallback ? await run.policy.heldFallback(run.call, { askedBy, text }).catch(() => null) : null;
+    if (line !== null && !run.finished) await this.sayHeld(run, askedBy, line);
   }
 
   /** Everyone who held a seat while Milo was in the call, everyone seated now and the inviter, by display name. */

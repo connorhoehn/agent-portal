@@ -689,6 +689,49 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
     } finally { off(); }
   });
 
+  it('a refused call is not the request answered: its asker hears the fallback at once (review 1, item 6)', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      await startCall('orgiq:servertools:r6a');
+      await ask('Milo, a huge batch of test cases please');
+      await flush();
+      expect(ran).toEqual([]);
+      expect(mockTrace.some((t) => t.ev === 'call.refused' && t.f['why'] === 'invalid-arguments')).toBe(true);
+      expect(mockPosts.approved).toEqual([FALLBACK]);
+      await new Promise((r) => setTimeout(r, 700)); await flush();
+      expect(mockPosts.approved).toEqual([FALLBACK]); // once: the wait does not say it again
+    } finally { off(); }
+  });
+
+  it('a call that lands after the fallback was said does not write (review 1, item 6)', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:servertools:r6b');
+      await ask('Milo, add a helper please');
+      await new Promise((r) => setTimeout(r, 800)); await flush();
+      expect(mockPosts.approved).toEqual([FALLBACK]);
+      fake().fire('toolCall', { callId: 'call_late', name: 'pad_add_helper', args: { what: 'x', code: 'y' }, atMs: now - T0 });
+      await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
+      expect(ran).toEqual([]);
+      expect(mockTrace.some((t) => t.ev === 'call.refused' && t.f['why'] === 'after-fallback')).toBe(true);
+    } finally { off(); }
+  });
+
+  it('the wait counts from when the words ended: a delegation before a slow store still gets the acknowledgement (review 1, item 6)', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', { ...TOOLS, heldAcknowledgement: async () => 'On it.' });
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:servertools:r6c');
+      await intake.handle(CALL, { userId: ALICE, text: 'Milo, it would be helpful to have another dozen test cases', at: now });
+      fake().fire('delegation', { atMs: now - T0 });
+      now += 5000; // the request reaches the detector seconds after its words (the detector's quiet, a slow store)
+      await intake.tick(); await flush();
+      await new Promise((r) => setTimeout(r, 300)); await flush();
+      expect(mockPosts.approved[0]).toBe('On it.');
+    } finally { off(); }
+  });
+
   it('clearlyAsked: the asker alone, the name in the line, nobody after it', () => {
     const line = (seq: number, userId: string, text: string, at: number, speakers?: string[]) => ({ seq, userId, text, at, captionId: `c${seq}`, callId: CALL, participantId: userId, speakerName: userId, ...(speakers ? { speakers } : {}) });
     const req = line(1, ALICE, 'Milo, another dozen test cases', 1000);
