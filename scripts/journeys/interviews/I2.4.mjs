@@ -99,7 +99,7 @@ export default async function run(ctx) {
     await wp.close();
     const ok = /^Mateo/.test(title) && state.startsWith('The call has not started') && /Candidate\s*Mateo/.test(facts) && /Panel\s*Hugo Marchetti \(lead\)/.test(facts)
       && JSON.stringify(tabs) === '["Pad","Questions","Milo","Chat","Details"]' && JSON.stringify(bTabs) === '["Plan","Milo","Chat","Details"]'
-      && hasQuestion && trail > 0 && panes === 1 && shellChat === 0 && shots.every((s) => s.ok)
+      && hasQuestion && trail > 0 && panes === 0 && shellChat === 0 && shots.every((s) => s.ok)
       && (callable || NO_PLATFORM.test(reason));
     widthSeen = { width, card };
     return { ok, detail: `"${title}" (${state.slice(0, 40)}); tabs ${tabs.join('/')} (technical, room ${width} px of ${card}), ${bTabs.join('/')} (behavioural); questions in their tab ${hasQuestion}; trail ${trail > 0}; right panes ${panes}, shell chat ${shellChat}; Join the call ${callable ? 'enabled' : `disabled: "${reason.slice(0, 60)}"`}` };
@@ -142,7 +142,11 @@ export default async function run(ctx) {
 
   await step('I2.4c', async () => {
     const text = await guest.page.locator('body').innerText();
-    const idle = (await guest.page.getByTestId('join-room-idle').innerText()).replace(/\s+/g, ' ');
+    // A technical round's full-width room: the header line, with what to do next in its description card (About …).
+    const idleHeader = guest.page.getByTestId('join-room-idle').first();
+    await idleHeader.getByRole('button', { name: /^About / }).first().click().catch(() => undefined);
+    const idle = `${await idleHeader.innerText()} ${await guest.page.getByTestId('join-room-idle-description-text').first().innerText().catch(() => '')}`.replace(/\s+/g, ' ');
+    await guest.page.keyboard.press('Escape');
     const join = guest.page.getByTestId('join-room-bar-start');
     const disabled = (await join.count()) ? await join.isDisabled() : null;
     const why = disabled ? ((await join.getAttribute('title')) ?? '') : '';
