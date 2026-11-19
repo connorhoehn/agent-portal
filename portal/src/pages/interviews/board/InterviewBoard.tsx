@@ -8,18 +8,20 @@
 // is in the lead's view with their named pointer; the lead's own press, wheel or key inside the canvas pauses it, and
 // the row's "Follow <name>" resumes it. The panel has the same control, off at first; the candidate follows nobody.
 //
-// Above it one compact row: the lead's "Start from a board" menu (the round's questions that carry a starting board;
-// a pick adds the board as one write and never clears anything) and the connection chip. The lead's room also
+// Above it one compact row, laid out as the code pad's: on the left the lead's "Start from a board" menu (the round's
+// questions that carry a starting board; a pick adds the board as one write and never clears anything) and the follow
+// toggle, a pressed/unpressed button of the same family; on the right the pick's short confirmation (it clears itself)
+// and the connection chip. Nothing else sits between the row and the canvas but a connection notice. The lead's room also
 // checkpoints the board (lib/interviewsBoard.ts BOARD_SNAPSHOT_MS) for the record.
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Children, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GatewayContext, useYjsDoc, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
-import { Button, Chip, DropdownMenu, InlineAlert, LoadingState, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, DropdownMenu, Inline, InlineAlert, LoadingState, Stack, T, Toolbar, ToolbarGroup } from '@connorhoehn/ui-components/shared';
 import { offlineGateway } from '../../../components/OptionalGatewayProvider';
 import {
   BOARD_SNAPSHOT_MS, boardChannel, boardCheckpoints, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, type BoardCheckpoints,
   type KitBoard,
 } from '../../../lib/interviewsBoard';
-import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, type PadConnection } from '../../../lib/interviewsPad';
+import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, questionLabel, type PadConnection } from '../../../lib/interviewsPad';
 import { BOARD_NOTICE_MS } from '../../../lib/interviewsBoardFollow';
 import { useBoardFit } from './useBoardFit';
 import { useBoardFollow } from './useBoardFollow';
@@ -27,6 +29,7 @@ import { useBoardFollow } from './useBoardFollow';
 const ExcalidrawCanvas = lazy(() => import('@connorhoehn/ui-components/diagram').then((m) => ({ default: m.CollaborativeExcalidraw })));
 
 export type BoardSeat = 'lead' | 'panel' | 'candidate';
+type BoardNote = ReturnType<typeof boardAddedNote>;
 export interface BoardQuestion { id: string; prompt: string; board?: KitBoard }
 export interface InterviewBoardProps {
   interviewId: string;
@@ -91,11 +94,11 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
   }, [checkpoints, connection, flush]);
 
   const boards = (questions ?? []).filter((q) => q.board);
-  const [inserted, setInserted] = useState<string | null>(null);
+  const [inserted, setInserted] = useState<BoardNote | null>(null);
   const start = useCallback((q: BoardQuestion) => {
     if (!ydoc || !q.board) return;
     const n = insertBoard(ydoc, q.board);
-    setInserted(n ? `${q.board.name} added to the board.` : `${q.board.name} is already on the board.`);
+    setInserted(boardAddedNote(q, n > 0));
     flush();
   }, [ydoc, flush]);
   // The notice says what the pick did, then clears itself.
@@ -105,30 +108,60 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
     return () => clearTimeout(t);
   }, [inserted]);
 
-  const toolbar = <Toolbar size="sm" aria-label="Whiteboard" data-testid="interview-board-toolbar">
-    {seat === 'lead' && boards.length > 0 && <DropdownMenu trigger="Start from a board" triggerLabel="Start from a board" triggerVariant="secondary"
+  const toolbar = <BoardToolbar connection={connection} note={inserted}>
+    {seat === 'lead' && boards.length > 0 && <DropdownMenu trigger="Start from a board" triggerLabel="Start from a board" triggerVariant="default"
       triggerClassName="whitespace-nowrap" disabled={!editable} triggerTestId="interview-board-insert"
-      sections={[{ items: boards.map((q) => ({ id: q.id, label: q.board!.name, description: q.prompt, onSelect: () => start(q) })) }]} />}
-    {seat !== 'candidate' && follow.present && <Button size="sm" variant={follow.mode === 'following' ? 'secondary' : 'ghost'}
+      sections={[{ items: boards.map((q) => ({ id: q.id, label: q.board!.name, description: questionLabel(q), onSelect: () => start(q) })) }]} />}
+    {seat !== 'candidate' && follow.present && <Button size="sm" variant="secondary"
       aria-pressed={follow.mode === 'following'} onClick={follow.toggle} className="whitespace-nowrap"
       data-testid="interview-board-follow" data-follow={follow.mode}>{follow.label}</Button>}
-    {connection === 'connecting' && <Chip size="sm" tone="neutral" data-testid="interview-board-status">Connecting…</Chip>}
-    {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-board-status">In sync</Chip>}
-  </Toolbar>;
+  </BoardToolbar>;
 
-  return <BoardFrame boardId={documentId} connection={connection} toolbar={toolbar} note={inserted}
+  return <BoardFrame boardId={documentId} connection={connection} toolbar={toolbar}
     canvas={ydoc && connection !== 'refused'
       ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={awareness} user={user} editable={editable} followUserId={follow.target} className="h-full min-h-0 flex-1" />
       : null} />;
 }
 
-/** The board's column: the row, a notice when there is one, the canvas taking the rest. */
-function BoardFrame({ boardId, connection, toolbar, canvas, note }: { boardId?: string; connection: PadConnection; toolbar?: React.ReactNode; canvas?: React.ReactNode; note?: string | null }) {
+/**
+ * What a pick from "Start from a board" did, for the row's status slot: a short line that fits beside the controls
+ * in the room pane, and the long form (which question's starting board) for its tooltip.
+ */
+export function boardAddedNote(q: Pick<BoardQuestion, 'prompt'>, added: boolean): { text: string; detail: string } {
+  const title = questionTitle(q);
+  const text = added ? 'Starting board added.' : 'Already on the board.';
+  if (!title) return { text, detail: added ? 'Added the starting board.' : 'That starting board is already on the board.' };
+  return { text, detail: added ? `Added the starting board for ${title}.` : `The starting board for ${title} is already on the board.` };
+}
+
+/** A question's title: its first line up to a colon ("Design Twitter: people post…" is "Design Twitter"), shortened. */
+export function questionTitle(q: Pick<BoardQuestion, 'prompt'>): string {
+  const first = questionLabel(q, 200);
+  const head = first.split(':')[0]!.trim();
+  return questionLabel({ prompt: head || first }, 48);
+}
+
+/**
+ * The board's one row, the pad's pattern: the actions on the left (sm, one family), the pick's confirmation and the
+ * connection chip on the right. `px-4` is the pane's content inset, so the first control lines up with the first tab's label.
+ */
+function BoardToolbar({ connection, note, children }: { connection: PadConnection; note?: BoardNote | null; children?: React.ReactNode }) {
+  const end = <Inline gap="sm" align="center" wrap={false}>
+    {note && <T size="xs" tone="secondary" title={note.detail} role="status" data-testid="interview-board-inserted">{note.text}</T>}
+    {connection === 'connecting' && <Chip size="sm" tone="neutral" data-testid="interview-board-status">Connecting…</Chip>}
+    {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-board-status">In sync</Chip>}
+  </Inline>;
+  return <Toolbar size="sm" aria-label="Whiteboard" end={end} className="px-4" data-testid="interview-board-toolbar">
+    {Children.toArray(children).length > 0 && <ToolbarGroup aria-label="Board actions">{children}</ToolbarGroup>}
+  </Toolbar>;
+}
+
+/** The board's column: the row, a connection notice when there is one, the canvas taking the rest. */
+function BoardFrame({ boardId, connection, toolbar, canvas }: { boardId?: string; connection: PadConnection; toolbar?: React.ReactNode; canvas?: React.ReactNode }) {
   const notice = NOTICES[connection];
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-board" data-connection={connection}>
     {toolbar}
     {notice && <InlineAlert tone={notice.tone} data-testid="interview-board-notice">{notice.text}</InlineAlert>}
-    {note && <InlineAlert tone="info" data-testid="interview-board-inserted">{note}</InlineAlert>}
     {canvas && <Stack gap="none" className="min-h-[480px] flex-1 overflow-hidden" data-testid="interview-board-canvas" data-board={boardId}>
       <Suspense fallback={<LoadingState label="Loading the whiteboard…" />}>{canvas}</Suspense>
     </Stack>}

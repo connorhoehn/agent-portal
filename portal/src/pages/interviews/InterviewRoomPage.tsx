@@ -302,8 +302,13 @@ function RoomPane({ room, here, onBoardCheckpoints }: { room: RoomView; here: bo
         {chat?.callId && here ? <HuddleChatBody showCall={false} />
           : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
       </Stack>
+      : tab === 'pad'
+      // Full-bleed, as on the candidate's side: the surface's own toolbar row carries the pane's inset (its first
+      // control under the first tab's label) and the canvas or editor takes the rest of the column.
+      ? <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-tab-pad">
+        {surface === 'board' ? <BoardTab room={room} onCheckpoints={onBoardCheckpoints} /> : <PadTab room={room} />}
+      </Stack>
       : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid={`interview-room-tab-${tab}`}>
-        {tab === 'pad' && (surface === 'board' ? <BoardTab room={room} onCheckpoints={onBoardCheckpoints} /> : <PadTab room={room} />)}
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={room.seat === 'lead' && room.state === 'live'} /><Competencies room={room} /></>}

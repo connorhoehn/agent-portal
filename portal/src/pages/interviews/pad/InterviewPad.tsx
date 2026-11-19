@@ -60,7 +60,7 @@ export function InterviewPad(props: InterviewPadProps) {
 /** No gateway (or no pad by that name): the notice, the slots, and a handle that answers. */
 function PadUnavailable({ ref, toolbarEnd, below, connection }: InterviewPadProps & { connection: PadConnection }) {
   useImperativeHandle(ref, () => ({ getText: () => '', getLanguage: () => PAD_DEFAULT_LANGUAGE, insertQuestion: () => {}, focus: () => {} }), []);
-  return <PadFrame connection={connection} toolbar={toolbarEnd ? <Toolbar size="sm" end={toolbarEnd} /> : null} below={below} />;
+  return <PadFrame connection={connection} toolbar={toolbarEnd ? <Toolbar size="sm" end={toolbarEnd} className="px-4" /> : null} below={below} />;
 }
 
 function SharedPad({ interviewId, self, seat, questions, toolbarEnd, below, onPaste, onLocalEdit, onLanguageChange, onInsert, ref, gateway, documentId, channel }:
@@ -117,15 +117,17 @@ function SharedPad({ interviewId, self, seat, questions, toolbarEnd, below, onPa
   const ready = !!ydoc && connection !== 'refused';
   const editable = connection === 'synced';
   const lead = seat === 'lead' && !!questions?.length;
-  const toolbar = <Toolbar size="sm" aria-label="Code pad" end={toolbarEnd} data-testid="interview-pad-toolbar">
-    <Select size="sm" value={language} options={LANGUAGE_OPTIONS} aria-label="Language" disabled={!editable} wrapperClassName="w-36 shrink-0"
+  // The board's row pattern: the actions on the left, the connection chip right-aligned ahead of the run controls.
+  const status = connection === 'connecting' ? <Chip size="sm" tone="neutral" data-testid="interview-pad-status">Connecting…</Chip>
+    : connection === 'synced' ? <Chip size="sm" tone="success" data-testid="interview-pad-status">In sync</Chip> : null;
+  const end = status || toolbarEnd ? <>{status}{toolbarEnd}</> : undefined;
+  const toolbar = <Toolbar size="sm" aria-label="Code pad" end={end} className="px-4" data-testid="interview-pad-toolbar">
+    <Select size="sm" value={language} options={LANGUAGE_OPTIONS} aria-label="Language" disabled={!editable} wrapperClassName="w-28 shrink-0"
       onChange={(e) => chooseLanguage(e.target.value)} data-testid="interview-pad-language" />
-    {lead && <DropdownMenu trigger="Insert a question" triggerLabel="Insert a question" triggerVariant="secondary" triggerClassName="whitespace-nowrap" disabled={!editable}
+    {lead && <DropdownMenu trigger="Insert a question" triggerLabel="Insert a question" triggerVariant="default" triggerClassName="whitespace-nowrap" disabled={!editable}
       triggerTestId="interview-pad-insert" sections={[{ scroll: true, items: questions!.map((q, n) => ({
         id: q.id, label: `Question ${n + 1}`, description: questionLabel(q), onSelect: () => insertQuestion(q),
       })) }]} />}
-    {connection === 'connecting' && <Chip size="sm" tone="neutral" data-testid="interview-pad-status">Connecting…</Chip>}
-    {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-pad-status">In sync</Chip>}
   </Toolbar>;
 
   return <PadFrame connection={connection} toolbar={toolbar} below={below}
