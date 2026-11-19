@@ -113,6 +113,20 @@ describe('name matching', () => {
     // No comma before the name: Milo is not spoken to.
     expect(findAddress('I trust Milo. Not sure yet. Can you check the totals')).toBeNull();
   });
+
+  it('talk about Milo stays talk about Milo across a full stop or a comma; thanks said to Milo is not a request (review of 18 November, item 3)', () => {
+    // The ask after the name is in another sentence: said to the person in the room.
+    expect(findAddress('We could ask Milo. Show me your solution.')).toBeNull();
+    expect(findAddress('I trust Milo. Show me your solution.')).toBeNull();
+    // An imperative after the comma is said to the listener; only a question with "you" in the same sentence goes to Milo.
+    expect(findAddress("Don't ask Milo, write it yourself")).toBeNull();
+    expect(findAddress('Let me ask Milo, can you add a test for the empty list')?.rest).toBe('can you add a test for the empty list');
+    // Thanks or goodbye said to Milo, then a question to the candidate.
+    expect(findAddress('Thanks, Milo. That was great. Could you walk me through your approach?')).toBeNull();
+    expect(findAddress('Bye, Milo! Now, could you explain the loop')).toBeNull();
+    // An apology is not thanks: the ask that follows it is still Milo's (live take of 18 November).
+    expect(findAddress('So sorry, Milo. I was focusing. Could you repeat the question?')).not.toBeNull();
+  });
 });
 
 describe('fillers and cut detection', () => {

@@ -16,14 +16,18 @@
 //     B. mid-sentence, it is followed by a comma / colon / dash ("so, Milo, can you"), or by
 //        "please", an imperative verb ("Milo write up ..."), a question word, or "can/could/would/will you".
 //     So "I think Milo could help with that budget question" is NOT a request (mid-sentence, "could"
-//     not followed by "you"), but "I think Milo, could you help" is. A name set off by a comma that closes
-//     its sentence ("So sorry, Milo. I was miles away. Could you repeat that?") is a request when one of the
-//     next two sentences asks so; a "Thanks, Milo!" followed by talk to someone else is not.
-//   C. the name is the last word of the caption (unless it follows thanks / bye): the request starts next caption.
+//     not followed by "you"), but "I think Milo, could you help" is. A request after the name's own sentence
+//     has ended ("I trust Milo. Show me your solution.") is said to someone else, with one exception: a name
+//     set off by a comma that closes its sentence ("So sorry, Milo. I was miles away. Could you repeat that?")
+//     is a request when one of the next two sentences asks so, unless it is thanks or a goodbye ("Thanks,
+//     Milo. That was great. Could you walk me through it?" asks the candidate).
+//   C. the name is the last word of the caption (unless it follows thanks / bye / sorry): the request starts next caption.
 //   Mention. Talking about Milo to someone else is never an address: Milo as what the sentence acts on or names ("just ask
-//     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the words after the name ask it something ("let
-//     me ask Milo, can you add a test"); or Milo as the subject in the third person, a modal straight after the name with no
-//     person after it ("Milo can help with that"; "Milo can you", "Milo, can help" still address it).
+//     Milo", "I've brought in Milo, our AI support", "this is Milo"), unless the same sentence goes on to ask it something
+//     straight on, or after a pause with "you" ("let me ask Milo, can you add a test"; not "don't ask Milo, write it
+//     yourself", nor "we could ask Milo. Show me your solution."); or Milo as the subject in the third person, a modal
+//     straight after the name with no person after it ("Milo can help with that"; "Milo can you", "Milo, can help" still
+//     address it).
 //   Text before the name is dropped. If nothing follows the name ("...Milo.") the request is opened
 //   empty and starts with the same speaker's next caption.
 //   Stitching. The same speaker's following captions join the request. It closes when the speaker has been
@@ -140,18 +144,28 @@ const QUESTION_SUBJECTS: ReadonlySet<string> = new Set(['you', 'u', 'ya', 'we', 
 /**
  * Is this mention of the name talk about Milo to someone else (the Mention rule above)? `before` and `after` are the text around
  * the name, `rest` is `after` without the punctuation it starts with, `initial` whether the name starts its sentence. A name the
- * sentence acts on still addresses Milo when the words after it ask something ("let me ask Milo, can you add a test").
+ * sentence acts on still addresses Milo when the ask follows the name straight on ("hang on Milo what did Priya say"), or after a
+ * pause in the same sentence with "you" ("let me ask Milo, can you add a test"). An imperative after the pause ("don't ask Milo,
+ * write it yourself") is said to the listener, and an ask after the name's sentence has ended ("we could ask Milo. Show me your
+ * solution.") is another sentence, said to whoever the speaker faces.
  */
 const talksAboutName = (before: string, after: string, rest: string, initial: boolean): boolean => {
   const [first = '', second = ''] = norm(rest).split(' ');
-  if (!initial && !asksSomething(rest) && NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '')) return true;
+  const asksMiloHere = /^\s+\p{L}/u.test(after) ? asksSomething(rest) : !closesSentence(after) && asksYou(rest);
+  if (!initial && !asksMiloHere && NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '')) return true;
   return /^\s+\p{L}/u.test(after) && MODALS.has(first) && !QUESTION_SUBJECTS.has(second);
 };
-/** Do these words start by asking something: "please", an imperative, a question word, or "can/could/would/will you"? */
-const asksSomething = (text: string): boolean => {
+/** Do these words start by asking someone "can/could/would/will you"? */
+const asksYou = (text: string): boolean => {
   const [first = '', second = ''] = norm(text).split(' ');
-  return IMPERATIVES.has(first) || (['can', 'could', 'would', 'will'].includes(first) && second === 'you');
+  return ['can', 'could', 'would', 'will'].includes(first) && second === 'you';
 };
+/** Do these words start by asking something: "please", an imperative, or "can/could/would/will you"? */
+const asksSomething = (text: string): boolean => IMPERATIVES.has(norm(text).split(' ')[0] ?? '') || asksYou(text);
+/** The name ends its sentence: a full stop, "!" or "?" straight after it (an ellipsis is a pause, not an end). */
+const closesSentence = (after: string): boolean => /^\s*[.!?]/.test(after) && !/^\s*\.\./.test(after);
+/** Thanks or a goodbye right before the name ("Thanks, Milo"): said to Milo, but never a request, whatever follows. */
+const THANKS_OR_BYE = /(thanks|thank you|bye|goodbye|cheers)[\s,.!]*$/i;
 /**
  * How many sentences after a name that closes its own sentence after a comma ("So sorry, Milo.") the speaker may still be asking
  * Milo something: "So sorry, Milo. I was miles away. Could you repeat that?" The ask further on is for someone else.
@@ -206,13 +220,14 @@ export function findAddress(text: string): NameHit | null {
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
     if (namePhraseFollows(after) || talksAboutName(before, after, rest, initial)) continue;
     let addressed = initial;
-    // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you.
-    if (!addressed && rest === '' && !/(thanks|thank you|bye|goodbye|cheers|sorry)[\s,.!]*$/i.test(before)) addressed = true;
+    // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you or an apology.
+    if (!addressed && rest === '' && !THANKS_OR_BYE.test(before) && !/sorry[\s,.!]*$/i.test(before)) addressed = true;
     if (!addressed) {
       if (/^\s*([,:;—–-]|\.\.\.|…)/.test(after)) addressed = true;
-      else if (asksSomething(rest)) addressed = true;
-      // Spoken to Milo at the end of a sentence: a request only when one of the next sentences asks it something.
-      else if (closesSentenceSpokenTo(before, after)) {
+      // Mid-sentence, the name straight followed by the ask ("so Milo please summarise the call").
+      else if (!closesSentence(after)) addressed = asksSomething(rest);
+      // Spoken to Milo at the end of a sentence, not in thanks: a request only when one of the next sentences asks it something.
+      else if (closesSentenceSpokenTo(before, after) && !THANKS_OR_BYE.test(before)) {
         addressed = rest.split(/(?<=[.!?…])\s+/).slice(0, VOCATIVE_REACH_SENTENCES).some(asksSomething);
       }
     }
