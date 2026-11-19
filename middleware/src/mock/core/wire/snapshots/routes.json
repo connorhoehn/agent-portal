@@ -2438,7 +2438,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id/consents",
-      "source": "src/routes/interviews/records.ts:43"
+      "source": "src/routes/interviews/records.ts:44"
     },
     {
       "method": "GET",
@@ -2558,7 +2558,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/milo-export",
-      "source": "src/routes/interviews/records.ts:73"
+      "source": "src/routes/interviews/records.ts:74"
     },
     {
       "method": "POST",
@@ -2618,7 +2618,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/recap/ask",
-      "source": "src/routes/interviews/recap.ts:112"
+      "source": "src/routes/interviews/recap.ts:113"
     },
     {
       "method": "POST",
@@ -2668,12 +2668,12 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/scorecard",
-      "source": "src/routes/interviews/scorecards.ts:117"
+      "source": "src/routes/interviews/scorecards.ts:118"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/scorecard",
-      "source": "src/routes/interviews/scorecards.ts:136"
+      "source": "src/routes/interviews/scorecards.ts:137"
     },
     {
       "method": "POST",

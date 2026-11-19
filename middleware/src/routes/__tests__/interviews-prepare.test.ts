@@ -90,7 +90,8 @@ describe('PUT /interviews/:id/questions', () => {
   it('the lead chooses in order; the record shows the plan and the state follows the time and the plan', async () => {
     const before = await readRow(HUGO, 'iv-k1p5w8ra');
     expect(before).toMatchObject({ canPrepare: true, state: 'ready', missing: null });
-    expect(before.bank.length).toBe(6);
+    // The coding round's questions only (kit.ts questionsOfRound): the design questions are not offered.
+    expect(before.bank.map((q: { id: string }) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
     const r = await HUGO.put('/interviews/iv-k1p5w8ra/questions', { revision: before.revision, questionIds: ['q-be-retry', 'q-be-ratelimit'] });
     expect(r.status).toBe(200);
     expect(r.body.interview).toMatchObject({ state: 'ready', missing: null });
