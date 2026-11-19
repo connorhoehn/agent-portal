@@ -32,12 +32,18 @@ test('complete only when every competency is rated, a recommendation is chosen a
 
 test('the submit carries ratings in the kit\'s order, trimmed notes, never an author; a reason only on a correction', () => {
   const d = { ...emptyDraft(), ratings: { clarity: 2 as const, ownership: 4 as const }, notes: { ownership: ' Saw it. ' }, recommendation: 'no' as const, summary: ' Not yet. ', reason: ' Typo. ' };
-  assert.deepEqual(bodyOf(d, KIT, 0), {
+  assert.deepEqual(bodyOf(d, KIT, 0, []), {
     ratings: [{ competencyId: 'ownership', rating: 4, note: 'Saw it.' }, { competencyId: 'clarity', rating: 2, note: '' }],
     recommendation: 'no', summary: 'Not yet.', basedOn: 0,
   });
-  assert.equal((bodyOf(d, KIT, 2) as { reason?: string }).reason, 'Typo.');
-  assert.equal('interviewerId' in bodyOf(d, KIT, 2), false);
+  assert.equal((bodyOf(d, KIT, 2, []) as { reason?: string }).reason, 'Typo.');
+  assert.equal('interviewerId' in bodyOf(d, KIT, 2, []), false);
+});
+
+test('the submit sends only the red flags the kit still lists: a flag reworded since the last version no longer refuses a correction', () => {
+  const d = { ...emptyDraft(), ratings: { ownership: 4 as const }, recommendation: 'yes' as const, summary: 'Fine.', redFlagsSeen: ['Old wording', 'Kept flag'] };
+  assert.deepEqual((bodyOf(d, KIT, 1, ['Kept flag', 'New wording']) as { redFlagsSeen?: string[] }).redFlagsSeen, ['Kept flag']);
+  assert.equal('redFlagsSeen' in bodyOf({ ...d, redFlagsSeen: ['Old wording'] }, KIT, 1, ['New wording']), false);
 });
 
 test('a correction starts from the latest version as submitted', () => {
@@ -159,7 +165,7 @@ test('a round requires only its own competencies; an optional one left unseen is
   const d = { ...emptyDraft(), ratings: { clarity: 3 as const }, notes: { ownership: 'stray' }, recommendation: 'yes' as const, summary: 'Good.' };
   assert.equal(allRated(d, round.required), true);
   assert.deepEqual(missingFrom(d, KIT, LIMITS, false, round.required), []);
-  assert.deepEqual(bodyOf(d, KIT, 0).ratings, [{ competencyId: 'clarity', rating: 3, note: '' }]);
+  assert.deepEqual(bodyOf(d, KIT, 0, []).ratings, [{ competencyId: 'clarity', rating: 3, note: '' }]);
   assert.deepEqual(openBodyOf(d, KIT), { ratings: [{ competencyId: 'clarity', rating: 3 }] });
 });
 
@@ -170,9 +176,9 @@ test('a recap answer\'s source reads the record\'s clock, not the wall clock (E4
 
 test('the red flags seen go with the scorecard when some are ticked, and a correction starts from the ones submitted', () => {
   const d = { ...emptyDraft(), ratings: { ownership: 4 as const, clarity: 2 as const }, recommendation: 'no' as const, summary: 'Not yet.' };
-  assert.equal('redFlagsSeen' in bodyOf(d, KIT, 0), false);
-  assert.equal('redFlagsSeen' in bodyOf({ ...d, redFlagsSeen: [] }, KIT, 0), false);
-  assert.deepEqual(bodyOf({ ...d, redFlagsSeen: ['Vague names.'] }, KIT, 0)['redFlagsSeen'], ['Vague names.']);
+  assert.equal('redFlagsSeen' in bodyOf(d, KIT, 0, []), false);
+  assert.equal('redFlagsSeen' in bodyOf({ ...d, redFlagsSeen: [] }, KIT, 0, ['Vague names.']), false);
+  assert.deepEqual(bodyOf({ ...d, redFlagsSeen: ['Vague names.'] }, KIT, 0, ['Vague names.'])['redFlagsSeen'], ['Vague names.']);
   const card = { id: 'sc', interviewer: { id: 'u', name: 'U' }, recommendation: 'no' as const, summary: 's', submittedAt: '', version: 1, correctionReason: null, ratings: [], earlier: [], redFlagsSeen: ['Vague names.'] };
   assert.deepEqual(draftFrom(card).redFlagsSeen, ['Vague names.']);
 });

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  RED_FLAG_GROUP_LABELS, ackReveal, answerKeyQuestions, loadReveals, onBoardReveal, onReveals, placeBeside, queueBoardReveal, takeBoardReveal, wasRevealed, redFlagGroups, revealPath, revealProvidedDesign, seenFlagsOf, toggleSeenFlag,
+  RED_FLAG_GROUP_LABELS, ackReveal, readoutFlags, answerKeyQuestions, loadReveals, onBoardReveal, onReveals, placeBeside, queueBoardReveal, takeBoardReveal, wasRevealed, redFlagGroups, revealPath, revealProvidedDesign, seenFlagsOf, toggleSeenFlag,
 } from '../interviewsAnswerKey.ts';
 import { roomTabOf, roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/types.ts';
@@ -90,4 +90,13 @@ test('a revealed design waits for the lead\'s board once: taking it clears it an
   assert.deepEqual(takeBoardReveal('iv-9'), { questionId: 'q2', board: key.providedDesign });
   assert.equal(takeBoardReveal('iv-9'), null);
   off();
+});
+
+test('a submitted scorecard\'s red flags read out by the kit\'s groups, and a stored flag the kit no longer lists stays, under Other', () => {
+  const kit = [{ group: 'naming' as const, text: 'Vague names' }, { group: 'responsibility' as const, text: 'God service' }];
+  assert.deepEqual(readoutFlags(['God service', 'A flag since reworded'], kit), [
+    { group: 'responsibility', text: 'God service' }, { group: 'other', text: 'A flag since reworded' },
+  ]);
+  assert.deepEqual(readoutFlags(['Only stored'], undefined), [{ group: 'other', text: 'Only stored' }]);
+  assert.deepEqual(readoutFlags(undefined, kit), []);
 });

@@ -9,7 +9,7 @@
 import { clockOf } from './interviewsRecord.ts';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, type InterviewState, type Recommendation, type RoundType } from './interviews.ts';
 import type { KitCompetency } from './interviewsKit.ts';
-import type { KitRedFlag } from './interviewsAnswerKey.ts';
+import { seenFlagsOf, type KitRedFlag } from './interviewsAnswerKey.ts';
 import type { MiloAskBody } from './interviewsRoom.ts';
 import { writeJson } from './writeJson.ts';
 
@@ -138,13 +138,15 @@ export function missingFrom(d: Draft, competencies: readonly KitCompetency[], li
   return out;
 }
 
-/** The body POST …/scorecard takes. There is no author in it: the server always uses the signed-in person. */
-export function bodyOf(d: Draft, competencies: readonly KitCompetency[], basedOn: number): Record<string, unknown> {
+/** The body POST …/scorecard takes. There is no author in it: the server always uses the signed-in person. Only the red
+ *  flags the round's kit still lists (`redFlags`) go: one reworded or removed since the draft began would be refused. */
+export function bodyOf(d: Draft, competencies: readonly KitCompetency[], basedOn: number, redFlags: readonly string[]): Record<string, unknown> {
+  const redFlagsSeen = seenFlagsOf(d.redFlagsSeen, redFlags);
   return {
     // Only what was rated: an optional competency left "Not seen in this round" is not sent.
     ratings: competencies.filter((c) => !!d.ratings[c.id]).map((c) => ({ competencyId: c.id, rating: d.ratings[c.id], note: (d.notes[c.id] ?? '').trim() })),
     recommendation: d.recommendation, summary: d.summary.trim(), basedOn,
-    ...(d.redFlagsSeen?.length ? { redFlagsSeen: [...d.redFlagsSeen] } : {}),
+    ...(redFlagsSeen.length ? { redFlagsSeen } : {}),
     ...(basedOn > 0 ? { reason: d.reason.trim() } : {}),
   };
 }

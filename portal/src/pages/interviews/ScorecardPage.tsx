@@ -23,7 +23,7 @@ import { RatingInput } from '@connorhoehn/ui-components';
 import {
   Button, ChatComposer, Checkbox, Chip, DetailPage, DetailSection, Disclosure, EmptyState, FormField, Inline, KeyValue, MetaLine, RadioGroup, Stack, T, Textarea, WorkflowStepper,
 } from '@connorhoehn/ui-components/shared';
-import { redFlagGroups, toggleSeenFlag, type KitRedFlag } from '../../lib/interviewsAnswerKey';
+import { readoutFlags, redFlagGroups, toggleSeenFlag, type KitRedFlag } from '../../lib/interviewsAnswerKey';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
@@ -142,7 +142,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
         options: [{ id: 'submit', label: 'Submit', emphasis: 'primary' }, { id: 'keep', label: 'Keep editing' }],
         onAnswer: async (a) => {
           if (!('optionId' in a) || a.optionId !== 'submit') { setAsking(null); return { receipt: 'Still editing' }; }
-          const out = await submitScorecard(interview.id, bodyOf(draft, competencies, basedOn));
+          const out = await submitScorecard(interview.id, bodyOf(draft, competencies, basedOn, (view.redFlags ?? []).map((f) => f.text)));
           if (!out.ok) {
             setProblem(out.error);
             setAsking(null);
@@ -342,7 +342,7 @@ function ScorecardReadout({ card, competencies, round, recap, flags, testId }: {
           );
         })}
         <T size="sm" data-testid="interviews-scorecard-summary">{card.summary}</T>
-        {!!card.redFlagsSeen?.length && <RedFlagsSeen flags={flags?.length ? flags : card.redFlagsSeen.map((text) => ({ group: 'other' as const, text }))} seen={card.redFlagsSeen} />}
+        {!!card.redFlagsSeen?.length && <RedFlagsSeen flags={readoutFlags(card.redFlagsSeen, flags)} seen={card.redFlagsSeen} />}
       </Stack>
     </DetailSection>
   );
@@ -364,10 +364,9 @@ function RedFlagsSeen({ flags, seen, onToggle }: { flags: readonly KitRedFlag[];
           <Stack key={g.group} gap="xs" data-testid="interviews-scorecard-red-flag-group">
             <T size="xs" weight="medium" tone="secondary">{g.label}</T>
             {g.items.map((text) => (onToggle
-              ? <Inline key={text} gap="sm" align="center" wrap={false}>
-                  <Checkbox checked={seen.includes(text)} onChange={() => onToggle(text)} aria-label={text} />
-                  <T size="sm" wrap>{text}</T>
-                </Inline>
+              ? <FormField key={text} label={text} layout="inline">
+                  {({ id, labelId }) => <Checkbox id={id} aria-labelledby={labelId} checked={seen.includes(text)} onChange={() => onToggle(text)} />}
+                </FormField>
               : <T key={text} size="sm" wrap>{`• ${text}`}</T>))}
           </Stack>
         ))}

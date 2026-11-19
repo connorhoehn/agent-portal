@@ -94,6 +94,13 @@ export const REVEAL_NOT_ACKED = 'The provided design is on the board, but the re
 /** The scorecard's seen red flags: only the question's own, in its order. */
 export const seenFlagsOf = (seen: readonly string[] | undefined, flags: readonly string[]): string[] =>
   flags.filter((f) => (seen ?? []).includes(f));
+/** A submitted scorecard's seen flags as the readout lists them: the kit's own (with their groups, in its order), then
+ *  any the kit no longer lists (reworded or removed since), under Other, so nothing stored vanishes from the record. */
+export function readoutFlags(seen: readonly string[] | undefined, flags: readonly KitRedFlag[] | undefined): KitRedFlag[] {
+  const kit = flags ?? [];
+  const known = new Set(kit.map((f) => f.text));
+  return [...kit.filter((f) => (seen ?? []).includes(f.text)), ...(seen ?? []).filter((t) => !known.has(t)).map((text) => ({ group: 'other' as const, text }))];
+}
 export const toggleSeenFlag = (seen: readonly string[], flag: string, flags: readonly string[]): string[] =>
   seenFlagsOf(seen.includes(flag) ? seen.filter((f) => f !== flag) : [...seen, flag], flags);
 
