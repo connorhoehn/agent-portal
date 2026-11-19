@@ -80,7 +80,7 @@ describe('the mock world\'s stand-ins', () => {
 describe('the registry (D6)', () => {
   afterEach(() => unregisterEraser('other-module'));
   it('holds this module\'s own erasers, takes another module\'s, and refuses a malformed one', () => {
-    expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes', 'pad-log', 'runs']);
+    expect(erasersOf('media').map((e) => e.kind)).toEqual(['recording', 'transcript-and-minutes', 'pad-log', 'board-snapshots', 'runs']);
     expect(eraserFor('runs')?.class).toBe('media');
     // The coach's suggestion log is registered with the module's own (round 4 combine).
     expect(erasersOf('record').map((e) => e.kind)).toEqual(['consents', 'scorecards', 'suggestions', 'recaps', 'coach-log', 'said-log']);

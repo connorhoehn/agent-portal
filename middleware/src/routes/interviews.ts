@@ -33,6 +33,7 @@ import { consentsRouter } from './interviews/consents.js';
 import { coachRouter } from './interviews/coach.js';
 import { miloRouter } from './interviews/milo.js';
 import { padRouter } from './interviews/pad.js';
+import { boardRouter } from './interviews/board.js';
 import { assignmentsRouter } from './interviews/assignments.js';
 import { runsRouter } from './interviews/runs.js';
 import { candidatesRouter } from './interviews/candidates.js';
@@ -97,6 +98,7 @@ interviewsRouter.use(planRouter); // lane PLAN (row I3.10): Milo drafts a questi
 
 interviewsRouter.use(coachRouter); // lane COACH (row I3.3): Milo's suggestion for the lead, and the lead's answer
 interviewsRouter.use(padRouter); // lane PADLOG (row I4.3)
+interviewsRouter.use(boardRouter); // the whiteboard's checkpoints (WHITEBOARD-PLAN step 1)
 interviewsRouter.use(miloRouter); // lane MILO-FOR-YOU (rows I3.6, I3.7): the live transcript, Milo's notes, the lead's private question
 interviewsRouter.use(runsRouter); // lane RUNS (rows I4.4, I4.5)
 interviewsRouter.get('/interviews', asyncHandler(async (req, res) => {

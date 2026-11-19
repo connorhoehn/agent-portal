@@ -171,6 +171,7 @@ BEGIN
       ('interview_applications',       'public.app_tenant_visible(''interviews'')'),
       ('interview_coach_log',          'public.app_tenant_visible(''interviews'')'),
       ('interview_pad_events',         'public.app_tenant_visible(''interviews'')'),
+      ('interview_board_snapshots',    'public.app_tenant_visible(''interviews'')'),
       ('interview_said_log',           'public.app_tenant_visible(''interviews'')'),
       ('interview_milo_settings',      'public.app_tenant_visible(''interviews'')'),
       ('interview_runs',               'public.app_tenant_visible(''interviews'')'),

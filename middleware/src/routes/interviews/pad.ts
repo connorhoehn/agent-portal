@@ -31,7 +31,7 @@ export const padRouter = Router();
 export const NO_PAD_HERE = 'There is no code pad here that you can open.';
 
 /** The technical interview in this staff viewer's scope (never the admin, never a guest), with the index it was read from. */
-async function technicalInScope(req: Request): Promise<{ interview: Interview; ix: WorldIndex; userId: string; role: string } | null> {
+export async function technicalInScope(req: Request): Promise<{ interview: Interview; ix: WorldIndex; userId: string; role: string } | null> {
   const session = resolveSession(req);
   if (!session || session.tenant !== INTERVIEWS_TENANT || !session.role || session.role === 'admin' || isGuestId(session.sub)) return null;
   const ix = await indexFor(req);

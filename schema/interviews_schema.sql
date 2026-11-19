@@ -410,6 +410,20 @@ CREATE TABLE IF NOT EXISTS interview_panel_notices (
 -- server's time, `client_at` the browser's. Append-only; rows leave by
 -- interview through retention (decision 17: the code log is media, 90 days).
 -- Panel side only (decision 4).
+-- The whiteboard's checkpoints (WHITEBOARD-PLAN step 1; middleware/src/lib/interviews/board/snapshots.ts): the board's
+-- elements as JSON, posted by the lead's room while a board round is live, append-only, capped per interview in the
+-- service, erased with the interview's media.
+CREATE TABLE IF NOT EXISTS interview_board_snapshots (
+  interview_id  TEXT NOT NULL REFERENCES interviews(id),
+  seq           INTEGER NOT NULL CHECK (seq >= 1),
+  at            TIMESTAMPTZ NOT NULL,
+  who_id        TEXT NOT NULL,
+  side          TEXT NOT NULL CHECK (side IN ('panel', 'candidate')),
+  elements      INTEGER NOT NULL CHECK (elements >= 0),
+  scene         TEXT NOT NULL CHECK (octet_length(scene) <= 524288),
+  PRIMARY KEY (interview_id, seq)
+);
+
 CREATE TABLE IF NOT EXISTS interview_pad_events (
   interview_id  TEXT NOT NULL REFERENCES interviews(id),
   seq           INTEGER NOT NULL CHECK (seq >= 1),

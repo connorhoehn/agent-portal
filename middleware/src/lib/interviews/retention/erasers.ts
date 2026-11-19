@@ -28,6 +28,7 @@ import { eraseRecaps } from '../recap/index.js';
 import { eraseCoachLog } from '../milo-notes/index.js';
 import { eraseSaidLog } from '../speak/index.js';
 import { erasePadLog } from '../pad/log/index.js';
+import { eraseBoardSnapshots } from '../board/snapshots.js';
 import { eraseRuns } from '../runs/index.js';
 import { SERVICE_AUTH_HEADER, signEnvelope } from '@connorhoehn/service-runtime';
 import type { AssistantStore } from '../../meeting-assistant/store.js';
@@ -191,5 +192,6 @@ export function registerOwnErasers(): void {
   registerEraser({ kind: 'coach-log', class: 'record', erase: eraseCoachLog });
   registerEraser({ kind: 'said-log', class: 'record', erase: eraseSaidLog });
   registerEraser({ kind: 'pad-log', class: 'media', erase: erasePadLog });
+  registerEraser({ kind: 'board-snapshots', class: 'media', erase: eraseBoardSnapshots });
   registerEraser({ kind: 'runs', class: 'media', erase: eraseRuns });
 }
