@@ -31,10 +31,11 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel, useCrumbTrail } from '../../lib/crumbLabels';
 import { interviewsRoundHome } from '../../components/shell/breadcrumbResolve';
 import { useSession } from '../../lib/auth';
-import { CallBlock, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
+import { CallBlock, callCounts, callDrawn, useCallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { HuddleChatBody, useHuddleChat, useHuddleChatUnread } from '../../components/shell/HuddleChat';
 import { withUnreadBadges } from '../../components/calls/UnreadTabBadge';
+import { RoomCallGallery } from '../../components/calls/RoomCallGallery';
 import { usePageChromeFold } from '../../components/shell/pageChrome';
 import { scorecardPath } from '../../lib/interviewsScorecard';
 import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHintListener';
@@ -212,6 +213,9 @@ function InterviewRoom({ id }: { id: string }) {
       <UnavailableNotice error={error} what="this interview room" source="The room is read from the interviews tenant's rounds" onRetry={refresh} />
     );
   }
+  // A technical round's call floats (RoomCallGallery): the board or pad keeps the page's width. A behavioural round keeps the
+  // narrow Call pane beside the plan: the faces are what that round is about.
+  const floating = room?.round.type === 'technical';
   if (!room) return <LoadingState label={isLoading ? 'Loading the interview room…' : 'Loading…'} />;
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
@@ -219,8 +223,10 @@ function InterviewRoom({ id }: { id: string }) {
     <RoomWorkspace room={room} here={call.here} joined={joined} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
       onBack={() => navigate(MY_INTERVIEWS_HREF)} lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
       miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints}
-      folded={drawn} onShowCall={drawn && callPaneShut ? () => setCallPaneShut(false) : null} />
-    {drawn && !callPaneShut && <RoomCallPane recordingNote={host?.recordingNote ?? null} onClose={() => setCallPaneShut(true)} />}
+      folded={drawn} onShowCall={drawn && !floating && callPaneShut ? () => setCallPaneShut(false) : null} />
+    {drawn && floating && <RoomCallGallery storageKey="interviews.room.call-gallery" count={callCounts(host?.call.call ?? null).joined}
+      recordingNote={host?.recordingNote ?? null} testId="interview-room-gallery" />}
+    {drawn && !floating && !callPaneShut && <RoomCallPane recordingNote={host?.recordingNote ?? null} onClose={() => setCallPaneShut(true)} />}
   </Stack>;
 }
 

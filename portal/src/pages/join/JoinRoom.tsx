@@ -23,10 +23,11 @@
 // the link taken back), leaves the call and opens the ended page. Leave returns to a line offering to rejoin.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
-import { SidePane, SidePaneProvider, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
+import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
 import { Button, EmptyState, Inline, LoadingState, PageHeader, Stack, T } from '@connorhoehn/ui-components/shared';
 import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
 import { CallBlock, CallMediaOutlet, callCounts, callDrawn, useCallBlock, useCallHost } from '../../lib/conversationCall';
+import { RoomCallGallery } from '../../components/calls/RoomCallGallery';
 import { hasJoinedCall } from '../../components/shell/callShellModel';
 import { callLossWords, callTimeLabel, guestRoomNameFor, timeLeftTone } from '../../lib/interviewsRoom';
 import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
@@ -186,10 +187,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
     if (technical) { setTab((t) => (t === 'chat' ? 'pad' : 'chat')); return; }
     setPaneOpen((open) => !open);
   }, [technical]);
-  // A technical round's Call pane (its tiles): the page owns its ×. Closed, it is not drawn, so the call's media falls back
-  // to the footer's mounted outlet and keeps playing; the header's "Show the call" brings it back.
-  const [callShut, setCallShut] = useState(false);
-  useEffect(() => { if (!drawn) setCallShut(false); }, [drawn]);
+  // A technical round's call floats (RoomCallGallery, as the lead's does); minimised, its media plays from the footer's outlet.
   const callId = host?.call.call?.callId ?? null;
   // The candidate's own media id, so Milo and the transcript hear the candidate (bound server-side to this guest's session).
   useGuestMediaBinding(joined ? callId : null, room.self.userId, host?.call.call?.participants as Parameters<typeof useGuestMediaBinding>[2]);
@@ -219,7 +217,6 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
     const inset = 'px-[var(--ui-page-gutter)]';
     const header = <PageHeader density="compact" title={`${room.round.name} · ${room.round.minutes} min`}
       description={drawn ? 'You are in the call: microphone, camera and Leave are in the bar at the bottom of the window.' : `${idle.title}. ${idle.body}`}
-      actions={drawn && callShut ? <Button variant="secondary" size="sm" onClick={() => setCallShut(false)} data-testid="join-room-show-call">Show the call</Button> : undefined}
       className={inset} data-testid={drawn ? 'join-room-header' : idle.testId} />;
     return <GuestShell bleed role={role}>
       <SidePaneProvider storageKey="join.room-pane" bounds={{ minSecondaryPx: 320, fitPrimaryPx: 480 }}>
@@ -230,7 +227,8 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
               <GuestMiloVoice room={room} answer={miloAnswer} />
             </Stack>
           </SidePaneSplit>
-          {drawn && !callShut && <GuestCallPane onClose={() => setCallShut(true)} />}
+          {drawn && <RoomCallGallery storageKey="join.room.call-gallery" count={callCounts(host?.call.call ?? null).joined}
+            recordingNote={host?.recordingNote ?? null} liftRem={3} testId="join-room-gallery" />}
           {footer}
         </Stack>
       </SidePaneProvider>
@@ -256,16 +254,6 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
     </SidePaneProvider>
   </GuestShell>;
 }
-
-/** A technical round's call tiles, narrow on the right while the call is drawn (the lead's room has the same pane). */
-function GuestCallPane({ onClose }: { onClose(): void }) {
-  const { reveal } = useSidePaneHost();
-  useEffect(() => { reveal(); }, [reveal]);
-  return <SidePane title="Call" closeLabel="Hide the call" onClose={onClose} paneId="join-room-call" widthPx={GUEST_CALL_PANE} data-testid="join-room-call-pane">
-    <CallBlock placement="pane" fit="contain" className="min-h-0 min-w-0 flex-1 justify-center bg-surface" />
-  </SidePane>;
-}
-const GUEST_CALL_PANE = { min: 320, max: 440 } as const;
 
 /** The library's HuddleBar on the work-call model: Join before the call; microphone, camera, Message, Leave and the time left in it. */
 function GuestCallBar({ room, panel, chatOpen, onToggleChat, onMiloLine }: { room: GuestRoom; panel: GuestPanel | null; chatOpen: boolean; onToggleChat(): void; onMiloLine(answer: MiloRequestAnswer | null): void }) {
