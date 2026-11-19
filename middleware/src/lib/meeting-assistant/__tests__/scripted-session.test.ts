@@ -1,4 +1,4 @@
-import { SCRIPT_FALLBACK, SCRIPT_RULES, ScriptedSession, scriptedSpeech, scriptFor } from '../scripted-session.js';
+import { DEFAULT_TOOL_GAP_MS, SCRIPT_FALLBACK, SCRIPT_RULES, ScriptedSession, scriptedSpeech, scriptFor } from '../scripted-session.js';
 import type { SessionEvents } from '../session.js';
 import AjvImport from 'ajv';
 import { meetingTools } from '../instructions.js';
@@ -112,5 +112,29 @@ describe('scripted calls against the catalogue', () => {
       const step = r.run(r.match.exec('x') ?? ([ 'x', 'x' ] as unknown as RegExpMatchArray));
       if ('call' in step) expect(covered.has(r.id)).toBe(true);
     }
+  });
+});
+
+describe('ScriptedSession tool-call gap', () => {
+  it('raises the delegation at once and the tool call only after the gap, so the acknowledgement path runs', async () => {
+    jest.useFakeTimers();
+    try {
+      const s = new ScriptedSession(() => 0, DEFAULT_TOOL_GAP_MS);
+      const order: string[] = [];
+      s.on('delegation', () => order.push('delegation'));
+      s.on('toolCall', () => order.push('toolCall'));
+      await s.start({ instructions: 'i', tools: [], backendInstructions: 'b' });
+      expect(DEFAULT_TOOL_GAP_MS).toBeGreaterThanOrEqual(1000);
+      s.emitToolCall('u-1', 'time_left', {});
+      expect(order).toEqual(['delegation']);
+      jest.advanceTimersByTime(DEFAULT_TOOL_GAP_MS - 1);
+      expect(order).toEqual(['delegation']);
+      jest.advanceTimersByTime(1);
+      expect(order).toEqual(['delegation', 'toolCall']);
+      s.emitToolCall('u-1', 'time_left', {});
+      await s.close();
+      jest.advanceTimersByTime(DEFAULT_TOOL_GAP_MS);
+      expect(order).toEqual(['delegation', 'toolCall', 'delegation']);
+    } finally { jest.useRealTimers(); }
   });
 });

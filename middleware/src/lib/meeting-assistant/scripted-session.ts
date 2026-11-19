@@ -87,6 +87,9 @@ export function scriptToneFrames(): Buffer[] {
   return frames;
 }
 
+/** About the gap the 18 November film measured between a delegation and its call (1 to 2 s). */
+export const DEFAULT_TOOL_GAP_MS = 1_500;
+
 export class ScriptedSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'scripted' as const;
   readonly acceptsText = true;
@@ -99,7 +102,8 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   private seq = 0;
   private audioSeq = 0;
 
-  constructor(private readonly clock: () => number = Date.now) { super(); }
+  /** `toolGapMs`: how long after the delegation the tool call is raised (0: the same tick). */
+  constructor(private readonly clock: () => number = Date.now, private readonly toolGapMs: number = 0) { super(); }
 
   async start(input: SessionStartInput): Promise<void> {
     this.startInput = input;
@@ -160,7 +164,9 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
     const callId = `sc_${this.seq}`;
     this.open.add(callId);
     this.emit('delegation', { atMs: this.clock() - this.startedAt });
-    this.emit('toolCall', { callId, name, args, atMs: this.clock() - this.startedAt, askedBy });
+    const raise = () => { if (!this.ended) this.emit('toolCall', { callId, name, args, atMs: this.clock() - this.startedAt, askedBy }); };
+    // The real voice hands the work over, says its short acknowledgement, and the call lands 1 to 2 s later: a gap lets the server's own acknowledgement run.
+    if (this.toolGapMs > 0) setTimeout(raise, this.toolGapMs); else raise();
     return callId;
   }
 
