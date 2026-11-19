@@ -3,8 +3,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, consentChip, defaultRoomTab, guestRoomNameFor, isGuestUserId, miloInviteBlock, staffRoomNameFor, panelLine, roomPaneWidth,
-  roomHeadline, roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
+  NOT_ANSWERED_LINE, ROOM_MESSAGE_TAB, callTimeLabel, candidateLine, candidateStatusTone, consentChip, defaultRoomTab, guestRoomNameFor, isGuestUserId, miloInviteBlock, staffRoomNameFor, panelLine, roomPaneWidth,
+  roomHeaderHint, roomHeadline, roomTabIds, roomTabOf, roomTabs, roundCrumbLabel,
 } from '../interviewsRoom.ts';
 
 const MIN = 60_000;
@@ -153,4 +153,21 @@ test('the call’s tiles never show an id: the panel reads the candidate’s nam
   assert.deepEqual(named('u-hugo'), { displayName: 'Interviewer' });
   assert.deepEqual(guestRoomNameFor('guest:inv-1', { lead: 'Hugo Marchetti', others: 0 }, 'u-hugo')('u-greta'), { displayName: 'Interviewer' });
   for (const id of ['u-wen', 'u-hugo', 'guest:inv-1']) for (const f of [alone, panel]) assert.doesNotMatch(f(id)?.displayName ?? '', /^u-|guest:/);
+});
+
+test('the header hint never tells someone in the call to join it, and the candidate chip reads asked to wait as plain', () => {
+  const base = { open: true, over: false, lostBody: null, here: false, live: true, roomLive: true, lead: true };
+  assert.match(roomHeaderHint(base), /^Join it from the bar/);
+  const inCall = roomHeaderHint({ ...base, here: true });
+  assert.doesNotMatch(inCall, /join/i);
+  assert.match(inCall, /in the call/);
+  assert.equal(roomHeaderHint({ ...base, here: true, lostBody: 'The call dropped.' }), 'The call dropped.');
+  assert.match(roomHeaderHint({ ...base, open: false, over: true }), /scorecard/);
+  assert.match(roomHeaderHint({ ...base, live: false, roomLive: false }), /Joining starts the interview/);
+  assert.match(roomHeaderHint({ ...base, live: false, roomLive: false, lead: false }), /^You can join/);
+  assert.equal(candidateStatusTone('admitted'), 'success');
+  assert.equal(candidateStatusTone('waiting'), 'warning');
+  assert.equal(candidateStatusTone('turned-away'), 'neutral');
+  assert.equal(candidateStatusTone('not-knocked'), 'neutral');
+  assert.equal(candidateStatusTone(null), 'neutral');
 });

@@ -561,6 +561,24 @@ export function candidateLine(admission: Admission | null, seat: 'lead' | 'panel
   return 'Not here yet';
 }
 
+/** The candidate's status chip: let in reads as done, waiting asks for the lead, asked to wait and not here are plain facts. */
+export function candidateStatusTone(state: Admission['state'] | null | undefined): 'success' | 'warning' | 'neutral' {
+  return state === 'admitted' ? 'success' : state === 'waiting' ? 'warning' : 'neutral';
+}
+
+/**
+ * The room's header hint under its state: what to do next, for this seat. Someone already in the call (`here`) is never
+ * told to join it; the bar's controls are where they are.
+ */
+export function roomHeaderHint(o: { open: boolean; over: boolean; lostBody: string | null; here: boolean; live: boolean; roomLive: boolean; lead: boolean }): string {
+  if (!o.open) return o.over ? 'Its call is closed. Your scorecard is on My interviews.' : 'The call opens once the lead has accepted the round.';
+  if (o.lostBody) return o.lostBody;
+  if (o.here) return 'You are in the call: mic, camera and Leave are in the bar at the bottom of the window.';
+  if (o.live) return 'Join it from the bar at the bottom of the window.';
+  if (o.roomLive) return 'The interview is live. Join the call from the bar at the bottom of the window.';
+  return o.lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.' : 'You can join the call from the bar at the bottom of the window.';
+}
+
 // ── Milo asks aloud (rows I3.5, I3.8; decisions 9, 11; contract U10) ─────────────────────────────────────────────────
 /** How Milo's approved words went: aloud (and in the call chat), or in the call chat only. */
 export type MiloSaid = 'spoken' | 'chat';

@@ -11,10 +11,11 @@ import type { RoomQuestion, RoomView } from '../../../lib/interviewsRoom';
 import { BoardScene } from '../board/BoardScene';
 import { questionTitle } from '../board/InterviewBoard';
 
-export function ProvidedDesignTab({ room, onRevealed }: { room: RoomView; onRevealed: () => void }) {
+/** `inset`: the page's side inset while the shell's gutter is folded (the room draws it). */
+export function ProvidedDesignTab({ room, onRevealed, inset = '' }: { room: RoomView; onRevealed: () => void; inset?: string }) {
   const questions = answerKeyQuestions(room.questions);
   useEffect(() => { void loadReveals(room.id); }, [room.id]);
-  return <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid="interview-room-tab-design">
+  return <Stack gap="lg" className={`min-h-0 flex-1 overflow-y-auto py-4 ${inset}`} data-testid="interview-room-tab-design">
     {questions.map((q, i) => <AnswerKeyPart key={q.id} room={room} question={q} answerKey={q.answerKey} first={i === 0} onRevealed={onRevealed} />)}
   </Stack>;
 }

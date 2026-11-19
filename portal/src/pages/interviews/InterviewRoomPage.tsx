@@ -53,7 +53,7 @@ import {
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
-  ROOM_MESSAGE_TAB, candidateLine, defaultRoomTab, panelLine, roomHeadline, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
+  ROOM_MESSAGE_TAB, candidateLine, candidateStatusTone, defaultRoomTab, roomHeaderHint, panelLine, roomHeadline, roomTabOf, roomTabs, roundCrumbLabel, offForFact, type RoomTabId,
   queuePadQuestion, sayQuestion, type MiloAsked, type MiloAskWhy, type MiloSaid, miloInviteBlock,
   NO_SEAT_NOT_FOUND, callLossWords, miloLostLine,
 } from '../../lib/interviewsRoom';
@@ -94,6 +94,10 @@ function InterviewRoom({ id }: { id: string }) {
   const lostMilo = useMeetingAssistant(lost.loss?.callId ?? null);
   // U5: while the call is drawn, the shell folds its trail, primary rail and gutter.
   usePageChromeFold(drawn);
+  // The Call pane's ×: the page draws the pane only while it is open, so the call's media sink falls back to the shell's own
+  // (mounted, hidden) outlet and keeps playing; a closed SidePane would detach the tiles' node and pause its media.
+  const [callPaneShut, setCallPaneShut] = useState(false);
+  useEffect(() => { if (!drawn) setCallPaneShut(false); }, [drawn]);
   // The page's tiles are the call's one media sink: the footer's own video panel stays shut while the call is this room's.
   const media = useCallMediaPanel();
   useEffect(() => { if (call.here && media?.open) media.setOpen(false); }, [call.here, media?.open, media?.setOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -212,10 +216,11 @@ function InterviewRoom({ id }: { id: string }) {
 
   return <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="interview-room" data-room-live={drawn ? 'true' : 'false'}>
     {polling && <InterviewHintListener interviewId={id} onHint={onHint} />}
-    <RoomWorkspace room={room} here={call.here} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
+    <RoomWorkspace room={room} here={call.here} joined={joined} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
       onBack={() => navigate(MY_INTERVIEWS_HREF)} lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
-      miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints} />
-    {drawn && <RoomCallPane recordingNote={host?.recordingNote ?? null} />}
+      miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints}
+      folded={drawn} onShowCall={drawn && callPaneShut ? () => setCallPaneShut(false) : null} />
+    {drawn && !callPaneShut && <RoomCallPane recordingNote={host?.recordingNote ?? null} onClose={() => setCallPaneShut(true)} />}
   </Stack>;
 }
 
@@ -223,12 +228,13 @@ function InterviewRoom({ id }: { id: string }) {
  * The call's tiles while the call is drawn, in the shell's right column: narrow, resizable and closable, so the room's
  * tabs keep the page's width. They claim the call's one media sink (`placement="pane"`: tiles only, the footer's bar
  * owns mic, camera and Leave). The recording note is drawn here, with the tiles' gutter (ShellCallMedia turns the
- * library pane's own off).
+ * library pane's own off). The page owns its open state (`onClose`): closed, it is not drawn at all, and the header offers
+ * "Show the call" to bring it back.
  */
-function RoomCallPane({ recordingNote }: { recordingNote: React.ReactNode }) {
+function RoomCallPane({ recordingNote, onClose }: { recordingNote: React.ReactNode; onClose(): void }) {
   const { reveal } = useSidePaneHost();
   useEffect(() => { reveal(); }, [reveal]);
-  return <SidePane title="Call" paneId="interview-room-call" widthPx={ROOM_CALL_PANE} data-testid="interview-room-stage">
+  return <SidePane title="Call" closeLabel="Hide the call" onClose={onClose} paneId="interview-room-call" widthPx={ROOM_CALL_PANE} data-testid="interview-room-stage">
     <Stack gap="sm" className="h-full min-h-0 min-w-0 flex-1 bg-surface">
       {recordingNote && <Inline gap="none" className="px-3 pt-2" data-testid="interview-room-recording-note">{recordingNote}</Inline>}
       <CallBlock placement="pane" fit="contain" className={recordingNote ? 'min-h-0 min-w-0 flex-1 [&_[data-testid=shell-call-media]]:flex-none' : 'min-h-0 min-w-0 flex-1 justify-center'} />
@@ -240,6 +246,7 @@ const ROOM_CALL_PANE = { min: 320, max: 440 } as const;
 
 /** The header line's state: what the call is doing, for this seat. */
 function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } | null): string {
+  if (!OPEN_STATES.has(room.state)) return room.state === 'ended' || room.state === 'scored' || room.state === 'reviewed' ? 'This interview has ended' : 'This interview is not ready for a call';
   if (lost) return lost.title;
   if (live) return 'The call is on';
   if (room.state === 'live') return 'The interview is live';
@@ -253,10 +260,14 @@ function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } |
  * the call is this room's, the room is the huddle pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own
  * chat pane never opens, and a focus request for the call's chat (the footer's Message) selects the Chat tab.
  */
-function RoomWorkspace({ room, here, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints }: {
-  room: RoomView; here: boolean; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
+function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints, folded, onShowCall }: {
+  room: RoomView; here: boolean; /** This person is in the call (not only bound to its lobby). */ joined: boolean; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
   lost: ReturnType<typeof callLossWords> | null; onRestart: (() => void) | null; miloLine: string | null;
   onBoardCheckpoints: (c: BoardCheckpoints | null) => void;
+  /** The shell's chrome is folded (the call is drawn): its content gutter is gone, so the room draws the inset itself. */
+  folded: boolean;
+  /** The Call pane was closed: the header's way back to it. */
+  onShowCall: (() => void) | null;
 }) {
   const type = room.round.type;
   const [tab, setTab] = useState<RoomTabId>(() => defaultRoomTab(type));
@@ -282,12 +293,10 @@ function RoomWorkspace({ room, here, live, admission, off, onBack, lost, onResta
   const lead = room.seat === 'lead';
   // Any seat reads whether the candidate is here (the panel waits with them for the lead).
   const waiting = candidateLine(admission, room.seat);
-  const hint = !open ? (over ? 'Its call is closed. Your scorecard is on My interviews.' : 'The call opens once the lead has accepted the round.')
-    : lost ? lost.body
-    : live ? 'Join it from the bar at the bottom of the window.'
-    : room.state === 'live' ? 'The interview is live. Join the call from the bar at the bottom of the window.'
-    : lead ? 'Join the call from the bar at the bottom of the window. Joining starts the interview.'
-    : 'You can join the call from the bar at the bottom of the window.';
+  const hint = roomHeaderHint({ open, over, lostBody: lost ? lost.body : null, here: joined, live, roomLive: room.state === 'live', lead });
+  // The page's side inset while the shell's gutter is folded (every tab body, the header and the tab row; the board's
+  // own toolbar row carries its inset).
+  const inset = folded ? 'px-[var(--ui-page-gutter)]' : '';
   const facts = [
     { label: 'Candidate', value: room.candidate.name },
     { label: 'Round', value: `${room.round.name} · ${type === 'technical' ? 'Technical' : 'Behavioural'}` },
@@ -299,21 +308,27 @@ function RoomWorkspace({ room, here, live, admission, off, onBack, lost, onResta
   ];
   const action = !open ? <Button variant="secondary" size="sm" onClick={onBack} data-testid="interview-room-closed">Open My interviews</Button>
     : lost?.action && onRestart ? <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>
+    : onShowCall ? <Button variant="secondary" size="sm" onClick={onShowCall} data-testid="interview-room-show-call">Show the call</Button>
     : null;
+  const status = waiting ? <Chip size="sm" tone={candidateStatusTone(admission?.state)} data-testid="interview-room-candidate-status">{waiting}</Chip> : null;
+  // Milo's record for a lost call is said on the header line too, not only under Details.
+  const badge = status || miloLine ? <Inline gap="sm" align="center" wrap={false}>
+    {status}
+    {miloLine && <T size="xs" tone="secondary" truncate data-testid="interview-room-header-milo-left">{miloLine}</T>}
+  </Inline> : undefined;
   return <Stack gap="none" className="min-h-0 min-w-0 flex-1" data-testid="interview-room-pane">
     {/* The page's one h1 (the shell's trail is only a breadcrumb): the essentials, the candidate's status, what the call is doing. */}
-    <PageHeader density="compact" title={roomHeadline(room)} description={`${roomStateTitle(room, live, lost)}. ${hint}`}
-      badge={waiting ? <Chip size="sm" tone={admission?.state === 'admitted' ? 'success' : 'warning'} data-testid="interview-room-candidate-status">{waiting}</Chip> : undefined}
-      actions={action ?? undefined} data-testid={lost ? 'interview-room-call-lost' : 'interview-room-idle'} />
+    <PageHeader density="compact" title={roomHeadline(room)} description={`${roomStateTitle(room, live, lost)}. ${hint}${miloLine ? ` ${miloLine}` : ''}`}
+      badge={badge} actions={action ?? undefined} className={inset || undefined} data-testid={lost ? 'interview-room-call-lost' : 'interview-room-idle'} />
     <Tabs idPrefix="interview-room" aria-label="The interview room" variant="underline" items={tabs} value={tab}
-      onValueChange={(next) => setTab((t) => roomTabOf(type, next, t, design))} className="shrink-0" />
+      onValueChange={(next) => setTab((t) => roomTabOf(type, next, t, design))} className={`shrink-0 ${inset}`} />
     {/* A board round's board stays mounted under the other tabs: its canvas, its follow and its live document survive a
         visit to Questions or Provided design (the reveal lands on it from there), shown again as it was. */}
     {surface === 'board' && <Stack gap="none" className={tab === 'pad' ? 'min-h-0 flex-1' : 'hidden'} data-testid="interview-room-tab-pad">
       <BoardTab room={room} onCheckpoints={onBoardCheckpoints} />
     </Stack>}
     {tab === 'chat'
-      ? <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-chat">
+      ? <Stack gap="none" className={`min-h-0 flex-1 ${inset}`} data-testid="interview-room-chat">
         {chat?.callId && here ? <HuddleChatBody showCall={false} />
           : <EmptyState title="The call’s chat" body="Messages to the panel and the candidate show here once you join the call." testId="interview-room-chat-idle" />}
       </Stack>
@@ -321,8 +336,8 @@ function RoomWorkspace({ room, here, live, admission, off, onBack, lost, onResta
       // Full-bleed: the surface's own toolbar row carries the page's inset and the canvas or editor takes the rest.
       ? (surface === 'board' ? null : <Stack gap="none" className="min-h-0 flex-1" data-testid="interview-room-tab-pad"><PadTab room={room} /></Stack>)
       : tab === 'design'
-      ? <ProvidedDesignTab room={room} onRevealed={() => setTab('pad')} />
-      : <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto py-4" data-testid={`interview-room-tab-${tab}`}>
+      ? <ProvidedDesignTab room={room} onRevealed={() => setTab('pad')} inset={inset} />
+      : <Stack gap="lg" className={`min-h-0 flex-1 overflow-y-auto py-4 ${inset}`} data-testid={`interview-room-tab-${tab}`}>
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={lead && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={lead && room.state === 'live'} /><Competencies room={room} /></>}
