@@ -75,6 +75,12 @@ const SUBJECT_VERBS: ReadonlySet<string> = new Set([
 const INVERTING: ReadonlySet<string> = new Set(['is', 'was', 'isnt', 'wasnt', 'has', 'had', 'does', 'did', 'doesnt', 'didnt']);
 /** Words ending in -ed that are asks, not a past tense ("Milo, need..." is rare; "embed" and "feed" are tools' words). */
 const ED_NOT_PAST: ReadonlySet<string> = new Set(['need', 'feed', 'embed', 'proceed', 'seed', 'speed', 'shred', 'red', 'bed', 'heed', 'exceed', 'succeed']);
+/** A question tag closing a statement: ", wasn't he?", ", isn't it?", ", did he?". */
+const TAG_QUESTION = /,\s*(?:is|was|are|were|has|had|have|does|did|do|can|could|will|would|should)(?:n['’]?t)?\s+(?:he|she|it|they|you|we|i|that|this)\s*\?\s*$/iu;
+/** Words that put a name straight after them as a name, not an address ("a dog called Milo"). */
+const NAMING: ReadonlySet<string> = new Set(['called', 'named', 'call', 'name', 'nicknamed', 'dubbed', 'titled']);
+/** The same, a few words before the name ("we named the bot Milo"). */
+const NAMED: ReadonlySet<string> = new Set(['called', 'named', 'nicknamed', 'dubbed']);
 /** After a modal, these make it a question to Milo after all ("Milo can you ...", "Milo could we ..."). */
 const ASKED_SUBJECTS: ReadonlySet<string> = new Set(['you', 'we', 'i', 'u']);
 const MODALS: ReadonlySet<string> = new Set(['might', 'must', 'may', 'should', 'would', 'could', 'will', 'can', 'shouldnt', 'cant', 'wont']);
@@ -89,9 +95,13 @@ export function talksAboutMilo(sentence: string): boolean {
   if (!hits.length) return false;
   // The name opening a yes/no question ("Milo is a tomato a fruit?", the transcriber dropping the comma) is an address.
   const opening = hits.length === 1 && /^\s*$/.test(sentence.slice(0, (hits[0]!.index ?? 0) + hits[0]![1]!.length));
-  if (opening && /\?\s*$/.test(sentence) && INVERTING.has(words(sentence.slice((hits[0]!.index ?? 0) + hits[0]![0].length))[0] ?? '')) return false;
+  // Unless it ends on a tag ("Milo was fast, wasn't he?"): a statement about him, asked of the room.
+  if (opening && /\?\s*$/.test(sentence) && !TAG_QUESTION.test(sentence) && INVERTING.has(words(sentence.slice((hits[0]!.index ?? 0) + hits[0]![0].length))[0] ?? '')) return false;
   return hits.every((m) => {
     const end = (m.index ?? 0) + m[0].length;
+    // The name as a name ("a dog called Milo", "we named it Milo"): talked about.
+    const before = words(sentence.slice(0, (m.index ?? 0) + m[1]!.length));
+    if (NAMING.has(before.at(-1) ?? '') || before.slice(-3).some((x) => NAMED.has(x))) return true;
     const after = sentence.slice(end);
     if (/^['’]s\b/i.test(after)) return true; // "Milo's summary"
     if (!/^\s+\p{L}/u.test(after)) return false; // a comma, a stop or the end: set off, an address

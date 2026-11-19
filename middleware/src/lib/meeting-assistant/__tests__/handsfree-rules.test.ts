@@ -78,6 +78,12 @@ describe('verdict on the clean sentence: mention vs request', () => {
     'Thanks Milo.',
     'Can Milo do that?',
     'Milo should know this.',
+    // the live gate's mentions (2026-11-19): a tag question is a statement about him, a name after "called" is a mention
+    "Milo was fast at this yesterday, wasn't he?",
+    'Milo is quick today, isn’t he?',
+    "Milo did well there, didn't he?",
+    "My cousin's dog is called Milo, which is funny.",
+    'We named the bot Milo, after my dog.',
   ];
   const REQUESTS: Array<[string, string]> = [
     ["Milo, what's the capital of France?", "what's the capital of France?"],
@@ -90,6 +96,8 @@ describe('verdict on the clean sentence: mention vs request', () => {
     ['Milo add an item for Vera.', 'add an item for Vera.'],
     ['Milo is a tomato a fruit?', 'is a tomato a fruit?'],
     ['Milo does the bus stop here?', 'does the bus stop here?'],
+    ['Milo, was the call long, or was it short?', 'was the call long, or was it short?'],
+    ["Milo, the call ran long, didn't it?", "the call ran long, didn't it?"],
   ];
 
   it.each(MENTIONS)('%j is a mention: talksAboutMilo or no address, and the verdict drops it', async (text) => {
