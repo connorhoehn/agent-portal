@@ -116,4 +116,18 @@ describe('a question already asked is never suggested again', () => {
   it('is not fooled by a pad that only shares words with the question', () => {
     expect(questionAsked(pad('def f(numbers, target):\n    return indices\n'), TWO_SUM)).toBe(false);
   });
+  it('matches whole words: a short prompt is not found inside a longer name', () => {
+    const short: CoachInput = { ...pad('def two_summary(nums):\n    pass\n'), questions: [{ id: 'q-short', prompt: 'Two sum', followUps: [], competencyId: 'communication' }] };
+    expect(questionAsked(short, 'Two sum')).toBe(false);
+    expect(questionAsked({ ...short, code: { pad: { language: 'python', text: '# Two sum\ndef f(nums):\n    pass\n', cut: false }, run: null } }, 'Two sum')).toBe(true);
+    expect(questionAsked({ ...short, code: null, lines: [{ seq: 1, side: 'panel', text: 'Here is a two summary of the plan.' }] }, 'Two sum')).toBe(false);
+  });
+  it('when two bank questions share an opening, only the whole prompt counts', () => {
+    const PAIRS = 'Given an array of integers and a target, count the pairs that add up to the target.';
+    const both: CoachInput = { ...tech, questions: [...tech.questions, { id: 'q-pairs', prompt: PAIRS, followUps: [], competencyId: 'communication' }] };
+    const posted = '# Given an array of integers and a target, return the indices of the two\n# numbers that add up to the target.\n';
+    const withPad = { ...both, code: { pad: { language: 'python' as const, text: posted, cut: false }, run: null } };
+    expect(questionAsked(withPad, TWO_SUM)).toBe(true);
+    expect(questionAsked(withPad, PAIRS)).toBe(false);
+  });
 });

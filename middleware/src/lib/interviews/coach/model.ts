@@ -81,13 +81,15 @@ export class BedrockCoachModel implements CoachModel {
 //   5. nothing left: no answer (`nothing`).
 // In a technical round no step offers a question about complexity before working code, or about testing before a run
 // (stage.ts `fitsStage`).
-// Steps 2 to 4 are not keyed to a line and quote none. A question counts as asked when a panel line holds its opening
-// words (its first six), or when one panel line holds at least half of its content words.
+// Steps 2 to 4 are not keyed to a line and quote none. A question counts as asked when a panel line or the pad holds its
+// opening words (its first six; the whole prompt when another bank question opens the same way), as whole words, or when
+// one panel line holds at least half of its content words.
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 /** A question's opening words (its first six). */
 const opening = (s: string): string => words(s).split(' ').slice(0, 6).join(' ');
-const said = (needle: string, line: string): boolean => needle.length > 0 && words(line).includes(needle);
+/** Does `line` hold `needle` as whole words ("two sum" is not in "two_summary")? */
+const said = (needle: string, line: string): boolean => needle.length > 0 && ` ${words(line)} `.includes(` ${needle} `);
 
 const STOP = new Set(('what that this with about they them their there have does when where which were been from your would could should '
   + 'tell more much some then than into also just like only very will want know here doing done happens happen time first next').split(' '));
@@ -114,20 +116,29 @@ function quoteOf(text: string): string {
   return space > 40 ? cut.slice(0, space) : cut;
 }
 
-/** The pad's text with its comment marks off and its lines joined, so a prompt posted as a wrapped comment reads as one line. */
-const padFlat = (text: string): string => words(text.split('\n').map((l) => l.replace(/^\s*(?:#|\/\/|--|\/\*|\*)+/, '')).join(' '));
+/**
+ * What marks a question as said: its opening words, or its whole prompt when another bank question opens the same way
+ * (then the opening alone cannot tell them apart).
+ */
+function cueOf(input: CoachInput, prompt: string): string {
+  const open = opening(prompt);
+  const whole = words(prompt);
+  return input.questions.some((q) => words(q.prompt) !== whole && opening(q.prompt) === open) ? whole : open;
+}
 
 /**
- * Has this question been asked? A panel line holds its opening words or half of its content words, or the pad holds its
- * opening words (the Prepare insert posts the prompt there as a wrapped comment); never a mere overlap with the pad's code.
+ * Has this question been asked? A panel line holds its cue (cueOf) or half of its content words, or the pad holds its cue
+ * (the Prepare insert posts the prompt there as a wrapped comment; `words` drops the comment marks and joins the lines);
+ * never a mere overlap with the pad's code.
  */
 export function questionAsked(input: CoachInput, prompt: string): boolean {
+  const cue = cueOf(input, prompt);
   const panel = input.lines.filter((l) => l.side === 'panel').map((l) => l.text);
-  if (panel.some((t) => said(opening(prompt), t))) return true;
+  if (panel.some((t) => said(cue, t))) return true;
   const want = plainContent(prompt);
   if (want.size >= 2 && panel.map(plainContent).some((p) => overlap(want, p) * 2 >= want.size)) return true;
   const pad = input.code?.pad?.text;
-  return !!pad && said(opening(prompt), padFlat(pad));
+  return !!pad && said(cue, pad);
 }
 
 export function scriptedSuggestion(input: CoachInput): { text: string; competencyId: string; basedOn: string | null } | null {
