@@ -2,8 +2,10 @@
 //
 // Fed by the mixer's per-person audio (`AudioSink.placed`, audio-intake.ts), it
 //   * re-cuts each person's pieces into session frames (person-buffer.ts), writes the ring and emits `frame`, synchronously;
-//   * streams the same frames to that person's transcription stream, contiguous from the stream's ms 0 (gaps up to 1 s as silence,
-//     longer gaps skipped and remembered as a break, so stream ms convert back to session ms exactly);
+//   * streams those frames to that person's transcription stream only while they speak: from a voiced frame (with a short lead of
+//     the frames before it) until a second of quiet after, so a quiet person costs nothing (the provider bills the audio it is
+//     sent). The stream stays contiguous from its ms 0: gaps up to 1 s as silence, longer gaps skipped and remembered as a break,
+//     so stream ms convert back to session ms exactly;
 //   * finds Milo's name on each DELTA (`findAddress`, with the forms the provider mishears normalised first) and emits `name` once
 //     per sentence, then `sentence` and `line` at the final.
 // Nothing outside this file sees stream ms. Nothing here stores audio.
@@ -31,8 +33,14 @@ export const normaliseName = (text: string): string => text.replace(MISHEARD, (_
 /** The keywords each stream opens with: the name's spellings, capitalised as a name. */
 export const NAME_KEYWORDS: readonly string[] = NAME_SPELLINGS.map((s) => s[0]!.toUpperCase() + s.slice(1));
 
-/** Gaps in a person's audio up to this long are streamed as silence; longer ones are skipped (a break in the stream's timeline). */
+/**
+ * Gaps in a person's audio up to this long are streamed as silence; longer ones are skipped (a break in the stream's timeline). Also
+ * how much of the quiet after speech is streamed: the stream's own end-of-speech check (openai-transcribe.ts, 600 ms) must hear it.
+ */
 const STREAM_FILL_MS = 1_000;
+/** Streaming starts this far before the first voiced frame (the frames just before it), so a soft first syllable is not cut. */
+const STREAM_LEAD_MS = 300;
+const LEAD_FRAMES = STREAM_LEAD_MS / HANDSFREE.frameMs;
 /**
  * A person's audio this far behind the clock has stopped (the mixer places a chunk at most 400 ms late, mixer.ts `lateMs`): the tick
  * streams silence in its place, up to STREAM_FILL_MS past their last audio.
@@ -78,6 +86,10 @@ interface Lane {
   lastStreamedEnd: number | null;
   /** Session ms just past the person's last frame of audio streamed (not the tick's silence). */
   lastHeardEnd: number | null;
+  /** Frames are streamed while they start before this (session ms): a second past the last voiced frame. */
+  gateUntil: number;
+  /** The last few frames, for the lead streamed before a voiced frame. */
+  recent: Array<{ pcm: Buffer; atMs: number }>;
   sentences: Map<string, Sentence>;
   sentenceSeq: number;
   lastSentenceEndMs: number;
@@ -119,10 +131,13 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
     return Math.round(streamMs + offset);
   };
 
-  const trackOnset = (lane: Lane, pcm: Buffer, atMs: number): void => {
+  /** Track sentence onsets; true when any 20 ms window of the frame is voiced. */
+  const trackOnset = (lane: Lane, pcm: Buffer, atMs: number): boolean => {
     const win = (HANDSFREE.sampleRate * 2) / 50;
+    let any = false;
     for (let at = 0, ms = atMs; at + win <= pcm.length; at += win, ms += 20) {
       if (windowRms(pcm, at, at + win) > ONSET_RMS) {
+        any = true;
         if (!lane.voiced && (lane.quietMs >= ONSET_QUIET_MS || lane.onsets.length === 0)) {
           lane.onsets.push(ms);
           if (lane.onsets.length > 32) lane.onsets.shift();
@@ -133,6 +148,26 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
         if (lane.quietMs >= ONSET_QUIET_MS) lane.voiced = false;
       }
     }
+    return any;
+  };
+
+  /**
+   * The frames of this one to send its stream: none while the person is quiet; at a voiced frame after quiet, the lead before it
+   * (never a frame already sent); then everything until STREAM_FILL_MS past the last voiced frame.
+   */
+  const gate = (lane: Lane, f: { pcm: Buffer; atMs: number }, voiced: boolean): Array<{ pcm: Buffer; atMs: number }> => {
+    const out: Array<{ pcm: Buffer; atMs: number }> = [];
+    if (voiced) {
+      if (f.atMs >= lane.gateUntil) {
+        const sent = Math.max(lane.lastStreamedEnd ?? -Infinity, f.atMs - STREAM_LEAD_MS);
+        for (const r of lane.recent) if (r.atMs >= sent && r.atMs < f.atMs) out.push(r);
+      }
+      lane.gateUntil = f.atMs + HANDSFREE.frameMs + STREAM_FILL_MS;
+    }
+    if (f.atMs < lane.gateUntil) out.push(f);
+    lane.recent.push(f);
+    if (lane.recent.length > LEAD_FRAMES) lane.recent.shift();
+    return out;
   };
 
   /** Where a sentence first heard at `atMs` began: the latest onset at or before it, never before the last sentence's end. */
@@ -285,12 +320,14 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       const lane = lanes.get(userId);
       if (!lane) return;
       for (const f of lane.ring.write(pcm24k, atMs)) {
-        trackOnset(lane, f.pcm, f.atMs);
+        const voiced = trackOnset(lane, f.pcm, f.atMs);
         emit('frame', { userId, pcm: f.pcm, atMs: f.atMs });
-        if (lane.stream) { streamFrame(lane, f.pcm, f.atMs); lane.lastHeardEnd = f.atMs + HANDSFREE.frameMs; }
-        else if (lane.opening) {
-          lane.queue.push({ pcm: f.pcm, atMs: f.atMs });
-          while (lane.queue.length > OPEN_QUEUE_MS / HANDSFREE.frameMs) lane.queue.shift();
+        for (const g of gate(lane, f, voiced)) {
+          if (lane.stream) { streamFrame(lane, g.pcm, g.atMs); lane.lastHeardEnd = g.atMs + HANDSFREE.frameMs; }
+          else if (lane.opening) {
+            lane.queue.push(g);
+            while (lane.queue.length > OPEN_QUEUE_MS / HANDSFREE.frameMs) lane.queue.shift();
+          }
         }
       }
     },
@@ -304,7 +341,7 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       }
       const lane: Lane = {
         userId, speakerName, ring: new PersonRing(), stream: null, generation: 0, opening: false, queue: [], breaks: [], streamMs: 0,
-        lastStreamedEnd: null, lastHeardEnd: null, sentences: new Map(), sentenceSeq: 0, lastSentenceEndMs: 0, onsets: [], quietMs: 0, voiced: false,
+        lastStreamedEnd: null, lastHeardEnd: null, gateUntil: -Infinity, recent: [], sentences: new Map(), sentenceSeq: 0, lastSentenceEndMs: 0, onsets: [], quietMs: 0, voiced: false,
         reopens: [], retry: null, unsubs: [], down: false,
       };
       lanes.set(userId, lane);
@@ -335,7 +372,8 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       const now = opts.clock.nowMs();
       for (const lane of lanes.values()) {
         if (!lane.stream || lane.lastStreamedEnd === null || lane.lastHeardEnd === null) continue;
-        const upTo = Math.min(now - STOPPED_AFTER_MS, lane.lastHeardEnd + STREAM_FILL_MS);
+        // Up to a second past their last voiced frame: someone quiet when their audio stopped is sent nothing.
+        const upTo = Math.min(now - STOPPED_AFTER_MS, lane.lastHeardEnd + STREAM_FILL_MS, lane.gateUntil);
         while (lane.lastStreamedEnd + HANDSFREE.frameMs <= upTo) streamFrame(lane, SILENT_FRAME, lane.lastStreamedEnd);
       }
     },

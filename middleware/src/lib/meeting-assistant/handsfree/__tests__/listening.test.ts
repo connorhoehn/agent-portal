@@ -76,7 +76,8 @@ describe('the listening side', () => {
     feed('u1', voiced(500), 2800);
     s.delta('i1', ' what time is it?');
     expect(seen.name).toHaveLength(1);
-    s.final('i1', 'Hey Milo, what time is it?', 2000, 3300);
+    // Stream ms: the stream began 300 ms before the onset (its lead), so session 2000..3300 is stream 300..1600.
+    s.final('i1', 'Hey Milo, what time is it?', 300, 1600);
     expect(seen.sentence).toEqual([expect.objectContaining({ userId: 'u1', sentenceId: seen.name[0]!.sentenceId, named: true, text: 'Hey Milo, what time is it?', startMs: 1900, endMs: 3300 })]);
     expect(seen.line).toEqual([expect.objectContaining({ callId: 'c1', userId: 'u1', speakerName: 'Una', text: 'Hey Milo, what time is it?', startMs: 1900, endMs: 3300 })]);
     expect(seen.words.map((w) => w.delta)).toEqual(['Hey', ' Milo,', ' what time is it?']);
@@ -114,6 +115,35 @@ describe('the listening side', () => {
     expect(streams[0]!.streamMs).toBe(1000);
     streams[0]!.final('b', 'Back again.', 500, 1000);
     expect(seen.sentence[0]).toMatchObject({ startMs: 60_000, endMs: 60_500 });
+  });
+
+  it('streams only from a voiced onset (with a short lead) until a second of quiet after; stream ms still convert exactly', async () => {
+    const { side, streams, seen, clock, feed } = setup();
+    await side.open('u1', 'Una');
+    const s = () => streams[0]!;
+    feed('u1', quiet(5000), 0);
+    expect(s().streamMs).toBe(0); // nobody spoke: nothing sent
+    expect(seen.frame).toHaveLength(50); // the ring and the router still get every frame
+    feed('u1', voiced(500), 5000);
+    expect(s().streamMs).toBe(300 + 500); // 300 ms of lead before the onset, then the speech
+    feed('u1', quiet(4500), 5500);
+    expect(s().streamMs).toBe(800 + 1000); // a second of the quiet after it (the stream's own end-of-speech check needs 600 ms)
+    for (let t = 10_000; t <= 10_600; t += 100) { clock.t = t; side.tick(); }
+    expect(s().streamMs).toBe(1800); // the tick sends no silence for someone who is quiet
+    s().final('a', 'Hello.', 300, 800);
+    expect(seen.sentence.at(-1)).toMatchObject({ startMs: 5000, endMs: 5500 });
+    // Speech again 4.5 s later: a break in the stream's timeline, its lead read back from before the onset.
+    feed('u1', voiced(500), 10_000);
+    expect(s().streamMs).toBe(1800 + 300 + 500);
+    s().final('b', 'Again.', 2100, 2600);
+    expect(seen.sentence.at(-1)).toMatchObject({ text: 'Again.', startMs: 10_000, endMs: 10_500 });
+    // Speech soon after the quiet ended (the lead overlaps what was sent): the stream stays contiguous, no frame twice.
+    feed('u1', quiet(1200), 10_500);
+    expect(s().streamMs).toBe(3600);
+    feed('u1', voiced(300), 11_700);
+    expect(s().streamMs).toBe(3600 + 200 + 300); // 11_500 .. 12_000
+    s().final('c', 'Yes.', 3800, 4100);
+    expect(seen.sentence.at(-1)).toMatchObject({ text: 'Yes.', startMs: 11_700, endMs: 12_000 });
   });
 
   it('writes the ring and emits frames synchronously; pre-roll never exceeds 10 s', async () => {
