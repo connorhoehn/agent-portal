@@ -78,7 +78,7 @@ export class HandsfreeRuntime implements HandsfreeRun {
   /** The provider closed the routed person's turn (an input transcript that ended it, or a delegation). */
   turnEnded(): void { this.router.turnEnded(); }
   outputAudio(pcm: Buffer, last: boolean, say?: string): void { this.router.outputAudio(pcm, last, say); }
-  outputText(text: string): void { this.router.outputText(text); }
+  outputText(text: string, final = false): void { this.router.outputText(text, final); }
 
   close(): Promise<void> {
     this.closingAll ??= Promise.allSettled([this.closeListening(), this.deps.talking.close()]).then(() => undefined);
@@ -186,7 +186,7 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   inner.on('inputTranscript', (e) => { tr('s.input', { turnEnded: !!e.turnEnded }); if (e.turnEnded) run?.turnEnded(); });
   inner.on('delegation', () => { tr('s.delegation'); run?.turnEnded(); });
   inner.on('outputTranscript', (e) => {
-    if (e.say === undefined) run?.outputText(e.text);
+    if (e.say === undefined) run?.outputText(e.text, e.final);
     if (e.final && e.say === undefined) { uttText = e.text; flushText(); }
   });
   let outN = 0;

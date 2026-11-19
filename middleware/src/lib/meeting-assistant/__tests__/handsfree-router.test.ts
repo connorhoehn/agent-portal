@@ -4,6 +4,9 @@ import { HANDSFREE, type RouteState } from '../handsfree/types.js';
 import { FakeClock, FakeListening, FakeRelay, FakeRules, FakeTalking, frame, settle } from './handsfree-fakes.js';
 
 const UNA = 'u-una', HUGO = 'u-hugo';
+/** A plain echo rule for these tests (the real one is lane C's, rules.ts): the heard words inside Milo's, in order, are his echo. */
+const norm = (t: string) => t.toLowerCase().replace(/[^a-z' ]+/g, ' ').trim().replace(/\s+/g, ' ');
+const overlapOf = (heard: string, saying: string): 'echo' | 'barge-in' => (norm(heard) && ` ${norm(saying)} `.includes(` ${norm(heard)} `) ? 'echo' : 'barge-in');
 const T_UNA = 1, T_HUGO = 2, T_MILO = 9;
 
 function world() {
@@ -24,7 +27,7 @@ function world() {
   /** Milo says `n` frames (the last marked last). */
   const milo = (n: number, say?: string) => { for (let i = 0; i < n; i++) { router.outputAudio(frame(T_MILO), i === n - 1, say); } };
   const name = (u: string, sid: string, startMs: number, nameEndMs = clock.nowMs()) => listening.emit('name', { userId: u, sentenceId: sid, sentenceStartMs: startMs, nameEndMs, textSoFar: 'Milo' });
-  const sentence = (u: string, sid: string, text: string, named = true) => listening.emit('sentence', { userId: u, sentenceId: sid, text, startMs: 0, endMs: clock.nowMs(), named });
+  const sentence = (u: string, sid: string, text: string, named = true, startMs = 0) => listening.emit('sentence', { userId: u, sentenceId: sid, text, startMs, endMs: clock.nowMs(), named });
   const words = (u: string, sid: string, delta: string) => listening.emit('words', { userId: u, sentenceId: sid, delta, atMs: clock.nowMs() });
   return { clock, listening, rules, talking, relay, router, states, drops, step, talk, quiet, milo, name, sentence, words };
 }
@@ -271,6 +274,67 @@ describe('hands-free router', () => {
     w.sentence(HUGO, 'h3', 'Milo, what time is it?'); await settle();
     w.milo(1);
     expect(w.relay.pushed).toHaveLength(2);
+  });
+
+  it("Milo's words held for the verdict still count as what he is saying once they play (his echo is not a barge-in)", async () => {
+    const w = world();
+    w.rules.overlapFor = overlapOf;
+    let resolve!: (v: { kind: 'request' }) => void;
+    w.rules.verdictFor = () => new Promise((r) => { resolve = r; });
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, what is blocking auth?');
+    w.router.outputText('The cookie bug is blocking auth.', true);
+    w.router.outputAudio(frame(T_MILO), false);
+    w.router.outputAudio(frame(T_MILO), false);
+    resolve({ kind: 'request' }); await settle();
+    expect(w.relay.pushed).toHaveLength(2);
+    w.words(HUGO, 'h1', 'the cookie bug is blocking');
+    expect(w.drops).toEqual([]);
+    expect(w.relay.clears).toBe(0);
+  });
+
+  it("Milo's voice heard back after his last frame (the echo tail) is not a follow-up: his reply to it is dropped and the window kept", async () => {
+    const w = world();
+    w.rules.overlapFor = overlapOf;
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, what is blocking auth?'); await settle();
+    w.router.outputText('The cookie bug is blocking auth.', true);
+    w.milo(3);
+    const window = w.router.state();
+    expect(window).toMatchObject({ phase: 'follow-up', userId: UNA });
+    const echoStart = w.clock.nowMs() + 100;
+    w.quiet(6); // past the last frame's playout, inside the tail
+    expect(w.router.playing()).toBe(false);
+    w.words(UNA, 'e1', 'the cookie bug is');
+    w.router.outputAudio(frame(T_MILO), false); // the session answering its own echo
+    w.sentence(UNA, 'e1', 'The cookie bug is blocking auth.', false, echoStart); await settle();
+    w.router.outputAudio(frame(T_MILO), true);
+    expect(w.relay.pushed).toHaveLength(3);
+    expect(w.rules.verdicts.map((v) => v.text)).not.toContain('The cookie bug is blocking auth.');
+    expect(w.router.state()).toEqual(window);
+    // A real follow-up in the same window is still heard and answered.
+    w.words(UNA, 'f1', 'And who owns it?');
+    w.sentence(UNA, 'f1', 'And who owns it?', false, w.clock.nowMs()); await settle();
+    w.milo(1);
+    expect(w.relay.pushed).toHaveLength(4);
+  });
+
+  it("a name in Milo's echo tail (his own words naming himself) triggers nothing", async () => {
+    const w = world();
+    w.rules.overlapFor = overlapOf;
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.sentence(UNA, 's1', 'Milo, who are you?'); await settle();
+    w.router.outputText("I'm Milo, I take the notes.", true);
+    w.milo(2);
+    w.quiet(5); // past the last frame's playout, inside the tail
+    expect(w.router.playing()).toBe(false);
+    // Hugo's open speakers: the name comes back in his mic.
+    w.listening.emit('name', { userId: HUGO, sentenceId: 'h1', sentenceStartMs: w.clock.nowMs() - 600, nameEndMs: w.clock.nowMs(), textSoFar: "I'm Milo, I take" });
+    await settle();
+    expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
   });
 
   it('the asker barging in keeps the floor; the rest of the old utterance is never relayed', async () => {

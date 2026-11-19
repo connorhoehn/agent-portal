@@ -53,6 +53,11 @@ export const HANDSFREE = Object.freeze({
   admitWaitMs: 150,
   /** A named turn's output audio waits at most this long after its first frame for the rules' verdict; none by then counts as `mention`. */
   verdictWaitMs: 800,
+  /**
+   * Milo's voice is still heard back this long after his last frame played (the browser's buffer, the mic path, the transcript's lag;
+   * voice.ts VOICE_ECHO_TAIL_MS): words, names and sentences that start inside it are checked against what he said (review 1, item 4).
+   */
+  echoGraceMs: 1_500,
   /** Target: from a barge-in's first word in a transcript delta to the relay going silent. Gate scenario, not a timer. */
   bargeInStopMs: 700,
   /** A closed transcription stream is reopened at most this many times per person per minute; past it the lane is down until the next minute. */
@@ -214,7 +219,7 @@ export type RouteState =
   | { phase: 'follow-up'; userId: string; untilMs: number };
 
 /** Why the router stopped relaying a turn's audio (logged, and shown in the trace; never shown to people). */
-export type RelayDrop = 'mention' | 'aside' | 'verdict-timeout' | 'barge-in' | 'stop' | 'fixed' | 'hold-cancel';
+export type RelayDrop = 'mention' | 'aside' | 'verdict-timeout' | 'barge-in' | 'stop' | 'fixed' | 'hold-cancel' | 'echo';
 
 export interface RouterEvents {
   /** Every change, in order. The surface shows `routing` / `answering` as "<name> is talking to Milo" and rings that person's tile. */

@@ -237,6 +237,25 @@ describe('the hands-free seam', () => {
     expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['before the pause', 'after the resume']);
   });
 
+  it("Milo's own voice heard back in a person's mic is not stored as their line (the echo guard, as with the flag off)", async () => {
+    await boot('1');
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    listening!.emit('name', { userId: ALICE, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 300, textSoFar: 'Milo' });
+    await flush();
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, what is blocking auth?', startMs: 0, endMs: 1200, named: true });
+    await flush();
+    inner().fire('outputTranscript', { text: 'The cookie bug is blocking auth.', final: false });
+    for (let i = 1; i <= 10; i += 1) inner().fire('outputAudio', { pcm: pcm(9), seq: i, ...(i === 10 ? { last: true } : {}) });
+    inner().fire('outputTranscript', { text: 'The cookie bug is blocking auth.', final: true });
+    await flush();
+    expect(sent).toHaveLength(10);
+    const at = now - T0;
+    listening!.emit('line', { callId: CALL, userId: BOB, participantId: 'p-bob', speakerName: 'Bob', text: 'the cookie bug is blocking auth', at: now + 900, captionId: 'hf:b:1', startMs: at + 100, endMs: at + 900 });
+    await flush();
+    expect(await store.lines(CALL, 0, 10)).toHaveLength(0);
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(1);
+  });
+
   it('a stop closes the listening side with the session', async () => {
     await boot('true');
     const l = listening!;

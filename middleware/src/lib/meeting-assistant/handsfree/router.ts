@@ -55,6 +55,8 @@ interface Turn {
   verdictTimer: unknown;
   /** The hold ran out once while the person was still talking: the early reply was dropped and the turn kept. */
   reheld?: boolean;
+  /** Opened inside the asker's follow-up window: Milo's echo goes back to it (when it ends, and the request it carried). */
+  window?: { untilMs: number; verdict: TriggerVerdict | null };
 }
 
 type Listener<K extends keyof RouterEvents> = (e: RouterEvents[K]) => void;
@@ -78,8 +80,14 @@ export class Router {
   private dropUtt = false;
   /** When each person's last words arrived (session ms): still talking, for a hold that runs out mid-sentence. */
   private readonly lastWordsMs = new Map<string, number>();
-  /** What Milo's current utterance has said so far (the echo check's `saying`). */
+  /**
+   * What Milo's current piece of speech has said so far, and the piece before it (the echo check's `saying`: an echo trails his
+   * voice). A piece ends with its final transcript; the next words start a new one. Never cleared by playout, so words the verdict
+   * held still count once their frames play.
+   */
   private saying = '';
+  private said = '';
+  private pieceDone = false;
   /** Words heard so far per `${userId}|${sentenceId}` (the echo / barge-in check's `heard`). */
   private heard = new Map<string, string>();
   private verdicts = new Map<string, TriggerVerdict>();
@@ -101,9 +109,9 @@ export class Router {
     const l = deps.listening;
     this.offs = [
       l.on('frame', (e) => this.onFrame(e.userId, e.pcm)),
-      l.on('name', (e) => { void this.onName(e.userId, e.sentenceId, e.sentenceStartMs, e.nameEndMs); }),
+      l.on('name', (e) => { void this.onName(e.userId, e.sentenceId, e.sentenceStartMs, e.nameEndMs, e.textSoFar); }),
       l.on('words', (e) => this.onWords(e.userId, e.sentenceId, e.delta)),
-      l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named)),
+      l.on('sentence', (e) => this.onSentence(e.userId, e.sentenceId, e.text, e.named, e.startMs)),
       l.on('lane', (e) => { if (e.state === 'down' && e.reason === 'left') this.personLeft(e.userId); }),
     ];
   }
@@ -119,6 +127,15 @@ export class Router {
 
   /** Milo's voice is playing (triggers are ignored, words are checked for barge-in). */
   playing(): boolean { return this.uttering || this.deps.clock.nowMs() < this.playingUntil; }
+
+  /** Something that began at `atMs` may be Milo's voice heard back: it started while he played or inside the echo grace after. */
+  private inEchoTail(atMs: number): boolean { return this.playing() || atMs < this.playingUntil + HANDSFREE.echoGraceMs; }
+
+  /** Is this text (heard in someone's mic) Milo's own words coming back? */
+  private echoes(text: string): boolean {
+    const saying = this.said ? `${this.said} ${this.saying}` : this.saying;
+    return !!saying && this.deps.rules.overlap(text, saying) === 'echo';
+  }
 
   // ---------------------------------------------------------------------------------------------------------------------------
   // The tick: what the session hears
@@ -147,10 +164,12 @@ export class Router {
   // ---------------------------------------------------------------------------------------------------------------------------
   // Triggers
 
-  private async onName(userId: string, sentenceId: string, sentenceStartMs: number, nameEndMs: number): Promise<void> {
+  private async onName(userId: string, sentenceId: string, sentenceStartMs: number, nameEndMs: number, textSoFar: string): Promise<void> {
     if (this.closed) return;
     // Milo's own voice in a mic says his name: no trigger while he plays (barge-in is the words' check, not the name's).
     if (this.playing()) { this.trace('name.ignored', { userId, why: 'playing' }); return; }
+    // Just after he stops, the name may still be his voice coming back (an introduction): his own words are no trigger.
+    if (this.inEchoTail(sentenceStartMs) && this.echoes(textSoFar)) { this.trace('name.ignored', { userId, why: 'echo' }); return; }
     const st = this.st;
     if (st.phase !== 'idle' && st.userId === userId) {
       // The person already routed names Milo again: the same floor, now a named turn on this sentence.
@@ -204,7 +223,9 @@ export class Router {
     const prior = this.turn;
     if (prior && prior.verdictTimer !== null) this.deps.clock.clearTimeout(prior.verdictTimer);
     const known = sentenceId ? this.verdicts.get(`${userId}|${sentenceId}`) ?? null : null;
-    this.turn = { userId, via, sentenceId, verdict: via === 'hold' ? { kind: 'request' } : known, held: [], verdictTimer: null };
+    const st = this.st;
+    const window = st.phase === 'follow-up' && st.userId === userId ? { untilMs: st.untilMs, verdict: prior?.verdict ?? null } : prior?.userId === userId ? prior.window : undefined;
+    this.turn = { userId, via, sentenceId, verdict: via === 'hold' ? { kind: 'request' } : known, held: [], verdictTimer: null, ...(window ? { window } : {}) };
     this.setState({ phase: 'routing', userId, via, sinceMs: this.deps.clock.nowMs() });
     if (this.turn.verdict) this.applyVerdict(this.turn, this.turn.verdict);
   }
@@ -229,9 +250,11 @@ export class Router {
     else if (this.turn && this.turn.userId === userId && this.turn.via === 'follow-up' && this.turn.sentenceId === null) this.turn.sentenceId = sentenceId;
   }
 
-  private onSentence(userId: string, sentenceId: string, text: string, named: boolean): void {
+  private onSentence(userId: string, sentenceId: string, text: string, named: boolean, startMs: number): void {
     if (this.closed) return;
     this.heard.delete(`${userId}|${sentenceId}`);
+    // Milo's own words coming back through this mic (it began while he played or just after): not a request of anyone's.
+    if (this.inEchoTail(startMs) && this.echoes(text)) { this.echoed(userId, sentenceId); return; }
     const key = `${userId}|${sentenceId}`;
     if (this.fixedSentences.delete(key) || (named && this.isFixedPending(userId))) { void this.judgeFixed(userId, text); return; }
     const t = this.turn;
@@ -289,8 +312,12 @@ export class Router {
     if (this.st.phase === 'routing') this.setState({ ...this.st, phase: 'answering' });
   }
 
-  /** Milo's words so far (output transcript). A `say` utterance's words count too: they are what plays. */
-  outputText(text: string): void { this.saying = text; }
+  /** Milo's words so far in this piece (output transcript; `final` ends the piece). A `say` utterance's words count too: they are what plays. */
+  outputText(text: string, final = false): void {
+    if (this.pieceDone) { this.said = this.saying; this.pieceDone = false; }
+    this.saying = text;
+    if (final) this.pieceDone = true;
+  }
 
   /** One frame of the session's voice. `say` frames (server-held words) are relayed as they are; the rest follow the floor. */
   outputAudio(pcm: Buffer, last: boolean, say?: string): void {
@@ -333,7 +360,6 @@ export class Router {
 
   private relayFrame(pcm: Buffer, last: boolean, said = false): void {
     const now = this.deps.clock.nowMs();
-    if (!this.uttering) this.saying = '';
     this.uttering = !last;
     this.playingUntil = Math.max(now, this.playingUntil) + TICK_MS;
     this.deps.relay.push(pcm, last);
@@ -345,13 +371,38 @@ export class Router {
     const t = this.turn;
     if (!t || this.st.phase === 'idle') return;
     if (this.queued) { this.toIdle(); return; }
-    const untilMs = this.playingUntil + HANDSFREE.followUpMs;
+    this.openWindow(t.userId, this.playingUntil + HANDSFREE.followUpMs, t.verdict);
+  }
+
+  /**
+   * The asker's follow-up window until `untilMs`. Until they speak again, more output is the request it carries going on (a delegated
+   * answer after its acknowledgement).
+   */
+  private openWindow(userId: string, untilMs: number, verdict: TriggerVerdict | null): void {
     this.live = true;
-    this.setState({ phase: 'follow-up', userId: t.userId, untilMs });
-    // Until the asker speaks again, more output is the same request going on (a delegated answer after its acknowledgement).
-    this.turn = { ...t, via: 'follow-up', sentenceId: null, held: [], verdictTimer: null };
+    this.turn = { userId, via: 'follow-up', sentenceId: null, verdict, held: [], verdictTimer: null };
+    this.setState({ phase: 'follow-up', userId, untilMs });
     this.clearWindow();
     this.windowTimer = this.deps.clock.setTimeout(() => { this.windowTimer = null; if (this.st.phase === 'follow-up') this.toIdle(); }, untilMs - this.deps.clock.nowMs());
+  }
+
+  /**
+   * A sentence that was Milo's echo: never judged. A turn it opened is undone: what the session said to it is dropped unheard, and
+   * the asker's follow-up window it interrupted goes on as it was; otherwise the floor is free.
+   */
+  private echoed(userId: string, sentenceId: string): void {
+    this.trace('echo', { userId });
+    if (this.queued?.userId === userId && this.queued.sentenceId === sentenceId) this.queued = null;
+    const t = this.turn;
+    if (!t || t.userId !== userId || this.st.phase === 'follow-up') return; // nothing opened (the window itself goes on)
+    if (t.sentenceId !== sentenceId && !(t.sentenceId === null && t.via === 'follow-up')) return;
+    if (t.via === 'hold') return;
+    if (t.verdictTimer !== null) { this.deps.clock.clearTimeout(t.verdictTimer); t.verdictTimer = null; }
+    t.held = [];
+    this.dropUtt = this.speaking;
+    const w = t.window;
+    if (w && w.untilMs > this.deps.clock.nowMs()) { this.clearGiveUp(); this.openWindow(userId, w.untilMs, w.verdict); return; }
+    this.drop('echo');
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------

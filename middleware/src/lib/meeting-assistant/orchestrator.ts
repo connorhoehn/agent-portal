@@ -1021,6 +1021,11 @@ export class AssistantRuntime {
    */
   private onHeardLine(run: CallRun, l: HeardLine): Promise<void> {
     run.transcribedAt = this.now(); run.deaf = null;
+    // Milo's own voice heard back through a microphone is not a person's line: not stored, only counted (as with the flag off).
+    if (run.voice && run.speech.isEcho({ text: l.text, startAt: run.sessionStartedAt + l.startMs, endAt: run.sessionStartedAt + l.endMs })) {
+      run.echoLinesDropped += 1; trace('line.echo', { startMs: l.startMs, endMs: l.endMs });
+      return run.lineChain;
+    }
     const scope = `${run.period}.${run.sessionNo}`;
     const next = run.lineChain.then(async () => {
       run.pieceNo += 1;
@@ -1114,7 +1119,7 @@ export class AssistantRuntime {
       session.on('outputAudio', (e) => this.onOutputAudio(run, session, e)),
       session.on('outputTranscript', (e) => {
         // Hands-free: the router's echo check reads what Milo is saying (any utterance but an approved line, which it never relays).
-        if (run.hf && run.session === session && (e.say === undefined || !approvalOf(run, e.say))) run.hf.outputText(e.text);
+        if (run.hf && run.session === session && (e.say === undefined || !approvalOf(run, e.say))) run.hf.outputText(e.text, e.final);
         // An approved utterance's words wait, unheard, for its frames: they join the span its release opens (the echo guard).
         if (e.say !== undefined) {
           const a = approvalOf(run, e.say);
