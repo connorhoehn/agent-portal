@@ -30,7 +30,7 @@ const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_id
   assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
-export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason
+export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason, red_flags_seen
   FROM interview_scorecards ORDER BY submitted_at, id`;
 
 export const INTERVIEWS_STATEMENTS = [LIST_OPENINGS_SQL, LIST_CANDIDATES_SQL, LIST_APPLICATIONS_SQL, LIST_INTERVIEWS_SQL, LIST_SCORECARDS_SQL] as const;
