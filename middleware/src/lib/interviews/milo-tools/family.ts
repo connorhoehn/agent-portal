@@ -52,7 +52,7 @@ async function backendInstructions(interview: Interview): Promise<string> {
   return interviewBackendInstructions(questions, seen);
 }
 
-export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<Interview> = {
+export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<Interview, SaidSource> = {
   family: 'interviews:interview',
   tenants: ['interviews'],
   tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER],
@@ -62,7 +62,7 @@ export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<Interview> = {
   },
   backendInstructions,
   whatICanDo: (interview, askedBy) => whatICanDoIn(interview, askedBy, MILO_CAN_DO),
-  log: async (interview, askedBy, said: ToolSaid) => { await logLine(interview, askedBy, { line: said.line, source: said.kind as SaidSource }); },
+  log: async (interview, askedBy, said) => { await logLine(interview, askedBy, { line: said.line, source: said.kind }); },
   busy: PAD_BUSY,
   failed: PAD_FAILED,
   acknowledgement: ON_IT,

@@ -1,5 +1,6 @@
 // Milo's interview tool `pad_add_import`: standard-library import lines at the top of the pad, in the pad's language, as Milo.
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
+import type { SaidSource } from '../speak/store.js';
 import type { Interview } from '../types.js';
 import { hasPad } from './context.js';
 import { importsAddedLine, NOT_STANDARD_IMPORT, NOTHING_NEW } from './deps.js';
@@ -7,7 +8,7 @@ import { checkedImportLines, placeImports } from './imports.js';
 import { argsOf, padMayAsk, writePad } from './pad-write.js';
 import { PAD_TOOL_ARGS_BYTES } from './schema.js';
 
-export const PAD_ADD_IMPORT: ServerToolDef<Interview> = {
+export const PAD_ADD_IMPORT: ServerToolDef<Interview, SaidSource> = {
   name: 'pad_add_import',
   description: 'Add standard-library import lines at the top of the shared code pad, in the pad\'s language (for example "from functools import lru_cache" in Python). Only imports, never other code.',
   parameters: {

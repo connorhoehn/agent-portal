@@ -24,10 +24,10 @@ import { trace } from './trace.js';
 export type ServerToolVia = 'phrase' | 'model' | 'button' | 'typed';
 
 /** What a tool's run (or a refusal) has Milo say: the line, and the family's word for it in its own log. */
-export interface ToolSaid {
+export interface ToolSaid<Kind extends string = string> {
   line: string;
   /** The family's kind for its log of what Milo said (interviews: the said log's `source`). */
-  kind: string;
+  kind: Kind;
   /** Refused for something the model can put right: not the request's one run; `retryNote` is silent context for the model. */
   retryNote?: string;
   /** The tool logged the line itself (the family's log hook is not asked again). */
@@ -36,7 +36,7 @@ export interface ToolSaid {
   delivered?: string;
 }
 
-export interface ServerToolDef<Ctx> {
+export interface ServerToolDef<Ctx, Kind extends string = string> {
   name: string;
   /** What the background agent reads. */
   description: string;
@@ -64,15 +64,15 @@ export interface ServerToolDef<Ctx> {
   /** May this person have it run: yes; no, with the sentence they are told; or null, not one of this call's people (nothing said). */
   mayAsk(ctx: Ctx, askedBy: string): Promise<true | { refusal: string } | null>;
   /** Run it: what Milo says, or null for nothing. */
-  run(ctx: Ctx, askedBy: string, args: unknown, via: ServerToolVia): Promise<ToolSaid | null>;
+  run(ctx: Ctx, askedBy: string, args: unknown, via: ServerToolVia): Promise<ToolSaid<Kind> | null>;
 }
 
-export interface ServerToolFamily<Ctx> {
+export interface ServerToolFamily<Ctx, Kind extends string = string> {
   /** The lobby family (`<tenant>:<family>`, policy.ts `familyOfLobby`), e.g. `interviews:interview`. */
   family: string;
   /** The tenants whose calls are offered the tools. */
   tenants: readonly string[];
-  tools: readonly ServerToolDef<Ctx>[];
+  tools: readonly ServerToolDef<Ctx, Kind>[];
   /** What the tools of this call work on (an interview), or null: no tools in this call now. */
   context(call: PolicyCall): Promise<Ctx | null>;
   /** What the live session's background agent is told about the tools in this call. */
@@ -80,7 +80,7 @@ export interface ServerToolFamily<Ctx> {
   /** The sentence for a request nothing answered: what this asker may ask, or null for nothing. */
   whatICanDo(ctx: Ctx, askedBy: string): Promise<string | null>;
   /** The family's log of what Milo is about to say (posted and said after it by whoever triggered the run). */
-  log(ctx: Ctx, askedBy: string, said: ToolSaid, via: ServerToolVia | 'held'): Promise<void>;
+  log(ctx: Ctx, askedBy: string, said: ToolSaid<Kind>, via: ServerToolVia | 'held'): Promise<void>;
   /** Said when a writing tool is asked for while another is still running in the call. Absent: nothing. */
   busy?: string;
   /** Said when a writing tool fails. Absent: the failure is the caller's. */
@@ -104,7 +104,7 @@ const byName = new Map<string, RegisteredServerTool>();
  * Register one family's server tools. One registration per family, and a tool's name is unique across every family (the live model
  * and the trace see only the name). Returns the unregistration (tests use it).
  */
-export function registerServerTools<Ctx>(f: ServerToolFamily<Ctx>): () => void {
+export function registerServerTools<Ctx, Kind extends string>(f: ServerToolFamily<Ctx, Kind>): () => void {
   if (familyOfLobby(f.family) !== f.family) throw new Error(`not a lobby family: ${f.family}`);
   if (families.has(f.family)) throw new Error(`server tools are already registered for ${f.family}`);
   for (const t of f.tools) {

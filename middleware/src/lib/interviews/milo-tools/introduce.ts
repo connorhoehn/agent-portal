@@ -2,6 +2,7 @@
 // words ("Milo, introduce yourself"), the live model's call, and the lead's "Introduce Milo" button (routes/interviews/milo.ts),
 // which posts and says it at once (speak/intro.ts `introduceMilo`); the others log it for the orchestrator to post and say.
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
+import type { SaidSource } from '../speak/store.js';
 import { utterance } from '../speak/utterance.js';
 import { introduceMilo, isIntroduction, logIntroduction } from '../speak/intro.js';
 import type { Interview } from '../types.js';
@@ -11,7 +12,7 @@ import { noArgs } from './schema.js';
 const LEAD = String.raw`(?:(?:um|uh|sorry|so|ok|okay|hey|hi|and|but)\s+)*(?:(?:hey\s+)?milo\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?`;
 const INTRO = new RegExp(String.raw`^${LEAD}(?:introduce\s+yourself|say\s+(?:hello|hi)(?:\s+to\s+\w+)?)(?:\s+(?:please|to\s+\w+|to\s+the\s+candidate))*$`);
 
-export const INTRODUCE: ServerToolDef<Interview> = {
+export const INTRODUCE: ServerToolDef<Interview, SaidSource> = {
   name: 'introduce',
   description: 'Introduce Milo to the candidate, when the lead interviewer asks Milo to introduce itself or says Milo is here to help.',
   parameters: noArgs(),

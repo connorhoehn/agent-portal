@@ -2,6 +2,7 @@
 // pad, marked as Milo's. Every helper is judged against the round's questions first (verdict.ts, a model call held under the
 // interview's `tools` part); a standard-library one becomes an import.
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
+import type { SaidSource } from '../speak/store.js';
 import type { Interview } from '../types.js';
 import { hasPad, padContextNote } from './context.js';
 import { HELPER_ADDED, HELPER_NOT_ADDED, importsAddedLine, NOT_SOLUTION, NOTHING_NEW } from './deps.js';
@@ -10,7 +11,7 @@ import { placeImports } from './imports.js';
 import { argsOf, padMayAsk, writePad } from './pad-write.js';
 import { PAD_TOOL_ARGS_BYTES } from './schema.js';
 
-export const PAD_ADD_HELPER: ServerToolDef<Interview> = {
+export const PAD_ADD_HELPER: ServerToolDef<Interview, SaidSource> = {
   name: 'pad_add_helper',
   description: 'Add a helper someone asked for (an LRU cache class, a small data structure) at the top of the shared code pad, written by you in the pad\'s language, at most 60 lines. Use it only when the language has no standard-library import for it; otherwise use pad_add_import. Never the interview question\'s own answer, and never the question\'s function.',
   parameters: {

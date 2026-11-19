@@ -61,7 +61,7 @@ const CHANGES: readonly SaidSource[] = ['tests', 'imports', 'helper'];
  * One pad tool's run: the interview's limits, then its plan against the pad as it is, the write, the pad log, and the line for what
  * happened. `testsBatch`: the change counts against the test-case batches too.
  */
-export async function writePad(interview: Interview, plan: (step: PadStep) => ReturnType<MiloPadPlan>, opts: { testsBatch?: boolean } = {}): Promise<ToolSaid> {
+export async function writePad(interview: Interview, plan: (step: PadStep) => ReturnType<MiloPadPlan>, opts: { testsBatch?: boolean } = {}): Promise<ToolSaid<SaidSource>> {
   const d = deps();
   const said = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interview.id));
   if (said.filter((r) => CHANGES.includes(r.source)).length >= MAX_PAD_CHANGES) return { line: PAD_CHANGES_LIMIT, kind: 'refusal' };
@@ -81,7 +81,7 @@ export async function writePad(interview: Interview, plan: (step: PadStep) => Re
   const entries = entriesOf(questions);
   let refusal: string | null = null;
   let retryNote: string | undefined;
-  let done: ToolSaid | null = null;
+  let done: ToolSaid<SaidSource> | null = null;
   let kind: PadChangeKind = 'tests';
   const out = await d.write(interview.id, async ({ text, language }) => {
     if (text.length > MAX_PAD_TEXT) { refusal = PAD_TOO_LONG; return null; }
