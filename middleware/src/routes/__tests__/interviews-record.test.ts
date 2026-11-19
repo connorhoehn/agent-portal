@@ -138,7 +138,7 @@ describe('the parts', () => {
     const r = (await HUGO(record(MATEO))).body.record;
     expect(r.interview).toMatchObject({ state: 'scored', round: { name: 'Technical screen', type: 'technical', minutes: 45, surface: 'pad' }, candidate: { id: 'cand-rx6tcaqj', name: 'Mateo Álvarez' },
       opening: { id: 'op-backend' } });
-    expect(r.recording).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
+    expect(r.recording).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 2690, standIn: true });
     expect(r.transcript.state).toBe('available');
     expect(r.transcript.lines[0]).toEqual({ seq: 1, atMs: 20_000, side: 'panel', speaker: 'Hugo Marchetti', text: expect.stringMatching(/^Hi Mateo/) });
     expect(r.transcript.lines.some((l: { side: string; speaker: string }) => l.side === 'candidate' && l.speaker === 'Mateo Álvarez')).toBe(true);

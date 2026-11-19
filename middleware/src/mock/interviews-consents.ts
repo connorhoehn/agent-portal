@@ -30,6 +30,7 @@ export const interviewConsentsFixture = defineFixture<ConsentRecord>({
     default: () => [
       // Twenty minutes before each finished interview's start (mock/interviews.ts).
       accepted('iv-d7q4n9xe', at(-9, 13, 40)),
+      accepted('iv-b8w3q6ld', at(-7, 13, 40)),
       accepted('iv-f2b6t5zh', at(-6, 12, 40)),
       accepted('iv-j6x2d9sb', at(-3, 13, 40)),
       accepted('iv-p2v7j4ye', at(-2, 14, 40)),

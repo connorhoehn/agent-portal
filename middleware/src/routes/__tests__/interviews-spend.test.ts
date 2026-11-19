@@ -110,9 +110,10 @@ describe('the seeded world', () => {
     expect(seeded).toBeGreaterThan(0);
     spendEntries.reset();
     const money = (await spendOf(GRETA, 'op-backend')).body.spend;
-    // Three finished rounds: two 60-minute technical ones at about $3.08 each and a 45-minute behavioural one at about $2.34.
-    expect(money.spentUsd).toBeGreaterThan(8);
-    expect(money.spentUsd).toBeLessThan(9);
+    // Four finished rounds: Ingrid's 60-minute coding and system design rounds at about $3.08 each, and two 45-minute ones
+    // (her Working together round and Mateo's technical screen) at about $2.34.
+    expect(money.spentUsd).toBeGreaterThan(10.5);
+    expect(money.spentUsd).toBeLessThan(11.2);
     expect(money.leftUsd).toBeCloseTo(150 - money.spentUsd, 4);
   });
 });

@@ -91,7 +91,7 @@ describe('each round names the competencies it assesses', () => {
   it('questionsOfRound: of the round\'s type, for a competency it assesses', () => {
     const kit = seedKit('op-backend');
     expect(questionsOfRound(kit, 'rd-coding', 'technical').map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
-    expect(questionsOfRound(kit, 'rd-design', 'technical').map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-reconcile']);
+    expect(questionsOfRound(kit, 'rd-design', 'technical').map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-shortener', 'q-be-reconcile']);
   });
 
   it('checkKit keeps the list in the kit\'s order, once each; a kit without lists still passes and stays without them', () => {
@@ -318,7 +318,7 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     for (const r of old.rounds) delete r.surface;
     for (const q of old.questions) delete q.board;
     const r = checkKit(old);
-    expect(r.ok && r.value.rounds.map((x) => x.surface)).toEqual(['pad', 'pad', undefined]);
+    expect(r.ok && r.value.rounds.map((x) => x.surface)).toEqual(['pad', 'pad', 'pad', undefined]);
   });
 
   it('the seeded System design round is a board round, and its questions carry the two templates', () => {
@@ -344,9 +344,9 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
 
   it('a behavioural round on the board, or a surface the room does not have, is refused', () => {
     const kit = seedKit('op-backend') as unknown as { rounds: Array<Record<string, unknown>> };
-    kit.rounds[2]!['surface'] = 'board';
+    kit.rounds[3]!['surface'] = 'board';
     kit.rounds[0]!['surface'] = 'slides';
-    expect(paths(checkKit(kit))).toEqual(['rounds.0.surface', 'rounds.2.surface']);
+    expect(paths(checkKit(kit))).toEqual(['rounds.0.surface', 'rounds.3.surface']);
   });
 
   it('a board on a behavioural question, an unreadable, empty, unnamed or too large board is refused', () => {

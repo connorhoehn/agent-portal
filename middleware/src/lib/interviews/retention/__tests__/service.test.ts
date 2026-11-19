@@ -208,7 +208,7 @@ describe('a candidate\'s deletion request', () => {
     expect(row).toMatchObject({ reason: 'request', requestedBy: 'u-greta', left: [], attempts: 1 });
     expect(row.interviewIds.sort()).toEqual(['iv-j6x2d9sb', 'iv-k1p5w8ra']);
     expect(row.removed).toEqual([
-      { kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'pad-log', count: 12 }, { kind: 'board-snapshots', count: 4 }, { kind: 'runs', count: 2 }, { kind: 'invite', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 },
+      { kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'pad-log', count: 12 }, { kind: 'runs', count: 2 }, { kind: 'invite', count: 1 }, { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 },
       { kind: 'stage-reasons', count: 1 },
     ]);
     expect(row.doneAt).toBe(new Date(NOW).toISOString());

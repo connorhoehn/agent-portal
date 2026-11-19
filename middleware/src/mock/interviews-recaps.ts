@@ -1,8 +1,8 @@
 // Milo's recaps and who opened them (docs/interviews-tenant-plan.md decision 14, row I5.2): the mock world's
 // interview_recaps, interview_recap_opens and interview_recap_attempts.
 //
-// A recap on each of the four finished, scored rounds of mock/interviews.ts: Ingrid's coding and "Working together"
-// rounds, Mateo's coding round and Ravi's coding round in Swift. Jonah's leadership round has none yet: Wen has not
+// A recap on each of the five finished, scored rounds of mock/interviews.ts: Ingrid's coding, System design and "Working
+// together" rounds, Mateo's technical screen and Ravi's coding round in Swift. Jonah's leadership round has none yet: Wen has not
 // rated it, and the first open writes it. Each recap covers the competencies of the round's chosen questions, with
 // two to four statements each (a coding round's Communication, which the round also assesses, reads as not covered); every statement is a short plain sentence in the words of the candidate line it cites
 // (mock/interviews-records.ts holds the lines), so the screen shows the statement once and the quoted line beside it.
@@ -35,6 +35,19 @@ export const interviewRecapsFixture = defineFixture<RecapRecord>({
   key: 'interviews.recaps',
   scenarios: {
     default: () => [
+      // Ingrid's System design round (Hugo; ended at -7 15:00): the ledger's write path, on the whiteboard.
+      recap('iv-b8w3q6ld', at(-7, 15, 40), [
+        { id: 'system-design', evidence: [
+          claim('Writes the entry pair and an outbox row in one transaction, with an idempotency key.', 10,
+            'The API takes the capture with an idempotency key and writes the entry pair and an outbox row in one transaction.'),
+          claim('The client retries with the same key, and the new region writes it once.', 14,
+            'The client retries with the same key, and the new region either returns the entry it already has or writes it once.'),
+          claim('Synchronous replication for the ledger tables, at a few extra milliseconds a write.', 16,
+            'Replication has to be synchronous for the ledger tables, so each write pays a few extra milliseconds.'),
+          claim('A unique constraint on the idempotency key, and a nightly job that checks debits equal credits.', 18,
+            'A unique constraint on the idempotency key, and a nightly job that checks debits equal credits for every account.'),
+        ] },
+      ], ['communication']),
       // Ingrid's coding round (Hugo; ended at -9 15:00): the rate limiter, then retries with an idempotency key.
       recap('iv-d7q4n9xe', at(-9, 15, 40), [
         { id: 'problem-solving', evidence: [
@@ -138,6 +151,8 @@ export const interviewRecapOpensFixture = defineFixture<RecapOpen>({
       // The leads opened the recap after rating, with the ratings their scorecards then kept (so nothing changed after it).
       { interviewId: 'iv-d7q4n9xe', interviewerId: 'u-hugo', openedAt: at(-9, 15, 40),
         ratings: [{ competencyId: 'problem-solving', rating: 4 }, { competencyId: 'code-quality', rating: 4 }, { competencyId: 'communication', rating: 4 }] },
+      { interviewId: 'iv-b8w3q6ld', interviewerId: 'u-hugo', openedAt: at(-7, 15, 40),
+        ratings: [{ competencyId: 'system-design', rating: 3 }, { competencyId: 'communication', rating: 3 }] },
       { interviewId: 'iv-f2b6t5zh', interviewerId: 'u-wen', openedAt: at(-6, 14, 50),
         ratings: [{ competencyId: 'communication', rating: 3 }, { competencyId: 'collaboration', rating: 3 }] },
       { interviewId: 'iv-j6x2d9sb', interviewerId: 'u-hugo', openedAt: at(-3, 16, 0),

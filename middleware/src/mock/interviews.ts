@@ -245,7 +245,7 @@ export const interviewApplicationsFixture = defineFixture<Application>({
   scenarios: {
     default: () => [
       application('app-7b69njmx', 'cand-rx6tcaqj', 'op-backend', [step('applied', 30, null), step('screening', 24, GRETA), step('interviewing', 8, GRETA, 'Strong screen: payments interest is real.')]),
-      application('app-vfzc2x6g', 'cand-qz63q3a3', 'op-backend', [step('applied', 33, null), step('screening', 29, GRETA), step('interviewing', 15, GRETA), step('debrief', 5, GRETA, 'Both rounds in; debrief with Amara next.')]),
+      application('app-vfzc2x6g', 'cand-qz63q3a3', 'op-backend', [step('applied', 33, null), step('screening', 29, GRETA), step('interviewing', 15, GRETA), step('debrief', 5, GRETA, 'All three rounds in; debrief with Amara next.')]),
       application('app-pn7v4yev', 'cand-nx59ftdv', 'op-backend', [step('applied', 12, null), step('screening', 9, GRETA), step('interviewing', 2, GRETA)]),
       application('app-g393z287', 'cand-88j9dpte', 'op-backend', [step('applied', 6, null), step('screening', 2, GRETA)]),
       application('app-y2pmbks8', 'cand-d7vdruga', 'op-backend', [step('applied', 28, null), step('screening', 22, GRETA), step('rejected', 18, GRETA, 'Looking for a fully remote role outside European hours.')]),
@@ -286,9 +286,12 @@ export const interviewsFixture = defineFixture<Interview>({
   key: 'interviews.interviews',
   scenarios: {
     default: () => [
-      // Finished, with scorecards. Ingrid's two wait for Amara's decision (row I5.5); the decision marks them reviewed.
+      // Finished, with scorecards. Ingrid's three wait for Amara's decision (row I5.5); the decision marks them reviewed. Her
+      // System design round was drawn on the whiteboard (the Blueprint; mock/interviews-board-snapshots.ts keeps its checkpoints).
       interview({ id: 'iv-d7q4n9xe', app: 'app-vfzc2x6g', round: 'rd-coding', type: 'technical', lead: HUGO, start: at(-9, 14), minutes: 60, state: 'scored',
         questions: ['q-be-ratelimit', 'q-be-retry'], assignedDaysAgo: 15, ended: at(-9, 15) }),
+      interview({ id: 'iv-b8w3q6ld', app: 'app-vfzc2x6g', round: 'rd-design', type: 'technical', lead: HUGO, start: at(-7, 14), minutes: 60, state: 'scored',
+        questions: ['q-be-ledger'], assignedDaysAgo: 14, ended: at(-7, 15) }),
       interview({ id: 'iv-f2b6t5zh', app: 'app-vfzc2x6g', round: 'rd-together', type: 'behavioural', lead: WEN, start: at(-6, 13), minutes: 45, state: 'scored',
         questions: ['q-be-incident', 'q-be-disagree'], assignedDaysAgo: 14, ended: at(-6, 13, 45) }),
       interview({ id: 'iv-j6x2d9sb', app: 'app-7b69njmx', round: 'rd-screen', type: 'technical', lead: HUGO, start: at(-3, 14), minutes: 45, state: 'scored',
@@ -330,6 +333,13 @@ export const interviewScorecardsFixture = defineFixture<Scorecard>({
           rate('problem-solving', 4, 'Had the bucket passing in about sixteen minutes, fixed her own missing-argument call from the run, and kept the lock per key.'),
           rate('code-quality', 4, 'Named the fake-clock refill test unprompted; one idempotency key per charge, kept for a day, and only safe errors retried.'),
           rate('communication', 4, 'Said which approach she was taking and why before typing, and stopped to check I followed the locking.'),
+        ] },
+      { id: 'sc-w7kd4m2e', interviewId: 'iv-b8w3q6ld', interviewerId: HUGO, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
+        submittedAt: at(-7, 16, 15),
+        summary: 'A careful design. Asked the load and the failover model before drawing, and kept the ledger exact through a failover; balances may lag a second by design.',
+        ratings: [
+          rate('system-design', 3, 'Entry pair and outbox in one transaction, one write per idempotency key through a failover, and a nightly check that debits equal credits. Did not get to rollout.'),
+          rate('communication', 3, 'Asked the peak rate and active-passive or active-active before drawing anything, and said what synchronous replication costs.'),
         ] },
       { id: 'sc-ju3s5t85', interviewId: 'iv-f2b6t5zh', interviewerId: WEN, recommendation: 'yes', version: 1, changedAfterRecap: false, correctionReason: null,
         submittedAt: at(-6, 15, 5),

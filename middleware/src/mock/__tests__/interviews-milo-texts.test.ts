@@ -38,7 +38,7 @@ describe('the seeded recaps', () => {
     expect(recaps().map((r) => r.interviewId).sort()).toEqual(scored);
   });
 
-  it.each(['iv-d7q4n9xe', 'iv-f2b6t5zh', 'iv-j6x2d9sb', 'iv-p2v7j4ye'])('%s is exactly what the guard keeps, and covers the round', (id) => {
+  it.each(['iv-d7q4n9xe', 'iv-b8w3q6ld', 'iv-f2b6t5zh', 'iv-j6x2d9sb', 'iv-p2v7j4ye'])('%s is exactly what the guard keeps, and covers the round', (id) => {
     const row = recaps().find((r) => r.interviewId === id)!;
     const iv = interviewOf(id);
     const competencyIds = competencyIdsOfRound(openingOf(iv).kit, iv.roundId);

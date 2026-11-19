@@ -30,8 +30,9 @@ export const SEED = Object.freeze({
   /** Interviews by candidate and round, with the seeded state, lead and panel in the comment. */
   interviews: Object.freeze({
     ingridCoding: 'iv-d7q4n9xe',     // scored, technical, lead Hugo, 9 days ago
+    ingridDesign: 'iv-b8w3q6ld',     // scored, System design on the whiteboard (four board checkpoints), lead Hugo, 7 days ago
     ingridTogether: 'iv-f2b6t5zh',   // scored, behavioural, lead Wen, 6 days ago
-    mateoCoding: 'iv-j6x2d9sb',      // scored, technical, lead Hugo, 3 days ago
+    mateoCoding: 'iv-j6x2d9sb',      // (the key is old) Mateo's technical screen: scored, on the pad, lead Hugo, 3 days ago
     raviCoding: 'iv-p2v7j4ye',       // scored, technical, lead Wen, 2 days ago
     jonahLeadership: 'iv-g9r1y8lp',  // ended yesterday, behavioural, lead Wen: Wen's scorecard is due
     mateoDesign: 'iv-k1p5w8ra',      // ready, technical, lead Hugo, tomorrow: the default interview for a candidate's visit

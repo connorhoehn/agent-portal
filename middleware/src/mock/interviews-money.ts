@@ -4,7 +4,7 @@
 //
 // Spend: one settled ledger row per part of each finished round of mock/interviews.ts, at the I3.9 answer's typical
 // figures (docs/interviews-tenant-plan.md): Milo listening at $0.05 a minute for the round's minutes, the coach's
-// suggestions, private answers, plan and recap on Nova Pro, and the runs of a technical round. Source ids are the door's
+// suggestions, private answers, plan and recap on Nova Pro, and the runs of a round on the code pad. Source ids are the door's
 // own (`iv:<opening>:<interview>:<part>:<key>`, lib/interviews/spend.ts), so the opening's figures are attributed the
 // way live spend is. Joined to the shared ledger fixture by mock/spend-ledger.ts.
 //
@@ -19,9 +19,10 @@ import type { MockNotificationRow } from './notifications.js';
 const NOVA_PRO = 'amazon.nova-pro-v1:0';
 
 interface Finished { interviewId: string; openingId: string; days: number; endHour: number; endMinute: number; minutes: number; technical: boolean; recap: boolean }
-// The five finished rounds (mock/interviews.ts), with when each ended.
+// The six finished rounds (mock/interviews.ts), with when each ended.
 const FINISHED: Finished[] = [
   { interviewId: 'iv-d7q4n9xe', openingId: 'op-backend', days: -9, endHour: 15, endMinute: 0, minutes: 60, technical: true, recap: true },
+  { interviewId: 'iv-b8w3q6ld', openingId: 'op-backend', days: -7, endHour: 15, endMinute: 0, minutes: 60, technical: false, recap: true },
   { interviewId: 'iv-f2b6t5zh', openingId: 'op-backend', days: -6, endHour: 13, endMinute: 45, minutes: 45, technical: false, recap: true },
   { interviewId: 'iv-j6x2d9sb', openingId: 'op-backend', days: -3, endHour: 14, endMinute: 45, minutes: 45, technical: true, recap: true },
   { interviewId: 'iv-p2v7j4ye', openingId: 'op-ios', days: -2, endHour: 16, endMinute: 0, minutes: 60, technical: true, recap: true },

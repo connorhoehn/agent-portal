@@ -731,7 +731,8 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
 - The record page of a board round shows the whiteboard where the code would be: the final board and up to four earlier
   checkpoints spread over the round, chosen from one compact control, each read-only in the same canvas and zoomed to fit.
   Choosing one moves the page's clock (transcript and recording) to its time. The record view carries the round's surface. The
-  mock world seeds Mateo's finished system design round with four checkpoints of the Blueprint as his notes filled it.
+  mock world seeds Ingrid's finished system design round (the ledger question) with four checkpoints of the Blueprint as her
+  notes filled it; Mateo's finished round is his technical screen on the pad.
 - The kit editor sets each technical round to the code pad or the whiteboard ("Works on"), and a question for a whiteboard
   round can add, name, draw and remove its starting board in the room's own canvas, and list its clarifying questions.
 - Clarifying questions (step 2b): a technical question may carry up to five (`clarifying`), what a strong candidate asks before

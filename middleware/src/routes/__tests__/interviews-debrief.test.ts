@@ -193,7 +193,7 @@ describe('the decision', () => {
     expect(a.basedOn).toBe(5);
     expect(a.history[4]).toMatchObject({ stage: 'offer', by: 'u-amara', byName: 'Amara Okafor', reason: REASON, decision: 'advance', scorecardsMissing: 0 });
     expect(a.history.slice(0, 4).every((h: { decision: unknown }) => h.decision === null)).toBe(true);
-    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-vfzc2x6g').map((i) => i.state)).toEqual(['reviewed', 'reviewed']);
+    expect(interviewsFixture.rows().filter((i) => i.applicationId === 'app-vfzc2x6g').map((i) => i.state)).toEqual(['reviewed', 'reviewed', 'reviewed']);
     expect(a.decide.options.every((o: { allowed: boolean }) => !o.allowed)).toBe(true);
     await settle();
     expect(sent.map((s) => s.userId)).toEqual(['u-greta']);

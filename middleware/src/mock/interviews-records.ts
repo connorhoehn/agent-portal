@@ -8,6 +8,7 @@
 //   iv-j6x2d9sb   Mateo's technical screen, Hugo leads: a rate limiter, then retries with an idempotency key.
 //   iv-f2b6t5zh   Ingrid's "Working together" round, Wen leads: an incident she led, then a disagreement.
 //   iv-d7q4n9xe   Ingrid's coding round, Hugo leads: the rate limiter again, then the retries.
+//   iv-b8w3q6ld   Ingrid's System design round on the whiteboard, Hugo leads: the ledger's write path.
 //   iv-p2v7j4ye   Ravi's coding round in Swift, Wen leads: a paged list, then a debounced search.
 //   iv-g9r1y8lp   Jonah's leadership round, Wen leads: a teammate who struggled, then a slipped deadline.
 //
@@ -205,6 +206,36 @@ const JONAH_SAID: Said[] = [
   [53, 20, WEN, 'Thanks Jonah. Greta will be in touch.'],
 ];
 
+const INGRID_DESIGN = 'guest:iv-b8w3q6ld';
+const ingridDesignStart = () => at(-7, 14);
+const INGRID_DESIGN_SAID: Said[] = [
+  [0, 20, HUGO, "Hi again Ingrid. This one is system design, so we'll work on the whiteboard rather than the pad."],
+  [0, 40, INGRID_DESIGN, 'Hi Hugo. Good, I like drawing these out.'],
+  [1, 30, HUGO, 'Design the write path for a double-entry ledger that records card captures and refunds, survives a region failover and never loses or duplicates an entry.'],
+  [2, 10, INGRID_DESIGN, 'Before I draw anything: how many captures and refunds a second, at peak?'],
+  [2, 30, HUGO, 'About two thousand a second at peak, mostly captures.'],
+  [3, 0, INGRID_DESIGN, 'And is failover active-passive, or do both regions take writes?'],
+  [3, 20, HUGO, 'Active-passive. The second region takes over when the first is down.'],
+  [5, 10, INGRID_DESIGN, 'Then every entry is a pair of rows, a debit and a credit, written in one transaction, so the books always balance.'],
+  [8, 0, HUGO, 'What does the write path look like end to end?'],
+  [8, 40, INGRID_DESIGN, 'The API takes the capture with an idempotency key and writes the entry pair and an outbox row in one transaction.'],
+  [11, 30, HUGO, 'And how do the balances and the card network feed hear about it?'],
+  [12, 10, INGRID_DESIGN, 'A worker reads the outbox and publishes the event, and the balance views follow from it.'],
+  [17, 0, HUGO, 'What happens when the failover lands in the middle of a write?'],
+  [17, 50, INGRID_DESIGN, 'The client retries with the same key, and the new region either returns the entry it already has or writes it once.'],
+  [20, 10, HUGO, 'What does that cost you?'],
+  [20, 40, INGRID_DESIGN, 'Replication has to be synchronous for the ledger tables, so each write pays a few extra milliseconds.'],
+  [25, 0, HUGO, 'How would you prove no entry was written twice?'],
+  [25, 40, INGRID_DESIGN, 'A unique constraint on the idempotency key, and a nightly job that checks debits equal credits for every account.'],
+  [31, 0, HUGO, 'Where does the data live, and how is it keyed?'],
+  [31, 40, INGRID_DESIGN, 'Entries keyed by account and time, and a separate table of idempotency keys with the entry each one produced.'],
+  [37, 0, HUGO, 'What would you give up to keep it simple?'],
+  [37, 50, INGRID_DESIGN, 'Balances come from a view that can lag by a second or two; anyone who needs the exact balance reads the entries.'],
+  [47, 0, HUGO, "We're close to time. What would you like to ask me?"],
+  [47, 30, INGRID_DESIGN, 'How does the team test a region failover today, and how often?'],
+  [48, 30, HUGO, 'Thanks Ingrid. Greta will be in touch.'],
+];
+
 export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
   key: 'interviews.recordings',
   scenarios: {
@@ -212,6 +243,7 @@ export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
       { interviewId: 'iv-j6x2d9sb', startedAt: mateoStart(), durationSeconds: 44 * 60 + 50 },
       { interviewId: 'iv-f2b6t5zh', startedAt: ingridStart(), durationSeconds: 44 * 60 + 50 },
       { interviewId: 'iv-d7q4n9xe', startedAt: ingridCodeStart(), durationSeconds: 55 * 60 + 40 },
+      { interviewId: 'iv-b8w3q6ld', startedAt: ingridDesignStart(), durationSeconds: 49 * 60 + 10 },
       { interviewId: 'iv-p2v7j4ye', startedAt: raviStart(), durationSeconds: 57 * 60 + 10 },
       { interviewId: 'iv-g9r1y8lp', startedAt: jonahStart(), durationSeconds: 53 * 60 + 40 },
     ],
@@ -223,7 +255,7 @@ export const interviewRecordLinesFixture = defineFixture<RecordLineSeed>({
   key: 'interviews.record-lines',
   scenarios: {
     default: () => [...lines('iv-j6x2d9sb', mateoStart, MATEO_SAID), ...lines('iv-f2b6t5zh', ingridStart, INGRID_SAID),
-      ...lines('iv-d7q4n9xe', ingridCodeStart, INGRID_CODE_SAID), ...lines('iv-p2v7j4ye', raviStart, RAVI_SAID), ...lines('iv-g9r1y8lp', jonahStart, JONAH_SAID)],
+      ...lines('iv-d7q4n9xe', ingridCodeStart, INGRID_CODE_SAID), ...lines('iv-b8w3q6ld', ingridDesignStart, INGRID_DESIGN_SAID), ...lines('iv-p2v7j4ye', raviStart, RAVI_SAID), ...lines('iv-g9r1y8lp', jonahStart, JONAH_SAID)],
     empty: () => [],
   },
 });

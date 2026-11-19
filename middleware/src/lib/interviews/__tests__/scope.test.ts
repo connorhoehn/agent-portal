@@ -34,7 +34,7 @@ describe('reach by role', () => {
 describe('an interviewer', () => {
   it('reads the interviews they lead or sit on the panel of, and nothing of another interviewer\'s', () => {
     expect(ids(as('u-hugo', 'interviewer').interviews)).toEqual(
-      ['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
+      ['iv-b8w3q6ld', 'iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
     expect(ids(as('u-hugo', 'interviewer').interviews)).not.toContain('iv-c3k8w2ma');
     expect(ids(as('u-wen', 'interviewer').interviews)).toEqual(
       ['iv-c3k8w2ma', 'iv-f2b6t5zh', 'iv-g9r1y8lp', 'iv-n5z9f2cq', 'iv-p2v7j4ye', 'iv-r6d1k9wt', 'iv-s4e8u2zk']);
@@ -48,10 +48,10 @@ describe('an interviewer', () => {
   });
 
   it('reads a colleague\'s scorecards on a candidate only once their own for every round they sit on there is in (row I5.3)', () => {
-    // Ingrid: Hugo's coding and Wen's working-together are both in, so each reads the other's.
+    // Ingrid: Hugo's coding and system design and Wen's working-together are all in, so each reads the other's.
     // Mateo: Hugo's coding is in but he also leads the design round, still to run: nobody else's (there are none yet either).
-    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n']);
-    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-b75vwqbq', 'sc-ju3s5t85', 'sc-szbsws4n']);
+    expect(ids(as('u-hugo', 'interviewer').scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n', 'sc-w7kd4m2e']);
+    expect(ids(as('u-wen', 'interviewer').scorecards)).toEqual(['sc-b75vwqbq', 'sc-ju3s5t85', 'sc-szbsws4n', 'sc-w7kd4m2e']);
   });
 });
 
@@ -62,7 +62,7 @@ describe('a hiring manager', () => {
     expect(amara.candidates).toHaveLength(8);
     expect(amara.candidates.map((c) => c.name)).not.toContain('Aiko Tanaka');
     expect(ids(amara.interviews)).not.toContain('iv-p2v7j4ye');
-    expect(ids(amara.scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n']);
+    expect(ids(amara.scorecards)).toEqual(['sc-ju3s5t85', 'sc-qadtme79', 'sc-szbsws4n', 'sc-w7kd4m2e']);
   });
 
   it('another hiring manager reads none of them', () => {
@@ -92,7 +92,7 @@ describe('the wire shapes', () => {
 
   it('the last result is only ever a scorecard the viewer may read', () => {
     const hugo = index('u-hugo', 'interviewer').candidateRows();
-    expect(hugo.find((r) => r.candidate.name === 'Ingrid Solberg')!.lastResult).toMatchObject({ roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
+    expect(hugo.find((r) => r.candidate.name === 'Ingrid Solberg')!.lastResult).toMatchObject({ roundName: 'System design', interviewer: { name: 'Hugo Marchetti' } });
   });
 
   it('an interviewer\'s desk: to accept, to prepare, upcoming, scorecards due, done', () => {
@@ -102,7 +102,7 @@ describe('the wire shapes', () => {
       return out;
     };
     expect(desk('u-hugo')).toEqual({
-      'done': ['Ingrid Solberg', 'Mateo Álvarez'],
+      'done': ['Ingrid Solberg', 'Ingrid Solberg', 'Mateo Álvarez'],
       'upcoming': ['Kwame Asante', 'Mateo Álvarez', 'Nadia Petrova'],
       'to-prepare': ['Nadia Petrova'],
       'to-accept': ['Kwame Asante'],
@@ -137,7 +137,7 @@ describe('the wire shapes', () => {
     expect(backend.candidates).toBe(5);
     expect(backend.hiringManager).toEqual({ id: 'u-amara', name: 'Amara Okafor' });
     expect(backend.pipeline.map((p) => p.candidate.name)).toContain('Ingrid Solberg');
-    expect(backend.scorecardsIn).toBe(3);
+    expect(backend.scorecardsIn).toBe(4);
   });
 
   it('an interview record carries the chosen questions, the kit\'s competencies and the visible scorecards with names', () => {
@@ -154,9 +154,10 @@ describe('the wire shapes', () => {
     const ix = index('u-greta', 'recruiter');
     const app = debriefView(ix, 'cand-qz63q3a3')!.applications[0]!;
     expect(app.rounds.map((r) => [r.name, r.competencyIds])).toEqual([
-      ['Coding', ['problem-solving', 'code-quality', 'communication']], ['Working together', ['communication', 'collaboration']],
+      ['Coding', ['problem-solving', 'code-quality', 'communication']], ['System design', ['system-design', 'communication']],
+      ['Working together', ['communication', 'collaboration']],
     ]);
-    expect(app.competencies.map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'Communication', 'Collaboration']);
+    expect(app.competencies.map((c) => c.name)).toEqual(['Problem solving', 'Code quality', 'System design', 'Communication', 'Collaboration']);
   });
 
   it('the kit as read names every round\'s competencies, a round saved without them included (all of them)', () => {

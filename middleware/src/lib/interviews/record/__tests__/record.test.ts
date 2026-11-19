@@ -68,7 +68,7 @@ describe('recordingPart', () => {
   const yes = { recording: true };
   it('the mock stand-in: available with its duration, nothing playable', () => {
     const r = recordingPart('iv-j6x2d9sb', yes, new Set());
-    expect(r).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
+    expect(r).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 2690, standIn: true });
   });
   it('declined when the candidate said no, whatever else is there', () => {
     expect(recordingPart('iv-j6x2d9sb', { recording: false }, new Set(['recording'])).state).toBe('declined');
@@ -84,7 +84,7 @@ describe('recordingPart', () => {
     expect(recordingPart('iv-k1p5w8ra', null, new Set(), true, true).state).toBe('none');
     expect(recordingPart('iv-k1p5w8ra', { recording: false }, new Set(), true, true).state).toBe('declined');
     expect(recordingPart('iv-k1p5w8ra', yes, new Set(['recording']), true, true).state).toBe('deleted');
-    expect(recordingPart('iv-j6x2d9sb', yes, new Set(), true, true)).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 3500, standIn: true });
+    expect(recordingPart('iv-j6x2d9sb', yes, new Set(), true, true)).toEqual({ state: 'available', playbackUrl: null, durationSeconds: 2690, standIn: true });
   });
   it('outside the mock world: available on a yes (the page asks the media service), none without answers, never a URL', () => {
     expect(recordingPart('iv-x', yes, new Set(), false)).toEqual({ state: 'available', playbackUrl: null, durationSeconds: null, standIn: false });

@@ -106,11 +106,11 @@ describe('the recruiter reads everything in the tenant', () => {
     expect(ios.status).toBe(200);
     expect(ios.body.opening).toMatchObject({ title: 'iOS Engineer', hiringManager: null, recruiter: { name: 'Greta Lindqvist' } });
     expect(ios.body.opening.competencies.map((c: { name: string }) => c.name)).toContain('Swift and SwiftUI');
-    expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(12);
+    expect((await GRETA('/api/interviews/interviews')).body.items).toHaveLength(13);
     const aiko = await GRETA('/api/interviews/interviews/iv-c3k8w2ma');
     expect(aiko.body.interview).toMatchObject({ candidate: { name: 'Aiko Tanaka' }, lead: { name: 'Wen Zhao' }, state: 'ready', seat: null });
     const ingrid = await GRETA('/api/interviews/candidates/cand-qz63q3a3');
-    expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-d7q4n9xe', 'iv-f2b6t5zh']);
+    expect(ingrid.body.candidate.applications[0].interviews.map((i: { id: string }) => i.id).sort()).toEqual(['iv-b8w3q6ld', 'iv-d7q4n9xe', 'iv-f2b6t5zh']);
     // The profile reads who moved each stage by name, and each round's readable results.
     const app = ingrid.body.candidate.applications[0];
     expect(app.history.every((h: { by: string | null; byName: string | null }) => (h.by === null) === (h.byName === null))).toBe(true);
@@ -127,11 +127,11 @@ describe('the recruiter reads everything in the tenant', () => {
 });
 
 describe('an interviewer reads only the interviews assigned to them', () => {
-  it('GET /interviews: Hugo\'s seven, with his desk buckets; none of Wen\'s alone', async () => {
+  it('GET /interviews: Hugo\'s eight, with his desk buckets; none of Wen\'s alone', async () => {
     const res = await HUGO('/api/interviews/interviews');
     expect(res.status).toBe(200);
     const ids = res.body.items.map((i: { id: string }) => i.id).sort();
-    expect(ids).toEqual(['iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
+    expect(ids).toEqual(['iv-b8w3q6ld', 'iv-d7q4n9xe', 'iv-h4m7c3vu', 'iv-j6x2d9sb', 'iv-k1p5w8ra', 'iv-m8t3h6ng', 'iv-n5z9f2cq', 'iv-s4e8u2zk']);
     expect(res.body.items.find((i: { id: string }) => i.id === 'iv-h4m7c3vu').bucket).toBe('to-accept');
   });
 
@@ -161,7 +161,7 @@ describe('an interviewer reads only the interviews assigned to them', () => {
   it('sees only their own scorecards: Wen\'s card on Ingrid is not in Hugo\'s read of her', async () => {
     const res = await HUGO('/api/interviews/candidates');
     const ingrid = res.body.items.find((r: { candidate: { name: string } }) => r.candidate.name === 'Ingrid Solberg');
-    expect(ingrid.lastResult).toMatchObject({ roundName: 'Coding', interviewer: { name: 'Hugo Marchetti' } });
+    expect(ingrid.lastResult).toMatchObject({ roundName: 'System design', interviewer: { name: 'Hugo Marchetti' } });
     const rec = await HUGO('/api/interviews/interviews/iv-d7q4n9xe');
     expect(rec.body.interview.scorecards.map((s: { interviewer: { name: string } }) => s.interviewer.name)).toEqual(['Hugo Marchetti']);
   });
