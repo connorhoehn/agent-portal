@@ -1,4 +1,4 @@
-import { attribute, lagSample, splitBySpeaker, transcriptLag, VoicedTimeline, type VoicedInterval } from '../attribution.js';
+import { attribute, estimateLag, lagSample, splitBySpeaker, transcriptLag, TranscriptLag, VoicedTimeline, type VoicedInterval } from '../attribution.js';
 
 const iv = (userId: string, startMs: number, endMs: number): VoicedInterval => ({ userId, startMs, endMs });
 
@@ -260,5 +260,42 @@ describe('overlapped speech in one heard turn (live interview, 17 November)', ()
     const last = pieces[pieces.length - 1]!;
     expect(last.text).toContain('r5');
     expect(attribute(a, last).userId).toBe('mia');
+  });
+});
+
+describe('the lag measured from the stamps and the voices, without knowing who spoke', () => {
+  // Two people alternating with 0.4 s between them, a 3 s pause every fourth turn; a stamp every 400 ms of speech, put on the words
+  // `lag` after they were spoken.
+  const talk = (lag: number) => {
+    const intervals: VoicedInterval[] = [], stamps: Array<{ startMs: number; endMs: number }> = [];
+    let t = 10_000;
+    for (let k = 0; k < 16; k += 1) {
+      const len = 1_500 + (k % 3) * 1_200;
+      intervals.push(iv(k % 2 ? 'lead' : 'cand', t, t + len));
+      for (let w = t + 200; w < t + len; w += 400) stamps.push({ startMs: w + lag, endMs: w + lag + 200 });
+      t += len + (k % 4 === 3 ? 3_000 : 400);
+    }
+    return { intervals, stamps };
+  };
+  it('finds a lag of a few seconds that the per-turn sample cannot reach', () => {
+    for (const lag of [300, 1_500, 4_800]) {
+      const { intervals, stamps } = talk(lag);
+      expect(Math.abs(estimateLag(intervals, stamps)! - lag)).toBeLessThanOrEqual(300);
+    }
+  });
+  it('says nothing from a handful of stamps, or when no lag puts the stamps on a voice', () => {
+    const { intervals, stamps } = talk(1_500);
+    expect(estimateLag(intervals, stamps.slice(0, 5))).toBeNull();
+    expect(estimateLag([iv('cand', 0, 500)], stamps)).toBeNull();
+  });
+  it('a wrong first sample does not stick: the estimate replaces it, and later samples are not taken', () => {
+    const { intervals, stamps } = talk(2_500);
+    const lag = new TranscriptLag();
+    lag.sample([iv('cand', 9_000, 12_000)], 'cand', { startMs: 8_500, endMs: 11_000 });
+    expect(lag.current()).toBe(-500);
+    lag.heard(stamps);
+    expect(Math.abs(lag.update(intervals) - 2_500)).toBeLessThanOrEqual(300);
+    lag.sample([iv('cand', 9_000, 12_000)], 'cand', { startMs: 8_500, endMs: 11_000 });
+    expect(Math.abs(lag.current() - 2_500)).toBeLessThanOrEqual(300);
   });
 });

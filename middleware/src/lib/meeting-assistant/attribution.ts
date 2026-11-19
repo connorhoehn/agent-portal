@@ -161,6 +161,99 @@ export function lagSample(intervals: readonly VoicedInterval[], userId: string, 
   return d >= LAG_MIN_MS && Math.abs(d - current) <= reach ? d : null;
 }
 
+/**
+ * The lag measured without knowing who spoke. A transcript stamp is put on the words when the provider emits them, not when they
+ * were spoken: in a paid interview take of 18 November the stamps ran 1.3 s behind the voices at the start and almost 5 s behind
+ * nine minutes in (the stamps drift against the session clock by about 0.4 s a minute; the voiced timeline does not). The per-turn
+ * sample above needs a turn already credited to one person, so a wrong first sample is never corrected once people alternate quickly
+ * (that take: one sample of -0.56 s, then none, every turn holding two voices). Here every stamp of the last `LAG_WINDOW_MS`, moved
+ * back by a candidate lag, should land on someone's voice: the lag is the middle of the run of candidates that puts the most stamps on
+ * a voice. Pauses decide it: too small a lag puts the last words of a turn in the silence after it, too large puts the first in the
+ * silence before. Null when there are too few stamps, the best fit is poor, or two separate runs fit equally well (no previous
+ * estimate to choose by).
+ */
+export const LAG_WINDOW_MS = 60_000;
+export const LAG_MIN_STAMPS = 12;
+/** The largest lag searched. The 14 November runs saw the drift reach 1.3 s a minute. */
+export const LAG_SEARCH_MAX_MS = 20_000;
+export const LAG_SEARCH_STEP_MS = 100;
+/** The share of stamps the best lag must put on a voice. */
+export const LAG_FIT_MIN = 0.8;
+/** A stamp this close to a voice counts as on it (a word's stamp step is 200 ms; the gap between two speakers can be 0.2 s). */
+const LAG_EDGE_MS = 100;
+/** Candidates within this share of the best fit are as good as it. */
+const LAG_FIT_TIE = 0.02;
+export function estimateLag(intervals: readonly VoicedInterval[], stamps: readonly TranscriptSpan[], previous: number | null = null): number | null {
+  if (stamps.length < LAG_MIN_STAMPS) return null;
+  const latest = Math.max(...stamps.map((s) => s.endMs));
+  const mids = stamps.filter((s) => s.endMs >= latest - LAG_WINDOW_MS).map((s) => (s.startMs + s.endMs) / 2);
+  if (mids.length < LAG_MIN_STAMPS) return null;
+  // Everyone's voice as one sorted list of disjoint stretches, each widened by the edge allowance.
+  const union: Array<[number, number]> = [];
+  for (const i of [...intervals].sort((a, b) => a.startMs - b.startMs)) {
+    const a = i.startMs - LAG_EDGE_MS, b = i.endMs + LAG_EDGE_MS, last = union[union.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b); else union.push([a, b]);
+  }
+  if (!union.length) return null;
+  const onVoice = (t: number): boolean => {
+    let lo = 0, hi = union.length - 1, at = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (union[m]![0] <= t) { at = m; lo = m + 1; } else hi = m - 1; }
+    return at >= 0 && union[at]![1] >= t;
+  };
+  const fits: Array<{ lag: number; fit: number }> = [];
+  for (let lag = LAG_MIN_MS; lag <= LAG_SEARCH_MAX_MS; lag += LAG_SEARCH_STEP_MS) {
+    let n = 0;
+    for (const m of mids) if (onVoice(m - lag)) n += 1;
+    fits.push({ lag, fit: n / mids.length });
+  }
+  const best = Math.max(...fits.map((f) => f.fit));
+  if (best < LAG_FIT_MIN) return null;
+  // The runs of consecutive candidates that fit as well as the best; the estimate is the middle of one.
+  const runs: Array<{ from: number; to: number }> = [];
+  fits.forEach((f, i) => {
+    if (f.fit < best - LAG_FIT_TIE) return;
+    const r = runs[runs.length - 1];
+    if (r && fits[i - 1] && r.to === fits[i - 1]!.lag) r.to = f.lag; else runs.push({ from: f.lag, to: f.lag });
+  });
+  const mid = (r: { from: number; to: number }) => Math.round((r.from + r.to) / 2 / 10) * 10;
+  if (runs.length === 1) return mid(runs[0]!);
+  if (previous === null) return null;
+  return mid(runs.reduce((a, b) => (Math.abs(mid(b) - previous) < Math.abs(mid(a) - previous) ? b : a)));
+}
+
+/**
+ * The lag the attribution uses, per live session: the stamps of the heard turns, the estimate from them (`estimateLag`), and, before
+ * there is one, the median of the per-turn samples (`lagSample`).
+ */
+export class TranscriptLag {
+  private stamps: TranscriptSpan[] = [];
+  private samples: number[] = [];
+  private estimate: number | null = null;
+
+  /** The stamps of one heard turn (each of the provider's pieces, or the turn's own span). */
+  heard(spans: readonly TranscriptSpan[]): void {
+    for (const s of spans) if (Number.isFinite(s.startMs) && Number.isFinite(s.endMs)) this.stamps.push({ startMs: s.startMs, endMs: s.endMs });
+    const latest = this.stamps.reduce((m, s) => Math.max(m, s.endMs), -Infinity);
+    this.stamps = this.stamps.filter((s) => s.endMs >= latest - LAG_WINDOW_MS);
+  }
+
+  /** Measure again against the voices; the lag to use now. */
+  update(intervals: readonly VoicedInterval[]): number {
+    const e = estimateLag(intervals, this.stamps, this.estimate);
+    if (e !== null) this.estimate = e;
+    return this.current();
+  }
+
+  current(): number { return this.estimate ?? transcriptLag(this.samples); }
+
+  /** A whole turn one person clearly spoke: a per-turn sample, which counts only until the first estimate. */
+  sample(intervals: readonly VoicedInterval[], userId: string, span: TranscriptSpan): void {
+    if (this.estimate !== null) return;
+    const s = lagSample(intervals, userId, span, this.current());
+    if (s !== null) { this.samples.push(s); if (this.samples.length > LAG_SAMPLES) this.samples.shift(); }
+  }
+}
+
 /** One of the provider's pieces of a heard turn, with its times on the audio timeline. */
 export interface TranscriptPart { text: string; startMs: number; endMs: number }
 

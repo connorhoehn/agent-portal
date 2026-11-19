@@ -29,7 +29,7 @@ import {
 } from './chat.js';
 import { isPrivateRead, meetingInstructions } from './instructions.js';
 import { limitsOfCall, linesForModels, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
-import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
+import { VoicedTimeline, TranscriptLag, attribute, splitBySpeaker } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import { ASKER_WINDOW_MS, VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
@@ -304,8 +304,8 @@ interface CallRun {
   inputEndAt: Map<number, number>;
   /** Which input transcript (by number) each recent stored line came from: lines split from one heard turn share it. */
   lineInput: Map<number, number>;
-  /** Recent measures of how late the provider's transcript times run behind the voiced timeline (ms); see `transcriptLag`. */
-  lagSamples: number[];
+  /** How late the provider's transcript stamps run behind the voiced timeline (ms), measured from the stamps and the voices; see `estimateLag`. */
+  lag: TranscriptLag;
   /** When the second model's messages became ready (epoch ms), not yet spoken: the next utterance after one speaks it. */
   readyMessages: number[];
   delegationSeq: number;
@@ -727,7 +727,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const call: PolicyCall = { callId: ctx.callId, lobby: ctx.lobby ?? null, tenant: ctx.tenant };
     const run: CallRun = {
-      ctx, call, policy: policyForLobby(call.lobby), period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
+      ctx, call, policy: policyForLobby(call.lobby), period: ctx.period ?? 1, session: null, unsubscribers: [], sessionStartedAt: 0, callStartedAt: this.now(), sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lag: new TranscriptLag(), readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), typedPausedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
@@ -901,7 +901,7 @@ export class AssistantRuntime {
   private async openSession(run: CallRun, recent: Awaited<ReturnType<AssistantRuntime['recentLines']>>): Promise<void> {
     const session = this.deps.makeSession(this.deps.clock);
     if (!session) throw new Error('no live session is available in this process');
-    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.readyMessages = []; run.timeline = new VoicedTimeline();
+    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lag = new TranscriptLag(); run.readyMessages = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
     run.calls = new Map(); run.addressedCalls = new Set(); this.dropVoice(run, false); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
@@ -1457,8 +1457,10 @@ export class AssistantRuntime {
     // Milo's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
     if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; trace('line.echo', { startMs: e.startMs, endMs: e.endMs }); return; }
     // One heard turn can hold two people (a request spoken right after someone else's sentence): one line per voice.
-    // The split is judged with each piece moved back by the measured lag of the provider's times behind the voices.
-    const lag = transcriptLag(run.lagSamples);
+    // The split is judged with each piece moved back by the measured lag of the provider's times behind the voices. The stamps are
+    // when the provider emitted the words, seconds after they were spoken; the lag is measured again with this turn's stamps in it.
+    run.lag.heard(e.parts && e.parts.length ? e.parts : [e]);
+    const lag = run.lag.update(run.timeline.intervals());
     const pieces = e.parts && e.parts.length > 1
       ? splitBySpeaker(run.timeline.intervals(), e.parts.map((p) => ({ ...p, startMs: p.startMs - lag, endMs: p.endMs - lag }))).map((p) => ({ ...p, startMs: p.startMs + lag, endMs: p.endMs + lag }))
       : [{ text: e.text, startMs: e.startMs, endMs: e.endMs }];
@@ -1468,15 +1470,14 @@ export class AssistantRuntime {
 
   private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number; mixed?: true }, inputNo = 0, whole = true, turnEnded = false): Promise<void> {
     const intervals = run.timeline.intervals();
-    for (const i of intervals) if (i.endMs >= e.startMs - 2500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
-    const lag = transcriptLag(run.lagSamples);
+    const lag = run.lag.current();
+    for (const i of intervals) if (i.endMs >= e.startMs - Math.max(0, lag) - 2500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
     const found = attribute(intervals, { startMs: e.startMs - lag, endMs: e.endMs - lag });
     // Speech several people voiced at once names nobody: whose words are whose cannot be told from one mixed transcript.
     const who = e.mixed && found.speakers.length > 1 ? { userId: null, speakers: found.speakers } : found;
     // A whole turn one person clearly spoke measures the lag: how far its reported start lies after that person's voice began.
     if (whole && who.userId !== null && who.speakers.length === 1) {
-      const sample = lagSample(intervals, who.userId, e, lag);
-      if (sample !== null) { run.lagSamples.push(sample); if (run.lagSamples.length > LAG_SAMPLES) run.lagSamples.shift(); }
+      run.lag.sample(intervals, who.userId, e);
     }
     run.pieceNo += 1;
     const outcome = await this.deps.intake().handle(run.ctx.callId, {
