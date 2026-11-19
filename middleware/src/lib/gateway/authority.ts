@@ -48,7 +48,7 @@ import { SOCIAL_CHANNEL_PREFIX, slugForChannel, socialChat } from '../social-cha
 import { isSocialTeamMember } from '../../providers/social-platform.js';
 import { pageResourceVisible, type PageResourceKind } from '../page-resources.js';
 import { inDocumentNamespace } from '../interviews/pad/channel.js';
-import { admitPadChannel } from '../interviews/pad/authority.js';
+import { admitInterviewDocument } from '../interviews/board/authority.js';
 import { claimsMiloPad, miloPadContextCurrent } from '../interviews/pad/milo-seat.js';
 import {
   claimsGuest, guestCallSession, guestContextCurrent, guestHoldsInterviewSeat, guestOfContext, interviewLobbyName, interviewOfLobby,
@@ -317,7 +317,7 @@ const AUTHORITY = createChannelAuthority<LiveGatewayPrincipal, ChannelAuthority,
     { id: 'call-chat', match: base => base === 'orgiq:huddle' || base.startsWith('orgiq:huddle:'),
       channel: args => authorizeHuddleChannel(args, args.base, engineGuards) },
     // A `doc:` name is an interview's code pad or nothing: its lead and panel, now (lib/interviews/pad/authority.ts).
-    { id: 'interview-pad', match: base => inDocumentNamespace(base), channel: args => admitPadChannel(args, args.base) },
+    { id: 'interview-pad', match: base => inDocumentNamespace(base), channel: args => admitInterviewDocument(args, args.base) },
     // An interview's call lobby (its presence): the lead and the panel of that interview, now (lib/interviews/lobby.ts).
     { id: 'interview-lobby', match: base => base.startsWith('interviews:interview:'), channel: args => admitInterviewLobbyChannel(args, args.base) },
   ],
@@ -354,7 +354,7 @@ async function admitInterviewLobbyChannel(args: LiveChannelAuthorization, base: 
 async function miloChannel(args: LiveChannelAuthorization): Promise<boolean> {
   if (!args || (args.kind !== 'subscribe' && args.kind !== 'publish') || typeof args.channel !== 'string') return false;
   const base = baseChannel(args.channel);
-  return inDocumentNamespace(base) && args.channel === base ? admitPadChannel(args, base) : false;
+  return inDocumentNamespace(base) && args.channel === base ? admitInterviewDocument(args, base) : false;
 }
 
 /** Call frames a guest never sends: it joins and leaves a call, it does not run one. */
@@ -366,7 +366,7 @@ async function guestChannel(args: LiveChannelAuthorization): Promise<boolean> {
   const guest = guestOfContext(args.ctx);
   if (!guest || !args || (args.kind !== 'subscribe' && args.kind !== 'publish') || typeof args.channel !== 'string') return false;
   const base = baseChannel(args.channel);
-  if (inDocumentNamespace(base)) return admitPadChannel(args, base);
+  if (inDocumentNamespace(base)) return admitInterviewDocument(args, base);
   const lobby = interviewLobbyName(guest.interviewId);
   const seat = () => guestHoldsInterviewSeat(args.ctx, guest.interviewId);
   // Its lobby's presence; and the lobby's bare name (the room's live hints, the end among them: a subscribe, never a publish).

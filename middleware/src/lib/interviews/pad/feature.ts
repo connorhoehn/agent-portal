@@ -18,12 +18,13 @@ import { collabDocs, type CRDTDocumentAction, type RealtimeFeature } from '@conn
 import { config } from '../../../config.js';
 import { seededPadSnapshots } from '../../../mock/interviews-pad-seed.js';
 import { padInterviewId } from './channel.js';
+import { boardInterviewId } from '../board/channel.js';
 
 const PAD_ACTIONS: ReadonlySet<CRDTDocumentAction> = new Set<CRDTDocumentAction>(['read', 'update', 'awareness']);
 
-/** The CRDT service's document hook: a pad's channel, and only the three client actions. */
+/** The CRDT service's document hook: a pad's or a whiteboard's channel (../board/channel.ts), and only the three client actions. */
 export function padDocumentAuthz(_clientId: string, channel: string, _service: unknown, action: CRDTDocumentAction): boolean {
-  return PAD_ACTIONS.has(action) && padInterviewId(channel) !== null;
+  return PAD_ACTIONS.has(action) && (padInterviewId(channel) !== null || boardInterviewId(channel) !== null);
 }
 
 /** The gateway feature that carries interview pads. In the mock world the live seeded round's pad opens with its code. */
