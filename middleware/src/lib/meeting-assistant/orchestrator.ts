@@ -55,7 +55,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_BREATH_MS, SAY_BREATH_WAIT_MS, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -1401,16 +1401,21 @@ export class AssistantRuntime {
 
   /**
    * May a held line's first frame go out now? Yes once nobody in the call has been voiced for SAY_SILENCE_MS (the voiced timeline,
-   * on the session's clock), or once it has waited SAY_SILENCE_WAIT_MS for that since its first frame could have gone. Someone
-   * already speaking, or starting in the half second the provider takes to begin, is not talked over (approved-speech.ts).
+   * on the session's clock). Waited SAY_SILENCE_WAIT_MS for that since its first frame could have gone: at the next breath (nobody
+   * voiced for SAY_BREATH_MS), and after SAY_BREATH_WAIT_MS more whatever happens. Someone already speaking, or starting in the half
+   * second the provider takes to begin, is not talked over, nor cut into mid-word when the room does not pause (approved-speech.ts).
    */
   private silentForLine(run: CallRun, hold: ApprovedHold): boolean {
     const now = this.now();
     hold.silenceFrom ??= now;
     const waited = now - hold.silenceFrom;
     const quietMs = this.quietForMs(run);
-    if (quietMs < SAY_SILENCE_MS && waited < SAY_SILENCE_WAIT_MS) return false;
-    if (waited > 0) trace('say.silence', { waitedMs: waited, why: quietMs >= SAY_SILENCE_MS ? 'quiet' : 'bound' });
+    const why = quietMs >= SAY_SILENCE_MS ? 'quiet'
+      : waited < SAY_SILENCE_WAIT_MS ? null
+        : quietMs >= SAY_BREATH_MS ? 'breath'
+          : waited < SAY_SILENCE_WAIT_MS + SAY_BREATH_WAIT_MS ? null : 'bound';
+    if (why === null) return false;
+    if (waited > 0) trace('say.silence', { waitedMs: waited, why });
     return true;
   }
 

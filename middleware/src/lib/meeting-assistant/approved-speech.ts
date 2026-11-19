@@ -170,11 +170,19 @@ export const SAY_QUIET_STEP_MS = 100;
  * first frame goes out once nobody in the call has been voiced (attribution.ts VoicedTimeline, the voice the transcript is credited
  * from) for SAY_SILENCE_MS. The send itself cannot know: the provider takes about half a second to start speaking, and the live take
  * of 19 November had the candidate begin in that half second ("Added the import at the top of the pad." over 2 s of his words). It
- * waits at most SAY_SILENCE_WAIT_MS, counted from when its first frame could have gone, then speaks anyway, so Milo never goes silent
- * in a room that does not pause. 700 ms is past the pauses inside a sentence (the timeline joins those of 300 ms or less).
+ * waits at most SAY_SILENCE_WAIT_MS, counted from when its first frame could have gone, then begins at the next breath, so Milo never
+ * goes silent in a room that does not pause. 700 ms is past the pauses inside a sentence (the timeline joins those of 300 ms or less).
  */
 export const SAY_SILENCE_MS = 700;
 export const SAY_SILENCE_WAIT_MS = 4_000;
+/**
+ * Past SAY_SILENCE_WAIT_MS a line still does not begin inside someone's words: it waits for a breath, nobody voiced for SAY_BREATH_MS
+ * (the voiced timeline joins shorter gaps into one stretch), at most SAY_BREATH_WAIT_MS more, then speaks anyway. Live take t5 of
+ * 19 November: the 4 s ran out 1.85 s before the end of the candidate's long sentence (its pauses, 560 ms and 500 ms, were short of
+ * SAY_SILENCE_MS), and "Added the import at the top of the pad." went over the last 1.6 s of it.
+ */
+export const SAY_BREATH_MS = 300;
+export const SAY_BREATH_WAIT_MS = 3_000;
 
 /** How long the orchestrator waits for the utterance of `text` before it withholds it whole. */
 export function sayBoundMs(text: string): number {

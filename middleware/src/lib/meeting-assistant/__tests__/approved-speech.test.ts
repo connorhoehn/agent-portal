@@ -34,7 +34,7 @@ import { setAssistantStore } from '../store-select.js';
 import type { AudioSink } from '../audio-intake.js';
 import type { SayResult } from '../approved-speech.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_BREATH_MS, SAY_BREATH_WAIT_MS, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -1056,19 +1056,42 @@ describe('9. a held line begins only into a short silence (approved-speech.ts SA
     expect(silenceTrace()).toEqual([expect.objectContaining({ why: 'quiet' })]);
   });
 
-  it('in a room that does not pause it waits at most SAY_SILENCE_WAIT_MS, then speaks anyway', async () => {
+  it('past SAY_SILENCE_WAIT_MS it begins at the speaker\'s next breath, not inside their words (live take t5 of 19 November)', async () => {
+    const { p, req, u } = await askInQuiet('orgiq:saytest:sil5');
+    // The candidate answers in one long sentence: his pauses inside it (560 ms, 500 ms) are short of SAY_SILENCE_MS.
+    tap.sink!.placed(GUEST, loud(1_280), 3_100);
+    now = T0 + 3_600;
+    u.words(LINE); u.frames(10, true); req.ended(LINE);
+    await ticks();
+    now = T0 + 4_940; tap.sink!.placed(GUEST, loud(1_420), 4_940);
+    await ticks();
+    now = T0 + 6_860; tap.sink!.placed(GUEST, loud(3_200), 6_860); // his last stretch runs to 10 060
+    await ticks();
+    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS; // the bound falls 2.5 s before his sentence ends
+    await ticks(2);
+    expect(sent).toEqual([]);
+    now = T0 + 10_060 + SAY_BREATH_MS - 1;
+    await ticks(2);
+    expect(sent).toEqual([]);
+    now = T0 + 10_060 + SAY_BREATH_MS;
+    await until(() => sent.length === 10);
+    expect((await p).outcome).toBe('spoken');
+    expect(silenceTrace()).toEqual([{ waitedMs: 10_060 + SAY_BREATH_MS - 3_600, why: 'breath' }]);
+  });
+
+  it('in a room that does not pause it waits at most SAY_SILENCE_WAIT_MS and SAY_BREATH_WAIT_MS, then speaks anyway', async () => {
     const { p, req, u } = await askInQuiet('orgiq:saytest:sil3');
     tap.sink!.placed(GUEST, loud(8_000), 3_100);
     now = T0 + 3_600;
     u.words(LINE); u.frames(10, true); req.ended(LINE);
     await ticks();
-    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS - 1;
+    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS + SAY_BREATH_WAIT_MS - 1;
     await ticks(2);
     expect(sent).toEqual([]);
-    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS;
+    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS + SAY_BREATH_WAIT_MS;
     await until(() => sent.length === 10);
     expect((await p).outcome).toBe('spoken');
-    expect(silenceTrace()).toEqual([{ waitedMs: SAY_SILENCE_WAIT_MS, why: 'bound' }]);
+    expect(silenceTrace()).toEqual([{ waitedMs: SAY_SILENCE_WAIT_MS + SAY_BREATH_WAIT_MS, why: 'bound' }]);
   });
 
   it('in a quiet room it goes at once, with no wait to trace', async () => {
