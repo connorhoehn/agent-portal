@@ -645,6 +645,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     // counted from the turn's last words (the reply answers them: recorded 0 to 1.2 s after them, 18 November), so a turn flushed
     // after its quiet (`idleFlushMs`) has waited already.
     if (why === 'output' || why === 'delegation') return;
+    // A gap flush is made by the next words arriving after a pause: the person is speaking again, so nothing is sent into their
+    // words (the reply wait from the earlier piece is long over by then). The line waits for the end of the turn now begun.
+    if (why === 'gap') return;
     if (p && text && why !== 'closed') { this.waitForAnswer(this.inputHeardAt); return; }
     this.pumpSay();
   }

@@ -206,6 +206,25 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a turn ended by the next words after a pause (a gap flush) does not send the line: the person is speaking again', async () => {
+    // The provider's stamps put a pause of 1 to 1.5 s between two pieces of one person's speech: the first is flushed as a turn of
+    // its own when the second arrives, and the reply wait measured from the first piece's arrival is long over by then.
+    const { s } = make({ idleFlushMs: 200, gapMs: 1000, utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 20 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 400, delta: 'So the first thing I would do' });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(60);
+    expect(commentaries()).toBe(0); // the turn is open
+    frame({ type: 'session.input_transcript.delta', start_ms: 1_700, end_ms: 2_000, delta: ' is sort the input' });
+    await tick(20);
+    expect(commentaries()).toBe(0); // the person resumed: nothing is sent into their words
+    await tick(260); // their turn ends (idle flush) with no reply
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
   it('a turn with no reply: the line goes once the reply wait has passed', async () => {
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 60 });
     await s.start(START);
