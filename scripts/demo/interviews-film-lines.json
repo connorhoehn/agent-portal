@@ -24,7 +24,7 @@
   ],
   "p01": [
    "cand",
-   "Before I join, let me read this first. So it covers the recording, the transcript, and Milo."
+   "Let me read this first. So it covers the recording, the transcript, and Milo."
   ],
   "p02": [
    "cand",
@@ -44,11 +44,7 @@
   ],
   "p06": [
    "cand",
-   "Okay. Now I just wait for Hugo to let me in."
-  ],
-  "p07": [
-   "cand",
-   "Okay, joining now."
+   "Now I just wait for Hugo to let me in."
   ],
   "h01": [
    "hugo",
@@ -66,6 +62,10 @@
    "hugo",
    "Of course! I'm Hugo, and I'll be running today's session. I've also brought in Milo, our AI support for the interview."
   ],
+  "h24": [
+   "hugo",
+   "Milo, introduce yourself."
+  ],
   "c02": [
    "cand",
    "Nice to meet you, Milo!"
@@ -80,7 +80,7 @@
   ],
   "h05": [
    "hugo",
-   "Great, let's get started. So, what's your experience with data structures and algorithms?"
+   "Great, let's get started. What's your experience with data structures and algorithms?"
   ],
   "c04": [
    "cand",
@@ -88,11 +88,11 @@
   ],
   "h06": [
    "hugo",
-   "Same here! That's exactly why we still do this round. Okay, let's get into a coding problem."
+   "Same here! That's exactly why we still do this round."
   ],
   "h07": [
    "hugo",
-   "Given an array of integers and a target, return the indices of the two numbers that add up to the target."
+   "Okay, a coding problem. Given an array of integers and a target, return the indices of the two numbers that add up to the target."
   ],
   "h08": [
    "hugo",
@@ -106,29 +106,41 @@
    "hugo",
    "Python it is. I'm dropping the problem into the pad now."
   ],
+  "c29": [
+   "cand",
+   "Okay, give me a second to look at it."
+  ],
+  "c30": [
+   "cand",
+   "Mm, array of integers, a target, return the indices. Okay."
+  ],
+  "c31": [
+   "cand",
+   "Can I ask a clarifying question?"
+  ],
+  "h31": [
+   "hugo",
+   "Of course."
+  ],
   "c06": [
    "cand",
-   "Quick question. Can I use the same number twice? And is there always exactly one answer?"
+   "Can I use the same number twice? And is there always exactly one answer?"
   ],
   "h10": [
    "hugo",
-   "Good question. There's always exactly one answer, and you can't use the same element twice."
+   "Good questions. There's always exactly one answer, and you can't use the same element twice."
   ],
   "c07": [
    "cand",
-   "Okay. So the brute force is to check every pair, and that's n squared. But I think I can do better with a hash map."
+   "Okay. So the brute force is to check every pair, which is slow. I think I can do better with a hash map."
   ],
   "c08": [
    "cand",
-   "I'll use a dictionary to store what I've seen, and for each number, I check whether its complement is already in there."
-  ],
-  "c09": [
-   "cand",
-   "Milo, how much time is left?"
+   "I'll use a dictionary for what I've seen, and for each number I check whether its partner is already in there."
   ],
   "c10": [
    "cand",
-   "Okay, perfect, plenty of time. Let me add the tricky case, three and three, with a target of six."
+   "Let me add a tricky case too, one with a duplicate number."
   ],
   "c11": [
    "cand",
@@ -140,7 +152,7 @@
   ],
   "c12": [
    "cand",
-   "Hmm, it's returning the same index twice for the three-three case. Oh, I see it! I'm storing the number before I check for its complement. Let me swap those two lines."
+   "Hmm, the duplicate case is wrong. It's handing back the same index twice. Oh, I see it! I'm storing the number before I check for its partner. Let me swap those two lines."
   ],
   "c13": [
    "cand",
@@ -152,27 +164,15 @@
   ],
   "c14": [
    "cand",
-   "There we go! Both pairs come back right now."
+   "There we go! Both cases come back right now."
   ],
-  "c15": [
-   "cand",
-   "Hey Milo, it would be helpful to have another dozen test cases."
-  ],
-  "c16": [
-   "cand",
-   "Oh, nice, there they are. Let me run those too."
-  ],
-  "h13": [
+  "h32": [
    "hugo",
-   "That's a handy trick."
-  ],
-  "c17": [
-   "cand",
-   "Nice, that covers a lot of edge cases."
+   "Nice. Checking before storing was exactly the fix."
   ],
   "h14": [
    "hugo",
-   "Nice work. So, what's the runtime complexity?"
+   "So, what's the runtime complexity?"
   ],
   "c18": [
    "cand",
@@ -180,31 +180,27 @@
   ],
   "h15": [
    "hugo",
-   "Exactly right. And what if the array were already sorted? Would you do anything differently?"
+   "Exactly right. And if the array were already sorted, would you do anything differently?"
   ],
   "c19": [
    "cand",
-   "Oh, then I'd use two pointers, one at each end, and walk them toward each other. That gets the space down to constant."
+   "Then I'd use two pointers, one at each end, and walk them toward each other. That gets the extra space down to constant."
   ],
   "h16": [
    "hugo",
-   "Nice. Do you run into that pattern much in your day job?"
+   "Nice. Do you run into that pattern in your day job?"
   ],
   "c20": [
    "cand",
    "All the time, actually, especially when we reconcile payment batches against each other."
   ],
-  "h17": [
-   "hugo",
-   "That makes sense. Give me a second, I'm just jotting down a couple of notes."
-  ],
-  "c21": [
-   "cand",
-   "Sure, no rush."
-  ],
   "h18": [
    "hugo",
-   "Ooh, that's a good follow-up. I'll let our assistant ask it."
+   "Ooh, good one. Mateo, I'm going to let Milo ask you the next one."
+  ],
+  "c33": [
+   "cand",
+   "Sorry, I was still looking at the code."
   ],
   "c22": [
    "cand",
@@ -212,35 +208,51 @@
   ],
   "c23": [
    "cand",
-   "Sure! I'd test the example from the problem, a case with no valid pair, duplicates like three and three, and negative numbers. Maybe an empty list too."
+   "Sure! I'd test the example from the problem, a case with no valid pair, duplicates, and negative numbers. Maybe an empty list too."
   ],
-  "h19": [
+  "h25": [
    "hugo",
-   "Great answer. Let me check one thing in my notes before we wrap up."
+   "Great list. Tell you what, if you'd like more examples to check against, just ask Milo. I'm switching that on for you."
   ],
-  "h20": [
-   "hugo",
-   "Okay, thanks. That's most of our time. Do you have any questions for me?"
-  ],
-  "c24": [
+  "c34": [
    "cand",
-   "Yeah, actually. What does a typical week look like for the team?"
+   "Oh, nice."
   ],
-  "h21": [
-   "hugo",
-   "Lots of pairing, a design review on Tuesdays, and we ship most days. As for next steps, our recruiter will be in touch in a few days."
-  ],
-  "c25": [
+  "c15": [
    "cand",
-   "Awesome. Thanks so much, Hugo, this was really fun!"
+   "Hey Milo, it would be helpful to have another dozen test cases."
   ],
-  "h22": [
+  "h26": [
    "hugo",
-   "Thanks so much, Mateo. Take care, and have a great rest of your day."
+   "While that comes in, how did you spot that bug so quickly?"
   ],
-  "c26": [
+  "c28": [
    "cand",
-   "And I might want an LRU cache for a helper later on."
+   "The duplicate case gets me every time, so I always try it first."
+  ],
+  "c16": [
+   "cand",
+   "There they are. Let me run those too."
+  ],
+  "h13": [
+   "hugo",
+   "That's a handy trick."
+  ],
+  "c17": [
+   "cand",
+   "All passing. That covers the edge cases I listed."
+  ],
+  "h33": [
+   "hugo",
+   "One more twist. Say this gets called thousands of times with the same inputs. How would you speed it up?"
+  ],
+  "c35": [
+   "cand",
+   "I'd cache the results. In Python that's an LRU cache from the standard library."
+  ],
+  "h34": [
+   "hugo",
+   "Go for it."
   ],
   "h23": [
    "hugo",
@@ -248,23 +260,39 @@
   ],
   "c27": [
    "cand",
-   "Oh, thanks, Milo!"
+   "Oh, thanks, Milo! Then I'd wrap the function with it, and pass the numbers in as a tuple so they can be cached."
   ],
-  "h24": [
+  "h35": [
    "hugo",
-   "Milo, introduce yourself."
+   "Perfect. That's exactly what I'd do."
   ],
-  "h25": [
+  "h36": [
    "hugo",
-   "And Mateo, if you'd like more examples to check against at any point, just ask Milo."
+   "Let me check the clock."
   ],
-  "h26": [
+  "h37": [
    "hugo",
-   "While that comes in, checking for the pair before storing the number was a good fix."
+   "Milo, how much time is left?"
   ],
-  "c28": [
+  "h38": [
+   "hugo",
+   "Good, so there's time for your questions. What would you like to know?"
+  ],
+  "c24": [
    "cand",
-   "Thanks. The duplicate case gets me every time."
+   "What does a typical week look like for the team?"
+  ],
+  "h21": [
+   "hugo",
+   "Lots of pairing, code reviews every day, and we ship most days. As for next steps, our recruiter will be in touch in a few days."
+  ],
+  "c25": [
+   "cand",
+   "Awesome. Thanks so much, Hugo, this was really fun!"
+  ],
+  "h22": [
+   "hugo",
+   "Thanks, Mateo. Take care, and have a great rest of your day."
   ],
   "h28": [
    "hugo",
@@ -273,10 +301,6 @@
   "h29": [
    "hugo",
    "And Milo's recap points every note back to what Mateo actually said."
-  ],
-  "h30": [
-   "hugo",
-   "Fair enough. That's our call to make, not Milo's."
   ]
  }
 }
