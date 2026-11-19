@@ -1906,6 +1906,8 @@ export class AssistantRuntime {
     if (!argsOk) { await refused('invalid arguments', addressing?.text); return; }
     if (onServer) {
       // A server tool that writes runs with no confirm card, so the request must be the asker's beyond doubt (review 1, item 1).
+      // Lines from the live transcript are credited by its measured lag behind the voices; unmeasured, the asker is not known.
+      if (serverDef?.writes && run.lag.used && !run.lag.measured) { await this.refuseUnmeasured(run, e.callId, asker); return; }
       if (serverDef?.writes && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
       // The asker's request already got the fallback line: a call that lands after it does not run (it would contradict it).
       const ask = run.asks?.get(asker);
@@ -1952,6 +1954,23 @@ export class AssistantRuntime {
     }
     run.turnCalls.set(turnId, e.callId);
     run.holding.add(e.callId);
+  }
+
+  /**
+   * A writing server tool's call while the transcript lag is not measured (attribution.ts `TranscriptLag.measured`: before the first
+   * estimate, or while the voices have no pause to pin it down): the line that asked may be on the wrong person, so nothing is
+   * written. The call is told to ask again (the "could not tell who asked" line), and the request is settled with no fallback: the
+   * family's line of what the asker may ask would go to someone who perhaps did not ask.
+   */
+  private async refuseUnmeasured(run: CallRun, callId: string, asker: string): Promise<void> {
+    trace('call.refused', { call: callId, why: 'lag-not-measured' });
+    const ask = run.asks?.get(asker);
+    if (ask && !ask.ran) ask.fellBack = true;
+    this.answer(run, callId, { refused: 'could not tell who asked' }, null, { continue: false });
+    try {
+      await this.store.bumpRefused(run.ctx.callId);
+      await postReply(run.ctx.callId, { text: UNASKED_REPLY, askedBy: 'unknown', askedByName: 'the call' }).catch(() => null);
+    } finally { run.session?.resumeTools?.(); }
   }
 
   /**

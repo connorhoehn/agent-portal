@@ -356,5 +356,24 @@ describe('the lag is not guessed when the voices have no silence to pin it down 
     lag.heard(later.flatMap((i) => stampsOf(i.startMs, i.endMs, 5_500)));
     expect(Math.abs(estimateLag([...early, ...later], [...early, ...later].flatMap((i) => stampsOf(i.startMs, i.endMs, i.startMs < 30_000 ? 1_500 : 5_500)))! - 5_500)).toBeLessThanOrEqual(500);
     expect(lag.update([...early, ...later])).toBe(first);
+    expect(lag.measured).toBe(false);
+  });
+
+  it('counts as measured only while an estimate from the stamps stands, under a minute old (a writing tool waits for it)', () => {
+    const lag = new TranscriptLag();
+    expect([lag.used, lag.measured]).toEqual([false, false]);
+    // Before any estimate the lag in use is a per-turn sample, or 0: not measured.
+    lag.sample([iv('cand', 9_000, 12_000)], 'cand', { startMs: 10_000, endMs: 12_000 });
+    lag.heard([{ startMs: 10_200, endMs: 10_400 }]);
+    lag.update([iv('cand', 9_000, 12_000)]);
+    expect([lag.used, lag.current(), lag.measured]).toEqual([true, 1_000, false]);
+    const turns = [iv('cand', 20_000, 22_000), iv('lead', 25_000, 27_000), iv('cand', 30_000, 32_000)];
+    lag.heard(turns.flatMap((i) => stampsOf(i.startMs, i.endMs, 1_500)));
+    lag.update(turns);
+    expect(lag.measured).toBe(true);
+    // A minute of talk with no pause: no new estimate, and the old one is too old to vouch for the lag.
+    lag.heard(stampsOf(33_000, 100_000, 1_500));
+    lag.update([...turns, iv('cand', 33_000, 100_000)]);
+    expect(lag.measured).toBe(false);
   });
 });

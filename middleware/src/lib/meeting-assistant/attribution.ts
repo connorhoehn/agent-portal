@@ -239,22 +239,38 @@ export class TranscriptLag {
   private stamps: TranscriptSpan[] = [];
   private samples: number[] = [];
   private estimate: number | null = null;
-  /** The latest stamp's end when the estimate in use was taken. */
+  /** The latest stamp's end when the estimate in use was taken, and the latest stamp's end heard. */
   private estimateAt = -Infinity;
+  private latest = -Infinity;
+  /** The last estimate from the stamps disagreed with the one in use by more than `LAG_JUMP_MAX_MS` and was not taken. */
+  private disputed = false;
 
-  /** The stamps of one heard turn (each of the provider's pieces, or the turn's own span). */
+  /** Some heard turn's stamps came in: this session's lines are credited by this lag. */
+  get used(): boolean { return this.latest > -Infinity; }
+
+  /**
+   * The lag in use is an estimate from the stamps (`estimateLag`), under a window old and not disputed by a later one. Before that it
+   * is 0 or a per-turn sample, and a line may be on the wrong person: a writing tool does not run on a request until this is true.
+   */
+  get measured(): boolean { return this.estimate !== null && !this.disputed && this.latest - this.estimateAt <= LAG_WINDOW_MS; }
+
+  /** The stamps of one heard turn (each of the provider's pieces, or the turn's own span). Kept a window back (`estimateLag` picks its own). */
   heard(spans: readonly TranscriptSpan[]): void {
-    for (const s of spans) if (Number.isFinite(s.startMs) && Number.isFinite(s.endMs)) this.stamps.push({ startMs: s.startMs, endMs: s.endMs });
-    const latest = this.stamps.reduce((m, s) => Math.max(m, s.endMs), -Infinity);
-    this.stamps = this.stamps.filter((s) => s.endMs >= latest - LAG_WINDOW_MS);
+    for (const s of spans) {
+      if (!Number.isFinite(s.startMs) || !Number.isFinite(s.endMs)) continue;
+      this.stamps.push({ startMs: s.startMs, endMs: s.endMs });
+      this.latest = Math.max(this.latest, s.endMs);
+    }
+    while (this.stamps.length && this.stamps[0]!.endMs < this.latest - LAG_WINDOW_MS) this.stamps.shift();
   }
 
   /** Measure again against the voices; the lag to use now. */
   update(intervals: readonly VoicedInterval[]): number {
     const e = estimateLag(intervals, this.stamps, this.estimate);
-    const latest = this.stamps.reduce((m, s) => Math.max(m, s.endMs), -Infinity);
-    const vouches = this.estimate !== null && latest - this.estimateAt <= LAG_WINDOW_MS;
-    if (e !== null && (!vouches || Math.abs(e - this.estimate!) <= LAG_JUMP_MAX_MS)) { this.estimate = e; this.estimateAt = latest; }
+    if (e === null) return this.current();
+    const vouches = this.estimate !== null && this.latest - this.estimateAt <= LAG_WINDOW_MS;
+    this.disputed = vouches && Math.abs(e - this.estimate!) > LAG_JUMP_MAX_MS;
+    if (!this.disputed) { this.estimate = e; this.estimateAt = this.latest; }
     return this.current();
   }
 

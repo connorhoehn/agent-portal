@@ -22,7 +22,7 @@ jest.mock('../chat.js', () => ({
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, clearlyAsked, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, clearlyAsked, UNASKED_REPLY, type StartContext } from '../orchestrator.js';
 import { addScriptRules, ScriptedSession, SCRIPT_TONE_FRAMES } from '../scripted-session.js';
 import { responsesFunctionTools } from '../../voice/catalogue.js';
 import { INTERVIEW_TOOLS } from '../../interviews/milo-tools/family.js';
@@ -744,6 +744,28 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       expect(ran).toEqual([]);
       expect(mockTrace.some((x) => x.ev === 'call.refused' && x.f['why'] === 'not-clearly-asked')).toBe(true);
       expect(mockPosts.approved).toEqual([FALLBACK]);
+    } finally { off(); }
+  });
+
+  it('a writing tool does not run while the transcript lag is unmeasured: who asked is not known, and the call is told to ask again', async () => {
+    const off = registerMeetingAssistantPolicy('orgiq:servertools', TOOLS);
+    try {
+      factory = () => new FakeSession();
+      await startCall('orgiq:servertools:r4b');
+      // The live transcript's first turn: its lines are credited by the lag, which a few stamps cannot measure yet.
+      fake().fire('inputTranscript', { text: 'So that is the plan for the session.', startMs: 1_000, endMs: 2_400 });
+      await flush();
+      const t = now;
+      await intake.handle(CALL, { userId: ALICE, text: 'Milo, add a helper that finds the two indices.', at: t });
+      now = t + 2000; await intake.tick(); await flush();
+      fake().fire('toolCall', { callId: 'call_um', name: 'pad_add_helper', args: { what: 'x', code: 'y' }, atMs: now - T0 });
+      await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
+      expect(ran).toEqual([]);
+      expect(mockTrace.some((x) => x.ev === 'call.refused' && x.f['why'] === 'lag-not-measured')).toBe(true);
+      expect(mockPosts.replies).toEqual([UNASKED_REPLY]);
+      // Not the fallback of what this asker may ask either: the asker is the one thing not known.
+      await new Promise((r) => setTimeout(r, 500)); await flush();
+      expect(mockPosts.approved).toEqual([]);
     } finally { off(); }
   });
 
