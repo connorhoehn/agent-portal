@@ -16,22 +16,24 @@ const order: string[] = [];
 let store: SaidStore;
 let n = 0;
 let sayOut: 'spoken' | 'posted' | 'no-call' = 'spoken';
+let sayPartly: string | undefined;
 let posted: Array<{ text: string; kind: string }> = [];
 
 beforeEach(() => {
-  order.length = 0; posted = []; n = 0; sayOut = 'spoken';
+  order.length = 0; posted = []; n = 0; sayOut = 'spoken'; sayPartly = undefined;
   store = new MemorySaidStore();
   const logged: SaidStore = {
     list: (id) => store.list(id),
     append: async (row) => { order.push(`log:${row.kind}`); return store.append(row); },
     markPosted: async (id, rowId) => { order.push('posted'); return store.markPosted(id, rowId); },
     markSpoken: async (id, rowId) => { order.push('spoken'); return store.markSpoken(id, rowId); },
+    markSpokenPart: async (id, rowId, heard) => { order.push('spoken-part'); return store.markSpokenPart(id, rowId, heard); },
     erase: (ids) => store.erase(ids),
   };
   setSpeakDeps({
     store: () => logged,
     post: async (_c, text, kind) => { order.push(`post:${kind}`); posted.push({ text, kind }); return true; },
-    say: async () => { order.push('say'); return { outcome: sayOut, why: null }; },
+    say: async () => { order.push('say'); return { outcome: sayOut, why: null, ...(sayPartly ? { partly: sayPartly } : {}) }; },
     miloJoinedAt: async () => NOW - 10 * 60_000,
     now: () => NOW,
     newId: () => `said-${++n}`, holdSpeech: async () => ({ ok: true as const, release: async () => undefined }),
@@ -45,6 +47,15 @@ describe('approved words: logged, then posted, then said', () => {
     expect(order).toEqual(['log:question', 'post:question', 'posted', 'say', 'spoken']);
     expect(out.said).toBe('spoken');
     expect((await store.list('iv-1'))[0]).toMatchObject({ kind: 'question', source: 'kit', questionId: 'q-1', text: 'Design a URL shortener.', posted: true, spoken: true });
+  });
+
+  it('cut part way on the voice: the row stays unspoken and says which words were heard (review 1, item 5)', async () => {
+    sayOut = 'posted'; sayPartly = 'Walk me';
+    const { said, row } = await sayApproved({ id: 'iv-1', callId: 'call-1' }, { kind: 'question', source: 'kit', text: 'Walk me through how you would design it.', askedBy: 'u-hugo', questionId: 'q1' });
+    expect(said).toBe('chat');
+    expect(order).toContain('spoken-part');
+    const stored = (await store.list('iv-1')).find((r) => r.id === row.id)!;
+    expect(stored).toMatchObject({ spoken: false, spokenPart: 'Walk me' });
   });
 
   it('withheld or voice off: chat only, the row stays unspoken; Milo not in the call: nothing posted, nothing said', async () => {

@@ -304,6 +304,9 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
   spoken          BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_log (interview_id, said_at);
+-- `spoken_part`: the line was cut part way on the voice (a later word was not the approved text's, or the voice stopped); the
+-- words heard before the cut. `spoken` stays false. 18 November (review 1, item 5).
+ALTER TABLE interview_said_log ADD COLUMN IF NOT EXISTS spoken_part TEXT CHECK (spoken_part IS NULL OR char_length(spoken_part) <= 1500);
 -- Milo's introduction (`intro`) and its line after one of its interview tools wrote into the pad (`tests`, `imports`, `helper`), and "On it." while a slow one works (`ack`), 18 November. Tables made before
 -- carry the five-source list; replace it by name.
 ALTER TABLE interview_said_log DROP CONSTRAINT IF EXISTS interview_said_log_source_check;

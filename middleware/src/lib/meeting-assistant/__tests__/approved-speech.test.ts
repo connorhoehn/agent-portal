@@ -31,7 +31,7 @@ import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type S
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { APPROVED_STREAM_LAG_MS, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -467,6 +467,62 @@ describe('4. while an approved utterance is outstanding, no other response is re
     req.ended(`${QUESTION} Good luck!`);
     expect(await p).toBe('posted');
     expect(sent).toHaveLength(4);
+  });
+});
+
+describe('4b. the audio never runs ahead of the checked words (review 1, item 5)', () => {
+  const streamed = (s: FakeSession, say: string) => {
+    let seq = 0;
+    return {
+      frames: (n: number, last = false) => { for (let i = 0; i < n; i += 1) s.fire('outputAudio', { pcm: Buffer.alloc(4800, 9), seq: ++seq, say, ...(last && i === n - 1 ? { last: true as const } : {}) }); },
+      words: (text: string) => s.fire('outputTranscript', { text, final: false, say }),
+    };
+  };
+
+  it('a transcript that stalls mid-line releases nothing past what its words account for, and the audio resumes when it moves', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:stall');
+    const s = fake();
+    const p = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+    await flush();
+    const req = s.asked[0]!;
+    const u = streamed(s, req.id);
+    u.words('Walk me'); // 7 characters checked: 350 ms of audio at most, three 100 ms frames
+    u.frames(12);
+    now += 5 * APPROVED_STREAM_LAG_MS; // the transcript stalls while the frames age
+    for (let k = 0; k < 4; k += 1) { await new Promise((r) => setTimeout(r, 110)); await flush(); }
+    expect(sent).toHaveLength(Math.floor((7 * APPROVED_MS_PER_CHAR) / 100));
+    u.words('Walk me through how you would'); // 29 characters: 1,450 ms
+    await flush();
+    expect(sent).toHaveLength(12);
+    u.frames(1, true);
+    req.ended(QUESTION);
+    expect((await p).outcome).toBe('spoken');
+  });
+
+  it('a mismatch after some audio went out is recorded as partly spoken, with the words heard', async () => {
+    factory = () => new FakeSession();
+    await startCall('orgiq:saytest:cut');
+    const s = fake();
+    const p = runtime.sayHeldTextWhy(CALL, QUESTION, ALICE);
+    await flush();
+    const req = s.asked[0]!;
+    const u = streamed(s, req.id);
+    u.frames(4); now += APPROVED_STREAM_LAG_MS; u.words('Walk me through how you');
+    await flush();
+    expect(sent).toHaveLength(4);
+    u.words(`${QUESTION} Good luck`);
+    u.frames(2, true);
+    req.ended(`${QUESTION} Good luck!`);
+    const out = await p;
+    expect(out).toMatchObject({ outcome: 'posted', why: 'mismatch', partly: 'Walk me' }); // 400 ms out: at most 8 characters' worth
+    expect(voiceTrace().at(-1)).toMatchObject({ ev: 'voice.approved', decision: 'cut' });
+  });
+
+  it('heardPart: whole words only, as far as the audio can have carried', () => {
+    expect(heardPart('Walk me through how you', 400)).toBe('Walk me');
+    expect(heardPart('Walk me through how you', 10_000)).toBe('Walk me through how you');
+    expect(heardPart('Walk', 100)).toBe('');
   });
 });
 

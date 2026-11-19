@@ -39,6 +39,8 @@ export interface SaidRecord {
   posted: boolean;
   /** True once the words were relayed aloud on the call's voice. */
   spoken: boolean;
+  /** Cut part way (a later word was not the text's, or the voice stopped): the words heard; `spoken` stays false. */
+  spokenPart?: string;
 }
 
 export interface SaidStore {
@@ -50,6 +52,8 @@ export interface SaidStore {
   markPosted(interviewId: string, id: string): Promise<SaidRecord | null>;
   /** Set `spoken`; the row as it now is, or null when there is no such row. */
   markSpoken(interviewId: string, id: string): Promise<SaidRecord | null>;
+  /** Some of it was heard before it was cut: the words heard (a row already spoken is left as it is). */
+  markSpokenPart(interviewId: string, id: string, heard: string): Promise<SaidRecord | null>;
   /** Remove every row of these interviews; how many went. */
   erase(interviewIds: readonly string[]): Promise<number>;
 }
@@ -76,6 +80,13 @@ export class MemorySaidStore implements SaidStore {
 
   async markSpoken(interviewId: string, id: string): Promise<SaidRecord | null> {
     return this.mark(interviewId, id, 'spoken');
+  }
+
+  async markSpokenPart(interviewId: string, id: string, heard: string): Promise<SaidRecord | null> {
+    const row = this.rows.find((r) => r.interviewId === interviewId && r.id === id);
+    if (!row || row.spoken) return row ? copy(row) : null;
+    row.spokenPart = heard.slice(0, 1500);
+    return copy(row);
   }
 
   private mark(interviewId: string, id: string, field: 'posted' | 'spoken'): SaidRecord | null {

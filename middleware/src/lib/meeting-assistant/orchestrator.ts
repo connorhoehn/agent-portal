@@ -54,7 +54,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { APPROVED_STREAM_LAG_MS, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -603,6 +603,10 @@ interface ApprovedHold {
   sent: number;
   /** The transcript so far is the start of the text (approved-speech.ts `saidSoFar`): frames old enough may go out. */
   prefixOk: boolean;
+  /** The longest transcript checked as the start of the text: the audio released may not run past what it accounts for. */
+  checked: string;
+  /** Milliseconds of its audio handed to the gate so far. */
+  releasedMs: number;
   /** The relay's count when its first frame went out (null until then): `spoken` means the relay sent some of its frames. */
   relayedBefore: number | null;
   /** The next look at the held frames while some are not out yet (`streamApproved`). */
@@ -993,7 +997,11 @@ export class AssistantRuntime {
           const a = approvalOf(run, e.say);
           if (run.voice && a) run.speech.noteText(this.now(), e.text, e.final, true);
           // Each word checked as it comes: the frames it covers may go out (a word changed, added or run on stops them).
-          if (a && !a.releasing) { a.prefixOk = saidSoFar(a.text, e.text); this.streamApproved(run, a); }
+          if (a && !a.releasing) {
+            a.prefixOk = saidSoFar(a.text, e.text);
+            if (a.prefixOk && e.text.length > a.checked.length) a.checked = e.text;
+            this.streamApproved(run, a);
+          }
           return;
         }
         // Words for frames the gate holds wait for those frames; words for a withheld turn were never heard and are dropped.
@@ -1245,7 +1253,7 @@ export class AssistantRuntime {
     const id = `say_${this.saySeq}`;
     return new Promise<SayResult>((resolve) => {
       const hold: ApprovedHold = {
-        id, text: words, session, frames: [], sent: 0, prefixOk: false, relayedBefore: null, tick: null, timer: null, releasing: false,
+        id, text: words, session, frames: [], sent: 0, prefixOk: false, checked: '', releasedMs: 0, relayedBefore: null, tick: null, timer: null, releasing: false,
         waitForQuiet: () => bound(SAY_QUIET_WAIT_MS, 'not-quiet'),
         finish: (outcome, why) => {
           const at = run.approvals.indexOf(hold);
@@ -1257,9 +1265,11 @@ export class AssistantRuntime {
           if (outcome !== 'spoken' && at === 0) run.speech.forgetUnheard();
           // Given up: the session forgets the request, so it cannot claim a later utterance (whose frames would then be dropped).
           if (outcome !== 'spoken') { try { session.cancelSay?.(id); } catch { /* best effort */ } }
-          trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : 'withheld', why, frames: hold.frames.length, chars: words.length });
+          // Cut after some of it went out: recorded as partly spoken, with the words its audio can have carried (review 1, item 5).
+          const partly = outcome !== 'spoken' && hold.relayedBefore !== null && run.relay.relayed > hold.relayedBefore ? heardPart(hold.checked, hold.releasedMs) : null;
+          trace('voice.approved', { decision: outcome === 'spoken' ? 'relayed' : partly !== null ? 'cut' : 'withheld', why, frames: hold.frames.length, chars: words.length, ...(partly !== null ? { heardChars: partly.length } : {}) });
           hold.frames = [];
-          resolve({ outcome, why: why === 'relayed' ? null : why });
+          resolve({ outcome, why: why === 'relayed' ? null : why, ...(partly !== null ? { partly } : {}) });
           if (at !== 0) return;
           // The next line is now first: released at once if its utterance is complete, else its wait for quiet starts (unless the
           // session already sent it).
@@ -1329,6 +1339,7 @@ export class AssistantRuntime {
         const f = frames[i]!;
         run.releasingApproved = true;
         try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
+        hold.releasedMs += pcmMs(f.pcm.length);
         i += 1;
       }
       hold.sent = i;
@@ -1362,9 +1373,12 @@ export class AssistantRuntime {
       while (hold.sent < hold.frames.length && run.relay.queuedFrames() < APPROVED_AHEAD_FRAMES) {
         const f = hold.frames[hold.sent]!;
         if (now < f.at + APPROVED_STREAM_LAG_MS) break;
+        // Never more audio than the checked words account for: a stalled transcript holds the rest until it moves.
+        if (hold.releasedMs + pcmMs(f.pcm.length) > hold.checked.trim().length * APPROVED_MS_PER_CHAR) break;
         if (hold.relayedBefore === null) { hold.relayedBefore = run.relay.relayed; run.gate.clear(); }
         run.releasingApproved = true;
         try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
+        hold.releasedMs += pcmMs(f.pcm.length);
         hold.sent += 1;
       }
     }
@@ -1932,11 +1946,11 @@ export class AssistantRuntime {
     const speechHold = posted && run.policy.holdHeldSpeech
       ? await run.policy.holdHeldSpeech(run.call, { askedBy, text: held }).catch(() => null)
       : posted ? { release: async () => undefined } : null;
-    let said: SayOutcome = 'posted';
+    let said: SayResult = { outcome: 'posted', why: null };
     if (speechHold) {
-      try { said = await this.sayHeldText(callId, held, askedBy); } finally { await speechHold.release().catch(() => undefined); }
+      try { said = await this.sayHeldTextWhy(callId, held, askedBy); } finally { await speechHold.release().catch(() => undefined); }
     }
-    await run.policy.heldTextSaid?.(run.call, { askedBy, text: held, posted: posted !== null, spoken: said === 'spoken' }).catch(() => undefined);
+    await run.policy.heldTextSaid?.(run.call, { askedBy, text: held, posted: posted !== null, spoken: said.outcome === 'spoken', ...(said.partly ? { partly: said.partly } : {}) }).catch(() => undefined);
   }
 
   /**

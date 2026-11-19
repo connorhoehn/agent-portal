@@ -201,7 +201,11 @@ export async function sayLogged(interviewId: string, row: SaidRecord, callId: st
     .catch((): SayResult => ({ outcome: 'posted', why: 'not-relayed' }))
     .finally(() => hold.release());
   if (out.outcome === 'no-call') return { spoken: false, why: 'not-in-call' };
-  if (out.outcome !== 'spoken') return { spoken: false, why: notAloudWhy(out.why) };
+  if (out.outcome !== 'spoken') {
+    // Cut part way: the row says which words were heard (review 1, item 5).
+    if (out.partly) await d.store().markSpokenPart(interviewId, row.id, out.partly).catch(() => null);
+    return { spoken: false, why: notAloudWhy(out.why) };
+  }
   await d.store().markSpoken(interviewId, row.id).catch(() => null);
   return { spoken: true };
 }
@@ -270,7 +274,7 @@ export async function logCandidateLine(interview: Pick<Interview, 'id' | 'callId
  * The orchestrator posted (and perhaps said) a held answer: mark the latest row with those words for that asker that is not
  * yet posted. A post that failed marks nothing, so the row stays out of the round's record.
  */
-export async function noteHeldSaid(interviewId: string, text: string, askedBy: string, said: { posted: boolean; spoken: boolean }): Promise<void> {
+export async function noteHeldSaid(interviewId: string, text: string, askedBy: string, said: { posted: boolean; spoken: boolean; partly?: string }): Promise<void> {
   if (!said.posted) return;
   const d = deps();
   const rows = await d.store().list(interviewId);
@@ -279,6 +283,7 @@ export async function noteHeldSaid(interviewId: string, text: string, askedBy: s
     if (r.kind !== 'answer' || r.posted || r.text !== text || r.askedBy !== askedBy) continue;
     await d.store().markPosted(interviewId, r.id);
     if (said.spoken) await d.store().markSpoken(interviewId, r.id);
+    else if (said.partly) await d.store().markSpokenPart(interviewId, r.id, said.partly);
     return;
   }
 }

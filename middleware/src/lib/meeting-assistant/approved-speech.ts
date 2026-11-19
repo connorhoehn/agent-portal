@@ -100,6 +100,23 @@ export function saidSoFar(asked: string, transcript: string | null | undefined):
 /** How old a held frame of approved speech must be before it goes out, while the transcript so far is the start of the text. */
 export const APPROVED_STREAM_LAG_MS = 400;
 /**
+ * The most audio one checked character may account for while the line streams (review 1, item 5): audio goes out only as far as
+ * the words already checked could have taken to say, at a fast 20 characters a second (speech runs at about 15), so the audio
+ * never runs ahead of the checked words, and a transcript that stops advancing stops the audio until it moves again.
+ */
+export const APPROVED_MS_PER_CHAR = 50;
+/** Milliseconds of 24 kHz PCM16 mono audio in `bytes` (voice.ts). */
+export const pcmMs = (bytes: number): number => bytes / 48;
+/** The words of `checked` that `releasedMs` of audio can have carried, at APPROVED_MS_PER_CHAR (whole words only). */
+export function heardPart(checked: string, releasedMs: number): string {
+  const max = Math.floor(releasedMs / APPROVED_MS_PER_CHAR);
+  const text = checked.replace(/\s+/g, ' ').trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max + 1);
+  const at = cut.lastIndexOf(' ');
+  return at > 0 ? cut.slice(0, at) : '';
+}
+/**
  * Did the session say these words? The same words in the same order once both sides are normalised (spokenWords), or, failing
  * that, the same letters with the word breaks ignored ("failover" said as "fail over"). Any word added, dropped or changed still
  * fails: it errs on withholding. Empty never matches.
@@ -147,7 +164,8 @@ export type SayOutcome = 'spoken' | 'posted' | 'no-call';
 export type SayWithheldWhy = 'empty' | 'no-say' | 'voice-off' | 'paused' | 'refused' | 'timeout' | 'not-quiet' | 'no-words' | 'mismatch' | 'no-audio' | 'not-relayed' | 'session-changed' | 'closed';
 
 /** An approved utterance's outcome with why it was not relayed (null when it was, or when Milo has no run in the call). */
-export interface SayResult { outcome: SayOutcome; why: SayWithheldWhy | null }
+/** `partly`: some of its audio went out before it was cut (a later word did not match, or it was stopped): the words heard. */
+export interface SayResult { outcome: SayOutcome; why: SayWithheldWhy | null; partly?: string }
 
 /** The one plain sentence the lead reads when the words could not be said aloud. */
 export const NOT_SAID_ALOUD = 'Milo could not say it aloud. The question is in the call chat.';

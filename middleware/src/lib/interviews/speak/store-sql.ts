@@ -6,15 +6,18 @@ import { isoOf, type SqlExec } from '../store-sql.js';
 import type { SaidKind, SaidRecord, SaidSource, SaidStore } from './store.js';
 
 const COLUMNS = 'id, interview_id, call_id, kind, source, question_id, suggestion_id, text, asked_by, said_at, posted, spoken';
+/** What a read returns: the written columns and `spoken_part`, set only by a mark. */
+const READ = `${COLUMNS}, spoken_part`;
 
-export const LIST_SAID_SQL = `SELECT ${COLUMNS} FROM interview_said_log WHERE interview_id = :interview_id ORDER BY said_at, id`;
+export const LIST_SAID_SQL = `SELECT ${READ} FROM interview_said_log WHERE interview_id = :interview_id ORDER BY said_at, id`;
 export const INSERT_SAID_SQL = `INSERT INTO interview_said_log (${COLUMNS})
   VALUES (:id, :interview_id, :call_id, :kind, :source, :question_id, :suggestion_id, :text, :asked_by, CAST(:said_at AS TIMESTAMPTZ), :posted, :spoken)
-  RETURNING ${COLUMNS}`;
-export const MARK_POSTED_SQL = `UPDATE interview_said_log SET posted = TRUE WHERE interview_id = :interview_id AND id = :id RETURNING ${COLUMNS}`;
-export const MARK_SPOKEN_SQL = `UPDATE interview_said_log SET spoken = TRUE WHERE interview_id = :interview_id AND id = :id RETURNING ${COLUMNS}`;
+  RETURNING ${READ}`;
+export const MARK_POSTED_SQL = `UPDATE interview_said_log SET posted = TRUE WHERE interview_id = :interview_id AND id = :id RETURNING ${READ}`;
+export const MARK_SPOKEN_SQL = `UPDATE interview_said_log SET spoken = TRUE WHERE interview_id = :interview_id AND id = :id RETURNING ${READ}`;
+export const MARK_SPOKEN_PART_SQL = `UPDATE interview_said_log SET spoken_part = :spoken_part WHERE interview_id = :interview_id AND id = :id AND spoken = FALSE RETURNING ${READ}`;
 export const ERASE_SAID_SQL = `DELETE FROM interview_said_log WHERE interview_id = ANY(string_to_array(:interview_ids, ',')) RETURNING id`;
-export const SAID_STATEMENTS = [LIST_SAID_SQL, INSERT_SAID_SQL, MARK_POSTED_SQL, MARK_SPOKEN_SQL, ERASE_SAID_SQL] as const;
+export const SAID_STATEMENTS = [LIST_SAID_SQL, INSERT_SAID_SQL, MARK_POSTED_SQL, MARK_SPOKEN_SQL, MARK_SPOKEN_PART_SQL, ERASE_SAID_SQL] as const;
 
 const text = (name: string, value: string): SqlParameter => ({ name, value: { stringValue: value } });
 const textOrNull = (name: string, value: string | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : text(name, value));
@@ -27,6 +30,7 @@ export function saidFromRow(r: Record<string, unknown>): SaidRecord {
     id: String(r['id']), interviewId: String(r['interview_id']), callId: strOrNull(r['call_id']), kind: String(r['kind']) as SaidKind,
     source: String(r['source']) as SaidSource, questionId: strOrNull(r['question_id']), suggestionId: strOrNull(r['suggestion_id']),
     text: String(r['text'] ?? ''), askedBy: String(r['asked_by']), saidAt: isoOf(r['said_at']), posted: truthy(r['posted']), spoken: truthy(r['spoken']),
+    ...(r['spoken_part'] !== null && r['spoken_part'] !== undefined ? { spokenPart: String(r['spoken_part']) } : {}),
   };
 }
 
@@ -53,6 +57,11 @@ export class SqlSaidStore implements SaidStore {
 
   async markSpoken(interviewId: string, id: string): Promise<SaidRecord | null> {
     return this.mark(MARK_SPOKEN_SQL, interviewId, id);
+  }
+
+  async markSpokenPart(interviewId: string, id: string, heard: string): Promise<SaidRecord | null> {
+    const out = await this.exec(MARK_SPOKEN_PART_SQL, [text('interview_id', interviewId), text('id', id), text('spoken_part', heard.slice(0, 1500))]);
+    return out[0] ? saidFromRow(out[0]) : null;
   }
 
   private async mark(sql: string, interviewId: string, id: string): Promise<SaidRecord | null> {
