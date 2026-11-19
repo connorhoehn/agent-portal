@@ -38,8 +38,13 @@ export const ASSIGN_LIMITS = {
 
 /** Stages where a round makes no sense: the application is over. */
 const CLOSED_STAGES: ReadonlySet<Application['stage']> = new Set(['rejected', 'withdrawn', 'hired']);
-/** An interview in one of these does not hold its application's round: the round may be assigned again. */
-const VACANT_STATES: ReadonlySet<InterviewState> = new Set(['declined', 'cancelled']);
+/**
+ * An interview in one of these does not hold its application's round, so the round may be assigned again: one that never
+ * happened (declined, cancelled), or one that is over (ended, scored, reviewed), which a second round of the same kind may
+ * follow ("worth a second coding round"). Only a round still to come or under way is held: assigning it twice would be two
+ * calls for one slot.
+ */
+const VACANT_STATES: ReadonlySet<InterviewState> = new Set(['declined', 'cancelled', 'ended', 'scored', 'reviewed']);
 /** Seats may be answered while the call has not started. */
 const ANSWERABLE: ReadonlySet<InterviewState> = new Set(['assigned', 'accepted', 'ready']);
 /** The recruiter may change who sits on the round while the call has not started. */

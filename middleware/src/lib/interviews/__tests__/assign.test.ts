@@ -49,6 +49,14 @@ describe('assigning a round', () => {
     expect(checkAssignment({ ...good, applicationId: 'app-pn7v4yev' }, w, INTERVIEWERS).ok).toBe(true);
   });
 
+  it('a finished round does not hold it either: a second round of the same kind may follow, but not while one is to come', () => {
+    const w = world();
+    w.interviews = w.interviews.map((i) => (i.id === 'iv-h4m7c3vu' || i.id === 'iv-s4e8u2zk' ? { ...i, state: 'scored' as const } : i));
+    expect(checkAssignment({ ...good, applicationId: 'app-pn7v4yev' }, w, INTERVIEWERS).ok).toBe(true);
+    w.interviews = w.interviews.map((i) => (i.id === 'iv-s4e8u2zk' ? { ...i, state: 'ready' as const } : i));
+    expect(paths(checkAssignment({ ...good, applicationId: 'app-pn7v4yev' }, w, INTERVIEWERS))).toEqual(['roundId']);
+  });
+
   it('the lead and the panel are interviewers here: at most two more, never the lead, never twice', () => {
     expect(paths(checkAssignment({ ...good, leadId: '' }, world(), INTERVIEWERS))).toEqual(['leadId']);
     expect(paths(checkAssignment({ ...good, leadId: 'u-amara' }, world(), INTERVIEWERS))).toEqual(['leadId']);
