@@ -23,7 +23,7 @@ interface Finished { interviewId: string; openingId: string; days: number; endHo
 const FINISHED: Finished[] = [
   { interviewId: 'iv-d7q4n9xe', openingId: 'op-backend', days: -9, endHour: 15, endMinute: 0, minutes: 60, technical: true, recap: true },
   { interviewId: 'iv-f2b6t5zh', openingId: 'op-backend', days: -6, endHour: 13, endMinute: 45, minutes: 45, technical: false, recap: true },
-  { interviewId: 'iv-j6x2d9sb', openingId: 'op-backend', days: -3, endHour: 15, endMinute: 0, minutes: 60, technical: true, recap: true },
+  { interviewId: 'iv-j6x2d9sb', openingId: 'op-backend', days: -3, endHour: 14, endMinute: 45, minutes: 45, technical: true, recap: true },
   { interviewId: 'iv-p2v7j4ye', openingId: 'op-ios', days: -2, endHour: 16, endMinute: 0, minutes: 60, technical: true, recap: true },
   { interviewId: 'iv-g9r1y8lp', openingId: 'op-em', days: -1, endHour: 17, endMinute: 0, minutes: 60, technical: false, recap: false },
 ];

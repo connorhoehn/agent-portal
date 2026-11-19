@@ -5,7 +5,7 @@
 // nothing playable) and the transcript lines the meeting assistant would have stored. lib/interviews/record/ reads both
 // only in the mock world and only when no stored call of that interview is found.
 //
-//   iv-j6x2d9sb      Mateo's coding round, Hugo leads: a rate limiter, then retries with an idempotency key.
+//   iv-j6x2d9sb   Mateo's technical screen, Hugo leads: a rate limiter, then retries with an idempotency key.
 //   iv-f2b6t5zh   Ingrid's "Working together" round, Wen leads: an incident she led, then a disagreement.
 //   iv-d7q4n9xe   Ingrid's coding round, Hugo leads: the rate limiter again, then the retries.
 //   iv-p2v7j4ye   Ravi's coding round in Swift, Wen leads: a paged list, then a debounced search.
@@ -68,9 +68,9 @@ const MATEO_SAID: Said[] = [
   [27, 30, MATEO, "Backoff doubles from a hundred milliseconds with some jitter, capped at a few seconds, and I'd only retry timeouts and server errors, never a decline."],
   [31, 15, HUGO, 'What if our process dies after the provider charged but before we saved the result?'],
   [32, 0, MATEO, "Then the next attempt reuses the stored key, the provider returns the original result, and we record it. That's why the key has to be saved before the first call."],
-  [52, 30, HUGO, "We're near time. What questions do you have for me?"],
-  [53, 5, MATEO, 'How does the team decide when to pay down something like that fixed-window limiter?'],
-  [57, 40, HUGO, 'Thanks Mateo, that was a good session. Greta will be in touch about next steps.'],
+  [42, 30, HUGO, "We're near time. What questions do you have for me?"],
+  [43, 5, MATEO, 'How does the team decide when to pay down something like that fixed-window limiter?'],
+  [44, 40, HUGO, 'Thanks Mateo, that was a good session. Greta will be in touch about next steps.'],
 ];
 
 const INGRID = 'guest:iv-f2b6t5zh';
@@ -209,7 +209,7 @@ export const interviewRecordingsFixture = defineFixture<RecordingStandIn>({
   key: 'interviews.recordings',
   scenarios: {
     default: () => [
-      { interviewId: 'iv-j6x2d9sb', startedAt: mateoStart(), durationSeconds: 58 * 60 + 20 },
+      { interviewId: 'iv-j6x2d9sb', startedAt: mateoStart(), durationSeconds: 44 * 60 + 50 },
       { interviewId: 'iv-f2b6t5zh', startedAt: ingridStart(), durationSeconds: 44 * 60 + 50 },
       { interviewId: 'iv-d7q4n9xe', startedAt: ingridCodeStart(), durationSeconds: 55 * 60 + 40 },
       { interviewId: 'iv-p2v7j4ye', startedAt: raviStart(), durationSeconds: 57 * 60 + 10 },
