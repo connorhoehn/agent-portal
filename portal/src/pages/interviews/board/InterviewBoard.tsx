@@ -135,7 +135,7 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
 
   return <BoardFrame boardId={documentId} connection={connection} toolbar={toolbar}
     canvas={ydoc && connection !== 'refused'
-      ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={awareness} user={user} editable={editable} followUserId={follow.target} className="h-full min-h-0 flex-1" />
+      ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={awareness} user={user} editable={editable} followUserId={follow.target} helpButton="start" className="h-full min-h-0 flex-1" />
       : null} />;
 }
 

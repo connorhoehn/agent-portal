@@ -18,7 +18,8 @@ const mediaOf = (page, galleryId) => page.evaluate((gid) => {
   const els = [...document.querySelectorAll('[data-testid="shell-call-media"] video, [data-testid="shell-call-media"] audio')];
   const gallery = document.querySelector(`[data-testid="${gid}"]`);
   const g = gallery?.getBoundingClientRect() ?? null;
-  const help = document.querySelector('.excalidraw .help-icon')?.getBoundingClientRect() ?? null;
+  // The board draws its help "?" in the footer beside the zoom controls (helpButton="start"); the corner one is hidden.
+  const help = [...document.querySelectorAll('.excalidraw .help-icon')].map((h) => h.getBoundingClientRect()).find((r) => r.width > 0) ?? null;
   const tilesBox = gallery?.querySelector('[data-testid="shell-call-media"]')?.getBoundingClientRect() ?? null;
   return {
     docks: docks.length,
@@ -101,8 +102,10 @@ export default async function run(ctx) {
     const floor = await footerTop(page);
     const g = first.gallery;
     const bands = g && first.tilesBox ? `bands ${first.tilesBox.top - g.top}px above the tiles (header included) and ${g.bottom - first.tilesBox.bottom}px below` : 'no tiles box';
-    const ok = first.inGallery && first.docks === 1 && first.tiles > 0 && flush(g, floor, 1440) && width >= 1380;
-    return { ok, detail: `${said(first)}; the footer's top ${floor}px; the room ${width}px wide; ${bands}; ${helpNote(first)}` };
+    // The gallery's switches sit in its title bar (FloatingPanel headerActions), not beside the tiles.
+    const inHeader = await page.evaluate((gid) => !!document.querySelector(`[data-testid="${gid}"] [data-testid="floating-panel-header"] [data-testid="${gid}-to-docked"]`), GID);
+    const ok = first.inGallery && first.docks === 1 && first.tiles > 0 && flush(g, floor, 1440) && width >= 1380 && inHeader && !helpNote(first).includes('under the gallery');
+    return { ok, detail: `${said(first)}; the footer's top ${floor}px; the room ${width}px wide; ${bands}; ${helpNote(first)}; Dock in the header ${inHeader}` };
   });
   await step('C3b', async () => {
     const header = page.getByTestId(GID).getByTestId('floating-panel-header').first();
@@ -118,8 +121,9 @@ export default async function run(ctx) {
     return { ok: moved && m.inGallery && m.docks === 1 && m.connected >= (first?.connected ?? 1) && m.paused <= (first?.paused ?? 0), detail: `dragged: ${said(m)}` };
   });
   await step('C3c', async () => {
-    await page.getByTestId(`${GID}-to-minimised`).first().click({ timeout: 8000 });
-    const pill = page.getByTestId(`${GID}-pill`).first();
+    // The gallery's × is "Minimise" (FloatingPanel closeIcon="minimize"); the panel draws its own pill.
+    await page.getByTestId(GID).getByRole('button', { name: 'Minimise', exact: true }).first().click({ timeout: 8000 });
+    const pill = page.getByRole('button', { name: /^Show Call · / }).first();
     await pill.waitFor({ timeout: 8000 });
     await page.waitForTimeout(800);
     const m = await mediaOf(page, GID);
@@ -128,7 +132,7 @@ export default async function run(ctx) {
     return { ok: /in the call/.test(words) && m.docks === 1 && m.placement === 'footer' && !m.inGallery && m.connected >= (first?.connected ?? 1) && m.paused <= (first?.paused ?? 0), detail: `pill "${words}"; ${said(m)}` };
   });
   await step('C3d', async () => {
-    await page.getByTestId(`${GID}-restore`).first().click({ timeout: 5000 });
+    await page.getByRole('button', { name: /^Show Call · / }).first().click({ timeout: 5000 });
     const back = await until(async () => { const m = await mediaOf(page, GID); return m.inGallery && m.tiles > 0 ? m : null; }, 8000);
     return { ok: !!back, detail: back ? `restored: ${said(back)}` : `not back: ${said(await mediaOf(page, GID))}` };
   });
@@ -139,12 +143,12 @@ export default async function run(ctx) {
     const pane = await G.page.getByTestId('join-room-call-pane').count();
     const floor = await footerTop(G.page);
     const ok = m.inGallery && m.docks === 1 && m.tiles > 0 && pane === 0 && flush(m.gallery, floor, 1440);
-    await G.page.getByTestId('join-room-gallery-to-minimised').first().click({ timeout: 5000 }).catch(() => undefined);
-    await G.page.getByTestId('join-room-gallery-pill').first().waitFor({ timeout: 5000 }).catch(() => undefined);
+    await G.page.getByTestId('join-room-gallery').getByRole('button', { name: 'Minimise', exact: true }).first().click({ timeout: 5000 }).catch(() => undefined);
+    await G.page.getByRole('button', { name: /^Show Call · / }).first().waitFor({ timeout: 5000 }).catch(() => undefined);
     await G.page.waitForTimeout(600);
     const mm = await mediaOf(G.page, 'join-room-gallery');
     await G.page.screenshot({ path: path.join(out, 'callfloat-candidate-minimised.png') });
-    await G.page.getByTestId('join-room-gallery-restore').first().click({ timeout: 5000 }).catch(() => undefined);
+    await G.page.getByRole('button', { name: /^Show Call · / }).first().click({ timeout: 5000 }).catch(() => undefined);
     return { ok: ok && mm.docks === 1 && mm.placement === 'footer', detail: `${said(m)}; Call pane drawn ${pane}; the footer's top ${floor}px; ${helpNote(m)}; minimised: ${said(mm)}` };
   });
   await step('C3f', async () => {
@@ -154,7 +158,7 @@ export default async function run(ctx) {
     const docked = await until(async () => { const m = await page.evaluate(() => {
       const holders = [...document.querySelectorAll('[data-testid="shell-call-media"]')].filter((d) => d.isConnected);
       const p = document.querySelector('[data-testid="interview-room-stage"]');
-      return { docks: holders.length, inPane: !!p && holders.some((d) => p.contains(d)), float: !!p?.querySelector('[data-testid="interview-room-stage-to-floating"]') };
+      return { docks: holders.length, inPane: !!p && holders.some((d) => p.contains(d)), float: !!document.querySelector('[data-testid="interview-room-stage-to-floating"]') };
     }); return m.inPane ? m : null; }, 8000);
     await page.waitForTimeout(1500);
     await page.screenshot({ path: path.join(out, 'callfloat-lead-docked.png') });
