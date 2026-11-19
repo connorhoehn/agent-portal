@@ -418,6 +418,16 @@ export class VoicedTimeline {
 
   attribute(piece: TranscriptSpan): Attribution { return attribute(this.intervals(), piece); }
 
+  /** Where anyone's newest voiced frame ended (an interval still open included), or null when nobody has been voiced. */
+  lastVoicedEndMs(): number | null {
+    let last: number | null = null;
+    for (const u of this.users.values()) {
+      const end = u.open?.endMs ?? u.closed.at(-1)?.endMs;
+      if (end !== undefined && (last === null || end > last)) last = end;
+    }
+    return last;
+  }
+
   /** Drop what ended more than `retainMs` before the newest audio seen. */
   private trim(): void {
     const floor = this.latestMs - this.retainMs;

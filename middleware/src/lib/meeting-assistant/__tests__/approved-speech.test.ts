@@ -33,7 +33,7 @@ import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import type { AudioSink } from '../audio-intake.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, NOT_SAID_ALOUD, numberWords, ordinalWords, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, spokenWords } from '../approved-speech.js';
 
 const CALL = 'call-say';
 const ALICE = 'u-alice', GUEST = 'guest:inv-1';
@@ -910,5 +910,89 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       expect(ran).toEqual([]);
       expect(mockTrace.some((t) => t.ev === 'call.refused' && t.f['why'] === 'unknown-tool')).toBe(true);
     } finally { off(); }
+  });
+});
+
+// The live take of 19 November: "Added the import at the top of the pad." was sent to the provider in a quiet room, the candidate
+// began 430 ms later, and Milo's voice started 160 ms into his words and ran 2 s over them. The send cannot know; the first frame can.
+describe('9. a held line begins only into a short silence (approved-speech.ts SAY_SILENCE_MS)', () => {
+  const LINE = 'Added the import at the top of the pad.';
+  const streamed = (s: FakeSession, say: string) => {
+    let seq = 0;
+    return {
+      words: (text: string) => s.fire('outputTranscript', { text, final: false, say }),
+      frames: (n: number, last = false) => { for (let i = 0; i < n; i += 1) s.fire('outputAudio', { pcm: Buffer.alloc(4800, 9), seq: ++seq, say, ...(last && i === n - 1 ? { last: true as const } : {}) }); },
+    };
+  };
+  const ticks = async (n = 3) => { for (let k = 0; k < n; k += 1) { await new Promise((r) => setTimeout(r, 110)); await flush(); } };
+  const silenceTrace = () => mockTrace.filter((t) => t.ev === 'say.silence').map((t) => t.f);
+  const opened = () => voiceTrace().some((t) => t.ev === 'voice' && t.decision === 'open');
+  /** The line asked in a quiet room (the lead's request ended 1.5 s before), so the session sends it at once. */
+  async function askInQuiet(lobby: string) {
+    factory = () => new FakeSession();
+    await startCall(lobby, { audio: true });
+    const s = fake();
+    tap.sink!.placed(ALICE, loud(1_500), 0);
+    now = T0 + 3_000;
+    const p = runtime.sayHeldTextWhy(CALL, LINE, ALICE);
+    await flush();
+    const req = s.asked[0]!;
+    return { p, req, u: streamed(s, req.id) };
+  }
+
+  it('someone who began after the line was sent is not talked over: its first frame waits until nobody was voiced for SAY_SILENCE_MS', async () => {
+    const { p, req, u } = await askInQuiet('orgiq:saytest:sil1');
+    tap.sink!.placed(GUEST, loud(1_000), 3_100); // the candidate begins 100 ms after the send, and speaks for a second
+    now = T0 + 3_600;
+    u.words(LINE); u.frames(10, true); req.ended(LINE);
+    await ticks();
+    expect(sent).toEqual([]);
+    expect(opened()).toBe(false);
+    now = T0 + 4_100 + SAY_SILENCE_MS - 1;
+    await ticks(2);
+    expect(sent).toEqual([]);
+    now = T0 + 4_100 + SAY_SILENCE_MS;
+    await until(() => sent.length === 10);
+    expect((await p).outcome).toBe('spoken');
+    expect(silenceTrace()).toEqual([{ waitedMs: 500 + SAY_SILENCE_MS, why: 'quiet' }]);
+  });
+
+  it('a line streaming out as its words arrive holds its first frame the same way', async () => {
+    const { p, req, u } = await askInQuiet('orgiq:saytest:sil2');
+    tap.sink!.placed(GUEST, loud(1_000), 3_100);
+    now = T0 + 3_600;
+    u.words('Added the import at the'); u.frames(4);
+    now += APPROVED_STREAM_LAG_MS; // old enough to stream, had nobody been speaking
+    await ticks();
+    expect(sent).toEqual([]);
+    now = T0 + 4_100 + SAY_SILENCE_MS;
+    await until(() => sent.length === 4);
+    u.words(LINE); u.frames(6, true); req.ended(LINE);
+    expect((await p).outcome).toBe('spoken');
+    expect(sent).toHaveLength(10);
+    expect(silenceTrace()).toEqual([expect.objectContaining({ why: 'quiet' })]);
+  });
+
+  it('in a room that does not pause it waits at most SAY_SILENCE_WAIT_MS, then speaks anyway', async () => {
+    const { p, req, u } = await askInQuiet('orgiq:saytest:sil3');
+    tap.sink!.placed(GUEST, loud(8_000), 3_100);
+    now = T0 + 3_600;
+    u.words(LINE); u.frames(10, true); req.ended(LINE);
+    await ticks();
+    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS - 1;
+    await ticks(2);
+    expect(sent).toEqual([]);
+    now = T0 + 3_600 + SAY_SILENCE_WAIT_MS;
+    await until(() => sent.length === 10);
+    expect((await p).outcome).toBe('spoken');
+    expect(silenceTrace()).toEqual([{ waitedMs: SAY_SILENCE_WAIT_MS, why: 'bound' }]);
+  });
+
+  it('in a quiet room it goes at once, with no wait to trace', async () => {
+    const { p, req, u } = await askInQuiet('orgiq:saytest:sil4');
+    u.words(LINE); u.frames(10, true); req.ended(LINE);
+    await until(() => sent.length === 10);
+    expect((await p).outcome).toBe('spoken');
+    expect(silenceTrace()).toEqual([]);
   });
 });

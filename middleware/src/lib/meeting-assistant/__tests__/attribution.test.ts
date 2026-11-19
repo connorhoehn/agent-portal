@@ -82,6 +82,18 @@ describe('VoicedTimeline', () => {
     ]);
   });
 
+  it('says where anyone\'s newest voiced frame ended, an open interval included, and null before anyone was voiced', () => {
+    const t = new VoicedTimeline();
+    expect(t.lastVoicedEndMs()).toBeNull();
+    t.feed('alice', pcm(1000, 3000), 16_000, 0);
+    t.feed('bob', pcm(400, 3000), 16_000, 600);
+    expect(t.lastVoicedEndMs()).toBe(1000);
+    t.feed('alice', pcm(600, 0), 16_000, 1000); // silence moves nothing
+    expect(t.lastVoicedEndMs()).toBe(1000);
+    t.feed('bob', pcm(300, 3000), 16_000, 2000);
+    expect(t.lastVoicedEndMs()).toBe(2300);
+  });
+
   it('ignores quiet audio, any sample rate works, and a buffer of odd length does not throw', () => {
     const t = new VoicedTimeline();
     t.feed('bob', pcm(1000, 100, 8000), 8000, 0);

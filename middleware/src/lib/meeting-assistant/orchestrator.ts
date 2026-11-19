@@ -55,7 +55,7 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
-import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
+import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -623,6 +623,8 @@ interface ApprovedHold {
   releasedMs: number;
   /** The relay's count when its first frame went out (null until then): `spoken` means the relay sent some of its frames. */
   relayedBefore: number | null;
+  /** When its first frame could first have gone out (runtime clock), the start of its wait for silence (SAY_SILENCE_WAIT_MS). */
+  silenceFrom?: number;
   /** The next look at the held frames while some are not out yet (`streamApproved`). */
   tick: ReturnType<typeof setTimeout> | null;
   /** The bound: withheld whole when the utterance is not complete by then. */
@@ -1348,8 +1350,11 @@ export class AssistantRuntime {
     if (hold.tick) { clearTimeout(hold.tick); hold.tick = null; }
     const frames = hold.frames;
     // A turn of its own: decided afresh at its first frame (reason `approved`), and nothing after it rides on its open turn. Begun
-    // already (`streamApproved`): the rest follows on that turn.
-    if (hold.relayedBefore === null) { hold.relayedBefore = run.relay.relayed; run.gate.clear(); }
+    // already (`streamApproved`): the rest follows on that turn. Not begun: it starts into a short silence (`silentForLine`).
+    if (hold.relayedBefore === null) {
+      while (!this.approvedStopped(run, hold) && !this.silentForLine(run, hold)) await new Promise((r) => setTimeout(r, VOICE_FRAME_MS));
+      hold.relayedBefore = run.relay.relayed; run.gate.clear();
+    }
     const before = hold.relayedBefore;
     let i = hold.sent;
     let why: SayWithheldWhy | null = null;
@@ -1374,6 +1379,22 @@ export class AssistantRuntime {
     hold.finish(sent ? 'spoken' : 'posted', why ?? (sent ? 'relayed' : 'not-relayed'));
   }
 
+  /**
+   * May a held line's first frame go out now? Yes once nobody in the call has been voiced for SAY_SILENCE_MS (the voiced timeline,
+   * on the session's clock), or once it has waited SAY_SILENCE_WAIT_MS for that since its first frame could have gone. Someone
+   * already speaking, or starting in the half second the provider takes to begin, is not talked over (approved-speech.ts).
+   */
+  private silentForLine(run: CallRun, hold: ApprovedHold): boolean {
+    const now = this.now();
+    hold.silenceFrom ??= now;
+    const waited = now - hold.silenceFrom;
+    const lastVoice = run.timeline.lastVoicedEndMs();
+    const quietMs = lastVoice === null ? Infinity : now - (run.sessionStartedAt + lastVoice);
+    if (quietMs < SAY_SILENCE_MS && waited < SAY_SILENCE_WAIT_MS) return false;
+    if (waited > 0) trace('say.silence', { waitedMs: waited, why: quietMs >= SAY_SILENCE_MS ? 'quiet' : 'bound' });
+    return true;
+  }
+
   /** Why an approved line can no longer go out (it was given up, the run ended, the session changed, the voice is off or paused). */
   private approvedStopped(run: CallRun, hold: ApprovedHold): SayWithheldWhy | null {
     return !run.approvals.includes(hold) ? 'voice-off' : run.finished ? 'closed' : run.session !== hold.session ? 'session-changed'
@@ -1396,7 +1417,10 @@ export class AssistantRuntime {
         if (now < f.at + APPROVED_STREAM_LAG_MS) break;
         // Never more audio than the checked words account for: a stalled transcript holds the rest until it moves.
         if (hold.releasedMs + pcmMs(f.pcm.length) > hold.checked.trim().length * APPROVED_MS_PER_CHAR) break;
-        if (hold.relayedBefore === null) { hold.relayedBefore = run.relay.relayed; run.gate.clear(); }
+        if (hold.relayedBefore === null) {
+          if (!this.silentForLine(run, hold)) break;
+          hold.relayedBefore = run.relay.relayed; run.gate.clear();
+        }
         run.releasingApproved = true;
         try { run.gate.frame(f.pcm, f.last); } finally { run.releasingApproved = false; }
         hold.releasedMs += pcmMs(f.pcm.length);
