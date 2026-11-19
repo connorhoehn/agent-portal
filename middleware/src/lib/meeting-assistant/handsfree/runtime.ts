@@ -116,6 +116,8 @@ export interface StandaloneRunInput {
   relay: (pcm24k: Buffer, atMs: number, kind: 'model' | 'fixed') => void;
   onTool: (name: string, askedBy: string | null, atMs: number) => void;
   onRouted: (userId: string, atMs: number, mixed: boolean) => void;
+  /** What Milo said in an utterance any of whose audio was relayed (its final text, once). */
+  onText?: (text: string, atMs: number) => void;
   /** Codes and ids only (the router's trace plus the session's turn events), for a measuring run. */
   trace?: (event: string, data: Record<string, unknown>) => void;
 }
@@ -164,29 +166,35 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   // The relay sink: a playout queue, one tick's worth played per tick (a cleared relay drops what has not played).
   let queue: Array<{ pcm: Buffer; kind: 'model' | 'fixed' }> = [];
   let nextKind: 'model' | 'fixed' = 'model';
+  // The relayed utterance's words: kept until any of its audio is relayed (the verdict may hold it), then told once.
+  let uttText: string | null = null; let uttPushed = false;
+  const flushText = (): void => { if (uttText !== null && uttPushed) { input.onText?.(uttText, clock.nowMs()); uttText = null; uttPushed = false; } };
   const listening = createListeningSide({ callId: input.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true });
   const rules = createHandsfreeRules({ record: async () => record, policy: () => policy, roster: () => names, admitWaitMs: 150 });
   run = new HandsfreeRuntime({
     call, clock, listening, rules, talking,
-    relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); }, clear: () => { queue = []; } },
+    relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); uttPushed = true; flushText(); }, clear: () => { queue = []; } },
     onLine: () => undefined,
     nameOf: async (userId) => input.speakers.find((s) => s.userId === userId)?.name ?? userId,
     ...(input.trace ? { trace: input.trace } : {}),
   });
-  const tr = (event: string, data: Record<string, unknown> = {}): void => input.trace?.(event, { ...data, atMs: clock.nowMs() });
+  const tr = (event: string, data: Record<string, unknown> = {}): void => input.trace?.(event, { ...data, callId: input.callId, atMs: clock.nowMs() });
   listening.on('sentence', (e) => tr('l.sentence', { userId: e.userId }));
   listening.on('name', (e) => tr('l.name', { userId: e.userId }));
   run.on('state', (st) => tr('state', { phase: st.phase }));
   run.on('drop', (e) => tr('drop', e as unknown as Record<string, unknown>));
   inner.on('inputTranscript', (e) => { tr('s.input', { turnEnded: !!e.turnEnded }); if (e.turnEnded) run?.turnEnded(); });
   inner.on('delegation', () => { tr('s.delegation'); run?.turnEnded(); });
-  inner.on('outputTranscript', (e) => { if (e.say === undefined) run?.outputText(e.text); });
+  inner.on('outputTranscript', (e) => {
+    if (e.say === undefined) run?.outputText(e.text);
+    if (e.final && e.say === undefined) { uttText = e.text; flushText(); }
+  });
   let outN = 0;
   inner.on('outputAudio', (e) => { if (outN++ % 20 === 0 || e.last) tr('s.audio', { last: !!e.last, queued: queue.length }); nextKind = e.say !== undefined ? 'fixed' : 'model'; run?.outputAudio(e.pcm, e.last === true, e.say); });
   talking.on('toolCall', (e) => { input.onTool(e.name, e.askedBy ?? null, clock.nowMs()); inner.answerToolCall(e.callId, JSON.stringify({ ok: true })); });
 
   await talking.start({
-    instructions: [input.instructions, HANDSFREE_TURN_RULES].join('\n\n'),
+    instructions: [input.instructions, HANDSFREE_TURN_RULES, 'You have one tool through the backend: to add a note, delegate the request; never say you added it yourself.'].join('\n\n'),
     tools: [{ type: 'function', name: 'add_note', description: 'Add a short note to the meeting notes.', parameters: { type: 'object', properties: { text: { type: 'string', description: 'the note' } }, required: ['text'], additionalProperties: false }, strict: true } as never],
     backendInstructions: 'When asked to add a note, call add_note once, then confirm in a few words.',
   });

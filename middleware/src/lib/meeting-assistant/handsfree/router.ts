@@ -53,6 +53,8 @@ interface Turn {
   /** Output frames waiting for the verdict, and when the first arrived. */
   held: Array<{ pcm: Buffer; last: boolean }>;
   verdictTimer: unknown;
+  /** The hold ran out once while the person was still talking: the early reply was dropped and the turn kept. */
+  reheld?: boolean;
 }
 
 type Listener<K extends keyof RouterEvents> = (e: RouterEvents[K]) => void;
@@ -74,6 +76,8 @@ export class Router {
   private speaking = false;
   /** The rest of the session's current utterance is unheard (its turn was dropped, or nobody asked for it). */
   private dropUtt = false;
+  /** When each person's last words arrived (session ms): still talking, for a hold that runs out mid-sentence. */
+  private readonly lastWordsMs = new Map<string, number>();
   /** What Milo's current utterance has said so far (the echo check's `saying`). */
   private saying = '';
   /** Words heard so far per `${userId}|${sentenceId}` (the echo / barge-in check's `heard`). */
@@ -212,6 +216,7 @@ export class Router {
     if (this.closed) return;
     const key = `${userId}|${sentenceId}`;
     const heard = `${this.heard.get(key) ?? ''}${delta}`;
+    this.lastWordsMs.set(userId, this.deps.clock.nowMs());
     this.heard.set(key, heard);
     if (this.heard.size > MAX_KEPT_VERDICTS) this.heard.delete(this.heard.keys().next().value as string);
     if (this.playing()) {
@@ -301,10 +306,29 @@ export class Router {
     this.clearGiveUp();
     if (t.verdict === null) {
       t.held.push({ pcm, last });
-      if (t.verdictTimer === null) t.verdictTimer = this.deps.clock.setTimeout(() => { t.verdictTimer = null; if (this.turn === t && t.verdict === null) { t.verdict = { kind: 'mention' }; this.drop('verdict-timeout'); } }, HANDSFREE.verdictWaitMs);
+      if (t.verdictTimer === null) t.verdictTimer = this.deps.clock.setTimeout(() => { t.verdictTimer = null; if (this.turn === t && t.verdict === null) this.verdictLate(t); }, HANDSFREE.verdictWaitMs);
       return;
     }
     if (t.verdict.kind === 'request') this.relayFrame(pcm, last);
+  }
+
+  /**
+   * The hold ran out with no verdict. The provider answers a pause inside a long sentence: when the person is still talking (words
+   * in the last 1.5 s), that early reply is dropped unheard and the turn kept (once), so the end of the sentence is still routed and
+   * answered; otherwise the turn is dropped as before.
+   */
+  private verdictLate(t: Turn): void {
+    const talking = this.deps.clock.nowMs() - (this.lastWordsMs.get(t.userId) ?? -Infinity) <= 1_500;
+    if (!t.reheld && talking && this.st.phase === 'answering') {
+      t.reheld = true; t.held = [];
+      this.dropUtt = this.speaking;
+      this.setState({ phase: 'routing', userId: t.userId, via: this.st.via, sinceMs: this.deps.clock.nowMs() });
+      this.armGiveUp();
+      this.trace('verdict.rehold', { userId: t.userId });
+      return;
+    }
+    t.verdict = { kind: 'mention' };
+    this.drop('verdict-timeout');
   }
 
   private relayFrame(pcm: Buffer, last: boolean, said = false): void {

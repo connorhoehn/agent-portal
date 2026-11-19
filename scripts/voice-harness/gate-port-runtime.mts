@@ -31,6 +31,7 @@ export async function runtimePort(opts: { envFile: string }): Promise<GatePort> 
         relay: (pcm: Buffer, atMs: number, kind: 'model' | 'fixed') => { if (rms(pcm) > 300) ev.voice(atMs, kind); if (loop) echo = pcm; },
         onTool: (name: string, askedBy: string | null, atMs: number) => ev.tool(name, askedBy, atMs),
         onRouted: (userId: string, atMs: number, mixed: boolean) => ev.routed(userId, atMs, mixed),
+        onText: (text: string, atMs: number) => ev.text(text, atMs),
         ...(process.env['HF_GATE_TRACE'] ? { trace: (event: string, data: Record<string, unknown>) => appendFileSync(process.env['HF_GATE_TRACE']!, `${JSON.stringify({ event, ...data })}\n`) } : {}),
       });
       run.on('state', (st) => { if (st.phase === 'routing' && st.userId) ev.trigger(st.userId, nowMs); });

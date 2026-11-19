@@ -117,6 +117,22 @@ describe('hands-free router', () => {
     expect(w.relay.pushed).toHaveLength(0);
   });
 
+  it('a hold that runs out while the person is still talking drops the early reply but keeps the turn (once)', async () => {
+    const w = world();
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.router.outputAudio(frame(T_MILO), false); // the provider answered a pause mid-sentence
+    w.words(UNA, 's1', 'Milo, add a note that');
+    w.clock.advance(HANDSFREE.verdictWaitMs);
+    expect(w.drops).toEqual([]);
+    expect(w.router.state()).toMatchObject({ phase: 'routing', userId: UNA });
+    expect(w.relay.pushed).toHaveLength(0);
+    w.router.outputAudio(frame(T_MILO), true); // the rest of the early reply: unheard
+    w.sentence(UNA, 's1', 'Milo, add a note that we finished.'); await settle();
+    w.router.outputAudio(frame(T_MILO), false);
+    expect(w.relay.pushed).toHaveLength(1);
+  });
+
   it('a fixed verdict says the server line and drops the session\'s own words', async () => {
     const w = world();
     w.rules.verdictFor = () => ({ kind: 'fixed', line: 'You have twelve minutes left.' });
