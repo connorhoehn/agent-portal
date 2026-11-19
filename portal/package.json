@@ -30,7 +30,8 @@
     "journey:meeting-assistant": "node ../scripts/journeys/run-demo-moments.mjs --journey meeting-assistant",
     "journey:budgets-selection": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-selection",
     "journey:budgets-audit": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-audit",
-    "journey:interviews": "node ../scripts/journeys/run-demo-moments.mjs --journey interviews"
+    "journey:interviews": "node ../scripts/journeys/run-demo-moments.mjs --journey interviews",
+    "journey:call-chat-unread": "node ../scripts/journeys/run-demo-moments.mjs --journey call-chat-unread"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
