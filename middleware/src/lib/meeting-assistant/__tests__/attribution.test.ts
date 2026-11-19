@@ -299,3 +299,62 @@ describe('the lag measured from the stamps and the voices, without knowing who s
     expect(Math.abs(lag.current() - 2_500)).toBeLessThanOrEqual(300);
   });
 });
+
+describe('the lag is not guessed when the voices have no silence to pin it down (review of 18 November, item 1)', () => {
+  // A repeatable stream of numbers, so each shape is the same on every run.
+  const numbers = (seed: number) => () => { seed = (seed * 1_103_515_245 + 12_345) % 2 ** 31; return seed / 2 ** 31; };
+  const stampsOf = (from: number, to: number, lag: number) => {
+    const out: Array<{ startMs: number; endMs: number }> = [];
+    for (let w = from + 200; w < to; w += 400) out.push({ startMs: w + lag, endMs: w + lag + 200 });
+    return out;
+  };
+  // Two people alternating with 0 to `maxGap` ms between them and no longer pause: every lag puts the stamps on someone's voice.
+  const fastTurns = (lag: number, seed: number, maxGap = 300) => {
+    const r = numbers(seed), intervals: VoicedInterval[] = [], stamps: Array<{ startMs: number; endMs: number }> = [];
+    let t = 10_000;
+    for (let k = 0; k < 30; k += 1) {
+      const len = 1_500 + Math.round(r() * 3_000);
+      intervals.push(iv(k % 2 ? 'lead' : 'cand', t, t + len));
+      stamps.push(...stampsOf(t, t + len, lag));
+      t += len + Math.round(r() * maxGap);
+    }
+    return { intervals, stamps };
+  };
+
+  it('fast turns with 0 to 300 ms between speakers: no estimate, or the true one; never a lag of ten seconds', () => {
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const { intervals, stamps } = fastTurns(3_000, seed);
+      const e = estimateLag(intervals, stamps);
+      if (e !== null) expect(Math.abs(e - 3_000)).toBeLessThanOrEqual(500);
+    }
+  });
+
+  it('one microphone voiced the whole time (a fan, an open mic): no estimate', () => {
+    const intervals: VoicedInterval[] = [iv('fan', 0, 120_000)], stamps: Array<{ startMs: number; endMs: number }> = [];
+    let t = 10_000;
+    for (let k = 0; k < 16; k += 1) {
+      const len = 1_500 + (k % 3) * 1_200;
+      intervals.push(iv(k % 2 ? 'lead' : 'cand', t, t + len));
+      stamps.push(...stampsOf(t, t + len, 2_000));
+      t += len + (k % 4 === 3 ? 3_000 : 400);
+    }
+    expect(estimateLag(intervals, stamps)).toBeNull();
+  });
+
+  it('one person speaking a minute without a pause: no estimate', () => {
+    expect(estimateLag([iv('cand', 10_000, 70_000)], stampsOf(10_000, 70_000, 1_500))).toBeNull();
+  });
+
+  it('an estimate more than 2 s from the one before, inside the same minute, is not taken: the lag in use stays', () => {
+    const lag = new TranscriptLag();
+    const early = [iv('cand', 10_000, 12_000), iv('lead', 15_000, 17_000), iv('cand', 20_000, 22_000)];
+    lag.heard(early.flatMap((i) => stampsOf(i.startMs, i.endMs, 1_500)));
+    expect(Math.abs(lag.update(early) - 1_500)).toBeLessThanOrEqual(300);
+    const first = lag.current();
+    // Forty seconds on, stamps that the pauses fit 4 s later: the drift is at most about a second a minute, so this is the fit fooled.
+    const later = [iv('lead', 30_000, 36_000), iv('cand', 39_000, 45_000), iv('lead', 48_000, 54_000), iv('cand', 57_000, 63_000)];
+    lag.heard(later.flatMap((i) => stampsOf(i.startMs, i.endMs, 5_500)));
+    expect(Math.abs(estimateLag([...early, ...later], [...early, ...later].flatMap((i) => stampsOf(i.startMs, i.endMs, i.startMs < 30_000 ? 1_500 : 5_500)))! - 5_500)).toBeLessThanOrEqual(500);
+    expect(lag.update([...early, ...later])).toBe(first);
+  });
+});

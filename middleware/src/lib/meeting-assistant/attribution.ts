@@ -169,8 +169,10 @@ export function lagSample(intervals: readonly VoicedInterval[], userId: string, 
  * (that take: one sample of -0.56 s, then none, every turn holding two voices). Here every stamp of the last `LAG_WINDOW_MS`, moved
  * back by a candidate lag, should land on someone's voice: the lag is the middle of the run of candidates that puts the most stamps on
  * a voice. Pauses decide it: too small a lag puts the last words of a turn in the silence after it, too large puts the first in the
- * silence before. Null when there are too few stamps, the best fit is poor, or two separate runs fit equally well (no previous
- * estimate to choose by).
+ * silence before. Null when there are too few stamps, the best fit is poor, two separate runs fit equally well (no previous
+ * estimate to choose by), or the run is wider than `LAG_RUN_MAX_MS`: with no pause in the window (people answering each other
+ * within 0.3 s, one microphone voiced throughout, one person talking a minute) every lag puts the stamps on a voice, and the middle
+ * of that run (about 10 s) is a guess that credits a request to whoever spoke 10 s before it.
  */
 export const LAG_WINDOW_MS = 60_000;
 export const LAG_MIN_STAMPS = 12;
@@ -183,6 +185,8 @@ export const LAG_FIT_MIN = 0.8;
 const LAG_EDGE_MS = 100;
 /** Candidates within this share of the best fit are as good as it. */
 const LAG_FIT_TIE = 0.02;
+/** The widest run of equally good lags that still pins the lag down (the 18 November take's runs were 0 to 0.2 s wide). */
+export const LAG_RUN_MAX_MS = 2_000;
 export function estimateLag(intervals: readonly VoicedInterval[], stamps: readonly TranscriptSpan[], previous: number | null = null): number | null {
   if (stamps.length < LAG_MIN_STAMPS) return null;
   const latest = Math.max(...stamps.map((s) => s.endMs));
@@ -216,10 +220,16 @@ export function estimateLag(intervals: readonly VoicedInterval[], stamps: readon
     if (r && fits[i - 1] && r.to === fits[i - 1]!.lag) r.to = f.lag; else runs.push({ from: f.lag, to: f.lag });
   });
   const mid = (r: { from: number; to: number }) => Math.round((r.from + r.to) / 2 / 10) * 10;
-  if (runs.length === 1) return mid(runs[0]!);
-  if (previous === null) return null;
-  return mid(runs.reduce((a, b) => (Math.abs(mid(b) - previous) < Math.abs(mid(a) - previous) ? b : a)));
+  const chosen = runs.length === 1 ? runs[0]! : previous === null ? null : runs.reduce((a, b) => (Math.abs(mid(b) - previous) < Math.abs(mid(a) - previous) ? b : a));
+  return chosen && chosen.to - chosen.from <= LAG_RUN_MAX_MS ? mid(chosen) : null;
 }
+
+/**
+ * The most a new estimate may differ from the one in use while that one is under a window old. The stamps drift against the voices
+ * by at most about 1.3 s a minute (the 14 November runs), so a bigger step inside a minute is the fit fooled, not the lag moving;
+ * an estimate older than the window no longer vouches for anything, and the next one is taken whatever it is.
+ */
+export const LAG_JUMP_MAX_MS = 2_000;
 
 /**
  * The lag the attribution uses, per live session: the stamps of the heard turns, the estimate from them (`estimateLag`), and, before
@@ -229,6 +239,8 @@ export class TranscriptLag {
   private stamps: TranscriptSpan[] = [];
   private samples: number[] = [];
   private estimate: number | null = null;
+  /** The latest stamp's end when the estimate in use was taken. */
+  private estimateAt = -Infinity;
 
   /** The stamps of one heard turn (each of the provider's pieces, or the turn's own span). */
   heard(spans: readonly TranscriptSpan[]): void {
@@ -240,7 +252,9 @@ export class TranscriptLag {
   /** Measure again against the voices; the lag to use now. */
   update(intervals: readonly VoicedInterval[]): number {
     const e = estimateLag(intervals, this.stamps, this.estimate);
-    if (e !== null) this.estimate = e;
+    const latest = this.stamps.reduce((m, s) => Math.max(m, s.endMs), -Infinity);
+    const vouches = this.estimate !== null && latest - this.estimateAt <= LAG_WINDOW_MS;
+    if (e !== null && (!vouches || Math.abs(e - this.estimate!) <= LAG_JUMP_MAX_MS)) { this.estimate = e; this.estimateAt = latest; }
     return this.current();
   }
 
