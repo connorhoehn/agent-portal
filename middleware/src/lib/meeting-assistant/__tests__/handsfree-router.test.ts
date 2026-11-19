@@ -170,6 +170,22 @@ describe('hands-free router', () => {
     expect(w.router.state()).toEqual({ phase: 'idle' });
   });
 
+  it("someone else saying the name inside the asker's follow-up window takes the floor at once (the window is not a hold)", async () => {
+    const w = world();
+    const queued: string[] = [];
+    w.router.on('queued', (q) => queued.push(q.userId));
+    w.talk(UNA, T_UNA, 5);
+    w.name(UNA, 's1', 0); await settle();
+    w.quiet(1);
+    w.sentence(UNA, 's1', 'Milo, capital of France?'); await settle();
+    w.milo(2);
+    expect(w.router.state()).toMatchObject({ phase: 'follow-up', userId: UNA });
+    w.talk(HUGO, T_HUGO, 3);
+    w.name(HUGO, 'h1', 0); await settle();
+    expect(queued).toEqual([]);
+    expect(w.router.state()).toMatchObject({ phase: 'routing', userId: HUGO, via: 'name' });
+  });
+
   it('an aside inside the window is dropped and closes the window', async () => {
     const w = world();
     w.rules.verdictFor = (s) => (s.via === 'follow-up' ? { kind: 'aside' } : { kind: 'request' });

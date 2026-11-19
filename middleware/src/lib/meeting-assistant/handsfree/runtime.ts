@@ -116,6 +116,8 @@ export interface StandaloneRunInput {
   relay: (pcm24k: Buffer, atMs: number, kind: 'model' | 'fixed') => void;
   onTool: (name: string, askedBy: string | null, atMs: number) => void;
   onRouted: (userId: string, atMs: number, mixed: boolean) => void;
+  /** Codes and ids only (the router's trace plus the session's turn events), for a measuring run. */
+  trace?: (event: string, data: Record<string, unknown>) => void;
 }
 
 export interface StandaloneRun extends HandsfreeRun {
@@ -147,7 +149,7 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
     refusal: GATE_FIXED_REFUSAL,
     instructions: () => null,
   };
-  const policy = Object.assign(Object.create(base) as typeof base, { handsfree: () => family, acknowledgement: () => 'in-call-notice' as const });
+  const policy = Object.create(base, { handsfree: { value: () => family }, acknowledgement: { value: () => 'in-call-notice' } }) as typeof base;
   const record = { callId: input.callId, state: 'listening', acked: [...input.speakers.map((s) => s.userId), 'room'] } as unknown as import('../types.js').AssistantRecord;
 
   const cfg = voiceConfig();
@@ -169,11 +171,18 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
     relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); }, clear: () => { queue = []; } },
     onLine: () => undefined,
     nameOf: async (userId) => input.speakers.find((s) => s.userId === userId)?.name ?? userId,
+    ...(input.trace ? { trace: input.trace } : {}),
   });
-  inner.on('inputTranscript', (e) => { if (e.turnEnded) run?.turnEnded(); });
-  inner.on('delegation', () => run?.turnEnded());
+  const tr = (event: string, data: Record<string, unknown> = {}): void => input.trace?.(event, { ...data, atMs: clock.nowMs() });
+  listening.on('sentence', (e) => tr('l.sentence', { userId: e.userId }));
+  listening.on('name', (e) => tr('l.name', { userId: e.userId }));
+  run.on('state', (st) => tr('state', { phase: st.phase }));
+  run.on('drop', (e) => tr('drop', e as unknown as Record<string, unknown>));
+  inner.on('inputTranscript', (e) => { tr('s.input', { turnEnded: !!e.turnEnded }); if (e.turnEnded) run?.turnEnded(); });
+  inner.on('delegation', () => { tr('s.delegation'); run?.turnEnded(); });
   inner.on('outputTranscript', (e) => { if (e.say === undefined) run?.outputText(e.text); });
-  inner.on('outputAudio', (e) => { nextKind = e.say !== undefined ? 'fixed' : 'model'; run?.outputAudio(e.pcm, e.last === true, e.say); });
+  let outN = 0;
+  inner.on('outputAudio', (e) => { if (outN++ % 20 === 0 || e.last) tr('s.audio', { last: !!e.last, queued: queue.length }); nextKind = e.say !== undefined ? 'fixed' : 'model'; run?.outputAudio(e.pcm, e.last === true, e.say); });
   talking.on('toolCall', (e) => { input.onTool(e.name, e.askedBy ?? null, clock.nowMs()); inner.answerToolCall(e.callId, JSON.stringify({ ok: true })); });
 
   await talking.start({

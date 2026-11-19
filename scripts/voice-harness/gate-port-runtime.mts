@@ -3,6 +3,7 @@
 // plays Milo's voice out one tick at a time (so a dropped relay is silent from the next tick, as it is in a call). The player's
 // frames go to `run.sink.placed`, its tick is the run's clock; loopback feeds the played voice back as a room mic, memory only.
 import type { GatePort, PortEvents, PortOpen } from './gate-player.mjs';
+import { appendFileSync } from 'node:fs';
 import { loadKey, rms } from './lib.mjs';
 import { HANDSFREE_FRAME_BYTES } from './gate-clock.mjs';
 
@@ -30,6 +31,7 @@ export async function runtimePort(opts: { envFile: string }): Promise<GatePort> 
         relay: (pcm: Buffer, atMs: number, kind: 'model' | 'fixed') => { if (rms(pcm) > 300) ev.voice(atMs, kind); if (loop) echo = pcm; },
         onTool: (name: string, askedBy: string | null, atMs: number) => ev.tool(name, askedBy, atMs),
         onRouted: (userId: string, atMs: number, mixed: boolean) => ev.routed(userId, atMs, mixed),
+        ...(process.env['HF_GATE_TRACE'] ? { trace: (event: string, data: Record<string, unknown>) => appendFileSync(process.env['HF_GATE_TRACE']!, `${JSON.stringify({ event, ...data })}\n`) } : {}),
       });
       run.on('state', (st) => { if (st.phase === 'routing' && st.userId) ev.trigger(st.userId, nowMs); });
     },

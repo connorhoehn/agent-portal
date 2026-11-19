@@ -88,6 +88,8 @@ describe('verdict on the clean sentence: mention vs request', () => {
     ['Milo can you summarise the call?', 'can you summarise the call?'],
     ["Milo what's next on the list?", "what's next on the list?"],
     ['Milo add an item for Vera.', 'add an item for Vera.'],
+    ['Milo is a tomato a fruit?', 'is a tomato a fruit?'],
+    ['Milo does the bus stop here?', 'does the bus stop here?'],
   ];
 
   it.each(MENTIONS)('%j is a mention: talksAboutMilo or no address, and the verdict drops it', async (text) => {
@@ -146,7 +148,7 @@ describe('verdict on the clean sentence: mention vs request', () => {
 });
 
 describe('the follow-up window: still for Milo, or an aside', () => {
-  const STILL = ['And what about Germany?', 'What about Italy?', 'And in a regular year?', 'Why is that?', 'Make it shorter.', 'Okay, now add two more.', 'How about next week', 'Can you send that to the channel?'];
+  const STILL = ['And what about Germany?', 'What about Italy?', 'And in a regular year?', 'And in a regular year.', 'Or for a whole week.', 'Why is that?', 'Make it shorter.', 'Okay, now add two more.', 'How about next week', 'Can you send that to the channel?'];
   const ASIDES = ['Sarah, what do you think?', 'What do you think, Sarah?', 'Thanks.', 'Okay great.', 'Thank you so much.', "Let's move on to the next item.", 'I think we should ship it.', 'We can pick that up tomorrow.', 'Got it, makes sense.'];
 
   it.each(STILL)('%j continues the conversation (request)', async (text) => {

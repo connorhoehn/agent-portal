@@ -71,6 +71,8 @@ const SUBJECT_VERBS: ReadonlySet<string> = new Set([
   'might', 'must', 'may', 'should', 'would', 'could', 'will', 'can', 'just', 'already', 'also', 'never', 'always', 'probably',
   'actually', 'really', 'and', 'or', 'too', 'again', 'here', 'there', 'thing', 'stuff', 'bot',
 ]);
+/** Auxiliaries a yes/no question opens with, straight after the name when the comma was not heard. */
+const INVERTING: ReadonlySet<string> = new Set(['is', 'was', 'isnt', 'wasnt', 'has', 'had', 'does', 'did', 'doesnt', 'didnt']);
 /** Words ending in -ed that are asks, not a past tense ("Milo, need..." is rare; "embed" and "feed" are tools' words). */
 const ED_NOT_PAST: ReadonlySet<string> = new Set(['need', 'feed', 'embed', 'proceed', 'seed', 'speed', 'shred', 'red', 'bed', 'heed', 'exceed', 'succeed']);
 /** After a modal, these make it a question to Milo after all ("Milo can you ...", "Milo could we ..."). */
@@ -85,6 +87,9 @@ const MODALS: ReadonlySet<string> = new Set(['might', 'must', 'may', 'should', '
 export function talksAboutMilo(sentence: string): boolean {
   const hits = [...sentence.matchAll(NAME_WORD)];
   if (!hits.length) return false;
+  // The name opening a yes/no question ("Milo is a tomato a fruit?", the transcriber dropping the comma) is an address.
+  const opening = hits.length === 1 && /^\s*$/.test(sentence.slice(0, (hits[0]!.index ?? 0) + hits[0]![1]!.length));
+  if (opening && /\?\s*$/.test(sentence) && INVERTING.has(words(sentence.slice((hits[0]!.index ?? 0) + hits[0]![0].length))[0] ?? '')) return false;
   return hits.every((m) => {
     const end = (m.index ?? 0) + m[0].length;
     const after = sentence.slice(end);
@@ -117,6 +122,8 @@ const IMPERATIVES: ReadonlySet<string> = new Set([
   'try', 'do', 'go', 'keep', 'continue', 'compare', 'search', 'book', 'open', 'move', 'rename', 'mark', 'note', 'remind', 'shorten',
   'expand', 'break', 'spell', 'define', 'convert', 'calculate', 'count', 'pull', 'get', 'start', 'stop', 'cancel', 'skip', 'undo',
 ]);
+/** After "and" / "or": the last question carried on ("And in a regular year", "Or for a week"). */
+const CONTINUES: ReadonlySet<string> = new Set(['in', 'for', 'on', 'at', 'with', 'without', 'about', 'what', 'whats', 'how', 'hows', 'why', 'when', 'where', 'who', 'which', 'if', 'after', 'before', 'during', 'the', 'a', 'an']);
 /** Only a reaction or thanks: nothing asked. */
 const REACTION = /^(?:(?:ok|okay|great|cool|nice|perfect|thanks|thank you|thank you so much|thanks a lot|got it|right|sure|good|awesome|brilliant|lovely|fine|alright|all right|yes|yeah|yep|no|nope|mm|hmm|ah|oh|wow|interesting|makes sense|that makes sense|fair|fair enough|sounds good|that helps|that works|appreciate it|cheers)\s*)+$/;
 /** Interjections that may open a sentence before a comma without naming anyone. */
@@ -142,6 +149,8 @@ export function followUpKind(sentence: string, roster: readonly string[] = []): 
   if (toSomeoneElse(sentence, roster)) return 'aside';
   if (w[0] === 'lets' || w[0] === 'we' || w[0] === 'i' || w[0] === 'im') return /\?\s*$/.test(sentence) ? 'request' : 'aside';
   if (/\?\s*$/.test(sentence)) return 'request';
+  // A continuation of the last question ("And in a regular year.", the transcriber's stop for its question mark).
+  if ((w[0] === 'and' || w[0] === 'or') && CONTINUES.has(w[1] ?? '')) return 'request';
   if (IMPERATIVES.has(w[0]!) || (w[0] === 'what' || w[0] === 'how') && w[1] === 'about') return 'request';
   // An opener then an ask ("And make it shorter", "Okay, now add two more").
   const rest = w.filter((x, i) => !(i < 3 && QUESTION_OPENERS.has(x) && !IMPERATIVES.has(x)));

@@ -153,7 +153,9 @@ export class Router {
       if (st.phase === 'follow-up' || !this.turn || this.turn.sentenceId === null || this.turn.via === 'follow-up') this.openTurn(userId, 'name', sentenceId);
       return;
     }
-    if (st.phase !== 'idle' || this.holder || (this.admitting && this.admitting !== userId)) {
+    // Someone else's follow-up window is not a held floor: a new name takes it (the window is a courtesy to the asker, not a hold).
+    const busy = (): boolean => (this.st.phase !== 'idle' && this.st.phase !== 'follow-up') || !!this.holder;
+    if (busy() || (this.admitting && this.admitting !== userId)) {
       this.queued = { userId, sentenceId, sentenceStartMs };
       this.emit('queued', { userId, sentenceStartMs });
       return;
@@ -164,7 +166,7 @@ export class Router {
     if (this.closed) return;
     if (admission === 'fixed-lines') { this.keepFixed(userId, sentenceId); return; }
     if (admission !== 'route') { this.trace('name.denied', { userId }); return; }
-    if (this.st.phase !== 'idle' || this.holder) { this.queued = { userId, sentenceId, sentenceStartMs }; this.emit('queued', { userId, sentenceStartMs }); return; }
+    if (busy()) { this.queued = { userId, sentenceId, sentenceStartMs }; this.emit('queued', { userId, sentenceStartMs }); return; }
     this.startRoute(userId, 'name', sentenceId, Math.max(sentenceStartMs, nameEndMs - HANDSFREE.preRollMaxMs));
   }
 
