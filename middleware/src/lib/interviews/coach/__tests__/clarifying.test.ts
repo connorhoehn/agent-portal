@@ -130,6 +130,28 @@ describe('the coach in a whiteboard round', () => {
     expect(await store.listSuggestions('iv-board-test')).toHaveLength(1);
   });
 
+  it('two tabs reading at once log the nudge once: the second read sees the first one\'s row and shows it', async () => {
+    const ref = boardRef();
+    const lead = { userId: ref.interview.leadId };
+    // The second tab's transcript read waits until the first tab has logged its nudge: both read the empty log first.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let reads = 0;
+    setCoachDeps({
+      store: () => store, consents: async () => ({ transcription: true, milo: true }),
+      transcript: async () => { if (++reads === 2) await gate; return transcript; }, model, reserve,
+      settle: jest.fn(), release: jest.fn(), now: () => now, newId: () => `sg-b${++n}`,
+    } as unknown as CoachDeps);
+    const one = suggestionFor(ref, lead);
+    const two = suggestionFor(ref, lead);
+    const first = await one;
+    release();
+    const second = await two;
+    const ids = [first, second].map((o) => (o as { body: { suggestion: { id: string } | null } }).body.suggestion?.id);
+    expect(ids).toEqual(['sg-b1', 'sg-b1']);
+    expect((await store.listSuggestions('iv-board-test')).filter((r) => r.modelId === CLARIFYING_MODEL_ID)).toHaveLength(1);
+  });
+
   it('Have Milo ask on the nudge says a neutral invitation to the candidate, never the lead\'s coaching note', async () => {
     const ref = boardRef();
     const lead = { userId: ref.interview.leadId };

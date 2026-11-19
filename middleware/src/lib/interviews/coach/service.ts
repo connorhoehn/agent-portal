@@ -270,12 +270,19 @@ function clarifyingFor(ref: CoachRef, log: readonly SuggestionRecord[], lines: r
   });
 }
 
-/** Log the nudge as a suggestion shown now; null when another read of this interview holds it (it will show that one). */
+/**
+ * Log the nudge as a suggestion shown now; null when another read of this interview holds it (it will show that one).
+ * The log is read again inside the hold: the caller's read came before its awaits, so another tab may have logged the
+ * nudge since, and then that row is the one shown.
+ */
 async function appendClarifying(ref: CoachRef, nudge: ClarifyNudge, transcript: CoachTranscript, nowMs: number, d: CoachDeps): Promise<SuggestionRecord | null> {
   const id = ref.interview.id;
   if (inFlight.has(id)) return null;
   inFlight.add(id);
   try {
+    const store = d.store();
+    const logged = (await store.listSuggestions(id)).find((r) => r.modelId === CLARIFYING_MODEL_ID);
+    if (logged) return logged.answer === null ? (await store.markShown(id, logged.id, iso(nowMs))) ?? logged : null;
     const madeAt = iso(nowMs);
     const row: SuggestionRecord = {
       id: d.newId(), interviewId: id, callId: transcript.callId, throughSeq: transcript.lastSeq,
@@ -283,7 +290,7 @@ async function appendClarifying(ref: CoachRef, nudge: ClarifyNudge, transcript: 
       madeAt, shownAt: madeAt, answer: null, answeredAt: null, spoken: false,
       modelId: CLARIFYING_MODEL_ID, promptVersion: CLARIFYING_RULE_VERSION, dropped: null,
     };
-    await d.store().appendSuggestion(row);
+    await store.appendSuggestion(row);
     return row;
   } finally {
     inFlight.delete(id);
