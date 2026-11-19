@@ -1,0 +1,331 @@
+{
+ "_note": "Scenario speech for the voice harness (scripts/voice-harness/run.mts). voices = the interviews film's Qwen3-TTS presets (scripts/demo/interviews-film-lines.json).",
+ "voices": {
+  "hugo": {
+   "speaker": "ryan",
+   "instruct": "A warm, upbeat interviewer in his forties, friendly and conversational, smiling as he speaks, relaxed and natural, with lively intonation and a steady, natural speaking pitch."
+  },
+  "cand": {
+   "speaker": "aiden",
+   "instruct": "An energetic young candidate in his late twenties, slightly nervous but confident, expressive and quick, animated like a real person chatting."
+  }
+ },
+ "lines": {
+  "q01": [
+   "hugo",
+   "Milo, what is the capital of France?"
+  ],
+  "q02": [
+   "hugo",
+   "Milo, how many days are in a leap year?"
+  ],
+  "q03": [
+   "hugo",
+   "Milo, what's seven times eight?"
+  ],
+  "q04": [
+   "hugo",
+   "Milo, can you name a primary color?"
+  ],
+  "q05": [
+   "hugo",
+   "Milo, what does HTTP stand for?"
+  ],
+  "q06": [
+   "hugo",
+   "Milo, which planet is closest to the sun?"
+  ],
+  "q07": [
+   "hugo",
+   "Milo, what's the boiling point of water in Celsius?"
+  ],
+  "q08": [
+   "hugo",
+   "Milo, how do you say thank you in Spanish?"
+  ],
+  "q09": [
+   "hugo",
+   "Milo, is a tomato a fruit?"
+  ],
+  "q10": [
+   "hugo",
+   "Milo, what's the square root of eighty-one?"
+  ],
+  "q11": [
+   "hugo",
+   "Milo, how many legs does a spider have?"
+  ],
+  "q12": [
+   "hugo",
+   "Milo, what year did the first moon landing happen?"
+  ],
+  "q13": [
+   "hugo",
+   "Milo, what is the opposite of hot?"
+  ],
+  "q14": [
+   "hugo",
+   "Milo, how many sides does a hexagon have?"
+  ],
+  "q15": [
+   "hugo",
+   "Milo, what language is spoken in Brazil?"
+  ],
+  "q16": [
+   "hugo",
+   "Milo, what color do you get when you mix blue and yellow?"
+  ],
+  "q17": [
+   "hugo",
+   "Milo, what's the largest ocean on Earth?"
+  ],
+  "q18": [
+   "hugo",
+   "Milo, how many hours are in a day?"
+  ],
+  "q19": [
+   "hugo",
+   "Milo, what's the freezing point of water in Fahrenheit?"
+  ],
+  "q20": [
+   "hugo",
+   "Milo, what does CPU stand for?"
+  ],
+  "q21": [
+   "hugo",
+   "Milo, what's twelve plus fifteen?"
+  ],
+  "q22": [
+   "hugo",
+   "Milo, how many continents are there?"
+  ],
+  "q23": [
+   "hugo",
+   "Milo, what's the tallest mountain in the world?"
+  ],
+  "q24": [
+   "hugo",
+   "Milo, how many strings does a guitar have?"
+  ],
+  "h01": [
+   "hugo",
+   "Hey Milo, what time zone is London in?"
+  ],
+  "h02": [
+   "hugo",
+   "Hey Milo, how many players are on a soccer team?"
+  ],
+  "h03": [
+   "cand",
+   "Hey Milo, what's two plus two?"
+  ],
+  "h04": [
+   "cand",
+   "Milo, could you repeat the question please?"
+  ],
+  "n01": [
+   "hugo",
+   "Could you add a dozen test cases, Milo?"
+  ],
+  "n02": [
+   "hugo",
+   "What's the capital of Japan, Milo?"
+  ],
+  "n03": [
+   "cand",
+   "Can you remind me what a linked list is, Milo?"
+  ],
+  "n04": [
+   "hugo",
+   "How many weeks are in a year, Milo?"
+  ],
+  "n05": [
+   "cand",
+   "What's the time complexity of binary search, Milo?"
+  ],
+  "m01": [
+   "hugo",
+   "I think we should just ask Milo about that later."
+  ],
+  "m02": [
+   "cand",
+   "I saw Milo's summary yesterday, it was pretty good."
+  ],
+  "c01": [
+   "cand",
+   "So I would start by writing a function that reads the input file."
+  ],
+  "c02": [
+   "cand",
+   "Then I'd loop over each line and count the words."
+  ],
+  "c03": [
+   "hugo",
+   "Yeah, that makes sense, let's keep going with that approach."
+  ],
+  "c04": [
+   "hugo",
+   "What would you do if the file was really large?"
+  ],
+  "c05": [
+   "cand",
+   "I guess I'd stream it in chunks instead of loading the whole thing."
+  ],
+  "f01": [
+   "hugo",
+   "And what about Germany?"
+  ],
+  "f02": [
+   "hugo",
+   "What about Italy?"
+  ],
+  "f03": [
+   "hugo",
+   "And in a regular year?"
+  ],
+  "f04": [
+   "hugo",
+   "Why is that?"
+  ],
+  "g01": [
+   "hugo",
+   "Milo, tell me a long story about a dragon who learns to cook."
+  ],
+  "g02": [
+   "hugo",
+   "Milo, explain in detail how a car engine works."
+  ],
+  "g03": [
+   "hugo",
+   "Okay, thanks Milo, that's enough."
+  ],
+  "g04": [
+   "hugo",
+   "Okay, stop, thanks."
+  ],
+  "qc01": [
+   "cand",
+   "Milo, what's the capital of Italy?"
+  ],
+  "qc02": [
+   "cand",
+   "Milo, how many minutes are in an hour?"
+  ],
+  "qc03": [
+   "cand",
+   "Milo, what's nine times six?"
+  ],
+  "qc04": [
+   "cand",
+   "Milo, what does RAM stand for?"
+  ],
+  "qc05": [
+   "cand",
+   "Milo, which animal says moo?"
+  ],
+  "qc06": [
+   "cand",
+   "Milo, how many days are in a week?"
+  ],
+  "qc07": [
+   "cand",
+   "Milo, what's the chemical symbol for gold?"
+  ],
+  "qc08": [
+   "cand",
+   "Milo, what's the capital of Canada?"
+  ],
+  "qc09": [
+   "cand",
+   "Milo, how many months have thirty days?"
+  ],
+  "qc10": [
+   "cand",
+   "Milo, what is half of one hundred?"
+  ],
+  "qc11": [
+   "cand",
+   "Milo, what's the smallest prime number?"
+  ],
+  "f05": [
+   "hugo",
+   "And what about Spain?"
+  ],
+  "f06": [
+   "hugo",
+   "And what about the capital city?"
+  ],
+  "f07": [
+   "hugo",
+   "How far away is it?"
+  ],
+  "f08": [
+   "hugo",
+   "Can you say that again?"
+  ],
+  "f09": [
+   "hugo",
+   "And the opposite of big?"
+  ],
+  "m03": [
+   "hugo",
+   "Milo was fast at this yesterday, wasn't he?"
+  ],
+  "m04": [
+   "cand",
+   "I asked Milo for the notes earlier and they were fine."
+  ],
+  "m05": [
+   "hugo",
+   "Let's see what Milo says about that later in the meeting."
+  ],
+  "m06": [
+   "cand",
+   "My cousin's dog is called Milo, which is funny."
+  ],
+  "m07": [
+   "hugo",
+   "I read what Milo wrote in the summary, thanks."
+  ],
+  "m08": [
+   "cand",
+   "We could ask Milo to look at it, but not right now."
+  ],
+  "t01": [
+   "hugo",
+   "Milo, add a note that we finished the coding exercise."
+  ],
+  "t02": [
+   "cand",
+   "Milo, add a note that I prefer working in Python."
+  ],
+  "t03": [
+   "hugo",
+   "Milo, add a note that the system design round is next."
+  ],
+  "t04": [
+   "cand",
+   "Milo, add a note that I need five minutes at the end."
+  ],
+  "s01": [
+   "hugo",
+   "Milo, stop."
+  ],
+  "p01": [
+   "hugo",
+   "Milo, what's the capital of Spain?"
+  ],
+  "p02": [
+   "cand",
+   "Milo, what's the capital of Egypt?"
+  ],
+  "w01": [
+   "cand",
+   "Sorry, can I just ask something about the schedule?"
+  ],
+  "w02": [
+   "cand",
+   "Right, and one more thing about the schedule."
+  ]
+ }
+}
