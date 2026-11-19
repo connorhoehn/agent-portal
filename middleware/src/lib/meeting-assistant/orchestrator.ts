@@ -55,6 +55,10 @@ import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, ty
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
+import { handsfreeEnabled } from './handsfree-flag.js';
+import { HandsfreeTalking } from './handsfree/talking.js';
+import { HandsfreeRuntime } from './handsfree/runtime.js';
+import type { HandsfreeClock, HandsfreeRules, HandsfreeRun, HeardLine, ListeningSide } from './handsfree/types.js';
 import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_BREATH_MS, SAY_BREATH_WAIT_MS, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
@@ -170,6 +174,11 @@ export interface RuntimeDeps {
   taps?: () => Promise<Pick<TapArmer, 'rearm' | 'hearing'> | null>;
   /** Who holds or held a seat in the call (lib/call-chat.ts `seatedUsers`). Default: the call chat runtime's. */
   seats?: (callId: string) => Promise<Array<{ userId: string; active: boolean }>>;
+  /**
+   * The hands-free sides for one call (handsfree/: lane A's listening side, lane C's rules), used only when MEETING_ASSISTANT_HANDSFREE
+   * is on as the run starts. Absent (or null for this call): the call runs today's room-mix path even with the flag on.
+   */
+  handsfree?: (call: PolicyCall, clock: HandsfreeClock) => { listening: ListeningSide; rules: HandsfreeRules } | null;
 }
 
 export interface FinishedEvent {
@@ -405,6 +414,12 @@ interface CallRun {
   echoLinesDropped: number;
   providerErrors: ProviderErrorInfo[];
   finished: boolean;
+  /** MEETING_ASSISTANT_HANDSFREE as this run started (handsfree-flag.ts): read once, kept for the run's whole life. */
+  handsfree: boolean;
+  /** The open session's hands-free run (null when the run is not hands-free or no session is open). */
+  hf: HandsfreeRuntime | null;
+  /** Hands-free turns opened so far (a request, for the per-request call cap, is the asker plus this number). */
+  hfTurns: number;
 }
 
 /**
@@ -739,6 +754,7 @@ export class AssistantRuntime {
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), heldChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
+      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0,
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -913,8 +929,11 @@ export class AssistantRuntime {
   }
 
   private async openSession(run: CallRun, recent: Awaited<ReturnType<AssistantRuntime['recentLines']>>): Promise<void> {
-    const session = this.deps.makeSession(this.deps.clock);
-    if (!session) throw new Error('no live session is available in this process');
+    const made = this.deps.makeSession(this.deps.clock);
+    if (!made) throw new Error('no live session is available in this process');
+    if (run.hf) await this.endHandsfree(run);
+    // Hands-free: the session hears only the routed person and its tool calls carry who that is (handsfree/talking.ts).
+    const session: LiveMeetingSession = run.handsfree ? new HandsfreeTalking(made) : made;
     run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lag = new TranscriptLag(); run.readyMessages = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
     run.calls = new Map(); run.addressedCalls = new Set(); this.dropVoice(run, false); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
@@ -933,15 +952,75 @@ export class AssistantRuntime {
     run.sessionStartedAt = this.now();
     run.heartbeatAt = -Infinity; // the first tick writes one at once
     run.watchFrom = run.sessionStartedAt; // a new session is given its own minute
+    const hf = session instanceof HandsfreeTalking ? this.startHandsfree(run, session) : null;
     // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
     this.deps.audio?.attach(run.ctx.callId, {
-      append: (pcm) => { try { run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
+      // Hands-free: the room mix is only the tick (the router feeds the session); otherwise it is what the session hears.
+      append: (pcm) => { try { if (hf) hf.sink.append(pcm); else run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
       placed: (userId, pcm, atMs) => {
         run.heardAt = this.now();
         if (run.deaf?.kind === 'audio') run.deaf = null;
         run.timeline.feed(userId, pcm, OUT_RATE, atMs);
+        hf?.sink.placed(userId, pcm, atMs);
       },
     });
+  }
+
+  /** The hands-free run of a session just opened (handsfree/runtime.ts); null when this call's sides are not available. */
+  private startHandsfree(run: CallRun, talking: HandsfreeTalking): HandsfreeRuntime | null {
+    const clock: HandsfreeClock = {
+      nowMs: () => this.now() - run.sessionStartedAt,
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    };
+    const sides = this.deps.handsfree?.(run.call, clock) ?? null;
+    if (!sides) { console.warn('[meeting-assistant] hands-free is on but no listening side is available: nothing is routed'); return null; }
+    const hf = new HandsfreeRuntime({
+      call: run.call, clock, listening: sides.listening, rules: sides.rules, talking,
+      relay: {
+        push: (pcm, last) => this.sendVoice(run, pcm, last),
+        clear: () => { run.relay.clear(); run.playhead = 0; run.speech.forgetUnheard(); },
+      },
+      onLine: (l) => { void this.onHeardLine(run, l); },
+      nameOf: (userId) => nameOf(userId),
+      trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
+    });
+    hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; });
+    run.hf = hf;
+    return hf;
+  }
+
+  /** Stop the hands-free run's routing and close its listening side (the talking side is the session, closed by its own path). */
+  private endHandsfree(run: CallRun): Promise<void> {
+    const hf = run.hf;
+    run.hf = null;
+    return hf ? hf.closeListening() : Promise.resolve();
+  }
+
+  /** One frame of Milo's voice out to the call (the relay), with its playout and the echo guard's record. */
+  private sendVoice(run: CallRun, pcm: Buffer, last: boolean): void {
+    if (!run.voice || run.voiceHeld || run.finished || !run.session) return;
+    // Playout: a frame plays once the frames before it have (a released burst plays over its length, not at the instant it went).
+    const playAt = Math.max(this.now(), run.playhead);
+    run.speech.noteFrame(playAt);
+    run.playhead = playAt + VOICE_FRAME_MS;
+    run.relay.push(pcm, last);
+  }
+
+  /** A hands-free heard line (exact speaker, session ms): stored like a live piece, behind the earlier ones. */
+  private onHeardLine(run: CallRun, l: HeardLine): Promise<void> {
+    run.transcribedAt = this.now(); run.deaf = null;
+    const next = run.lineChain.then(async () => {
+      run.pieceNo += 1;
+      const outcome = await this.deps.intake().handle(run.ctx.callId, {
+        userId: l.userId, text: l.text, at: l.at, ...callOffsets(run, l), captionId: l.captionId || `hf:${run.sessionNo}:${run.pieceNo}`,
+        ...(l.participantId ? { participantId: l.participantId } : {}), ...(l.speakerName ? { speakerName: l.speakerName } : {}),
+      });
+      if (outcome.stored) { run.lastLineAt = Math.max(run.lastLineAt, outcome.stored.at); run.lastLineSeq = Math.max(run.lastLineSeq, outcome.stored.seq); }
+      trace('line', { piece: `hf:${run.sessionNo}:${run.pieceNo}`, seq: outcome.stored?.seq ?? null, userId: l.userId, startMs: l.startMs, endMs: l.endMs, stored: outcome.stored !== null, hf: true });
+    });
+    run.lineChain = next.catch((err: unknown) => { console.warn('[meeting-assistant] heard line failed', (err as Error).message); });
+    return next;
   }
 
   /** Close the current session on purpose; fold its usage into the totals; expire reads that were waiting on it. */
@@ -950,6 +1029,7 @@ export class AssistantRuntime {
     // under way when the ceiling is reached), so a tap never outlives the call's stop.
     this.deps.audio?.detach(run.ctx.callId);
     run.deaf = null; // a resume arms a new tap and opens a new session: any stall is watched afresh
+    if (run.hf) await this.endHandsfree(run);
     const session = run.session;
     if (!session) return;
     run.intentionalClose = true;
@@ -972,7 +1052,11 @@ export class AssistantRuntime {
       void Promise.resolve().then(() => fn(e)).catch((err: unknown) => console.warn('[meeting-assistant] session event failed', (err as Error).message));
     };
     run.unsubscribers.push(
-      session.on('inputTranscript', guard((e: SessionEvents['inputTranscript']) => this.onInput(run, e))),
+      // Hands-free: the session hears only the routed person, so its input transcript is never a stored line (the listening side's
+      // per-person lines are); it only says when the provider closed that person's turn.
+      session instanceof HandsfreeTalking
+        ? session.on('inputTranscript', (e) => { if (e.turnEnded) run.hf?.turnEnded(); })
+        : session.on('inputTranscript', guard((e: SessionEvents['inputTranscript']) => this.onInput(run, e))),
       session.on('outputTranscript', guard((e: SessionEvents['outputTranscript']) => this.onOutput(run, e))),
       session.on('toolCall', guard((e: SessionEvents['toolCall']) => this.onToolCall(run, e))),
       session.on('usage', (e) => {
@@ -981,6 +1065,8 @@ export class AssistantRuntime {
       }),
       // The moment the model began working on a request, kept until a function call takes it (a scripted session names its asker).
       session.on('delegation', (e) => {
+        // Hands-free: the request was handed on, so the turn is closed; the asker is the routed person, not a judged line.
+        if (session instanceof HandsfreeTalking) { run.hf?.turnEnded(); return; }
         if (session.kind === 'scripted') return;
         const at = run.sessionStartedAt + e.atMs;
         // Judged once every line heard before the delegation is stored (the provider flushes the request line just before it).
@@ -1015,6 +1101,8 @@ export class AssistantRuntime {
       }),
       session.on('outputAudio', (e) => this.onOutputAudio(run, session, e)),
       session.on('outputTranscript', (e) => {
+        // Hands-free: the router's echo check reads what Milo is saying (any utterance but an approved line, which it never relays).
+        if (run.hf && run.session === session && (e.say === undefined || !approvalOf(run, e.say))) run.hf.outputText(e.text);
         // An approved utterance's words wait, unheard, for its frames: they join the span its release opens (the echo guard).
         if (e.say !== undefined) {
           const a = approvalOf(run, e.say);
@@ -1045,6 +1133,7 @@ export class AssistantRuntime {
     if (run.intentionalClose || run.finished || run.session !== session) return;
     // An unexpected close (decision 11): replace the session with the last minutes of the call as context, a few times at most.
     run.session = null;
+    if (run.hf) void this.endHandsfree(run);
     this.dropVoice(run, false); // what the lost session was saying is never finished
     this.deps.audio?.suspend(run.ctx.callId); // the tap stays, its audio waits for the new session (and its time base)
     this.foldUsage(run);
@@ -1186,10 +1275,19 @@ export class AssistantRuntime {
       if (a && !a.releasing && a.session === session && run.session === session) {
         a.frames.push({ pcm: e.pcm, last: e.last === true, at: this.now() });
         this.streamApproved(run, a);
+      } else if (!a && run.hf && run.session === session && !run.voiceHeld && !run.finished) {
+        // Hands-free: a server line the router asked for (a fixed verdict) goes out through the router.
+        run.hf.outputAudio(e.pcm, e.last === true, e.say);
       }
       return;
     }
     if (run.approvals.length) return;
+    if (run.hf) {
+      // Hands-free: the router decides (relay, hold for the verdict, or drop); the voice gate is not used.
+      if (!run.voice || run.voiceHeld || run.finished || run.session !== session || !run.policy.relaysLiveSpeech(run.call)) return;
+      run.hf.outputAudio(e.pcm, e.last === true);
+      return;
+    }
     if (!run.voice || run.voiceHeld || run.finished || run.session !== session || !run.policy.relaysLiveSpeech(run.call)) return;
     run.gate.frame(e.pcm, e.last === true);
   }
@@ -1264,6 +1362,12 @@ export class AssistantRuntime {
   }
 
   /** `sayHeldText` with why the words were not relayed, for a caller that tells the asker (interviews' "Have Milo ask" receipt). */
+  /** The call's hands-free run (hold press / release / cancel, the floor for the surface), or null when the call is not hands-free now. */
+  handsfreeRun(callId: string): HandsfreeRun | null {
+    const run = this.runs.get(callId);
+    return run && !run.finished ? run.hf : null;
+  }
+
   async sayHeldTextWhy(callId: string, text: string, by: string): Promise<SayResult> {
     void by; // who asked is the caller's log row; the trace carries codes only
     const run = this.runs.get(callId);
@@ -1880,7 +1984,7 @@ export class AssistantRuntime {
     if (run.calls.has(id)) return;
     run.calls.set(id, 'open');
     // The request was made when the model began working on it, not when its function call reached the server: judge from then.
-    const delegation = run.session?.kind === 'scripted' ? null : this.takeDelegation(run, run.sessionStartedAt + e.atMs, id);
+    const delegation = run.session?.kind === 'scripted' || run.handsfree ? null : this.takeDelegation(run, run.sessionStartedAt + e.atMs, id);
     const judged = delegation ? await delegation.asker : undefined;
     const began = delegation?.at ?? null;
     // Without a delegation the call is judged when it arrived; on the lines' clock that is no earlier than the last line stored.
@@ -1911,7 +2015,8 @@ export class AssistantRuntime {
     const atMs = run.session?.kind === 'scripted' ? this.now() : (judgedAt ?? run.sessionStartedAt + e.atMs);
     // (a) The asker: the server's own record of who spoke.
     // The asker judged at the delegation (audit S2) when there was one; otherwise the latest addressing line before the call.
-    const asker = e.askedBy ?? (judgedAsker !== undefined ? judgedAsker : await this.findAsker(callId, atMs).then((f) => (f.ok ? f.userId : null)));
+    // Hands-free: only the routed person (talking.ts stamps them); a call nobody was routed for is unasked, never judged from lines.
+    const asker = run.handsfree ? (e.askedBy ?? null) : e.askedBy ?? (judgedAsker !== undefined ? judgedAsker : await this.findAsker(callId, atMs).then((f) => (f.ok ? f.userId : null)));
     if (!asker) {
       // No line addressed Milo, or the one that did has no single speaker: nobody is asked to confirm anything.
       await this.refuse(run, e.callId, 'could not tell who asked');
@@ -1935,12 +2040,13 @@ export class AssistantRuntime {
     if (!canSpeakOnRecord(record, asker)) { await refused('not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
-    if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await refused('not addressed'); return; }
+    // Hands-free: the route is the lock (the asker said the name, held the button, or is inside their follow-up window).
+    if (!run.handsfree && !nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await refused('not addressed'); return; }
     run.addressedCalls.add(e.callId); run.gate.poke();
     // (b2) At most MAX_CALLS_PER_REQUEST calls per addressed request: text inside a record must not be able to lead the
     // model into an open-ended chain of reads. A request is the asker plus the line that addressed Milo in the window.
     const addressing = [...lines].reverse().find((l) => (l.userId === asker || l.speakers?.includes(asker) === true) && l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
-    const requestKey = `${asker}|${addressing?.seq ?? 0}`;
+    const requestKey = run.handsfree ? `${asker}|hf${run.hfTurns}` : `${asker}|${addressing?.seq ?? 0}`;
     const made = (run.requestCalls.get(requestKey) ?? 0) + 1;
     run.requestCalls.set(requestKey, made);
     if (run.requestCalls.size > 200) run.requestCalls.delete(run.requestCalls.keys().next().value as string);
@@ -1974,7 +2080,7 @@ export class AssistantRuntime {
       // A server tool that writes runs with no confirm card, so the request must be the asker's beyond doubt (review 1, item 1).
       // Lines from the live transcript are credited by its measured lag behind the voices; unmeasured, the asker is not known.
       if (serverDef?.writes && run.lag.used && !run.lag.measured) { await this.refuseUnmeasured(run, e.callId, asker); return; }
-      if (serverDef?.writes && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
+      if (serverDef?.writes && !run.handsfree && !clearlyAsked(lines, addressing ?? null, asker, atMs)) { await refused('not clearly asked', addressing?.text); return; }
       // The asker's request already got the fallback line: a call that lands after it does not run (it would contradict it).
       const ask = run.asks?.get(asker);
       if (ask?.fellBack) { trace('call.refused', { call: e.callId, why: 'after-fallback' }); this.answer(run, e.callId, { refused: 'too late' }, null, { continue: false }); run.session?.resumeTools?.(); return; }

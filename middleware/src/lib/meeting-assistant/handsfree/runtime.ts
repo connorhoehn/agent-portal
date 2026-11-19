@@ -79,10 +79,17 @@ export class HandsfreeRuntime implements HandsfreeRun {
   outputText(text: string): void { this.router.outputText(text); }
 
   close(): Promise<void> {
+    this.closingAll ??= Promise.allSettled([this.closeListening(), this.deps.talking.close()]).then(() => undefined);
+    return this.closingAll;
+  }
+  private closingAll: Promise<void> | null = null;
+
+  /** Stop routing and close the listening side, leaving the talking side (the orchestrator's session) to its owner. Idempotent. */
+  closeListening(): Promise<void> {
     if (!this.closing) {
       this.router.close();
       for (const off of this.offs.splice(0)) off();
-      this.closing = Promise.allSettled([this.deps.listening.close(), this.deps.talking.close()]).then(() => undefined);
+      this.closing = this.deps.listening.close().catch(() => undefined);
     }
     return this.closing;
   }
