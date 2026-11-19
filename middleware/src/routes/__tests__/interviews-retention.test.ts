@@ -108,7 +108,7 @@ describe('asking for a deletion', () => {
     expect(res.body.deletion).toMatchObject({
       reason: 'request', requestedBy: { id: 'u-greta', name: 'Greta Lindqvist' }, interviews: 2,
       // The mock world's seeded stand-in recording and words of Mateo's coding round go as a recording and a call would (hardening H5).
-      removed: [{ kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'pad-log', count: 12 }, { kind: 'runs', count: 2 },
+      removed: [{ kind: 'recording', count: 1 }, { kind: 'transcript-and-minutes', count: 1 }, { kind: 'pad-log', count: 12 }, { kind: 'board-snapshots', count: 4 }, { kind: 'runs', count: 2 },
         { kind: 'resume', count: 1 }, { kind: 'contact-details', count: 1 }, { kind: 'stage-reasons', count: 1 }],
       overdue: false, doneLate: false,
       left: [],
