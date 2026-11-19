@@ -1,6 +1,7 @@
 // Is this helper the interview question's answer? (docs/interviews-tenant-plan.md, "Milo's interview tools", `pad_add_helper`).
 //
-// Asked only for a CANDIDATE's helper request (the lead's needs none: helper.ts). The interviews text model (the coach's, Amazon
+// Asked for EVERY helper, whoever asked (the code comes from a model that hears the candidate and reads the pad), and for any
+// batch of test cases that carries a long string (review 1, item 3). The interviews text model (the coach's, Amazon
 // Nova through Bedrock) answers one word, HELPER or SOLUTION, given the question and the code, both fenced as data; anything
 // else, a timeout, an error or a refused hold reads as SOLUTION: the check fails closed. The scripted stand-in
 // (`INTERVIEWS_COACH_MODEL=scripted`, the coach's one switch) carries fixed verdicts: SOLUTION when the code names the
@@ -21,12 +22,14 @@ export const SOLUTION_CHECK_PROMPT = [
   'You are given the interview question and a piece of helper code someone asked for. Answer SOLUTION if the code solves the',
   'question, or most of it (its algorithm, its function, or the part the candidate is meant to work out); answer HELPER if it is',
   'a general tool (a data structure, a utility) that does not by itself answer the question.',
+  'You may be given test cases instead of helper code: answer SOLUTION if any of their values or comments describes or gives away',
+  'how to solve the question, else HELPER.',
   'Answer with exactly one word: HELPER or SOLUTION.',
 ].join('\n');
 export const SOLUTION_CHECK_MAX_TOKENS = 5;
 export const SCRIPTED_VERDICT_MODEL_ID = 'scripted-verdict';
 
-export interface VerdictInput { question: string; code: string; entry: string | null }
+export interface VerdictInput { question: string; code: string; entry: string | null; kind?: 'helper' | 'tests' }
 export type Verdict = 'helper' | 'solution';
 
 export interface VerdictModel {
@@ -42,7 +45,7 @@ export function buildVerdictRequest(modelId: string, input: VerdictInput, fence:
     messages: [{ role: 'user' as const, content: [{ text: [
       `The question:\n${fence.wrap(input.question, { kind: 'question', maxChars: 2000 })}`,
       '',
-      `The helper code:\n${fence.wrap(input.code, { kind: 'code', maxChars: 6000 })}`,
+      `${input.kind === 'tests' ? 'The test cases' : 'The helper code'}:\n${fence.wrap(input.code, { kind: 'code', maxChars: 6000 })}`,
       '',
       'HELPER or SOLUTION?',
     ].join('\n') }] }],

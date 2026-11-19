@@ -228,6 +228,12 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
     if (name === 'pad_add_tests') {
       const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language) });
       if (!made.ok) { refusal = TESTS_NOT_ADDED; return null; }
+      // A long string value could carry the algorithm: such a batch is judged like a helper, and refused with no question to judge by.
+      if (made.longStrings) {
+        if (!question?.prompt.trim()) { refusal = TESTS_NOT_ADDED; return null; }
+        const verdict = await d.judge(interview.id, interview.leadId, { question: question.prompt, code: made.block, entry: entryOf(question.starter, language), kind: 'tests' }).catch(() => 'solution' as const);
+        if (verdict !== 'helper') { refusal = TESTS_NOT_ADDED; return null; }
+      }
       done = { line: testsAddedLine(made.count, made.checked), source: 'tests' };
       kind = 'tests';
       return atEnd(made.block);
@@ -256,10 +262,10 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
         return placed;
       };
     }
-    if (standing === 'candidate') {
-      const verdict = await d.judge(interview.id, interview.leadId, { question: question?.prompt ?? '', code: checked.code, entry: entryOf(question?.starter, language) }).catch(() => 'solution' as const);
-      if (verdict !== 'helper') { refusal = NOT_SOLUTION; return null; }
-    }
+    // Every helper is judged, whoever asked; with no question to judge it by, it is refused (fail closed; review 1, item 3).
+    if (!question?.prompt.trim()) { refusal = HELPER_NOT_ADDED; return null; }
+    const verdict = await d.judge(interview.id, interview.leadId, { question: question.prompt, code: checked.code, entry: entryOf(question.starter, language), kind: 'helper' }).catch(() => 'solution' as const);
+    if (verdict !== 'helper') { refusal = NOT_SOLUTION; return null; }
     kind = 'helper';
     const block = helperBlock(checked.code, what, language);
     return (current) => {

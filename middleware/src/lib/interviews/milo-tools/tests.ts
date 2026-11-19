@@ -27,7 +27,18 @@ export function questionForPad(questions: readonly KitQuestion[], pad: string, l
   return named ?? questions[0] ?? null;
 }
 
-export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number } | { ok: false };
+export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; longStrings: boolean } | { ok: false };
+
+/** A string longer than this in a case could describe the algorithm: the batch then goes to the solution check (index.ts). */
+export const MAX_PLAIN_CASE_STRING = 24;
+
+/** Does a case value carry a string longer than MAX_PLAIN_CASE_STRING (at any depth, keys too)? */
+export function hasLongString(v: unknown, depth = 0): boolean {
+  if (typeof v === 'string') return v.length > MAX_PLAIN_CASE_STRING;
+  if (depth > 6 || !v || typeof v !== 'object') return false;
+  if (Array.isArray(v)) return v.some((x) => hasLongString(x, depth + 1));
+  return Object.entries(v as Record<string, unknown>).some(([k, x]) => k.length > MAX_PLAIN_CASE_STRING || hasLongString(x, depth + 1));
+}
 
 /** The block for the call's `cases` against the pad as it is: checked cases when the question has a reference, else inputs only. */
 export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null }): TestCasesMade {
@@ -38,5 +49,5 @@ export function testCasesFor(cases: unknown, at: { pad: string; language: PadLan
     ? parsed.cases.filter((c) => reference.agrees(c.args, c.expected) === true)
     : parsed.cases.map((c) => ({ args: c.args }));
   if (!kept.length) return { ok: false };
-  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length };
+  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length, longStrings: kept.some((c) => hasLongString(c.args) || hasLongString(c.expected)) };
 }

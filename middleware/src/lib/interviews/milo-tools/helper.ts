@@ -72,11 +72,14 @@ const NATIVE: Readonly<Record<PadLanguage, RegExp>> = {
   cpp: /^\s*(?:template\s*<|class\s+\w+|struct\s+\w+|[\w:<>]+\s+\w+\s*\()/m,
 };
 
-/** Does `code` define a function or method named `fn`? (any language's declaration form). */
+/**
+ * Does `code` name the question's function `fn` at all? A helper has no reason to: any mention (a definition, an alias such as
+ * `two_sum = find_pair` or `const twoSum = findPair;`, an export) is refused (review 1, item 3).
+ */
 function defines(code: string, fn: string): boolean {
-  const n = fn.replace(/[^\w]/g, '');
+  const n = fn.replace(/[^\w$]/g, '');
   if (!n) return false;
-  return new RegExp(String.raw`(?:\bdef\s+${n}\s*\(|\bfunction\s+${n}\s*\(|\bfunc\s+${n}\s*\(|\b${n}\s*=\s*(?:function|\()|\b${n}\s*\([^)]*\)\s*(?:->[^:{]*)?[{:]|\b[\w<>\[\]]+\s+${n}\s*\([^)]*\)\s*\{)`).test(code);
+  return code.split(/[^\w$]+/).includes(n);
 }
 
 export type HelperCheck =

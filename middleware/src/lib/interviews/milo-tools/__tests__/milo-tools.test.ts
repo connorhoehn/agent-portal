@@ -150,7 +150,7 @@ describe('pad_add_helper', () => {
     expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'an LRU cache', code: SCRIPTED_LRU_JS })).toBe(HELPER_ADDED);
     expect(pad.text).toMatch(/^\/\/ --- Added by Milo: an LRU cache ---\nclass LRUCache \{[\s\S]*\n\/\/ --- end of Milo's helper ---\n\nfunction twoSum\(/);
     expect(logged.at(-1)![0]!.kind).toBe('helper');
-    expect(judged).toBe(0); // the lead's request needs no verdict
+    expect(judged).toBe(1); // every helper is judged, the lead's too (review 1, item 3)
   });
 
   it('refuses the question\'s own function, a helper over the size bound, and code in another language', async () => {
@@ -172,6 +172,44 @@ describe('pad_add_helper', () => {
     verdict = 'helper';
     expect(await runMiloTool(IV, GUEST, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY })).toBe(HELPER_ADDED);
     expect(pad.text).toMatch(/^# --- Added by Milo: a trie ---\nclass Trie:/);
+  });
+});
+
+describe('the solution check cannot be gone around (review 1, item 3)', () => {
+  it('an alias to the question\'s function is refused like its definition, in Python and JavaScript', () => {
+    expect(checkHelper('a pair finder', 'def find_pair(nums, target):\n    return None\n\ntwo_sum = find_pair', 'python', 'two_sum')).toEqual({ ok: false, why: 'entry' });
+    expect(checkHelper('a pair finder', 'function findPair(nums, target) {\n  return null;\n}\nconst twoSum = findPair;', 'javascript', 'twoSum')).toEqual({ ok: false, why: 'entry' });
+    expect(checkHelper('a counter', 'class Counter:\n    pass', 'python', 'two_sum')).toMatchObject({ ok: true });
+  });
+
+  it('a solution in comments goes to the verdict even when the lead asks, and is refused', async () => {
+    verdict = 'solution';
+    const commented = 'class Box:\n    # for each n: if target - n was seen, return both indices\n    pass';
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a box', code: commented })).toBe(NOT_SOLUTION);
+    expect(judged).toBe(1);
+    expect(pad.text).not.toContain('class Box');
+  });
+
+  it('no question to judge by (none in the kit, or the read failed): the helper is refused, fail closed', async () => {
+    questions = [];
+    expect(await runMiloTool(IV, LEAD, 'pad_add_helper', { what: 'a trie', code: SCRIPTED_TRIE_PY })).toBe(HELPER_NOT_ADDED);
+    expect(judged).toBe(0);
+    expect(pad.text).not.toContain('class Trie');
+  });
+
+  it('cases with a long string go to the verdict; refused when it says solution or there is no question', async () => {
+    questions = [OTHER];
+    pad.text = OTHER.starter!.python!;
+    const story = 'walk the list keeping a map of each value seen to its index';
+    verdict = 'solution';
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: [story], expected: 1 }]) })).toBe(TESTS_NOT_ADDED);
+    expect(judged).toBe(1);
+    expect(pad.text).not.toContain(story);
+    verdict = 'helper';
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: ['short words'], expected: 1 }]) })).toMatch(/^Added one test input/);
+    expect(judged).toBe(1); // a short string needs no verdict
+    questions = [{ ...OTHER, prompt: '' }];
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: [`${story} again`], expected: 1 }]) })).toBe(TESTS_NOT_ADDED);
   });
 });
 
