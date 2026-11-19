@@ -551,6 +551,16 @@ async function seedWorld(): Promise<void> {
       expect(await pad.counts('iv-m8t3h6ng')).toMatchObject({ events: 3, lastSeq: 3 });
     });
 
+    it("takes the lead's reveal row (kind reveal, side panel, with its question) and names the revealed question once", async () => {
+      const base = interviewPadLogFixture.rows().find((r) => r.interviewId === MATEO_CODING)!;
+      const reveal = (n: number) => ({ ...base, side: 'panel', kind: 'reveal', whoId: 'u-hugo', at: at(n), clientAt: at(n), from: null, inserted: null,
+        deleted: null, length: null, lines: null, via: null, language: null, text: null, questionId: 'q-be-twitter' }) as typeof base;
+      const posted = await pad.append('iv-r6d1k9wt', [reveal(1)]);
+      expect(posted.map((r) => [r.side, r.kind, r.questionId])).toEqual([['panel', 'reveal', 'q-be-twitter']]);
+      expect(await pad.postedQuestionIds('iv-r6d1k9wt', 'reveal')).toEqual(['q-be-twitter']);
+      await pad.erase(['iv-r6d1k9wt']);
+    });
+
     it('reads the default with no row, upserts one row per interview, and two sets at once leave one row holding one of them', async () => {
       const id = 'iv-n5z9f2cq'; // no settings row yet
       expect(await miloSettings.get(id)).toEqual({ candidateMayAsk: false, updatedBy: null, updatedAt: null });

@@ -438,7 +438,7 @@ CREATE TABLE IF NOT EXISTS interview_pad_events (
   client_at     TIMESTAMPTZ NOT NULL,
   who_id        TEXT NOT NULL,
   side          TEXT NOT NULL CHECK (side IN ('panel', 'candidate', 'milo')),
-  kind          TEXT NOT NULL CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper')),
+  kind          TEXT NOT NULL CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper', 'reveal')),
   from_pos      INTEGER CHECK (from_pos >= 0),
   inserted      INTEGER CHECK (inserted >= 0),
   deleted       INTEGER CHECK (deleted >= 0),
@@ -454,12 +454,13 @@ CREATE TABLE IF NOT EXISTS interview_pad_events (
 CREATE INDEX IF NOT EXISTS interview_pad_events_snapshot_idx ON interview_pad_events (interview_id, seq) WHERE kind = 'snapshot';
 -- Milo's own edits (18 November): what its interview tools write into the pad, by the server (side `milo`): test cases (kind
 -- `tests`), import lines (kind `imports`) or a helper (kind `helper`), with where the text starts, its characters and lines, and the snapshot taken as
--- it wrote them. Tables made before carry the older lists.
+-- it wrote them. The lead's reveal of a question's provided design (kind `reveal`, 19 November) is written by the server
+-- once per question. Tables made before carry the older lists.
 ALTER TABLE interview_pad_events DROP CONSTRAINT IF EXISTS interview_pad_events_side_check;
 ALTER TABLE interview_pad_events ADD CONSTRAINT interview_pad_events_side_check CHECK (side IN ('panel', 'candidate', 'milo'));
 ALTER TABLE interview_pad_events DROP CONSTRAINT IF EXISTS interview_pad_events_kind_check;
 ALTER TABLE interview_pad_events ADD CONSTRAINT interview_pad_events_kind_check
-  CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper'));
+  CHECK (kind IN ('edit', 'paste', 'snapshot', 'language', 'insert', 'tests', 'imports', 'helper', 'reveal'));
 
 -- ── what the lead lets Milo do for the candidate (18 November) ─────────────
 -- One row per interview once the lead has changed a setting; no row reads as the defaults (off). `candidate_may_ask`: the

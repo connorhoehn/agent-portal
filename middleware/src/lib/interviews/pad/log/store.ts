@@ -41,6 +41,9 @@ export interface PadEventRecord {
 /** An event as the route hands it to `append`: everything but the interview and the `seq`. */
 export type NewPadEvent = Omit<PadEventRecord, 'interviewId' | 'seq'>;
 
+/** The kinds that name a question. */
+export type QuestionEventKind = Extract<PadEventKind, 'insert' | 'reveal'>;
+
 export interface PadLogCounts { events: number; snapshots: number; lastSeq: number }
 
 export interface PadLogStore {
@@ -52,8 +55,9 @@ export interface PadLogStore {
   listAfter(interviewId: string, afterSeq: number, limit: number): Promise<PadEventRecord[]>;
   /** The interview's last snapshot, or null. */
   latestSnapshot(interviewId: string): Promise<PadEventRecord | null>;
-  /** The question ids the interview's `insert` events name (a question posted into the pad), first insert first, each once. */
-  postedQuestionIds(interviewId: string): Promise<string[]>;
+  /** The question ids the interview's events of `kind` name, first first, each once: `insert` (a question posted into the
+   *  pad, the default) or `reveal` (a question whose provided design the lead put on the shared board). */
+  postedQuestionIds(interviewId: string, kind?: QuestionEventKind): Promise<string[]>;
   /** Remove every event of these interviews; how many went. */
   erase(interviewIds: readonly string[]): Promise<number>;
 }
@@ -87,8 +91,8 @@ export class MemoryPadLogStore implements PadLogStore {
     return last ? copy(last) : null;
   }
 
-  async postedQuestionIds(interviewId: string): Promise<string[]> {
-    const ids = this.of(interviewId).filter((r) => r.kind === 'insert' && r.questionId).sort(bySeq).map((r) => r.questionId!);
+  async postedQuestionIds(interviewId: string, kind: QuestionEventKind = 'insert'): Promise<string[]> {
+    const ids = this.of(interviewId).filter((r) => r.kind === kind && r.questionId).sort(bySeq).map((r) => r.questionId!);
     return [...new Set(ids)];
   }
 

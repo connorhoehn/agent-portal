@@ -8,6 +8,8 @@ import {
   COUNT_PAD_EVENTS_SQL, ERASE_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, LIST_PAD_EVENTS_SQL, PAD_LOG_STATEMENTS, POSTED_QUESTION_IDS_SQL, SqlPadLogStore,
 } from '../store-sql.js';
 import { erasePadLog, latestPadSnapshot } from '../index.js';
+import { PAD_LOG_KINDS } from '../rules.js';
+import { readFileSync } from 'node:fs';
 import { fixtureRegistry } from '../../../../../mock/core/index.js';
 import { interviewPadLogFixture } from '../../../../../mock/interviews-pad-log.js';
 
@@ -51,7 +53,7 @@ function padTableExec(opts: { raceOnce?: boolean } = {}): SqlExec & { inserts: n
     if (sql === LIST_PAD_EVENTS_SQL) return out(mine(s('interview_id')).filter((r) => Number(r['seq']) > l('after_seq')).slice(0, l('limit')));
     if (sql === LATEST_PAD_SNAPSHOT_SQL) return out(mine(s('interview_id')).filter((r) => r['kind'] === 'snapshot').slice(-1));
     if (sql === POSTED_QUESTION_IDS_SQL) {
-      return mine(s('interview_id')).filter((r) => r['kind'] === 'insert' && r['question_id'] !== null).map((r) => ({ question_id: r['question_id'] }));
+      return mine(s('interview_id')).filter((r) => r['kind'] === s('kind') && r['question_id'] !== null).map((r) => ({ question_id: r['question_id'] }));
     }
     if (sql === ERASE_PAD_EVENTS_SQL) {
       const ids = String(s('interview_ids')).split(',');
@@ -116,6 +118,14 @@ describe.each([
     expect(await store.postedQuestionIds('iv-1')).toEqual(['q-b', 'q-a']);
   });
 
+  it('names the questions whose provided design was revealed, each once, apart from the pad\'s inserts', async () => {
+    const store = make();
+    const row = (second: number, kind: 'insert' | 'reveal', questionId: string) => edit(second, { kind, side: 'panel', whoId: 'u-lead', from: null, inserted: null, deleted: null, length: null, questionId });
+    await store.append('iv-1', [row(1, 'insert', 'q-a'), row(2, 'reveal', 'q-t'), row(3, 'reveal', 'q-t')]);
+    expect(await store.postedQuestionIds('iv-1', 'reveal')).toEqual(['q-t']);
+    expect(await store.postedQuestionIds('iv-1')).toEqual(['q-a']);
+  });
+
   it('erases by interview and nothing else', async () => {
     const store = make();
     await store.append('iv-1', [edit(1), edit(2)]);
@@ -124,6 +134,16 @@ describe.each([
     expect(await store.listAfter('iv-1', 0, 10)).toEqual([]);
     expect(await store.listAfter('iv-2', 0, 10)).toHaveLength(1);
     expect(await store.erase([])).toBe(0);
+  });
+});
+
+describe('the schema and the kinds the log holds', () => {
+  it('lets every kind the server writes into interview_pad_events, in the CREATE and in the constraint that replaces older lists', () => {
+    const schema = readFileSync(`${process.cwd()}/../schema/interviews_schema.sql`, 'utf8');
+    const lists = [...schema.matchAll(/CHECK \(kind IN \(([^)]*)\)\)/g)].map((m) => m[1]!.split(',').map((k) => k.trim().replace(/'/g, '')).sort());
+    const padLists = lists.filter((l) => l.includes('snapshot') && l.includes('insert'));
+    expect(padLists).toHaveLength(2);
+    for (const l of padLists) expect(l).toEqual([...PAD_LOG_KINDS].sort());
   });
 });
 

@@ -20,17 +20,16 @@
 /** What a person's pad may post. */
 export const PAD_EVENT_KINDS = ['edit', 'paste', 'snapshot', 'language', 'insert'] as const;
 export type PostedPadEventKind = typeof PAD_EVENT_KINDS[number];
-/**
- * Every kind the log holds: the posted ones, and Milo's own edits, which only the server writes (side `milo`;
- * lib/interviews/milo-tools): `tests` (test cases), `imports` (import lines) and `helper` (a helper block), with from, inserted,
- * length and lines. No post may carry any of them.
- */
-export type PadEventKind = PostedPadEventKind | 'tests' | 'imports' | 'helper' | 'reveal';
+/** Milo's own edits, which only the server writes (side `milo`; lib/interviews/milo-tools): `tests` (test cases), `imports`
+ * (import lines) and `helper` (a helper block), with from, inserted, length and lines. No post may carry any of them. */
 export const MILO_PAD_EVENT_KINDS = ['tests', 'imports', 'helper'] as const;
 /**
- * `reveal`: the lead put a question's provided design (its answer key's board) on the shared board, with `questionId`;
- * only the server writes it (routes/interviews/board.ts POST /board/reveal), side `panel`. No post may carry it.
+ * Every kind the log holds: the posted ones, Milo's, and `reveal`: the lead put a question's provided design (its answer
+ * key's board) on the shared board, with `questionId`; only the server writes it, once per question (routes/interviews/
+ * board.ts POST /board/reveal/shown), side `panel`. No post may carry it. The schema's kind CHECK holds this same list.
  */
+export const PAD_LOG_KINDS = [...PAD_EVENT_KINDS, ...MILO_PAD_EVENT_KINDS, 'reveal'] as const;
+export type PadEventKind = typeof PAD_LOG_KINDS[number];
 /** `milo`: the server writing for Milo (its tools' edits, and the snapshot taken as it wrote them); never set by a post. */
 export type PadSide = 'panel' | 'candidate' | 'milo';
 

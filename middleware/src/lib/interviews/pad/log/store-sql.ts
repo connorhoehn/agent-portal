@@ -9,7 +9,7 @@
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { isoOf, type SqlExec } from '../../store-sql.js';
 import type { PadEventKind, PadSide } from './rules.js';
-import type { NewPadEvent, PadEventRecord, PadLogCounts, PadLogStore } from './store.js';
+import type { NewPadEvent, PadEventRecord, PadLogCounts, PadLogStore, QuestionEventKind } from './store.js';
 
 const COLUMNS = 'interview_id, seq, at, client_at, who_id, side, kind, from_pos, inserted, deleted, doc_length, lines, via, language, question_id, text';
 
@@ -27,7 +27,7 @@ export const LIST_PAD_EVENTS_SQL = `SELECT ${COLUMNS} FROM interview_pad_events
 export const LATEST_PAD_SNAPSHOT_SQL = `SELECT ${COLUMNS} FROM interview_pad_events
   WHERE interview_id = :interview_id AND kind = 'snapshot' ORDER BY seq DESC LIMIT 1`;
 export const POSTED_QUESTION_IDS_SQL = `SELECT question_id FROM interview_pad_events
-  WHERE interview_id = :interview_id AND kind = 'insert' AND question_id IS NOT NULL ORDER BY seq`;
+  WHERE interview_id = :interview_id AND kind = :kind AND question_id IS NOT NULL ORDER BY seq`;
 export const ERASE_PAD_EVENTS_SQL = `DELETE FROM interview_pad_events WHERE interview_id = ANY(string_to_array(:interview_ids, ',')) RETURNING seq`;
 
 export const PAD_LOG_STATEMENTS = [COUNT_PAD_EVENTS_SQL, INSERT_PAD_EVENTS_SQL, LIST_PAD_EVENTS_SQL, LATEST_PAD_SNAPSHOT_SQL, POSTED_QUESTION_IDS_SQL, ERASE_PAD_EVENTS_SQL] as const;
@@ -86,8 +86,8 @@ export class SqlPadLogStore implements PadLogStore {
     return row ? padEventFromRow(row) : null;
   }
 
-  async postedQuestionIds(interviewId: string): Promise<string[]> {
-    const rows = await this.exec(POSTED_QUESTION_IDS_SQL, [text('interview_id', interviewId)]);
+  async postedQuestionIds(interviewId: string, kind: QuestionEventKind = 'insert'): Promise<string[]> {
+    const rows = await this.exec(POSTED_QUESTION_IDS_SQL, [text('interview_id', interviewId), text('kind', kind)]);
     return [...new Set(rows.map((r) => strOrNull(r['question_id'])).filter((id): id is string => id !== null))];
   }
 
