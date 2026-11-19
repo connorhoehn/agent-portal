@@ -277,6 +277,17 @@ async function runPadTool(interview: Interview, standing: Standing, name: string
   if (!out.ok) {
     if (refusal) return { line: refusal, source: 'refusal' };
     console.warn('[interviews] Milo pad write not done', out.code);
+    // Part of it reached the pad before the write failed: the attempt is logged, typed and taken out again (deleted the same
+    // count) when the gateway confirmed it, with the pad as it then stood (review 1, item 4).
+    if (out.typed) {
+      const t = out.typed;
+      const at = new Date(d.now());
+      const clientAt = at.toISOString();
+      await d.padLog(interview.id, [
+        { kind, clientAt, from: t.from, inserted: t.inserted, deleted: t.removed ? t.inserted : 0, length: t.length, lines: t.lines, language: t.language } as PadEventIn,
+        { kind: 'snapshot', clientAt, text: t.text, language: t.language, length: t.length } as PadEventIn,
+      ], at).catch((e: unknown) => console.warn('[interviews] Milo\'s failed pad edit not logged', (e as Error)?.name ?? 'error'));
+    }
     return { line: PAD_FAILED, source: 'refusal' };
   }
   const at = new Date(d.now());

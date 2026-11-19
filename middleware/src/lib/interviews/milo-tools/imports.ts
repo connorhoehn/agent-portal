@@ -144,8 +144,29 @@ const IMPORT_LINE: Readonly<Record<PadLanguage, RegExp>> = {
 export function afterImports(current: string, language: PadLanguage): number {
   const rows = current.split('\n');
   let after = -1;
-  for (let i = 0; i < rows.length && !lineTooLong(rows[i]!) && LEADING[language].test(rows[i]!); i += 1) if (IMPORT_LINE[language].test(rows[i]!)) after = i;
+  // An import that opens a bracket (Go's `import (`, Python's `from x import (`, a TypeScript `import {` over several lines)
+  // runs until the bracket closes: nothing is placed inside the group (review 1, item 4). One never closed ends the scan.
+  let depth = 0;
+  for (let i = 0; i < rows.length && !lineTooLong(rows[i]!); i += 1) {
+    const row = rows[i]!;
+    if (depth > 0) {
+      depth += bracketBalance(row);
+      if (depth <= 0) { depth = 0; after = i; }
+      continue;
+    }
+    if (!LEADING[language].test(row)) break;
+    if (!IMPORT_LINE[language].test(row)) continue;
+    const open = bracketBalance(row);
+    if (open > 0) depth = open; else after = i;
+  }
   return after < 0 ? 0 : Math.min(rows.slice(0, after + 1).join('\n').length + 1, current.length);
+}
+
+/** Opening minus closing round and curly brackets on a line (outside strings and comments is close enough for import lines). */
+function bracketBalance(row: string): number {
+  let n = 0;
+  for (const ch of row) { if (ch === '(' || ch === '{') n += 1; else if (ch === ')' || ch === '}') n -= 1; }
+  return n;
 }
 
 /**

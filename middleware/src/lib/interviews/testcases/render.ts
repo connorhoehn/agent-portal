@@ -107,17 +107,20 @@ export function renderTestCases(cases: readonly TestCase[], language: PadLanguag
   } else if (runs) {
     const typed = language === 'typescript';
     const call = typed ? `(${fn} as unknown as (...a: unknown[]) => unknown)(...args)` : `${fn}(...args)`;
+    // Each block in its own scope, so a second batch's `const` does not redeclare the first's (review 1, item 4).
+    const body: string[] = [];
     if (checked) {
-      lines.push(`const miloTestCases${typed ? ': Array<[unknown[], unknown]>' : ''} = [`, '  // [arguments, expected]');
-      for (const t of cases) lines.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
-      lines.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
+      body.push(`const miloTestCases${typed ? ': Array<[unknown[], unknown]>' : ''} = [`, '  // [arguments, expected]');
+      for (const t of cases) body.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
+      body.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
         '  console.log(JSON.stringify(got) === JSON.stringify(expected) ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
         '}');
     } else {
-      lines.push(`const miloTestInputs${typed ? ': unknown[][]' : ''} = [`, '  // arguments');
-      for (const t of cases) lines.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
-      lines.push('];', 'for (const args of miloTestInputs) {', `  console.log(JSON.stringify(args), "->", JSON.stringify(${call}));`, '}');
+      body.push(`const miloTestInputs${typed ? ': unknown[][]' : ''} = [`, '  // arguments');
+      for (const t of cases) body.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
+      body.push('];', 'for (const args of miloTestInputs) {', `  console.log(JSON.stringify(args), "->", JSON.stringify(${call}));`, '}');
     }
+    lines.push('{', ...body.map((l) => `  ${l}`), '}');
   } else {
     const name = fn ?? 'f';
     for (const t of cases) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')})${checked ? ` -> ${scriptLiteral(t.expected)}` : ''}`);

@@ -14,10 +14,12 @@ import { MILO_INTRO } from '../../speak/intro.js';
 import type { Interview, KitQuestion, PadLanguage } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
-  PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
+  PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
 } from '../index.js';
 import { builtinFor, checkHelper, MAX_HELPER_LINES } from '../helper.js';
-import { checkedImportLines, placeImports } from '../imports.js';
+import { afterImports, checkedImportLines, placeImports } from '../imports.js';
+import { renderTestCases } from '../../testcases/render.js';
+import { runInNewContext } from 'node:vm';
 import { referenceFor } from '../references.js';
 import { INTERVIEW_SCRIPT_RULES, SCRIPTED_LRU_JS, SCRIPTED_SOLUTION_PY, SCRIPTED_TRIE_PY, scriptedTestCases } from '../../../../mock/interviews-testcases.js';
 
@@ -44,8 +46,10 @@ let judged: number;
 let verdict: 'helper' | 'solution';
 let questions: KitQuestion[];
 
+let failWith: MiloPadWriteResult | null = null;
 const write = async (_id: string, plan: MiloPadPlan): Promise<MiloPadWriteResult> => {
   const placement = await plan({ ...pad });
+  if (failWith) return failWith;
   const placed = placement ? placement(pad.text) : null;
   if (!placed || !placed.text) return { ok: false, code: 'nothing' };
   pad.text = pad.text.slice(0, placed.index) + placed.text + pad.text.slice(placed.index);
@@ -62,7 +66,7 @@ beforeEach(() => {
   pad = { text: TWO_SUM.starter!.python!, language: 'python' };
   settings = new MemoryMiloSettingsStore();
   said = new MemorySaidStore(); setSaidStore(said);
-  logged = []; judged = 0; verdict = 'helper'; questions = [TWO_SUM];
+  logged = []; judged = 0; verdict = 'helper'; questions = [TWO_SUM]; failWith = null;
   resetMiloTools();
   setSpeakDeps({ callOf: async () => 'call-tools', miloJoinedAt: async () => Date.now() - 10 * 60_000 });
   setMiloToolDeps({
@@ -210,6 +214,39 @@ describe('the solution check cannot be gone around (review 1, item 3)', () => {
     expect(judged).toBe(1); // a short string needs no verdict
     questions = [{ ...OTHER, prompt: '' }];
     expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: cases([{ args: [`${story} again`], expected: 1 }]) })).toBe(TESTS_NOT_ADDED);
+  });
+});
+
+describe('nothing Milo writes breaks the pad (review 1, item 4)', () => {
+  it('two batches of cases in a JavaScript pad both run: each block is its own scope', () => {
+    const fn = 'function twoSum(nums, target) { return [0, 1]; }\n';
+    const one = renderTestCases([{ args: [[1, 2], 3], expected: [0, 1] }], 'javascript', 'twoSum');
+    const two = renderTestCases([{ args: [[3, 4], 7], expected: [0, 1] }], 'javascript', 'twoSum');
+    const printed: string[] = [];
+    expect(() => runInNewContext(`${fn}\n${one}\n${two}`, { console: { log: (...a: unknown[]) => printed.push(a.join(' ')) }, JSON })).not.toThrow();
+    expect(printed.filter((l) => l.startsWith('ok'))).toHaveLength(2);
+    const ts = renderTestCases([{ args: [[1, 2], 3] }], 'typescript', 'twoSum');
+    expect(ts.split('\n').filter((l) => l === '{' || l === '}')).toEqual(['{', '}']);
+  });
+
+  it('a write that failed after typing part of the block is logged as Milo\'s attempt, taken out again', async () => {
+    failWith = { ok: false, code: 'timeout', typed: { from: 10, inserted: 40, lines: 3, removed: true, length: 50, language: 'python', text: 'x'.repeat(50) } };
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: dozen() })).toBe(PAD_FAILED);
+    expect(logged.at(-1)![0]).toMatchObject({ kind: 'tests', from: 10, inserted: 40, deleted: 40, lines: 3 });
+    expect(logged.at(-1)![1]).toMatchObject({ kind: 'snapshot', length: 50 });
+  });
+
+  it('imports go after a bracketed import group, never inside it: Go, Python and TypeScript', () => {
+    const go = 'package main\n\nimport (\n\t"fmt"\n\t"strings"\n)\n\nfunc main() {}\n';
+    expect(go.slice(0, afterImports(go, 'go'))).toBe('package main\n\nimport (\n\t"fmt"\n\t"strings"\n)\n');
+    const py = 'from typing import (\n    List,\n    Dict,\n)\nimport os\n\ndef two_sum(nums, target):\n    pass\n';
+    expect(py.slice(0, afterImports(py, 'python'))).toBe('from typing import (\n    List,\n    Dict,\n)\nimport os\n');
+    const ts = "import {\n  readFileSync,\n  writeFileSync,\n} from 'node:fs';\n\nfunction twoSum() {}\n";
+    expect(ts.slice(0, afterImports(ts, 'typescript'))).toBe("import {\n  readFileSync,\n  writeFileSync,\n} from 'node:fs';\n");
+    // A group never closed: placed before it, not inside.
+    const open = 'import os\nfrom typing import (\n    List,\n';
+    expect(open.slice(0, afterImports(open, 'python'))).toBe('import os\n');
+    expect(placeImports(go, ['import "sort"'], 'go')!.index).toBe(go.indexOf(')\n') + 2);
   });
 });
 

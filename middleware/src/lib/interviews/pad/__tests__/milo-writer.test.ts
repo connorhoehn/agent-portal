@@ -139,6 +139,28 @@ describe('Milo writing into a pad', () => {
     expect(typingChunks('one line')).toEqual(['one line']);
   });
 
+  it('a write that fails after some chunks were typed takes them out again, keeps what others typed, and says what was typed (review 1, item 4)', async () => {
+    const hugo = await hugosPad();
+    hugo.doc.transact(() => hugo.text.insert(hugo.text.length, 'def f():\n    pass\n'));
+    await until(() => true, 'nothing');
+    await new Promise((r) => setTimeout(r, 300));
+    const before = hugo.text.toString();
+    // The write's bound ends after the third chunk (writeMs + 4 gaps = 150 ms; three chunks, at 0, 100 and 200 ms).
+    setMiloWriterDeps({ gatewayUrl: () => `ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, secret: () => SECRET, syncMs: 3000, planMs: 3000, writeMs: -250, typeGapMs: 100 });
+    const block = Array.from({ length: 8 }, (_, i) => `# case ${i}\n`).join('');
+    let typedSeen = false;
+    hugo.text.observe(() => { if (hugo.text.toString().includes('# case 0')) typedSeen = true; });
+    const out = await writeIntoPad(ROUND, () => atEnd(block));
+    setMiloWriterDeps({ gatewayUrl: () => `ws://127.0.0.1:${port}${REALTIME_GATEWAY_PATH}`, secret: () => SECRET, syncMs: 3000, planMs: 3000, writeMs: 3000, typeGapMs: 0 });
+    expect(out).toMatchObject({ ok: false, code: 'timeout', typed: { removed: true } });
+    if (out.ok || !out.typed) return;
+    expect(out.typed.inserted).toBeGreaterThan(0);
+    expect(out.typed.inserted).toBeLessThan(atEnd(block)(before)!.text.length);
+    expect(typedSeen).toBe(true);
+    await until(() => hugo.text.toString() === before, 'the typed part taken out of Hugo\'s pad');
+    expect(out.typed.text).toBe(before);
+  });
+
   it('appends its block at the end of what a person typed, and the person\'s pad shows it', async () => {
     const hugo = await hugosPad();
     hugo.doc.transact(() => hugo.text.insert(hugo.text.length, 'def two_sum(nums, target):\n    pass\n'));
