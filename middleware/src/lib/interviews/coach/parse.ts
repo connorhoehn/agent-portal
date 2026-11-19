@@ -101,7 +101,9 @@ export function parseCoachAnswer(raw: string | null, ctx: { competencyIds: reado
   if (!t) return { ok: false, code: 'malformed' };
   if (!ctx.competencyIds.includes(competencyId)) return { ok: false, code: 'off-kit' };
   if (t.length > MAX_SUGGESTION_CHARS) return { ok: false, code: 'too-long' };
-  const quote = basedOn === null ? null : squash(basedOn);
+  // A quote with no word in it (".", "…") is no quote; leading punctuation is trimmed.
+  const trimmed = basedOn === null ? '' : squash(basedOn).replace(/^[\s"'.,;:!?…-]+/, '');
+  const quote = /[\p{L}\p{N}]/u.test(trimmed) ? trimmed : null;
   if (quote !== null && quote.length > MAX_BASED_ON_CHARS) return { ok: false, code: 'too-long' };
   if (quote && !quotedFrom(quote, ctx.lines) && !quotedFromCode(quote, ctx.codeLines ?? [])) return { ok: false, code: 'unsourced' };
   const guard = guardSuggestion(t);

@@ -106,6 +106,15 @@ test('the wait is the server\'s, between 10 seconds and 2 minutes; the budget is
   assert.equal(suggestionPromptId('iv-1', 's1'), 'interview-suggestion:iv-1:s1');
 });
 
+test('a quote with no words in it is no quote: a suggestion never shows an empty "Based on"', async () => {
+  for (const q of ['', ' . ', '…', '"."']) {
+    const out = await readSuggestion('iv-1', reply(200, { suggestion: { ...SG, basedOn: q }, paused: null, retryAfterMs: 90_000 }));
+    assert.equal(out.suggestion?.basedOn, null);
+  }
+  const kept = await readSuggestion('iv-1', reply(200, { suggestion: { ...SG, basedOn: '. Actually, wait. That breaks' }, paused: null, retryAfterMs: 1 }));
+  assert.equal(kept.suggestion?.basedOn, 'Actually, wait. That breaks');
+});
+
 test('reading a suggestion: the shape, a budget pause, and not-found or failure as nothing', async () => {
   const ok = await readSuggestion('iv-1', reply(200, { suggestion: SG, paused: null, retryAfterMs: 90_000 }));
   assert.equal(ok.suggestion?.competency.name, 'Collaboration');

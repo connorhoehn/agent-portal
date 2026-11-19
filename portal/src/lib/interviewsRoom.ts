@@ -258,6 +258,12 @@ export function startSuggestionPoll(opts: {
   return () => { live = false; opts.clearTimer(timer); };
 }
 
+/** A quote worth a "Based on" line: leading punctuation trimmed, and nothing at all unless it holds a word. */
+export function usableQuote(q: string | null | undefined): string | null {
+  const t = (q ?? '').replace(/^[\s"'.,;:!?…-]+/, '').trim();
+  return /[\p{L}\p{N}]/u.test(t) ? t : null;
+}
+
 /** One read. Not found (not the lead, or no route) and any failure read as no suggestion. */
 export async function readSuggestion(interviewId: string, fetcher: typeof fetch = fetch): Promise<SuggestionRead> {
   try {
@@ -267,7 +273,7 @@ export async function readSuggestion(interviewId: string, fetcher: typeof fetch 
     const s = body.suggestion;
     const valid = !!s && typeof s.id === 'string' && typeof s.text === 'string' && !!s.competency && typeof s.competency.name === 'string';
     return {
-      suggestion: valid ? { id: s.id, text: s.text, competency: s.competency, basedOn: s.basedOn ?? null, shownAt: s.shownAt ?? '' } : null,
+      suggestion: valid ? { id: s.id, text: s.text, competency: s.competency, basedOn: usableQuote(s.basedOn), shownAt: s.shownAt ?? '' } : null,
       paused: body.paused === 'budget' || body.paused === 'model' ? body.paused : null,
       retryAfterMs: suggestionWaitMs(body.retryAfterMs),
     };

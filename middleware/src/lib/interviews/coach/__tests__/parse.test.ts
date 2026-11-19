@@ -11,6 +11,9 @@ describe('a well-formed answer', () => {
     expect(answer(GOOD)).toEqual({ ok: true, suggestion: GOOD });
     expect(answer('```json\n' + JSON.stringify(GOOD) + '\n```')).toEqual({ ok: true, suggestion: GOOD });
   });
+  it('a quote with no words in it reads as no quote, and leading punctuation is trimmed', () => {
+    for (const q of ['.', ' … ', '"."']) expect(answer({ ...GOOD, basedOn: q })).toEqual({ ok: true, suggestion: { ...GOOD, basedOn: null } });
+  });
   it('may build on nothing said (a new question from the bank)', () => {
     expect(answer({ ...GOOD, basedOn: null })).toEqual({ ok: true, suggestion: { ...GOOD, basedOn: null } });
   });
