@@ -21,6 +21,10 @@ import { HuddleChatProvider, HuddleChatPanel, HuddleReactionOverlay, useHuddleCh
 import { PostCallRecordingMonitor } from '../recordings/PostCallRecording';
 import { SHELL_MEETING } from '../../lib/meetingRooms';
 import { CallMeetingProvider, MeetingStageHeader, MeetingStageActions, useCallMeeting } from './CallMeeting';
+import { useMeetingAssistant } from '../../lib/meetingAssistant';
+import { useLiveCallId } from '../../lib/liveCallId';
+import { staffFloorBase, useMiloFloor } from '../../lib/miloFloor';
+import { floorHighlightFor } from '../../lib/miloFloorModel';
 
 const getToken = async () => (await realtimeTokenSource.get()).token;
 /** The pre-join choices were remembered under this key before the call host moved into the library. */
@@ -199,12 +203,16 @@ export function ShellCallMedia({ id }: { id?: string }) {
   const react = useHuddleReact();
   // A page that claims the pane (the interview room) draws the recording note itself, with its own gutter.
   const paneClaimed = useCallBlockPlacement() === 'pane';
+  // Hands-free Milo: the tile of whoever has its ear rings for every viewer (pushed on the call's channel, lib/miloFloor.ts).
+  const callId = useLiveCallId();
+  const handsfree = useMeetingAssistant(callId).view.handsfree;
+  const floorRing = floorHighlightFor(useMiloFloor(staffFloorBase(callId), callId, handsfree).view.floor);
   return <>
     <CallMediaOutlet {...(id ? { id } : {})} {...(paneClaimed ? { recordingConsent: false as const } : {})} overlay={<HuddleReactionOverlay />} header={<ShellMeetingStage />}
       extras={<MeetingStageActions react={react} />}
       onOpenPeople={(lobby, tenant) => { if (meeting) { meeting.toggle('people'); return; } const href = callPeopleHref(lobby.channel, tenant); if (href) navigate(href); }}
       onOpenDocument={doc => { if (doc.href) navigate(doc.href); }}
-      dockTestId={(lobby, tenant) => shellCallDockTestId(lobby.channel, tenant)} />
+      dockTestId={(lobby, tenant) => shellCallDockTestId(lobby.channel, tenant)} {...(floorRing ? { highlightFor: floorRing } : {})} />
     <HuddleChatPanel />
     <PostCallRecordingMonitor />
   </>;

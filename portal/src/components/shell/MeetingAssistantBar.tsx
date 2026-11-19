@@ -28,8 +28,8 @@ import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { hideAssistantNotice, noticeKey, useAssistantNoticeHidden } from '../../lib/assistantNoticeHidden';
 import { useCallHost } from '../../lib/conversationCall';
 import { useInterviewRoomMiloBlock, useInterviewRoomSeat } from './InterviewRoomFooter';
-import { MiloHoldControl } from './MiloHoldControl';
-import { staffFloorBase } from '../../lib/miloFloor';
+import { AssistantBar } from '@connorhoehn/ui-components/video';
+import { staffFloorBase, useMiloHoldBar } from '../../lib/miloFloor';
 import { useSession } from '../../lib/auth';
 
 export { useLiveCallId };
@@ -82,6 +82,7 @@ export function AssistantBarControls() {
   const focus = useComposerFocus();
   const transcriptOn = useLiveTranscriptOn(callId);
   const selfId = useSession().session?.sub ?? null;
+  const miloBar = useMiloHoldBar({ base: staffFloorBase(callId), callId, on: assistant.view.handsfree, mayHold: assistant.view.mayHold });
   // Nothing is drawn until the first state read answers: no "Invite Milo" while Milo may already be here.
   if (controls.hidden || view.phase === 'loading') return null;
   const cards = myWaitingActions(view);
@@ -101,7 +102,11 @@ export function AssistantBarControls() {
   const why = controls.left ? `${leftWords(view)}.` : null;
   // A standing reason Milo can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
   const refused = controls.left ? rejoinRefusedWords(view) : null;
-  return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="assistant-bar">
+  // Hands-free (the library AssistantBar): the hold button for someone the call's rules route, and who has Milo's ear for everyone.
+  const showFloor = miloBar.handsfree && view.handsfree && !controls.left;
+  return <AssistantBar assistantName={ASSISTANT_NAME} divided selfId={selfId}
+    floor={showFloor ? miloBar.floor : null} hold={showFloor ? miloBar.hold : null} refusal={showFloor ? miloBar.refusal : null}
+    leading={<>
     {controls.invite && miloBlock && <Tooltip content={miloBlock.tooltip} placement="top">
       <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={miloBlock.tooltip} data-testid="assistant-invite-blocked">{miloBlock.label}</Chip>
     </Tooltip>}
@@ -117,7 +122,8 @@ export function AssistantBarControls() {
     </Tooltip> : state && controls.left && why && <Tooltip content={refused ? `${why} ${refused}` : why} placement="top" data-testid="assistant-left-why">
       <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={refused ? `${why} ${refused}` : why} data-testid="assistant-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-rejoin={view.rejoin ?? ''}>{why}</Chip>
     </Tooltip>}
-    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, ${ASSISTANT_NAME}'s voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss ${ASSISTANT_NAME}`} triggerTestId="assistant-status-mark"
+    </>}
+    status={words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, ${ASSISTANT_NAME}'s voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss ${ASSISTANT_NAME}`} triggerTestId="assistant-status-mark"
       triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="assistant-menu"
       trigger={<T size="xs" weight="medium" className="whitespace-nowrap">{words}{left ? ` · ${left}` : ''}</T>}
       sections={[...(facts.length ? [{ label: `${ASSISTANT_NAME} in this call`, items: [], caption: facts.join('. ') + '.', 'data-testid': 'assistant-facts' }] : []), { items: [
@@ -135,7 +141,7 @@ export function AssistantBarControls() {
             if (!transcriptOn && huddle?.openPane({ focus: false })) focus.request({ mode: 'chat', target: { kind: 'huddle' } });
           } }] : []),
         ...(controls.dismiss ? [{ label: DISMISS_LABEL, icon: <CloseIcon size={14} />, danger: true, onSelect: () => assistant.askDismiss() }] : []),
-      ] }]} />}
+      ] }]} />}>
     {/* Milo's voice, seen without opening the menu: on for the call, or muted by this person. */}
     {voiceChip && !controls.left && <Chip size="sm" tone={voice.muted ? 'neutral' : 'info'} icon={<SpeakerIcon size={12} />} data-testid="assistant-voice-chip">{voiceChip}</Chip>}
     {/* What waits on this person: change cards to confirm (they expire) and proposals to answer. The cards come first: the badge
@@ -147,11 +153,9 @@ export function AssistantBarControls() {
         <Badge variant="count" value={cards.length + owed} color="accent" aria-label={waiting} />
       </Button>
     </Tooltip>}
-    {/* Hands-free: the hold button for someone the call's rules route, and who has Milo's ear for everyone. */}
-    {view.handsfree && !controls.left && <MiloHoldControl base={staffFloorBase(callId)} on={view.handsfree} mayHold={view.mayHold} selfId={selfId} />}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="assistant-enable-sound">Click to hear {ASSISTANT_NAME}</Button>}
     {/* A refusal or a failed start is not drawn on this line (one row clipped it): it is a deck prompt above the row (AssistantBudgetAsk). */}
-  </Inline>;
+  </AssistantBar>;
 }
 
 /**

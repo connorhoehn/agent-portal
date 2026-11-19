@@ -23,8 +23,9 @@ import { useCallHost } from '../../lib/conversationCall';
 import { lastMiloLineOf, type MiloLastLine } from '../../lib/interviewsRoom';
 import { NO_ASSISTANT } from '../../lib/meetingAssistantModel';
 import { GUEST_API } from './guestApi';
-import { MiloHoldControl } from '../../components/shell/MiloHoldControl';
-import { GUEST_FLOOR_BASE } from '../../lib/miloFloor';
+import { AssistantBar } from '@connorhoehn/ui-components/video';
+import { GUEST_FLOOR_BASE, useMiloFloor, useMiloHoldBar } from '../../lib/miloFloor';
+import { floorHighlightFor } from '../../lib/miloFloorModel';
 import {
   MILO_CAPTION_SPEAKER, captionClearsAt, captionFromChat, captionFromRequest, captionKindLabel, lineIsStale, replacesCaption,
   type MiloCaption, type MiloRequestAnswer,
@@ -34,7 +35,7 @@ import type { GuestRoom } from './steps';
 export type { MiloRequestAnswer } from './guestMiloCaption';
 
 /** The call the candidate is in now, or null before they join (or after they leave). */
-function useJoinedCallId(room: GuestRoom): string | null {
+export function useJoinedCallId(room: GuestRoom): string | null {
   const host = useCallHost();
   const call = host?.call;
   const here = host?.lobby?.lobbyName === room.lobbyName;
@@ -132,6 +133,9 @@ export function MiloCaptionCard({ caption, speaking }: { caption: MiloCaption; s
 export function GuestMiloRequests({ room, onLine }: { room: GuestRoom; onLine(answer: MiloRequestAnswer | null): void }): JSX.Element | null {
   const callId = useJoinedCallId(room);
   const [busy, setBusy] = useState(false);
+  // Hands-free: who is talking to Milo (pushed on the call's channel), and the hold button only when the lead turned pad help on
+  // (the server's admission, `mayHold` in the floor read).
+  const milo = useMiloHoldBar({ base: GUEST_FLOOR_BASE, callId, on: room.state === 'open' });
   if (!callId || room.state !== 'open') return null;
   const ask = async (request: 'repeat' | 'time') => {
     if (busy) return;
@@ -139,12 +143,11 @@ export function GuestMiloRequests({ room, onLine }: { room: GuestRoom; onLine(an
     onLine(await requestFromMilo(request));
     setBusy(false);
   };
-  return <Inline gap="xs" align="center" wrap={false} className="shrink-0" data-testid="guest-milo-requests">
-    <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('repeat')} data-testid="guest-milo-repeat">Repeat the question</Button>
-    <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('time')} data-testid="guest-milo-time">How much time is left?</Button>
-    {/* Hands-free: who is talking to Milo, and the hold button only when the lead turned pad help on (the server's admission). */}
-    <MiloHoldControl base={GUEST_FLOOR_BASE} on selfId={null} />
-  </Inline>;
+  return <AssistantBar assistantName="Milo" floor={milo.handsfree ? milo.floor : null} hold={milo.hold} refusal={milo.refusal} data-testid="guest-milo-requests"
+    leading={<>
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('repeat')} data-testid="guest-milo-repeat">Repeat the question</Button>
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void ask('time')} data-testid="guest-milo-time">How much time is left?</Button>
+    </>} />;
 }
 
 /** The request: the route's sentence (`ok`), or, when it refuses or does not answer, its error or one of ours (not Milo's words). */
@@ -160,4 +163,11 @@ async function requestFromMilo(request: 'repeat' | 'time'): Promise<MiloRequestA
     if (typeof body?.error === 'string') return { text: body.error, ok: false, at };
   } catch { /* below */ }
   return { text: 'Milo could not answer just now. Try again in a moment.', ok: false, at };
+}
+
+/** The ring on the tile of whoever has Milo's ear, for the candidate's call (the outlet's `highlightFor`); pushed like the bar's floor. */
+export function useGuestFloorRing(room: GuestRoom): ((userId: string) => { label: string } | undefined) | undefined {
+  const callId = useJoinedCallId(room);
+  const { view } = useMiloFloor(GUEST_FLOOR_BASE, callId, room.state === 'open');
+  return floorHighlightFor(view.floor);
 }

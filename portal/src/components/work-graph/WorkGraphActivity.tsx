@@ -135,7 +135,8 @@ export function WorkGraphActivity({
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
   useEffect(() => { setSelection(null); setView(undefined); setVisible(undefined); }, [subjectKey, day]);
 
-  const nodes = useMemo(() => Object.values(result.graph.nodes), [result.graph.nodes]);
+  // realtime-modules 0.149+ can stream a `subject` node (a subject-scoped graph's root); this view never asks for one, and the canvas does not draw that kind.
+  const nodes = useMemo(() => Object.values(result.graph.nodes).filter((n): n is typeof n & { kind: Exclude<typeof n.kind, 'subject'> } => n.kind !== 'subject'), [result.graph.nodes]);
   const edges = useMemo(() => Object.values(result.graph.edges), [result.graph.edges]);
   const sources = useMemo(() => Object.values(result.graph.sources), [result.graph.sources]);
   // The header every mount gets identically: who/what this graph is about, the

@@ -82,13 +82,14 @@ const audioTap: { sink: AudioSink | null; attach(callId: string, sink: AudioSink
 const ctx: StartContext = { callId: CALL, tenant: 'orgiq', inviterId: ALICE, roster: ['Alice', 'Bob', 'Carol'], recordName: 'Auth Migration' };
 const pcm = (tag: number) => Buffer.alloc(4800, tag);
 const savedFlag = process.env['MEETING_ASSISTANT_HANDSFREE'];
+let floors: Array<{ type: string; channel: string; handsfree: boolean; floor: { userId: string } | null }> = [];
 
 async function boot(flag: string | undefined, withSides = true): Promise<void> {
   if (flag === undefined) delete process.env['MEETING_ASSISTANT_HANDSFREE']; else process.env['MEETING_ASSISTANT_HANDSFREE'] = flag;
-  listening = null; rules = new FakeRules(); sent = [];
+  listening = null; rules = new FakeRules(); sent = []; floors = [];
   runtime = new AssistantRuntime({
     store: () => store, intake: () => intake, clock: () => now, makeSession: () => new FakeSession(),
-    rolesOf: async () => ['member'], audio: audioTap, ...(seats ? { seats: async () => seats! } : {}), voiceSink: (_c, frame) => { sent.push(frame.data.seq); return true; },
+    rolesOf: async () => ['member'], audio: audioTap, ...(seats ? { seats: async () => seats! } : {}), voiceSink: (_c, frame) => { sent.push(frame.data.seq); return true; }, floorSink: (_c, frame) => { floors.push(frame); return true; },
     ...(withSides ? { handsfree: (_call: unknown, clock: HandsfreeClock) => { listening = new FakeListening(clock as unknown as FakeClock); return { listening: listening as never, rules }; } } : {}),
   }, { tickMs: 0 });
   await runtime.start(ctx);
@@ -281,6 +282,20 @@ describe('the hands-free seam', () => {
     audioTap.sink!.placed(BOB, pcm(1), 100);
     await flush();
     expect(listening!.opened.filter((u) => u === BOB)).toHaveLength(2);
+  });
+
+  it('the floor is pushed on the call channel when it changes, once per change, and cleared at the stop', async () => {
+    await boot('1');
+    await flush();
+    expect(floors.map((f) => [f.type, f.channel, f.handsfree, f.floor?.userId ?? null])).toEqual([['assistant-floor', `orgiq:huddle:${CALL}`, true, null]]);
+    listening!.emit('name', { userId: ALICE, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 300, textSoFar: 'Milo' });
+    await flush();
+    expect(floors.at(-1)).toMatchObject({ handsfree: true, floor: { userId: ALICE } });
+    const n = floors.length;
+    await runtime.tick(); await flush();
+    expect(floors).toHaveLength(n);
+    await runtime.stop(CALL); await flush();
+    expect(floors.at(-1)).toMatchObject({ handsfree: false, floor: null });
   });
 
   it('a stop closes the listening side with the session', async () => {

@@ -55,7 +55,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { ChatPanel } from '@connorhoehn/ui-components/social';
 import { ContextComposer, ConversationInputProvider } from '@connorhoehn/ui-components/social/rich-composer';
-import { MiloHoldControl } from '../components/shell/MiloHoldControl';
+import { AssistantBar } from '@connorhoehn/ui-components/video';
 import { AudioLevelMeter, CallTileRow, HuddleBar, ParticipantTile, SettingsGearIcon } from '@connorhoehn/ui-components/video';
 import {
   VOICE_PHASES,
@@ -415,8 +415,8 @@ export default function ReferenceSheet() {
             <Tile id="A-3" component="Footer row" subpath="/shared, /video" state="today: idle, no call" width="full">
               <FooterRow />
             </Tile>
-            <Tile id="A-3b" component="MiloHoldControl (HoldToTalkButton + floor chip)" subpath="/video, /shared" state="hands-free Milo: the floor is read from /__ref/milo (a walk stubs it)" width="half">
-              <MiloHoldControl base="/__ref/milo" on mayHold selfId="u-hugo" />
+            <Tile id="A-3b" component="AssistantBar (HoldToTalkButton busy + who has Milo's ear)" subpath="/video" state="hands-free Milo: Hugo holds the floor; this viewer may hold" width="half">
+              <AssistantBar assistantName="Milo" statusLabel="Milo is listening" selfId="u-una" floor={{ userId: 'u-hugo', name: 'Hugo' }} hold={{ onStart: () => {}, onEnd: () => {}, onCancel: () => {} }} />
             </Tile>
             <Tile id="A-4" component="Footer row + VoiceDock" subpath="/shared, /video, /voice" state="spec §5 placement: listening, beside the huddle half; no dollar figure" width="full">
               <FooterRow voice={<VoiceDock size="footer" phase="listening" level={0.6} outputLevel={0} elapsedSeconds={14}

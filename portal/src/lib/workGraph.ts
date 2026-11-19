@@ -312,12 +312,16 @@ export function workGraphPresentation(input: PresentationInput): WorkActivityPre
   };
 }
 
+/** A node as the realtime-modules (0.149+) viewer stream carries it: its kinds include `subject` (a subject-scoped graph's root),
+ *  which the library's drawing kinds do not name; the portal never asks for a subject graph, so one is only ever labelled. */
+type ViewerNode = Omit<WorkGraphNodeData, 'kind'> & { kind: WorkGraphNodeData['kind'] | 'subject' };
+
 const STATUS_LABEL: Record<WorkGraphNodeData['status'], string> = {
   idle: 'Idle', running: 'Running', waiting: 'Waiting', completed: 'Completed', error: 'Failed', stopped: 'Stopped', stale: 'Stale',
 };
 /** "Run · Completed": the node's kind, in the legend's words, and its status. */
-export function workNodeKindStatus(node: Pick<WorkGraphNodeData, 'kind' | 'status'>): string {
-  return `${WORK_NODE_KIND_LABELS[node.kind] ?? node.kind} · ${STATUS_LABEL[node.status] ?? node.status}`;
+export function workNodeKindStatus(node: Pick<ViewerNode, 'kind' | 'status'>): string {
+  return `${(WORK_NODE_KIND_LABELS as Record<string, string>)[node.kind] ?? node.kind} · ${STATUS_LABEL[node.status] ?? node.status}`;
 }
 
 /** What a subject's graph is about, for its header: the scope noun, and the
@@ -365,7 +369,7 @@ export function workGraphHeading(input: WorkGraphHeadingInput): { title: string;
 
 /** Where opening a node goes — the page that already serves that entity. Null
  * for anything the id does not name plainly (a hashed id), so nothing guesses. */
-export function workGraphNodeHref(nodeId: string, edges: Record<string, WorkGraphEdgeData>, nodes: Record<string, WorkGraphNodeData>): string | null {
+export function workGraphNodeHref(nodeId: string, edges: Record<string, WorkGraphEdgeData>, nodes: Record<string, ViewerNode>): string | null {
   const [kind, ...rest] = nodeId.split(':');
   const id = rest.join(':');
   if (!id || id.startsWith('h.')) return null;

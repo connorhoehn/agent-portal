@@ -35,7 +35,7 @@ import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
-import { GuestMiloRequests, GuestMiloVoice, type MiloRequestAnswer } from './GuestMiloVoice';
+import { GuestMiloRequests, GuestMiloVoice, useGuestFloorRing, type MiloRequestAnswer } from './GuestMiloVoice';
 import { GuestRoomPane, GuestRoomWorkspace, type GuestPaneTab } from './GuestRoomPane';
 import { useGuestMediaBinding } from './guestMedia.ts';
 import { readRoom } from './guestApi.ts';
@@ -203,6 +203,8 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   const lostWords = callLossWords('candidate');
   // Milo's answer to the candidate's last request: asked from the bar, shown as Milo's caption under the stage.
   const [miloAnswer, setMiloAnswer] = useState<MiloRequestAnswer | null>(null);
+  // The tile of whoever has Milo's ear rings for the candidate too.
+  const floorRing = useGuestFloorRing(room);
   useEffect(() => { if (!joined) setMiloAnswer(null); }, [joined]);
 
   const idle = {
@@ -213,7 +215,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
   };
   const footer = <Stack as="footer" ref={footerRef} gap="none" aria-label="Call" className="shrink-0 border-t border-border bg-surface" data-testid="join-room-footer">
     {/* A page that claims the pane (the floating or docked call) draws the recording note itself, as the shell's outlet does. */}
-    <CallMediaOutlet {...(paneClaimed ? { recordingConsent: false as const } : {})} />
+    <CallMediaOutlet {...(paneClaimed ? { recordingConsent: false as const } : {})} {...(floorRing ? { highlightFor: floorRing } : {})} />
     <Inline gap="sm" align="center" justify="end" wrap={false} className="min-h-11 min-w-0 px-4 py-1">
       <GuestCallBar room={room} panel={panel} chatOpen={chatOpen} onToggleChat={toggleChat} onMiloLine={setMiloAnswer} />
     </Inline>

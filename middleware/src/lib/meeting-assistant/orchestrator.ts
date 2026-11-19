@@ -32,6 +32,7 @@ import { limitsOfCall, linesForModels, payerOf, policyCallOf, policyForLobby, ty
 import { VoicedTimeline, TranscriptLag, attribute, splitBySpeaker } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
+import { floorOf, type FloorView } from './handsfree/surface.js';
 import { ASKER_WINDOW_MS, VOICE_PROMPT_WINDOW_MS, VoiceGate, type VoiceGateWhy } from './voice-gate.js';
 import type { AudioIntake } from './audio-intake.js';
 import type { TapArmer } from './media.js';
@@ -115,6 +116,9 @@ const RECENT_TRANSCRIPT_LINES = 60;
 
 /** The gateway's in-process hand-off for a transient frame (lib/social-chat.ts); loaded on first use so a unit test needs no gateway. */
 const defaultVoiceSink: VoiceSink = async (channel, frame) => (await import('../social-chat.js')).sendThreadFrame(channel, frame);
+/** The hands-free floor as the call's viewers receive it (the shape of realtime-modules 0.150 `AssistantFloorFrame`). */
+export interface AssistantFloorFrame { type: 'assistant-floor'; channel: string; handsfree: boolean; floor: FloorView['floor'] }
+const defaultFloorSink = async (channel: string, frame: AssistantFloorFrame): Promise<boolean> => (await import('../social-chat.js')).sendThreadFrame(channel, frame);
 
 export interface StartContext {
   callId: string;
@@ -163,6 +167,8 @@ export interface RuntimeDeps {
   audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'> & Partial<Pick<AudioIntake, 'forget'>>;
   /** Where Milo's voice frames go (the gateway's in-process sink); false from it means no gateway runs here. Default: lib/social-chat.ts `sendThreadFrame`. */
   voiceSink?: VoiceSink;
+  /** Where the hands-free floor frames go (`assistant-floor`, the call's chat channel). Default: lib/social-chat.ts `sendThreadFrame`. */
+  floorSink?: (channel: string, frame: AssistantFloorFrame) => Promise<boolean> | boolean;
   /** Sleep for `ms` (replacement retries, the turn sweep's tests); injectable so tests never wait. */
   wait?: (ms: number) => Promise<void>;
   /** May this role take this Cedar action (a create form's gate, for a consented proposal)? Default: lib/authz.ts isAllowed. */
@@ -425,6 +431,8 @@ interface CallRun {
   hf: HandsfreeRuntime | null;
   /** Hands-free turns opened so far (a request, for the per-request call cap, is the asker plus this number). */
   hfTurns: number;
+  /** The floor last pushed to the call's channel (its JSON), so an unchanged floor is not sent twice. */
+  floorSent: string;
   /** When the seats were last read for leavers, and the people already let go (until they hold a seat again). */
   hfSeatsAt: number;
   hfGone: Set<string>;
@@ -762,7 +770,7 @@ export class AssistantRuntime {
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), heldChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
-      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0, hfSeatsAt: -Infinity, hfGone: new Set(),
+      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0, floorSent: '', hfSeatsAt: -Infinity, hfGone: new Set(),
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -999,8 +1007,9 @@ export class AssistantRuntime {
       working: () => [...run.calls.values()].includes('open'),
       trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
     });
-    hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; });
+    hf.on('state', (st) => { if (st.phase === 'routing') run.hfTurns += 1; void this.pushFloor(run); });
     run.hf = hf;
+    void this.pushFloor(run);
     return hf;
   }
 
@@ -1008,7 +1017,22 @@ export class AssistantRuntime {
   private endHandsfree(run: CallRun): Promise<void> {
     const hf = run.hf;
     run.hf = null;
+    if (hf) void this.pushFloor(run);
     return hf ? hf.closeListening() : Promise.resolve();
+  }
+
+  /**
+   * Who has Milo's ear, pushed to every viewer of the call on its chat channel (realtime-modules `useAssistantFloor` applies it), only
+   * when it changed. The channel guard decides who gets it: the call's admitted seats, and a candidate only on their own interview's call.
+   * The floor routes (GET …/assistant/floor, the candidate's /milo/floor) stay the first read.
+   */
+  private async pushFloor(run: CallRun): Promise<void> {
+    const view = await floorOf(run.finished ? null : run.hf, (id) => nameOf(id));
+    const key = JSON.stringify(view);
+    if (key === run.floorSent) return;
+    run.floorSent = key;
+    const frame: AssistantFloorFrame = { type: 'assistant-floor', channel: voiceChannel(run.ctx.callId), handsfree: view.handsfree, floor: view.floor };
+    try { await (this.deps.floorSink ?? defaultFloorSink)(frame.channel, frame); } catch { /* the next change sends the whole floor again */ }
   }
 
   /** One frame of Milo's voice out to the call (the relay), with its playout and the echo guard's record. */
