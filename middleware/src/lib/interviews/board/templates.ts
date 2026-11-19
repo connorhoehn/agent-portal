@@ -3,7 +3,8 @@
 //
 //   Blueprint     seven labelled frames (Clarifying questions first, then Requirements, Non-functional requirements,
 //                 API, High-level design, Data model, Trade-offs), each with a few starter stickies to talk through.
-//   Prompt only   one prompt card above the same seven frames, empty.
+//   Prompt only   one prompt card above the same seven frames, empty; or above another list of frames, such as
+//                 INTERVIEW_SECTIONS' five (Clarifying questions, Functional, Non-functional, High-level design, Deep dive).
 //
 // The elements carry every field Excalidraw 0.18 reads, a fractional `index` in order, and stickies as a rectangle with
 // its bound text, so the canvas draws them without repairing anything.
@@ -73,6 +74,15 @@ export const DESIGN_SECTIONS: ReadonlyArray<{ id: string; name: string; stickies
   { id: 'tradeoffs', name: 'Trade-offs', stickies: ['What did you give up?', 'Failure modes', 'What it costs to run'] },
 ];
 
+/** The five frames of a classic system design interview, empty: what the "Design Twitter" question opens on. */
+export const INTERVIEW_SECTIONS: ReadonlyArray<{ id: string; name: string }> = [
+  { id: 'clarify', name: 'Clarifying questions' },
+  { id: 'functional', name: 'Functional' },
+  { id: 'nonfunctional', name: 'Non-functional' },
+  { id: 'hld', name: 'High-level design' },
+  { id: 'deepdive', name: 'Deep dive' },
+];
+
 const FRAME_W = 440;
 const FRAME_H = 300;
 const GAP = 60;
@@ -83,14 +93,14 @@ const STICKY_H = 90;
 const STICKY_FILL = '#ffec99';
 const NOTE_FILL = '#b2f2bb';
 
-/** The frames in rows of COLUMNS starting at `top`, with the Blueprint's stickies when `stickies` is set. */
-function sections(prefix: string, top: number, stickies: boolean): El[] {
+/** The frames in rows of COLUMNS starting at `top`, with each section's stickies when `stickies` is set. */
+function sections(prefix: string, top: number, stickies: boolean, list: ReadonlyArray<{ id: string; name: string; stickies?: readonly string[] }> = DESIGN_SECTIONS): El[] {
   const out: El[] = [];
-  DESIGN_SECTIONS.forEach((s, i) => {
+  list.forEach((s, i) => {
     const fx = (i % COLUMNS) * (FRAME_W + GAP);
     const fy = top + Math.floor(i / COLUMNS) * (FRAME_H + GAP);
     const frameId = `${prefix}-${s.id}`;
-    if (stickies) {
+    if (stickies && s.stickies) {
       s.stickies.forEach((text, j) => {
         out.push(...card(`${frameId}-s${j + 1}`, fx + 20 + (j % 2) * (STICKY_W + 20), fy + 30 + Math.floor(j / 2) * (STICKY_H + 20), STICKY_W, STICKY_H, text, { fill: STICKY_FILL, frameId }));
       });
@@ -125,8 +135,8 @@ export function blueprintBoard(): KitBoard {
   return { name: 'Blueprint', elements: indexed(sections('bp', 0, true)) };
 }
 
-/** "Prompt only": one prompt card above seven empty frames. */
-export function promptBoard(prompt: string): KitBoard {
+/** "Prompt only": one prompt card above empty frames, the Blueprint's seven unless another list is given. */
+export function promptBoard(prompt: string, frames: ReadonlyArray<{ id: string; name: string }> = DESIGN_SECTIONS): KitBoard {
   const width = COLUMNS * FRAME_W + (COLUMNS - 1) * GAP;
-  return { name: 'Prompt only', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false)]) };
+  return { name: 'Prompt only', elements: indexed([...card('po-prompt', 0, 0, width, 100, prompt, { fill: '#a5d8ff', fontSize: 24 }), ...sections('po', 160, false, frames)]) };
 }

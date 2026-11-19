@@ -91,7 +91,7 @@ describe('each round names the competencies it assesses', () => {
   it('questionsOfRound: of the round\'s type, for a competency it assesses', () => {
     const kit = seedKit('op-backend');
     expect(questionsOfRound(kit, 'rd-coding', 'technical').map((q) => q.id)).toEqual(['q-be-ratelimit', 'q-be-retry', 'q-be-twosum']);
-    expect(questionsOfRound(kit, 'rd-design', 'technical').map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-shortener', 'q-be-reconcile']);
+    expect(questionsOfRound(kit, 'rd-design', 'technical').map((q) => q.id)).toEqual(['q-be-ledger', 'q-be-shortener', 'q-be-twitter', 'q-be-reconcile']);
   });
 
   it('checkKit keeps the list in the kit\'s order, once each; a kit without lists still passes and stays without them', () => {
@@ -149,7 +149,7 @@ describe('a question probes a competency in the kit, for a round the kit has', (
     kit.questions.push({ ...structuredClone(kit.questions[0]!) });
     expect(checkKit(kit).ok ? [] : (checkKit(kit) as { problems: unknown[] }).problems).toEqual([
       { path: 'competencies.5.name', message: 'Two competencies are called "problem SOLVING"; rename one.' },
-      { path: 'questions.8.id', message: 'Question 9 repeats question 1; remove one of them.' },
+      { path: 'questions.9.id', message: 'Question 10 repeats question 1; remove one of them.' },
     ]);
   });
 });
@@ -325,7 +325,7 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     const kit = seedKit('op-backend');
     expect(kit.rounds.find((r) => r.id === 'rd-design')!.surface).toBe('board');
     const boards = kit.questions.filter((q) => q.board).map((q) => q.board!.name);
-    expect(boards).toEqual(['Blueprint', 'Prompt only']);
+    expect(boards).toEqual(['Blueprint', 'Prompt only', 'Prompt only']);
     const blueprint = kit.questions.find((q) => q.id === 'q-be-ledger')!.board!;
     const frames = blueprint.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
     expect(frames).toEqual(['Clarifying questions', 'Requirements', 'Non-functional requirements', 'API', 'High-level design', 'Data model', 'Trade-offs']);
@@ -340,6 +340,24 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
     const prompt = kit.questions.find((q) => q.id === 'q-be-shortener')!.board!;
     expect(prompt.elements.some((e) => e['type'] === 'text' && String(e['originalText']).includes('URL shortener'))).toBe(true);
     expect(prompt.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
+  });
+
+  it('"Design Twitter" opens on its prompt card above five empty frames, and the kit keeps it as seeded', () => {
+    const kit = seedKit('op-backend');
+    const q = kit.questions.find((x) => x.id === 'q-be-twitter')!;
+    expect(q).toMatchObject({ competencyId: 'system-design', roundType: 'technical' });
+    expect(q.board!.name).toBe('Prompt only');
+    const texts = q.board!.elements.filter((e) => e['type'] === 'text').map((e) => e['originalText']);
+    expect(texts).toEqual(['Design Twitter']);
+    const frames = q.board!.elements.filter((e) => e['type'] === 'frame').map((e) => e['name']);
+    expect(frames).toEqual(['Clarifying questions', 'Functional', 'Non-functional', 'High-level design', 'Deep dive']);
+    // Only the prompt card: every frame is empty.
+    expect(q.board!.elements.filter((e) => e['type'] === 'rectangle').length).toBe(1);
+    expect(q.board!.elements.filter((e) => e['frameId']).length).toBe(0);
+    const idx = q.board!.elements.map((e) => String(e['index']));
+    expect([...idx].sort()).toEqual(idx);
+    const r = checkKit(kit);
+    expect(r.ok && r.value.questions.find((x) => x.id === 'q-be-twitter')!.board).toEqual(q.board);
   });
 
   it('a behavioural round on the board, or a surface the room does not have, is refused', () => {
@@ -390,13 +408,24 @@ describe('a round\'s surface and a question\'s starting board (WHITEBOARD-PLAN s
 describe('a system design question\'s clarifying questions (WHITEBOARD-PLAN step 2b)', () => {
   it('the seeded board questions carry three to five, and the kit keeps them as written', () => {
     const kit = seedKit('op-backend');
-    for (const id of ['q-be-ledger', 'q-be-shortener']) {
+    for (const id of ['q-be-ledger', 'q-be-shortener', 'q-be-twitter']) {
       const q = kit.questions.find((x) => x.id === id)!;
       expect(q.clarifying!.length).toBeGreaterThanOrEqual(3);
       expect(q.clarifying!.length).toBeLessThanOrEqual(5);
     }
     const r = checkKit(kit);
     expect(r.ok && r.value.questions.find((q) => q.id === 'q-be-ledger')!.clarifying).toEqual(kit.questions.find((q) => q.id === 'q-be-ledger')!.clarifying);
+  });
+
+  it('"Design Twitter" asks about the read to write ratio, daily active users, freshness, very large accounts and media', () => {
+    const r = checkKit(seedKit('op-backend'));
+    expect(r.ok && r.value.questions.find((q) => q.id === 'q-be-twitter')!.clarifying).toEqual([
+      'What is the read to write ratio?',
+      'How many daily active users?',
+      'How fresh must the home timeline be?',
+      'What about accounts with very many followers?',
+      'Text only, or images and video too?',
+    ]);
   });
 
   it('more than five, an empty one, and any on a behavioural question are refused, each on its own path', () => {

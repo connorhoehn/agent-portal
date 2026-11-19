@@ -6,7 +6,7 @@ import type * as YT from 'yjs';
 import { BOARD_DOCUMENT_PREFIX, boardCheckpoints, boardChannel, boardDocumentId, fitBoardView, flushBoardWithin, watchBoardFit, type BoardCheckpoints, insertBoard, readBoardElements, sceneKey, surfaceOf } from '../interviewsBoard.ts';
 import { roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/board/channel.ts';
-import { blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
+import { INTERVIEW_SECTIONS, blueprintBoard, promptBoard } from '../../../../middleware/src/lib/interviews/board/templates.ts';
 
 // The library's binding is CommonJS and requires yjs itself; under node the Y.Doc must come from that same copy (the
 // browser bundle has one copy).
@@ -44,6 +44,15 @@ test('a starting board goes in as one write, beside what is drawn, and a second 
   assert.equal(frames.length, 14);
   assert.ok(frames.includes('Clarifying questions'));
   assert.ok(frames.includes('Non-functional requirements'));
+});
+
+test('"Design Twitter" goes in as its prompt card and five empty frames', () => {
+  const doc = new Y.Doc();
+  const twitter = promptBoard('Design Twitter', INTERVIEW_SECTIONS);
+  assert.equal(insertBoard(doc, twitter), twitter.elements.length);
+  const els = readBoardElements(doc);
+  assert.deepEqual(els.filter((e) => e.type === 'frame').map((e) => e['name']), ['Clarifying questions', 'Functional', 'Non-functional', 'High-level design', 'Deep dive']);
+  assert.deepEqual(els.filter((e) => e.type === 'text').map((e) => e['originalText']), ['Design Twitter']);
 });
 
 test('a second document, fed the first one\'s update, holds the same board (what the other seat sees)', () => {
