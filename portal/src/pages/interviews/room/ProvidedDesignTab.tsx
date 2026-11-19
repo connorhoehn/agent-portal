@@ -2,17 +2,18 @@
 // whose questions carry an answer key: the reference design on a read-only canvas of its own, the design questions
 // with their answers, and the red flags by group. The candidate never receives any of it (the room sends `answerKey`
 // to seats only). The lead of the live round may "Reveal to the candidate": after the library's confirm dialog the
-// server takes it (POST /board/reveal, logged for the record) and the Board tab opens with the design put beside what
-// is drawn (lib/interviewsAnswerKey.ts queueBoardReveal).
-import { useState } from 'react';
+// server hands over the design (POST /board/reveal), the Board tab opens with it put beside what is drawn, and the
+// board's ack is logged for the record once (lib/interviewsAnswerKey.ts). Whether it was shown comes from the server.
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Button, Chip, ConfirmDialog, DetailSection, Inline, InlineAlert, Stack, T } from '@connorhoehn/ui-components/shared';
-import { answerKeyQuestions, queueBoardReveal, redFlagGroups, revealProvidedDesign, wasRevealed, type AnswerKey } from '../../../lib/interviewsAnswerKey';
+import { answerKeyQuestions, loadReveals, onReveals, queueBoardReveal, redFlagGroups, revealProvidedDesign, wasRevealed, type AnswerKey } from '../../../lib/interviewsAnswerKey';
 import type { RoomQuestion, RoomView } from '../../../lib/interviewsRoom';
 import { BoardScene } from '../board/BoardScene';
 import { questionTitle } from '../board/InterviewBoard';
 
 export function ProvidedDesignTab({ room, onRevealed }: { room: RoomView; onRevealed: () => void }) {
   const questions = answerKeyQuestions(room.questions);
+  useEffect(() => { void loadReveals(room.id); }, [room.id]);
   return <Stack gap="lg" className="min-h-0 flex-1 overflow-y-auto p-4" data-testid="interview-room-tab-design">
     {questions.map((q, i) => <AnswerKeyPart key={q.id} room={room} question={q} answerKey={q.answerKey} first={i === 0} onRevealed={onRevealed} />)}
   </Stack>;
@@ -21,18 +22,17 @@ export function ProvidedDesignTab({ room, onRevealed }: { room: RoomView; onReve
 function AnswerKeyPart({ room, question, answerKey, first, onRevealed }: { room: RoomView; question: RoomQuestion; answerKey: AnswerKey; first: boolean; onRevealed: () => void }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [shown, setShown] = useState(() => wasRevealed(room.id, question.id));
+  const [failed, setFailed] = useState<string | null>(null);
+  const shown = useSyncExternalStore(onReveals, () => wasRevealed(room.id, question.id));
   const canReveal = room.seat === 'lead' && room.state === 'live' && !!answerKey.providedDesign;
   const reveal = async () => {
     setAsking(false);
     setBusy(true);
-    const board = await revealProvidedDesign(room.id, question.id);
+    const answer = await revealProvidedDesign(room.id, question.id);
     setBusy(false);
-    if (!board) { setFailed(true); return; }
-    setFailed(false);
-    setShown(true);
-    queueBoardReveal(room.id, question.id, board);
+    if (!answer.ok) { setFailed(answer.error ?? 'The provided design could not be shown. The round may have ended.'); return; }
+    setFailed(null);
+    queueBoardReveal(room.id, question.id, answer.board);
     onRevealed();
   };
   const title = questionTitle(question) || 'This question';
@@ -45,7 +45,7 @@ function AnswerKeyPart({ room, question, answerKey, first, onRevealed }: { room:
   return <Stack gap="md" data-testid="interview-design-question" data-question={question.id}>
     <DetailSection variant="heading" as="h2" first={first} title={title} actions={action}
       hint={shown ? 'On the shared board, right of the candidate’s design.' : 'Only the interviewers see this. The candidate sees it only if the lead reveals it.'}>
-      {failed && <InlineAlert tone="error" data-testid="interview-design-reveal-failed">The provided design could not be shown. The round may have ended.</InlineAlert>}
+      {failed && <InlineAlert tone="error" data-testid="interview-design-reveal-failed">{failed}</InlineAlert>}
       {answerKey.providedDesign && <BoardScene sceneId={`answer-${question.id}`} elements={answerKey.providedDesign.elements}
         className="h-[30rem] min-h-0 shrink-0 overflow-hidden" data-testid="interview-design-canvas" />}
     </DetailSection>

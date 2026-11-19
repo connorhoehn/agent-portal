@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  RED_FLAG_GROUP_LABELS, answerKeyQuestions, onBoardReveal, placeBeside, queueBoardReveal, takeBoardReveal, wasRevealed, redFlagGroups, revealPath, revealProvidedDesign, seenFlagsOf, toggleSeenFlag,
+  RED_FLAG_GROUP_LABELS, ackReveal, answerKeyQuestions, loadReveals, onBoardReveal, onReveals, placeBeside, queueBoardReveal, takeBoardReveal, wasRevealed, redFlagGroups, revealPath, revealProvidedDesign, seenFlagsOf, toggleSeenFlag,
 } from '../interviewsAnswerKey.ts';
 import { roomTabOf, roomTabs } from '../interviewsRoom.ts';
 import * as server from '../../../../middleware/src/lib/interviews/types.ts';
@@ -39,13 +39,36 @@ test('the revealed design goes right of what is on the board, top-aligned, and a
   assert.deepEqual(placeBeside([], key.providedDesign).elements[0], key.providedDesign.elements[0]);
 });
 
-test('the reveal posts the question to the round\'s route and hands back the board; a refusal is null', async () => {
+test('the reveal asks the round\'s route for the board (nothing logged yet); a refusal carries the server\'s words', async () => {
   assert.equal(revealPath('iv-1'), '/api/interviews/interviews/iv-1/board/reveal');
   const calls: Array<{ url: string; body: unknown }> = [];
-  const ok = (async (url: string, init: RequestInit) => { calls.push({ url, body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ board: key.providedDesign }), { status: 200 }); }) as unknown as typeof fetch;
-  assert.deepEqual(await revealProvidedDesign('iv-1', 'q2', ok), key.providedDesign);
+  const ok = (async (url: string, init: RequestInit) => { calls.push({ url, body: JSON.parse(String(init.body)) }); return new Response(JSON.stringify({ board: key.providedDesign, already: false }), { status: 200 }); }) as unknown as typeof fetch;
+  assert.deepEqual(await revealProvidedDesign('iv-1', 'q2', ok), { ok: true, board: key.providedDesign, already: false });
   assert.deepEqual(calls[0]!.body, { questionId: 'q2' });
-  assert.equal(await revealProvidedDesign('iv-1', 'q2', (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch), null);
+  assert.deepEqual(await revealProvidedDesign('iv-1', 'q2', (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch), { ok: false, error: null });
+  const full = (async () => new Response(JSON.stringify({ error: 'The log is full.' }), { status: 409 })) as unknown as typeof fetch;
+  assert.deepEqual(await revealProvidedDesign('iv-1', 'q2', full), { ok: false, error: 'The log is full.' });
+});
+
+test('what was revealed comes from the server: loaded on open, and the ack (once the board holds it) marks it for every tab', async () => {
+  const urls: string[] = [];
+  const server = (async (url: string) => { urls.push(url); return url.endsWith('/reveals')
+    ? new Response(JSON.stringify({ questionIds: ['q1'] }), { status: 200 })
+    : new Response(JSON.stringify({ logged: true, already: false }), { status: 200 }); }) as unknown as typeof fetch;
+  const heard: number[] = [];
+  const off = onReveals(() => heard.push(1));
+  assert.equal(wasRevealed('iv-7', 'q1'), false);
+  await loadReveals('iv-7', server);
+  assert.equal(wasRevealed('iv-7', 'q1'), true);
+  assert.equal(wasRevealed('iv-7', 'q2'), false);
+  assert.equal(await ackReveal('iv-7', 'q2', server), null);
+  assert.equal(urls[1], '/api/interviews/interviews/iv-7/board/reveal/shown');
+  assert.equal(wasRevealed('iv-7', 'q2'), true);
+  assert.equal(heard.length, 2);
+  const full = (async () => new Response(JSON.stringify({ error: 'The log is full.' }), { status: 409 })) as unknown as typeof fetch;
+  assert.equal(await ackReveal('iv-7', 'q3', full), 'The log is full.');
+  assert.equal(wasRevealed('iv-7', 'q3'), false);
+  off();
 });
 
 test('the scorecard\'s seen red flags: a toggle adds or removes one, kept in the question\'s flag order, unknown ones dropped', () => {
@@ -58,14 +81,13 @@ test('the scorecard\'s seen red flags: a toggle adds or removes one, kept in the
   assert.deepEqual(seenFlagsOf(undefined, flags), []);
 });
 
-test('a revealed design waits for the lead\'s board once: taking it clears it, a listener hears it, it counts as revealed', () => {
+test('a revealed design waits for the lead\'s board once: taking it clears it and names its question; queueing is not revealing', () => {
   const heard: number[] = [];
   const off = onBoardReveal(() => heard.push(1));
-  assert.equal(wasRevealed('iv-9', 'q2'), false);
   queueBoardReveal('iv-9', 'q2', key.providedDesign);
   assert.equal(heard.length, 1);
-  assert.equal(wasRevealed('iv-9', 'q2'), true);
-  assert.deepEqual(takeBoardReveal('iv-9'), key.providedDesign);
+  assert.equal(wasRevealed('iv-9', 'q2'), false, 'only the server\'s ack marks it revealed');
+  assert.deepEqual(takeBoardReveal('iv-9'), { questionId: 'q2', board: key.providedDesign });
   assert.equal(takeBoardReveal('iv-9'), null);
   off();
 });

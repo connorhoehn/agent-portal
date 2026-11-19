@@ -109,8 +109,8 @@ export function markersOf(input: {
 }
 
 /** A board round's record: when the lead showed the provided design, for its Moments list. */
-export function revealMoments(events: readonly PadLogEvent[], startedAt: string | null): Array<{ atMs: number; label: string; by: string }> {
-  return events.filter((e) => e.kind === 'reveal').map((e) => ({ atMs: msFrom(startedAt, e.at), label: 'Provided design shown to the candidate', by: e.who.name }));
+export function revealMoments(events: readonly PadLogEvent[], startedAt: string | null): Array<{ questionId: string; atMs: number; label: string; by: string }> {
+  return events.filter((e) => e.kind === 'reveal').map((e) => ({ questionId: e.questionId ?? '', atMs: msFrom(startedAt, e.at), label: 'Provided design shown to the candidate', by: e.who.name }));
 }
 
 /** Markers of one kind this close (a share of the playback's length) draw on top of each other on the slider. */

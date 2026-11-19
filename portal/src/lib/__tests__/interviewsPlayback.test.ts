@@ -121,5 +121,5 @@ test('the lead\'s reveal of the provided design is a moment of its own, named fo
   const reveal: PadLogEvent = { seq: 9, kind: 'reveal', at: at(1500), who: HUGO, questionId: 'q-design' };
   const m = markersOf({ events: [reveal], startedAt: START, recordMarkers: [], runs: [], questions: [{ id: 'q-design', prompt: 'Design Twitter: people post short messages.' }] });
   assert.deepEqual(m, [{ atMs: 1_500_000, kind: 'reveal', label: 'Provided design shown', detail: 'Hugo Marchetti showed the provided design for "Design Twitter: people post short messages." to the candidate' }]);
-  assert.deepEqual(revealMoments([reveal], START), [{ atMs: 1_500_000, label: 'Provided design shown to the candidate', by: 'Hugo Marchetti' }]);
+  assert.deepEqual(revealMoments([reveal], START), [{ questionId: 'q-design', atMs: 1_500_000, label: 'Provided design shown to the candidate', by: 'Hugo Marchetti' }]);
 });

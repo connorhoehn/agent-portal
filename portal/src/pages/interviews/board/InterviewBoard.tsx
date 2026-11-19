@@ -23,7 +23,7 @@ import {
 } from '../../../lib/interviewsBoard';
 import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, questionLabel, type PadConnection } from '../../../lib/interviewsPad';
 import { BOARD_NOTICE_MS } from '../../../lib/interviewsBoardFollow';
-import { onBoardReveal, placeBeside, takeBoardReveal } from '../../../lib/interviewsAnswerKey';
+import { ackReveal, onBoardReveal, placeBeside, takeBoardReveal } from '../../../lib/interviewsAnswerKey';
 import { useBoardFit } from './useBoardFit';
 import { useBoardFollow } from './useBoardFollow';
 
@@ -103,16 +103,18 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
     flush();
   }, [ydoc, flush]);
   // The lead's reveal (the Provided design tab, lib/interviewsAnswerKey.ts): the server's copy of the provided design,
-  // put right of what is drawn as one write once the board is in sync.
+  // put right of what is drawn as one write once the board is in sync; then the ack, which the server logs once.
   const takeReveal = useCallback(() => {
     if (!ydoc || seat !== 'lead' || !editable) return;
-    const board = takeBoardReveal(interviewId);
-    if (!board) return;
-    const n = insertBoard(ydoc, placeBeside(readBoardElements(ydoc) as unknown as Array<Record<string, unknown>>, board));
-    setInserted(n > 0
-      ? { text: 'Provided design shown.', detail: 'The provided design is on the shared board, right of what was drawn.' }
-      : { text: 'Already on the board.', detail: 'The provided design is already on the shared board.' });
+    const taken = takeBoardReveal(interviewId);
+    if (!taken) return;
+    const n = insertBoard(ydoc, placeBeside(readBoardElements(ydoc) as unknown as Array<Record<string, unknown>>, taken.board));
     flush();
+    void ackReveal(interviewId, taken.questionId).then((failed) => setInserted(failed
+      ? { text: 'Shown, not recorded.', detail: failed }
+      : n > 0
+        ? { text: 'Provided design shown.', detail: 'The provided design is on the shared board, right of what was drawn.' }
+        : { text: 'Already on the board.', detail: 'The provided design is already on the shared board.' }));
   }, [ydoc, seat, editable, interviewId, flush]);
   useEffect(() => { takeReveal(); return onBoardReveal(takeReveal); }, [takeReveal]);
   // The notice says what the pick did, then clears itself.

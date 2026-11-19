@@ -199,7 +199,7 @@ function RecordWorkspace({ record, trail }: { record: InterviewRecordView; trail
       {markers.length || reveals.length ? (
         <Stack gap="xs">
           {reveals.map((r) => (
-            <Button key={`reveal:${r.atMs}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
+            <Button key={`reveal:${r.questionId}`} size="sm" variant="ghost" fullWidth className="justify-start text-left"
               onClick={() => moveTo(markerTime(r))} data-testid="interviews-record-reveal">
               <Inline gap="sm" align="center" wrap={false} className="min-w-0">
                 <T size="xs" tone="tertiary" tabular>{clockOf(markerTime(r))}</T>

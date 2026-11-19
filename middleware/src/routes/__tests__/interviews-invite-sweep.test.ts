@@ -591,8 +591,18 @@ describe('the answer key against a guest: a live "Design Twitter" round', () => 
     const shown = await call('POST', api(`/${IV}/board/reveal`), hugo, { questionId: 'q-be-twitter' });
     expect(shown.status).toBe(200);
     expect((json(shown)['board'] as { name: string }).name).toBe('Provided design');
-    // logged in the interview's pad log, as a reveal of that question
-    const log = json(await call('GET', api(`/${IV}/pad/log`), hugo));
-    expect(((log['events'] ?? []) as Array<{ kind: string; questionId?: string }>).filter((e) => e.kind === 'reveal').map((e) => e.questionId)).toEqual(['q-be-twitter']);
+    expect(json(shown)['already']).toBe(false);
+    const reveals = async () => ((json(await call('GET', api(`/${IV}/pad/log`), hugo))['events'] ?? []) as Array<{ kind: string; questionId?: string }>)
+      .filter((e) => e.kind === 'reveal').map((e) => e.questionId);
+    // the ask logs nothing: only the lead's room's ack, once the board holds it, and only once
+    expect(await reveals()).toEqual([]);
+    expect((await call('POST', api(`/${IV}/board/reveal/shown`), wen, { questionId: 'q-be-twitter' })).status).toBe(404);
+    expect(json(await call('POST', api(`/${IV}/board/reveal/shown`), hugo, { questionId: 'q-be-twitter' }))).toEqual({ logged: true, already: false });
+    expect(json(await call('POST', api(`/${IV}/board/reveal/shown`), hugo, { questionId: 'q-be-twitter' }))).toEqual({ logged: false, already: true });
+    expect(json(await call('POST', api(`/${IV}/board/reveal`), hugo, { questionId: 'q-be-twitter' }))['already']).toBe(true);
+    expect(await reveals()).toEqual(['q-be-twitter']);
+    // the room reads what was revealed from the server, not from page memory
+    expect(json(await call('GET', api(`/${IV}/board/reveals`), hugo))).toEqual({ questionIds: ['q-be-twitter'] });
+    expect([401, 404]).toContain((await call('GET', api(`/${IV}/board/reveals`), guest)).status);
   });
 });
