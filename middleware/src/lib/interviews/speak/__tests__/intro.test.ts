@@ -7,6 +7,7 @@ import { INTERVIEWS_MILO_POLICY as P } from '../../milo-policy.js';
 import { MemoryMiloSettingsStore, setMiloSettingsStore } from '../../milo-settings.js';
 import { setInterviewConsentSource } from '../../milo-policy.js';
 import { resetMiloTools } from '../../milo-tools/index.js';
+import { runServerTool } from '../../../meeting-assistant/server-tools.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps, SPEECH_HOLD_USD } from '../index.js';
 import { ALREADY_INTRODUCED, introduceMilo, isIntroduction, MILO_INTRO } from '../intro.js';
 
@@ -49,6 +50,15 @@ describe('the button (introduceMilo)', () => {
     expect((await said.list(IV)).map((r) => [r.kind, r.source, r.text, r.askedBy, r.posted, r.spoken])).toEqual([['answer', 'intro', MILO_INTRO, 'u-hugo', true, true]]);
     expect(await introduceMilo({ id: IV, callId: CALL.callId }, 'u-hugo')).toBe('already');
     expect(ALREADY_INTRODUCED).toMatch(/already/);
+  });
+
+  it('the button runs the same `introduce` tool as the words, through the one runner (via button): not held by the words\' repeat window, once', async () => {
+    // The lead's words first: logged unposted for the orchestrator, which the button does not count (only a posted introduction).
+    expect(await runServerTool(CALL, 'u-hugo', 'introduce', {}, 'phrase')).toEqual({ line: MILO_INTRO, retry: false });
+    expect(await runServerTool(CALL, 'u-hugo', 'introduce', {}, 'button')).toEqual({ line: MILO_INTRO, retry: false, delivered: 'spoken' });
+    expect(order).toEqual(['post:answer', 'say', 'release']);
+    expect(await runServerTool(CALL, 'u-hugo', 'introduce', {}, 'button')).toBeNull();
+    expect(await runServerTool(CALL, 'u-wen', 'introduce', {}, 'button')).toEqual({ line: 'Only the lead interviewer can ask Milo to introduce itself.', retry: false });
   });
 
   it('a press while Milo is not in the call is logged unposted and does not use up the introduction', async () => {
