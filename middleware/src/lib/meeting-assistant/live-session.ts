@@ -164,6 +164,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private tokens: BackendTokens = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   private seconds = 0;
   private input: Piece | null = null;
+  /** When the person's latest words arrived (`sinceStart`): the voice's own reply to their turn is awaited from then. */
+  private inputHeardAt = 0;
   /** The turn heard so far and not yet flushed (the voice gate reads it; never stored or logged). */
   pendingInputText(): string { return this.input?.text.replace(/\s+/g, ' ').trim() ?? ''; }
   private output: Utterance | null = null;
@@ -310,10 +312,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       || this.open.size > 0 || this.responses.size > 0;
   }
 
-  /** The provider may be about to answer: count as busy for `answerWaitMs` unless its evidence comes first. */
-  private waitForAnswer(): void {
+  /**
+   * The provider may be about to answer: count as busy for `answerWaitMs` after `from` (now, or a person's last words) unless its
+   * evidence comes first. Already past, nothing is awaited and a waiting line goes now.
+   */
+  private waitForAnswer(from = this.sinceStart()): void {
     this.endAnswerWait();
-    this.answerWait = setTimeout(() => { this.answerWait = null; this.pumpSay(); }, this.opts.answerWaitMs ?? 1000);
+    const left = (this.opts.answerWaitMs ?? 1000) - (this.sinceStart() - from);
+    if (left <= 0) { this.pumpSay(); return; }
+    this.answerWait = setTimeout(() => { this.answerWait = null; this.pumpSay(); }, left);
     this.answerWait.unref?.();
   }
 
@@ -561,6 +568,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.endAnswerWait();
       if (this.input && startMs - this.input.endMs > gapMs) this.flushInput('gap');
       const part = { text: delta, startMs, endMs };
+      this.inputHeardAt = this.sinceStart();
       this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs, parts: [...this.input.parts, part] } : { text: delta, startMs, endMs, parts: [part] };
       if (SENTENCE_END.test(this.input.text)) this.flushInput('sentence'); else this.armIdle();
     } else {
@@ -633,9 +641,11 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}), ...(why === 'output' || why === 'delegation' ? { turnEnded: true as const } : {}) });
     }
     // The person's turn is over. Not when Milo's own output or a delegation is what ended it: the provider is answering then. A turn
-    // that ended on its own may still get the voice's reply, which no event announces: the line waits `answerWaitMs` for it first.
+    // that ended on its own may still get the voice's reply, which no event announces: the line waits `answerWaitMs` for it first,
+    // counted from the turn's last words (the reply answers them: recorded 0 to 1.2 s after them, 18 November), so a turn flushed
+    // after its quiet (`idleFlushMs`) has waited already.
     if (why === 'output' || why === 'delegation') return;
-    if (p && text && why !== 'closed') { this.waitForAnswer(); return; }
+    if (p && text && why !== 'closed') { this.waitForAnswer(this.inputHeardAt); return; }
     this.pumpSay();
   }
 

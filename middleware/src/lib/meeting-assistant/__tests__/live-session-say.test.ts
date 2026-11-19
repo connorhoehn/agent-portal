@@ -190,6 +190,22 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a turn flushed after its quiet (no sentence end) does not wait again: the reply wait counts from the turn\'s last words', async () => {
+    // Recorded (18 November takes): the voice's own reply, or its delegation, came 0 to 1.2 s after a turn's last input delta,
+    // inside the 1.5 s of quiet that flushes the turn; waiting a full reply wait after the flush only delayed the intro by 1 s.
+    const { s } = make({ idleFlushMs: 100, utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 80 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'Milo, introduce yourself' });
+    await tick(10);
+    s.sayVerbatim('say_1', Q, () => undefined);
+    await tick(60);
+    expect(commentaries()).toBe(0); // the turn is still open
+    await tick(70); // flushed at 100 ms, longer than the reply wait after its last words: sent then
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
   it('a turn with no reply: the line goes once the reply wait has passed', async () => {
     const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 60 });
     await s.start(START);
