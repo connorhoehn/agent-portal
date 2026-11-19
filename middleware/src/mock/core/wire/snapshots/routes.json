@@ -2698,12 +2698,12 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/scorecard",
-      "source": "src/routes/interviews/scorecards.ts:121"
+      "source": "src/routes/interviews/scorecards.ts:125"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/scorecard",
-      "source": "src/routes/interviews/scorecards.ts:140"
+      "source": "src/routes/interviews/scorecards.ts:144"
     },
     {
       "method": "POST",

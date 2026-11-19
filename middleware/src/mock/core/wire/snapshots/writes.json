@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T12:54:36.969Z",
-  "serverHandlerSha": "278b64e3e0410e509049d0bfc599b22e5b9eb8f4d7c111214d61177ac7ce9a6d",
+  "capturedAt": "2026-11-19T13:10:17.560Z",
+  "serverHandlerSha": "64ba214792c750db2dd4bfcdb8d89a878b5d0d7ed3714589060ea7eb4bc28669",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -3204,6 +3204,12 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/interviews/interviews/:id/board/reveal": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/interviews/interviews/:id/board/snapshots": {
       "refused": {
         "rule": "unclassified",
@@ -5184,12 +5190,6 @@
         "monthlyCapUsd"
       ]
     },
-    "PUT /api/calls/:callId/chat/reads": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
-    },
     "PUT /api/calls/:callId/page": {
       "refused": {
         "rule": "active-call-state",
@@ -5286,12 +5286,6 @@
       "sent": [
         "personId"
       ]
-    },
-    "PUT /api/interview-invite/calls/:callId/chat/reads": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
     },
     "PUT /api/interview-invite/consents": {
       "refused": {

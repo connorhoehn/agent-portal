@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-19T12:54:25.312Z",
-  "serverHandlerSha": "278b64e3e0410e509049d0bfc599b22e5b9eb8f4d7c111214d61177ac7ce9a6d",
+  "capturedAt": "2026-11-19T13:10:06.070Z",
+  "serverHandlerSha": "64ba214792c750db2dd4bfcdb8d89a878b5d0d7ed3714589060ea7eb4bc28669",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2438,9 +2438,6 @@
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/chat": {
-      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
-    },
-    "GET /api/calls/:callId/chat/reads": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/page": {
@@ -5023,9 +5020,6 @@
     "GET /api/interview-invite/admission": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
-    "GET /api/interview-invite/calls/:callId/chat/reads": {
-      "skipped": "no value found for :callId under /api/interview-invite/calls (orgiq/admin); no value found for :callId under /api/interview-invite/calls (assessment/admin); no value found for :callId under /api/interview-invite/calls (anonymous)"
-    },
     "GET /api/interview-invite/consents": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
@@ -5046,6 +5040,82 @@
     },
     "GET /api/interview-invite/runs/events": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
+    "GET /api/interviews/board-templates": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].elements": "array",
+        "items[].elements[]": "object",
+        "items[].elements[].angle": "number",
+        "items[].elements[].autoResize": "boolean",
+        "items[].elements[].backgroundColor": "string",
+        "items[].elements[].boundElements": "array|null",
+        "items[].elements[].boundElements[]": "object",
+        "items[].elements[].boundElements[].id": "string",
+        "items[].elements[].boundElements[].type": "string",
+        "items[].elements[].containerId": "null|string",
+        "items[].elements[].elbowed": "boolean",
+        "items[].elements[].endArrowhead": "null|string",
+        "items[].elements[].endBinding": "null",
+        "items[].elements[].fillStyle": "string",
+        "items[].elements[].fontFamily": "number",
+        "items[].elements[].fontSize": "number",
+        "items[].elements[].frameId": "null|string",
+        "items[].elements[].groupIds": "array",
+        "items[].elements[].groupIds[]": "string",
+        "items[].elements[].height": "number",
+        "items[].elements[].id": "string",
+        "items[].elements[].index": "string",
+        "items[].elements[].isDeleted": "boolean",
+        "items[].elements[].lastCommittedPoint": "null",
+        "items[].elements[].lineHeight": "number",
+        "items[].elements[].link": "null",
+        "items[].elements[].locked": "boolean",
+        "items[].elements[].name": "string",
+        "items[].elements[].opacity": "number",
+        "items[].elements[].originalText": "string",
+        "items[].elements[].points": "array",
+        "items[].elements[].points[]": "array",
+        "items[].elements[].points[][]": "number",
+        "items[].elements[].roughness": "number",
+        "items[].elements[].roundness": "null|object",
+        "items[].elements[].roundness.type": "number",
+        "items[].elements[].seed": "number",
+        "items[].elements[].startArrowhead": "null",
+        "items[].elements[].startBinding": "null",
+        "items[].elements[].strokeColor": "string",
+        "items[].elements[].strokeStyle": "string",
+        "items[].elements[].strokeWidth": "number",
+        "items[].elements[].text": "string",
+        "items[].elements[].textAlign": "string",
+        "items[].elements[].type": "string",
+        "items[].elements[].updated": "number",
+        "items[].elements[].version": "number",
+        "items[].elements[].versionNonce": "number",
+        "items[].elements[].verticalAlign": "string",
+        "items[].elements[].width": "number",
+        "items[].elements[].x": "number",
+        "items[].elements[].y": "number",
+        "items[].name": "string"
+      },
+      "values": {
+        "items[].elements[].boundElements[].type": [
+          "text"
+        ],
+        "items[].elements[].type": [
+          "arrow",
+          "diamond",
+          "ellipse",
+          "frame",
+          "line",
+          "rectangle",
+          "text"
+        ]
+      }
     },
     "GET /api/interviews/candidates": {
       "persona": "orgiq/admin",
@@ -5707,6 +5777,7 @@
         "scorecard.others[].submittedAt": "string",
         "scorecard.others[].summary": "string",
         "scorecard.others[].version": "number",
+        "scorecard.redFlags": "array",
         "scorecard.refusal": "string",
         "scorecard.required": "array",
         "scorecard.required[]": "string"
@@ -7061,7 +7132,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -12260,20 +12331,26 @@
         "S3",
         "SSN",
         "TimeoutError",
+        "arrow",
         "behavioural",
         "browser screenshot",
         "bug",
         "collaborates",
         "decision",
+        "diamond",
+        "ellipse",
         "enum",
         "epic",
+        "frame",
         "initiative",
         "knowledge",
+        "line",
         "longtext",
         "manual",
         "mentors",
         "person",
         "pipeline.approval.requested",
+        "rectangle",
         "reports_to",
         "run",
         "schedule",
