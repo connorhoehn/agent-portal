@@ -13,6 +13,6 @@ export function BoardTab({ room, onCheckpoints }: { room: RoomView; onCheckpoint
   const session = useOptionalSession();
   const questions = useMemo(() => room.questions.map((q) => ({ id: q.id, prompt: q.prompt, board: q.board })), [room.questions]);
   if (!session) return <EmptyState title="The whiteboard" body="The whiteboard opens once you are signed in." testId="interview-room-board-idle" />;
-  return <InterviewBoard interviewId={room.id} self={{ userId: session.sub, displayName: session.name }} seat={room.seat}
+  return <InterviewBoard interviewId={room.id} self={{ userId: session.sub, displayName: session.name }} seat={room.seat} candidateName={room.candidate.name}
     {...(room.seat === 'lead' ? { questions, checkpoint: room.state === 'live', onCheckpoints } : {})} />;
 }

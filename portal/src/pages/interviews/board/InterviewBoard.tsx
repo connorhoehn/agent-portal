@@ -4,19 +4,25 @@
 // (`@connorhoehn/ui-components/diagram` CollaborativeExcalidraw, hosted mode) with the provider's awareness, so each
 // person's pointer carries their name ("Candidate" for the candidate).
 //
+// Follow (useBoardFollow): the lead's canvas follows the candidate's camera from the start, so what the candidate draws
+// is in the lead's view with their named pointer; the lead's own press, wheel or key inside the canvas pauses it, and
+// the row's "Follow <name>" resumes it. The panel has the same control, off at first; the candidate follows nobody.
+//
 // Above it one compact row: the lead's "Start from a board" menu (the round's questions that carry a starting board;
 // a pick adds the board as one write and never clears anything) and the connection chip. The lead's room also
 // checkpoints the board (lib/interviewsBoard.ts BOARD_SNAPSHOT_MS) for the record.
 import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { GatewayContext, useYjsDoc, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
-import { Chip, DropdownMenu, InlineAlert, LoadingState, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, DropdownMenu, InlineAlert, LoadingState, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
 import { offlineGateway } from '../../../components/OptionalGatewayProvider';
 import {
   BOARD_SNAPSHOT_MS, boardChannel, boardCheckpoints, boardDocumentId, insertBoard, postBoardSnapshot, readBoardElements, type BoardCheckpoints,
   type KitBoard,
 } from '../../../lib/interviewsBoard';
 import { caretColor, caretName, isPadRefusal, isPadSnapshot, padConnection, type PadConnection } from '../../../lib/interviewsPad';
+import { BOARD_NOTICE_MS } from '../../../lib/interviewsBoardFollow';
 import { useBoardFit } from './useBoardFit';
+import { useBoardFollow } from './useBoardFollow';
 
 const ExcalidrawCanvas = lazy(() => import('@connorhoehn/ui-components/diagram').then((m) => ({ default: m.CollaborativeExcalidraw })));
 
@@ -30,6 +36,8 @@ export interface InterviewBoardProps {
   questions?: readonly BoardQuestion[];
   /** Post checkpoints while the round is live (the lead's room). */
   checkpoint?: boolean;
+  /** The candidate's name, for the follow control ("Following Mateo"); the candidate's own pointer says "Candidate". */
+  candidateName?: string;
   /** The lead's room: the board's checkpoints while it is open (null once closed), so ending the round flushes them first. */
   onCheckpoints?: (checkpoints: BoardCheckpoints | null) => void;
 }
@@ -47,7 +55,7 @@ export function InterviewBoard(props: InterviewBoardProps) {
   return <SharedBoard {...props} gateway={gateway} documentId={documentId} channel={boardChannel(props.interviewId)!} />;
 }
 
-function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpoints, gateway, documentId, channel }:
+function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpoints, candidateName, gateway, documentId, channel }:
   InterviewBoardProps & { gateway: GatewayContextValue; documentId: string; channel: string }) {
   const { ydoc, provider, synced } = useYjsDoc({ documentId, ws: gateway, onMessage: gateway.onMessage });
   const [refused, setRefused] = useState(false);
@@ -58,8 +66,12 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
   const connection = padConnection({ configured: true, connectionState: String(gateway.connectionState), synced, refused });
   const editable = connection === 'synced';
   const user = useMemo(() => ({ userId: self.userId, displayName: caretName(seat, self.displayName), color: caretColor(self.userId) }), [seat, self.displayName, self.userId]);
-  // Opened, the board zooms to its content (and again when an empty board first gets some), until the person moves it.
-  useBoardFit(ydoc, `[data-board="${documentId}"]`);
+  const canvasSelector = `[data-board="${documentId}"]`;
+  const awareness = provider?.awareness ?? null;
+  const follow = useBoardFollow(awareness, seat, canvasSelector, candidateName ?? '');
+  // Opened, the board zooms to its content (and again when an empty board first gets some), until the person moves
+  // it; while it follows the candidate, their camera is the view instead.
+  useBoardFit(ydoc, canvasSelector, follow.target !== null);
 
   // The lead's checkpoints: a changed board every BOARD_SNAPSHOT_MS, and once more when the room closes. A post the
   // server did not take is tried again on the next tick (boardCheckpoints).
@@ -86,18 +98,27 @@ function SharedBoard({ interviewId, self, seat, questions, checkpoint, onCheckpo
     setInserted(n ? `${q.board.name} added to the board.` : `${q.board.name} is already on the board.`);
     flush();
   }, [ydoc, flush]);
+  // The notice says what the pick did, then clears itself.
+  useEffect(() => {
+    if (!inserted) return undefined;
+    const t = setTimeout(() => setInserted(null), BOARD_NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [inserted]);
 
   const toolbar = <Toolbar size="sm" aria-label="Whiteboard" data-testid="interview-board-toolbar">
     {seat === 'lead' && boards.length > 0 && <DropdownMenu trigger="Start from a board" triggerLabel="Start from a board" triggerVariant="secondary"
       triggerClassName="whitespace-nowrap" disabled={!editable} triggerTestId="interview-board-insert"
       sections={[{ items: boards.map((q) => ({ id: q.id, label: q.board!.name, description: q.prompt, onSelect: () => start(q) })) }]} />}
+    {seat !== 'candidate' && follow.present && <Button size="sm" variant={follow.mode === 'following' ? 'secondary' : 'ghost'}
+      aria-pressed={follow.mode === 'following'} onClick={follow.toggle} className="whitespace-nowrap"
+      data-testid="interview-board-follow" data-follow={follow.mode}>{follow.label}</Button>}
     {connection === 'connecting' && <Chip size="sm" tone="neutral" data-testid="interview-board-status">Connecting…</Chip>}
     {connection === 'synced' && <Chip size="sm" tone="success" data-testid="interview-board-status">In sync</Chip>}
   </Toolbar>;
 
   return <BoardFrame boardId={documentId} connection={connection} toolbar={toolbar} note={inserted}
     canvas={ydoc && connection !== 'refused'
-      ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={provider?.awareness ?? null} user={user} editable={editable} className="h-full min-h-0 flex-1" />
+      ? <ExcalidrawCanvas key={documentId} ydoc={ydoc} awareness={awareness} user={user} editable={editable} followUserId={follow.target} className="h-full min-h-0 flex-1" />
       : null} />;
 }
 

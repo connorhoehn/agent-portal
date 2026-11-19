@@ -166,6 +166,8 @@ export interface BoardFitEnv {
   clearTimer(t: unknown): void;
   /** Fit the board now (fitBoardView on its wrapper). */
   fit(): void;
+  /** True while the canvas follows someone (useBoardFollow): their camera is the view, so no fit moves it. */
+  held?: () => boolean;
 }
 
 /** The events by which the person takes the view: a press, a wheel, a key, their own (trusted) and inside the board. */
@@ -180,7 +182,7 @@ const TOUCHES = ['pointerdown', 'wheel', 'keydown'] as const;
 export function watchBoardFit(ydoc: Y.Doc, selector: string, env: BoardFitEnv): () => void {
   let touched = false;
   const timers: unknown[] = [];
-  const fit = () => { if (!touched && readBoardElements(ydoc).length > 0) env.fit(); };
+  const fit = () => { if (!touched && !env.held?.() && readBoardElements(ydoc).length > 0) env.fit(); };
   const schedule = (delays: readonly number[]) => { for (const ms of delays) timers.push(env.setTimer(fit, ms)); };
   schedule(BOARD_FIT_DELAYS_MS);
   let empty = readBoardElements(ydoc).length === 0;

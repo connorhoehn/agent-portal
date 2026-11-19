@@ -189,3 +189,21 @@ test('the board fits itself until the person touches it, wherever the board\'s w
   stop();
   assert.equal(listeners.size, 0, 'the listeners go with the board');
 });
+
+test('watchBoardFit: no fit while the canvas follows someone, and the fit comes back when it stops', () => {
+  const doc = new Y.Doc();
+  insertBoard(doc, blueprintBoard());
+  const page = { addEventListener: () => {}, removeEventListener: () => {} };
+  const timers: Array<() => void> = [];
+  let fits = 0;
+  let held = true;
+  const stop = watchBoardFit(doc, '[data-board="b"]', {
+    page, setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer: () => {}, fit: () => { fits += 1; }, held: () => held,
+  });
+  timers.shift()!();
+  assert.equal(fits, 0, 'following: the followed camera is the view');
+  held = false;
+  timers.shift()!();
+  assert.equal(fits, 1);
+  stop();
+});
