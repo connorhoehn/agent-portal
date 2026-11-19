@@ -157,6 +157,8 @@ const HINT_COLOR = '#868e96';
 /** A component's icon is drawn in a box of this size; its label sits below. */
 const ICON_W = 100;
 const ICON_H = 64;
+/** A label's size: Excalidraw's own default, so a label typed later matches. */
+const LABEL_FONT = 20;
 
 type ShapePart = { type: 'rectangle' | 'ellipse' | 'diamond'; x: number; y: number; w: number; h: number; fill?: boolean; stroke?: boolean; round?: boolean };
 type LinePart = { type: 'line' | 'arrow'; x: number; y: number; to: Array<[number, number]>; label?: string };
@@ -189,10 +191,10 @@ function partElements(id: string, p: Part, ox: number, oy: number, dashed: boole
     // Excalidraw's own arrow label: a text bound to the arrow (containerId), drawn at its middle.
     const textId = `${id}-label`;
     const end = points[points.length - 1]!;
-    const w = p.label.length * FONT * 0.55;
+    const w = p.label.length * LABEL_FONT * 0.55;
     el['boundElements'] = [{ type: 'text', id: textId }];
-    return [el, base(textId, 'text', ox + p.x + end[0] / 2 - w / 2, oy + p.y + end[1] / 2 - (FONT * LINE) / 2, w, FONT * LINE, {
-      text: p.label, originalText: p.label, fontSize: FONT, fontFamily: 2, textAlign: 'center', verticalAlign: 'middle', containerId: id, autoResize: true, lineHeight: LINE,
+    return [el, base(textId, 'text', ox + p.x + end[0] / 2 - w / 2, oy + p.y + end[1] / 2 - (LABEL_FONT * LINE) / 2, w, LABEL_FONT * LINE, {
+      text: p.label, originalText: p.label, fontSize: LABEL_FONT, fontFamily: 2, textAlign: 'center', verticalAlign: 'middle', containerId: id, autoResize: true, lineHeight: LINE,
     })];
   }
   return [base(id, p.type, ox + p.x, oy + p.y, p.w, p.h, {
@@ -274,7 +276,7 @@ export const ARCHITECTURE_COMPONENTS: ReadonlyArray<{ id: string; label: string;
   ] },
   { id: 'db-primary', label: 'Database (primary)', parts: cylinder },
   { id: 'db-replica', label: 'Database (replica)', parts: cylinder, dashed: true },
-  { id: 'arrow', label: 'Labelled arrow', parts: () => [{ type: 'arrow', x: 0, y: 32, to: [[100, 0]], label: 'reads' }] },
+  { id: 'arrow', label: 'Arrow', parts: () => [{ type: 'arrow', x: 0, y: 32, to: [[100, 0]], label: 'reads' }] },
 ];
 
 /** One component at (x, y): its icon's elements and its label below, all in one group (`<prefix>-g-<id>`), in `frameId`. */
@@ -283,8 +285,9 @@ export function architectureComponent(prefix: string, id: string, x: number, y: 
   if (!c) return [];
   const group = `${prefix}-g-${c.id}`;
   const els = c.parts().flatMap((p, i) => partElements(`${prefix}-${c.id}-${i + 1}`, p, x, y, Boolean(c.dashed)));
-  const lw = c.label.length * FONT * 0.55;
-  els.push(freeText(`${prefix}-${c.id}-name`, x + (ICON_W - lw) / 2, y + ICON_H + 10, c.label, { align: 'center', width: lw }));
+  const label = wrap(c.label, 13);
+  const lw = Math.max(...label.split('\n').map((l) => l.length)) * LABEL_FONT * 0.55;
+  els.push(freeText(`${prefix}-${c.id}-name`, x + (ICON_W - lw) / 2, y + ICON_H + 8, label, { fontSize: LABEL_FONT, align: 'center', width: lw }));
   return els.map((e) => ({ ...e, groupIds: [group], frameId }));
 }
 
@@ -297,41 +300,45 @@ export const NOTE_HEADINGS: ReadonlyArray<{ id: string; name: string; hint: stri
   { id: 'deepdive', name: 'Deep dive', hint: 'The hardest part, the options, and the trade-off chosen.' },
 ];
 
-const KIT_W = 1500;
+// Sized so a room pane fits the whole board at about half scale and the text still reads: 1280 × 960 in scene units,
+// labels at 20, the Notes headings at 24.
+const KIT_W = 1280;
 const KIT_TOP = 120;
 const KIT_H = 840;
-const NOTES_W = 380;
+const NOTES_W = 340;
 const RIGHT_X = NOTES_W + 40;
 const RIGHT_W = KIT_W - RIGHT_X;
-const CELL_W = 180;
+const CELL_W = 150;
 const CELL_H = 140;
 const PALETTE_COLUMNS = 6;
-export const ARCHITECTURE_HINT = 'Click a component to select it whole; Alt-drag or Cmd/Ctrl+D copies it into Design. Double-click an arrow to label it.';
+const HINT_FONT = 18;
+export const ARCHITECTURE_HINT = 'Click selects a whole component; Alt-drag or Cmd/Ctrl+D copies it into Design.\nDouble-click an arrow to label it: reads, writes.';
 
 /**
  * "Architecture kit": the prompt card across the top; on the left a Notes frame of headed placeholders; on the right a
- * Components frame with the palette (all of ARCHITECTURE_COMPONENTS unless `components` names some), a one-line hint,
- * and a large empty Design frame where the diagram is built.
+ * Components frame with the palette (all of ARCHITECTURE_COMPONENTS unless `components` names some) and a short hint
+ * on copying, and under it a large empty Design frame where the diagram is built.
  */
 export function architectureBoard(prompt: string, opts: { components?: readonly string[] } = {}): KitBoard {
-  const out: El[] = [...card('ak-prompt', 0, 0, KIT_W, 80, prompt, { fill: 'transparent', fontSize: 28 })];
+  const out: El[] = [...card('ak-prompt', 0, 0, KIT_W, 80, prompt, { fill: 'transparent', fontSize: 32 })];
   NOTE_HEADINGS.forEach((h, i) => {
-    const y = KIT_TOP + 30 + i * 160;
-    out.push(freeText(`ak-notes-${h.id}`, 20, y, h.name, { fontSize: 20, frameId: 'ak-notes' }));
-    out.push(freeText(`ak-notes-${h.id}-hint`, 20, y + 32, wrap(h.hint, 36), { color: HINT_COLOR, frameId: 'ak-notes' }));
+    const y = KIT_TOP + 24 + i * 168;
+    out.push(freeText(`ak-notes-${h.id}`, 20, y, h.name, { fontSize: 24, frameId: 'ak-notes' }));
+    out.push(freeText(`ak-notes-${h.id}-hint`, 20, y + 38, wrap(h.hint, 30), { fontSize: HINT_FONT, color: HINT_COLOR, frameId: 'ak-notes' }));
   });
   out.push(base('ak-notes', 'frame', 0, KIT_TOP, NOTES_W, KIT_H, { name: 'Notes', strokeWidth: 1, roughness: 0 }));
   const ids = (opts.components ?? ARCHITECTURE_COMPONENTS.map((c) => c.id)).filter((id) => ARCHITECTURE_COMPONENTS.some((c) => c.id === id));
   ids.forEach((id, i) => {
     const x = RIGHT_X + (i % PALETTE_COLUMNS) * CELL_W + (CELL_W - ICON_W) / 2;
-    const y = KIT_TOP + 30 + Math.floor(i / PALETTE_COLUMNS) * CELL_H;
+    const y = KIT_TOP + 24 + Math.floor(i / PALETTE_COLUMNS) * CELL_H;
     out.push(...architectureComponent('ak', id, x, y, 'ak-palette'));
   });
-  const paletteH = Math.max(1, Math.ceil(ids.length / PALETTE_COLUMNS)) * CELL_H + 20;
+  // The hint inside the palette's frame, under its last row: the gap below holds only the Design frame's name.
+  const hintY = KIT_TOP + 24 + Math.max(1, Math.ceil(ids.length / PALETTE_COLUMNS)) * CELL_H;
+  out.push(freeText('ak-hint', RIGHT_X + 16, hintY, ARCHITECTURE_HINT, { fontSize: HINT_FONT, color: HINT_COLOR, frameId: 'ak-palette' }));
+  const paletteH = hintY + 2 * HINT_FONT * LINE + 16 - KIT_TOP;
   out.push(base('ak-palette', 'frame', RIGHT_X, KIT_TOP, RIGHT_W, paletteH, { name: 'Components', strokeWidth: 1, roughness: 0 }));
-  const hintY = KIT_TOP + paletteH + 16;
-  out.push(freeText('ak-hint', RIGHT_X, hintY, ARCHITECTURE_HINT, { color: HINT_COLOR }));
-  const designY = hintY + 44;
+  const designY = KIT_TOP + paletteH + 60;
   out.push(base('ak-design', 'frame', RIGHT_X, designY, RIGHT_W, KIT_TOP + KIT_H - designY, { name: 'Design', strokeWidth: 1, roughness: 0 }));
   return { name: 'Architecture kit', elements: indexed(out) };
 }

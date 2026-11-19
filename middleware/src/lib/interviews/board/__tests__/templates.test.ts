@@ -28,11 +28,12 @@ describe('Architecture kit', () => {
     expect(notes).toEqual(['Clarifying questions', 'Functional', 'Non-functional', 'Components', 'Deep dive']);
     expect(els.find((e) => e['id'] === 'ak-prompt-text')!['originalText']).toBe('Design Twitter');
     expect(els.filter((e) => e['frameId'] === 'ak-design')).toEqual([]);
+    expect(els.find((e) => e['id'] === 'ak-hint')!['frameId']).toBe('ak-palette');
     expect(String(els.find((e) => e['id'] === 'ak-hint')!['text'])).toMatch(/Alt-drag or Cmd\/Ctrl\+D/);
   });
 
   it('every palette component is exactly one group, in the palette frame, with its label', () => {
-    const palette = els.filter((e) => e['frameId'] === 'ak-palette');
+    const palette = els.filter((e) => e['frameId'] === 'ak-palette' && e['id'] !== 'ak-hint');
     const groups = new Map<string, Array<Record<string, unknown>>>();
     for (const e of palette) {
       const g = e['groupIds'] as string[];
@@ -42,11 +43,11 @@ describe('Architecture kit', () => {
     expect([...groups.keys()]).toEqual(ARCHITECTURE_COMPONENTS.map((c) => `ak-g-${c.id}`));
     expect(ARCHITECTURE_COMPONENTS.map((c) => c.label)).toEqual([
       'Web client', 'Mobile client', 'CDN', 'Load balancer', 'App servers', 'Auth',
-      'Cache', 'Message queue', 'Workers', 'Database (primary)', 'Database (replica)', 'Labelled arrow',
+      'Cache', 'Message queue', 'Workers', 'Database (primary)', 'Database (replica)', 'Arrow',
     ]);
     for (const c of ARCHITECTURE_COMPONENTS) {
       const members = groups.get(`ak-g-${c.id}`)!;
-      const labels = members.filter((e) => e['type'] === 'text' && e['containerId'] === null).map((e) => e['text']);
+      const labels = members.filter((e) => e['type'] === 'text' && e['containerId'] === null).map((e) => String(e['text']).replace(/\n/g, ' '));
       expect(labels).toEqual([c.label]);
       // One fill and one stroke weight across the kit; the hand-drawn look Excalidraw gives roughness 1.
       for (const e of members.filter((m) => m['backgroundColor'] !== 'transparent')) expect(e['backgroundColor']).toBe(COMPONENT_FILL);
