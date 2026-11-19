@@ -1876,6 +1876,9 @@ export class AssistantRuntime {
     if (!run) return;
     for (const e of events) {
       if (e.type === 'request') {
+        // Hands-free: the rules judged this sentence as it was said (handsfree/rules.ts: a held answer is a `fixed` verdict, a
+        // request is routed to the model), so the stored line's detector answers nothing; it still counts toward the cap below.
+        if (run.handsfree) { await this.noticeRequestCap(callId); continue; }
         // A fixed request of the call's policy is answered with text the server holds, and no model hears it from here.
         const held = run.policy.answerFromHeldText ? await run.policy.answerFromHeldText(run.call, { askedBy: e.askedBy, text: e.text }).catch(() => null) : null;
         // An empty held answer: one of the family's requests, handled, with nothing to say (a request heard twice).
@@ -1887,20 +1890,7 @@ export class AssistantRuntime {
         }
         // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
         this.awaitToolCallOrFallback(run, e.askedBy, e.text, e.endedAt);
-        // Past the cap Milo says so once and ignores further requests (the cap counts what the detector found). The cap is per listening
-        // period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said again.
-        const record = await this.store.get(callId);
-        if (record && periodRequests(record) > assistantLimits().maxRequests) {
-          if (!sessionOf(record).limitNoticed) {
-            await this.store.patchSession(callId, { limitNoticed: true });
-            await postNoticeQuietly(callId, requestLimitNotice(periodOf(record)));
-          }
-          continue;
-        }
-        // A few requests before the cap, said once a period (the count only rises, so it equals this once).
-        if (record && periodRequests(record) === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) {
-          await postNoticeQuietly(callId, requestsLeftNotice(periodOf(record)));
-        }
+        if (await this.noticeRequestCap(callId)) continue;
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
         if (session?.acceptsText) {
@@ -1917,6 +1907,25 @@ export class AssistantRuntime {
         await this.afterMove(callId, to, record, { userId: e.by });
       }
     }
+  }
+
+  /**
+   * Past the cap Milo says so once and ignores further requests (the cap counts what the detector found); true when it is past. The
+   * cap is per listening period, as each is paid for on its own: an invitation back starts a fresh count, and its notices can be said
+   * again. A few requests before the cap is said once a period (the count only rises, so it equals that once).
+   */
+  private async noticeRequestCap(callId: string): Promise<boolean> {
+    const record = await this.store.get(callId);
+    if (!record) return false;
+    if (periodRequests(record) > assistantLimits().maxRequests) {
+      if (!sessionOf(record).limitNoticed) {
+        await this.store.patchSession(callId, { limitNoticed: true });
+        await postNoticeQuietly(callId, requestLimitNotice(periodOf(record)));
+      }
+      return true;
+    }
+    if (periodRequests(record) === assistantLimits().maxRequests - REQUESTS_WARNING_LEFT) await postNoticeQuietly(callId, requestsLeftNotice(periodOf(record)));
+    return false;
   }
 
   // -------------------------------------------------------------------------------------------------------------

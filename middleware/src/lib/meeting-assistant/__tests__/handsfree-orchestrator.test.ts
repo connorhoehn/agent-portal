@@ -38,6 +38,7 @@ import { AssistantRuntime, type StartContext } from '../orchestrator.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
+import { DEFAULT_POLICY, registerMeetingAssistantPolicy, type MeetingAssistantPolicy } from '../policy.js';
 import type { AudioSink } from '../audio-intake.js';
 import { HandsfreeTalking } from '../handsfree/talking.js';
 import type { HandsfreeClock } from '../handsfree/types.js';
@@ -198,6 +199,28 @@ describe('the hands-free seam', () => {
     await flush();
     expect(sent).toHaveLength(2);
     expect(runtime.handsfreeRun(CALL)!.state()).toMatchObject({ phase: 'follow-up', userId: ALICE });
+  });
+
+  it("the transcript's own request detector answers nothing under the flag (the rules' verdict is the only path: no second \"time left\", no fallback)", async () => {
+    const asked: string[] = [];
+    const HELD: MeetingAssistantPolicy = {
+      ...DEFAULT_POLICY, id: 'hf-held',
+      answerFromHeldText: async (_c, r) => { asked.push(r.text); return 'Ten minutes are left.'; },
+      heldFallback: async (_c, r) => { asked.push(`fallback:${r.text}`); return 'I can only do a few things.'; },
+    };
+    const off = registerMeetingAssistantPolicy('orgiq:initiative', HELD);
+    try {
+      await boot('1');
+      await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+      listening!.emit('line', { callId: CALL, userId: ALICE, participantId: 'p-alice', speakerName: 'Alice', text: 'Milo, how much time is left?', at: now, captionId: '', startMs: 0, endMs: 1500 });
+      await flush();
+      now += 5000; await intake.tick(); await flush();
+      now += 20_000; await intake.tick(); await flush();
+      expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['Milo, how much time is left?']);
+      expect(asked).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(mockPosts.replies).toEqual([]);
+    } finally { off(); }
   });
 
   it('a stop closes the listening side with the session', async () => {
