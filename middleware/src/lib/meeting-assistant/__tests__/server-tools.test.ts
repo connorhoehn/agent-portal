@@ -26,6 +26,7 @@ import { addScriptRules, ScriptedSession } from '../scripted-session.js';
 import { newAssistantSession } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 import { DEFAULT_POLICY, registerMeetingAssistantPolicy } from '../policy.js';
+import { VOICE_TOOLS } from '../../voice/catalogue.js';
 import { registerServerTools, resetServerTools, runServerTool, serverToolPolicy, type ServerToolDef, type ServerToolFamily } from '../server-tools.js';
 
 const CALL = 'call-standup';
@@ -115,5 +116,50 @@ describe('a family registered in a few lines (server-tools.ts)', () => {
     const mine = { callId: 'c3', lobby: `${FAMILY}:weekly`, tenant: 'orgiq' };
     expect(await runServerTool(mine, ALICE, 'read_agenda', {}, 'typed')).toEqual({ line: AGENDA, retry: false });
     expect(logged.map((l) => l.via)).toEqual(['typed']);
+  });
+});
+
+describe('the registry guards (server-tools.ts)', () => {
+  const SLOW: ServerToolDef<{ callId: string }> = {
+    name: 'slow_agenda', description: 'A slow one.', parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    says: 'x', mapsTo: 'server: test slow_agenda', writes: false, spend: null, slow: /\bslowly\b/i,
+    mayAsk: async () => true, run: async () => ({ line: 'done', kind: 'agenda' }),
+  };
+  const SLOW_FAMILY: ServerToolFamily<{ callId: string }> = {
+    ...STANDUP, family: 'orgiq:slowfam', tools: [SLOW], acknowledgement: 'On it.',
+  };
+
+  it('a call of another tenant naming this family\'s lobby runs nothing and is told nothing', async () => {
+    const off = registerServerTools(SLOW_FAMILY);
+    try {
+      const foreign = { callId: 'c9', lobby: `${FAMILY}:weekly`, tenant: 'access' };
+      expect(await runServerTool(foreign, ALICE, 'read_agenda', {}, 'model')).toBeNull();
+      const policy = serverToolPolicy(FAMILY);
+      expect(await policy.heldFallback!(foreign, { askedBy: ALICE, text: 'agenda' })).toBeNull();
+      expect(await policy.heldFallback!({ ...foreign, tenant: 'orgiq' }, { askedBy: ALICE, text: 'agenda' })).toBe('I can read the agenda.');
+      const slow = serverToolPolicy('orgiq:slowfam');
+      const lobby = 'orgiq:slowfam:weekly';
+      expect(await slow.heldAcknowledgement!({ callId: 'c8', lobby, tenant: 'orgiq' }, { askedBy: ALICE, text: 'do it slowly' })).toBe('On it.');
+      expect(await slow.heldAcknowledgement!({ callId: 'c8', lobby, tenant: 'access' }, { askedBy: ALICE, text: 'do it slowly' })).toBeNull();
+    } finally { off(); }
+  });
+
+  it('refuses a tool named like a browser voice tool, and a tool with both a phrase and writes', () => {
+    const clash = { ...READ_AGENDA, name: VOICE_TOOLS[0]!.name };
+    expect(() => registerServerTools({ ...STANDUP, family: 'orgiq:clash', tools: [clash] })).toThrow(/voice tool/);
+    const both = { ...READ_AGENDA, name: 'both_ways', writes: true, phrase: async () => false };
+    expect(() => registerServerTools({ ...STANDUP, family: 'orgiq:both', tools: [both] })).toThrow(/phrase/);
+  });
+
+  it('a repeat is not used up by a run that failed', async () => {
+    let n = 0;
+    const flaky: ServerToolDef<{ callId: string }> = { ...READ_AGENDA, name: 'flaky_agenda', repeatWindowMs: 60_000, run: async () => { n += 1; return n === 1 ? null : { line: AGENDA, kind: 'agenda' }; } };
+    const off = registerServerTools({ ...STANDUP, family: 'orgiq:flaky', tools: [flaky] });
+    try {
+      const call = { callId: 'c7', lobby: 'orgiq:flaky:w', tenant: 'orgiq' };
+      expect(await runServerTool(call, ALICE, 'flaky_agenda', {}, 'model')).toBeNull();
+      expect(await runServerTool(call, ALICE, 'flaky_agenda', {}, 'model')).toEqual({ line: AGENDA, retry: false });
+      expect(await runServerTool(call, ALICE, 'flaky_agenda', {}, 'model')).toBeNull(); // now the window holds
+    } finally { off(); }
   });
 });

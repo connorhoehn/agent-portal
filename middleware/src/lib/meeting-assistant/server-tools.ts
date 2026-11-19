@@ -16,7 +16,7 @@
 // Adding a tool: docs/interviews-tenant-plan.md, "Adding a Milo tool"; the smallest example is
 // meeting-assistant/__tests__/server-tools.test.ts.
 import type { JsonSchemaObject } from '../voice/catalogue.js';
-import { responsesFunctionTools } from '../voice/catalogue.js';
+import { responsesFunctionTools, voiceTool } from '../voice/catalogue.js';
 import { familyOfLobby, type MeetingAssistantPolicy, type PolicyCall, type ServerToolRetry, type SessionTools } from './policy.js';
 import { trace } from './trace.js';
 
@@ -107,6 +107,10 @@ const byName = new Map<string, RegisteredServerTool>();
 export function registerServerTools<Ctx>(f: ServerToolFamily<Ctx>): () => void {
   if (familyOfLobby(f.family) !== f.family) throw new Error(`not a lobby family: ${f.family}`);
   if (families.has(f.family)) throw new Error(`server tools are already registered for ${f.family}`);
+  for (const t of f.tools) {
+    if (voiceTool(t.name)) throw new Error(`a server tool cannot be named like a browser voice tool: ${t.name}`);
+    if (t.phrase && t.writes) throw new Error(`a server tool with a phrase cannot write (the phrase path runs without a confirmation): ${t.name}`);
+  }
   for (const t of f.tools) if (byName.has(t.name) || f.tools.filter((x) => x.name === t.name).length > 1) throw new Error(`a server tool is already named ${t.name}`);
   const family = f as unknown as ServerToolFamily<unknown>;
   families.set(f.family, family);
@@ -161,6 +165,8 @@ export async function runServerTool(call: PolicyCall, askedBy: string, name: str
   const f = familyOfCall(call);
   const def = f?.tools.find((t) => t.name === name);
   if (!f || !def) return null;
+  // The lobby names the family, but only the family's own tenants run its tools (a foreign tenant naming the lobby gets nothing).
+  if (!f.tenants.includes(call.tenant)) return null;
   const note = (outcome: string): void => trace('server.tool', { family: f.family, name, via, outcome });
   const ctx = await f.context(call);
   if (ctx === null) { note('no-context'); return null; }
@@ -176,12 +182,17 @@ export async function runServerTool(call: PolicyCall, askedBy: string, name: str
     const key = `${f.family}|${scope}|${askedBy}|${name}`;
     const now = f.now?.() ?? Date.now();
     if (now - (recent.get(key) ?? -Infinity) < def.repeatWindowMs) { note('repeat'); return null; }
-    recent.set(key, now);
-    if (recent.size > 500) recent.delete(recent.keys().next().value as string);
   }
+  // The repeat window is used up only by a run that said something.
+  const used = (): void => {
+    if (def.repeatWindowMs === undefined || via === 'button') return;
+    recent.set(`${f.family}|${scope}|${askedBy}|${name}`, f.now?.() ?? Date.now());
+    if (recent.size > 500) recent.delete(recent.keys().next().value as string);
+  };
   if (!def.writes) {
     const out = await def.run(ctx, askedBy, args, via);
     note(out ? 'ran' : 'nothing');
+    if (out) used();
     return out ? said(out) : null;
   }
   if (writing.has(scope)) { note('busy'); return f.busy !== undefined ? said({ line: f.busy, kind: 'refusal' }) : null; }
@@ -189,6 +200,7 @@ export async function runServerTool(call: PolicyCall, askedBy: string, name: str
   try {
     const out = await def.run(ctx, askedBy, args, via);
     note(out ? 'ran' : 'nothing');
+    if (out) used();
     return out ? await said(out) : null;
   } catch (e) {
     console.warn('[meeting-assistant] server tool failed', f.family, name, (e as Error)?.name ?? 'error');
@@ -249,7 +261,7 @@ export function serverToolPolicy(family: string, load?: () => Promise<unknown>):
     heldFallback: async (call, request) => {
       try {
         const f = await ofCall(call);
-        const ctx = f ? await f.context(call) : null;
+        const ctx = f && f.tenants.includes(call.tenant) ? await f.context(call) : null;
         if (!f || ctx === null) return null;
         const line = await f.whatICanDo(ctx, request.askedBy);
         if (line === null) return null;
@@ -261,7 +273,7 @@ export function serverToolPolicy(family: string, load?: () => Promise<unknown>):
       try {
         const f = await ofCall(call);
         const slow = (f?.tools ?? []).filter((t) => t.slow?.test(request.text));
-        if (!f || f.acknowledgement === undefined || !slow.length) return null;
+        if (!f || !f.tenants.includes(call.tenant) || f.acknowledgement === undefined || !slow.length) return null;
         const ctx = await f.context(call);
         if (ctx === null || serverToolBusy(call)) return null;
         for (const t of slow) {
