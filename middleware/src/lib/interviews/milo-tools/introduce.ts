@@ -5,14 +5,13 @@ import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { utterance } from '../speak/utterance.js';
 import { introduceMilo, isIntroduction, logIntroduction } from '../speak/intro.js';
-import type { Interview } from '../types.js';
-import { deps, INTRO_LEAD_ONLY, REPEAT_WINDOW_MS, standingOf } from './deps.js';
+import { deps, INTRO_LEAD_ONLY, REPEAT_WINDOW_MS, standingOf, type MiloInterview } from './deps.js';
 import { noArgs } from './schema.js';
 
 const LEAD = String.raw`(?:(?:um|uh|sorry|so|ok|okay|hey|hi|and|but)\s+)*(?:(?:hey\s+)?milo\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|please\s+)?`;
 const INTRO = new RegExp(String.raw`^${LEAD}(?:introduce\s+yourself|say\s+(?:hello|hi)(?:\s+to\s+\w+)?)(?:\s+(?:please|to\s+\w+|to\s+the\s+candidate))*$`);
 
-export const INTRODUCE: ServerToolDef<Interview, SaidSource> = {
+export const INTRODUCE: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'introduce',
   description: 'Introduce Milo to the candidate, when the lead interviewer asks Milo to introduce itself or says Milo is here to help.',
   parameters: noArgs(),

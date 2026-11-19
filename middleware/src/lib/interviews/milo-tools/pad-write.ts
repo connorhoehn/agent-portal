@@ -11,7 +11,7 @@ import { runWithDbTenant } from '../../../providers/db-tenant.js';
 import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type PadLanguage } from '../types.js';
 import { hasPad } from './context.js';
 import {
-  candidateMayAsk, deps, MAX_PAD_CHANGES, MAX_TEST_CASE_BATCHES, MAX_VERDICTS, NO_PAD, PAD_CHANGES_LIMIT, PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF,
+  candidateMayAsk, deps, MAX_PAD_CHANGES, NO_BOARD, type MiloInterview, MAX_TEST_CASE_BATCHES, MAX_VERDICTS, NO_PAD, PAD_CHANGES_LIMIT, PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF,
   PAD_TOO_LONG, standingOf, TESTS_LIMIT,
 } from './deps.js';
 import { entriesOf } from './helper.js';
@@ -22,10 +22,10 @@ const verdictsRun = new Map<string, number>();
 export function resetVerdicts(): void { verdictsRun.clear(); }
 
 /** Who may have Milo change the pad: the lead; the candidate while the lead's switch is on; never a panel member; only in a coding round. */
-export async function padMayAsk(interview: Interview, askedBy: string): Promise<true | { refusal: string } | null> {
+export async function padMayAsk(interview: MiloInterview, askedBy: string): Promise<true | { refusal: string } | null> {
   const standing = await standingOf(interview, askedBy);
   if (!standing) return null;
-  if (!hasPad(interview)) return { refusal: NO_PAD };
+  if (!hasPad(interview)) return { refusal: interview.surface === 'board' ? NO_BOARD : NO_PAD };
   if (standing === 'panel') return { refusal: PAD_LEAD_ONLY };
   if (standing === 'candidate' && !(await candidateMayAsk(interview))) return { refusal: PAD_OFF };
   return true;

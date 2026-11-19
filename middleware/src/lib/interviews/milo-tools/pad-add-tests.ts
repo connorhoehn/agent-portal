@@ -4,15 +4,14 @@ import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { atEnd } from '../pad/milo-writer.js';
 import { functionOf } from '../testcases/render.js';
-import type { Interview } from '../types.js';
 import { hasPad } from './context.js';
-import { TESTS_NOT_ADDED, testsAddedLine } from './deps.js';
+import { TESTS_NOT_ADDED, testsAddedLine, type MiloInterview } from './deps.js';
 import { entryOf } from './helper.js';
 import { argsOf, padMayAsk, writePad } from './pad-write.js';
 import { PAD_TOOL_ARGS_BYTES } from './schema.js';
 import { questionForPad, testCasesFor } from './tests.js';
 
-export const PAD_ADD_TESTS: ServerToolDef<Interview, SaidSource> = {
+export const PAD_ADD_TESTS: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'pad_add_tests',
   description: 'Add test cases for the interview\'s coding question at the bottom of the shared code pad. You write the cases: for each, the arguments of one call to the question\'s function as a JSON array, and the value the question says it returns as JSON. Put the number asked for in count (a dozen is 12; 12 when no number was said) and write about three more cases than that: the system drops any the pad already has and keeps the first count that pass. Never the solution.',
   parameters: {

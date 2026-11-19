@@ -2,7 +2,7 @@
 import type { PadEventIn } from '../pad/log/rules.js';
 import type { PadLanguage } from '../types.js';
 import { hasPad, padContextNote } from './context.js';
-import { deps } from './deps.js';
+import { deps, liveInterview } from './deps.js';
 
 const padNoted = new Map<string, { language: string; text: string; at: number }>();
 
@@ -29,9 +29,8 @@ export async function notePadChange(interviewId: string, events: readonly PadEve
   padNoted.set(interviewId, { language, text, at: now });
   if (padNoted.size > 500) padNoted.delete(padNoted.keys().next().value as string);
   if (!last || !languageChanged) return false; // the first look (the session started with this pad), or the text alone changed
-  const d = deps();
-  const interview = await d.interview(interviewId).catch(() => null);
-  if (!interview || interview.state !== 'live' || !interview.callId || !hasPad(interview)) return false;
+  const interview = await liveInterview(interviewId);
+  if (!interview || !interview.callId || !hasPad(interview)) return false;
   const { peekAssistantRuntime } = await import('../../meeting-assistant/orchestrator.js');
   return peekAssistantRuntime()?.addSessionContext(interview.callId, padContextNote({ text, language })) ?? false;
 }

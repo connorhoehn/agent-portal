@@ -6,9 +6,9 @@ import { registerServerTools, registeredServerTools, type ServerToolFamily, type
 import { interviewOfLobby } from './call.js';
 import { MILO_CAN_DO } from '../speak/index.js';
 import type { SaidSource } from '../speak/store.js';
-import type { Interview, PadLanguage } from '../types.js';
+import type { PadLanguage, RoundSurface } from '../types.js';
 import { hasPad, interviewBackendInstructions } from './context.js';
-import { candidateMayAsk, deps, liveInterview, logLine, ON_IT, PAD_BUSY, PAD_FAILED, standingOf, type Standing } from './deps.js';
+import { candidateMayAsk, deps, liveInterview, logLine, NO_BOARD, ON_IT, PAD_BUSY, PAD_FAILED, standingOf, type MiloInterview, type Standing } from './deps.js';
 import { INTRODUCE } from './introduce.js';
 import { PAD_ADD_HELPER } from './pad-add-helper.js';
 import { PAD_ADD_IMPORT } from './pad-add-import.js';
@@ -17,30 +17,34 @@ import { notePadSeen } from './pad-notes.js';
 import { REPEAT_QUESTION } from './repeat-question.js';
 import { TIME_LEFT } from './time-left.js';
 
-/** What this asker may ask for, said when Milo heard a request it could not serve (the family's `whatICanDo`). */
-export function whatICanDo(standing: Standing, padHelp: boolean, padRound: boolean): string | null {
+/**
+ * What this asker may ask for, said when Milo heard a request it could not serve (the family's `whatICanDo`), by where the round
+ * is worked: the pad tools on the code pad only; on the whiteboard the lead also hears that Milo cannot add to the board yet.
+ */
+export function whatICanDo(standing: Standing, padHelp: boolean, surface: RoundSurface | null): string | null {
   if (standing === 'panel') return null;
+  const padRound = surface === 'pad';
   if (standing === 'candidate' && !(padHelp && padRound)) return null; // the candidate's own fixed sentence (speak/index.ts MILO_CAN_DO)
-  return padRound
-    ? (standing === 'lead'
-      ? "I can add test cases, imports or a helper to the pad, introduce myself, or tell you how much time is left. I can't write the solution."
-      : "I can repeat the question, tell you how much time is left, or add test cases, imports or a helper to the pad. I can't write the solution.")
-    : 'I can introduce myself, repeat the question or tell you how much time is left.';
+  const plain = 'I can introduce myself, repeat the question or tell you how much time is left.';
+  if (!padRound) return surface === 'board' ? `${plain} ${NO_BOARD}` : plain;
+  return standing === 'lead'
+    ? "I can add test cases, imports or a helper to the pad, introduce myself, or tell you how much time is left. I can't write the solution."
+    : "I can repeat the question, tell you how much time is left, or add test cases, imports or a helper to the pad. I can't write the solution.";
 }
 
 /** The fallback for this asker in this interview: what they may ask; `candidateLine` for the candidate without pad help; null for a panel member or a stranger. */
-export async function whatICanDoIn(interview: Interview, askedBy: string, candidateLine: string): Promise<string | null> {
+export async function whatICanDoIn(interview: MiloInterview, askedBy: string, candidateLine: string): Promise<string | null> {
   const standing = await standingOf(interview, askedBy);
   if (!standing || standing === 'panel') return null;
   const padHelp = standing === 'lead' || (await candidateMayAsk(interview));
-  return whatICanDo(standing, padHelp, hasPad(interview)) ?? candidateLine;
+  return whatICanDo(standing, padHelp, interview.surface) ?? candidateLine;
 }
 
 /**
  * What the background agent is told: the round's questions and the pad as it is now (read through Milo's own seat, which writes
  * nothing). The pad seen is noted, so a later change of its language is told the session (pad-notes.ts).
  */
-async function backendInstructions(interview: Interview): Promise<string> {
+async function backendInstructions(interview: MiloInterview): Promise<string> {
   const d = deps();
   const pad = hasPad(interview);
   let seen: { text: string; language: PadLanguage } | null = null;
@@ -52,7 +56,7 @@ async function backendInstructions(interview: Interview): Promise<string> {
   return interviewBackendInstructions(questions, seen);
 }
 
-export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<Interview, SaidSource> = {
+export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<MiloInterview, SaidSource> = {
   family: 'interviews:interview',
   tenants: ['interviews'],
   tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER],

@@ -12,10 +12,10 @@ import type { MiloPadPlan, MiloPadWriteResult } from '../../pad/milo-writer.js';
 import type { PadEventIn } from '../../pad/log/rules.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps } from '../../speak/index.js';
 import { MILO_INTRO } from '../../speak/intro.js';
-import type { Interview, KitQuestion, PadLanguage } from '../../types.js';
+import type { Interview, KitQuestion, PadLanguage, RoundSurface } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
-  MAX_VERDICTS, notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
+  MAX_VERDICTS, NO_BOARD, NO_PAD, notePadChange, PAD_FAILED, PAD_LEAD_ONLY, PAD_OFF, resetMiloTools, resetPadNotes, sessionToolsFor, runMiloTool, setMiloToolDeps, TESTS_NOT_ADDED,
 } from '../index.js';
 import { builtinFor, checkHelper, MAX_HELPER_LINES } from '../helper.js';
 import { afterImports, checkedImportLines, placeImports } from '../imports.js';
@@ -50,6 +50,7 @@ let judged: number;
 let judgedInputs: Array<{ questions?: string[]; entries?: string[] }>;
 let verdict: 'helper' | 'solution';
 let questions: KitQuestion[];
+let surface: RoundSurface | null;
 
 let failWith: MiloPadWriteResult | null = null;
 const write = async (_id: string, plan: MiloPadPlan): Promise<MiloPadWriteResult> => {
@@ -71,7 +72,7 @@ beforeEach(() => {
   pad = { text: TWO_SUM.starter!.python!, language: 'python' };
   settings = new MemoryMiloSettingsStore();
   said = new MemorySaidStore(); setSaidStore(said);
-  logged = []; judged = 0; judgedInputs = []; verdict = 'helper'; questions = [TWO_SUM]; failWith = null;
+  logged = []; judged = 0; judgedInputs = []; verdict = 'helper'; questions = [TWO_SUM]; failWith = null; surface = 'pad';
   resetMiloTools();
   setSpeakDeps({ callOf: async () => 'call-tools', miloJoinedAt: async () => Date.now() - 10 * 60_000 });
   setMiloToolDeps({
@@ -79,6 +80,7 @@ beforeEach(() => {
     guestOf: async (u) => u === GUEST,
     settings: (id) => settings.get(id),
     questions: async () => questions,
+    surface: async () => surface,
     write,
     padLog: async (_id, events) => { logged.push([...events]); return events.length; },
     judge: async (_id, _lead, input) => { judged += 1; judgedInputs.push(input as never); return verdict; },
@@ -421,6 +423,26 @@ describe('introduce, time_left, repeat_question', () => {
     expect(await runMiloTool(IV, LEAD, 'create', {})).toBeNull();
     interview = { ...interview, state: 'ended' } as Interview;
     expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: dozen() })).toBeNull();
+  });
+});
+
+describe('a whiteboard round (review WB-1, item 4)', () => {
+  it('offers no pad tool, refuses a pad change with the board sentence, and the fallback says Milo cannot add to the board yet', async () => {
+    surface = 'board';
+    const offered = (await sessionToolsFor(IV)).tools.map((t) => t.name);
+    expect(offered.filter((n) => n.startsWith('pad_'))).toEqual([]);
+    const before = pad.text;
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: dozen(), count: 3 })).toBe(NO_BOARD);
+    expect(await runMiloTool(IV, LEAD, 'pad_add_import', { lines: ['import math'] })).toBe(NO_BOARD);
+    expect(pad.text).toBe(before);
+    expect(logged).toEqual([]);
+    expect(await fallbackLine(IV, LEAD, 'CANDIDATE')).toBe(`I can introduce myself, repeat the question or tell you how much time is left. ${NO_BOARD}`);
+    expect(await acknowledgementLine(IV, LEAD, 'it would be helpful to have another dozen test cases')).toBeNull();
+  });
+
+  it('a behavioural round still has no pad: the pad sentence, not the board one', async () => {
+    surface = null;
+    expect(await runMiloTool(IV, LEAD, 'pad_add_tests', { cases: dozen(), count: 3 })).toBe(NO_PAD);
   });
 });
 

@@ -2,11 +2,10 @@
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { candidateLine, candidateRequestOf } from '../speak/index.js';
-import type { Interview } from '../types.js';
-import { REPEAT_WINDOW_MS, standingOf } from './deps.js';
+import { REPEAT_WINDOW_MS, standingOf, type MiloInterview } from './deps.js';
 import { noArgs } from './schema.js';
 
-export const REPEAT_QUESTION: ServerToolDef<Interview, SaidSource> = {
+export const REPEAT_QUESTION: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'repeat_question',
   description: 'Repeat the last question the interviewer had Milo ask.',
   parameters: noArgs(),

@@ -10,16 +10,24 @@ import type { PadEventIn } from '../pad/log/rules.js';
 import { writeIntoPad, type MiloPadPlan, type MiloPadWriteResult } from '../pad/milo-writer.js';
 import { saidStore, type SaidSource } from '../speak/store.js';
 import { interviewsStore } from '../store-select.js';
-import { INTERVIEWS_TENANT, type Interview, type KitQuestion } from '../types.js';
+import { roundSurface } from '../kit.js';
+import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type RoundSurface } from '../types.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
+
+/**
+ * A live interview as Milo's tools see it: the record and where its round is worked (the kit round's surface: the code pad, the
+ * whiteboard, or neither for a behavioural round). The pad tools follow the surface, never the round's type alone.
+ */
+export type MiloInterview = Interview & { surface: RoundSurface | null };
 
 // ── The fixed sentences ──────────────────────────────────────────────────────────────────────────────────────────────────
 export const PAD_OFF = "The lead hasn't turned on pad help from Milo for this round.";
 export const PAD_LEAD_ONLY = 'Only the lead interviewer, or the candidate when the lead allows it, can ask Milo to change the pad.';
 export const INTRO_LEAD_ONLY = 'Only the lead interviewer can ask Milo to introduce itself.';
 export const NO_PAD = 'There is no code pad in this round.';
+export const NO_BOARD = "I can't add to the board yet.";
 export const PAD_BUSY = 'Milo is still writing in the pad.';
 export const NOT_SOLUTION = "I can add test cases, imports or a helper, but I can't write the solution.";
 export const NOT_STANDARD_IMPORT = 'Milo only adds standard-library imports at the top of the pad.';
@@ -56,6 +64,8 @@ export interface MiloToolDeps {
   guestOf: (userId: string, interviewId: string) => Promise<boolean>;
   settings: (interviewId: string) => Promise<MiloSettings>;
   questions: (interview: Interview) => Promise<KitQuestion[]>;
+  /** Where the interview's round is worked (kit.ts `roundSurface`). */
+  surface: (interview: Interview) => Promise<RoundSurface | null>;
   write: (interviewId: string, plan: MiloPadPlan) => Promise<MiloPadWriteResult>;
   padLog: (interviewId: string, events: readonly PadEventIn[], at: Date) => Promise<number>;
   judge: (interviewId: string, leadId: string, input: VerdictInput) => Promise<'helper' | 'solution'>;
@@ -63,10 +73,14 @@ export interface MiloToolDeps {
   newId: () => string;
 }
 
-async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
+async function openingOf(interview: Interview) {
   const store = interviewsStore();
   const [applications, openings] = await runWithDbTenant(INTERVIEWS_TENANT, () => Promise.all([store.listApplications(), store.listOpenings()]));
-  const opening = openings.find((o) => o.id === applications.find((a) => a.id === interview.applicationId)?.openingId);
+  return openings.find((o) => o.id === applications.find((a) => a.id === interview.applicationId)?.openingId) ?? null;
+}
+
+async function roundQuestions(interview: Interview): Promise<KitQuestion[]> {
+  const opening = await openingOf(interview);
   const bank = opening?.kit.questions ?? [];
   const chosen = interview.questionIds.length ? bank.filter((q) => interview.questionIds.includes(q.id)) : bank;
   return chosen.filter((q) => q.roundType === 'technical');
@@ -77,6 +91,10 @@ const DEFAULTS: MiloToolDeps = {
   guestOf: guestOfInterview,
   settings: (id) => runWithDbTenant(INTERVIEWS_TENANT, () => miloSettingsStore().get(id)),
   questions: roundQuestions,
+  surface: async (interview) => {
+    const round = (await openingOf(interview))?.kit.rounds.find((r) => r.id === interview.roundId);
+    return roundSurface({ type: interview.type, surface: round?.surface });
+  },
   write: writeIntoPad,
   padLog: (id, events, at) => runWithDbTenant(INTERVIEWS_TENANT, () => appendPadEvents(id, { id: MILO_WRITER_ID, side: 'milo' }, events, at)),
   judge: judgeHelper,
@@ -88,10 +106,12 @@ let overrides: Partial<MiloToolDeps> = {};
 export function setMiloToolDeps(next: Partial<MiloToolDeps> | null): void { overrides = next ?? {}; }
 export const deps = (): MiloToolDeps => ({ ...DEFAULTS, ...overrides });
 
-/** A live interview by id, or null (not found, not live, unreadable). */
-export async function liveInterview(interviewId: string): Promise<Interview | null> {
-  const interview = await deps().interview(interviewId).catch(() => null);
-  return interview && interview.state === 'live' ? interview : null;
+/** A live interview by id with its round's surface, or null (not found, not live, unreadable). An unreadable surface is none. */
+export async function liveInterview(interviewId: string): Promise<MiloInterview | null> {
+  const d = deps();
+  const interview = await d.interview(interviewId).catch(() => null);
+  if (!interview || interview.state !== 'live') return null;
+  return { ...interview, surface: await d.surface(interview).catch(() => null) };
 }
 
 /** Where this person stands in the interview: its lead, on its panel, its candidate (a guest of its invite), or nowhere. */

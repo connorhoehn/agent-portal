@@ -2,11 +2,10 @@
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { candidateLine, candidateRequestOf } from '../speak/index.js';
-import type { Interview } from '../types.js';
-import { REPEAT_WINDOW_MS, standingOf } from './deps.js';
+import { REPEAT_WINDOW_MS, standingOf, type MiloInterview } from './deps.js';
 import { noArgs } from './schema.js';
 
-export const TIME_LEFT: ServerToolDef<Interview, SaidSource> = {
+export const TIME_LEFT: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'time_left',
   description: 'Say how much time is left in this interview round.',
   parameters: noArgs(),

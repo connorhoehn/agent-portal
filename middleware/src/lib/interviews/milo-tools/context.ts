@@ -7,7 +7,8 @@
 // later: the server checks every call against the pad as it is when it writes (its language then, never the agent's idea of it).
 import { Fence } from '../../untrusted-text.js';
 import { MAX_SESSION_CONTEXT_CHARS } from '../../meeting-assistant/session.js';
-import type { Interview, KitQuestion, PadLanguage } from '../types.js';
+import type { KitQuestion, PadLanguage } from '../types.js';
+import type { MiloInterview } from './deps.js';
 
 export const MAX_CONTEXT_PAD_CHARS = 4000;
 
@@ -51,5 +52,5 @@ export function padContextNote(pad: { text: string; language: PadLanguage }, fen
   }
 }
 
-/** Only an interview with a pad has pad tools; the context is asked of a technical round only. */
-export const hasPad = (interview: Pick<Interview, 'type'>): boolean => interview.type === 'technical';
+/** Only a round worked on the code pad has pad tools (a whiteboard round is technical too, and has none). */
+export const hasPad = (interview: Pick<MiloInterview, 'surface'>): boolean => interview.surface === 'pad';
