@@ -9,13 +9,16 @@
 //
 // The story: the recruiter assigns Mateo's System design round (POST /interviews), Hugo accepts it, it gets a time and Hugo
 // chooses "Design Twitter" (q-be-twitter) in Prepare's route; Hugo starts the call, the candidate opens the link and is
-// admitted (all before the film starts). On film: Hugo puts the question's "Prompt and empty frames" board on the board; Mateo asks
-// about reads and freshness, types the functional and non-functional stickies, draws the high-level design (boxes with
-// labels, arrows), hesitates and drags the fan-out worker aside, asks where to go deep; Hugo picks the fan-out; a Deep dive
-// sticky; Hugo ends the round and opens its record page's board (the closing board and the snapshot picker).
+// admitted (all before the film starts). On film: Hugo welcomes Mateo to his second round and puts the question's "Master
+// template" board (the prompt, "Your design" with the components palette) on the board; Mateo reads the prompt and asks
+// about reads and freshness; in "Your design" he types the functional and non-functional notes, copies components from
+// the palette (Alt-drag) into the High-level design, joins them with arrows labelled "writes" and "reads", hesitates and
+// drags the workers aside, notes the read-time merge and the services' purposes, asks where to go deep; Hugo picks the
+// fan-out, and while Mateo walks it Hugo's side follows Mateo's view ("Following Mateo") and Hugo looks at the Provided
+// design tab (lead only); Hugo ends the round and opens its record page's board (the closing board and the snapshot picker).
 // The checks (report.json): after every drawing beat both sides hold the same number of elements; each side sees the other's
-// named pointer; the record page shows the board as it closed.
-//
+// named pointer; Hugo follows Mateo; the candidate's page holds nothing of the provided design; the record page shows the
+// board as it closed.
 // The stack, as for the coding film (its header): the media server and platform-api already running; this script starts its
 // own mock middleware and portal (IVFILM_MW_PORT, IVFILM_PORTAL_PORT) and stops them. Env as the coding film's
 // (IVFILM_MEDIA_URL, IVFILM_VIDEO_PUBLIC_URL, IVFILM_PLATFORM_PUBLIC_URL, IVFILM_PLATFORM_INTERNAL_URL, IVFILM_DYNAMODB).
@@ -163,8 +166,8 @@ const CURSOR = () => {
     const s = app.state; const els = app.scene.getNonDeletedElements();
     return { zoom: s.zoom.value, scrollX: s.scrollX, scrollY: s.scrollY, left: s.offsetLeft, top: s.offsetTop, width: s.width, height: s.height,
       count: els.length, texts: els.filter((e) => e.type === 'text').map((e) => e.text.replace(/\s+/g, ' ')),
-      boxes: Object.fromEntries(els.filter((e) => e.type === 'rectangle' && e.boundElements?.some((b) => b.type === 'text'))
-        .map((e) => [els.find((t) => t.containerId === e.id)?.text.replace(/\s+/g, ' ') ?? e.id, [Math.round(e.x), Math.round(e.y)]])),
+      labels: els.filter((e) => e.type === 'text' && !e.containerId).map((e) => [e.text.replace(/\s+/g, ' '), e.x, e.y, e.width]),
+      textAt: Object.fromEntries(els.filter((e) => e.type === 'text').map((e) => [e.text.replace(/\s+/g, ' '), [Math.round(e.x), Math.round(e.y)]]).reverse()),
       pointers: [...(s.collaborators?.values?.() ?? [])].filter((c) => c.pointer).map((c) => c.username) };
   };
 };
@@ -256,23 +259,6 @@ async function tool(page, name, key) {
   const b = page.getByTestId(CANVAS).locator(`label:has([data-testid="toolbar-${name}"])`).first(); // the radio's label takes the click
   if (await b.isVisible().catch(() => false)) await press(page, b, { pause: 120, ms: 280 }); else await page.keyboard.press(key);
 }
-/** The background swatch for the next shapes (Excalidraw's own picker), when its panel is on screen. */
-async function fill(page, color) {
-  const sw = page.getByTestId(CANVAS).locator(`[data-testid="color-top-pick-${color}"]`).first();
-  if (await sw.isVisible().catch(() => false)) await press(page, sw, { pause: 100, ms: 260 }); else note(`no background swatch ${color} on screen`);
-}
-/** A labelled shape: the rectangle tool, a drag, Enter, the words typed, Escape. */
-async function shape(page, [x, y, w, h], label, color = null) {
-  await tool(page, 'rectangle', 'r');
-  if (color) await fill(page, color);
-  const v = await board(page);
-  const [ax, ay] = px(v, x, y); const [bx, by] = px(v, x + w, y + h);
-  await moveTo(page, ax, ay, 320); await page.mouse.down(); await moveTo(page, bx, by, 320); await page.mouse.up();
-  await page.keyboard.press('Enter');
-  await page.keyboard.type(label, { delay: 26 });
-  await page.keyboard.press('Escape');
-  await sleep(120);
-}
 /** An arrow from one shape to another: the arrow tool and a drag between points inside them (Excalidraw binds both ends). */
 async function arrow(page, [sx, sy], [ex, ey]) {
   await tool(page, 'arrow', 'a');
@@ -299,14 +285,75 @@ async function same(id, label, min) {
   return a?.count ?? min;
 }
 
-// ── The board's plan, in scene units (the "Prompt and empty frames" board: the prompt card above frames of 440 × 300, three to a row) ──
-const FR = { functional: [500, 160], nonfunctional: [1000, 160], hld: [0, 520], deepdive: [500, 520] };
-const sticky = (frame, j) => [FR[frame][0] + 20 + (j % 2) * 210, FR[frame][1] + 30 + Math.floor(j / 2) * 110, 190, 80];
-const B = { w: 120, h: 64 };
-const cell = (col, row) => [FR.hld[0] + 15 + col * 145, FR.hld[1] + 25 + row * 98, B.w, B.h];
-const HLD = { client: cell(0, 0), api: cell(1, 0), tweets: cell(2, 0), fanout: cell(1, 1), store: cell(2, 1), cache: cell(0, 2), timeline: cell(1, 2) };
-const side = ([x, y, w, h], where, inset = 14) => ({ l: [x + inset, y + h / 2], r: [x + w - inset, y + h / 2], t: [x + w / 2, y + inset], b: [x + w / 2, y + h - inset],
-  tl: [x + inset, y + inset], bl: [x + inset, y + h - inset], br: [x + w - inset, y + h - inset], tr: [x + w - inset, y + inset] })[where];
+// ── The board's plan, in scene units: the question's "Master template" board (middleware/src/lib/interviews/board/
+// templates.ts masterBoard, with the palette): the prompt (part A) at x 0..620, "Your design" (part B) from x 700, its
+// High-level design frame at 700..1700 × 130..1620 with the palette's twelve components in two rows at the top, and the
+// written sections (Purpose(s) of each service, API signatures, Data model, the questions) in a column at x 1760..2400.
+// The positions are the template's own, moved by where the board's title actually landed (ORIGIN).
+const ICON = { w: 100, h: 64 };
+/** A palette component's icon box (its top-left corner), by its column and row in the palette. */
+const pal = (col, row) => [749 + col * 150, 220 + row * 140];
+const PALETTE = { web: pal(0, 0), lb: pal(3, 0), app: pal(4, 0), cache: pal(0, 1), queue: pal(1, 1), workers: pal(2, 1), db: pal(3, 1) };
+/** Where each copy goes in the drawing area under the palette (its icon's top-left corner). */
+const PLACE = { web: [740, 640], lb: [920, 640], app: [1100, 640], cache: [1300, 640], db: [1100, 820], queue: [1300, 820], workers: [1500, 820] };
+const NOTES = { functional: [724, 552], nonfunctional: [724, 608], bigAccounts: [900, 1000], purposes: [1784, 272] };
+const VIEW_PALETTE = [700, 200, 1700, 940]; // the palette and the drawing area under it
+const VIEW_DRAWING = [700, 530, 1700, 1100]; // the drawing area alone
+const VIEW_PURPOSES = [1700, 120, 2420, 470];
+const VIEW_PROMPT = [-30, -20, 1000, 700];
+let ORIGIN = [0, 0];
+const o = ([x, y]) => [x + ORIGIN[0], y + ORIGIN[1]];
+/** Where an arrow starts or ends on each copy (icon-relative points inside its shapes, so Excalidraw binds the arrow). */
+const ANCHOR = { web: { r: [90, 40] }, lb: { l: [26, 40], r: [76, 40] }, app: { l: [12, 32], r: [90, 32], b: [50, 58], br: [88, 58], c: [50, 32] },
+  db: { t: [50, 20] }, cache: { l: [20, 32], br: [78, 50], c: [50, 32] }, queue: { l: [16, 32], r: [84, 32] }, workers: { l: [20, 25], tr: [66, 10], c: [46, 30], b: [50, 50] } };
+const box = (k, where = 'c') => { const [x, y] = o(PLACE[k]); const [dx, dy] = ANCHOR[k][where] ?? [ICON.w / 2, ICON.h / 2]; return [x + dx, y + dy]; };
+/** The copy of a palette component (by its label) lowest on the board: its icon's top-left corner. */
+const lowest = (v, label) => (v?.labels ?? []).filter((l) => l[0] === label).map(([, x, y, w]) => [Math.round(x + w / 2 - ICON.w / 2), Math.round(y - 72)]).sort((a, b) => b[1] - a[1])[0] ?? null;
+const region = ([x0, y0, x1, y1]) => [x0 + ORIGIN[0], y0 + ORIGIN[1], x1 + ORIGIN[0], y1 + ORIGIN[1]];
+
+/** A palette component copied into the drawing area: Alt held, a press on the component, a drag to its place (Excalidraw
+ *  duplicates the selection on an Alt-drag; a press on a grouped component selects the whole group). */
+async function copyFromPalette(page, k) {
+  await tool(page, 'selection', 'v');
+  const v = await board(page);
+  const [sx, sy] = o(PALETTE[k]); const [tx, ty] = o(PLACE[k]);
+  const [ax, ay] = px(v, sx + ICON.w / 2, sy + ICON.h / 2); const [bx, by] = px(v, tx + ICON.w / 2, ty + ICON.h / 2);
+  await moveTo(page, ax, ay, 300);
+  await page.keyboard.down('Alt');
+  await page.mouse.down(); await sleep(80); await moveTo(page, bx, by, 520); await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await page.keyboard.press('Escape');
+  await sleep(60);
+}
+/** An arrow between two components with a label typed on it (Excalidraw's own: a double-click on the arrow). */
+async function labelledArrow(page, from, to, label) {
+  await arrow(page, from, to);
+  if (!label) return;
+  await tool(page, 'selection', 'v');
+  const v = await board(page);
+  const [mx, my] = px(v, (from[0] + to[0]) / 2, (from[1] + to[1]) / 2);
+  await moveTo(page, mx, my, 200);
+  await page.mouse.dblclick(mx, my);
+  await sleep(120);
+  await page.keyboard.type(label, { delay: 30 });
+  await page.keyboard.press('Escape');
+  await sleep(80);
+}
+/** A note typed on the board: the text tool, a click where it goes, the words, Escape. */
+async function note2(page, [x, y], text) {
+  await tool(page, 'text', 't');
+  const v = await board(page);
+  const [ax, ay] = px(v, x, y);
+  await moveTo(page, ax, ay, 300); await page.mouse.click(ax, ay); await sleep(100);
+  for (const [i, part] of text.split('\n').entries()) { if (i) await page.keyboard.press('Enter'); await page.keyboard.type(part, { delay: 22 }); }
+  await page.keyboard.press('Escape');
+  await sleep(80);
+}
+/** Lines said back to back while the hands work; resolves when both are done. */
+async function beat(ids, work, gapMs = 250) {
+  const talk = (async () => { for (const [i, id] of ids.entries()) await say(id, i ? 200 : gapMs); })();
+  await Promise.all([talk, work ? work() : null]);
+}
 
 let lead; let cand; let greta; let IV = null;
 try {
@@ -363,104 +410,133 @@ try {
   await until(async () => (await board(hp)) && (await board(cp)), 20_000, 300);
   const [lv, cv] = [await board(hp), await board(cp)];
   step('1 both in the call, the board open and in sync on both sides', !!tiles && ls && cs && !!lv && !!cv,
-    `camera tiles ${await cams(hp)}/${await cams(cp)}; board synced lead=${ls} candidate=${cs}; canvas lead ${lv?.width}x${lv?.height}, candidate ${cv?.width}x${cv?.height}`);
+    `camera tiles ${await cams(hp)}/${await cams(cp)}; board synced lead=${ls} candidate=${cs}; canvas lead ${Math.round(lv?.width)}x${Math.round(lv?.height)}, candidate ${Math.round(cv?.width)}x${Math.round(cv?.height)}`);
   await sleep(1500);
 
   // ── On film ──
   timeline.film.fromMs = Date.now() - 600;
-  scene(1, 'Mateo\'s System design round. Hugo puts the question on the shared board.');
+  scene(1, 'Mateo\'s second round: system design, with Hugo.');
   const insert = hp.getByTestId('interview-board-insert').first();
-  const b01 = say('b01', 0);
+  const i01 = say('i01', 0);
   await press(hp, insert, { pause: 400 });
-  await press(hp, hp.getByRole('menuitem', { name: /Prompt and empty frames/ }).first(), { pause: 350 });
-  await b01;
-  const n0 = await same('2 the Design Twitter board on both sides', 'after "Start from a board"', 7);
-  const prompt = (await board(cp))?.texts.some((t) => /Design Twitter/.test(t));
-  if (!prompt) note('the candidate\'s board shows no "Design Twitter" card');
+  await press(hp, hp.getByRole('menuitem', { name: /Master template/ }).first(), { pause: 350 });
+  await i01;
+  await say('i02', 300);
+  await say('i03', 300);
+  const n0 = await same('2 the Design Twitter master template on both sides', 'after "Start from a board"', 80);
+  const title = (await board(cp))?.textAt['Design Twitter'];
+  if (title) ORIGIN = [title[0], title[1]]; else note('no "Design Twitter" title on the candidate\'s board');
+  const cv0 = await board(cp);
+  const seen = cv0 ? [-cv0.scrollX, -cv0.scrollY, -cv0.scrollX + cv0.width / cv0.zoom, -cv0.scrollY + cv0.height / cv0.zoom].map(Math.round) : null;
+  step('3 the board opens readable on the prompt', !!cv0 && cv0.zoom >= 0.5 && seen[0] <= ORIGIN[0] + 10 && seen[2] >= ORIGIN[0] + 600,
+    `candidate's zoom ${cv0?.zoom?.toFixed(2)}, the scene from ${JSON.stringify(seen)} (the prompt at x ${ORIGIN[0]}..${ORIGIN[0] + 620})`);
 
-  scene(2, 'Clarifying questions first: reads, writes and freshness.');
-  const vc = await board(cp); const vl = await board(hp);
-  const clarify = (async () => { for (const [x, y] of [[220, 50], [220, 300], [700, 50]]) { const [a, b] = px(vc, x, y); await moveTo(cp, a, b, 900); await sleep(300); } })();
-  await say('b02', 0);
-  // Hugo's hand over his board while he answers: his named pointer on Mateo's screen.
-  const hugoPoint = (async () => { for (const [x, y] of [[720, 60], [600, 300], [760, 320]]) { const [a, b] = px(vl, x, y); await moveTo(hp, a, b, 700); await sleep(250); } })();
+  scene(2, 'Mateo reads the prompt, then asks about reads, writes and freshness.');
+  // His hand down the prompt as he reads, and the wheel down to the user stories.
+  const read = (async () => {
+    let v = await board(cp);
+    for (const [x, y] of [[40, 40], [300, 200], [300, 400]]) { const [a, b] = px(v, x + ORIGIN[0], y + ORIGIN[1]); await moveTo(cp, a, b, 800); await sleep(250); }
+    for (let i = 0; i < 10; i++) { await cp.mouse.wheel(0, 36); await sleep(40); }
+    v = await board(cp);
+    for (const [x, y] of [[120, 620], [300, 760], [200, 880]]) { const [a, b] = px(v, x + ORIGIN[0], y + ORIGIN[1]); await moveTo(cp, a, b, 700); await sleep(200); }
+  })();
+  await say('r01', 300);
+  await read;
+  await say('b02', 250);
+  // Hugo's hand over his board while he answers (a pointer move only: a press or the wheel would stop his follow).
+  const vl = await board(hp);
+  const hugoPoint = (async () => { for (const [x, y] of [[300, 300], [200, 520], [420, 560]]) { const [a, b] = px(vl, x + ORIGIN[0], y + ORIGIN[1]); await moveTo(hp, a, b, 700); await sleep(250); } })();
   await say('b03');
-  await hugoPoint; await clarify;
+  await hugoPoint;
   const seesHugo = (await board(cp))?.pointers ?? [];
-  step('3 the candidate sees Hugo\'s named pointer', seesHugo.some((n) => /Hugo/.test(n)), `pointers on the candidate's board: ${JSON.stringify(seesHugo)}`);
+  step('4 the candidate sees Hugo\'s named pointer', seesHugo.some((n) => /Hugo/.test(n)), `pointers on the candidate's board: ${JSON.stringify(seesHugo)}`);
   await say('b04');
   await say('b05');
 
-  scene(3, 'Requirements on stickies, typed straight onto the board.');
+  scene(3, 'Your design: the requirements noted, then the high-level design from the palette.');
   const PANEL = 215;
-  await Promise.all([camera(cp, [480, 130, 960, 480], 1.1, PANEL), camera(hp, [480, 130, 1460, 480], 0.9)]);
-  const b06 = say('b06', 150);
-  let first = true;
-  for (const [j, text] of ['Post a tweet', 'Follow someone', 'Home timeline'].entries()) { await shape(cp, sticky('functional', j), text, first ? '#ffec99' : null); first = false; }
-  await b06;
+  await beat(['d01', 'b07'], async () => {
+    await camera(cp, region(VIEW_PALETTE), 1.0, PANEL);
+    await note2(cp, o(NOTES.functional), 'Functional: post a tweet, follow someone, home timeline');
+    await nearEnd('d01', 300);
+    await note2(cp, o(NOTES.nonfunctional), 'Non-functional: fast timeline reads, highly available, a few seconds stale is OK');
+  }, 150);
+  const follow = hp.getByTestId('interview-board-follow').first();
+  const fState = await follow.getAttribute('data-follow', { timeout: 3000 }).catch(() => null);
+  const fText = (await follow.textContent({ timeout: 3000 }).catch(() => '')) ?? '';
   const seesCand = (await board(hp))?.pointers ?? [];
-  step('4 Hugo sees the candidate\'s named pointer', seesCand.length > 0, `pointers on Hugo's board: ${JSON.stringify(seesCand)}`);
-  const n1 = await same('5 functional stickies, same on both sides', 'after three functional stickies', n0 + 6);
-  const b07 = say('b07', 150);
-  await camera(cp, [980, 130, 1460, 480], 1.1, PANEL);
-  for (const [j, text] of ['Fast timeline reads', 'Highly available', 'A few seconds stale is OK'].entries()) await shape(cp, sticky('nonfunctional', j), text);
-  await b07;
-  const n2 = await same('6 non-functional stickies, same on both sides', 'after three non-functional stickies', n1 + 6);
+  step('5 Hugo follows Mateo and sees his named pointer', fState === 'following' && /Following/.test(fText) && seesCand.length > 0,
+    `follow control "${fText.trim()}" (${fState}); pointers on Hugo's board: ${JSON.stringify(seesCand)}`);
+  const n1 = await same('6 the requirement notes, same on both sides', 'after two notes', n0 + 2);
 
-  scene(4, 'The high-level design, drawn with Excalidraw\'s own tools.');
-  const look2 = [-20, 490, 460, 830];
-  await Promise.all([camera(cp, look2, 1.3, PANEL), camera(hp, look2)]);
-  const b08 = say('b08', 150);
-  await shape(cp, HLD.client, 'Client', '#a5d8ff');
-  await shape(cp, HLD.api, 'API');
-  await arrow(cp, side(HLD.client, 'r'), side(HLD.api, 'l'));
-  await shape(cp, HLD.tweets, 'Tweet service');
-  await arrow(cp, side(HLD.api, 'r'), side(HLD.tweets, 'l'));
-  await shape(cp, HLD.store, 'Tweet store');
-  await arrow(cp, side(HLD.tweets, 'b'), side(HLD.store, 't'));
-  await b08;
-  const n3 = await same('7 first boxes and arrows, same on both sides', 'after Client, API, Tweet service, Tweet store and three arrows', n2 + 11);
-  const b09 = say('b09', 150);
-  await shape(cp, HLD.fanout, 'Fan-out worker');
-  await arrow(cp, side(HLD.tweets, 'bl'), side(HLD.fanout, 'tr'));
-  await shape(cp, HLD.cache, 'Timeline cache');
-  await arrow(cp, side(HLD.fanout, 'bl'), side(HLD.cache, 'tr'));
-  await shape(cp, HLD.timeline, 'Timeline service');
-  await arrow(cp, side(HLD.timeline, 'l'), side(HLD.cache, 'r'));
-  await b09;
-  const n4 = await same('8 the whole high-level design, same on both sides', 'after Fan-out worker, Timeline cache, Timeline service and three arrows', n3 + 9);
+  await beat(['d02'], async () => {
+    for (const k of ['web', 'lb', 'app']) await copyFromPalette(cp, k);
+    await labelledArrow(cp, box('web', 'r'), box('lb', 'l'));
+    await labelledArrow(cp, box('lb', 'r'), box('app', 'l'));
+  }, 200);
+  const n2 = await same('7 web client, load balancer, app servers and two arrows, same on both sides', 'after three copies and two arrows', n1 + 5);
+  await beat(['d03'], async () => {
+    await copyFromPalette(cp, 'db');
+    await labelledArrow(cp, box('app', 'b'), box('db', 't'), 'writes');
+  }, 200);
+  await beat(['d04'], async () => {
+    await copyFromPalette(cp, 'cache');
+    await labelledArrow(cp, box('app', 'r'), box('cache', 'l'), 'reads');
+  }, 200);
+  const n3 = await same('8 the database and the cache with labelled arrows, same on both sides', 'after "writes" and "reads"', n2 + 4);
+  const labels = (await board(hp))?.texts ?? [];
+  if (!labels.includes('writes') || !labels.includes('reads')) note(`arrow labels on Hugo's board: writes=${labels.includes('writes')} reads=${labels.includes('reads')}`);
+  await beat(['d05'], async () => {
+    await copyFromPalette(cp, 'queue');
+    await copyFromPalette(cp, 'workers');
+    await labelledArrow(cp, box('app', 'br'), box('queue', 'l'));
+    await labelledArrow(cp, box('queue', 'r'), box('workers', 'l'));
+    await labelledArrow(cp, box('workers', 'tr'), box('cache', 'br'));
+  }, 200);
+  const n4 = await same('9 the queue and the workers, same on both sides', 'after two copies and three arrows', n3 + 4);
 
-  scene(5, 'A second thought: what about an account with fifty million followers?');
-  const b10 = say('b10', 300);
+  scene(4, 'A second thought: what about an account with fifty million followers?');
+  const [wx, wy] = box('workers', 'b');
+  const b10 = say('b10', 250);
+  await camera(cp, region(VIEW_DRAWING), 1.0, PANEL);
   await nearEnd('b10', 4200); // "Actually, wait."
-  const [fx, fy] = HLD.fanout;
-  await drag(cp, [fx + 12, fy + 10], [fx + 12 - 145, fy + 10]);
+  await drag(cp, [wx, wy], [wx, wy + 130]);
   await b10;
-  const b11 = say('b11', 200);
-  await arrow(cp, side(HLD.store, 'bl'), side(HLD.timeline, 'tr'));
-  await b11;
-  const n5 = await same('9 the drag and the new arrow, same on both sides', 'after moving the fan-out worker and adding the read-time arrow', n4 + 1);
-  const moved = await until(async () => { const [a, b] = [(await board(hp))?.boxes['Fan-out worker'], (await board(cp))?.boxes['Fan-out worker']]; return a && b && a[0] === b[0] && a[1] === b[1] && a[0] < fx - 100 ? [a, b] : null; }, 6000, 250);
-  step('10 the fan-out worker moved aside on both sides', !!moved, `fan-out worker at ${JSON.stringify(moved ?? [(await board(hp))?.boxes['Fan-out worker'], (await board(cp))?.boxes['Fan-out worker']])} (lead, candidate); drawn at [${fx}, ${fy}]`);
+  await beat(['d06'], async () => { await nearEnd('d06', 2200); await note2(cp, o(NOTES.bigAccounts), 'Big accounts: no fan-out, merge at read time'); }, 200);
+  const moved = await until(async () => { const [a, b] = [lowest(await board(hp), 'Workers'), lowest(await board(cp), 'Workers')]; return a && b && a[1] === b[1] && a[1] > PLACE.workers[1] + ORIGIN[1] + 80 ? [a, b] : null; }, 6000, 250);
+  step('10 the workers moved down on both sides, the note added', !!moved, `Workers at ${JSON.stringify(moved ?? [lowest(await board(hp), 'Workers'), lowest(await board(cp), 'Workers')])} (lead, candidate); copied to ${JSON.stringify(o(PLACE.workers))}`);
+  await beat(['d07'], async () => {
+    await camera(cp, region(VIEW_PURPOSES), 1.0, PANEL);
+    await note2(cp, o(NOTES.purposes), 'App servers: post tweets, serve timelines\nWorkers: fan new tweets out to followers\' caches');
+  }, 200);
+  const n5 = await same('11 the purposes, same on both sides', 'after the drag and two notes', n4 + 2);
 
-  scene(6, 'Where to go deep? Hugo picks the fan-out.');
-  await say('b12', 300);
+  scene(5, 'Where to go deep? Hugo picks the fan-out.');
+  await beat(['b12'], () => camera(cp, region(VIEW_DRAWING), 1.0, 0), 250);
   const lv2 = await board(hp);
-  const [hx, hy] = px(lv2, fx - 145 + B.w / 2, fy + B.h / 2);
-  const point = moveTo(hp, hx, hy, 800);
-  await say('b13');
+  const wk = lowest(lv2, 'Workers');
+  const point = wk ? (async () => { const [hx, hy] = px(lv2, wk[0] + 50, wk[1] + 32); await moveTo(hp, hx, hy, 800); })() : null;
+  await say('h13');
   await point;
-  const seesHugo2 = (await board(cp))?.pointers ?? [];
-  if (!seesHugo2.some((n) => /Hugo/.test(n))) note(`Hugo's pointer not on the candidate's board when he picked the fan-out: ${JSON.stringify(seesHugo2)}`);
-  const look3 = [-20, 490, 960, 830];
-  await Promise.all([camera(cp, [480, 490, 960, 830], 1.1, PANEL), camera(hp, look3)]);
-  const b14 = say('b14', 150);
-  await shape(cp, [FR.deepdive[0] + 20, FR.deepdive[1] + 30, 400, 110], 'Fan-out on write for most accounts; celebrity tweets merged at read time', '#ffec99');
-  await b14;
-  const nFinal = await same('11 the deep dive sticky, same on both sides', 'after the Deep dive sticky', n5 + 2);
+  // Mateo walks the fan-out with his pointer while Hugo looks at the provided design in his own pane.
+  const walk = (async () => { const v = await board(cp); const w2 = lowest(v, 'Workers') ?? o(PLACE.workers);
+    for (const [x, y] of [[w2[0] + 50, w2[1] + 32], box('cache', 'c'), box('app', 'c'), box('cache', 'c')]) { const [a, b] = px(v, x, y); await moveTo(cp, a, b, 900); await sleep(400); } })();
+  const d08 = say('d08', 250);
+  await sleep(2500);
+  await press(hp, hp.getByRole('tab', { name: 'Provided design' }).first(), { pause: 250 });
+  const pd = await hp.getByTestId('interview-design-canvas').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+  const candTab = await cp.getByRole('tab', { name: 'Provided design' }).count().catch(() => 0);
+  const candCanvas = await cp.getByTestId('interview-design-canvas').count().catch(() => 0);
+  const candText = await cp.evaluate(() => document.body.innerText.includes('Provided design')).catch(() => null);
+  step('12 Hugo sees the provided design; the candidate nothing of it', pd && candTab === 0 && candCanvas === 0 && candText === false,
+    `lead's design canvas ${pd}; candidate: tab ${candTab}, canvas ${candCanvas}, the words "Provided design" on the page ${candText}`);
+  await d08; await walk;
+  await say('h14', 250);
 
-  scene(7, 'Hugo ends the round. The board is kept on the record.');
-  const b15 = say('b15', 300);
+  scene(6, 'Hugo ends the round. The board is kept on the record.');
+  const nFinal = (await board(cp))?.count ?? n5;
+  const b15 = say('b15', 250);
+  await press(hp, hp.getByRole('tab', { name: 'Board' }).first(), { pause: 150 }).catch(() => note('no Board tab to go back to'));
   await nearEnd('b15', 1500);
   await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
   await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { pause: 150, timeout: 10_000 });
@@ -477,10 +553,10 @@ try {
   const picks = await hp.getByTestId('interviews-record-board').getByRole('radio').count().catch(() => 0);
   const b17 = say('b17', 300);
   const picker = hp.getByTestId('interviews-record-board').getByRole('radio').first();
-  if (picks > 0) { const box = await picker.boundingBox().catch(() => null); if (box) await moveTo(hp, box.x + box.width / 2, box.y + box.height / 2, 700); }
+  if (picks > 0) { const pb = await picker.boundingBox().catch(() => null); if (pb) await moveTo(hp, pb.x + pb.width / 2, pb.y + pb.height / 2, 700); }
   await b17;
   await sleep(1200);
-  step('12 the round ended and its record shows the closing board', state === 'ended' && ended && onRecord && rec?.count === nFinal,
+  step('13 the round ended and its record shows the closing board', state === 'ended' && ended && onRecord && rec?.count === nFinal,
     `state ${state}; candidate's ended page ${ended}; record board ${onRecord ? `${rec?.count} elements` : 'not shown'} (live board ${nFinal}); snapshot picker ${picks} choices`);
   timeline.film.toMs = Date.now();
   report.pageErrors = [...lead.errors, ...cand.errors].slice(0, 20);
