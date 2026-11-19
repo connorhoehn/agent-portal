@@ -5,7 +5,7 @@ import type { LargeJsonRoute } from '../../lib/json-body.js';
 import { MAX_BOARD_SCENE_BYTES } from '../../lib/interviews/board/snapshots.js';
 import { KIT_LIMITS } from '../../lib/interviews/kit.js';
 
-/** Where the interviews router is mounted (index.ts). */
+/** Where the interviews router is mounted: index.ts writes it as a literal (the wire's route table reads the source); a test pins the two together. */
 export const INTERVIEWS_MOUNT = '/api/interviews';
 
 const SEGMENT = '[^/]+';

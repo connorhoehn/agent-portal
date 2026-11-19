@@ -1,10 +1,12 @@
 // The app's JSON parser (lib/json-body.ts): express's 100 KB everywhere, and the larger limit a few routes need so their own
 // size checks (the board checkpoint's MAX_BOARD_SCENE_BYTES, the kit's per-board boardBytes) are what refuses, not a bare 413.
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true } } }));
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import express from 'express';
 import request from 'supertest';
 import { jsonBody } from '../json-body.js';
-import { INTERVIEWS_LARGE_JSON } from '../../routes/interviews/body-limits.js';
+import { INTERVIEWS_LARGE_JSON, INTERVIEWS_MOUNT } from '../../routes/interviews/body-limits.js';
 import { MAX_BOARD_SCENE_BYTES } from '../interviews/board/snapshots.js';
 import { KIT_LIMITS } from '../interviews/kit.js';
 
@@ -31,5 +33,11 @@ describe('the JSON parser', () => {
     expect((await request(app).put('/api/interviews/interviews/iv-a/board/snapshots').send(body(200 * 1024))).status).toBe(413);
     expect((await request(app).post('/api/interviews/interviews/iv-a/board/snapshots/x').send(body(200 * 1024))).status).toBe(413);
     expect((await request(app).post('/api/interviews/interviews/iv-a/board/snapshots').send(body(10))).status).toBe(200);
+  });
+
+  it('names the interviews router where index.ts mounts it', () => {
+    const index = readFileSync(join(__dirname, '..', '..', 'index.ts'), 'utf8');
+    expect(index).toContain(`app.use('${INTERVIEWS_MOUNT}', requireTenant('interviews')`);
+    expect(index).toContain('app.use(jsonBody(INTERVIEWS_LARGE_JSON, captureRawBody));');
   });
 });

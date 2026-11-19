@@ -65,7 +65,7 @@ import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
 import { interviewsFlagGate, interviewsRouter } from './routes/interviews.js';
-import { INTERVIEWS_LARGE_JSON, INTERVIEWS_MOUNT } from './routes/interviews/body-limits.js';
+import { INTERVIEWS_LARGE_JSON } from './routes/interviews/body-limits.js';
 import { jsonBody } from './lib/json-body.js';
 import { interviewInviteRouter } from './routes/interview-invite.js';
 import { runsFacadeRouter } from './routes/runs.js';
@@ -416,7 +416,7 @@ app.use('/api/access/search', requireTenant('access'), requireAction('ViewAccess
 app.use('/api/access', requireTenant('access'), accessRouter);
 // The interviews tenant (docs/interviews-tenant-plan.md): openings, candidates, interviews, scorecards.
 // Reads only in phase 0; INTERVIEWS_ENABLED (lib/interviews/flag.ts) gates the whole mount, on in the mock world.
-app.use(INTERVIEWS_MOUNT, requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
+app.use('/api/interviews', requireTenant('interviews'), interviewsFlagGate, interviewsRouter);
 // The in-tenant quick request (routes/access-requests-quick.ts): a session
 // floor, NOT requireTenant('access') — a Work reader asks for the budgets tier
 // from the Initiatives page. It files through the same submit path; it limits
