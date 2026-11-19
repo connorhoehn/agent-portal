@@ -5,7 +5,7 @@
 // It is also a `LiveMeetingSession`, so the orchestrator wires it exactly as it wires the session today (events, answers, usage);
 // only two things differ: `appendAudio` (the room mix) is dropped, since the router's `feed` is the only way audio reaches the
 // session, and `toolCall.askedBy` is the server's own record of who was routed, never the session's.
-import { SessionEmitter, type LiveMeetingSession, type SessionEventName, type SessionEvents, type SessionStartInput } from '../session.js';
+import { SessionEmitter, type LiveMeetingSession, type SayOptions, type SessionEventName, type SessionEvents, type SessionStartInput } from '../session.js';
 import type { TalkingSide } from './types.js';
 
 const EVENTS: readonly SessionEventName[] = ['inputTranscript', 'outputTranscript', 'toolCall', 'delegation', 'delegationReady', 'messageReady', 'usage', 'outputAudio', 'expires', 'closed', 'error'];
@@ -68,8 +68,8 @@ export class HandsfreeTalking extends SessionEmitter implements LiveMeetingSessi
   answerToolCall(callId: string, output: string, opts?: { continue?: boolean }): boolean { return this.inner.answerToolCall(callId, output, opts); }
   resumeTools(): void { this.inner.resumeTools?.(); }
   appendContext(text: string): boolean { return this.inner.appendContext(text); }
-  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean {
-    return this.inner.sayVerbatim?.(id, text, ended, sent) ?? false;
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void, opts?: SayOptions): boolean {
+    return this.inner.sayVerbatim?.(id, text, ended, sent, opts) ?? false;
   }
   cancelSay(id: string): void { this.inner.cancelSay?.(id); }
   pendingInputText(): string { return this.inner.pendingInputText(); }

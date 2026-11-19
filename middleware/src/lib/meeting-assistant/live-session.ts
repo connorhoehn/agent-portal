@@ -59,7 +59,7 @@ import {
   hangupLiveSession, liveSocketSessionBody, LIVE_SOCKET_OPEN, openLiveSocket, type LiveSocket,
 } from '../voice/openai.js';
 import {
-  MAX_PROVIDER_ERRORS, MAX_SESSION_CONTEXT_CHARS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
+  MAX_PROVIDER_ERRORS, MAX_SESSION_CONTEXT_CHARS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SayOptions, type SessionStartInput,
 } from './session.js';
 import { trace } from './trace.js';
 import { readAloudContent, saidVerbatim } from './approved-speech.js';
@@ -133,7 +133,7 @@ const errorFields = (ev: Record<string, unknown>): Record<string, string | undef
 const responseIdOf = (raw: unknown): string | null => { const id = (raw as { id?: unknown } | undefined)?.id; return typeof id === 'string' && id ? id : null; };
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
-interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number; eventId?: string; acked?: boolean }
+interface SayRequest { id: string; text: string; ended: (transcript: string | null) => void; sent?: () => void; askedAt: number; eventId?: string; acked?: boolean; answersTurn?: boolean }
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Milo said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
@@ -294,9 +294,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
    * Say the server's words aloud (session.ts `sayVerbatim`): sent as spoken commentary once the session is quiet (now, or after the
    * response running now); the next utterance from quiet after it is sent is claimed for it. `sent` is called when it goes out.
    */
-  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean {
+  sayVerbatim(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void, opts?: SayOptions): boolean {
     if (this.ended || !this.opened || !text.trim()) return false;
-    this.sayWaiting.push({ id, text, ended, askedAt: this.sinceStart(), ...(sent ? { sent } : {}) });
+    this.sayWaiting.push({ id, text, ended, askedAt: this.sinceStart(), ...(sent ? { sent } : {}), ...(opts?.answersTurn ? { answersTurn: true } : {}) });
     trace('say.asked', { t: this.sinceStart(), queued: this.sayQueue.length, waiting: this.sayWaiting.length, busy: this.busy() });
     this.pumpSay();
     return true;
@@ -335,8 +335,11 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
    * else, so the open response goes unheard: orchestrator.ts `onOutputAudio`), and for the lines sent before it (order kept).
    */
   private sayHeld(): boolean {
-    return this.input !== null || (this.answerWait !== null && this.answerWaitTurn) || this.output !== null || this.tailLeft > 0 || this.saying !== null
-      || this.sayQueue.length > 0;
+    // A line that answers the turn being heard (hands-free: the routed person's phrase-tool question) waits for neither that turn
+    // nor the reply the voice may give it: that reply is never relayed, and waiting for it cost 2.6 to 3.9 s (gate, 19 November).
+    const turnFree = this.sayWaiting[0]?.answersTurn === true;
+    return (!turnFree && this.input !== null) || (!turnFree && this.answerWait !== null && this.answerWaitTurn) || this.output !== null || this.tailLeft > 0
+      || this.saying !== null || this.sayQueue.length > 0;
   }
 
   /**

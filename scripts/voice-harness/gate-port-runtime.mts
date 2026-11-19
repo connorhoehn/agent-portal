@@ -52,7 +52,7 @@ export async function runtimePort(opts: { envFile: string }): Promise<GatePort> 
         trace: (event: string, data: Record<string, unknown>) => {
           if (event === 'l.sentence' && typeof data['userId'] === 'string') ev.sentence?.(data['userId'], Number(data['atMs']));
           if (event === 'drop' && typeof data['reason'] === 'string') ev.drop?.(data['reason'], Number(data['atMs']));
-          if (process.env['HF_GATE_TRACE']) appendFileSync(process.env['HF_GATE_TRACE'], `${JSON.stringify({ event, ...data })}\n`);
+          if (process.env['HF_GATE_TRACE']) appendFileSync(process.env['HF_GATE_TRACE'], `${JSON.stringify({ event, ...data, wall: Date.now() })}\n`);
         },
       });
       run.on('state', (st) => { if (st.phase === 'routing' && st.userId) ev.trigger(st.userId, nowMs); });

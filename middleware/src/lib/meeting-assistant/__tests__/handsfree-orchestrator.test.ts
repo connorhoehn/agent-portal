@@ -64,8 +64,8 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   answerToolCall(id: string, output: string) { if (this.closed || !this.open.delete(id)) return false; this.answers.push([id, output]); return true; }
   appendContext() { return true; }
   /** Server lines asked for (`sayVerbatim`): sent at once; the test plays their frames and ends them. */
-  readonly asked: Array<{ id: string; text: string; ended: (t: string | null) => void }> = [];
-  sayVerbatim(id: string, text: string, ended: (t: string | null) => void, sent?: () => void) { this.asked.push({ id, text, ended }); sent?.(); return true; }
+  readonly asked: Array<{ id: string; text: string; ended: (t: string | null) => void; answersTurn?: boolean }> = [];
+  sayVerbatim(id: string, text: string, ended: (t: string | null) => void, sent?: () => void, opts?: { answersTurn?: boolean }) { this.asked.push({ id, text, ended, ...(opts?.answersTurn ? { answersTurn: true } : {}) }); sent?.(); return true; }
   cancelSay() { /* forgotten */ }
   async close() { if (this.closed) return; this.closed = true; this.emit('closed', { reason: 'close_requested' }); }
   call(id: string, name: string, args: unknown, askedBy?: string) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs: 0, ...(askedBy ? { askedBy } : {}) }); }
@@ -325,6 +325,7 @@ describe('the hands-free seam', () => {
     await flush();
     const req = inner().asked[0]!;
     expect(req.text).toBe(LINE);
+    expect(req.answersTurn).toBe(true); // it answers the routed turn: not held behind it or the session's reply
     inner().fire('outputTranscript', { text: LINE, final: true, say: req.id });
     for (let i = 0; i < 6; i++) inner().fire('outputAudio', { pcm: pcm(9), seq: i + 1, say: req.id, ...(i === 5 ? { last: true as const } : {}) });
     req.ended(LINE);

@@ -90,8 +90,12 @@ export interface RouterDeps {
   relay: RelayPort;
   /** The session is working on a request (a tool call open): a turn with no voice yet is not over. Absent: never. */
   working?: () => boolean;
-  /** Say a fixed verdict's line for `userId` (the orchestrator posts it with the approved mark and says it as approved words). Absent: `talking.say`. */
-  sayFixed?: (userId: string, line: string) => void;
+  /**
+   * Say a fixed verdict's line for `userId` (the orchestrator posts it with the approved mark and says it as approved words). Absent:
+   * `talking.say`. `answersTurn`: the line answers the routed turn the session is hearing (session.ts `SayOptions`), so it goes out
+   * without waiting for that turn or the session's own (unrelayed) reply to it.
+   */
+  sayFixed?: (userId: string, line: string, answersTurn: boolean) => void;
   /** Codes and ids only (never words or audio). */
   trace?: (event: string, data: Record<string, unknown>) => void;
 }
@@ -478,7 +482,7 @@ export class Router {
     let v: TriggerVerdict;
     try { v = await this.deps.rules.verdict(this.deps.call, { userId, text, via: 'name' }); } catch { return; }
     if (this.closed || v.kind !== 'fixed') return;
-    this.sayFixed(userId, v.line);
+    this.sayFixed(userId, v.line, false);
   }
 
   private applyVerdict(t: Turn, v: TriggerVerdict): void {
@@ -488,13 +492,13 @@ export class Router {
     if (v.kind !== 'request' && t.early && !this.uttering && this.playing()) this.stopPlayout();
     if (v.kind === 'request') { this.syncAsker(); const held = t.held.splice(0); for (const f of held) this.relayFrame(f.pcm, f.last); return; }
     // A fixed line answers a routed asker: their follow-up window opens once it has played (film fix 2).
-    if (v.kind === 'fixed') { this.drop(v.kind); this.lineFor = t.userId; this.sayFixed(t.userId, v.line); return; }
+    if (v.kind === 'fixed') { this.drop(v.kind); this.lineFor = t.userId; this.sayFixed(t.userId, v.line, true); return; }
     this.drop(v.kind);
   }
 
   /** A server line: the orchestrator's held-text path when given (posted with the approved mark, logged by the family), else said here. */
-  private sayFixed(userId: string, line: string): void {
-    if (this.deps.sayFixed) { this.deps.sayFixed(userId, line); return; }
+  private sayFixed(userId: string, line: string, answersTurn: boolean): void {
+    if (this.deps.sayFixed) { this.deps.sayFixed(userId, line, answersTurn); return; }
     this.sayNo += 1;
     const id = `hf-fixed-${this.sayNo}`;
     this.sayTexts.set(id, line);

@@ -29,7 +29,7 @@ export interface HandsfreeRuntimeDeps {
   /** A person's display name, for their lane (the first audio of someone not yet joined opens one). */
   nameOf: (userId: string) => Promise<string>;
   /** A fixed verdict's server line (router.ts `RouterDeps.sayFixed`). */
-  sayFixed?: (userId: string, line: string) => void;
+  sayFixed?: (userId: string, line: string, answersTurn: boolean) => void;
   /** The session is working on a request (router.ts `RouterDeps.working`). */
   working?: () => boolean;
   trace?: (event: string, data: Record<string, unknown>) => void;
@@ -240,20 +240,20 @@ export async function startHandsfreeRun(input: StandaloneRunInput): Promise<Stan
   const rules = createHandsfreeRules({ record: async () => record, policy: () => policy, roster: () => names, admitWaitMs: 150 });
   // Server lines the orchestrator's way (orchestrator.ts `queueHeld` -> `sayHeld` -> `approvedFrame`), interviews family only.
   const lines = new Map<string, string>(); let lineNo = 0; let lineChain: Promise<void> = Promise.resolve();
-  const sayLine = (line: string): void => {
+  const sayLine = (line: string, answersTurn = false): void => {
     lineChain = lineChain.then(() => new Promise<void>((done) => {
       const id = `hf-line-${++lineNo}`; lines.set(id, line);
       const bound = setTimeout(done, 15_000);
       const finish = (): void => { clearTimeout(bound); lines.delete(id); done(); };
       // The router learns the words at the line's first frame (below); a line that never plays is forgotten when it ends.
-      if (!talking.say(id, line, finish)) finish();
+      if (!talking.sayVerbatim(id, line, finish, undefined, { answersTurn })) finish();
     }));
   };
   run = new HandsfreeRuntime({
     call, clock, listening, rules, talking,
     relay: { push: (pcm) => { queue.push({ pcm, kind: nextKind }); uttPushed = true; flushText(); }, clear: () => { queue = []; } },
     onLine: () => undefined,
-    ...(interviews ? { sayFixed: (_userId: string, line: string) => sayLine(line) } : {}),
+    ...(interviews ? { sayFixed: (_userId: string, line: string, answersTurn: boolean) => sayLine(line, answersTurn) } : {}),
     nameOf: async (userId) => input.speakers.find((s) => s.userId === userId)?.name ?? userId,
     ...(input.trace ? { trace: input.trace } : {}),
   });

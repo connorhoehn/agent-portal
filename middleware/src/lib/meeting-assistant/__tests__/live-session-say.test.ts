@@ -192,6 +192,38 @@ describe('sayVerbatim on the live session', () => {
     await s.close();
   });
 
+  it('a line that answers the turn being heard (hands-free phrase tool) goes at once: no wait for that turn or the voice\'s reply to it', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 200 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    frame({ type: 'session.input_transcript.delta', start_ms: 0, end_ms: 200, delta: 'Milo, how much time' });
+    await tick(10);
+    s.sayVerbatim('say_1', 'About thirty minutes are left.', () => undefined, undefined, { answersTurn: true });
+    await tick(5);
+    expect(commentaries()).toBe(1);
+    // The turn then flushes (its sentence end): the line is not sent again, and a plain line asked now waits for the reply as before.
+    frame({ type: 'session.input_transcript.delta', start_ms: 200, end_ms: 400, delta: ' is left?' });
+    s.sayVerbatim('say_2', Q, () => undefined);
+    await tick(20);
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
+  it('a line that answers the turn still waits for voice already running (the provider cannot be cut)', async () => {
+    const { s } = make({ utteranceGapMs: 40, saySettleMs: 40, sayGapMs: 150, answerWaitMs: 200 });
+    await s.start(START);
+    const commentaries = () => received.filter((e) => e['type'] === 'session.commentary.append').length;
+    audio(3000); words('Sure.', 0);
+    await tick(10);
+    s.sayVerbatim('say_1', 'About thirty minutes are left.', () => undefined, undefined, { answersTurn: true });
+    await tick(10);
+    expect(commentaries()).toBe(0);
+    for (let i = 0; i < 4; i += 1) audio(0);
+    await tick(80);
+    expect(commentaries()).toBe(1);
+    await s.close();
+  });
+
   it('a turn flushed after its quiet (no sentence end) does not wait again: the reply wait counts from the turn\'s last words', async () => {
     // Recorded (18 November takes): the voice's own reply, or its delegation, came 0 to 1.2 s after a turn's last input delta,
     // inside the 1.5 s of quiet that flushes the turn; waiting a full reply wait after the flush only delayed the intro by 1 s.

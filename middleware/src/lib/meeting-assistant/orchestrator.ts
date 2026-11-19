@@ -54,7 +54,7 @@ import type { RosterEntry } from './minutes.js';
 import { hookProposalNotices, notifyOpenProposals } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
-import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
+import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SayOptions, type SessionEvents } from './session.js';
 import { trace } from './trace.js';
 import { handsfreeEnabled } from './handsfree-flag.js';
 import { HandsfreeTalking } from './handsfree/talking.js';
@@ -1002,7 +1002,7 @@ export class AssistantRuntime {
       onLine: (l) => { void this.onHeardLine(run, l); },
       nameOf: (userId) => nameOf(userId),
       // A fixed verdict's line goes the held-text way: posted with the approved mark, said as approved words, logged by the family.
-      sayFixed: (userId, line) => { void this.queueHeld(run, userId, line); },
+      sayFixed: (userId, line, answersTurn) => { void this.queueHeld(run, userId, line, answersTurn ? { answersTurn } : undefined); },
       // A tool call still open: the request's answer may come later, so a turn with no voice yet is not over.
       working: () => [...run.calls.values()].includes('open'),
       trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
@@ -1423,7 +1423,7 @@ export class AssistantRuntime {
     return run && !run.finished ? run.hf : null;
   }
 
-  async sayHeldTextWhy(callId: string, text: string, by: string): Promise<SayResult> {
+  async sayHeldTextWhy(callId: string, text: string, by: string, opts?: SayOptions): Promise<SayResult> {
     void by; // who asked is the caller's log row; the trace carries codes only
     const run = this.runs.get(callId);
     if (!run || run.finished) return { outcome: 'no-call', why: null };
@@ -1501,7 +1501,7 @@ export class AssistantRuntime {
             if (hold.timer) { clearTimeout(hold.timer); hold.timer = null; }
             this.releaseNext(run);
           },
-          () => bound(sayBoundMs(words), 'timeout'));
+          () => bound(sayBoundMs(words), 'timeout'), opts);
       } catch { asked = false; }
       if (!asked) hold.finish('posted', 'refused');
     });
@@ -2260,8 +2260,8 @@ export class AssistantRuntime {
    * before it, so the chat and the voice keep the order they were asked in, and the refusal said once per asker is judged against
    * the answer before it. Resolves when this line is done; never rejects.
    */
-  private queueHeld(run: CallRun, askedBy: string, line: string): Promise<void> {
-    run.heldChain = run.heldChain.then(() => this.sayHeld(run, askedBy, line)).catch((err: unknown) => { console.warn('[meeting-assistant] held answer failed', (err as Error).message); });
+  private queueHeld(run: CallRun, askedBy: string, line: string, opts?: SayOptions): Promise<void> {
+    run.heldChain = run.heldChain.then(() => this.sayHeld(run, askedBy, line, opts)).catch((err: unknown) => { console.warn('[meeting-assistant] held answer failed', (err as Error).message); });
     return run.heldChain;
   }
 
@@ -2270,7 +2270,7 @@ export class AssistantRuntime {
    * said as approved words behind the family's money check, and the family told how it went. The family's fixed refusal is not
    * posted twice in a row to the same asker.
    */
-  private async sayHeld(run: CallRun, askedBy: string, held: string): Promise<void> {
+  private async sayHeld(run: CallRun, askedBy: string, held: string, opts?: SayOptions): Promise<void> {
     const callId = run.ctx.callId;
     // A line still waiting its turn when the call stopped (Milo left, the call ended): not posted, said or paid for.
     if (run.finished) { trace('held.dropped', {}); return; }
@@ -2287,7 +2287,7 @@ export class AssistantRuntime {
       : posted ? { release: async () => undefined } : null;
     let said: SayResult = { outcome: 'posted', why: null };
     if (speechHold) {
-      try { said = await this.sayHeldTextWhy(callId, held, askedBy); } finally { await speechHold.release().catch(() => undefined); }
+      try { said = await this.sayHeldTextWhy(callId, held, askedBy, opts); } finally { await speechHold.release().catch(() => undefined); }
     }
     await run.policy.heldTextSaid?.(run.call, { askedBy, text: held, posted: posted !== null, spoken: said.outcome === 'spoken', ...(said.partly ? { partly: said.partly } : {}) }).catch(() => undefined);
   }

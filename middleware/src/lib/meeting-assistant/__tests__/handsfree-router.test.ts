@@ -155,11 +155,12 @@ describe('hands-free router', () => {
     const rules = new FakeRules();
     rules.verdictFor = () => ({ kind: 'fixed', line: 'Ten minutes left.' });
     const talking = new FakeTalking();
-    const fixed: Array<[string, string]> = [];
-    new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay: new FakeRelay(), sayFixed: (u, l) => fixed.push([u, l]) });
+    const fixed: Array<[string, string, boolean]> = [];
+    new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay: new FakeRelay(), sayFixed: (u, l, a) => fixed.push([u, l, a]) });
     listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo' }); await settle();
     listening.emit('sentence', { userId: UNA, sentenceId: 's1', text: 'Milo, how long?', startMs: 0, endMs: 0, named: true }); await settle();
-    expect(fixed).toEqual([[UNA, 'Ten minutes left.']]);
+    // It answers the routed turn the session is hearing: sent without waiting behind that turn or the session's reply to it.
+    expect(fixed).toEqual([[UNA, 'Ten minutes left.', true]]);
     expect(talking.said).toEqual([]);
   });
 
@@ -736,8 +737,8 @@ describe('hands-free router', () => {
       rules.verdictFor = () => ({ kind: 'fixed', line: 'About 12 minutes are left in this round.' });
       const talking = new FakeTalking();
       const relay = new FakeRelay();
-      const fixed: Array<[string, string]> = [];
-      const router = new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay, sayFixed: (u, l) => fixed.push([u, l]) });
+      const fixed: Array<[string, string]> = []; const turns: boolean[] = [];
+      const router = new Router({ clock, call: { callId: 'c1', lobby: null, tenant: 't' }, rules, listening, talking, relay, sayFixed: (u, l, a) => { fixed.push([u, l]); turns.push(a); } });
       const drops: string[] = [];
       router.on('drop', (d) => drops.push(d.reason));
       const step = (who: Array<[string, number]> = []) => { clock.advance(100); for (const [u, t] of who) listening.speak(u, t); router.tick(); };
@@ -747,7 +748,7 @@ describe('hands-free router', () => {
         listening.emit('name', { userId: UNA, sentenceId: 's1', sentenceStartMs: 0, nameEndMs: 0, textSoFar: 'Milo' }); await settle();
         listening.emit('sentence', { userId: UNA, sentenceId: 's1', text, startMs: 0, endMs: clock.nowMs(), named: true }); await settle();
       };
-      return { clock, listening, rules, talking, relay, router, fixed, drops, step, words, line, ask };
+      return { clock, listening, rules, talking, relay, router, fixed, turns, drops, step, words, line, ask };
     }
 
     it('fix 1: a server line relayed through the router is Milo playing: words over it are a barge-in, and the rest of the line is dropped', async () => {
@@ -788,6 +789,8 @@ describe('hands-free router', () => {
       w.rules.admission.set(UNA, 'fixed-lines');
       await w.ask();
       expect(w.fixed).toHaveLength(1);
+      // Never routed: the session hears no turn of theirs, so the line waits behind whatever it is hearing.
+      expect(w.turns).toEqual([false]);
       w.line(5);
       expect(w.router.state()).toEqual({ phase: 'idle' });
     });

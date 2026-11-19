@@ -61,6 +61,9 @@ export class SessionTextUnsupported extends Error {
   constructor() { super('This session cannot take a typed request; the spoken path is the only one'); this.name = 'SessionTextUnsupported'; }
 }
 
+/** How a `sayVerbatim` line is sent (`answersTurn`: it answers the turn being heard, so it does not wait behind it). */
+export interface SayOptions { answersTurn?: boolean }
+
 export interface LiveMeetingSession {
   readonly kind: 'openai' | 'scripted';
   /** True when `sendText` works. The real session cannot (no text input event is documented). */
@@ -89,9 +92,10 @@ export interface LiveMeetingSession {
    * produced no words for it). The caller checks the transcript against `text` before anything is relayed. False when the session
    * cannot take it now (closed, not open). Absent: the session cannot say anything verbatim. The session may hold the line until it
    * is quiet (the live session does: a line sent into its own running response is never said); `sent` is called each time the line
-   * actually goes to the model, so the caller's bound can count from then.
+   * actually goes to the model, so the caller's bound can count from then. `opts.answersTurn`: the line answers the turn being heard
+   * (hands-free: the routed person's phrase-tool question), so it waits for neither that turn nor the voice's own reply to it.
    */
-  sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void): boolean;
+  sayVerbatim?(id: string, text: string, ended: (transcript: string | null) => void, sent?: () => void, opts?: SayOptions): boolean;
   /** Forget a `say` request the caller gave up on, so it never claims a later utterance. Absent: nothing to forget. */
   cancelSay?(id: string): void;
   /** What the session has heard of the current person-turn but not yet emitted as an `inputTranscript` ('' when nothing). Read-only, for the voice gate. */
