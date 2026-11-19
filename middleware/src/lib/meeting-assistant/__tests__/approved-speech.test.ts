@@ -603,6 +603,21 @@ describe('6c. the lines the family holds are said one after another, and none af
   };
   const say = async (userId: string, text: string) => { await intake.handle(CALL, { userId, text, at: now, turnEnded: true }); now += 100; await flush(); };
 
+  it('a fallback line waits behind the held answers asked before it: the chat keeps the order they were asked in', async () => {
+    const g = gated();
+    const off = registerMeetingAssistantPolicy('orgiq:heldorder', g.policy);
+    try {
+      await startCall('orgiq:heldorder:r1');
+      await say(GUEST, 'Milo, how much time is left?');
+      await say(GUEST, 'Milo, repeat the question.');
+      await say(ALICE, 'Milo, what is the weather like?');
+      await new Promise((r) => setTimeout(r, 300)); await flush();
+      expect(mockPosts.approved).toEqual([H1]);
+      g.open(); await until(() => mockPosts.approved.length >= 3);
+      expect(mockPosts.approved).toEqual([H1, H2, FALLBACK]);
+    } finally { off(); }
+  });
+
   it('a held answer still waiting when the call stops is neither posted nor paid for', async () => {
     const g = gated();
     const off = registerMeetingAssistantPolicy('orgiq:heldorder', g.policy);
@@ -863,7 +878,12 @@ describe('8. server tools (policy.ts runTool): no turn, no card, the line said a
       fake().fire('toolCall', { callId: 'call_r7b', name: 'pad_add_helper', args: { what: 'x', code: 'z' }, atMs: now - T0 });
       await flush(); await new Promise((r) => setTimeout(r, 50)); await flush();
       expect(calls).toBe(2); // the same request ran again
-      expect(mockPosts.approved).toContain(LINE);
+      // Its line is said after the first one's is over (one chain for the family's lines).
+      expect(mockPosts.approved).toEqual(["Not in the pad's language."]);
+      await until(() => fake().asked.length > 0);
+      fake().asked[0]!.ended("Not in the pad's language.");
+      await until(() => mockPosts.approved.includes(LINE));
+      expect(mockPosts.approved).toEqual(["Not in the pad's language.", LINE]);
     } finally { off(); }
   });
 

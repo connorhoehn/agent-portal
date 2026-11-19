@@ -1705,7 +1705,7 @@ export class AssistantRuntime {
         // It is said after the held answers before it, but not awaited here: this runs inside storing the request's line, and the
         // lines after it must not wait for Milo to finish speaking.
         if (held !== null) {
-          if (held) run.heldChain = run.heldChain.then(() => this.sayHeld(run, e.askedBy, held)).catch((err: unknown) => { console.warn('[meeting-assistant] held answer failed', (err as Error).message); });
+          if (held) void this.queueHeld(run, e.askedBy, held);
           continue;
         }
         // Not one of the family's fixed requests: the model may answer it with a tool call; with none in time, the family's line.
@@ -1997,11 +1997,21 @@ export class AssistantRuntime {
     const line = retry ? out.line : out;
     trace('call.server', { call: e.callId, said: line !== null, ...(retry ? { retry: true } : {}) });
     try {
-      if (line !== null) await this.sayHeld(run, asker, line);
+      if (line !== null) await this.queueHeld(run, asker, line);
     } finally {
       // The line is said (or there is none): the delegated work gets its held-back continuation now (session.ts `resumeTools`).
       run.session?.resumeTools?.();
     }
+  }
+
+  /**
+   * Every line the family holds (a held answer, a server tool's line, an acknowledgement, a fallback) is said after the ones queued
+   * before it, so the chat and the voice keep the order they were asked in, and the refusal said once per asker is judged against
+   * the answer before it. Resolves when this line is done; never rejects.
+   */
+  private queueHeld(run: CallRun, askedBy: string, line: string): Promise<void> {
+    run.heldChain = run.heldChain.then(() => this.sayHeld(run, askedBy, line)).catch((err: unknown) => { console.warn('[meeting-assistant] held answer failed', (err as Error).message); });
+    return run.heldChain;
   }
 
   /**
@@ -2057,7 +2067,7 @@ export class AssistantRuntime {
           acknowledged = true;
           // A slow tool's call is on its way: the family's short acknowledgement now, not after the call lands.
           const ack = policy.heldAcknowledgement ? await policy.heldAcknowledgement(run.call, { askedBy, text }).catch(() => null) : null;
-          if (ack !== null && !settled()) void this.sayHeld(run, askedBy, ack).catch(() => undefined);
+          if (ack !== null && !settled()) void this.queueHeld(run, askedBy, ack);
         }
         await this.wait(step);
       }
@@ -2075,7 +2085,7 @@ export class AssistantRuntime {
     if (ask && (ask.ran || ask.fellBack)) return;
     if (ask) ask.fellBack = true;
     const line = run.policy.heldFallback ? await run.policy.heldFallback(run.call, { askedBy, text }).catch(() => null) : null;
-    if (line !== null && !run.finished) await this.sayHeld(run, askedBy, line);
+    if (line !== null && !run.finished) await this.queueHeld(run, askedBy, line);
   }
 
   /** Everyone who held a seat while Milo was in the call, everyone seated now and the inviter, by display name. */
