@@ -77,7 +77,22 @@ describe('name matching', () => {
   });
 
   it('a name that starts a sentence is addressing even without a comma', () => {
-    expect(findAddress('That is fine. Milo could help with that')?.rest).toBe('could help with that');
+    expect(findAddress('That is fine. Milo the build is red again')?.rest).toBe('the build is red again');
+  });
+
+  it('a sentence that only mentions Milo to someone else is not an address: Milo as its object, or its subject in the third person', () => {
+    // The lead telling the candidate, the moment before the candidate asks (live interview, 18 November).
+    expect(findAddress("Great list! Tell you what? If you'd like more examples to check against, just ask Milo")).toBeNull();
+    expect(findAddress('You can always talk to Milo.')).toBeNull();
+    expect(findAddress('Milo can help with that')).toBeNull();
+    expect(findAddress('Good question. Milo will sort that out')).toBeNull();
+    // A person after the modal makes it a question to Milo; a comma after the name makes it an address.
+    expect(findAddress('Milo can you add a dozen test cases')?.rest).toBe('can you add a dozen test cases');
+    expect(findAddress('Milo could we get a summary')?.rest).toBe('could we get a summary');
+    expect(findAddress('Milo, can help with that?')?.rest).toBe('can help with that?');
+    // The name as the last word, not acted on by the sentence: the request is coming in the next line.
+    expect(findAddress('Okay so Milo')?.rest).toBe('');
+    expect(findAddress('Oh, nice! Hey Milo... It would be helpful to have another dozen test cases')?.rest).toBe('It would be helpful to have another dozen test cases');
   });
 });
 

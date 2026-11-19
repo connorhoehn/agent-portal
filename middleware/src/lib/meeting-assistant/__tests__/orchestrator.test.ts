@@ -1971,6 +1971,22 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(lines.map((l) => [l.userId, l.text])).toEqual([[BOB, 'The cookie is late'], [ALICE, 'Milo, find the experts']]);
   });
 
+  it('one heard turn where one person tells another to ask Milo and the other asks: the work is for the one who asked', async () => {
+    const s = await realRuntime();
+    audioTap.sink!.placed(BOB, loud(1_500), 0);
+    audioTap.sink!.placed(ALICE, loud(2_000), 1_900);
+    s.fire('inputTranscript', { text: 'For more examples, just ask Milo. Milo, could you find the experts?', startMs: 0, endMs: 3_900, parts: [
+      { text: ' For more examples', startMs: 0, endMs: 750 }, { text: ', just ask Milo', startMs: 750, endMs: 1_500 },
+      { text: '. Milo, could you', startMs: 1_900, endMs: 2_900 }, { text: ' find the experts?', startMs: 2_900, endMs: 3_900 },
+    ] });
+    await flush();
+    expect((await store.lines(CALL, 0, 10)).map((l) => l.userId)).toEqual([BOB, ALICE]);
+    now += 4_000; s.fire('delegation', { atMs: 4_000 });
+    s.call('call_m', 'search', { query: 'experts' }, 4_200); await flush();
+    expect(await runtime.turnsFor(CALL, ALICE)).toHaveLength(1);
+    expect(await runtime.turnsFor(CALL, BOB)).toHaveLength(0);
+  });
+
   it('speech with no addressing line in the window answers nobody and is not posted', async () => {
     const base = now;
     const s = await realRuntime();

@@ -16,8 +16,11 @@
 //     B. mid-sentence, it is followed by a comma / colon / dash ("so, Milo, can you"), or by
 //        "please", an imperative verb ("Milo write up ..."), a question word, or "can/could/would/will you".
 //     So "I think Milo could help with that budget question" is NOT a request (mid-sentence, "could"
-//     not followed by "you"), but "I think Milo, could you help" and "Milo could help with budget" are.
+//     not followed by "you"), but "I think Milo, could you help" is.
 //   C. the name is the last word of the caption (unless it follows thanks / bye): the request starts next caption.
+//   Mention. Talking about Milo to someone else is never an address, wherever the name stands: Milo as the object the
+//     sentence ends on ("just ask Milo", "talk to Milo"), or as its subject in the third person, a modal straight after
+//     the name with no person after it ("Milo can help with that"; "Milo can you", "Milo, can help" still address it).
 //   Text before the name is dropped. If nothing follows the name ("...Milo.") the request is opened
 //   empty and starts with the same speaker's next caption.
 //   Stitching. The same speaker's following captions join the request. It closes when the speaker has been
@@ -115,6 +118,27 @@ const IMPERATIVES = new Set([
 export const WHISPER_FILLERS = new Set([
   'thank you', 'thanks', 'you', 'bye', 'bye bye', 'goodbye', 'thanks for watching', 'okay', 'ok', 'uh', 'um', 'hmm', 'mm', 'mhm', 'the end',
 ]);
+/** Words the name ends a sentence after when it is what the sentence acts on, not who it speaks to: "just ask Milo". */
+const NAME_AS_OBJECT: ReadonlySet<string> = new Set([
+  'ask', 'asking', 'tell', 'telling', 'let', 'have', 'get', 'use', 'using', 'try', 'ping', 'call',
+  'to', 'with', 'for', 'from', 'about', 'at', 'by', 'of', 'on', 'like', 'than', 'without',
+]);
+/** A modal straight after the name says what Milo does ("Milo can help with that"), unless a person follows it ("Milo can you"). */
+const MODALS: ReadonlySet<string> = new Set([
+  'can', 'could', 'will', 'would', 'should', 'might', 'may', 'must', 'shall',
+  "can't", 'cant', 'cannot', "won't", 'wont', "wouldn't", "couldn't", "shouldn't",
+]);
+const QUESTION_SUBJECTS: ReadonlySet<string> = new Set(['you', 'u', 'ya', 'we', 'i', 'he', 'she', 'they', 'it', 'this', 'that', 'there', 'someone', 'somebody', 'anyone', 'anybody']);
+/**
+ * Is this mention of the name talk about Milo to someone else (the Mention rule above)? `before` and `after` are the text around
+ * the name; `rest` is `after` without the punctuation it starts with.
+ */
+const talksAboutName = (before: string, after: string, rest: string): boolean => {
+  if (rest === '') return NAME_AS_OBJECT.has(norm(before).split(' ').pop() ?? '');
+  if (!/^\s+\p{L}/u.test(after)) return false;
+  const [first = '', second = ''] = norm(rest).split(' ');
+  return MODALS.has(first) && !QUESTION_SUBJECTS.has(second);
+};
 const DANGLING = new Set(['and', 'or', 'but', 'to', 'for', 'the', 'a', 'an', 'of', 'with', 'that', 'in', 'on', 'so', 'then', 'about', 'at', 'is', 'it']);
 
 const words = (s: string): string[] => s.split(/\s+/).filter(Boolean);
@@ -159,7 +183,7 @@ export function findAddress(text: string): NameHit | null {
     const before = text.slice(0, start).trim();
     const after = text.slice(end);
     const rest = after.replace(/^[\s,:;.\-–—!?…]+/, '').trim();
-    if (namePhraseFollows(after)) continue;
+    if (namePhraseFollows(after) || talksAboutName(before, after, rest)) continue;
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
     let addressed = initial;
     // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you.
