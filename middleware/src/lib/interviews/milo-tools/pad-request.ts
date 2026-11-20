@@ -88,7 +88,7 @@ const leadOnly = async (interview: MiloInterview, askedBy: string): Promise<true
 
 export const PAD_WRITE: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'pad_write',
-  description: 'Put something on the shared code pad because this person asked Milo to (test cases, an import, a helper, a note). `text` is what to write, as they asked for it, in their own words. Never write the code yourself.',
+  description: 'Pass on a request to put something on the shared code pad. Call it whenever this person asks Milo to add, write or put something there: test cases, a unit test, an import, a helper or function they name, a note. `text` is what they asked for, in their own words. You do not judge the request and you write no code: a separate, checked step writes it and refuses anything that would solve the interview question.',
   parameters: {
     type: 'object',
     properties: { text: { type: 'string', maxLength: PAD_REQUEST_MAX_CHARS, description: 'What to write, as asked.' } },

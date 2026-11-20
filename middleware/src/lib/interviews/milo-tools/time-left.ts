@@ -7,7 +7,7 @@ import { noArgs } from './schema.js';
 
 export const TIME_LEFT: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'time_left',
-  description: 'Say how much time is left in this interview round.',
+  description: 'Say how much time is left in this interview round: any question to Milo about the round\'s time, how long they still have or when it ends, however it is put.',
   parameters: noArgs(),
   says: 'Says the time left from the round\'s minutes and its start.',
   mapsTo: 'server: lib/interviews/milo-tools time_left',

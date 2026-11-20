@@ -45,11 +45,11 @@ const fn = (name: string, description: string): ResponsesFunctionTool =>
 
 /** The core tools' words for the model. */
 export const CORE_TOOL_DEFS: Readonly<Record<CoreToolName, ResponsesFunctionTool>> = Object.freeze({
-  stay_silent: fn('stay_silent', 'Say nothing: the sentence is not a request to Milo (talking about Milo, to someone else, thanking, agreeing, or closing). Mentioning the name is not asking.'),
-  cannot_help: fn('cannot_help', 'The sentence asks Milo for something, but none of the other tools does it or this person may not ask for it.'),
+  stay_silent: fn('stay_silent', 'Say nothing: the sentence is not a request to Milo (talking about Milo, to someone else, to themselves, thanking, agreeing, or closing). Mentioning the name is not asking. Never for something asked of Milo, even something Milo must refuse: that is cannot_help.'),
+  cannot_help: fn('cannot_help', 'The sentence asks or tells Milo to do something, but none of the other tools in this list does it, or this person may not ask for it.'),
   keep_listening: fn('keep_listening', 'The sentence is a request to Milo that stops mid-thought (for example "Milo, add a test for..."): wait for the rest before acting.'),
-  pause_listening: fn('pause_listening', 'The speaker asks Milo to stop listening, mute itself or be quiet for now.'),
-  leave_call: fn('leave_call', 'The speaker asks Milo to leave the call.'),
+  pause_listening: fn('pause_listening', 'The speaker tells Milo itself to stop listening, mute itself or be quiet for now. Talk about breaks, pauses or what people will do next is not this.'),
+  leave_call: fn('leave_call', 'The speaker tells Milo itself to leave the call. Someone saying what they or other people will do or look at next is not this.'),
   cancel: fn('cancel', 'The speaker asks Milo to stop what it is doing or saying, or takes back their request ("never mind", "cancel that").'),
 });
 
@@ -66,7 +66,8 @@ const CORE_INSTRUCTIONS = [
   'You are Milo, a voice assistant in a call. You get one sentence one person just said; it may or may not be meant for you.',
   'Pick exactly one tool. If the sentence is not a request to you, call stay_silent: people often talk about Milo, or to each other, near you.',
   'If it asks you for something none of your tools does, call cannot_help. Never guess a tool the person did not ask for.',
-  'A follow-up sentence (no name) is for you only if it plainly continues the request you just answered; otherwise stay_silent.',
+  'A follow-up sentence (no name) is for you when it asks you again, asks for more of what you just did, or asks for another thing one of your tools does: answer it with that tool. When it is talk to someone else, an acknowledgement, thinking aloud or a comment, call stay_silent.',
+  'A sentence said with the button held is usually a request to you; when its words are plainly talk to someone else, or about the speaker\'s own plans, call stay_silent.',
 ].join(' ');
 const FREE_INSTRUCTIONS = 'If the person asks you a question no tool answers and you can answer it, you may answer in at most two short spoken sentences, plain words, no markdown, instead of calling a tool.';
 
@@ -97,7 +98,7 @@ async function readsOf(call: PolicyCall, deps: DecideDeps): Promise<(userId: str
 const VIA_WORDS: Record<TurnSentence['via'], string> = {
   name: 'they said your name',
   'follow-up': 'no name; it came within seconds after you answered this person',
-  hold: 'they held the button that asks Milo',
+  hold: 'no name; they held the button that asks Milo while they said it',
 };
 
 /** The user turn the model reads. Exported for tests (what is, and is not, in a request). */
