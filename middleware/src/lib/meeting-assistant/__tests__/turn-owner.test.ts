@@ -69,7 +69,7 @@ interface Rig {
 const pick = (name: string, args: object = {}): Partial<TextToolReply> => ({ call: { name, arguments: JSON.stringify(args) } });
 let ids = 0;
 
-function rig(over: Partial<TurnPolicy> = {}): Rig {
+function rig(over: Partial<TurnPolicy> = {}, voice: SpeechBackend = tone): Rig {
   const c = fakeClock();
   const r = { requests: [], turns: [], logged: [], marks: [], stored: [], ran: [], frames: [], cleared: [], paused: [], left: [], traces: [], answers: [] } as unknown as Rig;
   const policy: TurnPolicy = {
@@ -88,7 +88,7 @@ function rig(over: Partial<TurnPolicy> = {}): Rig {
     ...over,
   };
   r.owner = new TurnOwner({
-    call: CALL, policy, clock: c.clock, voice: tone,
+    call: CALL, policy, clock: c.clock, voice,
     relay: { push: () => { r.frames.push(c.clock.nowMs()); }, clear: () => { r.cleared.push(c.clock.nowMs()); } },
     decide: {
       modelReads: async () => () => true,
@@ -414,6 +414,62 @@ describe('talking over Milo, the hold button, a second asker', () => {
     expect(r.marks).toEqual(['partly']);
     expect(r.frames.length).toBe(sent);
     expect(r.owner.state()).toMatchObject({ phase: 'follow-up', userId: 'cara' });
+  });
+
+  describe('a voiced onset pauses him at once; the words confirm (film 3: Hugo cut in and Milo ran on 2.0 s)', () => {
+    const LOUD = Buffer.alloc(4_800); for (let i = 0; i < LOUD.length; i += 2) LOUD.writeInt16LE(i % 4 ? 3_000 : -3_000, i);
+    const QUIET = Buffer.alloc(4_800);
+    /** A voice as loud as speech, so his playout is something a mic could carry. */
+    const spoken: SpeechBackend = { ...tone, async speak(text, o) { o.onInput(text); const n = Math.max(1, Math.round((text.length * 65) / 100)); for (let i = 0; i < n; i++) o.onAudio(Buffer.from(LOUD)); return { firstAudioMs: 0, ms: 0, bytes: n * 4_800 }; } };
+    const LONG = 'I can tell you the time left or repeat the question, and I can say a good deal more than that if you let me.';
+    async function playing(mic: (at: number) => Buffer) {
+      const r = rig({ cannotHelp: () => LONG }, spoken);
+      const mics = (r.owner as unknown as { mics: { trackMic(u: string, p: Buffer, at: number): void } }).mics;
+      await r.to(10_000);
+      r.answers.push(pick('cannot_help'));
+      await r.say('cara', 'Milo, is my approach right?');
+      const feed = async (who: string, pcm: (at: number) => Buffer, ms: number) => {
+        for (let k = 0; k < ms; k += 100) { const at = (r.owner as unknown as { now(): number }).now(); mics.trackMic(who, pcm(at), at); await r.by(100); }
+      };
+      // His line is under way; pam's mic hears the room (quiet, or his voice when it leaks) for 2.5 s.
+      await feed('pam', mic, 2_500);
+      expect(r.frames.length).toBeGreaterThan(10);
+      return { r, feed };
+    }
+
+    it('a clean mic: the relay is cleared within 0.7 s of the voice starting and nothing more plays; then the words stop him for good', async () => {
+      const { r, feed } = await playing(() => QUIET);
+      const voiceAt = (r.owner as unknown as { now(): number }).now();
+      const before = r.frames.length;
+      await feed('pam', () => LOUD, 400);
+      expect(r.cleared.length).toBe(1);
+      expect(r.cleared[0]! - voiceAt).toBeLessThanOrEqual(700);
+      const atPause = r.frames.length;
+      expect(atPause - before).toBeLessThanOrEqual(5);
+      await feed('pam', () => LOUD, 500);
+      expect(r.frames.length).toBe(atPause);
+      r.owner.words({ userId: 'pam', sentenceId: 'w-stop', delta: 'okay thanks that is enough', atMs: voiceAt });
+      await r.by(3_000);
+      expect(r.marks).toEqual(['partly']);
+      expect(r.frames.length).toBe(atPause);
+    });
+
+    it('a clean mic and no words (a cough): he goes on from where he stopped and the line is spoken whole', async () => {
+      const { r, feed } = await playing(() => QUIET);
+      await feed('pam', () => LOUD, 300);
+      expect(r.cleared.length).toBe(1);
+      await feed('pam', () => QUIET, 300);
+      await r.by(20_000);
+      expect(r.marks).toEqual(['spoken']);
+      expect(r.traces.map(([e]) => e)).toEqual(expect.arrayContaining(['turn.paused', 'turn.resumed']));
+    });
+
+    it('a mic that carries his voice: its onset never pauses him', async () => {
+      const { r, feed } = await playing(() => LOUD);
+      await feed('pam', () => LOUD, 400);
+      expect(r.cleared).toEqual([]);
+      expect(r.traces.map(([e]) => e)).not.toContain('turn.paused');
+    });
   });
 
   it('a hold routes the holder without the name; a candidate may not hold; a second holder is busy', async () => {

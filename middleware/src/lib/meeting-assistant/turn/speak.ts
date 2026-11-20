@@ -61,6 +61,11 @@ export interface SpeakDeps {
    * not `go` when no gap came in the time this line is worth. `signal` aborts when the line is stopped. Absent: it starts at once.
    */
   clearToStart?(line: SpokenLine, signal: AbortSignal): Promise<{ go: boolean; waitedMs: number }>;
+  /**
+   * Asked before each frame after the first and before the line's end: resolves at once (0) unless the playout is paused (a voiced
+   * onset in a clean mic, turn-owner.ts), then once it resumes, with how long it was paused; `signal` aborts the wait. Absent: never paused.
+   */
+  held?(signal: AbortSignal): Promise<number>;
 }
 
 export interface Speaking {
@@ -111,6 +116,9 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
     let wake: (() => void) | null = null;
     const nudge = (): void => { const w = wake; wake = null; w?.(); };
     let sent = 0;
+    /** How long the playout was paused (it resumed): every later frame and the line's end are that much later. */
+    let shift = 0;
+    const heldFor = async (): Promise<number> => (deps.held ? deps.held(signal).catch(() => 0) : 0);
     let noGap = false;
     const pump = (async () => {
       for (;;) {
@@ -130,9 +138,11 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
           result.playStartMs = now();
           deps.onPlay?.({ kind: 'start', line, atMs: result.playStartMs });
         } else {
-          const due = result.playStartMs + sent * VOICE_FRAME_MS - PLAYOUT_LEAD_MS;
+          const due = result.playStartMs + shift + sent * VOICE_FRAME_MS - PLAYOUT_LEAD_MS;
           const wait = due - now();
           if (wait > 0) await sleep(wait);
+          if (signal.aborted) return;
+          shift += await heldFor();
           if (signal.aborted) return;
         }
         deps.push(Buffer.from(frame), last);
@@ -166,9 +176,15 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
     }
     if (result.playStartMs !== null && !signal.aborted && !ttsFailed) {
       // The line has played out once its last frame's audio has: wait for that before the next line or the follow-up window.
-      const end = result.playStartMs + sent * VOICE_FRAME_MS;
-      const wait = end - now();
-      if (wait > 0) await sleep(wait);
+      // A pause in that wait (the frames sent are held back) moves the end by as long as it lasted.
+      for (;;) {
+        const wait = result.playStartMs + shift + sent * VOICE_FRAME_MS - now();
+        if (wait > 0) await sleep(wait);
+        if (signal.aborted) break;
+        const paused = await heldFor();
+        if (!paused) break;
+        shift += paused;
+      }
     }
     const heard = result.playStartMs !== null;
     if (noGap && !stopSignal.aborted) return await finish(req, { ...result, why: 'no-gap' }, 'unspoken');

@@ -39,6 +39,8 @@ export const TWO_LANE_WAIT_MS = 1_500;
 export const WRITE_REPEAT_MS = 10_000;
 /** An onset in a mic straight after one in another mic is that voice arriving through a speaker, not this person starting. */
 const ONSET_LEAK_MS = 400;
+/** A pause on a voiced onset (nobody's words yet) lasts at most this long; then he goes on from where he stopped. */
+export const PAUSE_MAX_MS = 1_500;
 /** A line waits this long for people to stop speaking before its first audio; a line nobody asked for is dropped then. */
 export const GAP_WAIT_MS = 4_000;
 /** An answer someone asked for stays queued this long for a gap; after it, it is in the log and the chat only. */
@@ -119,6 +121,13 @@ export class TurnOwner implements HandsfreeRun {
   private lastAction: MiloAction | null = null;
   private played: PlayedLine[] = [];
   private playing: PlayedLine | null = null;
+  /** His playout in the relay: when the newest frame sent ends, and the frames not yet played (what a pause takes back). */
+  private playUntil = -Infinity;
+  private outbox: Array<{ pcm: Buffer; last: boolean; endMs: number }> = [];
+  /** Paused on a voiced onset: the frames taken back from the relay, and the speech waiting to go on. */
+  private hold: { userId: string; atMs: number; frames: Array<{ pcm: Buffer; last: boolean }>; timer: unknown; waiters: Array<(ms: number) => void> } | null = null;
+  /** Mics whose words have echoed his: their onsets never pause him (barge.ts `leakAtOnset`). */
+  private readonly echoMics = new Set<string>();
   private finals: Final[] = [];
   /** Words arriving per lane for a sentence that has not finished. */
   private readonly flight = new Map<string, { sentenceId: string; text: string; firstMs: number; start: number | null }>();
@@ -146,10 +155,11 @@ export class TurnOwner implements HandsfreeRun {
   constructor(private readonly deps: TurnOwnerDeps) {
     const { clock, listening } = deps;
     this.floor = new Floor(() => clock.nowMs(), (s) => this.emit('state', s), Math.max(0, deps.policy.followUpMs ?? 0));
-    this.mics = new MicWatch((userId) => this.onset(userId));
+    this.mics = new MicWatch((userId, bin) => { this.onset(userId); this.voicedOnset(userId, bin); });
     this.mouth = new Mouth({
-      push: (pcm, last) => deps.relay.push(pcm, last),
-      clear: () => deps.relay.clear(),
+      push: (pcm, last) => this.pushOut(pcm, last),
+      clear: () => { deps.relay.clear(); this.forgetOut(); },
+      held: (signal) => this.heldWait(signal),
       ...(deps.post ? { post: deps.post } : {}),
       ...(deps.voice ? { voice: deps.voice } : {}),
       now: () => clock.nowMs(),
@@ -277,7 +287,13 @@ export class TurnOwner implements HandsfreeRun {
   private async take(s: Final, keep: (v: boolean) => void): Promise<void> {
     if (this.closed) { keep(false); return; }
     // 1. Whose words are these? Milo's own line heard back, or another lane's sentence, is dropped here.
-    if (isMiloEcho(s, this.playedNow())) { this.trace('turn.echo', { userId: s.who }); keep(false); this.drop(s); return; }
+    if (isMiloEcho(s, this.playedNow())) {
+      this.trace('turn.echo', { userId: s.who }); keep(false); this.drop(s);
+      // His own words heard back in this mic: it carries him, and a pause its onset caused was no barge-in.
+      this.echoMics.add(s.who);
+      if (this.hold?.userId === s.who) this.resumeHold('echo');
+      return;
+    }
     if (!(await this.creditedHere(s))) { this.trace('turn.two-lane', { userId: s.who }); keep(false); this.drop(s); return; }
     keep(true);
     const before = this.recent.slice();
@@ -481,18 +497,80 @@ export class TurnOwner implements HandsfreeRun {
   }
 
   /** Someone talks over Milo: the line stops where it is (Speak marks it `partly`); the asker's window runs from now. */
+  // ---------------------------------------------------------------------------------------------------------------------------
+  // Barge-in by voice: a voiced onset in a mic that does not carry his playout pauses him at once (frames taken back from the
+  // relay); words that are not his confirm it (`bargeIn`), his own words heard back or PAUSE_MAX_MS with none resume him.
+
+  private pushOut(pcm: Buffer, last: boolean): void {
+    const now = this.now();
+    this.playUntil = Math.max(now, this.playUntil) + VOICE_FRAME_MS;
+    this.deps.relay.push(pcm, last);
+    this.outbox = this.outbox.filter((f) => f.endMs > now);
+    this.outbox.push({ pcm, last, endMs: this.playUntil });
+    this.mics.notePlayout(Math.floor((this.playUntil - VOICE_FRAME_MS) / VOICE_FRAME_MS), pcm);
+  }
+
+  /** The relay was cleared: his playout from now on never happened. */
+  private forgetOut(): void {
+    const now = this.now();
+    this.outbox = [];
+    this.playUntil = now;
+    this.mics.forgetPlayoutFrom(Math.floor(now / VOICE_FRAME_MS));
+  }
+
+  private heldWait(signal: AbortSignal): Promise<number> {
+    const h = this.hold;
+    if (!h || signal.aborted) return Promise.resolve(0);
+    return new Promise<number>((r) => { h.waiters.push(r); signal.addEventListener('abort', () => r(0), { once: true }); });
+  }
+
+  private voicedOnset(userId: string, bin: number): void {
+    if (this.closed || !this.playing || this.hold) return;
+    const mic = this.mics.leakAtOnset(userId, bin, this.echoMics.has(userId));
+    if (mic !== 'clean' && mic !== 'early-clean') { this.trace('turn.pause.skipped', { userId, mic }); return; }
+    const now = this.now();
+    const frames = this.outbox.filter((f) => f.endMs > now).map(({ pcm, last }) => ({ pcm, last }));
+    this.deps.relay.clear();
+    this.forgetOut();
+    this.hold = { userId, atMs: now, frames, timer: this.deps.clock.setTimeout(() => this.resumeHold('timeout'), PAUSE_MAX_MS), waiters: [] };
+    this.trace('turn.paused', { userId, mic, frames: frames.length });
+  }
+
+  /** Not a barge-in after all: what was taken back plays from where it stopped, and the line goes on. */
+  private resumeHold(why: string): void {
+    const h = this.hold;
+    if (!h) return;
+    this.deps.clock.clearTimeout(h.timer);
+    this.hold = null;
+    for (const f of h.frames) this.pushOut(f.pcm, f.last);
+    const waited = Math.max(1, this.now() - h.atMs);
+    for (const w of h.waiters) w(waited);
+    this.trace('turn.resumed', { userId: h.userId, why, frames: h.frames.length });
+  }
+
+  /** The pause ends with nothing more played (a barge-in, a stop): what was taken back is gone. */
+  private discardHold(): void {
+    const h = this.hold;
+    if (!h) return;
+    this.deps.clock.clearTimeout(h.timer);
+    this.hold = null;
+    for (const w of h.waiters) w(0);
+  }
+
   private bargeIn(userId: string): void {
     if (!this.playing) return;
     const t = this.turn;
-    this.trace('turn.barge-in', { byAsker: t?.who === userId });
+    this.trace('turn.barge-in', { byAsker: t?.who === userId, paused: this.hold !== null });
     this.endPlaying(this.now() + VOICE_FRAME_MS);
     this.mouth.stopAll();
+    this.discardHold();
     if (t && t.audio && !t.dead) this.floor.answered(t.who, this.now());
     this.emit('drop', { userId: t?.who ?? userId, reason: 'barge-in', atMs: this.now() });
   }
 
   private cancelAll(by: string): void {
     this.mouth.stopAll();
+    this.discardHold();
     this.endPlaying(this.now());
     for (const w of this.waiting.values()) this.deps.clock.clearTimeout(w.timer);
     this.waiting.clear();
@@ -587,6 +665,7 @@ export class TurnOwner implements HandsfreeRun {
     if (this.closing) return this.closing;
     this.closed = true;
     this.mouth.stopAll();
+    this.discardHold();
     if (this.turn) this.kill(this.turn);
     for (const w of this.waiting.values()) this.deps.clock.clearTimeout(w.timer);
     this.waiting.clear();
