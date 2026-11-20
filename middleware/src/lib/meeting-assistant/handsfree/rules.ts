@@ -22,6 +22,7 @@
 //
 // Echo vs barge-in (`overlap`) is pure word matching on the transcripts, never loudness: an open speaker playing Milo back cannot
 // fake a barge-in by being loud, only by not being Milo's words.
+import { overlapOf, wordsOf } from '../turn/barge.js';
 import { findAddress, NAME_ALTERNATION, parseCommand } from '../detector.js';
 import { policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from '../policy.js';
 import { assistantStore } from '../store-select.js';
@@ -73,7 +74,7 @@ const ADMISSIONS: ReadonlySet<string> = new Set(['route', 'fixed-lines', 'deny']
 
 // ── Mention vs request ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-const words = (s: string): string[] => s.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean);
+const words = wordsOf;
 
 /** The name as a whole word, possessive or not. */
 const NAME_SOURCE = `(^|[^\\p{L}\\p{N}])(${NAME_ALTERNATION})(?=$|[^\\p{L}\\p{N}])`;
@@ -207,35 +208,7 @@ export function followUpKind(sentence: string, roster: readonly string[] = []): 
 
 // ── Echo vs barge-in ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A one-word interruption that is never Milo's echo when he did not say it. */
-const STOP_WORDS: ReadonlySet<string> = new Set(['stop', 'wait', 'hold', 'enough', 'no', 'quiet', 'shush', 'cancel', 'pause', 'thanks']);
-
-/**
- * Is what a mic heard while Milo speaks his own voice coming back (`echo`), someone talking over him (`barge-in`), or too little
- * to tell (`unclear`)? Words only. Milo's output transcript can lag his audio, so heard words that match his words first and only
- * run past them at the end are still `unclear` (his next words may not have arrived yet).
- */
-export function overlapOf(heard: string, saying: string): OverlapVerdict {
-  const mine = words(heard);
-  if (!mine.length) return 'unclear';
-  const spoken = words(saying);
-  const said = new Set(spoken);
-  if (mine.length === 1) return !said.has(mine[0]!) && STOP_WORDS.has(mine[0]!) ? 'barge-in' : 'unclear';
-  if (!spoken.length) return mine.length >= 4 ? 'barge-in' : 'unclear';
-  const joined = ` ${spoken.join(' ')} `;
-  if (joined.includes(` ${mine.join(' ')} `)) return 'echo';
-  // A stop word he has not said ("Milo, stop", "okay wait") is someone talking over him, however few the words.
-  if (mine.some((x) => STOP_WORDS.has(x) && !said.has(x))) return 'barge-in';
-  const hits = mine.map((x) => said.has(x));
-  const share = hits.filter(Boolean).length / mine.length;
-  if (mine.length >= 3 && share >= 0.8) return 'echo';
-  // Milo's words first, then words he has not been transcribed saying yet: wait for the output transcript to catch up.
-  const firstMiss = hits.indexOf(false);
-  if (firstMiss >= 2 && hits.slice(firstMiss).every((h) => !h) && mine.length - firstMiss <= 3) return 'unclear';
-  if (mine.length === 2) return share === 0 ? 'barge-in' : 'unclear';
-  if (share <= 0.5) return 'barge-in';
-  return mine.length >= 5 ? 'barge-in' : 'unclear';
-}
+export { overlapOf };
 
 // ── The rules ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 

@@ -13,6 +13,9 @@
 // Synchronous on the frame path; only admission and verdicts are awaited, never inside a tick.
 import { HANDSFREE, type Admission, type HandsfreeClock, type HandsfreeRules, type ListeningSide, type RelayDrop, type RouteState, type RouterEvents, type TalkingSide, type TriggerVerdict } from './types.js';
 import type { PolicyCall } from '../policy.js';
+import { MicWatch, PAUSE_ONSET_MS } from '../turn/barge.js';
+
+export { PAUSE_ONSET_MS };
 
 /** A routed turn the provider never answers is given up this long after its speech ended (or the hold was released). */
 export const ROUTE_GIVE_UP_MS = 12_000;
@@ -24,60 +27,11 @@ const MAX_QUEUED_FRAMES = HANDSFREE.ringMs / HANDSFREE.frameMs;
 const SILENCE = Buffer.alloc(HANDSFREE.frameBytes);
 const MAX_KEPT_VERDICTS = 64;
 
-// Barge-in by voice (review 1, item 8). Words confirm a barge-in about a second after it starts; a voiced onset in a mic that does
-// not carry Milo's playout pauses the relay at once (what has not played is kept), and the words then confirm it (cleared) or not
-// (resumed). A mic is judged on its earlier loudness against his earlier playout: one that follows it is leaky (an open speaker:
-// its onsets are his echo), and stays words-only. A mic heard during too little of his playout to correlate (his first line) is
-// judged on the bins it has: quiet through at least 300 ms of his voice before the onset, it pauses like a clean one (an echo
-// would have been loud there); loud through most of them, it is leaky; less heard than that, or a mic whose words have already
-// echoed him, stays words-only. A pause is bounded and his own words heard back resume it, so his echo never stops him (gate
-// fixed-barge, 19 November: "Milo, stop" 600 ms into his first line went 1 s unheeded).
-/** This much voice (20 ms windows over ONSET_RMS, gaps under 60 ms bridged) is an onset; 300 ms of quiet re-arms it. */
-export const PAUSE_ONSET_MS = 200;
-const ONSET_RMS = 300;
-const ONSET_GAP_MS = 60;
-const ONSET_REARM_MS = 300;
 /** A pause no words confirm is resumed after this long. */
 export const PAUSE_MAX_MS = 1_500;
-/** Loudness history kept per mic and for Milo's playout, in 100 ms bins (30 s). */
-const LEAK_BINS = 300;
-/** At least this many voiced bins of his playout heard in a mic before it can be judged clean. */
-const LEAK_MIN_BINS = 15;
-/** Echo lags tried (bins: up to 600 ms after he played). */
-const LEAK_MAX_LAG = 6;
-/** A mic whose loudness correlates with his playout below this at every lag is clean. */
-const LEAK_CLEAN_CORR = 0.3;
-/** The newest bins are left out of the judgement (the onset being judged is not history). */
-const LEAK_SKIP_BINS = 5;
-/** Too little history to correlate: at least this many voiced bins of his heard in the mic before the onset to judge it at all. */
-const LEAK_EARLY_MIN_BINS = 3;
-/** The onset's own bins left out of that early judgement (its 200 ms of voice and a bridged gap). */
-const LEAK_EARLY_SKIP_BINS = 3;
-/** A voiced stretch after this much quiet is a new stretch of speech (where a sentence heard later probably began). */
-const SPEECH_GAP_MS = 600;
 /** A server line the session's own words wait behind (`serverLine`): heard again after its line, or after this at most. */
 export const SERVER_LINE_MUTE_MS = 15_000;
 
-/** RMS of 16-bit LE samples in [from, to) bytes. */
-function rmsOf(pcm: Buffer, from = 0, to = pcm.length): number {
-  let sum = 0; let n = 0;
-  for (let i = from; i + 1 < to; i += 2) { const v = pcm.readInt16LE(i); sum += v * v; n += 1; }
-  return n ? Math.sqrt(sum / n) : 0;
-}
-/** A frame's loudness on a log scale (what the echo check correlates). */
-const loudness = (pcm: Buffer): number => Math.log10(1 + rmsOf(pcm));
-const VOICED_LOUDNESS = Math.log10(1 + ONSET_RMS);
-/** Pearson correlation; 0 when either side does not vary (a silent mic carries nothing of his). */
-function pearson(xs: readonly number[], ys: readonly number[]): number {
-  const n = xs.length;
-  if (n < 2) return 0;
-  let mx = 0; let my = 0;
-  for (let i = 0; i < n; i++) { mx += xs[i]!; my += ys[i]!; }
-  mx /= n; my /= n;
-  let sxy = 0; let sxx = 0; let syy = 0;
-  for (let i = 0; i < n; i++) { const dx = xs[i]! - mx; const dy = ys[i]! - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
-  return sxx > 1e-9 && syy > 1e-9 ? sxy / Math.sqrt(sxx * syy) : 0;
-}
 
 export interface RelayPort {
   push(pcm: Buffer, last: boolean): void;
@@ -179,10 +133,8 @@ export class Router {
   private sayNo = 0;
   /** Frames relayed and when each ends playing (session ms), while they may still be playing: what a pause takes back. */
   private playout: Array<{ pcm: Buffer; last: boolean; endMs: number }> = [];
-  /** Milo's played loudness and each mic's, per 100 ms bin (log RMS). */
-  private readonly miloBins = new Map<number, number>();
-  private readonly micBins = new Map<string, Map<number, number>>();
-  private readonly onsets = new Map<string, { voicedMs: number; quietMs: number; fired: boolean }>();
+  /** Milo's played loudness and each mic's, the onsets and where speech began (turn/barge.ts). */
+  private readonly mics = new MicWatch((userId, bin) => this.voicedOnset(userId, bin));
   /** Mics whose words have echoed Milo in this call: an onset there too new to judge is his echo, never a pause. */
   private readonly echoMics = new Set<string>();
   /** The relay is paused for a voiced onset in `userId`'s mic: frames not yet played, and frames since, wait here. */
@@ -199,8 +151,6 @@ export class Router {
   private playStartMs = -Infinity;
   /** Per sentence: when its first words came, and where its speech probably began (the mic's last voiced stretch). */
   private readonly firstWords = new Map<string, { at: number; start: number | null }>();
-  private readonly speechStarts = new Map<string, number[]>();
-  private readonly lastVoiced = new Map<string, number>();
   /** Early verdicts asked on a routed sentence's words so far (`mayBeFixed`), by sentence. */
   private readonly earlyFixed = new Map<string, Promise<TriggerVerdict>>();
   /** A server line is coming: the session's own words are unheard until it has played (film fix 6). */
@@ -276,7 +226,7 @@ export class Router {
   }
 
   private onFrame(userId: string, pcm: Buffer, atMs: number): void {
-    if (!this.closed) this.trackMic(userId, pcm, atMs);
+    if (!this.closed) this.mics.trackMic(userId, pcm, atMs);
     if (this.closed || !this.live || this.st.phase === 'idle' || this.st.userId !== userId) return;
     this.out.push(pcm);
     if (this.out.length > MAX_QUEUED_FRAMES) this.out.shift();
@@ -369,7 +319,7 @@ export class Router {
     if (this.closed) return;
     const key = `${userId}|${sentenceId}`;
     if (!this.firstWords.has(key)) {
-      this.firstWords.set(key, { at: this.deps.clock.nowMs(), start: this.speechStartBefore(userId, atMs) });
+      this.firstWords.set(key, { at: this.deps.clock.nowMs(), start: this.mics.speechStartBefore(userId, atMs) });
       if (this.firstWords.size > MAX_KEPT_VERDICTS) this.firstWords.delete(this.firstWords.keys().next().value as string);
     }
     const heard = `${this.heard.get(key) ?? ''}${delta}`;
@@ -400,14 +350,6 @@ export class Router {
     return !!f && (f.at < this.playStartMs || (f.start !== null && f.start < this.playStartMs));
   }
 
-  /** Where the speech heard at `atMs` probably began: the start of the mic's voiced stretch (voiced in the last 2 s), else unknown. */
-  private speechStartBefore(userId: string, atMs: number): number | null {
-    const last = this.lastVoiced.get(userId);
-    if (last === undefined || last < atMs - 2_000) return null;
-    let start: number | null = null;
-    for (const s of this.speechStarts.get(userId) ?? []) if (s <= atMs) start = s;
-    return start !== null && start >= atMs - HANDSFREE.ringMs ? start : null;
-  }
 
   /**
    * The routed sentence's words so far may be a held answer (a phrase tool: the time, the question again): the verdict is asked on
@@ -684,83 +626,21 @@ export class Router {
     this.playout = this.playout.filter((p) => p.endMs > now);
     this.playout.push({ pcm, last, endMs: this.playingUntil });
     const bin = Math.floor((this.playingUntil - TICK_MS) / TICK_MS);
-    this.miloBins.set(bin, loudness(pcm));
-    for (const b of this.miloBins.keys()) { if (b > bin - LEAK_BINS) break; this.miloBins.delete(b); }
+    this.mics.notePlayout(bin, pcm);
   }
 
   // ---------------------------------------------------------------------------------------------------------------------------
   // Barge-in by voice: pause on an onset in a clean mic, the words confirm or resume
 
-  private trackMic(userId: string, pcm: Buffer, atMs: number): void {
-    const bin = Math.floor(atMs / TICK_MS);
-    const bins = this.micBins.get(userId) ?? new Map<number, number>();
-    bins.delete(bin); bins.set(bin, loudness(pcm));
-    for (const b of bins.keys()) { if (bins.size <= LEAK_BINS) break; bins.delete(b); }
-    this.micBins.set(userId, bins);
-    const o = this.onsets.get(userId) ?? { voicedMs: 0, quietMs: ONSET_REARM_MS, fired: false };
-    this.onsets.set(userId, o);
-    const win = (HANDSFREE.sampleRate * 2) / 50; // 20 ms
-    const starts = this.speechStarts.get(userId) ?? [];
-    this.speechStarts.set(userId, starts);
-    for (let at = 0, ms = atMs; at + win <= pcm.length; at += win, ms += 20) {
-      if (rmsOf(pcm, at, at + win) > ONSET_RMS) {
-        o.voicedMs += 20; o.quietMs = 0;
-        const lv = this.lastVoiced.get(userId);
-        if (lv === undefined || ms - lv >= SPEECH_GAP_MS) { starts.push(ms); if (starts.length > 16) starts.shift(); }
-        this.lastVoiced.set(userId, ms);
-      }
-      else {
-        o.quietMs += 20;
-        if (o.quietMs >= ONSET_GAP_MS) o.voicedMs = 0;
-        if (o.quietMs >= ONSET_REARM_MS) o.fired = false;
-      }
-      if (!o.fired && o.voicedMs >= PAUSE_ONSET_MS) { o.fired = true; this.voicedOnset(userId, bin); }
-    }
-  }
 
   private voicedOnset(userId: string, bin: number): void {
     if (this.paused || !(this.uttering || this.deps.clock.nowMs() < this.playingUntil)) return;
-    let mic: 'clean' | 'leaky' | 'unknown' | 'early-clean' = this.micLeak(userId, bin - LEAK_SKIP_BINS);
-    if (mic === 'unknown' && !this.echoMics.has(userId)) mic = this.micLeakEarly(userId, bin - LEAK_EARLY_SKIP_BINS);
+    const mic = this.mics.leakAtOnset(userId, bin, this.echoMics.has(userId));
     if (mic !== 'clean' && mic !== 'early-clean') { this.trace('pause.skipped', { userId, mic, echoed: this.echoMics.has(userId) }); return; }
     this.pause(userId, mic);
   }
 
-  /** Does this mic carry Milo's playout? Its loudness against his, at the best echo lag, up to bin `before`. */
-  private micLeak(userId: string, before: number): 'clean' | 'leaky' | 'unknown' {
-    const mic = this.micBins.get(userId);
-    if (!mic) return 'unknown';
-    let voiced = 0;
-    for (const [b, e] of this.miloBins) if (b < before && mic.has(b) && e > VOICED_LOUDNESS) voiced += 1;
-    if (voiced < LEAK_MIN_BINS) return 'unknown';
-    let best = -1;
-    for (let lag = 0; lag <= LEAK_MAX_LAG; lag++) {
-      const xs: number[] = []; const ys: number[] = [];
-      for (const [b, e] of this.miloBins) {
-        const y = mic.get(b + lag);
-        if (b + lag < before && y !== undefined) { xs.push(e); ys.push(y); }
-      }
-      best = Math.max(best, pearson(xs, ys));
-    }
-    return best < LEAK_CLEAN_CORR ? 'clean' : 'leaky';
-  }
 
-  /**
-   * Too little of his playout heard in this mic to correlate: its voiced bins of his before the onset, each loud in the mic (at any
-   * echo lag) or not. Quiet through at least `LEAK_EARLY_MIN_BINS` of them is early-clean; loud through half or more is leaky.
-   */
-  private micLeakEarly(userId: string, before: number): 'early-clean' | 'leaky' | 'unknown' {
-    const mic = this.micBins.get(userId);
-    if (!mic) return 'unknown';
-    let voiced = 0; let loud = 0;
-    for (const [b, e] of this.miloBins) {
-      if (b >= before || !mic.has(b) || e <= VOICED_LOUDNESS) continue;
-      voiced += 1;
-      for (let lag = 0; lag <= LEAK_MAX_LAG && b + lag < before; lag++) if ((mic.get(b + lag) ?? 0) > VOICED_LOUDNESS) { loud += 1; break; }
-    }
-    if (voiced < LEAK_EARLY_MIN_BINS) return 'unknown';
-    return loud * 2 >= voiced ? 'leaky' : 'early-clean';
-  }
 
   private pause(userId: string, mic: 'clean' | 'early-clean' = 'clean'): void {
     const now = this.deps.clock.nowMs();
@@ -797,8 +677,7 @@ export class Router {
   /** The relay was cleared at `now`: his playout after it never happened. */
   private forgetUnplayed(now: number): void {
     this.playout = [];
-    const from = Math.floor(now / TICK_MS);
-    for (const b of [...this.miloBins.keys()]) if (b >= from) this.miloBins.delete(b);
+    this.mics.forgetPlayoutFrom(Math.floor(now / TICK_MS));
   }
 
   /** The relayed answer's last frame: the asker keeps the floor for the follow-up window, unless someone is queued. */
