@@ -95,6 +95,8 @@ Both fixes passed `tsc` and the three touched suites (63 tests). The full suites
 
 ## Still open for phase 1
 
+Fixed in code since this film, not filmed again (2026-11-20): item 1 (the take's trace shows the lane dated Hugo's sentence from the end of his sentence before it, 20.6 s, which was before the release; the turn owner now dates a sentence by the speaker's mic) and item 2 (`repeat_question` reads the round's question as the candidate has it on screen when Milo asked none). The line in turn 2 overlapped Mateo because nothing checks other mics before a line starts; that is unchanged. Judge result after the fixes: `DECIDE-BAKEOFF.md`, "After phase-1 fixes".
+
 1. A sentence after a hold's release is treated as held, and Milo speaks unasked over the candidate (new, turn 2).
 2. `repeat_question` has nothing to read when the lead asked the question himself (old, turn 5).
 3. Latency is 3.5 to 4.0 s on every turn; the sentence final is 1.6 to 2.0 s of it.
