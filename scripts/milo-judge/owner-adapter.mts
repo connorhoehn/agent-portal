@@ -28,7 +28,7 @@ import { openAiKey } from './env.mts';
 import type { TurnOwner, TurnOwnerDeps, TurnRecord } from '../../middleware/src/lib/meeting-assistant/turn/turn-owner.ts';
 import type { MiloTool, TurnPolicy } from '../../middleware/src/lib/meeting-assistant/turn/types.ts';
 import type { PolicyCall } from '../../middleware/src/lib/meeting-assistant/policy.ts';
-import { INTERVIEWS, openInterview, scenarioClock, tenantOf } from './interviews-world.mts';
+import { INTERVIEWS, openInterview, scenarioClock, tenantOf, toolCallsInFlight } from './interviews-world.mts';
 import type { TextToolReply, TextToolRequest } from '../../middleware/src/lib/voice/openai-text.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -211,7 +211,7 @@ async function bindOwner(mod: { TurnOwner: new (deps: TurnOwnerDeps) => TurnOwne
   const drain = async (): Promise<void> => {
     for (let quiet = 0; quiet < 12;) {
       await new Promise<void>((r) => setImmediate(r));
-      quiet = inFlight === 0 ? quiet + 1 : 0;
+      quiet = inFlight === 0 && toolCallsInFlight() === 0 ? quiet + 1 : 0;
     }
   };
   let n = 0;

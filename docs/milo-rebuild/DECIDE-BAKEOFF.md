@@ -86,3 +86,25 @@ What was changed, and what each change did:
 - **Still missed: a follow-up without the name that was for Milo** (dev-085 in runs 3 and 4; hold-059 in all four, hold-060 and hold-061 in some). All are false silences: Milo says nothing where a second answer was wanted. This is every miss left on both sets.
 
 Not covered by wording: a split request whose first half reads as a whole request is acted on before the rest arrives, because Act runs as soon as Decide returns. Only the model's `keep_listening` stands in the way. A code rule (nothing is done until the asker has been quiet since the sentence ended) would close it and is not built.
+
+## After overlap + ask-a-probe (2026-11-20)
+
+Two changes since the section above, then the judge again on the registered interviews policy (owner rig, `gpt-5.4-mini`, three trials a scenario, pass^3).
+
+- **Milo never starts over someone.** Before a line's first audio the turn owner checks every mic; with someone speaking the line waits for a 400 ms gap. No gap in 4 s: the fixed cannot-help line is dropped (logged, never said); an answer someone asked for stays queued up to 30 s. This is timing, not Decide, so it is covered by unit tests on a fake clock with two speakers (`turn-owner.test.ts`), not by a judge scenario: the judge's scripts carry sentences, not mic audio.
+- **`ask_probe`.** The lead or a panel member asks Milo to ask the candidate a probe about a topic; Milo asks one short question aloud. The tool is offered to the lead and the panel only, and its `mayAsk` refuses a candidate in code. The question is written by a model (`gpt-5.4-mini`, `store: false`) from the topic, the candidate's projection of the round's question, the part of the board last worked on (or the pad) and the last lines said; the answer key is never in the request, and the written question is checked against it before it is logged.
+
+Eight dev scenarios were added (dev-124 to dev-131): asked by the lead (three phrasings, one on a pad round), asked by a panel member, attempted by the candidate (twice: the fixed can-do line), and mentioned only (twice: silence). A probe's truth is a shape, not a sentence: one short question that is not the "no probe" line and holds nothing of the answer key. The judge's board round has a key with two made-up names, and the scorer fails any logged line, from any tool, that holds a made-up name or five words in a row of the key. The hold-out set is unchanged.
+
+| run | set | action | silence | content | allow-list | unsteady | errors over all trials | decide fallbacks |
+|---|---|---|---|---|---|---|---|---|
+| after overlap + ask-a-probe | dev | **92/93 (98.9%)** | **38/38 (100%)** | 92/92 | 131/131 | 0 | false silence 3 | 0 |
+| | hold-out | **57/60 (95.0%)** | **24/24 (100%)** | 57/57 | 84/84 | 2 | false silence 6 | 0 |
+
+Gate (action 95%, silence 98%, both sets): **PASS**. The hold-out is still at the edge (95.0%), as in run 4 above; one more missed scenario fails it.
+
+- All eight probe scenarios were clean in all three trials. No line held the answer key.
+- The one dev miss is dev-085 (a follow-up without the name that was for Milo), the miss the section above already lists. The hold-out's errors are all false silences, as before.
+- What Milo asked in one run, for the record of the wording: "What non-functional requirements shape the CDN edge, Redis cache, and key-value store in the redirect path?" (the lead asked about non-functional requirements in this part of the design; the labels are the frame the candidate last drew in); "How would you invalidate the Redis cache when a short URL's destination changes?"; "How would this redirect path behave during a regional outage?"; on the pad round, "What edge cases would change how this behaves?".
+
+Not covered: the part of the board "under discussion" is the frame of the newest change in the last saved board (saved at most every 30 s). Where the lead is looking lives on the clients' awareness and does not reach the server, so it is not used. The run was made on mains power; the laptop had dropped to 1% battery earlier in the session and was charging at 19% when the judge ran.

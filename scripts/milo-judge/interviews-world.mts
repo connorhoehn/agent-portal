@@ -70,6 +70,9 @@ const JUDGE_BOARD: Array<Record<string, unknown>> = [
 /** Is the owner rig scripted (owner-adapter.mts `ownerScripted`)? Then a probe is the product's scripted stand-in, with no model. */
 const scriptedRun = (): boolean => { const v = (process.env.MILO_JUDGE_OWNER_MODEL ?? '').trim(); return v === 'scripted' || (v !== 'live' && !!process.env.NODE_TEST_CONTEXT); };
 const rooms = new Map<string, Room>();
+/** Probe-writer calls in flight, over every scenario run: a run is not finished while its tool still waits on a model (owner-adapter.mts `drain`). */
+let probing = 0;
+export const toolCallsInFlight = (): number => probing;
 const byCall = new Map<string, Room>();
 
 interface Product {
@@ -134,8 +137,8 @@ function load(): Promise<Product> {
       // The product's own request and reply parsing (probe.ts), asked live; the interview's money is not part of the judge.
       prober: async (_interview, input: ProbeInput) => {
         if (scriptedRun()) return probe.scriptedProbe(input);
-        const reply = await text.requestToolChoice(probe.probeRequest(input), { timeoutMs: probe.PROBE_TIMEOUT_MS });
-        return probe.probeOf(reply);
+        probing += 1;
+        try { return probe.probeOf(await text.requestToolChoice(probe.probeRequest(input), { timeoutMs: probe.PROBE_TIMEOUT_MS })); } finally { probing -= 1; }
       },
       write: async (_interviewId, plan) => { await plan({ text: '', language: 'python' }); return { ok: false, code: 'nothing' }; },
       padLog: async () => 0,
