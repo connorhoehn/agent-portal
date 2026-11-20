@@ -20,7 +20,7 @@ import { noArgs } from './schema.js';
 import { PAD_TOOLS } from './writer.js';
 
 /** Said to the call when the candidate asked for a pad change: the lead hears what to say. */
-export const PAD_WAITS_FOR_LEAD = 'I need the lead interviewer to allow that before I change the pad. Say "Milo, go ahead" to allow it.';
+export const PAD_WAITS_FOR_LEAD = 'I need the lead interviewer to allow that before I change the pad. Say "Milo, go ahead", or press Confirm.';
 export const NOTHING_TO_CONFIRM = 'There is no pad change waiting to be confirmed.';
 export const PAD_CONFIRM_LEAD_ONLY = 'Only the lead interviewer can confirm a change to the pad.';
 export const PAD_CHANGE_DECLINED = "Okay, I won't change the pad.";

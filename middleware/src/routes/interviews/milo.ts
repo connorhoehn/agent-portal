@@ -20,6 +20,9 @@
 //   PUT  /interviews/:id/milo-settings            the lead only, ConductInterview, before the round ends, body { candidateMayAsk }
 //                                                  → { settings }: whether the candidate may ask Milo to change the pad (test cases, imports, a helper)
 //                                                  (lib/interviews/milo-settings.ts; off by default).
+//   GET  /interviews/:id/milo-pad-confirm         the lead only → { waiting: { text, askedAt } | null }: the candidate's pad request
+//                                                  waiting for the lead's yes (the room footer's Confirm / Decline)
+//   POST /interviews/:id/milo-pad-confirm         the lead only, ConductInterview, while `live`, body { allow } → { line, said }
 //
 // Everyone outside gets the tenant's one not-found, whatever the reason: a guest (who also holds no ViewInterviews and is
 // refused at the router's gate first), another round's interviewer, the admin (no exception, as the record), and every
@@ -39,7 +42,7 @@ import { indexFor, param } from '../../lib/interviews/request.js';
 import { sayApproved, saidStore } from '../../lib/interviews/speak/index.js';
 import { ALREADY_INTRODUCED, introduced } from '../../lib/interviews/speak/intro.js';
 import { runServerTool } from '../../lib/meeting-assistant/server-tools.js';
-import { interviewCall } from '../../lib/interviews/milo-tools/index.js';
+import { interviewCall, padConfirmWaiting, pressPadConfirm } from '../../lib/interviews/milo-tools/index.js';
 import { miloSettingsStore } from '../../lib/interviews/milo-settings.js';
 import { interviewsNowMs } from '../../lib/interviews/clock.js';
 import { NOT_SAID_ALOUD } from '../../lib/meeting-assistant/approved-speech.js';
@@ -132,6 +135,30 @@ miloRouter.post('/interviews/:id/milo-intro', asyncHandler(async (req, res) => {
   if (!out || out.delivered === undefined) { res.status(409).json({ error: ALREADY_INTRODUCED }); return; }
   if (out.delivered === 'none') { res.status(409).json({ error: MILO_NOT_IN_CALL }); return; }
   res.json({ said: out.delivered, line: out.delivered === 'spoken' ? INTRODUCED_ALOUD : NOT_SAID_ALOUD });
+}));
+
+const BAD_PAD_CONFIRM = 'Send { "allow": true } or { "allow": false }.';
+
+/** The lead's Confirm / Decline for a candidate's pad request: what waits (null when nothing does). Polled by the lead's room. */
+miloRouter.get('/interviews/:id/milo-pad-confirm', asyncHandler(async (req, res) => {
+  const p = await panelSide(req);
+  if (!p || p.ref.interview.leadId !== p.userId) throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ waiting: await padConfirmWaiting(p.ref.interview.id, p.userId) });
+}));
+
+/** The lead pressed Confirm or Decline: the same tool as "Milo, go ahead" / "Milo, no", posted and said at once. */
+miloRouter.post('/interviews/:id/milo-pad-confirm', asyncHandler(async (req, res) => {
+  const session = resolveSession(req)!;
+  if (!(await isAllowed(session, 'ConductInterview'))) throw new NotFoundError(NOTHING_HERE);
+  const p = await panelSide(req);
+  if (!p || p.ref.interview.leadId !== p.userId || p.ref.interview.state !== 'live') throw new NotFoundError(NOTHING_HERE);
+  res.setHeader('Cache-Control', 'no-store');
+  const allow = (req.body as Record<string, unknown> | undefined)?.['allow'];
+  if (typeof allow !== 'boolean') { res.status(400).json({ error: BAD_PAD_CONFIRM }); return; }
+  const out = await pressPadConfirm(p.ref.interview.id, p.userId, allow);
+  if (!out) throw new NotFoundError(NOTHING_HERE);
+  res.json({ line: out.line, said: out.delivered ?? 'none' });
 }));
 
 /** The states after the call: nothing of Milo's is set any more. */

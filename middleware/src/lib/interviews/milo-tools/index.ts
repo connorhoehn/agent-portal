@@ -16,13 +16,14 @@
 // the live session, except a candidate's helper, whose solution check is held and settled under the interview's cap (verdict.ts).
 //
 // This module keeps the interview-shaped entry points (by interview id) the tests and older callers use.
-import { phraseTool, policyAnswer, resetServerTools, runServerTool, serverToolBusy, serverToolPolicy } from '../../meeting-assistant/server-tools.js';
+import { phraseTool, policyAnswer, resetServerTools, runServerTool, serverToolBusy, serverToolPolicy, type ServerToolRun } from '../../meeting-assistant/server-tools.js';
 import type { PolicyCall, ServerToolRetry } from '../../meeting-assistant/policy.js';
 import { INTERVIEW_FAMILY, lobbyOfInterview } from './call.js';
 import { INTERVIEWS_TENANT, type PadLanguage } from '../types.js';
 import type { ResponsesFunctionTool } from '../../voice/catalogue.js';
 import { whatICanDoIn } from './family.js';
-import { liveInterview, logLine } from './deps.js';
+import { liveInterview, logLine, standingOf } from './deps.js';
+import { pendingPadWrite } from './pad-request.js';
 import { resetVerdicts } from './pad-write.js';
 
 export * from './deps.js';
@@ -84,4 +85,20 @@ export const padBusy = (interviewId: string): boolean => serverToolBusy(intervie
 
 /** Tests: forget the repeat window, the in-flight writes and the solution checks counted. */
 export function resetMiloTools(): void { resetServerTools(); resetVerdicts(); }
+
+/**
+ * The candidate's pad request waiting for the lead's yes, for the lead's Confirm / Decline control (the room's footer): what was
+ * asked and when. Null for anyone but the lead, and when nothing waits.
+ */
+export async function padConfirmWaiting(interviewId: string, userId: string): Promise<{ text: string; askedAt: string } | null> {
+  const interview = await liveInterview(interviewId);
+  if (!interview || (await standingOf(interview, userId)) !== 'lead') return null;
+  const p = pendingPadWrite(interviewId);
+  return p ? { text: p.text, askedAt: new Date(p.atMs).toISOString() } : null;
+}
+
+/** The lead pressed Confirm or Decline: the same tool "Milo, go ahead" or "Milo, no" runs, posted and said at once. */
+export function pressPadConfirm(interviewId: string, userId: string, allow: boolean): Promise<ServerToolRun | null> {
+  return runServerTool(interviewCall(interviewId), userId, allow ? 'confirm_pad_write' : 'decline_pad_write', {}, 'button');
+}
 

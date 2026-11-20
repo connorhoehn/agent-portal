@@ -10,9 +10,9 @@ import { INTERVIEWS_MILO_POLICY, setInterviewConsentSource } from '../milo-polic
 import { INTERVIEW_TURN_INSTRUCTIONS, speechHoldKey } from '../milo-turn.js';
 import { interviewSpendSourceId } from '../spend.js';
 import { MemoryMiloSettingsStore } from '../milo-settings.js';
-import { interviewCall, PAD_OFF, resetMiloTools, sessionToolsFor, setMiloToolDeps } from '../milo-tools/index.js';
+import { interviewCall, PAD_OFF, padConfirmWaiting, pressPadConfirm, resetMiloTools, sessionToolsFor, setMiloToolDeps } from '../milo-tools/index.js';
 import {
-  NOTHING_TO_CONFIRM, PAD_CHANGE_DECLINED, PAD_CONFIRM_TTL_MS, PAD_WAITS_FOR_LEAD, PAD_WRITE_KINDS, pendingPadWrite, resetPendingPadWrites,
+  NOTHING_TO_CONFIRM, PAD_CHANGE_DECLINED, PAD_CONFIRM_LEAD_ONLY, PAD_CONFIRM_TTL_MS, PAD_WAITS_FOR_LEAD, PAD_WRITE_KINDS, pendingPadWrite, resetPendingPadWrites,
 } from '../milo-tools/pad-request.js';
 import { padWriterChoice, padWriterRequest, scriptedPadWrite, type PadWriterInput } from '../milo-tools/writer.js';
 import type { MiloPadPlan, MiloPadWriteResult } from '../pad/milo-writer.js';
@@ -278,6 +278,24 @@ describe("the lead's confirm on a candidate's pad write", () => {
     expect(written.map((w) => w.text)).toEqual(['a dozen test cases']);
     expect(pad.text).not.toBe(TWO_SUM.starter!.python);
     expect(pendingPadWrite(IV, now)).toBeNull();
+  });
+
+  it('the Confirm / Decline control: only the lead sees what waits, and pressing Confirm writes it as "Milo, go ahead" does (film 4: an unnamed yes was lost)', async () => {
+    expect(PAD_WAITS_FOR_LEAD).toBe('I need the lead interviewer to allow that before I change the pad. Say "Milo, go ahead", or press Confirm.');
+    expect(await padConfirmWaiting(IV, LEAD)).toBeNull();
+    await ask();
+    expect(await padConfirmWaiting(IV, LEAD)).toEqual({ text: 'a dozen test cases', askedAt: new Date(now).toISOString() });
+    expect(await padConfirmWaiting(IV, GUEST)).toBeNull();
+    expect(await padConfirmWaiting(IV, PANEL)).toBeNull();
+    expect(await pressPadConfirm(IV, PANEL, true)).toMatchObject({ line: PAD_CONFIRM_LEAD_ONLY });
+    expect(written).toEqual([]);
+    expect(await pressPadConfirm(IV, LEAD, true)).toMatchObject({ line: TWELVE });
+    expect(written.map((w) => w.text)).toEqual(['a dozen test cases']);
+    expect(await padConfirmWaiting(IV, LEAD)).toBeNull();
+    await ask();
+    expect(await pressPadConfirm(IV, LEAD, false)).toMatchObject({ line: PAD_CHANGE_DECLINED });
+    expect(written).toHaveLength(1);
+    expect(await pressPadConfirm(IV, LEAD, true)).toMatchObject({ line: NOTHING_TO_CONFIRM });
   });
 
   it('nobody but the lead can confirm: the candidate and the panel are not offered it', async () => {
