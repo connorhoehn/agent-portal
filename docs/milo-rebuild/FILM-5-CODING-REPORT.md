@@ -38,3 +38,23 @@ Take 2 is the final film (198 s cut from 566 s recorded, 8 scenes, 2 skip-ahead 
 
 - Make the step-6 check scroll the pad before reading it, or read the run output instead.
 - Shorten the chat beat's wait for Mateo's tab.
+
+# Film 6: the chat beat moves up, one clean ending
+
+Take 3 is the final film (191 s cut from 565 s recorded, 2 skip-ahead cuts). The film's own checks: 19 passed, 0 failed. Milo was live (real OpenAI). Takes 1 and 2 were stopped in the first two minutes on script faults, fixed below.
+
+## What changed
+
+- **The frontier-model beat follows the small talk.** The order is now h05, c04 (Mateo on Claude Code and frontier models), h40 (Hugo: the blog post, "I'll drop it in the chat"), c40 (Mateo opens his Chat tab: "Oh nice, I'll read it after!"), h06 ("Same here! That's exactly why we still do this round."). Hugo types the link while he speaks, and nothing waits on the chat, so the lines follow each other. Two script faults surfaced on the way: the coach's open question card held the focus, so Hugo now takes it ("I'll ask it") before he opens Chat; and the candidate's tab reads "Chat 1" with its unread badge, so it is matched by prefix.
+- **The ending is one cut.** After the run there is a single "Skipping ahead" cut, then a new scene 8 ("Near the end: Mateo asks Milo the time") with the time question, Milo's answer, the wrap, End and the scorecard in one continuous stretch. In film 5 the chat beat sat between the run and the skip, and the caption jumped from scene 7 to scene 9.
+- **The empty-array check scrolls the pad.** It scrolls the cases into view and reads the rows below the fold as well, so it saw the `([], 6)` edge input and Mateo's "There they are" line played.
+
+## Scores (take 3)
+
+- **Milo's turns:** two spoken, both right. "Sure thing, I just need Hugo to confirm on their screen." after 4.4 s, and "About 2 minutes are left in this round." after 3.4 s. Whisper on the film heard the same words.
+- **Gaps:** none over 6 s. None in the chat beat (film 5 had 9.5 s there). The longest is 5.3 s, while Milo writes the cases and before "There they are". The others are 5.0 s (the help line to the question), 4.5 s (Milo's reply latency), 4.3 s and 3.6 s.
+- **Cuts:** the link cut at 0:10, and the one skip-ahead after the run (372 s of working time). Nothing is cut after that.
+
+## Open
+
+- Milo's recommendation pill read "Milo has no recommendation yet. The transcript has evidence for only 0 of 3 competencies." Film 5's take had "Inconclusive" with evidence. The recap's evidence window probably varies from run to run; I didn't check why.
