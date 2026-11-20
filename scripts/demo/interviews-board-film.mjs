@@ -60,6 +60,10 @@ const HANDSFREE = MILO && args.includes('--handsfree');
 // --turn-owner (with --handsfree): the middleware runs MILO_TURN_OWNER=1, so the interviews call is heard and answered by the turn
 // owner (floor, Decide, Act, Speak) in the hands-free runtime's place. The report says which path the take ran on.
 const TURN_OWNER = HANDSFREE && args.includes('--turn-owner');
+// --name-required (with --turn-owner): the 20 November beats. Milo acts only on his name or the hold: Hugo reads the round's opening
+// line, has Milo ask a probe, the follow-up without the name is met with silence (Hugo reads the question himself), and Hugo cuts
+// into a second probe. Each silence is watched for a bounded time.
+const NAME_REQUIRED = TURN_OWNER && args.includes('--name-required');
 const MAX_MINUTES = Number(flag('--max-minutes') ?? 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -342,6 +346,19 @@ async function askByVoice(kind, asker, id, how, expect, ms = 20_000) {
   const t = await turn(kind, asker, LINES[id][1], endMs, n, posts0, spoke);
   t.how = how; t.right = spoke && expect.test(t.said);
   return t;
+}
+/** --name-required: a line that must get no reply from Milo, watched for `ms` after its end. */
+async function watchSilence(kind, id, ms) {
+  const n = milo.utterances;
+  await say(id, 300);
+  const endMs = Date.now();
+  const replied = !!(await until(async () => (milo.utterances > n ? true : null), ms, 100));
+  if (replied) await miloSays(n, 20_000);
+  const r = { kind, line: id, asked: LINES[id][1], endS: Number(((endMs - timeline.film.fromMs) / 1000).toFixed(1)), watchedS: ms / 1000, replied,
+    firstAudioS: replied ? Number(((timeline.milo[n].startMs - timeline.film.fromMs) / 1000).toFixed(1)) : null };
+  (report.silences ??= []).push(r);
+  console.log(`milo silence ${kind}: ${JSON.stringify(r)}`);
+  return r;
 }
 /** --handsfree: Hugo talks over Milo's utterance `n` about 2.5 s in ("Okay, thanks, that's enough"); measured to his silence. */
 const BARGE_ON = flag('--barge-on') ?? 'cand';
@@ -643,6 +660,11 @@ try {
   await press(hp, hp.getByRole('menuitem', { name: /Master template/ }).first(), { pause: 350 });
   await i01;
   await say('i02', 300);
+  if (NAME_REQUIRED) {
+    // The round's opening line (a board round: only how to ask). It quotes his name; it is not a request.
+    const q = await watchSilence('opening line', 'h01', 5000);
+    step('O the opening line ("just say Hey Milo") gets no reply', !q.replied, `Milo ${q.replied ? 'REPLIED' : 'stayed silent'} within 5 s`);
+  }
   if (HANDSFREE) {
     const t = await askByHold('introduce', 'h00', /Milo|assistant/i);
     step('H Hugo holds the talk button; Milo introduces himself', !!t?.right && t.holding, t ? `holding=${t.holding}; chips ${JSON.stringify(t.chips)}; ${t.latencyS ?? '-'} s after the release; said "${t.said.slice(0, 120)}"` : 'no hold button');
@@ -702,11 +724,13 @@ try {
     const endMs = Date.now();
     const began = await until(async () => (milo.utterances > n ? true : null), 15_000, 50);
     const barge = began && BARGE_ON === 'cand' ? await bargeOver(n) : null;
+    // --name-required: Mateo's next line waits for the whole answer (its first frame alone would let him start over it).
+    if (began && NAME_REQUIRED) await miloSays(n, 20_000);
     await until(async () => Date.now() > busy.until + 120, 30_000, 60);
     const t = await turn('time_left', 'candidate', LINES.t02[1], endMs, n, posts0, !!began);
     t.how = 'name last'; t.right = !!began && /minute|end of its time/i.test(t.said); t.barge = barge; if (barge) report.barge = barge;
     step('T Milo tells Mateo the time left (name last)', t.right, `spoke=${!!began}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
-    step('X Hugo talks over Milo and Milo stops', !!report.barge && report.barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(report.barge ?? null)}`);
+    if (!NAME_REQUIRED) step('X Hugo talks over Milo and Milo stops', !!report.barge && report.barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(report.barge ?? null)}`);
   } else if (MILO) {
     scene(3, 'Mateo asks Milo how much time is left.');
     const n = milo.utterances; const posts0 = (await miloPosts()).length;
@@ -775,8 +799,32 @@ try {
   }, 200);
   const n5 = await same('11 the purposes, same on both sides', 'after the drag and two notes', n4 + 2);
 
+  if (NAME_REQUIRED) {
+    scene(4, 'Hugo has Milo ask a probe about the non-functional requirements; Mateo answers.');
+    const pr = await askByVoice('ask_probe', 'lead', 'p01', 'name first (Hey Milo)', /\?/, 25_000);
+    step('P Milo asks Mateo a probe on the non-functional requirements', pr.right, `spoke=${pr.spoke}; ${pr.latencyS ?? '-'} s after the request; said "${pr.said.slice(0, 160)}"`);
+    await say('p02', 400);
+  }
   scene(5, 'Where to go deep? Hugo picks the fan-out.');
-  if (HANDSFREE) {
+  if (NAME_REQUIRED) {
+    scene(4, 'Hugo asks Milo the time; the follow-up without the name gets silence, and Hugo reads the question himself.');
+    const t = await askByVoice('time_left', 'lead', 't03', 'name first', /minute|end of its time/i);
+    step('U Milo tells Hugo the time left (name first)', t.right, `spoke=${t.spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
+    const f = await watchSilence('follow-up (no name)', 'f01', 6000);
+    step('F the follow-up without the name gets no reply', !f.replied, `Milo ${f.replied ? 'REPLIED' : 'stayed silent'} within 6 s`);
+    await say('f02', 300);
+    // The interruption: Hugo asks for another probe and cuts in about 2.5 s into it.
+    const n = milo.utterances; const posts0 = (await miloPosts()).length;
+    await say('p03', 400);
+    const endMs = Date.now();
+    const began = await until(async () => (milo.utterances > n ? true : null), 20_000, 50);
+    const barge = began ? await bargeOver(n) : null;
+    if (barge) report.barge = barge;
+    await until(async () => Date.now() > busy.until + 120, 30_000, 60);
+    const x = await turn('ask_probe (interrupted)', 'lead', LINES.p03[1], endMs, n, posts0, !!began);
+    x.how = 'name first, cut in'; x.barge = barge; x.right = !!began;
+    step('X Hugo talks over Milo and Milo stops', !!barge && barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(barge)}; said "${x.said.slice(0, 120)}"`);
+  } else if (HANDSFREE) {
     scene(4, 'Hugo asks Milo the time, then the question again without the name.');
     const t = await askByVoice('time_left', 'lead', 't03', 'name first', /minute|end of its time/i);
     step('U Milo tells Hugo the time left (name first)', t.right, `spoke=${t.spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);

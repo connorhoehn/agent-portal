@@ -47,6 +47,11 @@
   "t03": ["hugo", "Milo, how long have we got?"],
   "f01": ["hugo", "Great. And can you read out the question once more?"],
   "x01": ["hugo", "Okay, thanks, that's enough. Go ahead, Mateo."],
-  "b16m": ["cand", "Thank you, that was fun. I liked how Milo kept time."]
+  "b16m": ["cand", "Thank you, that was fun. I liked how Milo kept time."],
+  "h01": ["hugo", "If you'd like help, just say 'Hey Milo'."],
+  "p01": ["hugo", "Hey Milo, can you ask a probe about the non-functional requirements in this part of the design?"],
+  "p02": ["cand", "Good one. Timeline reads should come back in about two hundred milliseconds, and a few seconds of staleness is fine, so the cache takes most of the load."],
+  "f02": ["hugo", "Sure. Design Twitter: people post tweets, follow each other, and read a home timeline, newest first."],
+  "p03": ["hugo", "Milo, can you ask Mateo that probe once more?"]
  }
 }
