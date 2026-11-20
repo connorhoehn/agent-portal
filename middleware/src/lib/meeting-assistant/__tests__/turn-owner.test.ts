@@ -384,6 +384,32 @@ describe('talking over Milo, the hold button, a second asker', () => {
     expect(r.ran.map((x) => x.name)).toEqual(['time_left']);
   });
 
+  it('a hold ends at the release: a later sentence the lane dated from its previous one\'s end is not held (film, 20 November)', async () => {
+    const r = rig();
+    const mics = (r.owner as unknown as { mics: { trackMic(userId: string, pcm: Buffer, atMs: number): void } }).mics;
+    const loud = Buffer.alloc(4_800); for (let i = 0; i < loud.length; i += 2) loud.writeInt16LE(i % 4 ? 3_000 : -3_000, i);
+    const talk = (who: string, from: number, to: number): void => { for (let at = from; at < to; at += 100) mics.trackMic(who, loud, at); };
+    await r.to(18_500);
+    expect(await r.owner.holdPress('lead')).toEqual({ ok: true });
+    talk('lead', 18_600, 20_600);
+    await r.to(20_900);
+    r.owner.holdRelease('lead');
+    await r.to(22_100);
+    r.answers.push(pick('time_left'));
+    void r.owner.sentence({ userId: 'lead', sentenceId: 'h1', text: 'How much time is left?', startMs: 14_500, endMs: 20_600 });
+    await r.flush();
+    expect(r.ran.map((x) => x.name)).toEqual(['time_left']);
+    // 13 s later he talks to the candidate. No audio came from his mic in between, so the lane missed the onset and dates the
+    // sentence from the end of the one before it, which is before the release. His mic says where he really began.
+    await r.to(53_400);
+    talk('lead', 53_400, 56_400);
+    await r.to(58_100);
+    void r.owner.sentence({ userId: 'lead', sentenceId: 'h2', text: 'It is a classic: design a news feed.', startMs: 20_600, endMs: 56_400 });
+    await r.flush();
+    expect(r.requests.length).toBe(1);
+    expect(r.ran.map((x) => x.name)).toEqual(['time_left']);
+  });
+
   it('a second person\'s request waits for the floor and is taken next', async () => {
     const r = rig();
     await r.to(10_000);

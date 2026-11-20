@@ -241,7 +241,9 @@ export class TurnOwner implements HandsfreeRun {
   /** A finished sentence from one person's lane. Resolves when it has been handed on (a turn it opens runs on by itself). */
   sentence(e: OwnerSentence): Promise<void> {
     if (this.closed || !e.text.trim()) return Promise.resolve();
-    const s: Final = { id: e.sentenceId, who: e.userId, text: e.text.trim(), startMs: Math.min(e.startMs, e.endMs), endMs: e.endMs, turn: null };
+    // The lane's start can be the end of the person's sentence before this one (it missed the onset): the mic says where they began,
+    // which is what a hold, an echo, a second lane's copy and talking over Milo are all judged by.
+    const s: Final = { id: e.sentenceId, who: e.userId, text: e.text.trim(), startMs: this.mics.sentenceStart(e.userId, Math.min(e.startMs, e.endMs), e.endMs), endMs: e.endMs, turn: null };
     if (this.flight.get(e.userId)?.sentenceId === e.sentenceId) this.flight.delete(e.userId);
     // Known at once, in arrival order, so a copy on another lane sees it however long this one's own checks take.
     this.finals.push(s);

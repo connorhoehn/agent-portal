@@ -70,7 +70,11 @@ export class Floor {
     return w && w.who === who ? 'follow-up' : null;
   }
 
-  /** Is this person holding the button, or were they when a sentence that began at `startMs` started (its final comes a second or two after the release)? */
+  /**
+   * Is this person holding the button, or were they when a sentence that began at `startMs` started (its final comes a second or two
+   * after the release)? `startMs` is where they began to speak by their mic (turn-owner.ts `sentence`), never the lane's own date
+   * for the sentence: that can be the end of their sentence before it, inside a hold that ended long before these words.
+   */
   holding(who: string, startMs = this.nowMs()): boolean {
     const h = this.holder;
     if (!h || h.who !== who) return false;

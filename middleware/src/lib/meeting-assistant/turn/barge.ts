@@ -81,6 +81,8 @@ const LEAK_EARLY_MIN_BINS = 3;
 const LEAK_EARLY_SKIP_BINS = 3;
 /** A voiced stretch after this much quiet is a new stretch of speech (where a sentence heard later probably began). */
 const SPEECH_GAP_MS = 600;
+/** A stretch of speech that ends within this of a sentence's start is the tail of the sentence before it. */
+const SENTENCE_TAIL_MS = 200;
 
 /** RMS of 16-bit LE samples in [from, to) bytes. */
 function rmsOf(pcm: Buffer, from = 0, to = pcm.length): number {
@@ -112,6 +114,8 @@ export class MicWatch {
   private readonly micBins = new Map<string, Map<number, number>>();
   private readonly onsets = new Map<string, { voicedMs: number; quietMs: number; fired: boolean }>();
   private readonly speechStarts = new Map<string, number[]>();
+  /** Where each stretch in `speechStarts` ends so far (its last voiced window's end), index for index. */
+  private readonly speechEnds = new Map<string, number[]>();
   private readonly lastVoiced = new Map<string, number>();
   constructor(private readonly onOnset: (userId: string, bin: number) => void) {}
 
@@ -128,7 +132,7 @@ export class MicWatch {
 
   /** A person left: their history goes. */
   forget(userId: string): void {
-    this.micBins.delete(userId); this.onsets.delete(userId); this.speechStarts.delete(userId); this.lastVoiced.delete(userId);
+    this.micBins.delete(userId); this.onsets.delete(userId); this.speechStarts.delete(userId); this.speechEnds.delete(userId); this.lastVoiced.delete(userId);
   }
 
   /** How a mic with a voiced onset at `bin` stands against his playout; `echoed`: its words have already echoed him in this call. */
@@ -149,11 +153,14 @@ export class MicWatch {
     const win = (HANDSFREE.sampleRate * 2) / 50; // 20 ms
     const starts = this.speechStarts.get(userId) ?? [];
     this.speechStarts.set(userId, starts);
+    const ends = this.speechEnds.get(userId) ?? [];
+    this.speechEnds.set(userId, ends);
     for (let at = 0, ms = atMs; at + win <= pcm.length; at += win, ms += 20) {
       if (rmsOf(pcm, at, at + win) > ONSET_RMS) {
         o.voicedMs += 20; o.quietMs = 0;
         const lv = this.lastVoiced.get(userId);
-        if (lv === undefined || ms - lv >= SPEECH_GAP_MS) { starts.push(ms); if (starts.length > 16) starts.shift(); }
+        if (lv === undefined || ms - lv >= SPEECH_GAP_MS) { starts.push(ms); ends.push(ms + 20); if (starts.length > 16) { starts.shift(); ends.shift(); } }
+        else if (ends.length) ends[ends.length - 1] = ms + 20;
         this.lastVoiced.set(userId, ms);
       }
       else {
@@ -199,6 +206,22 @@ export class MicWatch {
     }
     if (voiced < LEAK_EARLY_MIN_BINS) return 'unknown';
     return loud * 2 >= voiced ? 'leaky' : 'early-clean';
+  }
+
+  /**
+   * Where a sentence the lane dated `fromMs` to `toMs` really began. A lane that missed the onset (no audio came from the mic
+   * while the person was quiet) dates a sentence from the end of the one before it, seconds or minutes early. The mic knows: the
+   * first stretch of speech that is not the earlier sentence's tail. It began inside the sentence: there. It was already running at
+   * `fromMs` (the person never stopped), or the mic shows nothing: the lane's own start.
+   */
+  sentenceStart(userId: string, fromMs: number, toMs: number): number {
+    const starts = this.speechStarts.get(userId) ?? [];
+    const ends = this.speechEnds.get(userId) ?? [];
+    for (let i = 0; i < starts.length; i++) {
+      if (ends[i]! <= fromMs + SENTENCE_TAIL_MS) continue;
+      return starts[i]! > fromMs && starts[i]! < toMs ? starts[i]! : fromMs;
+    }
+    return fromMs;
   }
 
   /** Where the speech heard at `atMs` probably began: the start of the mic's voiced stretch (voiced in the last 2 s), else unknown. */
