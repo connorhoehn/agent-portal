@@ -20,6 +20,7 @@ import { assistantLimits, type AssistantLimits } from './limits.js';
 import { assistantStore } from './store-select.js';
 import type { AssistantRecord, MinutesRecord } from './types.js';
 import type { Admission } from './handsfree/types.js';
+import type { TurnPolicy } from './turn/types.js';
 
 /** The call a decision is about. */
 export interface PolicyCall {
@@ -58,7 +59,11 @@ export interface SessionTools { tools: readonly ResponsesFunctionTool[]; backend
  */
 export interface ServerToolRetry { line: string; retry: true; note?: string }
 
-export interface MeetingAssistantPolicy {
+/**
+ * The turn owner's tenant contract (turn/types.ts `TurnPolicy`) rides on the policy as optional members: a family that has adopted the
+ * turn owner supplies all the required ones, and `turnPolicyOf` hands the complete contract to the turn (null otherwise).
+ */
+export interface MeetingAssistantPolicy extends Partial<TurnPolicy> {
   /** A name for logs and tests. */
   readonly id: string;
   /**
@@ -274,6 +279,13 @@ export function hasFamilyPolicies(): boolean { return policies.size > 0; }
 /** The families whose policy keeps its own retention: the meeting assistant's age sweep leaves their calls alone (retention.ts). */
 export function familiesKeepingOwnRetention(): string[] {
   return [...policies].filter(([, policy]) => policy.keepsOwnRetention === true).map(([family]) => family).sort();
+}
+
+/** The turn contract of a policy when it supplies every required member (turn/types.ts `TurnPolicy`), else null. */
+export function turnPolicyOf(policy: MeetingAssistantPolicy): TurnPolicy | null {
+  const p = policy;
+  if (!p.roleOf || !p.toolsFor || !p.answersFreely || !p.instructions || !p.cannotHelp || !p.context || !p.mayHold || !p.logSpoken) return null;
+  return p as MeetingAssistantPolicy & TurnPolicy;
 }
 
 /** The policy of a lobby: its family's, or the default. */
