@@ -52,6 +52,8 @@ export interface Scenario {
   id: string;
   layer: Layer;
   tags: string[];
+  /** The tenant the call is in. Absent: interviews, judged on the policy registered for an interview call (interviews-world.mts). Any other name: a tenant built from the scenario. */
+  tenant?: string;
   people: Person[];
   round: Round;
   events: ScriptEvent[];

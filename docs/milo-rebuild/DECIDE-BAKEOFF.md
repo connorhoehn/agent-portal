@@ -27,3 +27,33 @@ Stand-in decide call (name gate, follow-up window, hold, last three lines, Milo'
 - No model made a false write; every candidate output stayed inside the allow-list (100%). Call p50 is 0.55-0.8 s, p90 under 1.1 s.
 - Caveat: the stand-in prompt is not lane 1A's Decide; rerun `npm run milo-judge:bakeoff` (middleware/) with 1A's prompt before locking in. Hold-out columns are totals only; do not tune on them.
 - Since this run the judge changed (not re-run: the machine was on battery, so no live calls): graders are exact match on the tool, the person and the tool's arguments; a scenario now counts only when all 3 runs are right (pass^3; this table is 2 runs, each counted on its own); and 2 hold-out phrasings were replaced so that no hold-out seed phrasing is in dev. Expect the same order with slightly lower numbers; hold-out totals can move by at most 2 of 53. Re-run with `npm run milo-judge:bakeoff -- --models gpt-5.4-mini,gpt-5.4-nano --out <file>` on AC power.
+
+## Judge on the registered interviews policy (2026-11-20)
+
+The owner rig no longer judges a tenant built from the scenario. Every interviews scenario (all 207 today) now runs on the policy registered for an interview call (`registerInterviewsMiloPolicy`, looked up with `policyForLobby` and `turnPolicyOf` as the orchestrator does): its roles, its tools as the registered family offers and runs them, its Decide instructions and state string, its fixed lines, its said log and its rule for whose lines a model reads. Decide and Act get no stand-ins from the judge. The judge supplies only the world behind the tenant, through the tenant's own test seams (`scripts/milo-judge/interviews-world.mts`): a live pad round with the scenario's people, the said log in memory, pad help for the candidate off, a pad that takes nothing (the pad writer's model is not called) and the money for a spoken line granted. A scenario that names another `tenant` still gets the scenario-built tenant; none does yet.
+
+Run: `npm run milo-judge -- --rig owner --model gpt-5.4-mini --set both --trials 3 --verbose --require-owner`, live, 101 s. A scenario counts only when all three trials are right (pass^3); the error column counts every trial. With the scripted model (offline) the same rig passes every scenario on both sets, so the misses below are the model's choices on the product's prompt, not the binding.
+
+| set | scenarios | action | silence | content | allow-list | unsteady | errors over all trials | decide fallbacks (timeout, error, malformed) |
+|---|---|---|---|---|---|---|---|---|
+| dev | 123 (114 decide, 9 floor) | 79/87 (90.8%) | 35/36 (97.2%) | 79/79 (100.0%) | 123/123 (100.0%) | 9 | false write 1, false silence 8, refusal 3 | 0 |
+| hold-out | 84 (77 decide, 7 floor) | 54/60 (90.0%) | 23/24 (95.8%) | 54/54 (100.0%) | 84/84 (100.0%) | 6 | false write 1, false silence 7, refusal 5 | 0 |
+
+Gate: FAIL on both sets (action and silence). The hold-out does not drop against dev (90.0% against 90.8% action, one silence miss each), and its misses are the same three kinds as dev's, so nothing here is a wording the dev set does not already show. Both sets are well under the stand-in's numbers above (98.1% and 96.2%), which were two runs counted one by one on a prompt that is not the product's.
+
+Scenarios missed (id, tags, clean trials of 3, what was logged against what was wanted; hold-out by id and tags only):
+
+| kind | dev | hold-out |
+|---|---|---|
+| a pad request refused: the lead hears the "what I can do" line, a panel member gets silence | dev-029, dev-031 [named,pad_write] 2/3; dev-034 1/3, dev-035 2/3 [named,pad_write,panellist]; dev-106 [misheard-name,pad_write] 2/3 | hold-021 2/3, hold-022 1/3 [named,pad_write]; hold-024 [named,pad_write,panellist] 1/3; hold-078 [split-request, floor layer] 1/3 |
+| a follow-up with no name left unanswered | dev-085 1/3 (wanted time_left); dev-087 2/3 (wanted pad_write) [follow-up,for-milo] | hold-059 0/3 (wanted time_left); hold-061 1/3 (wanted pad_write) [follow-up,for-milo] |
+| a held sentence that was not for Milo acted on (the one false write of each set) | dev-111 [hold,not-for-milo] 2/3: leave_call | hold-075 [hold,not-for-milo] 2/3: pause_listening |
+| the candidate's forbidden request met with silence in place of the fixed line | dev-053 [named,candidate-forbidden] 1/3 | none |
+
+Reading:
+- Pad requests are the largest miss (5 of 9 on dev, 4 of 7 on the hold-out) and a new one: the stand-in missed none of them. Six more live runs of each missed dev scenario show it is the model's own `cannot_help`, not a tool refusal: "Milo, write a unit test for a single node list." was refused 4 times of 6, "put a note on the pad..." from a panel member 5 of 6, "add a helper called reverse" 1 or 2 of 6. The likely cause is the registered wording: the interview rule ("never solve, hint at, check... any such request is cannot_help") beside a pad tool that says "never write the code yourself". Not tuned here. A note is also something the pad tool itself declines once reached (it adds test cases, imports or a helper), so the truth for dev-035 and the product disagree whichever way the model goes.
+- A panel member whose request is refused hears nothing (the policy gives the panel no fixed line), so on the panel this miss is a silent one.
+- Follow-ups without the name: "And how long after that?" after a time answer got the time again 2 times of 6 on the reruns, the question once and silence 3 times; the second pad request in dev-087 was written 6 of 6. dev-085 is the stand-in's miss too (both of its runs).
+- The false write is rare but the wrong direction: one trial of three on each set, and none in six reruns of dev-111. A hold is the one way a sentence with no name reaches Decide, and the candidate may hold too on this policy.
+- Floor layer: 9 of 9 on dev, 6 of 7 on the hold-out, and the one miss is a pad refusal, not the floor.
+- Every line said was the product's exact words (content 100%) and nothing outside the candidate's allow-list was said to a candidate.

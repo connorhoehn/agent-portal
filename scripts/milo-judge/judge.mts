@@ -1,16 +1,20 @@
 // The Milo judge. Usage (from middleware/):
-//   npm run milo-judge -- [--rig owner|scripted|decide|perfect] [--model gpt-5.4-mini] [--set dev|holdout|both] [--trials 3] [--verbose] [--require-owner]
-//   owner     the real turn owner on the fake clock (the gate). Until lanes 1A/1B merge and owner-adapter.mts is bound, every scenario is
-//             "needs turn owner": skipped, exit 0. --require-owner makes that exit 3 (use it for the gate itself).
+//   npm run milo-judge -- [--rig owner|scripted|decide|perfect] [--model gpt-5.4-mini] [--set dev|holdout|both] [--trials 3] [--verbose] [--require-owner] [--scores file.json]
+//   owner     the real turn owner on the fake clock (the gate), LIVE: an interviews scenario on the policy registered for an interview
+//             call (interviews-world.mts), Decide on --model when given, else the product's configured model. Without turn/turn-owner.ts
+//             every scenario is "needs turn owner": skipped, exit 0. --require-owner makes that exit 3 (use it for the gate itself).
 //   scripted  OFFLINE: the stand-in decide rig with a scripted model that answers as the truth says. Checks corpus, gates and scorer.
 //   decide    LIVE: the stand-in decide rig with one minimal decide call per request (needs the OpenAI key). Not the gate.
 //   perfect   the scorer's self-test (a perfect log must score 100%).
 // scripted and decide run decide-layer scenarios; floor-layer ones need the turn owner and are skipped, never failed.
 // Each scenario runs --trials times and passes only if every trial passes (pass^3). Graders are exact match (score.mts).
-// The hold-out set prints totals only, never scenario text or ids. `npm run milo-judge:test` is the offline test suite.
+// The hold-out set prints totals only, never scenario text or ids. --scores writes every scenario's id, tags and problems (what was
+// logged against what was wanted; no scenario text) to a file, hold-out included, for the person reading a hold-out drop.
+// `npm run milo-judge:test` is the offline test suite.
 import { decideRig, perfectRig, scriptedRig, type Rig } from './rigs.mts';
 import { fakeClock } from './fake-clock.mts';
-import { ownerPresent, ownerRig } from './owner-adapter.mts';
+import { writeFileSync } from 'node:fs';
+import { decideFallbacks, ownerPresent, ownerRig, ownerScripted } from './owner-adapter.mts';
 import { TRIALS, loadCorpus, pct, runTrials, type CorpusName } from './runner.mts';
 import { totals } from './score.mts';
 
@@ -25,6 +29,11 @@ const sets: CorpusName[] = setArg === 'both' ? ['dev', 'holdout'] : [setArg as C
 const trials = Math.max(1, Number(arg('trials', String(TRIALS))) || TRIALS);
 const verbose = process.argv.includes('--verbose');
 const requireOwner = process.argv.includes('--require-owner');
+const scoresFile = arg('scores', '');
+// The owner's Decide reads its model from the product's setting: --model, when given, is that setting for this run.
+if (rigName === 'owner' && process.argv.includes('--model')) process.env.MILO_DECIDE_MODEL = model;
+const ownerModel = ownerScripted() ? 'scripted model' : (process.env.MILO_DECIDE_MODEL ?? '').trim() || 'the product default model';
+const kept: Record<string, unknown> = {};
 
 const rigs: Record<Exclude<(typeof RIGS)[number], 'owner'>, Rig> = { perfect: perfectRig, scripted: scriptedRig, decide: decideRig(model) };
 const rig: Rig | null = rigName === 'owner' ? (ownerPresent() ? ownerRig(() => fakeClock()) : null) : rigs[rigName];
@@ -41,12 +50,18 @@ for (const set of sets) {
   }
   const scores = await runTrials(rig, runnable, trials);
   const t = totals(scores);
-  console.log(`${set} [${rigName}${rigName === 'decide' ? ` ${model}` : ''}] ${t.scenarios} scenarios on ${t.seeds} seed phrasings, pass^${t.trials}${skipped ? `; ${skipped} floor-layer SKIPPED (needs turn owner)` : ''}`);
+  console.log(`${set} [${rigName}${rigName === 'decide' ? ` ${model}` : rigName === 'owner' ? ` ${ownerModel}` : ''}] ${t.scenarios} scenarios on ${t.seeds} seed phrasings, pass^${t.trials}${skipped ? `; ${skipped} floor-layer SKIPPED (needs turn owner)` : ''}`);
   console.log(`  allow-list ${pct(t.allowList)}  silence ${pct(t.silence)}  action ${pct(t.action)}  content ${pct(t.content)}  unsteady ${t.unsteady}`);
   console.log(`  errors over all trials: ${Object.entries(t.errors).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(' ') || 'none'}`);
+  if (rigName === 'owner') {
+    const f = Object.entries(decideFallbacks).filter(([, v]) => v);
+    console.log(`  decide fallbacks so far (the code's cannot_help, not the model's choice): ${f.map(([k, v]) => `${k}=${v}`).join(' ') || 'none'}`);
+  }
+  kept[set] = scores.map((x) => ({ id: x.id, layer: x.layer, tags: x.tags, trials: x.trials, cleanTrials: x.cleanTrials, problems: x.problems }));
   const pass = Object.values(t.pass).every(Boolean);
   console.log(`  gate ${pass ? 'PASS' : 'FAIL'} (${Object.entries(t.pass).map(([k, v]) => `${k}:${v ? 'ok' : 'no'}`).join(' ')})`);
   if (!pass && rigName !== 'decide') exit = exit || 1;
   if (verbose && set === 'dev') for (const s of scores.filter((x) => x.problems.length)) console.log(`  - ${s.id} [${s.tags.join(',')}] ${s.cleanTrials}/${s.trials} clean: ${s.problems.map((p) => `${p.kind}: ${p.detail}`).join('; ')}`);
 }
+if (scoresFile) writeFileSync(scoresFile, JSON.stringify(kept, null, 1));
 process.exit(exit);

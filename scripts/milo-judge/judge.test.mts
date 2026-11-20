@@ -13,7 +13,8 @@ import { perfectRig, decideRig, scriptedRig, type Rig } from './rigs.mts';
 import { TRIALS, loadCorpus, runAll, runTrials } from './runner.mts';
 import { passEvery, scoreScenario, totals } from './score.mts';
 import { seedOf, sharedSeeds } from './seed.mts';
-import { ownerPresent, ownerRig } from './owner-adapter.mts';
+import { ownerPresent, ownerRig, tenantFor } from './owner-adapter.mts';
+import { scenarioClock } from './interviews-world.mts';
 import type { Scenario } from './types.mts';
 import * as speak from '../../middleware/src/lib/interviews/speak/index.ts';
 import { MILO_INTRO as PRODUCT_INTRO } from '../../middleware/src/lib/interviews/speak/intro.ts';
@@ -177,6 +178,35 @@ for (const s of loadCorpus('dev').filter((x) => x.layer === 'floor')) {
 test('turn owner: the hold-out floor-layer scenarios (totals only)', { skip: NEEDS_OWNER }, async () => {
   const t = totals(await runTrials(ownerRig(() => fakeClock()), loadCorpus('holdout').filter((x) => x.layer === 'floor')));
   assert.deepEqual([t.action.ok, t.silence.ok, t.content.ok, t.allowList.ok], [t.action.of, t.silence.of, t.content.of, t.allowList.of]);
+});
+
+// What the owner rig judges: the policy registered for an interview call, not a tenant of the judge's own making.
+test('turn owner: an interviews scenario runs on the registered interviews policy; another tenant\'s on one built from the scenario', { skip: NEEDS_OWNER }, async () => {
+  const s = loadCorpus('dev').find((x) => x.layer === 'decide' && !x.people.some((p) => p.declined))!;
+  const clock = fakeClock();
+  await scenarioClock.run(clock, async () => {
+    const t = await tenantFor(s, clock);
+    assert.equal(t.id, 'interviews');
+    assert.equal(t.modelReads, undefined); // whose lines a model reads, and what a tool does, are the product's own
+    assert.equal(t.act, undefined);
+    assert.deepEqual([t.call.tenant, t.call.lobby?.startsWith('interviews:interview:')], ['interviews', true]);
+    const { policyFamilies, policyForLobby } = await import('../../middleware/src/lib/meeting-assistant/policy.ts');
+    const { INTERVIEW_TURN_INSTRUCTIONS } = await import('../../middleware/src/lib/interviews/milo-turn.ts');
+    assert.ok(policyFamilies().includes('interviews:interview'));
+    assert.equal(policyForLobby(t.call.lobby).id, 'interviews');
+    assert.equal(t.policy.instructions(t.call, 'lead'), INTERVIEW_TURN_INSTRUCTIONS.lead);
+    const [lead, panel, candidate] = ['lead', 'panellist', 'candidate'].map((role) => t.uid(s.people.find((p) => p.role === role)!.id));
+    assert.deepEqual(await Promise.all([lead!, panel!, candidate!, 'a-stranger'].map((u) => t.policy.roleOf(t.call, u))), ['lead', 'panel', 'candidate', null]);
+    const names = async (userId: string, role: string): Promise<string[]> => (await t.policy.toolsFor(t.call, { userId, role })).map((x) => x.name);
+    assert.deepEqual(await names(lead!, 'lead'), ['time_left', 'repeat_question', 'introduce', 'pad_write']);
+    assert.deepEqual(await names(panel!, 'panel'), ['time_left', 'repeat_question', 'pad_write']);
+    assert.deepEqual(await names(candidate!, 'candidate'), ['time_left', 'repeat_question']);
+    t.close();
+    assert.equal(await t.policy.roleOf(t.call, lead!), null); // the room is gone with the run
+    const other = await tenantFor({ ...s, tenant: 'work' }, clock);
+    assert.equal(other.id, 'scenario');
+    assert.equal(other.call.tenant, 'judge');
+  });
 });
 
 test('the decide rig makes no call for a declined candidate, a sentence with no name, no follow-up and no hold', async () => {
