@@ -209,6 +209,18 @@ describe('arming again (the deaf watchdog)', () => {
     expect(armer.hearing(CALL)).toBe('ok');
   });
 
+  it('a quiet room is not a lost tap: while the media server still lists the call\'s tap it is not armed again (film 4: a re-made tap was never heard again)', async () => {
+    await armer.arm(CALL, ARN); await settle();
+    behaviour.list = [{ tapId: 'tap-1', destination: { url: sinkOf(tapPosts()[0]!) } }];
+    expect(await armer.rearm(CALL)).toBe(false);
+    await settle();
+    expect(tapPosts()).toHaveLength(1);
+    expect(seen.filter((s) => s.method === 'DELETE')).toHaveLength(0);
+    expect(armer.hearing(CALL)).toBe('ok');
+    behaviour.list = []; // the media server lost it: armed again
+    expect(await armer.rearm(CALL)).toBe(true); await settle();
+  });
+
   it('a call this process never armed against a media server is not armed again', async () => {
     expect(await armer.rearm(CALL)).toBe(false);
     expect(tapPosts()).toEqual([]);

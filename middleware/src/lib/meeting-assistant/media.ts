@@ -274,11 +274,17 @@ export class TapArmer {
    * The orchestrator's deaf watchdog heard no audio for a minute while people are seated: arm the call's channel again (a fresh token
    * and tap, through `arm`). The call was told by the watchdog, so this arming starts as one past its one-minute give-up: no second
    * notice, the state view says `no-audio` until the tap exists, and arming goes on slowly. False when this process has not armed the
-   * call against a media server (nothing to arm again).
+   * call against a media server (nothing to arm again), and false while the media server still lists the call's tap: that is a quiet
+   * room (no packets while nobody speaks), not a lost tap. Re-making a live tap in a silent room left a tap whose decoders never
+   * started (film 4), and Milo never heard the call again; the tap that exists resumes when people speak.
    */
   async rearm(callId: string): Promise<boolean> {
     const state = this.calls.get(callId);
     if (!state) return false;
+    if (state.tapIds.size > 0) {
+      const listed = await this.client.list(state.channelArn);
+      if (listed && [...state.tapIds].every((id) => listed.some((t) => t.tapId === id))) return false;
+    }
     await this.arm(callId, state.channelArn, { told: true });
     return true;
   }

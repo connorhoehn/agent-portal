@@ -2607,7 +2607,8 @@ export class AssistantRuntime {
     run.watchFrom = now; // one recovery per stall: a tick that runs alongside this one does not act on it again
     const told = run.deaf !== null;
     if (kind === 'audio') {
-      if (!(await taps!.rearm(callId))) return; // not armed against a media server here: nothing to arm again, nothing to watch
+      // Not armed against a media server here, or the media server still lists the tap (a quiet room, media.ts rearm): Milo stays as he is.
+      if (!(await taps!.rearm(callId))) return;
       console.warn(`[meeting-assistant] no audio has reached ${callId} for a minute; arming its tap again`);
       run.deaf = { kind, at: now };
       if (!told) await postNoticeQuietly(callId, CANNOT_HEAR_NOTICE);
