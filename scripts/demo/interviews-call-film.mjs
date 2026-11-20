@@ -780,10 +780,14 @@ try {
     // Film 6 (owner): the frontier-model beat right after the small talk. Hugo drops the blog post into the call chat while he
     // says so; Mateo opens his Chat tab as he answers; nothing waits on the chat, so the lines follow each other promptly.
     let chatSeen = Promise.resolve(false);
+    let s1Early = null;
     try {
       const tip = line('h40', 400);
-      await nearEnd('h40', 2200);
+      await nearEnd('h40', 4200);
       const sent = (async () => {
+        // The coach's question card is open by now and holds the focus: Hugo takes it first (I'll ask it), so the tab is clickable.
+        s1Early = answerSuggestion(hp, /array of integers/i, 'ask', 3000);
+        await s1Early;
         await press(hp, hp.getByTestId('interview-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 100, timeout: 8000 });
         const box = hp.getByTestId('interview-room-chat').getByRole('textbox').first();
         await press(hp, box, { pause: 80, timeout: 8000 });
@@ -806,7 +810,7 @@ try {
     // The pad: Hugo's question in Mateo's language; Hugo lets the candidate ask Milo for the pad.
     const padReady = (async () => { await padTab(hp); await padTab(cp); return !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500)); })();
     // The coach's first suggestion is the chosen question: Hugo takes it as his own (I'll ask it), so its card is closed before the menu.
-    const s1p = answerSuggestion(hp, /array of integers/i, 'ask', 8000);
+    const s1p = (async () => ((s1Early && await s1Early) || answerSuggestion(hp, /array of integers/i, 'ask', 8000)))();
     await line('n05', 400);
     const sync = await padReady;
     await s1p;
