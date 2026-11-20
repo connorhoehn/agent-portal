@@ -6,10 +6,10 @@ jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () =
 jest.mock('../../social-notify.js', () => ({ notify: jest.fn(async () => []) }));
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { decide, decideInput, type DecideDeps } from '../turn/decide.js';
+import { decide, decideInput, decideModel, DEFAULT_DECIDE_MODEL, type DecideDeps } from '../turn/decide.js';
 import { act, _resetActed } from '../turn/act.js';
 import type { TextToolReply, TextToolRequest } from '../../voice/openai-text.js';
-import { TextToolError } from '../../voice/openai-text.js';
+import { TextToolError, _setTextFetch } from '../../voice/openai-text.js';
 import type { PolicyCall } from '../policy.js';
 import type { HeardLine, MiloAction, MiloTool, TurnPolicy, TurnSentence } from '../turn/types.js';
 
@@ -201,6 +201,58 @@ describe('what the model reads', () => {
 
   it('decideInput says how the sentence reached Milo', () => {
     expect(decideInput({ role: 'lead', sentence: said('lead', 'x', 'hold'), lines: [], lastAction: null, state: '' })).toContain('held the button');
+  });
+});
+
+describe('the Decide model and its request on the wire', () => {
+  const saved = { key: process.env['OPENAI_API_KEY'], model: process.env['MILO_DECIDE_MODEL'] };
+  const put = (k: string, v: string | undefined): void => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+  beforeEach(() => { process.env['OPENAI_API_KEY'] = 'sk-test-secret-key'; delete process.env['MILO_DECIDE_MODEL']; });
+  afterEach(() => { _setTextFetch(null); put('OPENAI_API_KEY', saved.key); put('MILO_DECIDE_MODEL', saved.model); });
+  const wire = (name: string) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    _setTextFetch(async (_u, init) => { bodies.push(JSON.parse(init.body)); return { status: 200, text: async () => JSON.stringify({ output: [{ type: 'function_call', name, arguments: '{}' }] }) }; });
+    return bodies;
+  };
+  const reads = { modelReads: async () => () => true };
+
+  it('the default is gpt-5.4-mini; MILO_DECIDE_MODEL names another', async () => {
+    expect(DEFAULT_DECIDE_MODEL).toBe('gpt-5.4-mini');
+    expect(decideModel()).toBe('gpt-5.4-mini');
+    const d = model(pick('time_left'));
+    await turn(said('cara', 'Milo, how long do I have?'), d);
+    expect(d.requests[0]!.model).toBe('gpt-5.4-mini');
+    process.env['MILO_DECIDE_MODEL'] = ' gpt-4.1 ';
+    await turn(said('cara', 'Milo, how long do I have?'), d);
+    expect(d.requests[1]!.model).toBe('gpt-4.1');
+  });
+
+  it("a candidate's sentence goes out once, with store: false, a forced choice and only the tools offered", async () => {
+    const bodies = wire('time_left');
+    const s = said('cara', 'Milo, how many minutes do I have?');
+    const decision = await decide({ call: CALL, policy: policy(), sentence: s, recent: [], lastAction: null }, reads);
+    expect(decision).toMatchObject({ kind: 'tool', tool: 'time_left', reason: 'model' });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]!['store']).toBe(false);
+    expect(bodies[0]).toMatchObject({ model: 'gpt-5.4-mini', tool_choice: 'required', parallel_tool_calls: false, reasoning: { effort: 'none' } });
+    const offered = (bodies[0]!['tools'] as Array<{ name: string }>).map((t) => t.name);
+    expect(offered).toEqual(expect.arrayContaining(['time_left', 'repeat_question', 'cannot_help', 'stay_silent']));
+    expect(offered).not.toContain('pad_write');
+    expect(offered).not.toContain('introduce');
+    expect(offered).not.toContain('leave_call');
+    expect(JSON.stringify(bodies[0])).toContain(s.text);
+  });
+
+  it('a role that answers freely is also sent with store: false', async () => {
+    const bodies = wire('time_left');
+    await decide({ call: CALL, policy: policy({ answersFreely: () => true }), sentence: said('lead', 'Milo, time check?'), recent: [], lastAction: null }, reads);
+    expect(bodies[0]).toMatchObject({ store: false, tool_choice: 'auto' });
+  });
+
+  it('someone with no role sends nothing', async () => {
+    const bodies = wire('time_left');
+    expect((await decide({ call: CALL, policy: policy(), sentence: said('dee', 'Milo, time?'), recent: [], lastAction: null }, reads)).kind).toBe('none');
+    expect(bodies).toHaveLength(0);
   });
 });
 

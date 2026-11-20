@@ -20,12 +20,12 @@ import {
 } from './types.js';
 
 /**
- * The Decide model. Until the judge lane's bake-off (with context, scored by accuracy and error direction) names one, the default is
- * the probe's safest-failing candidate: gpt-5.6-luna scored 42/42 on the first sweep and 123/126 on the ordinary phrasings, and its
- * misses were a refusal and a silence, where gpt-5.4-nano's were a mention answered aloud and an unasked pad write (REBUILD-PROBE.md
- * b and f; REBUILD-REVIEW.md risk 6). MILO_DECIDE_MODEL overrides it.
+ * The Decide model, picked by accuracy and error direction in the judge lane's bake-off (114 decide-layer scenarios, two runs, scored
+ * on the logged line): gpt-5.4-mini chose the right action 98.1% of the time and 96.2% on the hold-out, with no false speech and no
+ * false write. gpt-5.6-luna stayed silent on 17 real requests; gpt-5.4-nano and gpt-4.1-mini retire in 2027. MILO_DECIDE_MODEL
+ * overrides it, so a retired or better model is a config change.
  */
-export const DEFAULT_DECIDE_MODEL = 'gpt-5.6-luna';
+export const DEFAULT_DECIDE_MODEL = 'gpt-5.4-mini';
 /** How long Decide waits for the model before the code's fallback (`cannot_help`). MILO_DECIDE_TIMEOUT_MS overrides it. */
 export const DEFAULT_DECIDE_TIMEOUT_MS = 4000;
 /** The asker's own recent lines sent as context. */

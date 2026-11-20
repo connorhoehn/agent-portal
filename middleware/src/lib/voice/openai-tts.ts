@@ -4,7 +4,10 @@
 // as it arrives and is never kept. The key is read here and goes nowhere else (not in a return value, an error or a log line).
 //
 // Model and voice are config: MILO_TTS_MODEL (default gpt-4o-mini-tts, the probe's fastest first byte, REBUILD-PROBE.md c) and
-// MILO_TTS_VOICE (then VOICE_VOICE, then cedar).
+// MILO_TTS_VOICE (then VOICE_VOICE, then cedar). The default model retires on 2027-01-06: its successor is a MILO_TTS_MODEL value,
+// and any model this module has no special case for gets the plain request (model, voice, input, pcm). The turn reaches this module
+// only through the SpeechBackend interface (./speech.ts), so another provider is another backend.
+import type { SpeechBackend, SpeechOpts, SpeechResult } from './speech.js';
 
 function apiKey(): string | null {
   const v = (process.env['OPENAI_API_KEY'] ?? '').trim();
@@ -31,10 +34,10 @@ let fetchImpl: FetchLike = realFetch;
 export function _setTtsFetch(f: FetchLike | null): void { fetchImpl = f ?? realFetch; }
 
 export class TtsError extends Error {
-  constructor(message: string, readonly kind: 'no-key' | 'aborted' | 'network' | 'status', readonly status?: number) { super(message); }
+  constructor(message: string, readonly kind: 'no-key' | 'aborted' | 'network' | 'status' | 'input-changed', readonly status?: number) { super(message); }
 }
 
-export interface TtsResult { firstAudioMs: number | null; ms: number; bytes: number }
+export type TtsResult = SpeechResult;
 
 /** The request body. `input` is the caller's text, unchanged. */
 export function ttsBody(text: string, opts: { model?: string; voice?: string; instructions?: string } = {}): Record<string, unknown> {
@@ -51,7 +54,7 @@ export function ttsBody(text: string, opts: { model?: string; voice?: string; in
  * Speak `text`: each PCM chunk goes to `onAudio` as it arrives (an odd trailing byte is held so every chunk is whole samples).
  * Throws TtsError; an abort through `signal` throws kind 'aborted'.
  */
-export async function streamSpeech(text: string, opts: { signal?: AbortSignal; onAudio: (pcm: Buffer) => void; now?: () => number; model?: string; voice?: string; instructions?: string }): Promise<TtsResult> {
+export async function streamSpeech(text: string, opts: { signal?: AbortSignal; onInput?: (input: string) => void; onAudio: (pcm: Buffer) => void; now?: () => number; model?: string; voice?: string; instructions?: string }): Promise<TtsResult> {
   const key = apiKey();
   if (!key) throw new TtsError('no OpenAI key configured', 'no-key');
   const now = opts.now ?? (() => performance.now());
@@ -62,11 +65,15 @@ export async function streamSpeech(text: string, opts: { signal?: AbortSignal; o
   opts.signal?.addEventListener('abort', onAbort, { once: true });
   const aborted = (): boolean => controller.signal.aborted;
   try {
+    // Spoken equals logged, at the wire: whatever a model's request shape becomes, the input sent is the caller's text or nothing is.
+    const body = ttsBody(text, opts);
+    if (body['input'] !== text) throw new TtsError('the speech request would not say the given text', 'input-changed');
+    opts.onInput?.(body['input'] as string);
     let res: Awaited<ReturnType<FetchLike>>;
     try {
       res = await fetchImpl(`${apiBase()}/audio/speech`, {
         method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(ttsBody(text, opts)), signal: controller.signal,
+        body: JSON.stringify(body), signal: controller.signal,
       });
     } catch {
       throw aborted() ? new TtsError('speech was stopped', 'aborted') : new TtsError('the speech request failed', 'network');
@@ -97,4 +104,15 @@ export async function streamSpeech(text: string, opts: { signal?: AbortSignal; o
   } finally {
     opts.signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/** OpenAI's speech endpoint as a voice backend, with the configured model and voice. */
+export function openAiSpeech(): SpeechBackend {
+  const model = ttsModel();
+  const voice = ttsVoice();
+  return {
+    id: `openai:${model}:${voice}`,
+    sampleRate: TTS_SAMPLE_RATE,
+    speak: (text: string, opts: SpeechOpts) => streamSpeech(text, { ...opts, model, voice }),
+  };
 }

@@ -6,10 +6,15 @@
 // Pacing is owned here: frames go out at real time and at most 300 ms ahead of what has played, so a long line is never dropped
 // by the relay's 3 s queue, and a stop (talked over, cancelled) can end it within one frame. A line whose hold is refused, or
 // whose TTS fails before any audio, stays posted and is marked unspoken. One line at a time per call: `Mouth` queues them.
+//
+// The voice is a SpeechBackend (voice/speech.ts), chosen by config. Spoken equals logged is checked here, not trusted: audio is
+// played only after the backend has reported the exact text it sent and that text is the logged line, character for character.
+// A backend that changed the words, reported nothing, or runs at another sample rate plays nothing (`not-the-logged-words`,
+// `tts-failed`): the line stays logged and posted, marked unspoken.
 import type { PolicyCall } from '../policy.js';
 import { trace } from '../trace.js';
-import { VOICE_FRAME_BYTES, VOICE_FRAME_MS } from '../voice.js';
-import { streamSpeech, type TtsResult } from '../../voice/openai-tts.js';
+import { VOICE_FRAME_BYTES, VOICE_FRAME_MS, VOICE_SAMPLE_RATE } from '../voice.js';
+import { speechBackend, type SpeechBackend, type SpeechResult } from '../../voice/speech.js';
 import type { SpokenLine, SpokenOutcome, TurnPolicy } from './types.js';
 
 /** How far ahead of real playout frames may be sent. */
@@ -26,12 +31,12 @@ export interface SpeakRequest {
 export interface SpeakResult {
   outcome: SpokenOutcome | 'not-logged';
   rowId: string | null;
-  /** Why it was not heard whole: the hold was refused, TTS failed, or it was stopped. */
-  why?: 'no-hold' | 'tts-failed' | 'stopped';
+  /** Why it was not heard whole: the hold was refused, TTS failed, the voice would have said other words, or it was stopped. */
+  why?: 'no-hold' | 'tts-failed' | 'not-the-logged-words' | 'stopped';
   /** Ms on `now()`: the first frame sent, and when the last frame has played out. */
   playStartMs: number | null;
   playEndMs: number | null;
-  tts: TtsResult | null;
+  tts: SpeechResult | null;
 }
 
 export interface SpeakDeps {
@@ -41,7 +46,8 @@ export interface SpeakDeps {
   clear(): void;
   /** Post the line to the call's chat (awaited before any audio). A failure is traced and the line is still said. */
   post?(line: SpokenLine): Promise<void>;
-  tts?: typeof streamSpeech;
+  /** The voice. Absent: the configured backend (MILO_TTS_BACKEND, MILO_TTS_MODEL, MILO_TTS_VOICE). */
+  voice?: SpeechBackend;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   onPlay?(ev: { kind: 'start' | 'end'; line: SpokenLine; atMs: number }): void;
@@ -63,7 +69,7 @@ export function speakLine(req: SpeakRequest, deps: SpeakDeps): Speaking {
   return { done: run(req, deps, controller.signal), stop };
 }
 
-async function run(req: SpeakRequest, deps: SpeakDeps, signal: AbortSignal): Promise<SpeakResult> {
+async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal): Promise<SpeakResult> {
   const { call, policy, line } = req;
   const now = deps.now ?? (() => performance.now());
   const sleep = deps.sleep ?? realSleep;
@@ -80,7 +86,14 @@ async function run(req: SpeakRequest, deps: SpeakDeps, signal: AbortSignal): Pro
     }
     if (deps.post) await deps.post(line).catch(() => trace('turn.speak', { outcome: 'post-failed', tool: line.tool }));
     if (!hold) return await finish(req, { ...result, why: 'no-hold' }, 'unspoken');
-    if (signal.aborted) return await finish(req, { ...result, why: 'stopped' }, 'unspoken');
+    if (stopSignal.aborted) return await finish(req, { ...result, why: 'stopped' }, 'unspoken');
+
+    // `signal` ends the voice request and the playout: a stop from outside, or the guard below refusing the backend's words.
+    const guard = new AbortController();
+    const signal = AbortSignal.any([stopSignal, guard.signal]);
+    let confirmed = false;
+    let otherWords = false;
+    const refuse = (): void => { otherWords = true; guard.abort(); };
 
     // Paced playout: frame i is sent no earlier than start + i * 100 ms - 300 ms.
     let pending = Buffer.alloc(0);
@@ -112,14 +125,28 @@ async function run(req: SpeakRequest, deps: SpeakDeps, signal: AbortSignal): Pro
     })();
     let ttsFailed = false;
     try {
-      result.tts = await (deps.tts ?? streamSpeech)(line.text, { signal, onAudio: (pcm) => { pending = Buffer.concat([pending, pcm]); nudge(); }, now });
+      const voice = deps.voice ?? speechBackend();
+      if (voice.sampleRate !== VOICE_SAMPLE_RATE) throw new Error('the voice backend is not at the relay sample rate');
+      result.tts = await voice.speak(line.text, {
+        signal, now,
+        onInput: (input) => { if (input === line.text && !otherWords) confirmed = true; else refuse(); },
+        onAudio: (pcm) => { if (!confirmed) { refuse(); return; } pending = Buffer.concat([pending, pcm]); nudge(); },
+      });
+      if (!confirmed) refuse();
     } catch {
       ttsFailed = !signal.aborted;
     }
     ended = true;
-    if (ttsFailed) { pending = Buffer.alloc(0); nudge(); }
+    if (ttsFailed || otherWords) pending = Buffer.alloc(0);
     nudge();
     await pump;
+    if (otherWords && !stopSignal.aborted) {
+      // Audio is accepted only once the words are confirmed, so nothing has played unless the backend confirmed the logged words
+      // and then reported others: that line is cut where it is and marked partly.
+      const heard = result.playStartMs !== null;
+      if (heard) deps.clear();
+      return await finish(req, { ...result, tts: null, why: 'not-the-logged-words' }, heard ? 'partly' : 'unspoken');
+    }
     if (result.playStartMs !== null && !signal.aborted && !ttsFailed) {
       // The line has played out once its last frame's audio has: wait for that before the next line or the follow-up window.
       const end = result.playStartMs + sent * VOICE_FRAME_MS;

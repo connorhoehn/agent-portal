@@ -5,14 +5,14 @@ import { Mouth, speakLine, PLAYOUT_LEAD_MS, type SpeakDeps } from '../turn/speak
 import { VOICE_FRAME_BYTES, VOICE_FRAME_MS } from '../voice.js';
 import type { PolicyCall } from '../policy.js';
 import type { SpokenLine, SpokenOutcome, TurnPolicy } from '../turn/types.js';
-import type { streamSpeech } from '../../voice/openai-tts.js';
+import type { SpeechBackend } from '../../voice/speech.js';
 
 const CALL = { tenant: 't', callId: 'c' } as unknown as PolicyCall;
 const LINE: SpokenLine = { text: 'Design a rate limiter for a public API.', askedBy: 'lead', tool: 'ask', sentenceId: 's1' };
 const msOfAudio = (ms: number): Buffer => Buffer.alloc((ms / VOICE_FRAME_MS) * VOICE_FRAME_BYTES, 1);
 
 /** A fake clock: sleep advances it; the TTS hands over its audio in 1 s chunks, one per tick. */
-function rig(opts: { audioMs?: number; ttsFails?: 'before' | 'after-1s'; hold?: boolean; logThrows?: boolean } = {}) {
+function rig(opts: { audioMs?: number; ttsFails?: 'before' | 'after-1s'; hold?: boolean; logThrows?: boolean; says?: (logged: string) => string | null; sampleRate?: number } = {}) {
   let t = 0;
   const events: string[] = [];
   const pushes: Array<{ at: number; bytes: number; last: boolean }> = [];
@@ -22,9 +22,12 @@ function rig(opts: { audioMs?: number; ttsFails?: 'before' | 'after-1s'; hold?: 
     markSpoken: async (_c, _r, _l, o) => { marks.push(o); },
     holdSpeech: async () => (opts.hold === false ? null : { release: async () => { events.push('release'); } }),
   };
-  const tts = (async (text, o) => {
+  const speak: SpeechBackend['speak'] = async (text, o) => {
     events.push(`tts:${text}`);
     if (opts.ttsFails === 'before') throw new Error('500');
+    // What this voice reports it is about to say: the given text, other words, or (null) nothing at all.
+    const says = opts.says ? opts.says(text) : text;
+    if (says !== null) o.onInput(says);
     const total = opts.audioMs ?? 1000;
     for (let sent = 0; sent < total; sent += 1000) {
       if (o.signal?.aborted) throw new Error('aborted');
@@ -33,12 +36,13 @@ function rig(opts: { audioMs?: number; ttsFails?: 'before' | 'after-1s'; hold?: 
       await Promise.resolve();
     }
     return { firstAudioMs: 500, ms: 600, bytes: 0 };
-  }) as typeof streamSpeech;
+  };
+  const voice: SpeechBackend = { id: 'fake', sampleRate: opts.sampleRate ?? 24_000, speak };
   const deps: SpeakDeps = {
     push: (pcm, last) => { if (!pushes.length) events.push('audio'); pushes.push({ at: t, bytes: pcm.length, last }); },
     clear: () => { events.push('clear'); },
     post: async (l) => { events.push(`post:${l.text}`); },
-    tts, now: () => t, sleep: async (ms) => { t += ms; await Promise.resolve(); },
+    voice, now: () => t, sleep: async (ms) => { t += ms; await Promise.resolve(); },
   };
   return { deps, policy, events, pushes, marks, time: () => t };
 }
@@ -90,6 +94,42 @@ it('a TTS error leaves the line posted, unspoken; a break mid-line is partly', a
   expect(a.events).toContain(`post:${LINE.text}`);
   const b = rig({ ttsFails: 'after-1s', audioMs: 5000 });
   expect((await speakLine({ call: CALL, policy: b.policy, line: LINE }, b.deps).done)).toMatchObject({ outcome: 'partly', why: 'tts-failed' });
+});
+
+it('a voice that would say other words than the logged line plays nothing: posted, unspoken', async () => {
+  for (const says of [(l: string) => l.trim() + ' ', (l: string) => l.slice(0, 10), (l: string) => l.toLowerCase(), () => null]) {
+    const r = rig({ says, audioMs: 3000 });
+    const res = await speakLine({ call: CALL, policy: r.policy, line: LINE }, r.deps).done;
+    expect(res).toMatchObject({ outcome: 'unspoken', why: 'not-the-logged-words', rowId: 'row1', playStartMs: null });
+    expect(r.pushes).toHaveLength(0);
+    expect(r.events).toEqual(expect.arrayContaining([`log:${LINE.text}`, `post:${LINE.text}`, 'release']));
+    expect(r.marks).toEqual(['unspoken']);
+  }
+});
+
+it('the logged words are compared character for character, spaces included', async () => {
+  const line = { ...LINE, text: '  Two  spaces, then a tab\tand "quotes".\n' };
+  const r = rig();
+  expect((await speakLine({ call: CALL, policy: r.policy, line }, r.deps).done).outcome).toBe('spoken');
+  expect(r.events).toContain(`tts:${line.text}`);
+});
+
+it('a voice at another sample rate is not played', async () => {
+  const r = rig({ sampleRate: 16_000 });
+  expect(await speakLine({ call: CALL, policy: r.policy, line: LINE }, r.deps).done).toMatchObject({ outcome: 'unspoken', why: 'tts-failed' });
+  expect(r.pushes).toHaveLength(0);
+  expect(r.events).not.toContain(`tts:${LINE.text}`);
+});
+
+it('with no voice handed in, the configured backend is used; an unknown one leaves the line posted, unspoken', async () => {
+  const r = rig();
+  delete r.deps.voice;
+  process.env['MILO_TTS_BACKEND'] = 'no-such-backend';
+  try {
+    expect(await speakLine({ call: CALL, policy: r.policy, line: LINE }, r.deps).done).toMatchObject({ outcome: 'unspoken', why: 'tts-failed' });
+  } finally { delete process.env['MILO_TTS_BACKEND']; }
+  expect(r.events).toContain(`post:${LINE.text}`);
+  expect(r.pushes).toHaveLength(0);
 });
 
 it('a log that throws: neither posted nor said', async () => {
