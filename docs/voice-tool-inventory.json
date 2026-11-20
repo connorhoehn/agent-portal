@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-20T16:43:23.075Z",
-  "serverHandlerSha": "a59912b7deac715ea3cabdfc3b8ce167e312ed58797bce3ed51ff9308c1a39b4"
+  "capturedAt": "2026-11-20T17:39:11.172Z",
+  "serverHandlerSha": "d566fde47d133903b6d30ff1f41745ecd8e08e849a75c780a4211e519784b2da"
  },
  "summary": {
   "routes": 978,
@@ -2767,7 +2767,7 @@
    "spend": "tools",
    "mapsTo": "server: lib/interviews/milo-tools ask_probe",
    "file": "middleware/src/lib/interviews/milo-tools/ask-probe.ts",
-   "line": 14
+   "line": 15
   }
  ],
  "navigatePages": [
