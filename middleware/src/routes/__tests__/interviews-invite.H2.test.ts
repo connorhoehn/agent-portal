@@ -101,6 +101,11 @@ async function issue(id = IV): Promise<string> {
   return String(res.body.linkPath).split('#')[1]!;
 }
 
+// The date is pinned: the interviews seed places interviews on workdays, so the seed's "tomorrow" depends on the weekday the suite runs (O-049).
+const PINNED_NOW = new Date('2026-11-18T10:00:00Z'); // a Wednesday
+beforeAll(() => { jest.useFakeTimers({ now: PINNED_NOW, doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'queueMicrotask', 'performance', 'hrtime', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback'] }); });
+afterAll(() => { jest.useRealTimers(); });
+
 beforeEach(() => {
   (listUsers as jest.Mock).mockResolvedValue(USERS);
   delete process.env['INTERVIEWS_ENABLED'];
@@ -206,6 +211,7 @@ describe('a reschedule moves the link\'s expiry, through the routes (O-049)', ()
   });
 
   it('moving it later keeps the link alive past where it would have ended, never past the ceiling', async () => {
+    await moveTime(minuteFromNow(DAY)); // start from tomorrow whatever the seed's workday calendar says (a Friday's seed is Monday)
     const token = await issue();
     const at = (offset: number) => { setInterviewsClockOffset(offset, true); return exchange(token); };
     expect((await at(3 * DAY)).status).toBe(404);
