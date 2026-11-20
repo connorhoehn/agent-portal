@@ -5,6 +5,7 @@ import { candidateQuestion } from '../../answer-key.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps } from '../../speak/index.js';
 import type { Interview, KitQuestion } from '../../types.js';
 import { resetMiloTools, runMiloTool, setMiloToolDeps, INTERVIEW_TOOLS, sessionToolsFor } from '../index.js';
+import { twitterBoard } from './twitter-board.js';
 import { answerKeyText, boardRegion, checkProbe, PROBE_INTERVIEWERS_ONLY, PROBE_NONE, probeRequest, probeOf, type ProbeInput } from '../probe.js';
 
 const IV = 'iv-probe';
@@ -36,6 +37,7 @@ let interview: Interview;
 let said: MemorySaidStore;
 let seen: ProbeInput[];
 let write: (input: ProbeInput) => string | null;
+let baseDeps: Parameters<typeof setMiloToolDeps>[0] = null;
 
 beforeEach(() => {
   interview = {
@@ -47,7 +49,7 @@ beforeEach(() => {
   write = () => 'How does the fan-out queue behave when a write burst arrives?';
   let ids = 0;
   setSpeakDeps({ now: () => Date.parse('2026-11-20T10:00:00Z'), newId: () => `said-${++ids}` });
-  setMiloToolDeps({
+  setMiloToolDeps(baseDeps = {
     interview: async (id) => (id === IV ? interview : null),
     guestOf: async (userId, id) => userId === GUEST && id === IV,
     questions: async () => [candidateQuestion(FEED)],
@@ -103,6 +105,18 @@ describe('what the question is written from', () => {
     expect(input.board).toEqual({ frame: 'Write path', labels: ['Kafka fan-out queue', 'Post API'], elsewhere: ['Read path'] });
     expect(input.questions.map((q) => q.prompt)).toEqual([FEED.prompt]);
     expect(input.heard.map((l) => l.side)).toEqual(['candidate', 'panel']);
+  });
+
+  it('the whole board as text: the candidate\'s components and arrows by label (the kit\'s template left out), in the request', async () => {
+    const tw = twitterBoard();
+    setMiloToolDeps({ ...baseDeps, board: async () => tw.elements, questions: async () => [candidateQuestion({ ...FEED, board: { name: 'Master template', elements: tw.elements.filter((e) => tw.template.has(String(e['id']))) } } as KitQuestion)] });
+    await runMiloTool(IV, LEAD, 'ask_probe', { topic: 'read latency' });
+    const outline = seen[0]!.outline!;
+    expect(outline).toContain('<arrow from="Timeline service" to="Timeline cache (Redis)" label="reads timeline"/>');
+    expect(outline).not.toMatch(/Web client|Click selects/);
+    const req = probeRequest(seen[0]!);
+    expect(req.input).toContain('Timeline cache (Redis)');
+    expect(req.instructions).toMatch(/name their own components and arrows/);
   });
 
   it('the request to the model carries no answer key: not the provided design, the design answers or the red flags', async () => {

@@ -16,7 +16,7 @@ import { boardSnapshotStore } from '../board/snapshots.js';
 import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type RoundSurface } from '../types.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 import type { PadWriterChoice, PadWriterInput } from './writer.js';
-import type { HeardLine, ProbeInput } from './probe.js';
+import { PROBE_HEARD_LINES, PROBE_HEARD_MS, type HeardLine, type ProbeInput } from './probe.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
 
@@ -111,7 +111,9 @@ async function lastHeard(interview: Interview): Promise<HeardLine[]> {
   for (let page = 0; page < 10; page++) {
     const t = await assistantLiveTranscript({ id: interview.id, callId: interview.callId }, after);
     if (!t || t.lastSeq <= after) break;
-    if (t.lines.length) lines = t.lines.slice(-8).map((l) => ({ side: sideOf(l.userId), text: l.text }));
+    // The last two minutes of the newest page (at most PROBE_HEARD_LINES): enough of the talk for a probe about it.
+    const newest = t.lines.at(-1)?.atMs ?? 0;
+    if (t.lines.length) lines = t.lines.filter((l) => l.atMs >= newest - PROBE_HEARD_MS).slice(-PROBE_HEARD_LINES).map((l) => ({ side: sideOf(l.userId), text: l.text }));
     after = t.lastSeq;
   }
   return lines;

@@ -9,6 +9,7 @@ import type { SaidSource } from '../speak/store.js';
 import type { PadLanguage } from '../types.js';
 import { hasPad } from './context.js';
 import { deps, standingOf, type MiloInterview } from './deps.js';
+import { boardOutline } from './board-outline.js';
 import { boardLabels, boardRegion, checkProbe, PROBE_HEARD_LINES, PROBE_INTERVIEWERS_ONLY, PROBE_NONE, PROBE_TOPIC_MAX, type ProbeInput } from './probe.js';
 
 export const ASK_PROBE: ServerToolDef<MiloInterview, SaidSource> = {
@@ -41,7 +42,12 @@ export const ASK_PROBE: ServerToolDef<MiloInterview, SaidSource> = {
     let pad: { text: string; language: PadLanguage } | null = null;
     if (hasPad(interview)) await d.write(interview.id, ({ text, language }) => { pad = { text, language }; return null; }).catch(() => null);
     const seen = pad as { text: string; language: PadLanguage } | null;
-    const input: ProbeInput = { topic, questions, surface: interview.surface, board: elements ? boardRegion(elements) : null, pad: seen, heard: heard.slice(-PROBE_HEARD_LINES) };
+    // The kit's starting board is left out of the outline: what is described is what the candidate drew.
+    const template = new Set(questions.flatMap((q) => (q.board?.elements ?? []).map((e) => String((e as Record<string, unknown>)['id']))));
+    const input: ProbeInput = {
+      topic, questions, surface: interview.surface, board: elements ? boardRegion(elements) : null, outline: elements ? boardOutline(elements, { template }) : null,
+      pad: seen, heard: heard.slice(-PROBE_HEARD_LINES),
+    };
     const written = await d.prober(interview, input).catch(() => null);
     const visible = [
       topic, ...questions.flatMap((q) => [q.prompt, ...q.followUps, ...(q.clarifying ?? [])]), ...(elements ? boardLabels(elements) : []),
