@@ -76,7 +76,10 @@ miloRouter.get('/interviews/:id/milo-notes', asyncHandler(async (req, res) => {
   const p = await panelSide(req);
   if (!p || p.ref.interview.state !== 'live' || !seatOf(p.ref.interview, p.userId)) throw new NotFoundError(NOTHING_HERE);
   res.setHeader('Cache-Control', 'no-store');
-  res.json(await notesFor(p.ref));
+  // The probing questions an interviewer had Milo ask the candidate (milo-tools/ask-probe.ts), newest last, for the Milo tab.
+  const [out, rows] = await Promise.all([notesFor(p.ref), saidStore().list(p.ref.interview.id)]);
+  const probes = rows.filter((r) => r.source === 'probe').map((r) => ({ id: r.id, text: r.text, at: r.saidAt, spoken: r.spoken }));
+  res.json({ notes: { ...out.notes, probes } });
 }));
 
 miloRouter.post('/interviews/:id/milo-ask', asyncHandler(async (req, res) => {

@@ -331,7 +331,9 @@ export interface LiveTranscriptRead { state: 'on' | 'off'; off: string | null; l
 export interface MiloAskedItem { text: string; questionId: string | null; by: 'panel' | 'milo' }
 export interface MiloCompetencyNotes { id: string; name: string; asked: MiloAskedItem[]; toAsk: Array<{ questionId: string; text: string }> }
 export interface MiloTimeCheck { startedAt: string | null; minutesIn: number | null; minutes: number; minutesLeft: number | null; line: string }
-export interface MiloNotes { competencies: MiloCompetencyNotes[]; time: MiloTimeCheck }
+/** A probing question an interviewer had Milo ask the candidate; `spoken` false: it reached the chat only. */
+export interface MiloProbe { id: string; text: string; at: string; spoken: boolean }
+export interface MiloNotes { competencies: MiloCompetencyNotes[]; time: MiloTimeCheck; probes?: MiloProbe[] }
 export interface MiloAskSource { seq: number; quote: string; speaker: string; at: string }
 export interface MiloAnswer { id: string; question: string; text: string; sources: MiloAskSource[]; askedAt: string }
 export interface MiloAskBody {

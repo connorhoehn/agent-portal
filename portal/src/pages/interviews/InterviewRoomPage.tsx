@@ -467,6 +467,12 @@ function MiloNotesSection({ notes }: { notes: MiloNotes | null }) {
           <Stack as="ul" gap="xs">{c.toAsk.map((q) => <T as="li" key={q.questionId} size="sm" tone="secondary" wrap>{q.text}</T>)}</Stack>
         </Stack>}
       </Stack>)}
+      {(notes.probes?.length ?? 0) > 0 && <Stack gap="xs" data-testid="interview-room-milo-probes">
+        <T size="xs" weight="medium" tone="secondary">Probes Milo asked the candidate</T>
+        <Stack as="ul" gap="xs">
+          {notes.probes!.map((p) => <T as="li" key={p.id} size="sm" wrap>{p.spoken ? p.text : `${p.text} (in the chat only)`}</T>)}
+        </Stack>
+      </Stack>}
     </Stack>
   </PageSection>;
 }
