@@ -13,6 +13,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node node_modules/.bin/jest --config jest.config.cjs",
+    "milo-judge": "tsx ../scripts/milo-judge/judge.mts",
+    "milo-judge:bakeoff": "tsx ../scripts/milo-judge/bakeoff.mts",
+    "milo-judge:test": "tsx --test ../scripts/milo-judge/judge.test.mts",
     "voice-gate:scripted": "tsx --test ../scripts/voice-harness/gate.test.mts",
     "voice-gate": "tsx ../scripts/voice-harness/gate.mts"
   },

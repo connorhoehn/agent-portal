@@ -1,0 +1,3991 @@
+{
+ "_readme": "HOLD-OUT CORPUS. BUILDERS: DO NOT READ, GREP, OR TUNE AGAINST THIS FILE. Only scripts/milo-judge/judge.mts reads it, and it prints totals only. Reading it makes the gate number meaningless. Written by a different model than any Decide candidate, with phrasings kept apart from dev.json.",
+ "scenarios": [
+  {
+   "id": "hold-001",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, what is our time looking like?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-002",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Where are we on time, Milo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-003",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo how many minutes remain?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-004",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Quick one Milo, how much longer do we have?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-005",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, tell us the time remaining."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-006",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo do we still have time?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-007",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, what is our time looking like?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-008",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, what is our time looking like?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-009",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Where are we on time, Milo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-010",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "time_left",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Where are we on time, Milo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-011",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, sorry, the question once more?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-012",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "What was the problem, Milo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-013",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, can you read the question back to me?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-014",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, I did not catch the task, say it again."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-015",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question",
+    "lead"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, sorry, the question once more?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-016",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question",
+    "lead"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "What was the problem, Milo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-017",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "repeat_question",
+    "no-question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": null
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, sorry, the question once more?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-018",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "introduce"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, introduce yourself to Alex, please."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "introduce",
+     "words": "@intro"
+    }
+   ]
+  },
+  {
+   "id": "hold-019",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "introduce"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, go ahead and say hi to the candidate."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "introduce",
+     "words": "@intro"
+    }
+   ]
+  },
+  {
+   "id": "hold-020",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, can you jot a test for the empty input on the pad?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "empty"
+    }
+   ]
+  },
+  {
+   "id": "hold-021",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, drop a note on the pad: ask about memory."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "memory"
+    }
+   ]
+  },
+  {
+   "id": "hold-022",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, create a helper named swap on the pad."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "swap"
+    }
+   ]
+  },
+  {
+   "id": "hold-023",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, can you jot a test for the empty input on the pad?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "pad_write",
+     "argHas": "empty"
+    }
+   ]
+  },
+  {
+   "id": "hold-024",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, drop a note on the pad: ask about memory."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "pad_write",
+     "argHas": "memory"
+    }
+   ]
+  },
+  {
+   "id": "hold-025",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pad_write",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, create a helper named swap on the pad."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "pad_write",
+     "argHas": "swap"
+    }
+   ]
+  },
+  {
+   "id": "hold-026",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pause_listening"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, hold off listening for now."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pause_listening"
+    }
+   ]
+  },
+  {
+   "id": "hold-027",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "pause_listening"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, go quiet please."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pause_listening"
+    }
+   ]
+  },
+  {
+   "id": "hold-028",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "leave_call"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, we are done, you can go."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "leave_call"
+    }
+   ]
+  },
+  {
+   "id": "hold-029",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "leave_call"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, hang up please."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "leave_call"
+    }
+   ]
+  },
+  {
+   "id": "hold-030",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "cancel"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, write a test for the empty list."
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, forget that."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "empty"
+    },
+    {
+     "who": "dana",
+     "action": "cancel"
+    }
+   ]
+  },
+  {
+   "id": "hold-031",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "cancel"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, write a test for the empty list."
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Ignore that request, Milo."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "empty"
+    },
+    {
+     "who": "dana",
+     "action": "cancel"
+    }
+   ]
+  },
+  {
+   "id": "hold-032",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, just tell me if this is correct."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-033",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, what should I do next?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-034",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, can you code the loop for me?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-035",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, give me the solution outline."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-036",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, stop listening for a minute."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-037",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, tell the interviewers I did well."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "hold-038",
+   "layer": "decide",
+   "tags": [
+    "about-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo gave the wrong time once, I remember that."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-039",
+   "layer": "decide",
+   "tags": [
+    "about-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "I told Milo to stop earlier, so maybe it is off."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-040",
+   "layer": "decide",
+   "tags": [
+    "about-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Is Milo the thing that keeps the clock?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-041",
+   "layer": "decide",
+   "tags": [
+    "about-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "The notes from Milo came through fine."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-042",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo gave the wrong time once, I remember that."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-043",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo gave the wrong time once, I remember that."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-044",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "I told Milo to stop earlier, so maybe it is off."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-045",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "I told Milo to stop earlier, so maybe it is off."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-046",
+   "layer": "decide",
+   "tags": [
+    "chatter"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "What languages are you most comfortable with?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-047",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "What languages are you most comfortable with?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-048",
+   "layer": "decide",
+   "tags": [
+    "chatter"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Right, so we have about ten minutes before the debrief."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-049",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Right, so we have about ten minutes before the debrief."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-050",
+   "layer": "decide",
+   "tags": [
+    "chatter"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Sorry, could you say that again? My audio dropped."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-051",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Sorry, could you say that again? My audio dropped."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-052",
+   "layer": "decide",
+   "tags": [
+    "chatter"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "I will start a new tab for the next round."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-053",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "I will start a new tab for the next round."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-054",
+   "layer": "decide",
+   "tags": [
+    "chatter"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Go on, I am following you."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-055",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Go on, I am following you."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-056",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "What languages are you most comfortable with?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-057",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Right, so we have about ten minutes before the debrief."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-058",
+   "layer": "decide",
+   "tags": [
+    "chatter",
+    "panellist"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Sorry, could you say that again? My audio dropped."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-059",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "What about after that?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    },
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-060",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "One more time please."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    },
+    {
+     "who": "dana",
+     "action": "repeat_question"
+    }
+   ]
+  },
+  {
+   "id": "hold-061",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, write a test for the empty list."
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Put that on the pad as a note, thanks."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "empty"
+    },
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "note"
+    }
+   ]
+  },
+  {
+   "id": "hold-062",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Please hold off on listening."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    },
+    {
+     "who": "dana",
+     "action": "pause_listening"
+    }
+   ]
+  },
+  {
+   "id": "hold-063",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "I see, that is about what I guessed."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-064",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "I see, that is about what I guessed."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-065",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Alex, are you comfortable with that?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-066",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Alex, are you comfortable with that?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-067",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Right. Moving on to the next part, then."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-068",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "not-for-milo",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Right. Moving on to the next part, then."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-069",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "And the question again?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    },
+    {
+     "who": "alex",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-070",
+   "layer": "decide",
+   "tags": [
+    "follow-up",
+    "candidate"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 50000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how much time is left?"
+    },
+    {
+     "atMs": 57000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Can you finish it for me?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-071",
+   "layer": "decide",
+   "tags": [
+    "misheard-name",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Ilo, how much time is left?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-072",
+   "layer": "decide",
+   "tags": [
+    "misheard-name",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Could you repeat the question, Mylo?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-073",
+   "layer": "decide",
+   "tags": [
+    "hold",
+    "time_left"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 58000,
+     "kind": "hold",
+     "who": "dana",
+     "down": true
+    },
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Time left?"
+    },
+    {
+     "atMs": 63000,
+     "kind": "hold",
+     "who": "dana",
+     "down": false
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-074",
+   "layer": "decide",
+   "tags": [
+    "hold",
+    "repeat_question"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 58000,
+     "kind": "hold",
+     "who": "dana",
+     "down": true
+    },
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Say the question again."
+    },
+    {
+     "atMs": 63000,
+     "kind": "hold",
+     "who": "dana",
+     "down": false
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "repeat_question",
+     "words": "@question"
+    }
+   ]
+  },
+  {
+   "id": "hold-075",
+   "layer": "decide",
+   "tags": [
+    "hold",
+    "not-for-milo"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 58000,
+     "kind": "hold",
+     "who": "dana",
+     "down": true
+    },
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "I will mute while I grab some water."
+    },
+    {
+     "atMs": 63000,
+     "kind": "hold",
+     "who": "dana",
+     "down": false
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ]
+  },
+  {
+   "id": "hold-076",
+   "layer": "decide",
+   "tags": [
+    "declined"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate",
+     "declined": true
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, give me a hint on the loop."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ],
+   "noModelCall": true
+  },
+  {
+   "id": "hold-077",
+   "layer": "decide",
+   "tags": [
+    "declined"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate",
+     "declined": true
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how many minutes remain?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "silent"
+    }
+   ],
+   "noModelCall": true
+  },
+  {
+   "id": "hold-078",
+   "layer": "floor",
+   "tags": [
+    "split-request"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, would you"
+    },
+    {
+     "atMs": 61500,
+     "kind": "onset",
+     "who": "dana"
+    },
+    {
+     "atMs": 63200,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "add a test for the empty input on the pad"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pad_write",
+     "argHas": "empty"
+    }
+   ]
+  },
+  {
+   "id": "hold-079",
+   "layer": "floor",
+   "tags": [
+    "split-request"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, please"
+    },
+    {
+     "atMs": 61500,
+     "kind": "onset",
+     "who": "dana"
+    },
+    {
+     "atMs": 63200,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "leave the call"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "leave_call"
+    }
+   ]
+  },
+  {
+   "id": "hold-080",
+   "layer": "floor",
+   "tags": [
+    "split-request"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, how long"
+    },
+    {
+     "atMs": 61400,
+     "kind": "onset",
+     "who": "alex"
+    },
+    {
+     "atMs": 63000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "do we have?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-081",
+   "layer": "floor",
+   "tags": [
+    "two-lane"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, how many minutes remain?"
+    },
+    {
+     "atMs": 60250,
+     "kind": "echo",
+     "who": "sam",
+     "text": "Milo, how many minutes remain?",
+     "of": "other-lane"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  },
+  {
+   "id": "hold-082",
+   "layer": "floor",
+   "tags": [
+    "echo",
+    "milo-own-line"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, what is our time looking like?"
+    },
+    {
+     "atMs": 64500,
+     "kind": "echo",
+     "who": "alex",
+     "text": "About 25 minutes are left in this round.",
+     "of": "milo-last-line"
+    },
+    {
+     "atMs": 65200,
+     "kind": "echo",
+     "who": "dana",
+     "text": "I can repeat the question or tell you how much time is left.",
+     "of": "milo-last-line"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ],
+   "note": "Milo hears its own words on a mic; nothing else may be logged"
+  },
+  {
+   "id": "hold-083",
+   "layer": "floor",
+   "tags": [
+    "pause-and-leave"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, hold off listening for now."
+    },
+    {
+     "atMs": 80000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, are you there?"
+    },
+    {
+     "atMs": 90000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, we are done, you can go."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pause_listening"
+    }
+   ],
+   "note": "paused: later sentences, including a leave request, get nothing until resumed"
+  },
+  {
+   "id": "hold-084",
+   "layer": "floor",
+   "tags": [
+    "pause-and-leave",
+    "resume"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, hold off listening for now."
+    },
+    {
+     "atMs": 68000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, resume listening."
+    },
+    {
+     "atMs": 80000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, what is our time looking like?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "pause_listening"
+    },
+    {
+     "who": "dana",
+     "action": "time_left",
+     "words": "@time_left"
+    }
+   ]
+  }
+ ]
+}
