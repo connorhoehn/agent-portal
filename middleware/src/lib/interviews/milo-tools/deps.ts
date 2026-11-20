@@ -14,6 +14,7 @@ import { roundSurface } from '../kit.js';
 import { candidateQuestion, type CandidateQuestion } from '../answer-key.js';
 import { INTERVIEWS_TENANT, type Interview, type RoundSurface } from '../types.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
+import type { PadWriterChoice, PadWriterInput } from './writer.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
 
@@ -71,6 +72,8 @@ export interface MiloToolDeps {
   write: (interviewId: string, plan: MiloPadPlan) => Promise<MiloPadWriteResult>;
   padLog: (interviewId: string, events: readonly PadEventIn[], at: Date) => Promise<number>;
   judge: (interviewId: string, leadId: string, input: VerdictInput) => Promise<'helper' | 'solution'>;
+  /** One pad request, in the asker's words, written as one pad tool's call (writer.ts); null: nothing Milo adds. */
+  writer: (interview: Interview, input: PadWriterInput) => Promise<PadWriterChoice | null>;
   now: () => number;
   newId: () => string;
 }
@@ -100,6 +103,8 @@ const DEFAULTS: MiloToolDeps = {
   write: writeIntoPad,
   padLog: (id, events, at) => runWithDbTenant(INTERVIEWS_TENANT, () => appendPadEvents(id, { id: MILO_WRITER_ID, side: 'milo' }, events, at)),
   judge: judgeHelper,
+  // Loaded when first asked: writer.ts imports the pad tools, which import this module.
+  writer: async (interview, input) => (await import('./writer.js')).writePadRequest(interview, input),
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
 };

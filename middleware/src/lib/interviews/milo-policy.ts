@@ -49,6 +49,9 @@
 //                         (repeat / time / MILO_CAN_DO, from the server, logged; their audio never reaches the model); anyone else,
 //                         and everyone once the interview is not live, nothing. Held answers (time left, repeat, the lead's
 //                         introduce) run on the server for routed people too. The session's rules forbid solving or hinting.
+//   the turn contract     (milo-turn.ts) roleOf, toolsFor, answersFreely, instructions, cannotHelp, context, mayHold, mayUseCore,
+//                         logSpoken, markSpoken, holdSpeech: what the turn owner asks of an interview call. Nothing reads them
+//                         until the turn owner serves interviews.
 import { randomBytes } from 'node:crypto';
 import { registerMeetingAssistantPolicy, type HandsfreeFamily, type MeetingAssistantPolicy, type PolicyCall, type ReadAccess } from '../meeting-assistant/policy.js';
 import { interviewsEnabled } from './flag.js';
@@ -69,6 +72,7 @@ import { onPadEventsAppended } from './pad/log/service.js';
 import { INTERVIEW_SCRIPT_RULES } from './milo-tools/scripted.js';
 import { INTERVIEW_FAMILY, interviewOfLobby } from './milo-tools/call.js';
 import { phraseTool, runServerTool, serverToolPolicy } from '../meeting-assistant/server-tools.js';
+import { interviewsTurnPolicy } from './milo-turn.js';
 
 export { INTERVIEW_FAMILY, interviewOfLobby } from './milo-tools/call.js';
 export { PAD_TOOL_ARGS_BYTES } from './milo-tools/schema.js';
@@ -152,6 +156,13 @@ export async function candidateTranscribed(interviewId: string): Promise<boolean
   const source = consentSource ?? storedAnswers;
   const answer = await source(interviewId).catch(() => null);
   return answer?.transcription === true;
+}
+
+/** Did the candidate accept the transcript and Milo (Milo's turn may hear and answer them)? No answer and a failing read are no. */
+export async function candidateAcceptedMilo(interviewId: string): Promise<boolean> {
+  const source = consentSource ?? storedAnswers;
+  const answer = await source(interviewId).catch(() => null);
+  return answer?.transcription === true && answer.milo === true;
 }
 
 const NONE: ReadAccess = Object.freeze({ record: false, transcript: false, minutes: false });
@@ -263,6 +274,8 @@ export const INTERVIEWS_MILO_POLICY: MeetingAssistantPolicy = Object.freeze<Meet
   listsMeeting: (_minutes, userId) => !isGuestId(userId),
   relaysLiveSpeech: () => false,
   handsfree: interviewHandsfree,
+  // The turn owner's contract for an interview call (milo-turn.ts).
+  ...interviewsTurnPolicy(candidateAcceptedMilo),
   answerFromHeldText: async (call, request) => {
     const interviewId = interviewOfLobby(call.lobby);
     const interview = interviewId ? await interviewById(interviewId).catch(() => null) : null;
