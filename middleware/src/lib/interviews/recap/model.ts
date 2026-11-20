@@ -63,6 +63,15 @@ export class BedrockRecapModel implements RecapModel {
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 const opening = (s: string): string => words(s).split(' ').slice(0, 6).join(' ');
+/**
+ * How a question is named aloud: its first six words, and, for a prompt with a title before a colon ("Design Twitter: people
+ * post…", a board round's question, which is on the board and named rather than read), the title of two to six words.
+ */
+const openingsOfText = (s: string): string[] => {
+  const title = s.includes(':') ? words(s.slice(0, s.indexOf(':'))) : '';
+  const n = title ? title.split(' ').length : 0;
+  return [opening(s), ...(n >= 2 && n <= 6 ? [title] : [])].filter((o) => o.length > 0);
+};
 
 function quoteOf(text: string): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -82,8 +91,8 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
   const competencies: { id: string; evidence: { text: string; seq: number; quote: string }[] }[] = [];
   const notCovered: string[] = [];
   const openingsOf = (competencyId: string | null) => input.questions.filter((q) => competencyId === null || q.competencyId === competencyId)
-    .map((q) => opening(q.text)).filter((o) => o.length > 0);
-  const opens = (n: number, openings: readonly string[]) => input.lines[n]!.side === 'panel' && openings.some((o) => words(input.lines[n]!.text).includes(o));
+    .flatMap((q) => openingsOfText(q.text));
+  const opens = (n: number, openings: readonly string[]) => input.lines[n]!.side === 'panel' && openings.some((o) => ` ${words(input.lines[n]!.text)} `.includes(` ${o} `));
   const anyQuestion = openingsOf(null);
   for (const c of input.competencies) {
     const own = openingsOf(c.id);

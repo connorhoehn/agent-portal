@@ -83,6 +83,28 @@ describe('the scripted recap', () => {
     expect(out.notCovered).toEqual([]);
   });
 
+  it('a board round: the interviewer names the question by its title ("design Twitter"), not word for word; Milo\'s probe stays in its window', () => {
+    const input: RecapInput = {
+      competencies: [
+        { id: 'system-design', name: 'System design', lookFor: 'Designs for scale.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } },
+        { id: 'communication', name: 'Communication', lookFor: 'Explains as they go.', anchors: { 1: 'a', 2: 'b', 3: 'c', 4: 'd' } },
+      ],
+      questions: [{ text: 'Design Twitter: people post short messages, follow other people and read a home timeline of the posts of the people they follow.', competencyId: 'system-design', how: 'chosen' }],
+      lines: [
+        { seq: 1, side: 'panel', text: 'Hi Mateo, welcome back! The whiteboard is yours.' },
+        { seq: 2, side: 'panel', text: "It's a classic: design Twitter." },
+        { seq: 3, side: 'candidate', text: 'Is it read heavy or write heavy, and how fresh must the timeline be?' },
+        { seq: 4, side: 'candidate', text: 'A post goes to the post service, then the fan-out writes it into each follower timeline in Redis.' },
+        { seq: -1, side: 'panel', text: 'What happens to the timeline cache when a celebrity posts?' },
+        { seq: 5, side: 'candidate', text: 'For celebrities I would skip fan-out and merge their posts at read time.' },
+      ],
+    };
+    const out = scriptedRecap(input);
+    expect(out.notCovered).toEqual([]);
+    expect(out.competencies.map((c) => c.id)).toEqual(['system-design', 'communication']);
+    expect(out.competencies[0]!.evidence.map((e) => e.seq)).toEqual(expect.arrayContaining([4, 5]));
+  });
+
   it('passes its own parse, and says nothing when no asked question was heard', async () => {
     const raw = (await new ScriptedRecapModel().write(FIXED_INPUT)).raw;
     expect(parseRecapAnswer(raw, { competencyIds: ['communication', 'collaboration'], lines: FIXED_INPUT.lines })).toMatchObject({ ok: true, droppedClaims: 0 });

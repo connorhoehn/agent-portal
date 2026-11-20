@@ -119,7 +119,11 @@ describe('a question Milo asked aloud (Have Milo ask): its answer is evidence, u
       await log.append(row('said-3', 45, { kind: 'answer', source: 'repeat' }));
       await log.append(row('said-4', 47, { kind: 'answer', source: 'repeat', posted: false }));
       await log.append(row('said-5', 50, { kind: 'answer', source: 'time', text: 'About 5 minutes are left in this round.' }));
-      expect(await saidInCall(IV)).toEqual([{ text: slip().prompt, saidAt: at(30) }, { text: slip().prompt, saidAt: at(45) }]);
+      // A probe Milo asked on the turn path (logged as the tool's answer, source 'probe') is a question asked aloud.
+      await log.append(row('said-6', 55, { kind: 'answer', source: 'probe', text: 'What happens to the timeline cache when a celebrity posts?' }));
+      await log.append(row('said-7', 57, { kind: 'answer', source: 'probe', posted: false, text: 'Never reached the call?' }));
+      expect(await saidInCall(IV)).toEqual([{ text: slip().prompt, saidAt: at(30) }, { text: slip().prompt, saidAt: at(45) },
+        { text: 'What happens to the timeline cache when a celebrity posts?', saidAt: at(55) }]);
     } finally {
       setSaidStore(null);
     }

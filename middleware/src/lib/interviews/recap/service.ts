@@ -84,7 +84,8 @@ export interface SaidQuestion { text: string; saidAt: string }
 /** The said log's questions (and repeats) that reached the call: a row whose words were never posted was asked of nobody. */
 export const saidInCall: RecapDeps['said'] = async (interviewId) => {
   const rows = await runWithDbTenant(INTERVIEWS_TENANT, () => saidStore().list(interviewId));
-  return rows.filter((r) => r.posted && (r.kind === 'question' || r.source === 'repeat')).map((r) => ({ text: r.text, saidAt: r.saidAt }));
+  // A probe (the turn path's ask_probe, logged as the tool's answer) is a question Milo asked aloud too.
+  return rows.filter((r) => r.posted && (r.kind === 'question' || r.source === 'repeat' || r.source === 'probe')).map((r) => ({ text: r.text, saidAt: r.saidAt }));
 };
 
 const DEFAULTS: RecapDeps = {
