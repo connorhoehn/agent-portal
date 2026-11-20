@@ -289,6 +289,98 @@
   "h41n": [
    "hugo",
    "Milo doesn't have enough evidence for a call yet, so that one's on me."
+  ],
+  "n01": [
+   "hugo",
+   "Welcome, Mateo! This is your coding round. We've got about ten minutes, and the pad is yours."
+  ],
+  "n02": [
+   "cand",
+   "Sounds great, thanks Hugo."
+  ],
+  "n03": [
+   "hugo",
+   "If you'd like help, just say 'Hey Milo'. Milo can add test cases for you to speed things up."
+  ],
+  "n04": [
+   "hugo",
+   "Please introduce yourself to Mateo."
+  ],
+  "n05": [
+   "hugo",
+   "Today's question is Two Sum. Pick whatever language you like, and I'll put it in the pad."
+  ],
+  "n06": [
+   "cand",
+   "Python, please."
+  ],
+  "n22": [
+   "hugo",
+   "Nice, that looks clean."
+  ],
+  "n07": [
+   "cand",
+   "Hey Milo, can you add a few test cases for an empty array and duplicates?"
+  ],
+  "n08": [
+   "hugo",
+   "Milo, go ahead."
+  ],
+  "n20": [
+   "hugo",
+   "While that comes in, why a dictionary rather than a list?"
+  ],
+  "n21": [
+   "cand",
+   "Lookups are constant time, so I can check for the partner in one step."
+  ],
+  "n09": [
+   "cand",
+   "There they are. An empty array and a duplicate case."
+  ],
+  "n10": [
+   "hugo",
+   "Hey Milo, can you ask a probe about the time complexity of this solution?"
+  ],
+  "n11": [
+   "hugo",
+   "Can you read out the question once more?"
+  ],
+  "n12": [
+   "hugo",
+   "Okay, I'll read it. Given an array of integers and a target, return the indices of the two numbers that add up to the target."
+  ],
+  "n13": [
+   "cand",
+   "Milo's test cases saved me time."
+  ],
+  "n14": [
+   "hugo",
+   "Milo, can you ask Mateo that probe once more?"
+  ],
+  "x01": [
+   "hugo",
+   "Okay, thanks, that's enough."
+  ],
+  "n19": [
+   "cand",
+   "Sure, I'll keep going."
+  ],
+  "n15": [
+   "hugo",
+   "Alright, we're close to the end."
+  ],
+  "n16": [
+   "cand",
+   "Roughly how much time is left, Milo?"
+  ],
+  "n17": [
+   "hugo",
+   "That's a wrap. Great work today, Mateo, thanks for joining."
+  ],
+  "n18": [
+   "cand",
+   "Thanks, Hugo. Bye!"
   ]
  }
 }

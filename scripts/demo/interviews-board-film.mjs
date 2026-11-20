@@ -39,6 +39,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { miloTurns } from './lib/milo-turns.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
@@ -288,128 +289,12 @@ async function nearEnd(id, leadMs) {
 // ── Milo (--milo): his voice as the candidate's browser receives it, his words in the call chat, the coach's footer deck ──
 let callId = null;
 const deckWatch = { stop: false };
-const voiceLog = MILO ? fs.createWriteStream(path.join(OUT, 'assistant-voice.jsonl')) : null;
-const milo = { frames: 0, utterances: 0, cur: null, lastStartMs: 0 };
-timeline.milo = [];
-function keepMiloVoice(page) {
-  page.on('websocket', (ws) => ws.on('framereceived', ({ payload }) => {
-    if (typeof payload !== 'string' || !payload.includes('assistant-audio')) return;
-    let f; try { f = JSON.parse(payload); } catch { return; }
-    if (f?.type !== 'assistant-audio' || typeof f.data?.pcm !== 'string') return;
-    const now = Date.now();
-    milo.frames += 1;
-    const c = milo.cur;
-    if (!c || c.done || c.runId !== f.data.runId || f.data.seq !== c.seq + 1 || now - (c.lastAtMs ?? now) > 1500) { milo.cur = { runId: f.data.runId, seq: f.data.seq, startMs: now, ms: 0, done: false }; milo.utterances += 1; milo.lastStartMs = now; timeline.milo.push(milo.cur); }
-    const u = milo.cur;
-    u.seq = f.data.seq; u.done = f.data.last === true; u.lastAtMs = now;
-    u.ms += (Buffer.from(f.data.pcm, 'base64').length / 2 / (f.data.sampleRate || 24000)) * 1000;
-    busy.until = Math.max(busy.until, u.startMs + u.ms);
-    voiceLog?.write(`${JSON.stringify({ atMs: now, runId: f.data.runId, seq: f.data.seq, sampleRate: f.data.sampleRate, last: f.data.last === true, pcm: f.data.pcm })}\n`);
-  }));
-}
-/** Waits until Milo has said something new (an utterance after `n`) and finished it; → true when he did. */
-async function miloSays(n, ms) {
-  if (!(await until(async () => milo.utterances > n, ms, 100))) return false;
-  const quiet = async () => (Date.now() > busy.until + 120 && Date.now() - (milo.cur?.lastAtMs ?? 0) > 600 ? true : null);
-  await until(quiet, 60_000, 60);
-  // --handsfree: one answer can come as two utterances (the model's first words, then the server's held answer said over them),
-  // so a short settle: an utterance starting within 1 s belongs to the same answer.
-  for (let k = milo.utterances; HANDSFREE && (await until(async () => (milo.utterances > k ? true : null), 1000, 50)); k = milo.utterances) {
-    await until(quiet, 60_000, 60);
-  }
-  return true;
-}
-/** Milo's posts in the call chat (his words, as captioned), oldest first. */
-async function miloPosts() {
-  if (!callId) return [];
-  const r = await lead.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`).catch(() => null);
-  if (!r?.ok()) return [];
-  return ((await r.json().catch(() => ({}))).messages ?? []).filter((m) => String(m.metadata?.kind ?? '').startsWith('assistant')).map((m) => String(m.message ?? m.text ?? m.body ?? ''));
-}
-/** One Milo turn, measured: the asking line's end to Milo's first audio, and what he said (his new post). */
-async function turn(kind, asker, asked, endMs, n, posts0, spoke) {
-  const u = timeline.milo[n] ?? null;
-  const said = spoke ? ((await until(async () => { const p = await miloPosts(); return p.length > posts0 ? p.slice(posts0).join(' | ') : null; }, 6000, 400)) ?? '') : '';
-  const t = { kind, asker, asked, askedEndS: Number(((endMs - timeline.film.fromMs) / 1000).toFixed(1)), spoke,
-    firstAudioS: u ? Number(((u.startMs - timeline.film.fromMs) / 1000).toFixed(1)) : null, latencyS: u ? Number(((u.startMs - endMs) / 1000).toFixed(1)) : null,
-    voiceS: u ? Number((u.ms / 1000).toFixed(1)) : null, said };
-  report.turns.push(t);
-  console.log(`milo turn ${kind}: ${JSON.stringify(t)}`);
-  return t;
-}
-/** --handsfree: a line said to Milo by voice, and his answer measured (the line's end to his first audio). */
-async function askByVoice(kind, asker, id, how, expect, ms = 20_000) {
-  const n = milo.utterances; const posts0 = (await miloPosts()).length;
-  await say(id, 300);
-  const endMs = Date.now();
-  const spoke = await miloSays(n, ms);
-  const t = await turn(kind, asker, LINES[id][1], endMs, n, posts0, spoke);
-  t.how = how; t.right = spoke && expect.test(t.said);
-  return t;
-}
-/** --name-required: a line that must get no reply from Milo, watched for `ms` after its end. */
-async function watchSilence(kind, id, ms) {
-  const n = milo.utterances;
-  await say(id, 300);
-  const endMs = Date.now();
-  const replied = !!(await until(async () => (milo.utterances > n ? true : null), ms, 100));
-  if (replied) await miloSays(n, 20_000);
-  const r = { kind, line: id, asked: LINES[id][1], endS: Number(((endMs - timeline.film.fromMs) / 1000).toFixed(1)), watchedS: ms / 1000, replied,
-    firstAudioS: replied ? Number(((timeline.milo[n].startMs - timeline.film.fromMs) / 1000).toFixed(1)) : null };
-  (report.silences ??= []).push(r);
-  console.log(`milo silence ${kind}: ${JSON.stringify(r)}`);
-  return r;
-}
-/** --handsfree: Hugo talks over Milo's utterance `n` about 2.5 s in ("Okay, thanks, that's enough"); measured to his silence. */
+// The measured turns (keepMiloVoice, miloSays, turn, askByVoice, watchSilence, bargeOver, askByHold): shared with the coding film.
 const BARGE_ON = flag('--barge-on') ?? 'cand';
-async function bargeOver(n) {
-  const u = timeline.milo[n];
-  await sleep(Math.max(0, u.startMs + 2500 - Date.now()));
-  if (u.done) { note('Milo finished before the barge-in could start'); return null; }
-  const startMs = Date.now();
-  const x01 = say('x01', 0, { now: true });
-  await until(async () => (u.done || (u.lastAtMs && Date.now() - u.lastAtMs > 700) ? true : null), 12_000, 50);
-  const barge = { on: BARGE_ON, startS: Number(((startMs - timeline.film.fromMs) / 1000).toFixed(1)), lastFrameAfterS: Number((((u.lastAtMs ?? startMs) - startMs) / 1000).toFixed(2)),
-    playoutEndAfterS: Number(((u.startMs + u.ms - startMs) / 1000).toFixed(2)), closed: u.done, voiceS: Number((u.ms / 1000).toFixed(1)) };
-  await x01;
-  await until(async () => Date.now() > busy.until + 120, 30_000, 60);
-  return barge;
-}
-/** --handsfree: Hugo holds the bar's talk button through line `id`, then lets go; his answer measured from the release. */
-async function askByHold(kind, id, expect) {
-  const btn = lead.page.getByTestId('assistant-bar-hold').first();
-  const b = await btn.boundingBox({ timeout: 8000 }).catch(() => null);
-  if (!b) { note('no hold-to-talk button in Hugo\'s bar'); return null; }
-  await moveTo(lead.page, b.x + b.width / 2, b.y + b.height / 2, 700);
-  const n = milo.utterances; const posts0 = (await miloPosts()).length;
-  await sleep(Math.max(0, busy.until + 300 - Date.now()));
-  await lead.page.mouse.down();
-  const holding = await until(async () => ((await lead.page.getByTestId('assistant-bar').first().getAttribute('data-holding').catch(() => null)) === 'true' ? true : null), 3000, 100);
-  report.holdAtS = Number(((Date.now() - timeline.film.fromMs) / 1000).toFixed(1));
-  const line = say(id, 0, { now: true });
-  // Both seats during the hold: the "<who> is talking to Milo" chip, the bar's floor holder, and the ring on the speaker's tile (each framed once).
-  const seat = async (p, bar) => {
-    await until(async () => ((await p.page.getByTestId(`${bar}-floor`).first().isVisible().catch(() => false)) ? true : null), 2500, 100);
-    const r = { chip: squash(await p.page.getByTestId(`${bar}-floor`).first().textContent({ timeout: 500 }).catch(() => '')),
-      floor: await p.page.getByTestId(bar).first().getAttribute('data-floor').catch(() => null),
-      rings: await p.page.getByTestId('tile-highlight-ring').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).length).catch(() => -1),
-      atS: Number(((Date.now() - timeline.film.fromMs) / 1000).toFixed(1)) };
-    await p.page.screenshot({ path: path.join(OUT, `hold-${p.key}.png`) }).catch(() => {});
-    return r;
-  };
-  const [cl, cc] = await Promise.all([seat(lead, 'assistant-bar'), seat(cand, 'guest-milo-requests')]);
-  const chips = { lead: cl, cand: cc };
-  await line;
-  await sleep(300);
-  await lead.page.mouse.up();
-  const relMs = Date.now();
-  let barge = null;
-  if (BARGE_ON === 'hold' && (await until(async () => (milo.utterances > n ? true : null), 15_000, 50))) { barge = await bargeOver(n); report.barge = barge; }
-  const spoke = barge ? true : await miloSays(n, 20_000);
-  const t = await turn(kind, 'lead (hold)', LINES[id][1], relMs, n, posts0, spoke);
-  t.how = 'hold'; t.right = spoke && expect.test(t.said); t.holding = !!holding; t.chips = chips; t.barge = barge;
-  return t;
-}
+const { milo, keepMiloVoice, miloSays, miloPosts, turn, askByVoice, watchSilence, bargeOver, askByHold } = miloTurns({
+  out: OUT, timeline, report, lines: LINES, busy, say, until, sleep, note, moveTo: (...a) => moveTo(...a), portal: PORTAL, people: () => ({ lead, cand }),
+  callId: () => callId, handsfree: HANDSFREE, bargeOn: BARGE_ON, record: MILO,
+});
 const deckOf = (page) => page.getByTestId('interview-room-ask');
 const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 // The suggestion waits as a button on the footer's row (nothing is drawn above the row): the lead opens it to read and answer it.
