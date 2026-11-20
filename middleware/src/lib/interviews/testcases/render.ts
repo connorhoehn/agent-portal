@@ -14,7 +14,9 @@ import { MAX_SCAN_TEXT, scannable } from '../pad-text.js';
 import type { PadLanguage } from '../types.js';
 
 /** One case: the arguments in order, and (checked against the question's reference) the value the call returns. JSON values only. */
-export interface TestCase { args: unknown[]; expected?: unknown }
+/** `covers`: the case the asker named that this one answers. `edge`: an input the question's reference has no single answer for
+ * (an empty array for two_sum), written because it was asked for: shown with what the function returns, no expected value. */
+export interface TestCase { args: unknown[]; expected?: unknown; covers?: string; edge?: boolean }
 
 /** The block's first line in every language, after the comment marker: how a reader (and the record) finds Milo's block. */
 export const TEST_CASES_TITLE = 'Test cases from Milo';
@@ -33,6 +35,9 @@ export const TEST_INPUTS_NOTE = [
   'Inputs Milo wrote for the question. The expected values are yours to',
   'fill in. Milo did not run or judge your code: edit or delete any case.',
 ];
+
+/** The note above the edge inputs that were asked for, in a checked block. */
+export const EDGE_INPUTS_NOTE = 'Inputs you asked for that have no single right answer in the question: what should it return?';
 
 /**
  * The function a case calls: the pad's first top-level function (a Swift, Go or Java/C++ function by its declaration, for the
@@ -98,10 +103,15 @@ function header(language: PadLanguage, count: number, checked: boolean): string[
  * The block for `cases` in `language`, calling `fn` where the language can; it ends with a newline. Checked (expected values
  * written) only when every case carries one; otherwise inputs only.
  */
-export function renderTestCases(cases: readonly TestCase[], language: PadLanguage, fn: string | null): string {
+export function renderTestCases(all: readonly TestCase[], language: PadLanguage, fn: string | null): string {
   const c = COMMENT[language];
-  const checked = cases.length > 0 && cases.every((t) => t.expected !== undefined);
-  const lines = header(language, cases.length, checked);
+  // Checked when every case that is not an asked-for edge input carries an expected value; the edge inputs follow, inputs only.
+  const edges = all.filter((t) => t.edge);
+  const rest = all.filter((t) => !t.edge);
+  const checked = rest.length > 0 && rest.every((t) => t.expected !== undefined);
+  const cases = checked ? rest : all;
+  const tail = checked ? edges : [];
+  const lines = header(language, all.length, checked);
   const runs = fn !== null && RUNS_AS_SCRIPT.has(language);
   const py = (t: TestCase) => `(${t.args.map(pythonLiteral).join(', ')}${t.args.length === 1 ? ',' : ''})`;
   if (runs && language === 'python') {
@@ -110,6 +120,11 @@ export function renderTestCases(cases: readonly TestCase[], language: PadLanguag
       for (const t of cases) lines.push(`    (${py(t)}, ${pythonLiteral(t.expected)}),`);
       lines.push(']', 'for args, expected in milo_test_cases:', `    got = ${fn}(*args)`,
         '    print("ok  " if got == expected else "DIFF", args, "->", got, "| expected", expected)');
+      if (tail.length) {
+        lines.push(`${c} ${EDGE_INPUTS_NOTE}`, 'milo_edge_inputs = [');
+        for (const t of tail) lines.push(`    ${py(t)},`);
+        lines.push(']', 'for args in milo_edge_inputs:', `    print("edge", args, "->", ${fn}(*args))`);
+      }
     } else {
       lines.push('milo_test_inputs = [', '    # arguments');
       for (const t of cases) lines.push(`    ${py(t)},`);
@@ -126,6 +141,11 @@ export function renderTestCases(cases: readonly TestCase[], language: PadLanguag
       body.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
         '  console.log(JSON.stringify(got) === JSON.stringify(expected) ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
         '}');
+      if (tail.length) {
+        body.push(`// ${EDGE_INPUTS_NOTE}`, `const miloEdgeInputs${typed ? ': unknown[][]' : ''} = [`);
+        for (const t of tail) body.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
+        body.push('];', 'for (const args of miloEdgeInputs) {', `  console.log("edge", JSON.stringify(args), "->", JSON.stringify(${call}));`, '}');
+      }
     } else {
       body.push(`const miloTestInputs${typed ? ': unknown[][]' : ''} = [`, '  // arguments');
       for (const t of cases) body.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
@@ -135,6 +155,7 @@ export function renderTestCases(cases: readonly TestCase[], language: PadLanguag
   } else {
     const name = fn ?? 'f';
     for (const t of cases) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')})${checked ? ` -> ${scriptLiteral(t.expected)}` : ''}`);
+    for (const t of tail) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')}) -> ? (asked for; no single right answer)`);
   }
   return `${lines.join('\n')}\n`;
 }

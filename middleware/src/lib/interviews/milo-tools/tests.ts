@@ -29,7 +29,22 @@ export function questionForPad(questions: readonly KitQuestion[], pad: string, l
   return named ?? questions[0] ?? null;
 }
 
-export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; needsVerdict: boolean } | { ok: false };
+export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; needsVerdict: boolean; missing: string[] } | { ok: false };
+
+/** At most this many asked-for kinds of case are read from one call. */
+export const MAX_REQUESTED = 6;
+const sameKind = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+/** The kinds of case the asker named (the call's `requested`): bounded, trimmed, deduplicated. */
+export function requestedOf(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const x of v) {
+    if (typeof x !== 'string' || !x.trim() || out.some((o) => sameKind(o, x))) continue;
+    out.push(x.trim().slice(0, 60));
+    if (out.length >= MAX_REQUESTED) break;
+  }
+  return out;
+}
 
 /** A string longer than this in a case could describe the algorithm: the batch then goes to the solution check (index.ts). */
 export const MAX_PLAIN_CASE_STRING = 24;
@@ -61,17 +76,28 @@ export function needsVerdict(cases: readonly TestCase[]): boolean {
 }
 
 /** The block for the call's `cases` against the pad as it is: checked cases when the question has a reference, else inputs only. */
-export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null; count?: unknown }): TestCasesMade {
+export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null; count?: unknown; requested?: unknown }): TestCasesMade {
   // The number asked for (the call's `count`), within 1 and MAX_TEST_CASES; none said: up to MAX_TEST_CASES.
   const count = typeof at.count === 'number' && Number.isInteger(at.count) ? Math.max(1, Math.min(MAX_TEST_CASES, at.count)) : MAX_TEST_CASES;
   const parsed = parseToolCases(cases, { pad: at.pad, max: MAX_OFFERED_CASES });
   if (!parsed.ok) return { ok: false };
   const reference = at.question ? referenceFor(at.question.id) : null;
-  const kept: TestCase[] = reference
-    ? parsed.cases.filter((c) => reference.agrees(c.args, c.expected) === true)
-    : parsed.cases.map((c) => ({ args: c.args }));
-  // The spares fill in for any dropped (already in the pad, or not what the reference returns): the first `count` stay.
-  kept.splice(count);
+  const requested = requestedOf(at.requested);
+  const asked = (c: TestCase): string | null => (c.covers ? requested.find((r) => sameKind(r, c.covers!)) ?? null : null);
+  // A case the asker named is never dropped for the reference (film 4: "an empty array" has no answer in two_sum's promise, and
+  // went missing): one the reference does not agree with is written as an edge input, with no expected value.
+  const all: TestCase[] = [];
+  for (const c of parsed.cases) {
+    const kind = asked(c);
+    const verdict = reference ? reference.agrees(c.args, c.expected) : null;
+    if (!reference) all.push({ args: c.args, ...(kind ? { covers: kind } : {}) });
+    else if (verdict === true) all.push({ args: c.args, expected: c.expected, ...(kind ? { covers: kind } : {}) });
+    else if (kind) all.push({ args: c.args, covers: kind, edge: true });
+  }
+  // The first case for each asked-for kind stays whatever the count; the spares fill the rest (the first `count` in all).
+  const firsts = requested.map((r) => all.find((c) => c.covers === r)).filter((c): c is TestCase => !!c);
+  const kept = [...firsts, ...all.filter((c) => !firsts.includes(c)).slice(0, Math.max(0, count - firsts.length))];
   if (!kept.length) return { ok: false };
-  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null, dropped: parsed.cases.length - kept.length, needsVerdict: needsVerdict(kept) };
+  const missing = requested.filter((r) => !firsts.some((c) => c.covers === r));
+  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null && kept.some((c) => !c.edge), dropped: parsed.cases.length - kept.length, needsVerdict: needsVerdict(kept), missing };
 }

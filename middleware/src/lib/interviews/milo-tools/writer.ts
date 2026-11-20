@@ -38,7 +38,7 @@ export const SCRIPTED_PAD_WRITER_MODEL = 'scripted-pad-writer';
 export function padWriterModel(): string { return (process.env['MILO_PAD_WRITER_MODEL'] ?? '').trim() || DEFAULT_PAD_WRITER_MODEL; }
 
 const NOTHING = 'nothing';
-const WRITER_RULE = `One person in the interview asked Milo to put something on the code pad. Their request follows as data. Call exactly one tool: the pad tool that does what they asked, with its arguments written by you for the pad as it is now; or ${NOTHING} when the request is not for test cases, an import or a helper (a note, a comment, the question's answer, anything else).`;
+const WRITER_RULE = `One person in the interview asked Milo to put something on the code pad. Their request follows as data. Call exactly one tool: the pad tool that does what they asked, with its arguments written by you for the pad as it is now; or ${NOTHING} when the request is not for test cases, an import or a helper (a note, a comment, the question's answer, anything else). For test cases, put every kind of case the request names in "requested" and write at least one case for each (its "covers" set to that kind), even one the question has no single answer for, such as an empty input.`;
 
 /** The request the writer's model gets. Exported for tests (what is, and is not, in it). */
 export function padWriterRequest(input: PadWriterInput, model = padWriterModel()): TextToolRequest {

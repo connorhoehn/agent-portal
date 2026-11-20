@@ -19,8 +19,11 @@ import { argsOf } from './pad-write.js';
 import { noArgs } from './schema.js';
 import { PAD_TOOLS } from './writer.js';
 
-/** Said to the call when the candidate asked for a pad change: the lead hears what to say. */
-export const PAD_WAITS_FOR_LEAD = 'I need the lead interviewer to allow that before I change the pad. Say "Milo, go ahead", or press Confirm.';
+/** Said to the call when the candidate asked for a pad change: it names the lead, who confirms on their screen (or says "Milo, go ahead"). */
+export const padWaitsForLead = (leadFirstName: string | null): string =>
+  `Sure thing, I just need ${leadFirstName ?? 'the lead interviewer'} to confirm on their screen.`;
+/** The line when the lead's name is unknown. */
+export const PAD_WAITS_FOR_LEAD = padWaitsForLead(null);
 export const NOTHING_TO_CONFIRM = 'There is no pad change waiting to be confirmed.';
 export const PAD_CONFIRM_LEAD_ONLY = 'Only the lead interviewer can confirm a change to the pad.';
 export const PAD_CHANGE_DECLINED = "Okay, I won't change the pad.";
@@ -107,7 +110,8 @@ export const PAD_WRITE: ServerToolDef<MiloInterview, SaidSource> = {
     if ((await standingOf(interview, askedBy)) !== 'candidate') return writeAsked(interview, askedBy, text);
     pending.set(interview.id, { text, askedBy, atMs: deps().now() });
     if (pending.size > 500) pending.delete(pending.keys().next().value as string);
-    return { line: PAD_WAITS_FOR_LEAD, kind: 'ack' };
+    const leadName = await deps().personName(interview.leadId).catch(() => null);
+    return { line: padWaitsForLead(leadName?.trim().split(/\s+/)[0] || null), kind: 'ack' };
   },
 };
 

@@ -191,9 +191,8 @@ start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modul
   REALTIME_VIDEO_PUBLIC_URL: process.env.IVFILM_VIDEO_PUBLIC_URL || 'http://localhost:3911',
   SOCIAL_CHAT_DYNAMODB_ENDPOINT: dynamo, DOCUMENT_COMMENT_IMPORT_DYNAMODB_ENDPOINT: dynamo, DOCUMENT_COMMENT_IMPORT_TABLE: 'document-comments',
   MEETING_ASSISTANT_ENABLED: 'true', ...(args.includes('--scripted') ? {} : { MEETING_ASSISTANT_LIVE: '1' }),
-  // The pad's runs execute for real (the developer's Docker runner, one throwaway container per run, no network); not in the
-  // --name-required round, which runs no code.
-  ...(NAME_REQUIRED ? {} : { INTERVIEWS_RUN_BACKEND: 'docker' }),
+  // The pad's runs execute for real (the developer's Docker runner, one throwaway container per run, no network).
+  INTERVIEWS_RUN_BACKEND: 'docker',
   MEETING_ASSISTANT_MAX_MINUTES: String(MAX_MINUTES), MEETING_ASSISTANT_HARD_MAX_MINUTES: String(MAX_MINUTES),
   MEETING_ASSISTANT_TRACE_FILE: path.join(WORK, 'trace.jsonl'),
   MEETING_ASSISTANT_MEDIA_URL: process.env.IVFILM_MEDIA_URL || 'http://127.0.0.1:3911',
@@ -774,10 +773,11 @@ try {
   async function namedRound() {
     await miloReady;
     const s = {};
+    // Film 5 (owner's v2 script): Milo is used only for test cases and the time; no intro, no probe, no nameless or mention beats.
     await line('n01', 400);
     await line('n02', 300);
+    await line('h05', 500); await line('c04', 500); await line('h06', 500);
     s.opening = await watchSilence('opening line', 'n03', 5000);
-    s.intro = await askByHold('introduce (hold)', 'n04', /algorithm|test cases|speed/i);
     // The pad: Hugo's question in Mateo's language; Hugo lets the candidate ask Milo for the pad.
     const padReady = (async () => { await padTab(hp); await padTab(cp); return !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500)); })();
     // The coach's first suggestion is the chosen question: Hugo takes it as his own (I'll ask it), so its card is closed before the menu.
@@ -814,15 +814,12 @@ try {
     await caseLine;
     solvedAt = Date.now();
     await line('n22', 300);
-    // Test cases by name; a candidate's pad request waits for the lead's yes.
+    // Mateo asks Milo for test cases; Milo names the lead, who confirms on his screen.
     scene(6, 'Mateo asks Milo for test cases.', '');
-    s.tests = await askByVoice('test cases (candidate, name first)', 'cand', 'n07', 'hey milo', /test|lead|go ahead/i, 30_000);
-    // The lead's yes: Hugo presses Confirm on the footer's "Pad change?" question (it opens by itself, like a knock).
-    if (/lead|go ahead|allow|confirm/i.test(s.tests.said)) {
-      const shown = await pressPadConfirm(hp, 20_000);
-      s.confirm = { said: shown ? `[Confirm pressed] ${shown.slice(0, 160)}` : '[no Pad change? question]', latencyS: null, replied: !!shown, right: !!shown };
-      step('6 the lead confirms the pad request in the footer', !!shown, shown ? `"${shown.slice(0, 200)}"` : 'the Pad change? question never showed');
-    }
+    s.tests = await askByVoice('test cases (candidate, name first)', 'cand', 'n07', 'hey milo', /confirm|hugo/i, 30_000);
+    const shown = await pressPadConfirm(hp, 20_000);
+    s.confirm = { said: shown ? `[Confirm pressed] ${shown.slice(0, 160)}` : '[no Pad change? question]', latencyS: null, replied: !!shown, right: !!shown };
+    step('6 the lead confirms the pad request in the footer', !!shown, shown ? `"${shown.slice(0, 200)}"` : 'the Pad change? question never showed');
     let block = await until(async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null), 6000, 400);
     const inPad = async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null);
     if (!block) { await line('n20', 400); await line('n21', 300); block = await until(inPad, 3000, 300); }
@@ -832,34 +829,37 @@ try {
     const padNow = (await padText(cp)) ?? '';
     const cases = padNow.slice(Math.max(0, padNow.search(CASES_BLOCK)));
     report.testCases = block ? cases : null;
-    // The rendered cases are rows like (([3, 2, 4], 6), [1, 2]): the first list is nums.
-    const numsOf = [...cases.matchAll(/\(\(\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => x.trim()).filter(Boolean));
+    // Rows like (([3, 2, 4], 6), [1, 2]) and the asked-for edge inputs like ([], 0): the first list is nums.
+    const numsOf = [...cases.matchAll(/\(\(?\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => x.trim()).filter(Boolean));
     const hasEmpty = numsOf.some((n) => n.length === 0); const hasDup = numsOf.some((n) => new Set(n).size < n.length);
-    step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && hasEmpty && hasDup, `empty array=${hasEmpty}; duplicates=${hasDup}; block ${block ? `"${squash(cases).slice(0, 400)}"` : 'never appeared'}`);
-    // Mateo's line names both kinds: said only when both are there.
+    step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && hasEmpty && hasDup, `empty array=${hasEmpty}; duplicates=${hasDup}; block ${block ? `"${squash(cases).slice(0, 500)}"` : 'never appeared'}`);
     if (block) { await padToEnd(cp, 1500); if (hasEmpty && hasDup) await line('n09', 300); }
-    // A probe by name, written on Mateo's code; his answer.
-    scene(7, 'Hugo has Milo ask a probe on Mateo\'s code.', '');
-    s.probe = await askByVoice('probe (lead, hey milo)', 'lead', 'n10', 'hey milo', /complex|O\(|linear|time|seen|dictionary|loop/i, 30_000);
-    await line('c18', 400);
-    // No name: silence by design; Hugo reads the question himself. A mention: silence.
-    s.noName = await watchSilence('no name', 'n11', 6000);
-    await line('n12', 300);
-    s.mention = await watchSilence('a mention', 'n13', 5000);
-    // Hugo cuts in on a repeated probe.
-    const nB = milo.utterances; const posts0 = (await miloPosts()).length;
-    await line('n14', 300);
-    const askedEnd = Date.now();
-    const began = await until(async () => (milo.utterances > nB ? true : null), 20_000, 50);
-    const barge = began ? await bargeOver(nB) : null;
-    report.barge = barge;
-    s.repeat = await turn('probe again, cut in (lead, name first)', 'lead', LINES.n14[1], askedEnd, nB, posts0, !!began);
-    s.repeat.how = 'name first'; s.repeat.barge = barge;
-    await line('n19', 300);
+    // Mateo runs the code: the pad's Run, the output panel with Milo's cases' results (the Docker runner, for real).
+    scene(7, 'Mateo runs the code with Milo\'s cases.', '');
+    const r = await (async () => { const p = runAndRead(cp, hp, /ok /, 'c11'); await line('c11', 300); return p; })().catch((e) => { note(`run: ${String(e).slice(0, 120)}`); return null; });
+    report.runOutput = r ? squash(r.cand ?? r.lastCand ?? '').slice(0, 800) : null;
+    step('7 the run shows the test results', !!r?.cand && !!r?.lead, `candidate output "${squash(r?.cand ?? r?.lastCand ?? '').slice(0, 400)}"; lead sees it=${!!r?.lead}; run containers=${r?.containers ?? 0}`);
+    // The chat beat (owner): Hugo drops the news page into the call chat through the real composer; Mateo opens it.
+    const chatOk = await (async () => {
+      const tip = line('h40', 400);
+      await nearEnd('h40', 1800);
+      await press(hp, hp.getByTestId('interview-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 });
+      const box = hp.getByTestId('interview-room-chat').getByRole('textbox').first();
+      await press(hp, box, { pause: 100, timeout: 8000 });
+      await hp.keyboard.type(NEWS_URL, { delay: 30 });
+      await hp.keyboard.press('Enter');
+      await tip;
+      await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 }).catch((e) => note(`candidate chat tab: ${String(e).slice(0, 100)}`));
+      const seen = !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
+      await line('c40', 300);
+      return seen;
+    })().catch((e) => { note(`chat beat: ${String(e).slice(0, 120)}`); return false; });
+    step('2c the link in the call chat on both sides', chatOk, `candidate's chat shows ${NEWS_URL}=${chatOk}`);
     // Near the end of the ten minutes (the round's clock starts when Mateo joins): the time question.
     const target = roundFrom + 8.2 * 60_000;
     if (Date.now() < target) {
       const cut = skipFrom('Skipping ahead: Mateo works on, near the end of the ten minutes');
+      await padTab(cp).catch(() => undefined); await padTab(hp).catch(() => undefined);
       await padToEnd(cp, 1500);
       await sleep(Math.max(0, target - Date.now()));
       cut();
@@ -1114,11 +1114,15 @@ try {
 
   // Act 9. After the call. End and its confirmation land as "have a great rest of your day" ends; Mateo's ended page is on screen
   // and held about a second (v1.4) before Hugo's one line (v1.2), which covers the ratings and the recap opening.
-  await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
-  // The confirmation is on the footer's ask card, which a lead may have folded to its button (an answered suggestion): open it.
-  // It opens by itself: open it by hand only when it has not shown within 3 s (a click while it is opening would close it).
+  // The confirmation is on the footer's ask card; it opens by itself. Take 4: the End question never showed (the click missed),
+  // so the visible End button is pressed again, and the ask button opened by hand only when it asks the End question.
   const endBtn = hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ });
-  if (!(await endBtn.waitFor({ timeout: 3000 }).then(() => true, () => false))) await openAsk(hp);
+  for (let k = 0; k < 3; k += 1) {
+    await press(hp, hp.getByTestId('interview-end').filter({ visible: true }).first(), { pause: 150, timeout: 8000 }).catch((e) => note(`End: ${String(e).slice(0, 80)}`));
+    if (await endBtn.waitFor({ timeout: 3000 }).then(() => true, () => false)) break;
+    if ((await hp.getByTestId('interview-room-ask-open').getAttribute('data-ask').catch(() => null)) === 'end') { await openAsk(hp); if (await endBtn.waitFor({ timeout: 2000 }).then(() => true, () => false)) break; }
+    note(`the End question did not show (try ${k + 1})`);
+  }
   await press(hp, endBtn, { timeout: 10_000, pause: 150 });
   const endedAt = Date.now();
   await bye;

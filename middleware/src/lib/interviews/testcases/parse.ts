@@ -60,7 +60,8 @@ export function parseToolCases(list: unknown, opts: { pad: string; max: number }
     // A call `f(<args>)` in any notation, or a block's row `[[<args>], …]` / `[<args>],`, is already in the pad.
     if (args.length && (callForms(args).some((f) => pad.includes(`(${squash(f)})`)) || pad.includes(`[[${squash(callForms(args)[1]!)}],`))) continue;
     seen.add(key);
-    kept.push({ args, expected });
+    const covers = (c as Record<string, unknown>)['covers'];
+    kept.push({ args, expected, ...(typeof covers === 'string' && covers.trim() ? { covers: covers.trim().slice(0, 60) } : {}) });
   }
   return kept.length ? { ok: true, cases: kept } : { ok: false, code: 'empty' };
 }

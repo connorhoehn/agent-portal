@@ -12,7 +12,7 @@ import { interviewSpendSourceId } from '../spend.js';
 import { MemoryMiloSettingsStore } from '../milo-settings.js';
 import { interviewCall, PAD_OFF, padConfirmWaiting, pressPadConfirm, resetMiloTools, sessionToolsFor, setMiloToolDeps } from '../milo-tools/index.js';
 import {
-  NOTHING_TO_CONFIRM, PAD_CHANGE_DECLINED, PAD_CONFIRM_LEAD_ONLY, PAD_CONFIRM_TTL_MS, PAD_WAITS_FOR_LEAD, PAD_WRITE_KINDS, pendingPadWrite, resetPendingPadWrites,
+  NOTHING_TO_CONFIRM, PAD_CHANGE_DECLINED, PAD_CONFIRM_LEAD_ONLY, PAD_CONFIRM_TTL_MS, PAD_WAITS_FOR_LEAD, padWaitsForLead, PAD_WRITE_KINDS, pendingPadWrite, resetPendingPadWrites,
 } from '../milo-tools/pad-request.js';
 import { padWriterChoice, padWriterRequest, scriptedPadWrite, type PadWriterInput } from '../milo-tools/writer.js';
 import type { MiloPadPlan, MiloPadWriteResult } from '../pad/milo-writer.js';
@@ -77,6 +77,7 @@ beforeEach(async () => {
     padLog: async (_id, events) => events.length,
     judge: async () => 'helper',
     writer: async (_iv, input) => { written.push(input); return scriptedPadWrite(input.text); },
+    personName: async (u) => (u === LEAD ? 'Hugo Lindqvist' : null),
     now: () => now,
   });
   await said.append({ id: `q-${n}`, interviewId: IV, callId: 'call-turn', kind: 'question', source: 'kit', questionId: 'q-be-twosum', suggestionId: null, text: QUESTION, askedBy: LEAD, saidAt: new Date(STARTED).toISOString(), posted: true, spoken: true });
@@ -256,13 +257,15 @@ describe('the interviewers', () => {
 });
 
 describe("the lead's confirm on a candidate's pad write", () => {
+  // Film 5: the candidate hears who confirms, by the lead's first name, and nothing to say themselves.
+  const WAITS = padWaitsForLead('Hugo');
   beforeEach(async () => { await settings.setCandidateMayAsk(IV, true, LEAD, new Date(now).toISOString()); });
   const ask = () => turn(GUEST, 'Milo, add a dozen test cases to the pad.', { tool: 'pad_write', args: { text: 'a dozen test cases' } });
 
   it('the candidate\'s request writes nothing: it waits, and Milo says who must allow it', async () => {
     const t = await ask();
-    expect(t.out).toMatchObject({ tool: 'pad_write', line: PAD_WAITS_FOR_LEAD, logged: true });
-    expect(t.rows).toEqual([{ source: 'ack', text: PAD_WAITS_FOR_LEAD, askedBy: GUEST, posted: false }]);
+    expect(t.out).toMatchObject({ tool: 'pad_write', line: WAITS, logged: true });
+    expect(t.rows).toEqual([{ source: 'ack', text: WAITS, askedBy: GUEST, posted: false }]);
     expect(pad.text).toBe(TWO_SUM.starter!.python);
     expect(written).toEqual([]);
     expect(pendingPadWrite(IV, now)).toMatchObject({ text: 'a dozen test cases', askedBy: GUEST });
@@ -281,7 +284,8 @@ describe("the lead's confirm on a candidate's pad write", () => {
   });
 
   it('the Confirm / Decline control: only the lead sees what waits, and pressing Confirm writes it as "Milo, go ahead" does (film 4: an unnamed yes was lost)', async () => {
-    expect(PAD_WAITS_FOR_LEAD).toBe('I need the lead interviewer to allow that before I change the pad. Say "Milo, go ahead", or press Confirm.');
+    expect(WAITS).toBe('Sure thing, I just need Hugo to confirm on their screen.');
+    expect(PAD_WAITS_FOR_LEAD).toBe('Sure thing, I just need the lead interviewer to confirm on their screen.');
     expect(await padConfirmWaiting(IV, LEAD)).toBeNull();
     await ask();
     expect(await padConfirmWaiting(IV, LEAD)).toEqual({ text: 'a dozen test cases', askedAt: new Date(now).toISOString() });

@@ -54,9 +54,9 @@ export const REPEAT_WINDOW_MS = 20_000;
 
 const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 export const countWords = (n: number): string => NUMBER_WORDS[n] ?? String(n);
-export const testsAddedLine = (n: number, checked: boolean): string => (checked
+export const testsAddedLine = (n: number, checked: boolean, missing: readonly string[] = []): string => `${checked
   ? `Added ${countWords(n)} test case${n === 1 ? '' : 's'} at the bottom of the pad.`
-  : `Added ${countWords(n)} test input${n === 1 ? '' : 's'} at the bottom of the pad. The expected values are yours to fill in.`);
+  : `Added ${countWords(n)} test input${n === 1 ? '' : 's'} at the bottom of the pad. The expected values are yours to fill in.`}${missing.length ? ` I couldn't write one for ${missing.join(' or ')}.` : ''}`;
 export const importsAddedLine = (n: number): string => (n === 1 ? 'Added the import at the top of the pad.' : `Added ${countWords(n)} imports at the top of the pad.`);
 export const HELPER_ADDED = 'Added the helper at the top of the pad, marked as added by Milo.';
 
@@ -84,6 +84,8 @@ export interface MiloToolDeps {
   answerKey: (interview: Interview) => Promise<string[]>;
   /** One probing question for the candidate, written for the topic (probe.ts), not yet checked; null: none. */
   prober: (interview: Interview, input: ProbeInput) => Promise<string | null>;
+  /** A person's display name from the directory, or null (no account here). */
+  personName: (userId: string) => Promise<string | null>;
   now: () => number;
   newId: () => string;
 }
@@ -142,6 +144,10 @@ const DEFAULTS: MiloToolDeps = {
   heard: lastHeard,
   answerKey: async (interview) => answerKeyText(await kitQuestions(interview)),
   prober: async (interview, input) => (await import('./probe.js')).writeProbe(interview, input),
+  personName: async (userId) => {
+    const { listUsers } = await import('../../../providers/identity.js');
+    return (await listUsers()).find((u) => u.id === userId)?.displayName ?? null;
+  },
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
 };
