@@ -19,8 +19,8 @@ export type SaidKind = 'question' | 'answer';
  * and `helper`: Milo's line after one of its interview tools wrote into the pad (milo-tools: test cases, import lines, a helper).
  * `ack`: "On it.", said while a slow pad tool's call is on its way.
  */
-export type SaidSource = 'suggestion' | 'kit' | 'repeat' | 'time' | 'refusal' | 'intro' | 'tests' | 'imports' | 'helper' | 'ack';
-export const SAID_SOURCES: readonly SaidSource[] = ['suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack'];
+export type SaidSource = 'suggestion' | 'kit' | 'repeat' | 'time' | 'refusal' | 'intro' | 'tests' | 'imports' | 'helper' | 'ack' | 'probe';
+export const SAID_SOURCES: readonly SaidSource[] = ['suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack', 'probe'];
 
 export interface SaidRecord {
   id: string;

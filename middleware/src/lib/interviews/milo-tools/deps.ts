@@ -11,10 +11,12 @@ import { writeIntoPad, type MiloPadPlan, type MiloPadWriteResult } from '../pad/
 import { saidStore, type SaidSource } from '../speak/store.js';
 import { interviewsStore } from '../store-select.js';
 import { roundSurface } from '../kit.js';
-import { candidateQuestion, type CandidateQuestion } from '../answer-key.js';
-import { INTERVIEWS_TENANT, type Interview, type RoundSurface } from '../types.js';
+import { answerKeyText, candidateQuestion, type CandidateQuestion } from '../answer-key.js';
+import { boardSnapshotStore } from '../board/snapshots.js';
+import { INTERVIEWS_TENANT, type Interview, type KitQuestion, type RoundSurface } from '../types.js';
 import { judgeHelper, type VerdictInput } from './verdict.js';
 import type { PadWriterChoice, PadWriterInput } from './writer.js';
+import type { HeardLine, ProbeInput } from './probe.js';
 
 export type Standing = 'lead' | 'panel' | 'candidate';
 
@@ -74,6 +76,14 @@ export interface MiloToolDeps {
   judge: (interviewId: string, leadId: string, input: VerdictInput) => Promise<'helper' | 'solution'>;
   /** One pad request, in the asker's words, written as one pad tool's call (writer.ts); null: nothing Milo adds. */
   writer: (interview: Interview, input: PadWriterInput) => Promise<PadWriterChoice | null>;
+  /** The round's board as it was last saved: the scene's elements, or null (no board, nothing saved yet). */
+  board: (interview: Interview) => Promise<Array<Record<string, unknown>> | null>;
+  /** The last lines of the call's transcript, oldest first; none when the transcript was not accepted. */
+  heard: (interview: Interview) => Promise<HeardLine[]>;
+  /** The round's answer key as text (answer-key.ts `answerKeyText`): what Milo must never say. A throw: unread, so nothing is said. */
+  answerKey: (interview: Interview) => Promise<string[]>;
+  /** One probing question for the candidate, written for the topic (probe.ts), not yet checked; null: none. */
+  prober: (interview: Interview, input: ProbeInput) => Promise<string | null>;
   now: () => number;
   newId: () => string;
 }
@@ -84,11 +94,27 @@ async function openingOf(interview: Interview) {
   return openings.find((o) => o.id === applications.find((a) => a.id === interview.applicationId)?.openingId) ?? null;
 }
 
-async function roundQuestions(interview: Interview): Promise<CandidateQuestion[]> {
+/** The round's technical questions as the kit holds them, answer key and all: never handed on unprojected. */
+async function kitQuestions(interview: Interview): Promise<KitQuestion[]> {
   const opening = await openingOf(interview);
   const bank = opening?.kit.questions ?? [];
   const chosen = interview.questionIds.length ? bank.filter((q) => interview.questionIds.includes(q.id)) : bank;
-  return chosen.filter((q) => q.roundType === 'technical').map(candidateQuestion);
+  return chosen.filter((q) => q.roundType === 'technical');
+}
+const roundQuestions = async (interview: Interview): Promise<CandidateQuestion[]> => (await kitQuestions(interview)).map(candidateQuestion);
+
+/** The call's last lines, when the candidate accepted the transcript (the newest page of it, at most ten pages in). */
+async function lastHeard(interview: Interview): Promise<HeardLine[]> {
+  const [{ coachConsents }, { assistantLiveTranscript, sideOf }] = await Promise.all([import('../coach/service.js'), import('../milo-notes/transcript.js')]);
+  if (!(await coachConsents(interview.id))?.transcription) return [];
+  let after = 0; let lines: HeardLine[] = [];
+  for (let page = 0; page < 10; page++) {
+    const t = await assistantLiveTranscript({ id: interview.id, callId: interview.callId }, after);
+    if (!t || t.lastSeq <= after) break;
+    if (t.lines.length) lines = t.lines.slice(-8).map((l) => ({ side: sideOf(l.userId), text: l.text }));
+    after = t.lastSeq;
+  }
+  return lines;
 }
 
 const DEFAULTS: MiloToolDeps = {
@@ -105,6 +131,15 @@ const DEFAULTS: MiloToolDeps = {
   judge: judgeHelper,
   // Loaded when first asked: writer.ts imports the pad tools, which import this module.
   writer: async (interview, input) => (await import('./writer.js')).writePadRequest(interview, input),
+  board: async (interview) => {
+    const last = await runWithDbTenant(INTERVIEWS_TENANT, () => boardSnapshotStore().latest(interview.id));
+    if (!last) return null;
+    const scene: unknown = JSON.parse(last.scene);
+    return Array.isArray(scene) ? (scene as Array<Record<string, unknown>>) : null;
+  },
+  heard: lastHeard,
+  answerKey: async (interview) => answerKeyText(await kitQuestions(interview)),
+  prober: async (interview, input) => (await import('./probe.js')).writeProbe(interview, input),
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
 };

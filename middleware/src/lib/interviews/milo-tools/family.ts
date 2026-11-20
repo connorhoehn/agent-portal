@@ -9,6 +9,7 @@ import type { SaidSource } from '../speak/store.js';
 import type { PadLanguage, RoundSurface } from '../types.js';
 import { hasPad, interviewBackendInstructions } from './context.js';
 import { candidateMayAsk, deps, liveInterview, logLine, NO_BOARD, ON_IT, PAD_BUSY, PAD_FAILED, standingOf, type MiloInterview, type Standing } from './deps.js';
+import { ASK_PROBE } from './ask-probe.js';
 import { INTRODUCE } from './introduce.js';
 import { PAD_ADD_HELPER } from './pad-add-helper.js';
 import { PAD_ADD_IMPORT } from './pad-add-import.js';
@@ -61,7 +62,7 @@ export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<MiloInterview, SaidSource> 
   family: 'interviews:interview',
   tenants: ['interviews'],
   // The six the old live session is offered, then the turn owner's pad tools (pad-request.ts), which no session is ever offered.
-  tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER, PAD_WRITE, CONFIRM_PAD_WRITE, DECLINE_PAD_WRITE],
+  tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER, PAD_WRITE, CONFIRM_PAD_WRITE, DECLINE_PAD_WRITE, ASK_PROBE],
   context: async (call) => {
     const interviewId = interviewOfLobby(call.lobby);
     return interviewId ? liveInterview(interviewId) : null;

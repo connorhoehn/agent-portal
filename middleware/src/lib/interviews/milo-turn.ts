@@ -6,7 +6,7 @@
 //                  their sentences reach Decide and no model is called.
 //   toolsFor       what this person may ask, as a forced choice:
 //                    candidate  time_left, repeat_question; pad_write only while the lead's pad help is on, in a pad round
-//                    panel      time_left, repeat_question; pad_write in a pad round
+//                    panel      time_left, repeat_question; pad_write in a pad round; ask_probe (a probing question for the candidate)
 //                    lead       the panel's, plus introduce; confirm_pad_write and decline_pad_write while a candidate's pad
 //                               request waits for them
 //   answersFreely  never: no role gets model-written words in an interview. Every line is a fixed sentence or a tool's.
@@ -97,6 +97,7 @@ export function interviewsTurnPolicy(candidateAcceptedMilo: (interviewId: string
       const padHelp = hasPad(interview) && (standing !== 'candidate' || (await candidateMayAsk(interview)));
       const names = ['time_left', 'repeat_question'];
       if (standing === 'lead') names.push('introduce');
+      if (standing !== 'candidate') names.push('ask_probe');
       if (padHelp) names.push('pad_write');
       if (standing === 'lead' && pendingPadWrite(interview.id)) names.push('confirm_pad_write', 'decline_pad_write');
       remember(call, standing, standing === 'panel' ? null : whatICanDo(standing, padHelp, interview.surface) ?? MILO_CAN_DO);

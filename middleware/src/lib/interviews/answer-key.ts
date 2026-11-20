@@ -26,6 +26,20 @@ export function candidateQuestion(q: KitQuestion): CandidateQuestion {
   };
 }
 
+/**
+ * The answer key as text, for checking that something about to be said in the candidate's call says none of it: the provided
+ * design's labels, each design question with its answer, and the red flags.
+ */
+export function answerKeyText(questions: readonly KitQuestion[]): string[] {
+  const out: string[] = [];
+  for (const q of questions) {
+    for (const e of q.providedDesign?.elements ?? []) if (typeof e['text'] === 'string' && e['text'].trim()) out.push(e['text']);
+    for (const d of q.designQuestions ?? []) { out.push(d.text); if (d.answer) out.push(d.answer); }
+    for (const f of q.redFlags ?? []) out.push(f.text);
+  }
+  return out;
+}
+
 /** Does the question carry any of the answer key? */
 export const hasAnswerKey = (q: KitQuestion): boolean => ANSWER_KEY_FIELDS.some((k) => q[k] !== undefined);
 
