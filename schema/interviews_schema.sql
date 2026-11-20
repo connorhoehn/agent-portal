@@ -302,7 +302,7 @@ CREATE TABLE IF NOT EXISTS interview_said_log (
   interview_id    TEXT NOT NULL REFERENCES interviews(id),
   call_id         TEXT,
   kind            TEXT NOT NULL CHECK (kind IN ('question', 'answer')),
-  source          TEXT NOT NULL CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack')),
+  source          TEXT NOT NULL CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack', 'probe')),
   question_id     TEXT,
   suggestion_id   TEXT,
   text            TEXT NOT NULL,
@@ -315,10 +315,10 @@ CREATE INDEX IF NOT EXISTS interview_said_log_interview_idx ON interview_said_lo
 -- words heard before the cut. `spoken` stays false. 18 November (review 1, item 5).
 ALTER TABLE interview_said_log ADD COLUMN IF NOT EXISTS spoken_part TEXT CHECK (spoken_part IS NULL OR char_length(spoken_part) <= 1500);
 -- Milo's introduction (`intro`) and its line after one of its interview tools wrote into the pad (`tests`, `imports`, `helper`), and "On it." while a slow one works (`ack`), 18 November. Tables made before
--- carry the five-source list; replace it by name.
+-- carry the five-source list; replace it by name. `probe`: a probing question an interviewer had Milo ask the candidate, 20 November.
 ALTER TABLE interview_said_log DROP CONSTRAINT IF EXISTS interview_said_log_source_check;
 ALTER TABLE interview_said_log ADD CONSTRAINT interview_said_log_source_check
-  CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack'));
+  CHECK (source IN ('suggestion', 'kit', 'repeat', 'time', 'refusal', 'intro', 'tests', 'imports', 'helper', 'ack', 'probe'));
 -- `posted`: the words reached the call chat (the candidate read them). A row is written before that, so one whose post never
 -- happened (Milo not in the call, the post refused) stays false and is no question the candidate was asked.
 -- Rows written before the column are backfilled once, as the column is added (the DO block makes it repeatable without
