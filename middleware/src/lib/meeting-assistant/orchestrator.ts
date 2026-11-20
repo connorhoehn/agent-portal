@@ -28,7 +28,9 @@ import {
   nameOf, noticeText, postAction, postApprovedAnswer, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { isPrivateRead, meetingInstructions } from './instructions.js';
-import { limitsOfCall, linesForModels, payerOf, policyCallOf, policyForLobby, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
+import { limitsOfCall, linesForModels, payerOf, policyCallOf, policyForLobby, turnPolicyOf, type MeetingAssistantPolicy, type PolicyCall } from './policy.js';
+import { TurnOwner, turnOwnerEnabled } from './turn/turn-owner.js';
+import type { TurnPolicy } from './turn/types.js';
 import { VoicedTimeline, TranscriptLag, attribute, splitBySpeaker } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { AssistantSpeech, VOICE_FRAME_MS, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
@@ -429,6 +431,8 @@ interface CallRun {
   handsfree: boolean;
   /** The open session's hands-free run (null when the run is not hands-free or no session is open). */
   hf: HandsfreeRuntime | null;
+  /** The turn owner in the hands-free runtime's place (turn/turn-owner.ts), when MILO_TURN_OWNER is on and the call's policy has the turn contract. */
+  owner: TurnOwner | null;
   /** Hands-free turns opened so far (a request, for the per-request call cap, is the asker plus this number). */
   hfTurns: number;
   /** The floor last pushed to the call's channel (its JSON), so an unchanged floor is not sent twice. */
@@ -770,7 +774,7 @@ export class AssistantRuntime {
       intentionalClose: false, heardAt: -Infinity, transcribedAt: -Infinity, watchFrom: this.now(), deaf: null, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, stallReplacements: 0, voice: false, voiceHeld: false, approvals: [],
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), gate: null as unknown as VoiceGate, playhead: 0, addressedAt: -Infinity, addressedCalls: new Set(), newsAt: -Infinity, speech: new AssistantSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), heldChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
-      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, hfTurns: 0, floorSent: '', hfSeatsAt: -Infinity, hfGone: new Set(),
+      handsfree: handsfreeEnabled() && !!this.deps.handsfree, hf: null, owner: null, hfTurns: 0, floorSent: '', hfSeatsAt: -Infinity, hfGone: new Set(),
     };
     run.gate = this.makeGate(run);
     this.runs.set(ctx.callId, run);
@@ -947,7 +951,7 @@ export class AssistantRuntime {
   private async openSession(run: CallRun, recent: Awaited<ReturnType<AssistantRuntime['recentLines']>>): Promise<void> {
     const made = this.deps.makeSession(this.deps.clock);
     if (!made) throw new Error('no live session is available in this process');
-    if (run.hf) await this.endHandsfree(run);
+    if (run.hf || run.owner) await this.endHandsfree(run);
     // Hands-free: the session hears only the routed person and its tool calls carry who that is (handsfree/talking.ts).
     const session: LiveMeetingSession = run.handsfree ? new HandsfreeTalking(made) : made;
     run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lag = new TranscriptLag(); run.readyMessages = []; run.timeline = new VoicedTimeline();
@@ -970,7 +974,11 @@ export class AssistantRuntime {
     run.sessionStartedAt = this.now();
     run.heartbeatAt = -Infinity; // the first tick writes one at once
     run.watchFrom = run.sessionStartedAt; // a new session is given its own minute
-    const hf = session instanceof HandsfreeTalking ? this.startHandsfree(run, session) : null;
+    // The seam: with the switch on, a call whose policy has the turn contract is heard and answered by the turn owner, and the
+    // session opened above hears nothing and none of its speech is relayed. Off (or no contract): the hands-free runtime, as before.
+    const turnPolicy = session instanceof HandsfreeTalking && turnOwnerEnabled() ? turnPolicyOf(run.policy) : null;
+    const owner = turnPolicy ? this.startTurnOwner(run, turnPolicy) : null;
+    const hf = owner ?? (session instanceof HandsfreeTalking ? this.startHandsfree(run, session) : null);
     // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
     this.deps.audio?.attach(run.ctx.callId, {
       // Hands-free: the room mix is only the tick (the router feeds the session); otherwise it is what the session hears.
@@ -1021,9 +1029,50 @@ export class AssistantRuntime {
   /** Stop the hands-free run's routing and close its listening side (the talking side is the session, closed by its own path). */
   private endHandsfree(run: CallRun): Promise<void> {
     const hf = run.hf;
-    run.hf = null;
-    if (hf) void this.pushFloor(run);
-    return hf ? hf.closeListening() : Promise.resolve();
+    const owner = run.owner;
+    run.hf = null; run.owner = null;
+    if (hf || owner) void this.pushFloor(run);
+    return owner ? owner.close() : hf ? hf.closeListening() : Promise.resolve();
+  }
+
+  /**
+   * The turn owner for a session just opened (turn/turn-owner.ts): the per-person listening side, the call's relay, chat and stored
+   * lines, and what "stop listening" and "leave" do (the same steps as the buttons). Null when no listening side is available.
+   */
+  private startTurnOwner(run: CallRun, policy: TurnPolicy): TurnOwner | null {
+    const callId = run.ctx.callId;
+    const clock: HandsfreeClock = {
+      nowMs: () => this.now() - run.sessionStartedAt,
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    };
+    const sides = this.deps.handsfree?.(run.call, clock, () => run.ctx.roster) ?? null;
+    if (!sides) { console.warn('[meeting-assistant] the turn owner is on but no listening side is available: nothing is heard'); return null; }
+    const moved = async (to: 'paused' | 'left', by: string): Promise<void> => {
+      if (to === 'left') await this.snapshotAttendance(callId);
+      const change = to === 'paused' ? { from: ['listening'] as const, to } : { from: ['invited', 'listening', 'paused'] as const, to };
+      const record = await this.store.transition(callId, { ...change, by, at: this.now() });
+      if (record) await this.afterMove(callId, to, record, { userId: by });
+    };
+    const quietly = (p: Promise<void>): void => { void p.catch((err: unknown) => console.warn('[meeting-assistant] turn owner step failed', (err as Error).message)); };
+    const owner = new TurnOwner({
+      call: run.call, policy, clock, listening: sides.listening,
+      relay: {
+        push: (pcm, last) => this.sendVoice(run, pcm, last),
+        clear: () => { run.relay.clear(); run.playhead = 0; run.speech.forgetUnheard(); },
+      },
+      voiceOn: () => run.voice && !run.voiceHeld && !run.finished,
+      post: async (line) => { await postApprovedAnswer(callId, line.text, {}, line.askedBy ? { askedBy: line.askedBy, askedByName: await this.nameIn(run, line.askedBy) } : undefined); },
+      onLine: (l) => { void this.onHeardLine(run, l); },
+      nameOf: (userId) => nameOf(userId),
+      onPause: (by) => quietly(moved('paused', by)),
+      onLeave: (by) => quietly(moved('left', by)),
+      trace: (event, data) => trace(event, data as Parameters<typeof trace>[1]),
+    });
+    owner.on('state', () => { void this.pushFloor(run); });
+    run.owner = owner;
+    void this.pushFloor(run);
+    return owner;
   }
 
   /**
@@ -1032,7 +1081,7 @@ export class AssistantRuntime {
    * The floor routes (GET …/assistant/floor, the candidate's /milo/floor) stay the first read.
    */
   private async pushFloor(run: CallRun): Promise<void> {
-    const view = await floorOf(run.finished ? null : run.hf, (id) => nameOf(id));
+    const view = await floorOf(run.finished ? null : run.owner ?? run.hf, (id) => nameOf(id));
     const key = JSON.stringify(view);
     if (key === run.floorSent) return;
     run.floorSent = key;
@@ -1082,7 +1131,7 @@ export class AssistantRuntime {
     // under way when the ceiling is reached), so a tap never outlives the call's stop.
     this.deps.audio?.detach(run.ctx.callId);
     run.deaf = null; // a resume arms a new tap and opens a new session: any stall is watched afresh
-    if (run.hf) await this.endHandsfree(run);
+    if (run.hf || run.owner) await this.endHandsfree(run);
     const session = run.session;
     if (!session) return;
     run.intentionalClose = true;
@@ -1186,7 +1235,7 @@ export class AssistantRuntime {
     if (run.intentionalClose || run.finished || run.session !== session) return;
     // An unexpected close (decision 11): replace the session with the last minutes of the call as context, a few times at most.
     run.session = null;
-    if (run.hf) void this.endHandsfree(run);
+    if (run.hf || run.owner) void this.endHandsfree(run);
     this.dropVoice(run, false); // what the lost session was saying is never finished
     this.deps.audio?.suspend(run.ctx.callId); // the tap stays, its audio waits for the new session (and its time base)
     this.foldUsage(run);
@@ -1321,6 +1370,7 @@ export class AssistantRuntime {
    * echo) up to the hold's length later than its frames were sent.
    */
   private onOutputAudio(run: CallRun, session: LiveMeetingSession, e: SessionEvents['outputAudio']): void {
+    if (run.owner) return; // the turn owner speaks with its own voice: nothing the session says is relayed
     // Approved speech (sayHeldText): the frames of the utterance asked for are held, and go out only as its transcript shows them to
     // be the approved words (`streamApproved`, then `releaseApproved`); a frame tagged for any other request is dropped; and while one is outstanding nothing else the session says is relayed.
     if (e.say !== undefined) {
@@ -1420,7 +1470,7 @@ export class AssistantRuntime {
   /** The call's hands-free run (hold press / release / cancel, the floor for the surface), or null when the call is not hands-free now. */
   handsfreeRun(callId: string): HandsfreeRun | null {
     const run = this.runs.get(callId);
-    return run && !run.finished ? run.hf : null;
+    return run && !run.finished ? run.owner ?? run.hf : null;
   }
 
   async sayHeldTextWhy(callId: string, text: string, by: string, opts?: SayOptions): Promise<SayResult> {
@@ -1429,6 +1479,13 @@ export class AssistantRuntime {
     if (!run || run.finished) return { outcome: 'no-call', why: null };
     const session = run.session;
     const words = text.trim().slice(0, 1500);
+    if (run.owner) {
+      // The turn owner says server-held words through its own mouth (the caller has logged and posted them).
+      const off: SayWithheldWhy | null = !words ? 'empty' : !run.voice ? 'voice-off' : run.voiceHeld ? 'paused' : null;
+      if (off) { trace('voice.approved', { decision: 'chat', why: off }); return { outcome: 'posted', why: off }; }
+      const said = await run.owner.sayLine(words, by);
+      return said.outcome === 'spoken' ? { outcome: 'spoken', why: null } : { outcome: 'posted', why: said.why === 'no-hold' ? 'refused' : said.why === 'stopped' ? 'not-relayed' : 'no-audio' };
+    }
     const early: SayWithheldWhy | null = !words ? 'empty' : !session?.sayVerbatim ? 'no-say' : !run.voice ? 'voice-off' : run.voiceHeld ? 'paused' : null;
     if (early || !session?.sayVerbatim) { trace('voice.approved', { decision: 'chat', why: early ?? 'no-say' }); return { outcome: 'posted', why: early ?? 'no-say' }; }
     this.saySeq += 1;
@@ -2591,7 +2648,7 @@ export class AssistantRuntime {
   private async letLeaversGo(run: CallRun): Promise<void> {
     let seats: Array<{ userId: string; active: boolean }>;
     try { seats = await this.seatsOf(run.ctx.callId); } catch { return; /* the seat roster is best effort here */ }
-    const hf = run.hf;
+    const hf = run.owner ?? run.hf;
     if (!hf || run.finished) return;
     for (const u of seats) {
       if (u.active) run.hfGone.delete(u.userId);

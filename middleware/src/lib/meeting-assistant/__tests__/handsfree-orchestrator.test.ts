@@ -6,6 +6,10 @@ jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () => null) }));
 // Notifications go nowhere here (the absent-people step of a dismiss would otherwise reach for a real inbox).
 jest.mock('../../social-notify.js', () => ({ notify: jest.fn(async () => []) }));
+// The turn owner's voice (the last block): a tone that says the logged words, so nothing reaches a provider.
+jest.mock('../../voice/speech.js', () => ({
+  speechBackend: () => ({ id: 'tone', sampleRate: 24_000, speak: async (text: string, o: { onInput(t: string): void; onAudio(b: Buffer): void }) => { o.onInput(text); o.onAudio(Buffer.alloc(4800, 1)); return { firstAudioMs: 0, ms: 0, bytes: 4800 }; } }),
+}));
 const mockPosts = {
   replies: [] as Array<{ text: string; askedBy: string; askedByName: string }>,
   privates: [] as Array<{ userId: string; text: string }>,
@@ -44,6 +48,9 @@ import type { AudioSink } from '../audio-intake.js';
 import { HandsfreeTalking } from '../handsfree/talking.js';
 import type { HandsfreeClock } from '../handsfree/types.js';
 import { FakeListening, FakeRules, type FakeClock } from './handsfree-fakes.js';
+import { TurnOwner } from '../turn/turn-owner.js';
+import { _setTextFetch } from '../../voice/openai-text.js';
+import type { SpokenLine } from '../turn/types.js';
 
 const CALL = 'call-1';
 const ALICE = 'u-alice', BOB = 'u-bob', CAROL = 'u-carol';
@@ -347,3 +354,80 @@ describe('the hands-free seam', () => {
   });
 });
 
+
+// The turn owner's seam (Milo rebuild 1B): one switch, and only for a call whose policy has the turn contract.
+describe('the turn owner seam (MILO_TURN_OWNER)', () => {
+  const CAN_DO = 'I can repeat the question or tell you the time.';
+  const logged: SpokenLine[] = [];
+  const bodies: Array<{ store?: boolean; input: string }> = [];
+  let pickTool = 'cannot_help';
+  let off: (() => void) | null = null;
+  const saved = { owner: process.env['MILO_TURN_OWNER'], key: process.env['OPENAI_API_KEY'] };
+  const contract: MeetingAssistantPolicy = {
+    ...DEFAULT_POLICY, id: 'turn-test',
+    roleOf: async () => 'lead', toolsFor: async () => [], answersFreely: () => false, instructions: () => 'A test call.', cannotHelp: () => CAN_DO,
+    context: async () => '', mayHold: () => true, logSpoken: async (_c, line) => { logged.push(line); return 'row'; },
+  };
+  /** Bounded: the owner runs on real timers here (one 100 ms frame per line). */
+  const until = async (ok: () => boolean | Promise<boolean>) => { for (let i = 0; i < 100 && !(await ok()); i += 1) { await new Promise<void>((r) => setTimeout(r, 20)); await flush(); } };
+  beforeEach(() => {
+    logged.length = 0; bodies.length = 0; pickTool = 'cannot_help';
+    process.env['OPENAI_API_KEY'] = 'test-key';
+    _setTextFetch(async (_u, init) => { bodies.push(JSON.parse(init.body)); return { status: 200, text: async () => JSON.stringify({ output: [{ type: 'function_call', name: pickTool, arguments: '{}' }] }) }; });
+  });
+  afterEach(() => {
+    off?.(); off = null; _setTextFetch(null);
+    for (const [k, v] of [['MILO_TURN_OWNER', saved.owner], ['OPENAI_API_KEY', saved.key]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  });
+
+  it('switch off, or a policy without the turn contract: the hands-free runtime, as today', async () => {
+    off = registerMeetingAssistantPolicy('orgiq:initiative', contract);
+    delete process.env['MILO_TURN_OWNER'];
+    await boot('1');
+    expect(runtime.handsfreeRun(CALL)).not.toBeInstanceOf(TurnOwner);
+    await runtime.dispose();
+    off(); off = null;
+    process.env['MILO_TURN_OWNER'] = '1';
+    await boot('1');
+    expect(runtime.handsfreeRun(CALL)).not.toBeNull();
+    expect(runtime.handsfreeRun(CALL)).not.toBeInstanceOf(TurnOwner);
+  });
+
+  it('switch on with the contract: a named sentence is decided once (store: false), its fixed line is logged, posted and then said; the session hears and says nothing', async () => {
+    off = registerMeetingAssistantPolicy('orgiq:initiative', contract);
+    process.env['MILO_TURN_OWNER'] = '1';
+    await boot('1');
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    expect(runtime.handsfreeRun(CALL)).toBeInstanceOf(TurnOwner);
+    audioTap.sink!.append(pcm(1));
+    inner().fire('outputAudio', { pcm: pcm(9), seq: 1, last: true });
+    listening!.emit('sentence', { userId: BOB, sentenceId: 's0', text: 'I think the cache is fine.', startMs: 0, endMs: 900, named: false });
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, is my approach right?', startMs: 1000, endMs: 2200, named: true });
+    await until(() => sent.length === 1 && mockPosts.replies.length === 1);
+    await new Promise<void>((r) => setTimeout(r, 150)); // the frame has played out
+    expect(inner().audio).toEqual([]);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]!.store).toBe(false);
+    expect(JSON.stringify(bodies[0]!.input)).toContain('Milo, is my approach right?');
+    expect(logged.map((l) => [l.text, l.askedBy, l.tool])).toEqual([[CAN_DO, ALICE, 'cannot_help']]);
+    expect(mockPosts.replies).toEqual([{ text: CAN_DO, askedBy: ALICE, askedByName: 'Alice' }]);
+    expect(sent).toHaveLength(1);
+    expect(floors.some((f) => f.handsfree && f.floor?.userId === ALICE)).toBe(true);
+    // "Have Milo ask": the server's words go through the owner's mouth, not the session.
+    expect(await runtime.sayHeldTextWhy(CALL, 'What is a hash map?', ALICE)).toEqual({ outcome: 'spoken', why: null });
+    expect(inner().asked).toEqual([]);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('"Milo, stop listening" pauses the call through the same steps as the button', async () => {
+    off = registerMeetingAssistantPolicy('orgiq:initiative', contract);
+    process.env['MILO_TURN_OWNER'] = '1';
+    await boot('1');
+    pickTool = 'pause_listening';
+    listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, please stop listening for now.', startMs: 0, endMs: 1200, named: true });
+    await until(async () => (await store.get(CALL))!.state === 'paused' && runtime.handsfreeRun(CALL) === null && mockPosts.notices.length > 0);
+    expect((await store.get(CALL))!.state).toBe('paused');
+    expect(mockPosts.notices.some((n) => n.includes('Alice'))).toBe(true);
+    expect(runtime.handsfreeRun(CALL)).toBeNull();
+  });
+});

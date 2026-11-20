@@ -42,6 +42,13 @@ const RECENT_MAX = 60;
 const KEPT_MS = 30_000;
 
 type Via = TurnSentence['via'];
+let owners = 0;
+
+/** The one switch: MILO_TURN_OWNER=1 puts a call whose policy has the turn contract (interviews) on the turn owner. Off: today's path. */
+export function turnOwnerEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const v = (env['MILO_TURN_OWNER'] ?? '').trim();
+  return v === '1' || v === 'true';
+}
 
 /** One finished sentence from one person's lane (the listening side's `sentence` event). */
 export interface OwnerSentence { userId: string; sentenceId: string; text: string; startMs: number; endMs: number }
@@ -61,6 +68,8 @@ export interface TurnOwnerDeps {
   /** Post a line to the call's chat before it is said. */
   post?: SpeakDeps['post'];
   voice?: SpeechBackend;
+  /** May Milo's voice be heard now (the call's voice is on and not held)? False: lines are logged and posted, never said. Absent: yes. */
+  voiceOn?: () => boolean;
   decide?: DecideDeps;
   act?: ActDeps;
   /** A person's line to store: never Milo's echo, never a second lane's copy. */
@@ -116,6 +125,11 @@ export class TurnOwner implements HandsfreeRun {
   private holdTimer: unknown = null;
   private windowTimer: unknown = null;
   private sayNo = 0;
+  /**
+   * This owner's mark on its sentence ids. A listening side numbers its sentences from 1, and a call gets a new one with every session
+   * (a pause, a replacement, an invitation back): without the mark, Act's once-per-sentence key would take a new sentence for an old one.
+   */
+  private readonly scope = `${Date.now().toString(36)}.${++owners}`;
   private closed = false;
   private closing: Promise<void> | null = null;
   private readonly listeners = new Map<string, Set<(e: never) => void>>();
@@ -345,7 +359,7 @@ export class TurnOwner implements HandsfreeRun {
   private kill(t: Turn): void { t.dead = true; this.unsuspend(t); }
 
   private open(s: Final, text: string, via: Via, recent: HeardLine[]): void {
-    const turn: Turn = { who: s.who, via, text, sentence: { id: s.id, who: s.who, text, atMs: s.endMs, via }, dead: false, suspended: null, committed: false, audio: false, line: null };
+    const turn: Turn = { who: s.who, via, text, sentence: { id: `${this.scope}/${s.id}`, who: s.who, text, atMs: s.endMs, via }, dead: false, suspended: null, committed: false, audio: false, line: null };
     s.turn = turn;
     this.turn = turn;
     this.floor.deciding(turn.who, via);
@@ -393,7 +407,7 @@ export class TurnOwner implements HandsfreeRun {
     this.floor.speaking(turn.who, turn.via);
     const line: SpokenLine = { text: result.line, askedBy: turn.who, tool: result.tool, sentenceId: turn.sentence.id };
     turn.audio = true; // from here a new sentence is a new turn, and talking over him is a barge-in
-    const said = await this.mouth.say({ call, policy, line, ...(result.logged ? { logged: { rowId: null } } : {}) });
+    const said = await this.mouth.say({ call, policy: this.speakPolicy(), line, ...(result.logged ? { logged: { rowId: null } } : {}) });
     if (this.playing?.text === line.text) this.endPlaying(said.playEndMs ?? this.now());
     if (said.outcome !== 'not-logged' && !this.floor.paused) this.floor.answered(turn.who, said.playEndMs ?? this.now());
     record(said);
@@ -411,6 +425,13 @@ export class TurnOwner implements HandsfreeRun {
     if (old) this.deps.clock.clearTimeout(old.timer);
     const timer = this.deps.clock.setTimeout(() => { if (this.waiting.get(turn.who)?.timer === timer) { this.waiting.delete(turn.who); this.trace('turn.rest-never-came', {}); } }, KEEP_LISTENING_MS);
     this.waiting.set(turn.who, { text: turn.text, via: turn.via, timer });
+  }
+
+  /** The tenant's log and money hold for a line; with the call's voice off no hold is asked for, so the line is posted and not said. */
+  private speakPolicy(): Pick<TurnPolicy, 'logSpoken' | 'markSpoken' | 'holdSpeech'> {
+    const p = this.deps.policy;
+    if (this.deps.voiceOn?.() !== false) return p;
+    return { logSpoken: (c, l) => p.logSpoken(c, l), ...(p.markSpoken ? { markSpoken: (c, id, l, o) => p.markSpoken!(c, id, l, o) } : {}), holdSpeech: async () => null };
   }
 
   private onPlay(ev: { kind: 'start' | 'end'; line: SpokenLine; atMs: number }): void {
@@ -493,7 +514,7 @@ export class TurnOwner implements HandsfreeRun {
   sayLine(text: string, askedBy: string): Promise<SpeakResult> {
     this.sayNo += 1;
     const line: SpokenLine = { text, askedBy, tool: 'say', sentenceId: `say:${this.sayNo}` };
-    return this.mouth.say({ call: this.deps.call, policy: this.deps.policy, line, logged: { rowId: null } }).then((said) => {
+    return this.mouth.say({ call: this.deps.call, policy: this.speakPolicy(), line, logged: { rowId: null } }).then((said) => {
       if (this.playing?.text === text) this.endPlaying(said.playEndMs ?? this.now());
       return said;
     });
