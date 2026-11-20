@@ -130,9 +130,9 @@ describe('the contract', () => {
     const c = await turn(GUEST, 'Milo, how long do I have?', { tool: 'time_left' });
     expect(c.offered).toEqual(['time_left', 'repeat_question', ...CORE_CANDIDATE]);
     const p = await turn(PANEL, 'Milo, how long is left?', { tool: 'time_left' });
-    expect(p.offered).toEqual(['time_left', 'repeat_question', 'pad_write', ...CORE_INTERVIEWER]);
+    expect(p.offered).toEqual(['time_left', 'repeat_question', 'ask_probe', 'pad_write', ...CORE_INTERVIEWER]);
     const l = await turn(LEAD, 'Milo, how long is left?', { tool: 'time_left' });
-    expect(l.offered).toEqual(['time_left', 'repeat_question', 'introduce', 'pad_write', ...CORE_INTERVIEWER]);
+    expect(l.offered).toEqual(['time_left', 'repeat_question', 'introduce', 'ask_probe', 'pad_write', ...CORE_INTERVIEWER]);
     expect(requests.map((r) => r.toolChoice)).toEqual(['required', 'required', 'required']);
     expect(requests[0]!.instructions).toContain('Never answer in words');
   });
@@ -142,7 +142,7 @@ describe('the contract', () => {
     expect((await turn(GUEST, 'Milo, how long do I have?', { tool: 'time_left' })).offered).toEqual(['time_left', 'repeat_question', 'pad_write', ...CORE_CANDIDATE]);
     surface = 'board';
     expect((await turn(GUEST, 'Milo, how long do I have?', { tool: 'time_left' })).offered).toEqual(['time_left', 'repeat_question', ...CORE_CANDIDATE]);
-    expect((await turn(LEAD, 'Milo, how long is left?', { tool: 'time_left' })).offered).toEqual(['time_left', 'repeat_question', 'introduce', ...CORE_INTERVIEWER]);
+    expect((await turn(LEAD, 'Milo, how long is left?', { tool: 'time_left' })).offered).toEqual(['time_left', 'repeat_question', 'introduce', 'ask_probe', ...CORE_INTERVIEWER]);
   });
 
   it('the old live session is still offered exactly its six tools', async () => {
@@ -269,7 +269,7 @@ describe("the lead's confirm on a candidate's pad write", () => {
     expect(await policy.context(call, { userId: LEAD, role: 'lead' })).toContain('The candidate asked Milo for a pad change that waits for the lead\'s yes or no: "a dozen test cases".');
     expect(await policy.context(call, { userId: GUEST, role: 'candidate' })).not.toContain('waits for');
     const t = await turn(LEAD, 'Milo, go ahead.', { tool: 'confirm_pad_write' });
-    expect(t.offered).toEqual(['time_left', 'repeat_question', 'introduce', 'pad_write', 'confirm_pad_write', 'decline_pad_write', ...CORE_INTERVIEWER]);
+    expect(t.offered).toEqual(['time_left', 'repeat_question', 'introduce', 'ask_probe', 'pad_write', 'confirm_pad_write', 'decline_pad_write', ...CORE_INTERVIEWER]);
     expect(t.out).toMatchObject({ tool: 'confirm_pad_write', line: TWELVE, logged: true });
     expect(written.map((w) => w.text)).toEqual(['a dozen test cases']);
     expect(pad.text).not.toBe(TWO_SUM.starter!.python);

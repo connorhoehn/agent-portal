@@ -24,6 +24,7 @@ interface Event { atMs: number; kind: string; who: string; text?: string; down?:
 interface Expect { who: string; action: string; words?: string; argHas?: string }
 interface Scenario { id: string; layer: string; people: Person[]; round: { minutes: number; startedAtMs: number; question: string | null }; events: Event[]; expect: Expect[]; noModelCall?: boolean }
 
+const PROBE = 'What would you change in this part, and why?';
 const JUDGE = join(__dirname, '../../../../../scripts/milo-judge');
 const scenarios = (JSON.parse(readFileSync(join(JUDGE, 'corpus/dev.json'), 'utf8')) as { scenarios: Scenario[] }).scenarios.filter((s) => s.layer === 'decide');
 // The judge's own spellings of the name and its clock (seed.mts, truth.mts), read so this test follows them.
@@ -56,6 +57,8 @@ async function run(s: Scenario): Promise<string[]> {
   const asked: string[] = [];
   setMiloToolDeps({
     interview: async () => interview, guestOf: async (u) => u.startsWith('guest:'), settings: (i) => new MemoryMiloSettingsStore().get(i), questions: async () => [],
+    // A probe's writer is a model: here it is a fixed question, and the truth `@probe` is that question.
+    board: async () => null, heard: async () => [], answerKey: async () => [], prober: async () => PROBE,
     surface: async () => 'pad', write: async (_i, plan) => { await plan({ text: '', language: 'python' }); return { ok: false, code: 'nothing' }; },
     padLog: async () => 0, judge: async () => 'helper', writer: async (_iv, input) => { asked.push(input.text); return null; }, now: () => now, newId: () => `said-${s.id}-t${++ids}`,
   });
@@ -108,7 +111,7 @@ async function run(s: Scenario): Promise<string[]> {
     const accepted = e.words === undefined ? null
       : e.words === '@time_left' ? [0, -15_000, 15_000].map((d) => timeLeftLine(s.round.minutes, start, T0 + l.atMs + d))
         : e.words === '@question' ? [s.round.question ?? NO_QUESTION_YET]
-          : e.words === '@intro' ? [MILO_INTRO] : e.words === '@can_do' ? [MILO_CAN_DO] : [e.words];
+          : e.words === '@intro' ? [MILO_INTRO] : e.words === '@can_do' ? [MILO_CAN_DO] : e.words === '@probe' ? [PROBE] : [e.words];
     if (accepted && !accepted.includes(l.line ?? '')) problems.push(`${s.id}: said "${l.line}", the truth is "${accepted[0]}"`);
     if (e.action === 'pad_write' && !l.text?.trim()) problems.push(`${s.id}: the pad tool was asked nothing`);
     if (e.action === 'pad_write' && e.argHas !== undefined && !` ${words(l.text ?? '').join(' ')} `.includes(` ${words(e.argHas ?? '').join(' ')} `)) problems.push(`${s.id}: the pad tool was asked "${l.text}", not "${e.argHas}"`);
