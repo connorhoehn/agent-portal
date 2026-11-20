@@ -198,9 +198,9 @@ test('turn owner: an interviews scenario runs on the registered interviews polic
     const [lead, panel, candidate] = ['lead', 'panellist', 'candidate'].map((role) => t.uid(s.people.find((p) => p.role === role)!.id));
     assert.deepEqual(await Promise.all([lead!, panel!, candidate!, 'a-stranger'].map((u) => t.policy.roleOf(t.call, u))), ['lead', 'panel', 'candidate', null]);
     const names = async (userId: string, role: string): Promise<string[]> => (await t.policy.toolsFor(t.call, { userId, role })).map((x) => x.name);
-    assert.deepEqual(await names(lead!, 'lead'), ['time_left', 'repeat_question', 'introduce', 'pad_write']);
-    assert.deepEqual(await names(panel!, 'panel'), ['time_left', 'repeat_question', 'pad_write']);
-    assert.deepEqual(await names(candidate!, 'candidate'), ['time_left', 'repeat_question']);
+    assert.deepEqual(await names(lead!, 'lead'), ['time_left', 'repeat_question', 'introduce', 'ask_probe', 'pad_write']);
+    assert.deepEqual(await names(panel!, 'panel'), ['time_left', 'repeat_question', 'ask_probe', 'pad_write']);
+    assert.deepEqual(await names(candidate!, 'candidate'), ['time_left', 'repeat_question']); // never ask_probe: a candidate cannot have Milo ask a probe
     t.close();
     assert.equal(await t.policy.roleOf(t.call, lead!), null); // the room is gone with the run
     const other = await tenantFor({ ...s, tenant: 'work' }, clock);

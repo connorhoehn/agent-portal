@@ -153,7 +153,7 @@ async function bindOwner(mod: { TurnOwner: new (deps: TurnOwnerDeps) => TurnOwne
     const e = want[next];
     if (!e || e.who !== speaker) return pick('stay_silent');
     next += 1;
-    return pick(e.action, TOOL_ARGS[e.action as Action].length ? { text: e.argHas ?? sentence } : {});
+    return pick(e.action, Object.fromEntries(TOOL_ARGS[e.action as Action].map((k) => [k, e.argHas ?? sentence])));
   };
   type Ask = (req: TextToolRequest, opts: { timeoutMs: number }) => Promise<TextToolReply>;
   let live: Ask | null = null;
@@ -202,7 +202,8 @@ async function bindOwner(mod: { TurnOwner: new (deps: TurnOwnerDeps) => TurnOwne
         return;
       }
       if (action === 'pause_listening' || action === 'leave_call' || action === 'cancel') { if (t.result.effect) logged.push({ who, action, atMs: at }); return; }
-      if (t.result.line !== null) logged.push({ who, action, words: t.result.line, atMs: at });
+      // A probe is logged with the topic it was asked for (the tool's one argument).
+      if (t.result.line !== null) logged.push({ who, action, words: t.result.line, ...(action === 'ask_probe' && t.decision.kind === 'tool' ? { args: t.decision.args } : {}), atMs: at });
     },
   });
 

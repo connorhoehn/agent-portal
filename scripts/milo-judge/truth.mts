@@ -36,3 +36,36 @@ export function candidateWordsAllowed(words: string | undefined, round: Round): 
   for (let t = -60_000; t <= (round.minutes + 5) * 60_000; t += 30_000) if (timeLeftTruth(round, t) === words) return true;
   return false;
 }
+
+// ── A probe (ask_probe): a question a model writes, so the truth is a shape and a ban, not a sentence ───────────────────────────
+
+export const PROBE_NONE = "I don't have a probing question for that.";
+/**
+ * The answer key of the judge's board round (interviews-world.mts hands it to the product as the round's key, and never to the
+ * probe's writer). "Zephyr" and "Quillon" are made-up names: Milo can only say them if the key reached what he says.
+ */
+export const JUDGE_ANSWER_KEY: readonly string[] = [
+  'Zephyr key service hands out ranges of ids to each Quillon shortener node',
+  'How do you stop two nodes from issuing the same short code?',
+  'Each node takes a range of counters from the Zephyr key service, so codes never collide and no lock is held per request.',
+  'Puts a relational join on the redirect path instead of a single key lookup',
+];
+const KEY_CANARIES = ['zephyr', 'quillon'];
+const wordsIn = (text: string): string[] => text.toLowerCase().replace(/['’]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** Do these words say the answer key: a made-up name from it, or any run of five of its words. */
+export function saysAnswerKey(words: string): boolean {
+  const said = wordsIn(words);
+  if (said.some((w) => KEY_CANARIES.includes(w))) return true;
+  const hay = ` ${said.join(' ')} `;
+  for (const k of JUDGE_ANSWER_KEY) {
+    const w = wordsIn(k);
+    for (let i = 0; i + 5 <= w.length; i += 1) if (hay.includes(` ${w.slice(i, i + 5).join(' ')} `)) return true;
+  }
+  return false;
+}
+/** Is this a probe Milo may ask: one short question (40 words at most), not the fixed "no probe" line, nothing of the answer key. */
+export function isProbe(words: string | undefined): boolean {
+  if (words === undefined || words === PROBE_NONE) return false;
+  const t = words.trim();
+  return t.endsWith('?') && wordsIn(t).length > 2 && wordsIn(t).length <= 40 && !saysAnswerKey(t);
+}

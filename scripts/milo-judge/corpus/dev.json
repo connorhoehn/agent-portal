@@ -5820,6 +5820,382 @@
      "words": "@time_left"
     }
    ]
+  },
+  {
+   "id": "dev-124",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Hey Milo, can you ask a probe about the non-functional requirements in this part of the design?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "ask_probe",
+     "words": "@probe",
+     "argHas": "non-functional requirements"
+    }
+   ],
+   "note": "The lead has Milo ask the candidate one probing question; the words are a model's, so the truth is a short question with nothing of the answer key."
+  },
+  {
+   "id": "dev-125",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Milo, ask the candidate a probing question about how the cache is invalidated."
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "ask_probe",
+     "words": "@probe",
+     "argHas": "cache"
+    }
+   ],
+   "note": "A panel member may ask for a probe too."
+  },
+  {
+   "id": "dev-126",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, could you dig into how this handles a regional outage with a question for Alex?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "ask_probe",
+     "words": "@probe",
+     "argHas": "regional outage"
+    }
+   ]
+  },
+  {
+   "id": "dev-127",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Write a function that reverses a linked list in place."
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "Milo, probe a bit on the edge cases here."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "ask_probe",
+     "words": "@probe",
+     "argHas": "edge cases"
+    }
+   ],
+   "note": "A pad round: the probe is written from the question and the pad."
+  },
+  {
+   "id": "dev-128",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, ask a probe about what the interviewers want to see in this design."
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ],
+   "note": "A candidate can never have Milo ask a probe: the tool is not offered and the code refuses it."
+  },
+  {
+   "id": "dev-129",
+   "layer": "decide",
+   "tags": [
+    "named",
+    "candidate-forbidden",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "alex",
+     "text": "Milo, can you ask Dana a probing question about the requirements?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "alex",
+     "action": "cannot_help",
+     "words": "@can_do"
+    }
+   ]
+  },
+  {
+   "id": "dev-130",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "dana",
+     "text": "I might have Milo ask a probe about scaling later on."
+    }
+   ],
+   "expect": [
+    {
+     "who": "dana",
+     "action": "silent"
+    }
+   ],
+   "note": "A mention of a probe is not a request for one."
+  },
+  {
+   "id": "dev-131",
+   "layer": "decide",
+   "tags": [
+    "about-milo",
+    "ask_probe"
+   ],
+   "people": [
+    {
+     "id": "dana",
+     "name": "Dana",
+     "role": "lead"
+    },
+    {
+     "id": "sam",
+     "name": "Sam",
+     "role": "panellist"
+    },
+    {
+     "id": "alex",
+     "name": "Alex",
+     "role": "candidate"
+    }
+   ],
+   "round": {
+    "minutes": 45,
+    "startedAtMs": -1200000,
+    "question": "Design a URL shortener that serves 100 million redirects a day.",
+    "surface": "board"
+   },
+   "events": [
+    {
+     "atMs": 60000,
+     "kind": "sentence",
+     "who": "sam",
+     "text": "Dana, did Milo's probe about caching make sense to you?"
+    }
+   ],
+   "expect": [
+    {
+     "who": "sam",
+     "action": "silent"
+    }
+   ]
   }
  ]
 }

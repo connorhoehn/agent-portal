@@ -13,6 +13,8 @@ import { NAME_SPELLINGS } from './seed.mts';
 import { MILO_CAN_DO, MILO_INTRO, NO_QUESTION_YET, acceptedWords, timeLeftTruth } from './truth.mts';
 
 export type Rig = (s: Scenario) => Promise<Outcome>;
+/** The probe the stand-in rigs log (they have no writer): a question that passes truth.mts `isProbe`. */
+const STAND_IN_PROBE = 'What would you change in this part, and why?';
 
 export const FOLLOW_UP_MS = 10_000;
 /** Milo's name and the forms the transcriber mishears it as, as a whole word. */
@@ -62,6 +64,7 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
       else if (action === 'repeat_question') words = s.round.question ?? NO_QUESTION_YET;
       else if (action === 'introduce') { if (introduced) continue; introduced = true; words = MILO_INTRO; }
       else if (action === 'cannot_help') words = speaker.role === 'candidate' ? MILO_CAN_DO : 'I cannot do that.';
+      else if (action === 'ask_probe') words = STAND_IN_PROBE;
       logged.push({ who: ev.who, action, words, args: r.args, atMs: ev.atMs });
       if (SPEECH.includes(action) || action === 'pad_write') answeredAt.set(ev.who, ev.atMs + 4_000);
       miloLast = { line: words ?? '', tool: action, args: action === 'pad_write' ? JSON.stringify(r.args) : undefined };
@@ -79,7 +82,7 @@ export const scriptedRig: Rig = (s) => {
     if (!e || e.who !== input.speaker.id) return { action: 'stay_silent', args: {}, ms: 0, model };
     next += 1;
     const action = e.action as Action;
-    return { action, args: TOOL_ARGS[action].length ? { text: e.argHas ?? input.sentence } : {}, ms: 0, model };
+    return { action, args: Object.fromEntries(TOOL_ARGS[action].map((k) => [k, e.argHas ?? input.sentence])), ms: 0, model };
   })(s);
 };
 
@@ -89,8 +92,8 @@ export const perfectRig: Rig = async (s) => {
   for (const e of s.expect) {
     if (e.action === 'silent') continue;
     const at = s.events.find((x) => x.kind === 'sentence' && x.who === e.who)?.atMs ?? 0;
-    const words = acceptedWords(e.words, s.round, at)?.[0];
-    logged.push({ who: e.who, action: e.action, words, args: TOOL_ARGS[e.action].length ? { text: e.argHas ?? 'as asked' } : undefined, atMs: at });
+    const words = e.words === '@probe' ? STAND_IN_PROBE : acceptedWords(e.words, s.round, at)?.[0];
+    logged.push({ who: e.who, action: e.action, words, args: TOOL_ARGS[e.action].length ? Object.fromEntries(TOOL_ARGS[e.action].map((k) => [k, e.argHas ?? 'as asked'])) : undefined, atMs: at });
   }
   return { logged, decideRequests: [] };
 };

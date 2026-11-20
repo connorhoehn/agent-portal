@@ -4,11 +4,11 @@ export type Role = 'lead' | 'panellist' | 'candidate';
 
 /** What Milo can do. Speech actions say words; write actions change something; the rest are silence in different clothes. */
 export type Action =
-  | 'time_left' | 'repeat_question' | 'introduce' | 'cannot_help' // speech
+  | 'time_left' | 'repeat_question' | 'introduce' | 'cannot_help' | 'ask_probe' // speech
   | 'pad_write' | 'pause_listening' | 'leave_call' | 'cancel' // writes
   | 'stay_silent' | 'keep_listening'; // no line
 
-export const SPEECH: readonly Action[] = ['time_left', 'repeat_question', 'introduce', 'cannot_help'];
+export const SPEECH: readonly Action[] = ['time_left', 'repeat_question', 'introduce', 'cannot_help', 'ask_probe'];
 export const WRITES: readonly Action[] = ['pad_write', 'pause_listening', 'leave_call', 'cancel'];
 export const CANDIDATE_ALLOWED: readonly Action[] = ['time_left', 'repeat_question', 'cannot_help'];
 
@@ -19,6 +19,8 @@ export interface Round {
   /** Round start, ms relative to the script's t0 (negative: started before the script). */
   startedAtMs: number;
   question: string | null;
+  /** Where the round is worked. Absent: the code pad. `board`: a system design round on the whiteboard (interviews-world.mts gives it a board and an answer key). */
+  surface?: 'pad' | 'board';
 }
 
 /** One thing that happens on the fake clock. `sentence` is a FINAL transcript line from `who`'s own mic. */
@@ -30,18 +32,18 @@ export type ScriptEvent =
   /** `who` starts speaking again (a new onset); the turn owner may merge it with the previous sentence. */
   | { atMs: number; kind: 'onset'; who: string };
 
-/** What the truth says one logged item must be. `words`: a literal, or @time_left / @question / @intro / @can_do, resolved from the round. */
+/** What the truth says one logged item must be. `words`: a literal, or @time_left / @question / @intro / @can_do, resolved from the round; @probe: any one short question that says nothing of the answer key (truth.mts `isProbe`). */
 export interface ExpectItem {
   who: string;
   action: Action | 'silent';
   words?: string;
-  /** Words the `text` argument must hold, as whole words in this order (what was asked for; a merged split request). */
+  /** Words the `text` argument (for ask_probe, `topic`) must hold, as whole words in this order (what was asked for; a merged split request). */
   argHas?: string;
 }
 
 /** The arguments each tool takes, exactly. A logged call with a missing, empty or extra argument is not that call. */
 export const TOOL_ARGS: Record<Action, readonly string[]> = {
-  time_left: [], repeat_question: [], introduce: [], cannot_help: [],
+  time_left: [], repeat_question: [], introduce: [], cannot_help: [], ask_probe: ['topic'],
   pad_write: ['text'], pause_listening: [], leave_call: [], cancel: [],
   stay_silent: [], keep_listening: [],
 };

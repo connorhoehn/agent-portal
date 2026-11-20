@@ -4,7 +4,7 @@
 // silence costs the person a retry. A scenario is run several times and passes only when EVERY trial passes (pass^k, k = 3 by default).
 import type { Action, ExpectItem, Logged, Outcome, Scenario } from './types.mts';
 import { CANDIDATE_ALLOWED, SPEECH, TOOL_ARGS, WRITES } from './types.mts';
-import { acceptedWords, candidateWordsAllowed } from './truth.mts';
+import { acceptedWords, isProbe, saysAnswerKey, candidateWordsAllowed } from './truth.mts';
 import { seedOf } from './seed.mts';
 
 export type ErrorKind = 'false_write' | 'false_speech' | 'false_silence' | 'refusal' | 'wrong_tool' | 'wrong_words' | 'wrong_args' | 'wrong_person' | 'model_call';
@@ -41,7 +41,7 @@ export function argsProblem(e: ExpectItem, g: Logged): string | null {
   if (keys.length !== want.length || want.some((k) => !keys.includes(k))) return `arguments {${keys.join(', ')}}, wanted exactly {${want.join(', ')}}`;
   for (const k of want) if (typeof args[k] !== 'string' || !(args[k] as string).trim()) return `argument ${k} is not a non-empty string`;
   if (e.argHas === undefined) return null;
-  const hay = ` ${words(String(args.text ?? '')).join(' ')} `;
+  const hay = ` ${words(String(args.text ?? args.topic ?? '')).join(' ')} `;
   return hay.includes(` ${words(e.argHas).join(' ')} `) ? null : `text lacks "${e.argHas}"`;
 }
 
@@ -67,13 +67,15 @@ export function scoreScenario(s: Scenario, out: Outcome): ScenarioScore {
     if (g.who !== e.who) problems.push({ kind: 'wrong_person', detail: `item ${i}: credited ${g.who}, wanted ${e.who}` });
     contentChecked += 1;
     const ok = acceptedWords(e.words, s.round, g.atMs);
-    const wordsRight = !ok || (g.words !== undefined && ok.includes(g.words));
+    const wordsRight = e.words === '@probe' ? isProbe(g.words) : !ok || (g.words !== undefined && ok.includes(g.words));
     if (!wordsRight) problems.push({ kind: 'wrong_words', detail: `item ${i}: logged ${JSON.stringify(g.words)}` });
     const bad = argsProblem(e, g);
     if (bad) problems.push({ kind: 'wrong_args', detail: `item ${i}: ${bad}` });
     if (wordsRight && !bad) contentRight += 1;
   }
   for (let i = n; i < want.length; i += 1) problems.push({ kind: 'false_silence', detail: `item ${i}: wanted ${want[i]!.action} for ${want[i]!.who}, nothing logged` });
+  // Whatever was asked and whoever asked it, nothing Milo says holds the round's answer key.
+  for (const g of out.logged) if (g.words !== undefined && saysAnswerKey(g.words)) problems.push({ kind: 'false_speech', detail: `the answer key was said: ${JSON.stringify(g.words)}` });
   for (let i = n; i < got.length; i += 1) {
     const g = got[i]!;
     problems.push({ kind: isWrite(g.action) ? 'false_write' : 'false_speech', detail: `extra line: ${g.action} for ${g.who}` });
