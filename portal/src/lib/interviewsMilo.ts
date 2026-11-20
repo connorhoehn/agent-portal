@@ -17,6 +17,32 @@ export async function setCandidateMayAsk(id: string, on: boolean): Promise<{ ok:
   return r.ok && r.data?.settings ? { ok: true, on: r.data.settings.candidateMayAsk } : { ok: false, error: r.error ?? 'The setting could not be saved. Try again.' };
 }
 
+/** The candidate's pad request that waits for the lead's yes (GET/POST /interviews/:id/milo-pad-confirm). */
+export interface PadConfirmWaiting { text: string; askedAt: string }
+export const padConfirmPath = (id: string): string => `${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/milo-pad-confirm`;
+/** How often the lead's room asks whether a pad request waits (it waits two minutes on the server). */
+export const PAD_CONFIRM_POLL_MS = 3000;
+/** The footer prompt's words: Confirm writes it as "Milo, go ahead" does; Decline drops it. */
+export const PAD_CONFIRM_TITLE = 'The candidate asked Milo to change the pad';
+export const PAD_CONFIRM_OPTIONS = [{ id: 'confirm', label: 'Confirm', emphasis: 'primary' as const }, { id: 'decline', label: 'Decline' }];
+export const PAD_CONFIRM_RECEIPTS = { confirm: 'Pad change confirmed', decline: 'Pad change declined' } as const;
+
+/** What waits for the lead, or null (nothing, not the lead, or the read failed: no news). */
+export async function readPadConfirm(id: string, fetcher: typeof fetch = fetch): Promise<PadConfirmWaiting | null> {
+  try {
+    const res = await fetcher(padConfirmPath(id), { credentials: 'include' });
+    if (!res.ok) return null;
+    const w = ((await res.json()) as { waiting?: Partial<PadConfirmWaiting> | null }).waiting;
+    return w && typeof w.text === 'string' && w.text.trim() ? { text: w.text, askedAt: typeof w.askedAt === 'string' ? w.askedAt : '' } : null;
+  } catch { return null; }
+}
+
+/** The lead pressed Confirm (`allow`) or Decline: Milo says what he did. */
+export async function answerPadConfirm(id: string, allow: boolean): Promise<{ ok: true; line: string } | { ok: false; error: string }> {
+  const r = await writeJson<{ line?: string }>(padConfirmPath(id), 'POST', { allow });
+  return r.ok && r.data?.line ? { ok: true, line: r.data.line } : { ok: false, error: r.error ?? 'Milo could not answer that. Try again.' };
+}
+
 export async function introduceMilo(id: string): Promise<{ ok: true; line: string } | { ok: false; error: string }> {
   const r = await writeJson<{ line?: string }>(introPath(id), 'POST', {});
   return r.ok && r.data?.line ? { ok: true, line: r.data.line } : { ok: false, error: r.error ?? 'Milo could not introduce itself. Try again.' };

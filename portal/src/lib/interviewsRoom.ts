@@ -304,11 +304,11 @@ export const escSkipsSuggestion = (collapsed: boolean, suggestionId: string | nu
   collapsed && suggestionId !== null && suggestionId !== skipped ? suggestionId : null;
 
 /** Which of the room's waiting questions is on the footer bar's button (components/shell/InterviewRoomFooter.tsx). */
-export type InterviewAskKind = 'end' | 'knock' | 'suggestion';
+export type InterviewAskKind = 'end' | 'knock' | 'pad' | 'suggestion';
 
 /** The button's words for the question that waits; `more` others wait behind it. Short, so the footer's row keeps its width. */
 export const askButtonLabel = (kind: InterviewAskKind, more: number): string =>
-  `${kind === 'end' ? 'End interview?' : kind === 'knock' ? 'Candidate waiting' : 'Milo suggests'}${more > 0 ? ` +${more}` : ''}`;
+  `${kind === 'end' ? 'End interview?' : kind === 'knock' ? 'Candidate waiting' : kind === 'pad' ? 'Pad change?' : 'Milo suggests'}${more > 0 ? ` +${more}` : ''}`;
 
 /** One prompt per suggestion. */
 export const suggestionPromptId = (interviewId: string, suggestionId: string): string => `interview-suggestion:${interviewId}:${suggestionId}`;

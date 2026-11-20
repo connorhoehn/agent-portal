@@ -18,7 +18,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { INTERVIEWS_API } from '../../lib/interviews';
 import { issueInvite, roomLinkControl, type InviteStatus } from '../../lib/interviewsUpcoming';
 import { hasJoinedCall } from './callShellModel';
-import { introduceMilo, miloSettingsPath, type MiloSettingsView } from '../../lib/interviewsMilo';
+import { PAD_CONFIRM_OPTIONS, PAD_CONFIRM_RECEIPTS, PAD_CONFIRM_TITLE, introduceMilo, miloSettingsPath, type MiloSettingsView, type PadConfirmWaiting } from '../../lib/interviewsMilo';
 
 export interface InterviewRoomFooterState {
   interviewId: string;
@@ -41,6 +41,10 @@ export interface InterviewRoomFooterState {
   pausedLine: string | null;
   /** `said` (Have Milo ask): aloud, or in the call chat only (row I3.5). */
   answerSuggestion(suggestionId: string, answer: SuggestionAnswerId): Promise<{ error?: string; said?: MiloAsked; why?: MiloAskWhy }>;
+  /** The candidate's pad request waiting for the lead's yes (the lead's only; null otherwise). */
+  padConfirm?: PadConfirmWaiting | null;
+  /** The lead pressed Confirm (`allow`) or Decline: the same as "Milo, go ahead" / "Milo, no". */
+  answerPadConfirm?(allow: boolean): Promise<{ error?: string }>;
 }
 
 // One registration at a time: the room page that is mounted.
@@ -257,6 +261,9 @@ export function useInterviewRoomBarActions(lobbyName: string | null | undefined,
  * room above it keep their height. The End question (the lead just pressed End interview) and a knock open by themselves
  * without taking focus; a suggestion waits as the button until the lead opens it (the question is the button's tooltip).
  */
+/** One prompt per waiting pad request (a new request after an answer is a new question). */
+const padPromptId = (interviewId: string, pad: PadConfirmWaiting): string => `interview-pad-confirm:${interviewId}:${pad.askedAt}`;
+
 function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined }) {
   const room = useRoomFor(lobbyName);
   const asked = useSyncExternalStore(subscribe, askedSnapshot, askedSnapshot);
@@ -296,6 +303,18 @@ function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined 
         return { receipt: admit ? 'Admitted' : 'Not yet' };
       },
     });
+    const pad = room.lead ? room.padConfirm ?? null : null;
+    if (pad && room.answerPadConfirm) list.push({
+      ...base, id: padPromptId(room.interviewId, pad), kind: 'choice', eyebrow: 'Milo', title: PAD_CONFIRM_TITLE,
+      question: pad.text,
+      options: PAD_CONFIRM_OPTIONS,
+      onAnswer: async (a) => {
+        const allow = 'optionId' in a && a.optionId === 'confirm';
+        const out = await room.answerPadConfirm!(allow);
+        if (out.error) return { error: out.error };
+        return { receipt: PAD_CONFIRM_RECEIPTS[allow ? 'confirm' : 'decline'] };
+      },
+    });
     const sg = suggestionForPrompt(room.lead, room.suggestion);
     if (sg && sg.id !== skipped) list.push({
       ...base, id: suggestionPromptId(room.interviewId, sg.id), kind: 'choice', eyebrow: 'Milo suggests', title: sg.competency.name,
@@ -313,16 +332,17 @@ function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined 
       },
     });
     return list;
-  }, [room, scope, asked, knock, room?.suggestion, byHand, skipped]);
+  }, [room, scope, asked, knock, room?.suggestion, room?.padConfirm, byHand, skipped]);
   const deck = useComposerPromptDeck(prompts, { scope });
   const activeId = deck.active?.id ?? null;
   const endId = scope ? `${scope}:end` : null;
   const knockId = room && knock ? knockPromptId(room.interviewId, knock) : null;
   const suggestionId = room?.lead ? room.suggestion?.id ?? null : null;
-  const kind: InterviewAskKind = activeId === endId ? 'end' : activeId === knockId ? 'knock' : 'suggestion';
-  // The End question and a knock (a new one too, after "Not yet") open by themselves; a suggestion that comes to the front closes
+  const padId = room?.lead && room.padConfirm ? padPromptId(room.interviewId, room.padConfirm) : null;
+  const kind: InterviewAskKind = activeId === endId ? 'end' : activeId === knockId ? 'knock' : activeId === padId ? 'pad' : 'suggestion';
+  // The End question, a knock (a new one too, after "Not yet") and a pad request waiting for the lead open by themselves; a suggestion that comes to the front closes
   // the popover and waits as the button.
-  useEffect(() => { setOpen(activeId !== null && (activeId === endId || activeId === knockId) ? 'self' : 'no'); }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setOpen(activeId !== null && (activeId === endId || activeId === knockId || activeId === padId) ? 'self' : 'no'); }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Closing the End question by any means is "Keep going"; the knock and a suggestion stay on the button.
   const close = () => { setOpen('no'); if (kind === 'end' && activeId !== null) setEndAsked(false); };
   // Esc or Hide on the open question closes it. On a suggestion that is a Skip (escSkipsSuggestion, decision W2P): the server

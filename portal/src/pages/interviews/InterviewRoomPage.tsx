@@ -22,6 +22,7 @@
 //
 // The lead's join starts the interview (POST start); End interview ends it (POST end), leaves the call and goes
 // to the scorecard that is now due. Anyone without a seat reads the not-found page.
+import { PAD_CONFIRM_POLL_MS, answerPadConfirm, readPadConfirm, type PadConfirmWaiting } from '../../lib/interviewsMilo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Button, ChatComposer, Chip, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T, Tabs } from '@connorhoehn/ui-components/shared';
@@ -172,6 +173,24 @@ function InterviewRoom({ id }: { id: string }) {
     return out.ok && out.said ? { said: out.said, ...(out.why ? { why: out.why } : {}) } : {};
   }, [id]);
 
+  // A candidate's pad request waiting for the lead's yes: the footer's Confirm / Decline, read while the lead is in the live call.
+  const [padConfirm, setPadConfirm] = useState<PadConfirmWaiting | null>(null);
+  const readsPad = room?.seat === 'lead' && room?.state === 'live' && joined;
+  useEffect(() => {
+    if (!readsPad) { setPadConfirm(null); return; }
+    let live = true;
+    const read = () => { void readPadConfirm(id).then((w) => { if (live) setPadConfirm((was) => (was?.askedAt === w?.askedAt && was?.text === w?.text ? was : w)); }); };
+    read();
+    const timer = window.setInterval(read, PAD_CONFIRM_POLL_MS);
+    return () => { live = false; window.clearInterval(timer); };
+  }, [readsPad, id]);
+  const answerPad = useCallback(async (allow: boolean): Promise<{ error?: string }> => {
+    const out = await answerPadConfirm(id, allow);
+    if (!out.ok) return { error: out.error };
+    setPadConfirm(null);
+    return {};
+  }, [id]);
+
   const leave = host?.call.leave;
   // The host value is a new object each render: read through a ref so the footer's registration does not change with it.
   const hostRef = useRef(host);
@@ -204,7 +223,8 @@ function InterviewRoom({ id }: { id: string }) {
     suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
     pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,
     answerSuggestion: answerAsk,
-  } : null), [room, lobbyName, consent?.label, consent?.tooltip, miloBlock?.label, admission, end, knock, suggestion, paused, answerAsk]); // eslint-disable-line react-hooks/exhaustive-deps
+    padConfirm: room.seat === 'lead' ? padConfirm : null, answerPadConfirm: answerPad,
+  } : null), [room, lobbyName, consent?.label, consent?.tooltip, miloBlock?.label, admission, end, knock, suggestion, paused, answerAsk, padConfirm, answerPad]); // eslint-disable-line react-hooks/exhaustive-deps
   useRegisterInterviewRoomFooter(footer);
 
   if (error && !room) {
