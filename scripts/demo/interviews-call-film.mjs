@@ -776,7 +776,32 @@ try {
     // Film 5 (owner's v2 script): Milo is used only for test cases and the time; no intro, no probe, no nameless or mention beats.
     await line('n01', 400);
     await line('n02', 300);
-    await line('h05', 500); await line('c04', 500); await line('h06', 500);
+    await line('h05', 500); await line('c04', 500);
+    // Film 6 (owner): the frontier-model beat right after the small talk. Hugo drops the blog post into the call chat while he
+    // says so; Mateo opens his Chat tab as he answers; nothing waits on the chat, so the lines follow each other promptly.
+    let chatSeen = Promise.resolve(false);
+    try {
+      const tip = line('h40', 400);
+      await nearEnd('h40', 2200);
+      const sent = (async () => {
+        await press(hp, hp.getByTestId('interview-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 100, timeout: 8000 });
+        const box = hp.getByTestId('interview-room-chat').getByRole('textbox').first();
+        await press(hp, box, { pause: 80, timeout: 8000 });
+        await hp.keyboard.type(NEWS_URL, { delay: 18 });
+        await hp.keyboard.press('Enter');
+      })().catch((e) => note(`chat send: ${String(e).slice(0, 120)}`));
+      await tip;
+      const reply = line('c40', 250);
+      chatSeen = (async () => {
+        await sent;
+        await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 100, timeout: 8000 });
+        return !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
+      })().catch((e) => { note(`candidate chat: ${String(e).slice(0, 120)}`); return false; });
+      await reply;
+    } catch (e) { note(`chat beat: ${String(e).slice(0, 120)}`); }
+    await line('h06', 300);
+    const chatOk = await chatSeen;
+    step('2c the link in the call chat on both sides', chatOk, `candidate's chat shows ${NEWS_URL}=${chatOk}`);
     s.opening = await watchSilence('opening line', 'n03', 5000);
     // The pad: Hugo's question in Mateo's language; Hugo lets the candidate ask Milo for the pad.
     const padReady = (async () => { await padTab(hp); await padTab(cp); return !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500)); })();
@@ -829,34 +854,24 @@ try {
     if (!block) { const cut = skipFrom('Skipping ahead: Milo writes the test cases'); block = await until(inPad, 90_000, 400); cut(); }
     await until(async () => Date.now() > busy.until + 200, 30_000, 100);
     const padNow = (await padText(cp)) ?? '';
-    const cases = padNow.slice(Math.max(0, padNow.search(CASES_BLOCK)));
+    let cases = padNow.slice(Math.max(0, padNow.search(CASES_BLOCK)));
+    // The editor draws only the rows in view: scroll the cases into view, then read the rows below the fold too.
+    if (block) {
+      await padToEnd(cp, 1500);
+      const below = (await padText(cp)) ?? '';
+      cases += `\n${below.slice(Math.max(0, below.search(CASES_BLOCK)))}`;
+    }
     report.testCases = block ? cases : null;
     // Rows like (([3, 2, 4], 6), [1, 2]) and the asked-for edge inputs like ([], 0): the first list is nums.
     const numsOf = [...cases.matchAll(/\(\(?\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => x.trim()).filter(Boolean));
     const hasEmpty = numsOf.some((n) => n.length === 0); const hasDup = numsOf.some((n) => new Set(n).size < n.length);
     step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && hasEmpty && hasDup, `empty array=${hasEmpty}; duplicates=${hasDup}; block ${block ? `"${squash(cases).slice(0, 500)}"` : 'never appeared'}`);
-    if (block) { await padToEnd(cp, 1500); if (hasEmpty && hasDup) await line('n09', 300); }
+    if (block && hasEmpty && hasDup) await line('n09', 300);
     // Mateo runs the code: the pad's Run, the output panel with Milo's cases' results (the Docker runner, for real).
     scene(7, 'Mateo runs the code with Milo\'s cases.', '');
     const r = await (async () => { const p = runAndRead(cp, hp, /ok /, 'c11'); await line('c11', 300); return p; })().catch((e) => { note(`run: ${String(e).slice(0, 120)}`); return null; });
     report.runOutput = r ? squash(r.cand ?? r.lastCand ?? '').slice(0, 800) : null;
     step('7 the run shows the test results', !!r?.cand && !!r?.lead, `candidate output "${squash(r?.cand ?? r?.lastCand ?? '').slice(0, 400)}"; lead sees it=${!!r?.lead}; run containers=${r?.containers ?? 0}`);
-    // The chat beat (owner): Hugo drops the news page into the call chat through the real composer; Mateo opens it.
-    const chatOk = await (async () => {
-      const tip = line('h40', 400);
-      await nearEnd('h40', 1800);
-      await press(hp, hp.getByTestId('interview-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 });
-      const box = hp.getByTestId('interview-room-chat').getByRole('textbox').first();
-      await press(hp, box, { pause: 100, timeout: 8000 });
-      await hp.keyboard.type(NEWS_URL, { delay: 30 });
-      await hp.keyboard.press('Enter');
-      await tip;
-      await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 }).catch((e) => note(`candidate chat tab: ${String(e).slice(0, 100)}`));
-      const seen = !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
-      await line('c40', 300);
-      return seen;
-    })().catch((e) => { note(`chat beat: ${String(e).slice(0, 120)}`); return false; });
-    step('2c the link in the call chat on both sides', chatOk, `candidate's chat shows ${NEWS_URL}=${chatOk}`);
     // Near the end of the ten minutes (the round's clock starts when Mateo joins): the time question.
     const target = roundFrom + 8.2 * 60_000;
     if (Date.now() < target) {
@@ -866,6 +881,8 @@ try {
       await sleep(Math.max(0, target - Date.now()));
       cut();
     }
+    // Film 6: from here to the scorecard is one continuous stretch (no cut): the time question, the wrap, End and the scorecard.
+    scene(8, 'Near the end: Mateo asks Milo the time.', '');
     await line('n15', 300);
     s.time = await askByVoice('time left (candidate, name last)', 'cand', 'n16', 'name last', /minute|end of its time/i, 20_000);
     await line('n17', 400);
