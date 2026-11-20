@@ -57,3 +57,31 @@ describe('test cases the asker named', () => {
     expect(requestedOf('x')).toEqual([]);
   });
 });
+
+describe("the kinds the request's own words name (film 5, take 1: no labels from the writer, no empty case)", () => {
+  const T1 = [
+    { args: '[[3, 2, 4], 6]', expected: '[1, 2]' },
+    { args: '[[1, 5, 9, 13], 22]', expected: '[2, 3]' },
+    { args: '[[0, 4, 3, 0], 0]', expected: '[0, 3]' },
+    { args: '[[1, 2], 3]', expected: '[0, 1]' },
+  ];
+  const REQ = 'a few test cases for an empty array and duplicates';
+  it('builds the empty input from the first case when the writer wrote none, and keeps the duplicates case first', () => {
+    const made = testCasesFor(T1, { ...at([], 3), request: REQ });
+    if (!made.ok) throw new Error('not made');
+    expect(made.block).toContain('    ([], 6),');
+    expect(made.block).toContain('(([0, 4, 3, 0], 0), [0, 3])');
+    expect(made.count).toBe(3);
+  });
+  it('an empty case the writer wrote but the reference set aside is used as it is', () => {
+    const made = testCasesFor([...T1, { args: '[[], 0]', expected: '[]' }], { ...at([], 4), request: REQ });
+    if (!made.ok) throw new Error('not made');
+    expect(made.block).toContain('    ([], 0),');
+    expect(made.block).not.toContain('([], 6)');
+  });
+  it('builds duplicates by repeating an item when no case has them', () => {
+    const made = testCasesFor(T1.filter((c) => !c.args.includes('0, 4, 3, 0')), { ...at([], 3), request: 'test cases with duplicates' });
+    if (!made.ok) throw new Error('not made');
+    expect(made.block).toContain('([3, 2, 4, 3], 6)');
+  });
+});

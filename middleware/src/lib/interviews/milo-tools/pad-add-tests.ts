@@ -49,7 +49,7 @@ export const PAD_ADD_TESTS: ServerToolDef<MiloInterview, SaidSource> = {
     const a = argsOf(args);
     const { text, language, questions } = step;
     const question = questionForPad(questions, text, language);
-    const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language), count: a['count'], requested: a['requested'] });
+    const made = testCasesFor(a['cases'], { pad: text, language, question, fn: functionOf(text, language) ?? entryOf(question?.starter, language), count: a['count'], requested: a['requested'], request: a['request'] });
     if (!made.ok) return step.refuse(TESTS_NOT_ADDED);
     // Strings that could carry the algorithm (words, a long one, or many short ones): the batch is judged like a helper, and
     // refused with no question to judge by.

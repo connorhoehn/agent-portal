@@ -34,6 +34,22 @@ export type TestCasesMade = { ok: true; block: string; count: number; checked: b
 /** At most this many asked-for kinds of case are read from one call. */
 export const MAX_REQUESTED = 6;
 const sameKind = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+/**
+ * Kinds of case found in the request's own words, checked by the shape of a case, not by the writer's labels (film 5, take 1:
+ * the writer asked for "an empty array and duplicates" wrote neither label nor an empty case). `make`: the kind built from
+ * another case's arguments when the writer wrote none (the first list argument emptied, or its first item repeated).
+ */
+interface ShapeKind { label: string; said: RegExp; has: (args: unknown[]) => boolean; make: (args: unknown[]) => unknown[] | null }
+const listAt = (args: unknown[]): number => args.findIndex((x) => Array.isArray(x));
+export const SHAPE_KINDS: readonly ShapeKind[] = [
+  { label: 'an empty input', said: /\bempty\b/i,
+    has: (a) => a.some((x) => (Array.isArray(x) && x.length === 0) || x === ''),
+    make: (a) => { const i = listAt(a); return i < 0 ? null : a.map((x, j) => (j === i ? [] : x)); } },
+  { label: 'duplicates', said: /\bduplicat|\brepeated\b|\bsame (?:number|value)/i,
+    has: (a) => a.some((x) => Array.isArray(x) && new Set(x.map((v) => JSON.stringify(v))).size < x.length),
+    make: (a) => { const i = listAt(a); const l = i < 0 ? [] : (a[i] as unknown[]); return l.length ? a.map((x, j) => (j === i ? [...l, l[0]] : x)) : null; } },
+];
+
 /** The kinds of case the asker named (the call's `requested`): bounded, trimmed, deduplicated. */
 export function requestedOf(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -76,7 +92,7 @@ export function needsVerdict(cases: readonly TestCase[]): boolean {
 }
 
 /** The block for the call's `cases` against the pad as it is: checked cases when the question has a reference, else inputs only. */
-export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null; count?: unknown; requested?: unknown }): TestCasesMade {
+export function testCasesFor(cases: unknown, at: { pad: string; language: PadLanguage; question: KitQuestion | null; fn: string | null; count?: unknown; requested?: unknown; request?: unknown }): TestCasesMade {
   // The number asked for (the call's `count`), within 1 and MAX_TEST_CASES; none said: up to MAX_TEST_CASES.
   const count = typeof at.count === 'number' && Number.isInteger(at.count) ? Math.max(1, Math.min(MAX_TEST_CASES, at.count)) : MAX_TEST_CASES;
   const parsed = parseToolCases(cases, { pad: at.pad, max: MAX_OFFERED_CASES });
@@ -96,6 +112,18 @@ export function testCasesFor(cases: unknown, at: { pad: string; language: PadLan
   }
   // The first case for each asked-for kind stays whatever the count; the spares fill the rest (the first `count` in all).
   const firsts = requested.map((r) => all.find((c) => c.covers === r)).filter((c): c is TestCase => !!c);
+  // The kinds the request's own words name, by shape: a kept case of that shape, else one the reference set aside (an edge
+  // input), else one built from the first case's arguments (an edge input).
+  const said = typeof at.request === 'string' ? at.request : '';
+  for (const k of SHAPE_KINDS.filter((x) => x.said.test(said))) {
+    if (firsts.some((c) => k.has(c.args))) continue;
+    const kept = all.find((c) => !firsts.includes(c) && k.has(c.args));
+    if (kept) { firsts.push(kept); continue; }
+    const args = parsed.cases.find((c) => k.has(c.args))?.args ?? (parsed.cases[0] ? k.make(parsed.cases[0].args) : null);
+    if (!args || all.some((c) => JSON.stringify(c.args) === JSON.stringify(args))) continue;
+    const edge: TestCase = { args, covers: k.label, edge: true };
+    all.push(edge); firsts.push(edge);
+  }
   const kept = [...firsts, ...all.filter((c) => !firsts.includes(c)).slice(0, Math.max(0, count - firsts.length))];
   if (!kept.length) return { ok: false };
   const missing = requested.filter((r) => !firsts.some((c) => c.covers === r));

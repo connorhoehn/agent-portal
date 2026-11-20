@@ -67,7 +67,9 @@ async function writeAsked(interview: MiloInterview, askedBy: string, text: strin
   const choice = await d.writer(interview, { text, questions, pad: seen as { text: string; language: PadLanguage } | null }).catch(() => null);
   const def = choice && PAD_TOOLS.find((t) => t.name === choice.name);
   if (!choice || !def) return { line: PAD_WRITE_KINDS, kind: 'refusal' };
-  return (await def.run(interview, askedBy, choice.args, 'model')) ?? { line: PAD_FAILED, kind: 'refusal' };
+  // Test cases also get the request's own words: the kinds it names (an empty input, duplicates) are checked by shape (tests.ts).
+  const args = def.name === 'pad_add_tests' ? { ...choice.args, request: text } : choice.args;
+  return (await def.run(interview, askedBy, args, 'model')) ?? { line: PAD_FAILED, kind: 'refusal' };
 }
 
 /** The lead's answer to the waiting request (the voice tools below, and the door for a confirm card). Null: not the lead. */

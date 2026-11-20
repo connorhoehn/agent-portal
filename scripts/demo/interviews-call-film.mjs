@@ -800,6 +800,8 @@ try {
     scene(4, 'Two Sum, in the candidate\'s language.', '');
     problemAt = Date.now();
     step('4 the question in the pad, Python', sync && starter && (await padLanguage(cp)) === 'python', `synced=${sync}; starter=${starter}; language ${await padLanguage(cp)}; candidate may ask Milo for the pad=${helpOn}`);
+    // Hugo reads the question aloud (the recap's question window opens on its words, so Milo's recommendation has evidence).
+    await line('n23', 300);
     // Mateo codes, thinking out loud.
     scene(5, 'Mateo codes, thinking out loud.', '');
     const thinking = line('c07', 400);
@@ -1228,7 +1230,7 @@ try {
     const candCredited = lines.some((l) => l.side === 'candidate' && /hash map|brute force|dictionary/i.test(l.text));
     const wrong = lines.filter((l) => (l.side === 'candidate' && /data structures and algorithms\?|runtime complexity\?/i.test(l.text)) || (l.side === 'panel' && /brute force|dictionary to store/i.test(l.text))).length;
     if (!NAME_REQUIRED) step('T transcript, two speakers credited', hugoCredited && candCredited && wrong === 0, `lines ${lines.length} by side ${JSON.stringify(sides)}; Hugo credited=${hugoCredited}; candidate credited=${candCredited}; wrongly credited ${wrong}`);
-    step('M Milo spoke', milo.utterances >= 3, `${milo.utterances} utterances, ${milo.frames} voice frames received by the candidate's browser`);
+    step('M Milo spoke', milo.utterances >= (NAME_REQUIRED ? 2 : 3), `${milo.utterances} utterances, ${milo.frames} voice frames received by the candidate's browser`);
   }
   // Never estimated from the wall clock: what the product booked, or unknown (with the last read's status) when it could not be read.
   const listenedS = A === null && booked.listeningSeconds === null ? 0 : booked.listeningSeconds;
