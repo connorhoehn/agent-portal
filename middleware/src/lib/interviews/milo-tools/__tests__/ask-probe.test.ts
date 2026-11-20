@@ -139,6 +139,25 @@ describe('what the question is written from', () => {
     expect(seen[0]).toMatchObject({ board: null, pad: { language: 'python', text: 'def feed(user):\n    return []\n' } });
   });
 
+  it('a pad round: the writer reads the code as it is now (a one-pass two_sum), is told to say only what that code shows, and an unreadable pad is said to be unreadable (film 4: "two-pass")', async () => {
+    const CODE = 'def two_sum(nums, target):\n    seen = {}\n    for i, n in enumerate(nums):\n        if target - n in seen:\n            return [seen[target - n], i]\n        seen[n] = i\n    return []\n';
+    let padText: string | null = CODE;
+    setMiloToolDeps({
+      interview: async () => interview, guestOf: async () => false, questions: async () => [candidateQuestion(FEED)], surface: async () => 'pad',
+      write: async (_id, plan) => { if (padText === null) return { ok: false, code: 'unavailable' }; await plan({ text: padText, language: 'python' }); return { ok: false, code: 'nothing' }; },
+      board: async () => null, heard: async () => [], answerKey: async () => [], prober: async (_i, input) => { seen.push(input); return 'Why does two_sum check seen before it stores n?'; },
+    });
+    await runMiloTool(IV, LEAD, 'ask_probe', { topic: 'time complexity' });
+    expect(seen[0]!.pad).toEqual({ language: 'python', text: CODE });
+    const req = probeRequest(seen[0]!, 'm');
+    expect(req.input).toContain(CODE.trim());
+    expect(req.instructions).toContain('Say nothing about the code that its text does not show');
+    padText = null; resetMiloTools();
+    await runMiloTool(IV, LEAD, 'ask_probe', { topic: 'time complexity' });
+    expect(seen[1]!.pad).toBeNull();
+    expect(probeRequest(seen[1]!, 'm').input).toContain('The code pad could not be read');
+  });
+
   it('the region: the frame of the newest live element; without frames, the labels near it', () => {
     expect(boardRegion(BOARD)).toEqual({ frame: 'Write path', labels: ['Kafka fan-out queue', 'Post API'], elsewhere: ['Read path'] });
     const loose = [
