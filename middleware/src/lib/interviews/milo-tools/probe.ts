@@ -12,7 +12,6 @@ import { estimateUsageCost } from '../../pricing.js';
 import { Fence } from '../../untrusted-text.js';
 import { requestToolChoice, type TextToolReply, type TextToolRequest } from '../../voice/openai-text.js';
 import type { CandidateQuestion } from '../answer-key.js';
-import { makeCoachModel } from '../coach/model.js';
 import { releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend } from '../spend.js';
 import type { Interview, PadLanguage, RoundSurface } from '../types.js';
 
@@ -170,11 +169,24 @@ export function probeOf(reply: Pick<TextToolReply, 'call'>): string | null {
   } catch { return null; }
 }
 
-/** The scripted stand-in (no model configured): a fixed open question about the topic. */
-export function scriptedProbe(input: Pick<ProbeInput, 'topic' | 'board'>): string {
-  const where = input.board?.frame ? `the ${input.board.frame} part` : 'this part';
-  const topic = input.topic.replace(/[?.!]+$/, '');
-  return topic ? `Thinking about ${topic}, what would you change in ${where}, and why?` : `What would you change in ${where}, and why?`;
+/**
+ * The stand-in when no text model key is configured: one open question built from the region's own labels (the newest two), so it
+ * is still about what the candidate drew; with no labels, about the topic alone.
+ */
+export function fallbackProbe(input: Pick<ProbeInput, 'topic' | 'board'>): string {
+  const topic = input.topic.replace(/[?.!]+$/, '').trim();
+  const labels = (input.board?.labels ?? []).slice(0, 2);
+  const parts = labels.length === 2 ? `${labels[0]} and ${labels[1]}` : labels[0] ?? null;
+  if (parts) return topic ? `How do ${parts} hold up for ${topic}, and what happens when one of them is under heavy load?` : `How do ${parts} behave under heavy load, and what happens if one of them fails?`;
+  return topic ? `How does your design handle ${topic}, and where would it break first?` : 'Which part of your design would break first under heavy load, and why?';
+}
+/** The judge's scripted rig (scripts/milo-judge) names the stand-in by this name. */
+export const scriptedProbe = fallbackProbe;
+
+/** Is a text model key configured (a REPLACE_ME placeholder counts as none, as in voice/openai-text.ts)? */
+export function probeKeyConfigured(): boolean {
+  const v = (process.env['OPENAI_API_KEY'] ?? '').trim();
+  return !!v && !v.includes('REPLACE_ME');
 }
 
 let request: (req: TextToolRequest, opts: { timeoutMs: number }) => Promise<TextToolReply> = requestToolChoice;
@@ -186,7 +198,8 @@ export function setProbeRequest(next: typeof request | null): void { request = n
  * (the pad writer's part); no room under the cap, a timeout or an error: null. The text is NOT yet checked: the tool checks it.
  */
 export async function writeProbe(interview: Pick<Interview, 'id' | 'leadId'>, input: ProbeInput): Promise<string | null> {
-  const scripted = makeCoachModel().kind === 'scripted';
+  // Independent of the coach's mode: a scripted coach still gets real probes; only a missing key falls back.
+  const scripted = !probeKeyConfigured();
   const model = scripted ? SCRIPTED_PROBE_MODEL : probeModel();
   const req = probeRequest(input, model);
   const estimate = { inputTokens: Math.ceil((req.instructions.length + req.input.length) / 3), outputTokens: PROBE_MAX_OUTPUT_TOKENS };
@@ -197,7 +210,7 @@ export async function writeProbe(interview: Pick<Interview, 'id' | 'leadId'>, in
   if (!held.ok) return null;
   if (scripted) {
     await settleInterviewSpend({ sourceId: held.sourceId, costUsd: 0, basis: 'estimated', model, actorId: interview.leadId, provider: 'local' }).catch(() => undefined);
-    return scriptedProbe(input);
+    return fallbackProbe(input);
   }
   let reply: TextToolReply;
   try { reply = await request(req, { timeoutMs: PROBE_TIMEOUT_MS }); } catch {
