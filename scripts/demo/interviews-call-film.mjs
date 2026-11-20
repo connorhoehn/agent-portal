@@ -798,7 +798,7 @@ try {
       const reply = line('c40', 250);
       chatSeen = (async () => {
         await sent;
-        await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 100, timeout: 8000 });
+        await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat/i }), { pause: 100, timeout: 8000 });
         return !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
       })().catch((e) => { note(`candidate chat: ${String(e).slice(0, 120)}`); return false; });
       await reply;
@@ -922,7 +922,7 @@ try {
     await hp.keyboard.type(NEWS_URL, { delay: 30 });
     await hp.keyboard.press('Enter');
     await tip;
-    await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat$/i }), { pause: 150, timeout: 8000 }).catch((e) => note(`candidate chat tab: ${String(e).slice(0, 100)}`));
+    await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat/i }), { pause: 150, timeout: 8000 }).catch((e) => note(`candidate chat tab: ${String(e).slice(0, 100)}`));
     const seen = !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
     await say(cand, 'c40', 300);
     return seen;
