@@ -1,13 +1,15 @@
 // The interview's own elements in the shell footer (docs/interviews-tenant-plan.md decision 21, row I2.4), on the
 // same model as a work call: the room page (pages/interviews/InterviewRoomPage.tsx) registers what the footer
-// needs here; SocialFooter draws `InterviewRoomBarItems` in the call bar's extras (time left, what the candidate
-// turned off, End interview for the lead) and `InterviewRoomAsks` in the footer's prompt deck beside Milo's
-// asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep going). The quiet facts are chips
-// with the full sentence as a tooltip, so the row stays one line at 1280. Nothing renders unless
-// the shell's call is the registered interview's, so no other tenant's footer changes.
+// needs here; SocialFooter hands `useInterviewRoomBarActions` to the call bar as its actions (time left, what the
+// candidate turned off, the last answer's receipt, End interview for the lead) and draws `InterviewRoomAsks` in the
+// footer's prompt deck beside Milo's asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep
+// going). The footer is one row at every width: each action has a priority, and the bar moves the lowest into its
+// More menu when the row is short (the order is BAR_PRIORITY below). Nothing renders unless the shell's call is the
+// registered interview's, so no other tenant's footer changes.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import type { HuddleBarAction } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 import { useCallHost } from '../../lib/conversationCall';
@@ -43,12 +45,26 @@ export interface InterviewRoomFooterState {
 // One registration at a time: the room page that is mounted.
 let current: InterviewRoomFooterState | null = null;
 let endAsked = false;
+// The last answered prompt's receipt ("You will ask it", "Admitted"): a chip in the bar, never a row above it.
+let receipt: string | null = null;
 const listeners = new Set<() => void>();
 const emit = () => { for (const l of listeners) l(); };
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 const snapshot = () => current;
 const askedSnapshot = () => endAsked;
 const setEndAsked = (v: boolean) => { if (endAsked !== v) { endAsked = v; emit(); } };
+const receiptSnapshot = () => receipt;
+const setReceipt = (v: string | null) => { if (receipt !== v) { receipt = v; emit(); } };
+
+/**
+ * Which of the call bar's items stay on the row longest (higher stays; the library's own sit at chat 60, share 50,
+ * media 40, meeting 30). When the row is short they move into the bar's More menu from the lowest up: device
+ * settings, the candidate link, Introduce Milo, the quiet chips, the receipt, time left, then Message, and last the
+ * connection error, End interview, Open the room and Rejoin. Microphone, camera and Leave never move.
+ */
+export const BAR_PRIORITY = {
+  rejoin: 90, openRoom: 85, end: 80, error: 75, timeLeft: 55, receipt: 45, consent: 35, paused: 25, intro: 20, link: 15, devices: 5,
+} as const;
 
 /** The room page's registration: kept while it is mounted, cleared when it unmounts. */
 export function useRegisterInterviewRoomFooter(state: InterviewRoomFooterState | null): void {
@@ -56,7 +72,7 @@ export function useRegisterInterviewRoomFooter(state: InterviewRoomFooterState |
     current = state;
     emit();
   }, [state]);
-  useEffect(() => () => { current = null; endAsked = false; emit(); }, []);
+  useEffect(() => () => { current = null; endAsked = false; receipt = null; emit(); }, []);
 }
 
 /** The registration, only while the shell's call is that interview's. */
@@ -102,14 +118,15 @@ export function useInterviewRoomMiloBlock(lobbyName: string | null | undefined):
 // The links the lead made in this tab, by interview: a link is answered once, so leaving the room and coming back keeps it.
 const madeLinks = new Map<string, string>();
 
-/** The lead's "Make candidate link" / "Copy candidate link", while the candidate is not in yet (rows I2.1 and I3.x). */
-function CandidateLinkControl({ interviewId, candidateName }: { interviewId: string; candidateName: string }) {
-  const { data, refresh } = useFetch<{ invite: InviteStatus }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/invite`);
-  const [link, setLink] = useState<string | null>(() => madeLinks.get(interviewId) ?? null);
+/** The lead's "Make candidate link" / "Copy candidate link", while the candidate is not in yet (rows I2.1 and I3.x); null: nothing to offer. */
+function useCandidateLinkAction(interviewId: string | null, candidateName: string): HuddleBarAction | null {
+  const { data, refresh } = useFetch<{ invite: InviteStatus }>(interviewId ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(interviewId)}/invite` : null);
+  const [made, setMade] = useState<string | null>(null);
+  const link = interviewId ? made ?? madeLinks.get(interviewId) ?? null : null;
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
-  const control = roomLinkControl(data?.invite ?? null, link !== null);
-  if (!control) return null;
+  const control = interviewId ? roomLinkControl(data?.invite ?? null, link !== null) : null;
+  if (!interviewId || !control) return null;
   const copy = async (value: string) => {
     try { await navigator.clipboard.writeText(value); setNote({ text: 'Copied', error: false }); }
     catch { setNote({ text: 'Copy failed: select the link from the tooltip', error: true }); }
@@ -120,20 +137,28 @@ function CandidateLinkControl({ interviewId, candidateName }: { interviewId: str
     setBusy(false);
     if (!out.ok) { setNote({ text: out.error, error: true }); return; }
     madeLinks.set(interviewId, out.link);
-    setLink(out.link);
+    setMade(out.link);
     refresh();
     await copy(out.link);
   };
-  return <Inline gap="xs" align="center" wrap={false} data-testid="interview-candidate-link">
-    {control.kind === 'copy' && link
-      ? <Tooltip content={`${link} (shown only in this tab; a new link stops it working)`} placement="top">
-        <Button size="sm" variant="secondary" aria-label={`Copy ${candidateName}'s link`} onClick={() => void copy(link)} data-testid="interview-candidate-link-copy">Copy candidate link</Button>
-      </Tooltip>
-      : control.kind === 'make' && <Tooltip content={control.hint} placement="top">
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void make()} data-testid="interview-candidate-link-make">{busy ? 'Making…' : control.label}</Button>
-      </Tooltip>}
-    {note && <T size="xs" tone={note.error ? 'danger' : 'secondary'} role={note.error ? 'alert' : 'status'} data-testid="interview-candidate-link-note">{note.text}</T>}
-  </Inline>;
+  const copying = control.kind === 'copy' && link !== null;
+  if (!copying && control.kind !== 'make') return null;
+  return {
+    id: 'candidate-link', priority: BAR_PRIORITY.link,
+    node: <Inline gap="xs" align="center" wrap={false} data-testid="interview-candidate-link">
+      {copying
+        ? <Tooltip content={`${link} (shown only in this tab; a new link stops it working)`} placement="top">
+          <Button size="sm" variant="secondary" aria-label={`Copy ${candidateName}'s link`} onClick={() => void copy(link)} data-testid="interview-candidate-link-copy">Copy candidate link</Button>
+        </Tooltip>
+        : control.kind === 'make' && <Tooltip content={control.hint} placement="top">
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => void make()} data-testid="interview-candidate-link-make">{busy ? 'Making…' : control.label}</Button>
+        </Tooltip>}
+      {note && <T size="xs" tone={note.error ? 'danger' : 'secondary'} role={note.error ? 'alert' : 'status'} className="whitespace-nowrap" data-testid="interview-candidate-link-note">{note.text}</T>}
+    </Inline>,
+    menu: copying
+      ? { label: 'Copy candidate link', ...(note ? { description: note.text } : {}), onSelect: () => void copy(link) }
+      : { label: busy ? 'Making…' : control.kind === 'make' ? control.label : 'Candidate link', description: note?.text ?? (control.kind === 'make' ? control.hint : undefined), disabled: busy, onSelect: () => void make() },
+  };
 }
 
 /** The interview whose call this viewer has joined, or null (the desk's and the upcoming table's "Back to the call"). */
@@ -143,26 +168,31 @@ export function useJoinedInterviewCall(): string | null {
 }
 
 /**
- * In the docked call's extras, beside Leave: the way back to the room while the viewer is in an interview's call on any other
- * page. It only navigates; the call is already joined.
+ * Among the docked call's actions, beside Leave: the way back to the room while the viewer is in an interview's call on any
+ * other page. It only navigates; the call is already joined. Null on the room itself and in any other call.
  */
-export function InterviewRoomReturn({ lobbyName, joined }: { lobbyName: string | null | undefined; joined: boolean }) {
+export function useInterviewRoomReturnAction(lobbyName: string | null | undefined, joined: boolean): HuddleBarAction | null {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const id = joinedInterviewOf(lobbyName, joined);
   if (!id || pathname === roomHref(id)) return null;
-  return <Button size="sm" variant="secondary" onClick={() => void navigate(roomHref(id))} data-testid="interview-open-room">Open the room</Button>;
+  const open = () => void navigate(roomHref(id));
+  return {
+    id: 'interview-open-room', priority: BAR_PRIORITY.openRoom,
+    node: <Button size="sm" variant="secondary" onClick={open} data-testid="interview-open-room">Open the room</Button>,
+    menu: { label: 'Open the room', onSelect: open },
+  };
 }
 
 /**
  * The lead's "Introduce Milo": Milo says its fixed introduction once an interview, on the approved speaking path (the server
  * refuses a second one). The lead may also just say it ("Milo, introduce yourself").
  */
-function MiloIntroControl({ interviewId }: { interviewId: string }) {
-  const { data, refresh } = useFetch<MiloSettingsView>(miloSettingsPath(interviewId));
+function useMiloIntroAction(interviewId: string | null): HuddleBarAction | null {
+  const { data, refresh } = useFetch<MiloSettingsView>(interviewId ? miloSettingsPath(interviewId) : null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
-  if (!data) return null;
+  if (!interviewId || !data) return null;
   const done = data.introduced;
   const press = async () => {
     setBusy(true); setNote(null);
@@ -171,31 +201,50 @@ function MiloIntroControl({ interviewId }: { interviewId: string }) {
     setNote(out.ok ? { text: out.line, error: false } : { text: out.error, error: true });
     refresh();
   };
-  return <Inline gap="xs" align="center" wrap={false}>
-    <Button size="sm" variant="secondary" disabled={busy || done} onClick={() => void press()} data-testid="interview-milo-intro">{done ? 'Milo introduced' : 'Introduce Milo'}</Button>
-    {note && <T size="xs" tone={note.error ? 'danger' : 'secondary'} role={note.error ? 'alert' : 'status'} data-testid="interview-milo-intro-note">{note.text}</T>}
-  </Inline>;
+  const label = done ? 'Milo introduced' : 'Introduce Milo';
+  return {
+    id: 'milo-intro', priority: BAR_PRIORITY.intro,
+    // What Milo said (or why it could not) is the button's tooltip and the menu row's second line: a sentence beside the button made the row grow.
+    node: <Tooltip content={note?.text ?? 'Milo says its introduction aloud, once an interview'} placement="top">
+      <Button size="sm" variant="secondary" disabled={busy || done} onClick={() => void press()} data-testid="interview-milo-intro" data-note={note?.text ?? ''} data-note-error={note ? String(note.error) : ''}>{label}</Button>
+    </Tooltip>,
+    menu: { label, ...(note ? { description: note.text } : {}), disabled: busy || done, onSelect: () => void press() },
+  };
 }
 
-/** In the call bar's extras: time left, the consent chip, the lead's Introduce Milo and End interview. */
-export function InterviewRoomBarItems({ lobbyName, callStartedAt }: { lobbyName: string | null | undefined; callStartedAt: number | string | null | undefined }) {
+/** The call bar's actions for the room: time left, the consent chip, the last answer's receipt, the lead's link, Introduce Milo and End interview. */
+export function useInterviewRoomBarActions(lobbyName: string | null | undefined, callStartedAt: number | string | null | undefined): HuddleBarAction[] {
   const room = useRoomFor(lobbyName);
   const now = useNow(15_000);
   const asked = useSyncExternalStore(subscribe, askedSnapshot, askedSnapshot);
-  if (!room) return null;
+  const answered = useSyncExternalStore(subscribe, receiptSnapshot, receiptSnapshot);
+  const link = useCandidateLinkAction(room?.lead && room.admission?.state !== 'admitted' ? room.interviewId : null, room?.candidateName ?? '');
+  const intro = useMiloIntroAction(room?.lead ? room.interviewId : null);
+  if (!room) return [];
   const left = callTimeLabel(callStartedAt, room.minutes, now);
-  return <Inline gap="sm" align="center" wrap={false} data-testid="interview-room-bar">
-    {left && <Chip size="sm" tone={timeLeftTone(left) === 'warning' ? 'warning' : 'neutral'} data-testid="interview-time-left">{left}</Chip>}
-    {room.pausedLine && <Tooltip content={room.pausedLine} placement="top">
-      <Chip size="sm" tone="neutral" aria-label={room.pausedLine} data-testid="interview-suggestions-paused">Suggestions paused</Chip>
-    </Tooltip>}
-    {room.consent && <Tooltip content={room.consent.tooltip} placement="top">
-      <Chip size="sm" tone={room.consent.tone} aria-label={room.consent.tooltip} data-testid="interview-consent">{room.consent.label}</Chip>
-    </Tooltip>}
-    {room.lead && room.admission?.state !== 'admitted' && <CandidateLinkControl interviewId={room.interviewId} candidateName={room.candidateName} />}
-    {room.lead && <MiloIntroControl interviewId={room.interviewId} />}
-    {room.lead && <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>}
-  </Inline>;
+  const said = answered ? `Answered · ${answered}` : null;
+  return [
+    ...(left ? [{ id: 'interview-time-left', priority: BAR_PRIORITY.timeLeft, fact: left,
+      node: <Chip size="sm" tone={timeLeftTone(left) === 'warning' ? 'warning' : 'neutral'} data-testid="interview-time-left">{left}</Chip> }] : []),
+    ...(room.pausedLine ? [{ id: 'interview-suggestions-paused', priority: BAR_PRIORITY.paused, fact: room.pausedLine,
+      node: <Tooltip content={room.pausedLine} placement="top">
+        <Chip size="sm" tone="neutral" aria-label={room.pausedLine} data-testid="interview-suggestions-paused">Suggestions paused</Chip>
+      </Tooltip> }] : []),
+    ...(room.consent ? [{ id: 'interview-consent', priority: BAR_PRIORITY.consent, fact: room.consent.tooltip,
+      node: <Tooltip content={room.consent.tooltip} placement="top">
+        <Chip size="sm" tone={room.consent.tone} aria-label={room.consent.tooltip} data-testid="interview-consent">{room.consent.label}</Chip>
+      </Tooltip> }] : []),
+    // What the lead last answered, where the row above the bar used to say it (the owner, 20 November: the footer is one row).
+    ...(said ? [{ id: 'interview-receipt', priority: BAR_PRIORITY.receipt, fact: said,
+      node: <Tooltip content={said} placement="top">
+        <Chip size="sm" tone="neutral" aria-label={said} data-testid="interview-room-receipt">{said}</Chip>
+      </Tooltip> }] : []),
+    ...(link ? [link] : []),
+    ...(intro ? [intro] : []),
+    ...(room.lead ? [{ id: 'interview-end', priority: BAR_PRIORITY.end,
+      node: <Button size="sm" variant="secondary" onClick={() => setEndAsked(true)} disabled={asked} data-testid="interview-end">End interview</Button>,
+      menu: { label: 'End interview', disabled: asked, onSelect: () => setEndAsked(true) } }] : []),
+  ];
 }
 
 /** The footer's prompt deck for the room: the waiting candidate, and the End interview confirm. */
@@ -267,9 +316,12 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
   useEffect(() => { if (suggestionId && deck.collapsed) deck.setCollapsed(false); }, [suggestionId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Esc on the End question is "Keep going".
   useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);
-  // `visible`, not `active`: an answered prompt leaves the list (a suggestion answered is gone from the room), and its receipt
-  // ("Milo asked it aloud", "Admitted") is the deck's own answered row, drawn only while the deck is mounted.
-  if (!room || !deck.visible || deck.collapsed) return null;
+  // An answered prompt leaves the list (a suggestion answered is gone from the room). Its receipt ("Milo asked it aloud",
+  // "Admitted") is a chip in the call bar (useInterviewRoomBarActions), not the deck's answered row: with no question
+  // waiting, nothing is drawn above the footer's row.
+  const lastReceipt = room && !deck.active ? deck.receipt : null;
+  useEffect(() => { setReceipt(lastReceipt); }, [lastReceipt]);
+  if (!room || !deck.active || deck.collapsed) return null;
   // The compact form (plain buttons, no key-hint row, facts on one line each): the room's pad and its output keep their height at 1280.
   return <ComposerPromptDeck deck={deck} presentation="prompt" className="mx-4 my-1" data-testid="interview-room-ask" />;
 }

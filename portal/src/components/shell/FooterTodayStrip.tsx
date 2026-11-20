@@ -20,7 +20,8 @@ export function TodayStripSlot({ placement, activeCall = false }: { placement: P
   const dock = useContext(TodayPlacement);
   if (!dock || (dock.placement !== placement && !dock.moving)) return null;
   return <Inline gap="none" align="center" wrap={false}
-    className={`min-w-0 max-w-[420px] flex-1 max-[780px]:hidden ${dock.moving ? 'rounded-md outline-2 outline-dashed outline-primary bg-primary/5' : ''}`}
+    // In a call the footer's row is one line (SocialFooter): below 80rem the strip gives its width to the call bar, whose name it otherwise squeezed to a letter at 1024.
+    className={`min-w-0 max-w-[420px] flex-1 ${activeCall ? 'max-xl:hidden' : 'max-[780px]:hidden'} ${dock.moving ? 'rounded-md outline-2 outline-dashed outline-primary bg-primary/5' : ''}`}
     data-today-drop-zone={placement} aria-label={`Today strip ${placement} location`}
     onDragOver={event => { if (dock.moving && event.dataTransfer.types.includes('text/x-activity-ticker')) { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; } }}
     onDrop={event => { if (dock.moving && event.dataTransfer.getData('text/x-activity-ticker') === 'today') { event.preventDefault(); dock.setPlacement(placement); } }}>
