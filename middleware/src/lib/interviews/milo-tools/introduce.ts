@@ -4,7 +4,7 @@
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { utterance } from '../speak/utterance.js';
-import { introduceMilo, isIntroduction, logIntroduction } from '../speak/intro.js';
+import { introduceMilo, isIntroduction, logIntroduction, miloIntro } from '../speak/intro.js';
 import { deps, INTRO_LEAD_ONLY, REPEAT_WINDOW_MS, standingOf, type MiloInterview } from './deps.js';
 import { noArgs } from './schema.js';
 
@@ -27,12 +27,14 @@ export const INTRODUCE: ServerToolDef<MiloInterview, SaidSource> = {
     return standing === 'lead' ? true : { refusal: INTRO_LEAD_ONLY };
   },
   run: async (interview, askedBy, _args, via) => {
+    const d = deps();
+    // The words follow the round's own surface: a board round never hears the pad round's "I won't write your algorithm".
+    const words = miloIntro(await d.surface(interview));
     if (via === 'button') {
-      const out = await introduceMilo(interview, askedBy);
+      const out = await introduceMilo(interview, askedBy, words);
       return out === 'already' ? null : { line: out.line, kind: 'intro', logged: true, delivered: out.said };
     }
-    const d = deps();
-    const line = await logIntroduction(interview, askedBy, d.now, d.newId);
+    const line = await logIntroduction(interview, askedBy, d.now, d.newId, words);
     return line === null ? null : { line, kind: 'intro', logged: true };
   },
 };

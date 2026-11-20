@@ -12,12 +12,20 @@
 // (`posted`), Milo has introduced itself in this interview and neither way says them again.
 import { utterance } from './utterance.js';
 import { interviewsNowMs } from '../clock.js';
-import type { Interview } from '../types.js';
+import type { Interview, RoundSurface } from '../types.js';
 import { sayApproved, type Said } from './index.js';
 import { saidStore, type SaidRecord } from './store.js';
 
-/** What Milo says when the lead introduces it. */
+/** What Milo says when the lead introduces it in a code-pad round. */
 export const MILO_INTRO = "Hi, I'm Milo. I won't write your algorithm or anything like that, but use me if you want to speed things up or have a question.";
+/** A whiteboard (system design) round: no code, no test cases. */
+export const MILO_INTRO_BOARD = "Hi, I'm Milo. I won't do the design for you, but say 'Hey Milo' if you'd like the question again, the time left, or have a question.";
+/** A behavioural round: no pad, no board. */
+export const MILO_INTRO_BEHAVIOURAL = "Hi, I'm Milo. I'm here to keep time and help out; say 'Hey Milo' if you'd like the question again or have a question.";
+
+/** The introduction for the round's surface (kit.ts `roundSurface`: 'pad', 'board', or null for a behavioural round). */
+export const miloIntro = (surface: RoundSurface | null): string =>
+  surface === 'board' ? MILO_INTRO_BOARD : surface === 'pad' ? MILO_INTRO : MILO_INTRO_BEHAVIOURAL;
 
 /** The lead's receipt when Milo has already introduced itself in this interview. */
 export const ALREADY_INTRODUCED = 'Milo has already introduced itself in this interview.';
@@ -50,13 +58,13 @@ export const introduced = (rows: readonly SaidRecord[], nowMs: number, pending: 
 const inFlight = new Set<string>();
 
 /** The lead's button: Milo's introduction logged, posted and said, unless it was already given. */
-export async function introduceMilo(interview: Pick<Interview, 'id' | 'callId'>, leadId: string): Promise<{ said: Said; line: string } | 'already'> {
+export async function introduceMilo(interview: Pick<Interview, 'id' | 'callId'>, leadId: string, line: string = MILO_INTRO): Promise<{ said: Said; line: string } | 'already'> {
   if (inFlight.has(interview.id)) return 'already';
   inFlight.add(interview.id);
   try {
     if (introduced(await saidStore().list(interview.id), interviewsNowMs(), false)) return 'already';
-    const { said } = await sayApproved(interview, { kind: 'answer', source: 'intro', text: MILO_INTRO, askedBy: leadId });
-    return { said, line: MILO_INTRO };
+    const { said } = await sayApproved(interview, { kind: 'answer', source: 'intro', text: line, askedBy: leadId });
+    return { said, line };
   } finally {
     inFlight.delete(interview.id);
   }
@@ -66,7 +74,7 @@ export async function introduceMilo(interview: Pick<Interview, 'id' | 'callId'>,
  * The spoken half (milo-policy.ts `answerFromHeldText` for the lead): the words, logged as an answer not yet posted, or null when
  * Milo has introduced itself already (the request is then nobody's held text, as before). The orchestrator posts and says them.
  */
-export async function logIntroduction(interview: Pick<Interview, 'id' | 'callId'>, leadId: string, now: () => number, newId: () => string): Promise<string | null> {
+export async function logIntroduction(interview: Pick<Interview, 'id' | 'callId'>, leadId: string, now: () => number, newId: () => string, line: string = MILO_INTRO): Promise<string | null> {
   if (inFlight.has(interview.id)) return null;
   inFlight.add(interview.id);
   try {
@@ -74,9 +82,9 @@ export async function logIntroduction(interview: Pick<Interview, 'id' | 'callId'
     if (introduced(await store.list(interview.id), now(), true)) return null;
     await store.append({
       id: newId(), interviewId: interview.id, callId: interview.callId, kind: 'answer', source: 'intro', questionId: null, suggestionId: null,
-      text: MILO_INTRO, askedBy: leadId, saidAt: new Date(now()).toISOString(), posted: false, spoken: false,
+      text: line, askedBy: leadId, saidAt: new Date(now()).toISOString(), posted: false, spoken: false,
     });
-    return MILO_INTRO;
+    return line;
   } finally {
     inFlight.delete(interview.id);
   }

@@ -11,7 +11,7 @@ import { MemoryMiloSettingsStore } from '../../milo-settings.js';
 import type { MiloPadPlan, MiloPadWriteResult } from '../../pad/milo-writer.js';
 import type { PadEventIn } from '../../pad/log/rules.js';
 import { MemorySaidStore, setSaidStore, setSpeakDeps } from '../../speak/index.js';
-import { MILO_INTRO } from '../../speak/intro.js';
+import { MILO_INTRO, miloIntro } from '../../speak/intro.js';
 import type { Interview, KitQuestion, PadLanguage, RoundSurface } from '../../types.js';
 import {
   acknowledgementLine, fallbackLine, HELPER_ADDED, HELPER_NOT_ADDED, INTRO_LEAD_ONLY, NOT_SOLUTION, NOT_STANDARD_IMPORT, NOTHING_NEW, ON_IT,
@@ -410,6 +410,21 @@ describe('introduce, time_left, repeat_question', () => {
     expect(await runMiloTool(IV, LEAD, 'introduce', {})).toBe(MILO_INTRO);
     resetMiloTools();
     expect(await runMiloTool(IV, LEAD, 'introduce', {})).toBeNull();
+  });
+
+  it('introduce: the words match the round (pad, board, behavioural), from the round\'s own surface', async () => {
+    expect(miloIntro('pad')).toBe(MILO_INTRO);
+    surface = 'board';
+    const board = await runMiloTool(IV, LEAD, 'introduce', {});
+    expect(board).toBe(miloIntro('board'));
+    expect(board).not.toMatch(/algorithm|code|test case/i);
+    expect(board).toMatch(/design/i);
+    resetMiloTools(); setSaidStore(new MemorySaidStore());
+    surface = null;
+    const behavioural = await runMiloTool(IV, LEAD, 'introduce', {});
+    expect(behavioural).toBe(miloIntro(null));
+    expect(behavioural).not.toMatch(/algorithm|code|design|test case/i);
+    expect(new Set([miloIntro('pad'), miloIntro('board'), miloIntro(null)]).size).toBe(3);
   });
 
   it('time_left: anyone; the same request heard twice (the phrase and the model\'s call) runs once', async () => {
