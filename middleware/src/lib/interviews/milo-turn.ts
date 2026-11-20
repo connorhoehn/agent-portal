@@ -124,7 +124,7 @@ export function interviewsTurnPolicy(candidateAcceptedMilo: (interviewId: string
       parts.push(`Round: ${interview.minutes} minutes.${time ? ` ${time.text}` : ''}`);
       // What repeat_question would read: Milo's last question, else the round's own (the lead asked it himself).
       const question = await runWithDbTenant(INTERVIEWS_TENANT, () => questionOf(interview.id)).catch(() => null);
-      parts.push(!question ? 'The round has no question Milo can repeat yet.'
+      parts.push(!question ? 'No question has been asked yet; asked to repeat it, repeat_question says so.'
         : question.from === 'milo' ? `Question Milo last asked: ${quoted(question.text, QUESTION_MAX)}.`
           : `The round's question, on the candidate's screen (repeat_question reads it out): ${quoted(question.text, QUESTION_MAX)}.`);
       if (interview.surface === 'pad') {
