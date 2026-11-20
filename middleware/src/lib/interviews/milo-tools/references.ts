@@ -5,7 +5,8 @@
 // and a question with no reference gets inputs only. A reference is a check, not an answer generator: `agrees(args, expected)`
 // is true when `expected` is a right answer for `args` under the question's own rules (Two Sum: a pair of distinct indices
 // whose numbers add up to the target, in an input that has exactly one such pair), false when it is not, and null when the
-// arguments are not an input the question allows (the case is dropped too).
+// arguments are not an input the question allows. Specifically requested out-of-domain cases can instead use the
+// separately disclosed `assumption` contract; they are never described as reference-verified.
 //
 // Why not the run harness: a reference that runs in a sandbox would cost a container run per request and seconds of wait, and
 // the mock runner (the walks, the film) prints what it is told instead of running anything. These checks are bounded arithmetic
@@ -13,11 +14,21 @@
 
 export interface QuestionReference {
   agrees(args: readonly unknown[], expected: unknown): boolean | null;
+  /** A documented extension for a specifically requested out-of-domain case. Never reference-verified. */
+  assumption?(args: readonly unknown[]): { expected: unknown; note: string } | null;
 }
 
 const ints = (v: unknown): v is number[] => Array.isArray(v) && v.every((x) => Number.isSafeInteger(x));
 
 const TWO_SUM: QuestionReference = {
+  assumption(args) {
+    const [nums, target] = args;
+    if (args.length !== 2 || !ints(nums) || !Number.isSafeInteger(target)) return null;
+    for (let i = 0; i < nums.length; i += 1) for (let j = i + 1; j < nums.length; j += 1) {
+      if (nums[i]! + nums[j]! === target) return null;
+    }
+    return { expected: [], note: 'Assumes [] when there is no pair (outside the question\'s one-answer promise).' };
+  },
   agrees(args, expected) {
     const [nums, target] = args;
     if (args.length !== 2 || !ints(nums) || !Number.isSafeInteger(target) || nums.length < 2) return null;

@@ -137,6 +137,13 @@ export const SAME_ANSWER_TEXT = 'The candidate also said this in the same answer
 
 /** A candidate line that addresses Milo ("Milo, can you repeat the question?") is a request to Milo, not part of an answer (the detector's own test). */
 export const addressesMilo = (text: string): boolean => findAddress(text)?.addressed === true;
+/** A social closing alone is not evidence, including when the rest-of-answer guard expands a citation. */
+export function courtesyOnly(text: string): boolean {
+  const plain = text.toLowerCase().replace(/[^\p{L}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /^(?:thanks|thank you)(?: [\p{L}]+){0,2}$/u.test(plain)
+    || /^(?:sounds (?:great|good)|nice to meet you|good (?:morning|afternoon))(?: (?:thanks|thank you)(?: [\p{L}]+)?)?$/u.test(plain)
+    || /^(?:(?:thanks|thank you)(?: [\p{L}]+)? )?(?:have a (?:great|good) (?:rest of your )?day|bye|goodbye|see you(?: later)?|thanks for having me)$/u.test(plain);
+}
 
 function quoteOfLine(text: string): string {
   const t = squash(text);
@@ -199,7 +206,7 @@ export function parseRecapAnswer(raw: string | null, ctx: { competencyIds: reado
       const quote = squash(e.quote);
       const line = bySeq.get(e.seq);
       const keep = text.length > 0 && text.length <= MAX_CLAIM_CHARS && quote.length > 0 && quote.length <= MAX_QUOTE_CHARS
-        && !!line && line.side === 'candidate' && !addressesMilo(line.text) && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote))
+        && !!line && line.side === 'candidate' && !addressesMilo(line.text) && !courtesyOnly(line.text) && !courtesyOnly(quote) && quotedFrom(quote, [line]) && !PERSONAL.some((r) => r.test(quote))
         && grounded(withoutQuote(text, quote), line.text);
       const list = found.get(c.id) ?? [];
       const repeat = list.some((x) => x.seq === e.seq && x.text.toLowerCase() === text.toLowerCase());
@@ -223,7 +230,7 @@ export function parseRecapAnswer(raw: string | null, ctx: { competencyIds: reado
       if (list.length >= MAX_CLAIMS_PER_COMPETENCY) break;
       const line = bySeq.get(seq)!;
       const quote = quoteOfLine(line.text);
-      if (cited.has(seq) || !quote || PERSONAL.some((r) => r.test(quote)) || addressesMilo(line.text)) continue;
+      if (cited.has(seq) || !quote || PERSONAL.some((r) => r.test(quote)) || addressesMilo(line.text) || courtesyOnly(line.text)) continue;
       list.push({ text: SAME_ANSWER_TEXT, seq, quote });
       cited.add(seq);
     }

@@ -10,13 +10,17 @@
 // below). Two Chromiums, one per person, each with a still, clearly fictional camera (a y4m made by interviews-film-compose.py
 // `cameras`) and a microphone this script plays lines into: each browser's getUserMedia audio track is a WebAudio stream, and
 // each line (a WAV synthesised beforehand, see --voices) is played into it when the story reaches it, never over another
-// line, with at least 1.8 s of silence between turns (overlapping speech is not credited to either speaker). Milo hears the call
-// through the media server's taps, as in production. The interviews coach (and with it Milo's private answers and the recap)
-// stays on the mock world's scripted stand-in (the product setting INTERVIEWS_COACH_MODEL=scripted), so no Bedrock is called.
+// line, with short gaps between turns and longer waits for product actions. Milo hears the call
+// through the media server's taps, as in production. The proactive coach stays on the scripted stand-in; in the live
+// --name-required coding round, the pad writer and recap use OpenAI independently. No Bedrock is called.
 //
 // The story, on the seeded round iv-k1p5w8ra (Hugo leads; the candidate is the mock world's Mateo Alvarez). Before the call Hugo
-// chooses Two Sum (q-be-twosum) through Prepare's own route. Every step is the product's own code path; the only stand-in is the
-// coach's model (INTERVIEWS_COACH_MODEL=scripted, in place of Bedrock). Code runs for real (INTERVIEWS_RUN_BACKEND=docker).
+// chooses Two Sum (q-be-twosum) through Prepare's own route. Calls, pad edits, runs and scorecards use the product's code paths
+// against local mock interview storage. Code runs for real (INTERVIEWS_RUN_BACKEND=docker).
+// The --name-required story is one continuous fresh round: agree on the no-pair convention, explain the dictionary,
+// request executable cases, inspect and run them, discuss duplicates and complexity, add assertions and run again,
+// ask the actual time remaining, explicitly finish early, then rate and inspect the grounded recap.
+// The older default story remains available below:
 //   0 Hugo chooses Two Sum (PUT /interviews/:id/questions)            1 Hugo starts the call; the recruiter makes the link
 //   2 the candidate's door, Hugo admits; both in the call              3 Milo in, voice on; small talk; experience with DSA
 //   4 the coach's first suggestion (the chosen question): "I'll ask it"; Hugo sets Two Sum; the pad on Java ("pick whatever you
@@ -30,7 +34,8 @@
 //  11 End; the scorecard; the recap (its Problem solving evidence quotes the Two Sum and testing answers); the pad log
 // It writes <dir>/timeline.json, <dir>/report.json (each step's pass/fail with what the product showed), the raw recordings in
 // <dir>/raw, Milo's voice frames in <dir>/assistant-voice.jsonl, stops what it started, then runs interviews-film-compose.py to
-// write <dir>/interviews-call.mp4.
+// write <dir>/interviews-call.mp4. Finally interviews-film-review.py transcribes the complete mix and creates qa/review.md
+// and frame samples. Read that review before accepting the film. Requires uv, faster-whisper and its cached base model.
 //
 // Options: --rehearse (the whole story with Milo never invited: no spend; lines without a take wait their estimated length),
 //   --scripted (with --rehearse: Milo IS invited, on the mock world's scripted session instead of the provider; each line is
@@ -54,6 +59,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { miloTurns } from './lib/milo-turns.mjs';
+import { pythonTestCases, passingRun } from './lib/coding-film-proof.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);
@@ -64,7 +70,16 @@ fs.mkdirSync(OUT, { recursive: true });
 const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'interviews-film-compose.py');
 const FINAL = flag('--final') ?? path.join(OUT, 'interviews-call.mp4');
 const py = (...a) => new Promise((resolve) => spawn('python3', [COMPOSE, ...a], { stdio: 'inherit' }).on('exit', (c) => resolve(c ?? 1)));
-if (args.includes('--compose-only')) process.exit(await py('compose', '--out', OUT, '--final', FINAL));
+const reviewFilm = () => new Promise((resolve) => {
+  const child = spawn('uv', ['run', '--offline', '--no-project', '--python', '3.10', '--with', 'faster-whisper', 'python',
+    path.join(ROOT, 'scripts/demo/interviews-film-review.py'), OUT], { stdio: 'inherit' });
+  child.on('error', (error) => { console.error(`film: full-audio review could not start: ${error.message}`); resolve(1); });
+  child.on('exit', (code) => resolve(code ?? 1));
+});
+if (args.includes('--compose-only')) {
+  const composed = await py('compose', '--out', OUT, '--final', FINAL);
+  process.exit(composed || await reviewFilm());
+}
 
 // A take needs the machine awake for its whole length: one that slept on battery dropped both browsers and ended the call. Refuse to start
 // on battery, and hold the system, display and disk awake (caffeinate -dimsu) until this process exits.
@@ -87,6 +102,8 @@ const MAX_MINUTES = Number(flag('--max-minutes') ?? 12);
 const HANDSFREE = args.includes('--handsfree');
 const TURN_OWNER = HANDSFREE && args.includes('--turn-owner');
 const NAME_REQUIRED = TURN_OWNER && args.includes('--name-required');
+const REHEARSE = args.includes('--rehearse');
+const SCRIPTED = args.includes('--scripted');
 const BARGE_ON = flag('--barge-on') ?? 'none';
 function keyEnv() {
   const f = process.env.IVFILM_KEY_FILE; if (!f) return {};
@@ -203,6 +220,8 @@ start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modul
   NODE_OPTIONS: `--require ${path.join(ROOT, 'scripts', 'meeting-assistant', 'lib', 'deadman.cjs')}`,
   MA_DEADMAN_MS: String(25 * 60_000),
   INTERVIEWS_COACH_MODEL: 'scripted',
+  // A reproducible suggestion deck, but real model-generated test cases and recap in the new coding scenario.
+  ...(NAME_REQUIRED && !SCRIPTED ? { MILO_PAD_WRITER_LIVE: '1', INTERVIEWS_RECAP_MODEL: 'openai' } : {}),
   ...(HANDSFREE ? { MEETING_ASSISTANT_HANDSFREE: '1' } : {}), MILO_TURN_OWNER: TURN_OWNER ? '1' : '0', ...keyEnv(),
 }, path.join(WORK, 'middleware.log'));
 start('portal', process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
@@ -222,7 +241,10 @@ const { joinCall, synced, padText, outputText, letSound, suggestion, padTab, cho
 // ── The record: timeline (for the edit) and report (for the verdict) ──
 const VIEW = { width: 1280, height: 800 };
 const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
-const report = { startedAt: new Date().toISOString(), interview: IV, turnOwner: TURN_OWNER, nameRequired: NAME_REQUIRED, steps: [], spend: null, notes: [], turns: [] };
+const report = { startedAt: new Date().toISOString(), interview: IV, turnOwner: TURN_OWNER, nameRequired: NAME_REQUIRED,
+  models: { coach: 'scripted', padWriter: NAME_REQUIRED && !SCRIPTED ? 'openai' : 'scripted',
+    recap: NAME_REQUIRED && !SCRIPTED ? 'openai' : 'scripted', voice: SCRIPTED || REHEARSE ? 'scripted' : 'live' },
+  steps: [], spend: null, notes: [], turns: [] };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
 const scene = (n, title, caption) => { timeline.scenes.push({ n, title, caption, atMs: Date.now() }); console.log(`scene ${n}: ${title}`); };
@@ -291,12 +313,14 @@ async function say(p, id, gapMs = 1800, { heard, now = false } = {}) {
   if (wait > 0) await sleep(wait);
   const c = CLIPS[id] ?? (LINES[id] ? { who: LINES[id][0], text: LINES[id][1], file: null, durMs: 900 + 62 * LINES[id][1].length } : null);
   if (!c) throw new Error(`no line ${id}`);
+  if (!REHEARSE && !c.file) throw new Error(`missing recorded voice for ${id}`);
+  if (c.file && LINES[id] && c.text !== LINES[id][1]) throw new Error(`stale voice text for ${id}; generate the current line`);
   const atMs = Date.now();
   timeline.speech.push({ id, who: c.who, text: c.text, file: c.file ? path.relative(OUT, c.file) : null, atMs, durMs: c.durMs });
   busy.until = atMs + c.durMs;
   console.log(`  [${timeline.film.fromMs ? ((atMs - timeline.film.fromMs) / 1000).toFixed(1) : '-'}] ${c.who}: ${c.text}`);
   if (!c.file) await sleep(c.durMs); // a rehearsal without this take: its estimated length
-  else await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`).catch((e) => note(`line ${id} did not play: ${String(e).slice(0, 120)}`));
+  else await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`);
   busy.until = Date.now();
   if (heard !== false) await heardByScript(p, heard ?? c.text);
 }
@@ -336,7 +360,7 @@ const BUGGY_BODY = [
   '    return []',
 ];
 const SECOND_CASE = 'print(two_sum([3, 3], 6))';
-/** --name-required: the body typed right the first time (checked before stored), as no code is run in that round. */
+/** The new coding round starts with the correct lookup-before-insert implementation, then runs its assertions. */
 const GOOD_BODY = ['    seen = {}', '    for i, n in enumerate(nums):', '        if target - n in seen:', '            return [seen[target - n], i]', '        seen[n] = i', '    return []'];
 /** The line Milo adds at the top of the pad when Hugo asks for it (the Milo-features lane's pad tool). */
 const LRU_IMPORT = 'from functools import lru_cache';
@@ -609,9 +633,7 @@ function skipFrom(caption) {
 }
 
 let lead; let cand; let greta; let callId = null;
-const REHEARSE = args.includes('--rehearse');
 // Milo is invited in a take, and in a rehearsal on the scripted session.
-const SCRIPTED = args.includes('--scripted');
 const MILO = !REHEARSE || SCRIPTED;
 try {
   // The recruiter makes the link by the API only (no browser, nothing recorded).
@@ -638,9 +660,10 @@ try {
   scene(1, 'Hugo prepares the Coding round.', '');
   const prepText = squash(await hp.getByTestId('interviews-prepare').first().innerText().catch(() => ''));
   step('1p Prepare shows the Coding round with Two Sum', /Coding/.test(prepText) && /array of integers/i.test(prepText), `Prepare reads "${prepText.slice(0, 160)}"`);
-  const checking = say(lead, 'h27', 300);
+  const prepareLine = NAME_REQUIRED ? 'r_prepare' : 'h27';
+  const checking = say(lead, prepareLine, 300);
   await glide(hp, hp.getByTestId('interviews-prepare').getByText(/array of integers/i).first(), { pause: 1400 });
-  await nearEnd('h27', 1300);
+  await nearEnd(prepareLine, 1300);
   await press(hp, hp.getByTestId('interviews-prepare-room').first(), { pause: 250 });
   await checking;
   const h00 = say(lead, 'h00', 200);
@@ -763,27 +786,20 @@ try {
     step('3 Milo listening, voice on', !!listening, `Milo listening=${!!listening}; voice on from the footer=${!!voiceOn}; call ${callId}`);
   })();
   await greeting;
-  /**
-   * --name-required: the 20 November coding round (ten minutes; Milo acts only on his name or the hold). Hugo welcomes Mateo and
-   * reads the round's opening line (Milo silent); by the hold, Milo introduces himself; Two Sum in Python, typed in the pad; Mateo
-   * asks Milo for test cases by name (they wait for Hugo's yes); Hugo has Milo ask a probe on the complexity of Mateo's code and
-   * Mateo answers; the question asked without the name and a mention of Milo get no reply; Hugo cuts in on a repeated probe; near
-   * the end Mateo asks the time. Each Milo turn is measured (report.turns, report.silences, report.barge). No code is run.
-   */
+  // One coherent coding conversation. Human dialogue is scripted; Milo's turns and the code runner are live.
   async function namedRound() {
     await miloReady;
     const s = {};
-    // Film 5 (owner's v2 script): Milo is used only for test cases and the time; no intro, no probe, no nameless or mention beats.
-    await line('n01', 400);
+    // Milo handles tests and time; all reasoning and follow-up questions belong to the two people.
+    await line('r_welcome', 400);
     await line('n02', 300);
-    await line('h05', 500); await line('c04', 500);
-    // Film 6 (owner): the frontier-model beat right after the small talk. Hugo drops the blog post into the call chat while he
-    // says so; Mateo opens his Chat tab as he answers; nothing waits on the chat, so the lines follow each other promptly.
+    await line('h05', 500); await line('c04', 500); await line('r_agree', 300);
+    // The acknowledgment answers Mateo immediately. The news link arrives before Mateo reacts to it.
     let chatSeen = Promise.resolve(false);
     let s1Early = null;
     try {
-      const tip = line('h40', 400);
-      await nearEnd('h40', 4200);
+      const tip = line('r_link', 400);
+      await nearEnd('r_link', 4200);
       const sent = (async () => {
         // The coach's question card is open by now and holds the focus: Hugo takes it first (I'll ask it), so the tab is clickable.
         s1Early = answerSuggestion(hp, /array of integers/i, 'ask', 3000);
@@ -795,27 +811,29 @@ try {
         await hp.keyboard.press('Enter');
       })().catch((e) => note(`chat send: ${String(e).slice(0, 120)}`));
       await tip;
-      const reply = line('c40', 250);
+      await sent;
       chatSeen = (async () => {
         await sent;
         await press(cp, cp.getByTestId('join-room-pane').getByRole('tab', { name: /^chat/i }), { pause: 100, timeout: 8000 });
         return !!(await until(async () => ((await cp.getByTestId('join-room-chat').innerText().catch(() => '')).includes(NEWS_URL) || null), 10_000, 300));
       })().catch((e) => { note(`candidate chat: ${String(e).slice(0, 120)}`); return false; });
-      await reply;
+      await chatSeen;
+      await line('c40', 250);
     } catch (e) { note(`chat beat: ${String(e).slice(0, 120)}`); }
-    await line('h06', 300);
     const chatOk = await chatSeen;
     step('2c the link in the call chat on both sides', chatOk, `candidate's chat shows ${NEWS_URL}=${chatOk}`);
-    s.opening = await watchSilence('opening line', 'n03', 5000);
+    s.opening = await watchSilence('opening line', 'n03', 1000);
     // The pad: Hugo's question in Mateo's language; Hugo lets the candidate ask Milo for the pad.
     const padReady = (async () => { await padTab(hp); await padTab(cp); return !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500)); })();
     // The coach's first suggestion is the chosen question: Hugo takes it as his own (I'll ask it), so its card is closed before the menu.
     const s1p = (async () => ((s1Early && await s1Early) || answerSuggestion(hp, /array of integers/i, 'ask', 8000)))();
-    await line('n05', 400);
+    await line('r_problem', 400);
+    await line('r_language', 300);
     const sync = await padReady;
     await s1p;
     const python = chooseLanguage(cp, 'Python').catch((e) => note(`language Python: ${String(e).slice(0, 100)}`));
-    await line('n06', 300);
+    await line('r_empty_question', 300);
+    await line('r_empty_agree', 300);
     await python;
     for (let k = 0; k < 3; k += 1) {
       await press(hp, hp.getByTestId('interview-pad-insert'), { timeout: 8000 });
@@ -829,67 +847,79 @@ try {
     scene(4, 'Two Sum, in the candidate\'s language.', '');
     problemAt = Date.now();
     step('4 the question in the pad, Python', sync && starter && (await padLanguage(cp)) === 'python', `synced=${sync}; starter=${starter}; language ${await padLanguage(cp)}; candidate may ask Milo for the pad=${helpOn}`);
-    // Hugo reads the question aloud (the recap's question window opens on its words, so Milo's recommendation has evidence).
-    await line('n23', 300);
-    // Mateo codes, thinking out loud.
-    scene(5, 'Mateo codes, thinking out loud.', '');
-    const thinking = line('c07', 400);
-    await nearEnd('c07', 2200);
+    scene(5, 'Mateo explains and implements his approach.', '');
+    const thinking = line('r_approach', 400);
+    await nearEnd('r_approach', 2200);
     const typing = replaceStarterBody(cp, GOOD_BODY);
     await thinking;
-    await line('c08', 300);
+    await line('r_order', 300);
     await typing;
-    const caseLine = line('c10', 300);
-    await sleep(1200);
-    await typeAtEnd(cp, SECOND_CASE);
-    await caseLine;
-    solvedAt = Date.now();
-    await line('n22', 300);
-    // Mateo asks Milo for test cases; Milo names the lead, who confirms on his screen.
-    scene(6, 'Mateo asks Milo for test cases.', '');
-    s.tests = await askByVoice('test cases (candidate, name first)', 'cand', 'n07', 'hey milo', /confirm|hugo/i, 30_000);
+    await line('r_return', 300);
+    await line('r_example_question', 300);
+    await line('r_example', 300);
+    scene(6, 'Mateo asks Milo for executable test cases.', '');
+    s.tests = await askByVoice('test cases (candidate, name first)', 'cand', 'r_tests', 'hey milo', /confirm|hugo/i, 30_000);
+    step('5 Milo asks the lead to confirm', s.tests.right, s.tests.said);
     const shown = await pressPadConfirm(hp, 20_000);
     s.confirm = { said: shown ? `[Confirm pressed] ${shown.slice(0, 160)}` : '[no Pad change? question]', latencyS: null, replied: !!shown, right: !!shown };
     step('6 the lead confirms the pad request in the footer', !!shown, shown ? `"${shown.slice(0, 200)}"` : 'the Pad change? question never showed');
-    let block = await until(async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null), 6000, 400);
-    const inPad = async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null);
-    if (!block) { await line('n20', 400); await line('n21', 300); block = await until(inPad, 3000, 300); }
-    // Still writing: the edit skips the wait (never over Milo's voice), so the film has no long silence.
-    if (!block) { const cut = skipFrom('Skipping ahead: Milo writes the test cases'); block = await until(inPad, 90_000, 400); cut(); }
-    await until(async () => Date.now() > busy.until + 200, 30_000, 100);
-    const padNow = (await padText(cp)) ?? '';
-    let cases = padNow.slice(Math.max(0, padNow.search(CASES_BLOCK)));
-    // The editor draws only the rows in view: scroll the cases into view, then read the rows below the fold too.
-    if (block) {
-      await padToEnd(cp, 1500);
-      const below = (await padText(cp)) ?? '';
-      cases += `\n${below.slice(Math.max(0, below.search(CASES_BLOCK)))}`;
-    }
-    report.testCases = block ? cases : null;
-    // Rows like (([3, 2, 4], 6), [1, 2]) and the asked-for edge inputs like ([], 0): the first list is nums.
-    const numsOf = [...cases.matchAll(/\(\(?\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => x.trim()).filter(Boolean));
-    const hasEmpty = numsOf.some((n) => n.length === 0); const hasDup = numsOf.some((n) => new Set(n).size < n.length);
-    step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && hasEmpty && hasDup, `empty array=${hasEmpty}; duplicates=${hasDup}; block ${block ? `"${squash(cases).slice(0, 500)}"` : 'never appeared'}`);
-    if (block && hasEmpty && hasDup) await line('n09', 300);
-    // Mateo runs the code: the pad's Run, the output panel with Milo's cases' results (the Docker runner, for real).
-    scene(7, 'Mateo runs the code with Milo\'s cases.', '');
-    const r = await (async () => { const p = runAndRead(cp, hp, /ok /, 'c11'); await line('c11', 300); return p; })().catch((e) => { note(`run: ${String(e).slice(0, 120)}`); return null; });
-    report.runOutput = r ? squash(r.cand ?? r.lastCand ?? '').slice(0, 800) : null;
-    step('7 the run shows the test results', !!r?.cand && !!r?.lead, `candidate output "${squash(r?.cand ?? r?.lastCand ?? '').slice(0, 400)}"; lead sees it=${!!r?.lead}; run containers=${r?.containers ?? 0}`);
-    // Near the end of the ten minutes (the round's clock starts when Mateo joins): the time question.
-    const target = roundFrom + 8.2 * 60_000;
-    if (Date.now() < target) {
-      const cut = skipFrom('Skipping ahead: Mateo works on, near the end of the ten minutes');
-      await padTab(cp).catch(() => undefined); await padTab(hp).catch(() => undefined);
-      await padToEnd(cp, 1500);
-      await sleep(Math.max(0, target - Date.now()));
+    // Read the complete document the product saved when Milo wrote it. Editor rows are virtualized.
+    const fullPad = async () => {
+      let after = 0; let latest = null;
+      for (let page = 0; page < 20; page += 1) {
+        const r = await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}/pad/log?after=${after}`);
+        const log = await r.json();
+        for (const e of log.events ?? []) if (e.kind === 'snapshot' && e.who?.side === 'milo' && CASES_BLOCK.test(e.text ?? '')) latest = e.text;
+        if (!log.more || log.lastSeq <= after) break;
+        after = log.lastSeq;
+      }
+      return latest;
+    };
+    let source = await until(fullPad, 12_000, 500);
+    if (!source) {
+      const cut = skipFrom('Waiting for Milo to finish writing the tests');
+      source = await until(fullPad, 60_000, 500);
       cut();
     }
-    // Film 6: from here to the scorecard is one continuous stretch (no cut): the time question, the wrap, End and the scorecard.
-    scene(8, 'Near the end: Mateo asks Milo the time.', '');
-    await line('n15', 300);
+    const proof = source ? pythonTestCases(source) : { ok: false, cases: [] };
+    report.testCases = source;
+    report.testProof = proof;
+    step('6 requested cases have executable expectations', proof.ok, JSON.stringify(proof));
+    if (!proof.ok) throw new Error('Requested test assertions missing; the take cannot claim completion');
+    await until(async () => Date.now() > busy.until + 300, 30_000, 100);
+    await padToEnd(cp, 1400); await padToEnd(hp, 600);
+    scene(7, 'Mateo runs and reviews the test results.', '');
+    const running = runAndRead(cp, hp, /ok /, 'r_inspect');
+    await line('r_inspect', 300);
+    const firstRun = await running;
+    report.runOutput = firstRun.cand;
+    const passed = passingRun(firstRun.cand ?? '', proof.cases.length) && passingRun(firstRun.lead ?? '', proof.cases.length);
+    step('7 every requested test passes on both screens', passed, squash(firstRun.cand));
+    if (!passed) throw new Error('The test run failed; no success dialogue will play');
+    solvedAt = Date.now();
+    await line('r_result', 500);
+    await line('r_why_duplicate', 300); await line('r_duplicate_reason', 300);
+    await line('r_complexity_question', 300); await line('r_complexity', 300);
+    await line('r_negative_question', 300); await line('r_negative', 300);
+    const adding = line('r_manual', 300);
+    await padTab(cp); await padToEnd(cp, 500);
+    await typeAtEnd(cp, '# Extra assertions from Mateo');
+    for (const code of ['assert two_sum([-3, 3], 0) == [0, 1]', 'assert two_sum([1, 2], 9) == []', 'print("Manual assertions passed")']) await typeLine(cp, code);
+    await adding;
+    const secondRun = await runAndRead(cp, hp, /Manual assertions passed/);
+    report.secondRunOutput = secondRun.cand;
+    const secondPassed = passingRun(secondRun.cand ?? '', proof.cases.length) && /Manual assertions passed/.test(secondRun.cand ?? '') && /Manual assertions passed/.test(secondRun.lead ?? '');
+    step('8 candidate additions pass with the full test set', secondPassed, squash(secondRun.cand));
+    if (!secondPassed) throw new Error('Candidate assertions did not pass');
+    await line('r_rerun', 400);
+    // No artificial elapsed-time sleep. The live clock answers honestly; they explicitly finish early after one last question.
+    scene(8, 'A final question and a continuous wrap-up.', '');
+    await line('r_time_intro', 300);
     s.time = await askByVoice('time left (candidate, name last)', 'cand', 'n16', 'name last', /minute|end of its time/i, 20_000);
-    await line('n17', 400);
+    step('9 Milo answers the actual time remaining', s.time.right, s.time.said);
+    await line('r_finish_early', 300);
+    await line('r_final_question', 300); await line('r_final_answer', 300);
+    await line('r_wrap', 400);
     bye = line('n18', 300);
     await nearEnd('n18', 1300);
     report.named = Object.fromEntries(Object.entries(s).map(([k, v]) => [k, v && { said: v.said, latencyS: v.latencyS, replied: v.replied, right: v.right }]));
@@ -1158,14 +1188,14 @@ try {
   await sleep(1000);
   const endedStill = await cp.getByTestId('join-ended').first().isVisible().catch(() => false);
   const closingAt = Date.now();
-  const sourced = say(lead, 'h29', 0);
+  const sourced = say(lead, NAME_REQUIRED ? 'r_recap' : 'h29', 0);
   step('V the candidate\'s ended page shows before the closing line', candEnded && endedStill && endedSeenAt < closingAt,
     `ended page seen ${((endedSeenAt - endedAt) / 1000).toFixed(1)} s after End, held ${((closingAt - endedSeenAt) / 1000).toFixed(1)} s before Hugo's line; still on screen=${endedStill}`);
   await hp.waitForURL(new RegExp(`/interviews/rounds/${IV}/scorecard$`), { timeout: 20_000 }).catch(() => undefined);
   const onScorecard = /\/scorecard$/.test(new URL(hp.url()).pathname);
   if (!onScorecard) await hp.goto(`${PORTAL}/interviews/rounds/${IV}/scorecard`, { waitUntil: 'domcontentloaded' });
   await hp.getByTestId('interviews-scorecard-form').first().waitFor({ timeout: 30_000 });
-  scene(9, 'Hugo scores; Milo only supplies evidence.', '');
+  scene(9, 'Hugo rates the round and reviews Milo\'s evidence.', '');
   const scorecardText = squash(await hp.getByTestId('interviews-scorecard-form').first().innerText().catch(() => ''));
   // He rates each competency with the cursor (a brisker glide than elsewhere), then opens the recap, all under his line.
   const groups = hp.locator('[data-ui-control="rating"]');
@@ -1178,7 +1208,7 @@ try {
   // His Problem solving note, typed through the form, with the film's own minutes from the problem in the pad to the green run.
   const mins = Math.max(1, Math.round((solvedAt - problemAt) / 60_000));
   const minsWords = mins === 1 ? 'about a minute' : `about ${['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'][mins - 2] ?? mins} minutes`;
-  const psNoteText = NAME_REQUIRED ? 'Understood the problem, named brute force first, then a hash map, and explained the linear time when asked.' : `Understood the problem well and asked a clarifying question. Had a working solution in ${minsWords}; the first run failed on the duplicate case, and he explained and fixed it.`;
+  const psNoteText = NAME_REQUIRED ? 'Explained the dictionary approach and why lookup precedes insertion. Tested empty input, duplicates, negative values and no pair. Explained expected linear time and linear extra space.' : `Understood the problem well and asked a clarifying question. Had a working solution in ${minsWords}; the first run failed on the duplicate case, and he explained and fixed it.`;
   const psNote = hp.getByTestId('interviews-scorecard-required').filter({ hasText: /Problem solving/ }).first().getByTestId('interviews-scorecard-note');
   const noted = await (async () => {
     await press(hp, psNote, { pause: 100, timeout: 5000, ms: 500 });
@@ -1192,6 +1222,37 @@ try {
     await hp.getByTestId('interviews-scorecard-recap-step').first().waitFor({ timeout: 30_000 });
   } catch (e) { note(`recap step: ${String(e).slice(0, 120)}`); }
   const recapOk = await hp.getByTestId('interviews-recap-competency').first().waitFor({ timeout: 90_000 }).then(() => true, () => false);
+  if (NAME_REQUIRED && recapOk) {
+    await sourced;
+    const reading = say(lead, 'r_evidence', 300);
+    const sections = hp.getByTestId('interviews-recap-competency');
+    const visibleEvidence = [];
+    const quoteGeometry = [];
+    for (let i = 0; i < await sections.count(); i += 1) {
+      const section = sections.nth(i);
+      const disclosure = section.getByTestId('interviews-recap-evidence');
+      if (!await disclosure.count()) continue;
+      const summary = disclosure.getByText(/Milo.s evidence/).first();
+      await press(hp, summary, { pause: 200, timeout: 5000 });
+      const quote = section.getByTestId('interviews-recap-claim').first();
+      await quote.waitFor({ state: 'visible', timeout: 5000 });
+      await press(hp, quote, { pause: 200, timeout: 5000 });
+      const fullQuote = section.getByTestId('interviews-recap-full-quote').first();
+      if (await fullQuote.isVisible().catch(() => false)) quoteGeometry.push(await fullQuote.evaluate((element) => {
+        const range = document.createRange(); range.selectNodeContents(element);
+        const box = element.getBoundingClientRect();
+        const rects = [...range.getClientRects()];
+        return { whiteSpace: getComputedStyle(element).whiteSpace,
+          fits: rects.every((r) => r.right <= box.right + 1 && r.left >= box.left - 1 && r.bottom <= box.bottom + 1) };
+      }));
+      visibleEvidence.push(squash(await section.innerText()));
+      await sleep(3200);
+      await press(hp, summary, { pause: 100, timeout: 5000 });
+    }
+    await reading;
+    report.quoteGeometry = quoteGeometry;
+    step('Q source evidence opened for all three competencies', visibleEvidence.length === 3 && quoteGeometry.every((g) => g.fits && g.whiteSpace !== 'nowrap'), JSON.stringify({ visibleEvidence, quoteGeometry }));
+  }
   // Milo's recommendation pill stays on screen about 3 s and Hugo answers whatever it says.
   await sourced;
   const adviceBox = hp.getByTestId('interviews-scorecard-milo-advice').first();
@@ -1204,7 +1265,7 @@ try {
     if (verdict) await say(lead, verdict, 300);
     const held = Date.now() - shownAt; if (held < 3200) await sleep(3200 - held);
   }
-  step('G Milo\'s recommendation on screen', adviceShown && /Milo recommends\s*(Advance|Inconclusive|Don.t advance)|Milo has no recommendation yet/i.test(adviceText), `pill "${adviceText.slice(0, 160)}"`);
+  step('G Milo\'s recommendation on screen', adviceShown && /Milo recommends\s*(Advance|Inconclusive|Don.t advance)/i.test(adviceText), `pill "${adviceText.slice(0, 160)}"`);
   // The evidence sits under a closed "Milo's evidence" disclosure: open it, then a quote row.
   const evidence = hp.getByTestId('interviews-recap-evidence').first();
   if (await evidence.count()) await press(hp, evidence.getByText(/Milo.s evidence/).first(), { pause: 150, timeout: 5000 }).catch((e) => note(`evidence disclosure: ${String(e).slice(0, 100)}`));
@@ -1222,6 +1283,13 @@ try {
   step('11 end, scorecard', ivState === 'ended' && candEnded && rated > 0, `state ${ivState}; candidate ended page=${candEnded}; lead landed on the scorecard=${onScorecard}; ${rated} ratings`);
   if (A) {
     const recap = (await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}/recap`)).json().catch(() => ({}))).recap ?? {};
+    report.recap = recap;
+    if (NAME_REQUIRED) {
+      const ids = ['problem-solving', 'code-quality', 'communication'];
+      const covered = ids.every((id) => (recap.competencies ?? []).some((c) => c.id === id && c.evidence?.length));
+      const relevant = (recap.competencies ?? []).flatMap((c) => c.evidence ?? []).every((e) => !/^(?:thanks|thank you|hey milo|roughly how much)/i.test(e.source?.quote ?? ''));
+      step('12 recap covers this round with substantive source quotes', recap.state === 'ready' && covered && relevant, JSON.stringify(recap));
+    }
     const ps = (recap.competencies ?? []).find((c) => c.id === 'problem-solving');
     const quotes = (ps?.evidence ?? []).map((e) => e.source?.quote ?? '');
     if (!NAME_REQUIRED) step('12 the recap cites the Two Sum and testing answers', recapOk && !!ps && quotes.some((q) => /hash map|brute force|dictionary|duplicate case|two pointers|linear time/i.test(q)) && quotes.some((q) => /\btest\b|duplicates|negative/i.test(q)),
@@ -1250,7 +1318,8 @@ try {
     const hugoCredited = lines.some((l) => l.side === 'panel' && /data structures|runtime complexity|good morning/i.test(l.text));
     const candCredited = lines.some((l) => l.side === 'candidate' && /hash map|brute force|dictionary/i.test(l.text));
     const wrong = lines.filter((l) => (l.side === 'candidate' && /data structures and algorithms\?|runtime complexity\?/i.test(l.text)) || (l.side === 'panel' && /brute force|dictionary to store/i.test(l.text))).length;
-    if (!NAME_REQUIRED) step('T transcript, two speakers credited', hugoCredited && candCredited && wrong === 0, `lines ${lines.length} by side ${JSON.stringify(sides)}; Hugo credited=${hugoCredited}; candidate credited=${candCredited}; wrongly credited ${wrong}`);
+    step('T transcript, two speakers credited', hugoCredited && candCredited && wrong === 0, `lines ${lines.length} by side ${JSON.stringify(sides)}; Hugo credited=${hugoCredited}; candidate credited=${candCredited}; wrongly credited ${wrong}`);
+    if (NAME_REQUIRED) step('T2 assessment claims occurred in this conversation', lines.some((l) => l.side === 'candidate' && /linear/i.test(l.text)) && lines.some((l) => l.side === 'candidate' && /before|earlier indices/i.test(l.text)), 'Complexity and lookup-order explanations in the saved candidate transcript');
     step('M Milo spoke', milo.utterances >= (NAME_REQUIRED ? 2 : 3), `${milo.utterances} utterances, ${milo.frames} voice frames received by the candidate's browser`);
   }
   // Never estimated from the wall clock: what the product booked, or unknown (with the last read's status) when it could not be read.
@@ -1279,5 +1348,7 @@ try {
   clearTimeout(ceiling);
 }
 console.log(`film: report ${report.passed} passed, ${report.failed} failed; spend ${JSON.stringify(report.spend)}`);
-if (args.includes('--record-only') || REHEARSE) process.exit(0);
-process.exit(await py('compose', '--out', OUT, '--final', FINAL));
+if (args.includes('--record-only') || REHEARSE) process.exit(report.failed ? 1 : 0);
+const composed = await py('compose', '--out', OUT, '--final', FINAL);
+const reviewed = composed ? 1 : await reviewFilm();
+process.exit(composed || reviewed || (report.failed ? 1 : 0));

@@ -385,6 +385,130 @@
   "n23": [
    "hugo",
    "Given an array of integers and a target, return the indices of the two numbers that add up to the target."
+  ],
+  "r_prepare": [
+   "hugo",
+   "I'll open Mateo's coding round and get the call ready."
+  ],
+  "r_welcome": [
+   "hugo",
+   "Welcome, Mateo. We've got up to ten minutes for a coding exercise. Talk me through your thinking as you go."
+  ],
+  "r_agree": [
+   "hugo",
+   "Same here. Being able to check what the code does is what I want to see today."
+  ],
+  "r_link": [
+   "hugo",
+   "I'll put the news page in the chat. You can catch up on those model announcements afterward."
+  ],
+  "r_problem": [
+   "hugo",
+   "Today's problem is Two Sum. Given an array of integers and a target, return the indices of two numbers that add up to the target. The prompt guarantees one pair, and you cannot use the same element twice."
+  ],
+  "r_language": [
+   "hugo",
+   "Which language would you like to use?"
+  ],
+  "r_empty_question": [
+   "cand",
+   "I'll use Python. The prompt guarantees a pair, but what should empty input return? I'd normally return an empty list when there isn't a pair."
+  ],
+  "r_empty_agree": [
+   "hugo",
+   "That works. Let's return an empty list for no pair, as an extra behavior beyond the prompt. Include a test for it."
+  ],
+  "r_approach": [
+   "cand",
+   "Checking every pair would take quadratic time. Instead, I'll keep a dictionary of numbers I've already seen, with their indices."
+  ],
+  "r_order": [
+   "cand",
+   "For each number, I look up the target minus that number. I check before storing the current index, so the function cannot pair an element with itself."
+  ],
+  "r_return": [
+   "cand",
+   "If the loop finishes without finding a pair, this last line returns an empty list. That also handles the empty input we agreed on."
+  ],
+  "r_example_question": [
+   "hugo",
+   "Walk me through the example with two, seven, eleven, and fifteen, and a target of nine."
+  ],
+  "r_example": [
+   "cand",
+   "At index zero, two needs a seven. There isn't one in the dictionary yet, so I store two at index zero. At index one, seven needs two. That's already there, so I return indices zero and one."
+  ],
+  "r_tests": [
+   "cand",
+   "Hey Milo, add three test cases, including an empty array and duplicates. For the empty array, expect an empty list."
+  ],
+  "r_inspect": [
+   "cand",
+   "The empty-array case expects an empty list. The duplicate case expects two different indices. Let's run the tests."
+  ],
+  "r_result": [
+   "cand",
+   "All the checks passed, including the empty array and duplicates. The empty case returns an empty list, and the duplicate case uses two distinct indices."
+  ],
+  "r_why_duplicate": [
+   "hugo",
+   "What mistake is the duplicate test protecting you against?"
+  ],
+  "r_duplicate_reason": [
+   "cand",
+   "If I store the current number before checking, I could find that same element and return its index twice. Checking first means the dictionary only contains earlier indices."
+  ],
+  "r_complexity_question": [
+   "hugo",
+   "What is the time and space complexity of your solution?"
+  ],
+  "r_complexity": [
+   "cand",
+   "Expected linear time, since each dictionary lookup takes constant time on average. Extra space is linear in the worst case, because I could store an entry for every input number."
+  ],
+  "r_negative_question": [
+   "hugo",
+   "Would negative numbers change your approach?"
+  ],
+  "r_negative": [
+   "cand",
+   "No. The complement is still the target minus the current number. For negative three and three with a target of zero, I store negative three first, then find it when I reach three."
+  ],
+  "r_manual": [
+   "cand",
+   "I'll add that negative-number assertion myself, and a no-pair assertion to check the extra behavior. Then I'll run the whole set again."
+  ],
+  "r_rerun": [
+   "cand",
+   "The added assertions passed too. They check the negative pair and the no-pair return, alongside Milo's cases."
+  ],
+  "r_time_intro": [
+   "hugo",
+   "Before we finish, I have one final question."
+  ],
+  "r_finish_early": [
+   "hugo",
+   "We have enough time, but we've covered what I needed. Let's do that last question and finish early."
+  ],
+  "r_final_question": [
+   "hugo",
+   "If you refactored this tomorrow, what behavior would these tests help you preserve?"
+  ],
+  "r_final_answer": [
+   "cand",
+   "They preserve the return of indices rather than values, two distinct indices for a pair, and the empty-list result when no pair exists. I would keep those assertions while changing the implementation."
+  ],
+  "r_wrap": [
+   "hugo",
+   "Thanks, Mateo. We've walked through the approach, the edge cases, and the complexity. That's all from me today."
+  ],
+  "r_recap": [
+   "hugo",
+   "I'll record my notes from this round, then check the transcript evidence behind the recap."
+  ],
+  "r_evidence": [
+   "hugo",
+   "I'll open the evidence for each competency and check the source quotes against what we discussed."
   ]
  }
 }

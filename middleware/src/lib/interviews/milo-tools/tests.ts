@@ -29,7 +29,7 @@ export function questionForPad(questions: readonly KitQuestion[], pad: string, l
   return named ?? questions[0] ?? null;
 }
 
-export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; dropped: number; needsVerdict: boolean; missing: string[] } | { ok: false };
+export type TestCasesMade = { ok: true; block: string; count: number; checked: boolean; unchecked: number; dropped: number; needsVerdict: boolean; missing: string[]; assumed: boolean } | { ok: false };
 
 /** At most this many asked-for kinds of case are read from one call. */
 export const MAX_REQUESTED = 6;
@@ -99,33 +99,42 @@ export function testCasesFor(cases: unknown, at: { pad: string; language: PadLan
   if (!parsed.ok) return { ok: false };
   const reference = at.question ? referenceFor(at.question.id) : null;
   const requested = requestedOf(at.requested);
+  const said = typeof at.request === 'string' ? at.request : '';
+  const requestedCase = (args: unknown[], covers: string): TestCase => {
+    const extension = reference?.assumption?.(args);
+    // Do not override an explicitly different requested no-pair convention.
+    const conflicts = /\b(?:return|expect|use|throw|raise)\s+(?:null|none|false|-1|an?\s+(?:error|exception))\b/i.test(said);
+    return extension && !conflicts
+      ? { args, covers, expected: extension.expected, assumption: extension.note }
+      : { args, covers, edge: true };
+  };
   const asked = (c: TestCase): string | null => (c.covers ? requested.find((r) => sameKind(r, c.covers!)) ?? null : null);
-  // A case the asker named is never dropped for the reference (film 4: "an empty array" has no answer in two_sum's promise, and
-  // went missing): one the reference does not agree with is written as an edge input, with no expected value.
+  // Named out-of-contract inputs get an explicit assumption where supported, otherwise an unresolved edge input.
+  // A wrong expected value for an in-contract case is still dropped.
   const all: TestCase[] = [];
   for (const c of parsed.cases) {
     const kind = asked(c);
     const verdict = reference ? reference.agrees(c.args, c.expected) : null;
     if (!reference) all.push({ args: c.args, ...(kind ? { covers: kind } : {}) });
     else if (verdict === true) all.push({ args: c.args, expected: c.expected, ...(kind ? { covers: kind } : {}) });
-    else if (kind) all.push({ args: c.args, covers: kind, edge: true });
+    else if (kind && verdict === null) all.push(requestedCase(c.args, kind));
   }
   // The first case for each asked-for kind stays whatever the count; the spares fill the rest (the first `count` in all).
   const firsts = requested.map((r) => all.find((c) => c.covers === r)).filter((c): c is TestCase => !!c);
   // The kinds the request's own words name, by shape: a kept case of that shape, else one the reference set aside (an edge
   // input), else one built from the first case's arguments (an edge input).
-  const said = typeof at.request === 'string' ? at.request : '';
   for (const k of SHAPE_KINDS.filter((x) => x.said.test(said))) {
     if (firsts.some((c) => k.has(c.args))) continue;
     const kept = all.find((c) => !firsts.includes(c) && k.has(c.args));
     if (kept) { firsts.push(kept); continue; }
     const args = parsed.cases.find((c) => k.has(c.args))?.args ?? (parsed.cases[0] ? k.make(parsed.cases[0].args) : null);
     if (!args || all.some((c) => JSON.stringify(c.args) === JSON.stringify(args))) continue;
-    const edge: TestCase = { args, covers: k.label, edge: true };
+    const edge = requestedCase(args, k.label);
     all.push(edge); firsts.push(edge);
   }
   const kept = [...firsts, ...all.filter((c) => !firsts.includes(c)).slice(0, Math.max(0, count - firsts.length))];
   if (!kept.length) return { ok: false };
   const missing = requested.filter((r) => !firsts.some((c) => c.covers === r));
-  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null && kept.some((c) => !c.edge), dropped: parsed.cases.length - kept.length, needsVerdict: needsVerdict(kept), missing };
+  const unchecked = kept.filter((c) => c.edge || c.expected === undefined).length;
+  return { ok: true, block: renderTestCases(kept, at.language, at.fn), count: kept.length, checked: reference !== null && unchecked === 0, unchecked, dropped: Math.max(0, parsed.cases.length - kept.length), needsVerdict: needsVerdict(kept), missing, assumed: kept.some((c) => !!c.assumption) };
 }

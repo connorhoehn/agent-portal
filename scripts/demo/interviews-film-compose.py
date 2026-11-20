@@ -369,6 +369,10 @@ def compose(out, final):
     cmd += ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-pix_fmt', 'yuv420p', '-t', f'{dur:.3f}', '-movflags', '+faststart', full]
     run(cmd)
     length = apply_cuts(full, final, cuts, dur, tmp) if cuts else dur
+    # Review must use the cuts actually applied, which can differ from requested cuts around speech.
+    with open(os.path.join(out, 'composition.json'), 'w') as handle:
+        json.dump({'film': os.path.abspath(final), 'sourceStartMs': t0, 'sourceDurationSeconds': dur,
+                   'durationSeconds': length, 'cuts': cuts}, handle, indent=2)
     print(f'film: {final} ({length:.1f} s of {dur:.1f} s recorded, {len(cuts)} cuts, {len(clips)} sounds, {len(scenes)} scenes)')
 
 

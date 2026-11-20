@@ -1,5 +1,7 @@
 # Film 5: the coding round on the owner's v2 script
 
+> Review correction, 20 November 2026: the acceptance conclusions below are historical and superseded by [Coding interview film analysis and restart](CODING-FILM-RESTART.md). Film 6's 19 passing checks accepted a print-only empty-array input, an unsupported scorecard note, and a missing recommendation. The new review also reproduces the scripted recap's sensitivity to an ASR error in the question opening. Neither take is an accepted final film.
+
 Take 2 is the final film (198 s cut from 566 s recorded, 8 scenes, 2 skip-ahead cuts). Milo was live (real OpenAI); the code ran for real in the Docker runner (Python 3.12, one throwaway container per run). The film's own checks: 18 passed, 1 failed, and that one is a false negative in the check, explained below.
 
 ## Product changes in this branch
