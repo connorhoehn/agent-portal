@@ -257,14 +257,6 @@ const MIC = () => {
     src.connect(d);
     await new Promise((resolve) => { src.onended = resolve; src.start(); });
   };
-  // A real microphone never sends digital silence: a quiet room tone (about -54 dBFS noise) under every line, from --name-required's
-  // start (a minute of pure silence made the product re-arm Milo's tap, after which he heard nothing; see FILM-4-CODING-REPORT.md).
-  window.__filmTone = async () => {
-    const d = ensure(); await ac.resume();
-    const buf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const ch = buf.getChannelData(0);
-    for (let i = 0; i < ch.length; i += 1) ch[i] = (Math.random() * 2 - 1) * 0.002;
-    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(d); src.start();
-  };
   window.__filmSay = async (url) => {
     const d = ensure();
     await ac.resume();
@@ -472,6 +464,17 @@ const deckOf = (page) => page.getByTestId('interview-room-ask');
 const openAsk = async (page) => { if (!(await deckOf(page).isVisible().catch(() => false))) await page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined); };
 const deckShown = async (page) => { await openAsk(page); return (await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null; };
 const OPTION = { ask: /^I.ll ask it$/i, 'milo-ask': /have milo ask/i, skip: /^Skip$/ };
+/** The lead's footer question for a candidate's waiting pad request ("Pad change?"): waits for it (within `ms`) and presses Confirm. → its text, or null. */
+async function pressPadConfirm(page, ms) {
+  const text = await until(async () => {
+    await openAsk(page);
+    const ok = deckOf(page).getByRole('button', { name: /^Confirm$/ });
+    return (await ok.isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null;
+  }, ms, 500);
+  if (!text) return null;
+  await press(page, deckOf(page).getByRole('button', { name: /^Confirm$/ }).first(), { pause: 600 }).catch((e) => note(`pad confirm: ${String(e).slice(0, 80)}`));
+  return text;
+}
 /** A suggestion matching `re`, answered with `option` (within `ms`); → its text, or null when none came. */
 async function answerSuggestion(page, re, option, ms) {
   const text = await until(async () => { const t = await deckShown(page); return t && re.test(t) ? t : null; }, ms, 700);
@@ -769,7 +772,6 @@ try {
    * the end Mateo asks the time. Each Milo turn is measured (report.turns, report.silences, report.barge). No code is run.
    */
   async function namedRound() {
-    for (const pg of [hp, cp]) await pg.evaluate(() => window.__filmTone?.()).catch((e) => note(`room tone: ${String(e).slice(0, 80)}`));
     await miloReady;
     const s = {};
     await line('n01', 400);
@@ -815,7 +817,12 @@ try {
     // Test cases by name; a candidate's pad request waits for the lead's yes.
     scene(6, 'Mateo asks Milo for test cases.', '');
     s.tests = await askByVoice('test cases (candidate, name first)', 'cand', 'n07', 'hey milo', /test|lead|go ahead/i, 30_000);
-    if (/lead|go ahead|allow/i.test(s.tests.said)) s.confirm = await askByVoice('test cases: the lead\'s yes', 'lead', 'n08', 'name first, a waiting request', /test|added|case/i, 30_000);
+    // The lead's yes: Hugo presses Confirm on the footer's "Pad change?" question (it opens by itself, like a knock).
+    if (/lead|go ahead|allow|confirm/i.test(s.tests.said)) {
+      const shown = await pressPadConfirm(hp, 20_000);
+      s.confirm = { said: shown ? `[Confirm pressed] ${shown.slice(0, 160)}` : '[no Pad change? question]', latencyS: null, replied: !!shown, right: !!shown };
+      step('6 the lead confirms the pad request in the footer', !!shown, shown ? `"${shown.slice(0, 200)}"` : 'the Pad change? question never showed');
+    }
     let block = await until(async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null), 6000, 400);
     const inPad = async () => (CASES_BLOCK.test((await padText(cp)) ?? '') ? true : null);
     if (!block) { await line('n20', 400); await line('n21', 300); block = await until(inPad, 3000, 300); }
@@ -825,8 +832,12 @@ try {
     const padNow = (await padText(cp)) ?? '';
     const cases = padNow.slice(Math.max(0, padNow.search(CASES_BLOCK)));
     report.testCases = block ? cases : null;
-    step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && /two_sum\(\s*\[\s*\]/.test(cases) && /\[\s*(-?\d+),\s*\1\b/.test(cases), `block ${block ? `"${squash(cases).slice(0, 300)}"` : 'never appeared'}`);
-    if (block) { await padToEnd(cp, 1500); await line('n09', 300); }
+    // The rendered cases are rows like (([3, 2, 4], 6), [1, 2]): the first list is nums.
+    const numsOf = [...cases.matchAll(/\(\(\s*\[([^\]]*)\]/g)].map((m) => m[1].split(',').map((x) => x.trim()).filter(Boolean));
+    const hasEmpty = numsOf.some((n) => n.length === 0); const hasDup = numsOf.some((n) => new Set(n).size < n.length);
+    step('6 Milo\'s test cases in the pad (empty array, duplicates)', !!block && hasEmpty && hasDup, `empty array=${hasEmpty}; duplicates=${hasDup}; block ${block ? `"${squash(cases).slice(0, 400)}"` : 'never appeared'}`);
+    // Mateo's line names both kinds: said only when both are there.
+    if (block) { await padToEnd(cp, 1500); if (hasEmpty && hasDup) await line('n09', 300); }
     // A probe by name, written on Mateo's code; his answer.
     scene(7, 'Hugo has Milo ask a probe on Mateo\'s code.', '');
     s.probe = await askByVoice('probe (lead, hey milo)', 'lead', 'n10', 'hey milo', /complex|O\(|linear|time|seen|dictionary|loop/i, 30_000);
@@ -1105,8 +1116,10 @@ try {
   // and held about a second (v1.4) before Hugo's one line (v1.2), which covers the ratings and the recap opening.
   await press(hp, hp.getByTestId('interview-end'), { pause: 150 });
   // The confirmation is on the footer's ask card, which a lead may have folded to its button (an answered suggestion): open it.
-  await sleep(400); await openAsk(hp);
-  await press(hp, hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ }), { timeout: 10_000, pause: 150 });
+  // It opens by itself: open it by hand only when it has not shown within 3 s (a click while it is opening would close it).
+  const endBtn = hp.getByTestId('interview-room-ask').getByRole('button', { name: /^End interview$/ });
+  if (!(await endBtn.waitFor({ timeout: 3000 }).then(() => true, () => false))) await openAsk(hp);
+  await press(hp, endBtn, { timeout: 10_000, pause: 150 });
   const endedAt = Date.now();
   await bye;
   clearInterval(watchLost);
