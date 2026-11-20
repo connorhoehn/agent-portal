@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-20T17:38:59.577Z",
-  "serverHandlerSha": "d566fde47d133903b6d30ff1f41745ecd8e08e849a75c780a4211e519784b2da",
+  "capturedAt": "2026-11-20T18:41:20.625Z",
+  "serverHandlerSha": "97446f2bbbd4ce7f1fe0ae212ac3c4ce29e6ebbc73a5cd1471e175fc1da7e713",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -5665,6 +5665,9 @@
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/milo-notes": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
+    },
+    "GET /api/interviews/interviews/:id/milo-pad-confirm": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :id under /api/interviews/interviews (anonymous)"
     },
     "GET /api/interviews/interviews/:id/milo-settings": {

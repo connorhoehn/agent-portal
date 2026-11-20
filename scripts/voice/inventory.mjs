@@ -641,6 +641,7 @@ export const V2_RULES = [
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|board\/snapshots|board\/reveal|board\/reveal\/shown|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log, the whiteboard\'s checkpoints and the runs belong to the room, never to the voice navigator'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/say$/, 'never', null, 'Milo saying an approved question aloud is the lead\'s choice in the room, never the voice navigator\'s'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-intro$/, 'never', null, 'Milo introducing itself is the lead\'s button in the room (or Milo\'s own `introduce` server tool in the call), never the voice navigator\'s'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-pad-confirm$/, 'never', null, 'Confirming a candidate\'s pad request is the lead\'s Confirm / Decline in the room (or "Milo, go ahead" in the call), never the voice navigator\'s'],
   [/^PUT \/api\/interviews\/interviews\/:[^/]+\/milo-settings$/, 'never', null, 'whether the candidate may ask Milo to change the pad is the lead\'s switch in the room'],
   [/^POST \/api\/interviews\/candidates$/, 'never', null, 'hiring setup (ManageCandidates): adding a candidate is done on the form'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],

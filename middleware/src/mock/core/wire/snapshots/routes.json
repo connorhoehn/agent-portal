@@ -2613,7 +2613,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/milo-ask",
-      "source": "src/routes/interviews/milo.ts:85"
+      "source": "src/routes/interviews/milo.ts:88"
     },
     {
       "method": "GET",
@@ -2623,22 +2623,32 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/milo-intro",
-      "source": "src/routes/interviews/milo.ts:124"
+      "source": "src/routes/interviews/milo.ts:127"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/milo-notes",
-      "source": "src/routes/interviews/milo.ts:75"
+      "source": "src/routes/interviews/milo.ts:78"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/interviews/:id/milo-pad-confirm",
+      "source": "src/routes/interviews/milo.ts:143"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/milo-pad-confirm",
+      "source": "src/routes/interviews/milo.ts:151"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/milo-settings",
-      "source": "src/routes/interviews/milo.ts:141"
+      "source": "src/routes/interviews/milo.ts:168"
     },
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/milo-settings",
-      "source": "src/routes/interviews/milo.ts:149"
+      "source": "src/routes/interviews/milo.ts:176"
     },
     {
       "method": "POST",
@@ -2723,7 +2733,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/say",
-      "source": "src/routes/interviews/milo.ts:104"
+      "source": "src/routes/interviews/milo.ts:107"
     },
     {
       "method": "GET",
@@ -2758,7 +2768,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/transcript",
-      "source": "src/routes/interviews/milo.ts:67"
+      "source": "src/routes/interviews/milo.ts:70"
     },
     {
       "method": "GET",
