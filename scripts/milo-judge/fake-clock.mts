@@ -30,7 +30,7 @@ export function fakeClock(): FakeClock {
         timers.delete(nextId);
         t = Math.max(t, tm.at);
         tm.fn();
-        await Promise.resolve();
+        await new Promise<void>((done) => setImmediate(done)); // let every promise chain the timer started run before the next one
       }
       t = Math.max(t, target);
     },

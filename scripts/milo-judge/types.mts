@@ -35,9 +35,16 @@ export interface ExpectItem {
   who: string;
   action: Action | 'silent';
   words?: string;
-  /** Text the action's argument must hold (a merged split request). */
+  /** Words the `text` argument must hold, as whole words in this order (what was asked for; a merged split request). */
   argHas?: string;
 }
+
+/** The arguments each tool takes, exactly. A logged call with a missing, empty or extra argument is not that call. */
+export const TOOL_ARGS: Record<Action, readonly string[]> = {
+  time_left: [], repeat_question: [], introduce: [], cannot_help: [],
+  pad_write: ['text'], pause_listening: [], leave_call: [], cancel: [],
+  stay_silent: [], keep_listening: [],
+};
 
 export type Layer = 'decide' | 'floor';
 
@@ -52,10 +59,12 @@ export interface Scenario {
   expect: ExpectItem[];
   /** True when no decide request may be made at all (a declined candidate). */
   noModelCall?: boolean;
+  /** The seed phrasing, when it is not the last sentence (see seed.mts). The dev / hold-out split is by seed. */
+  seed?: string;
   note?: string;
 }
 
-/** One line the turn owner logged (what the said log, or the action log, holds). */
+/** One line the turn owner logged (what the said log, or the action log, holds). `args` are the tool call's arguments, named as in TOOL_ARGS. */
 export interface Logged { who: string; action: Action; words?: string; args?: Record<string, unknown>; atMs: number }
 
 export interface DecideRequestSeen { who: string; lines: string[] }

@@ -93,7 +93,11 @@ export async function decide(model: string, input: DecideInput, opts: { timeoutM
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(opts.timeoutMs ?? 20_000),
     });
-    if (!res.ok) return { action: fallback, args: {}, ms: Date.now() - t0, error: `http ${res.status}: ${(await res.text()).slice(0, 160)}`, model };
+    // Status and error code only: the body of a rejected request can quote part of the key.
+    if (!res.ok) {
+      const code = await res.json().then((j) => (j as { error?: { code?: unknown } }).error?.code, () => undefined);
+      return { action: fallback, args: {}, ms: Date.now() - t0, error: `http ${res.status}${typeof code === 'string' ? ` ${code}` : ''}`, model };
+    }
     const json = (await res.json()) as { choices?: { message?: { tool_calls?: { function: { name: string; arguments: string } }[] } }[] };
     const call = json.choices?.[0]?.message?.tool_calls?.[0]?.function;
     if (!call || !tools.some((t) => t.name === call.name)) return { action: fallback, args: {}, ms: Date.now() - t0, error: 'no valid tool call', model };

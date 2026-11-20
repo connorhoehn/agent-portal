@@ -1,5 +1,5 @@
 {
- "_readme": "HOLD-OUT CORPUS. BUILDERS: DO NOT READ, GREP, OR TUNE AGAINST THIS FILE. Only scripts/milo-judge/judge.mts reads it, and it prints totals only. Reading it makes the gate number meaningless. Written by a different model than any Decide candidate, with phrasings kept apart from dev.json.",
+ "_readme": "HOLD-OUT CORPUS. BUILDERS: DO NOT READ, GREP, OR TUNE AGAINST THIS FILE. Only scripts/milo-judge (the judge and its tests) reads it, and it prints totals only. Reading it makes the gate number meaningless. Written by a different model than any Decide candidate. The split from dev.json is by seed phrasing (seed.mts): no wording under test here is in dev.json, with or without the name.",
  "scenarios": [
   {
    "id": "hold-001",
@@ -3279,7 +3279,7 @@
      "atMs": 60000,
      "kind": "sentence",
      "who": "dana",
-     "text": "Ilo, how much time is left?"
+     "text": "Ilo, how long have we got?"
     }
    ],
    "expect": [
@@ -3432,7 +3432,7 @@
      "atMs": 60000,
      "kind": "sentence",
      "who": "dana",
-     "text": "Say the question again."
+     "text": "Read the question out once more."
     },
     {
      "atMs": 63000,

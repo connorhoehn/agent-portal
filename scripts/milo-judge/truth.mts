@@ -16,11 +16,12 @@ export function timeLeftTruth(round: Round, atMs: number): string {
   return left === 1 ? 'About 1 minute is left in this round.' : `About ${left} minutes are left in this round.`;
 }
 
-/** Every wording the truth accepts for a words spec at a given moment (time may tick across a minute while Milo decides). */
+/** Every wording the truth accepts for a words spec at the moment it was logged (time may tick across a minute while Milo decides). */
 export function acceptedWords(spec: string | undefined, round: Round, atMs: number): string[] | null {
   if (spec === undefined) return null;
   switch (spec) {
-    case '@time_left': return [...new Set([0, 5_000, 15_000].map((d) => timeLeftTruth(round, atMs + d)))];
+    // The words are worked out when Milo decides and logged a moment either side: a 30 s window holds at most one minute boundary.
+    case '@time_left': return [...new Set([0, -15_000, 15_000].map((d) => timeLeftTruth(round, atMs + d)))];
     case '@question': return [round.question ?? NO_QUESTION_YET];
     case '@intro': return [MILO_INTRO];
     case '@can_do': return [MILO_CAN_DO];

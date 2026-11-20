@@ -2,18 +2,21 @@
 //   owner     the real turn owner (lanes 1A/1B), driven on the fake clock. NEEDS TURN OWNER until it merges: see owner-adapter.mts.
 //   decide    a stand-in: name gate + follow-up window + hold + one minimal decide call. Runs `decide`-layer scenarios only. It is NOT the
 //             product path; it exists so the model bake-off and the scorer run today.
+//   scripted  the decide rig with a scripted model in place of the network: it answers each request with the tool the truth names.
+//             Offline. It proves the corpus, the gates and the scorer agree; it says nothing about any model.
 //   perfect   the scenario's own expectation replayed as a log; the scorer's self-test.
 import { decide, type DecideInput, type DecideResult } from './decide.mts';
 import { fakeClock } from './fake-clock.mts';
 import type { Action, Logged, Outcome, Scenario, ScriptEvent } from './types.mts';
-import { SPEECH } from './types.mts';
+import { SPEECH, TOOL_ARGS } from './types.mts';
+import { NAME_SPELLINGS } from './seed.mts';
 import { MILO_CAN_DO, MILO_INTRO, NO_QUESTION_YET, acceptedWords, timeLeftTruth } from './truth.mts';
 
 export type Rig = (s: Scenario) => Promise<Outcome>;
 
 export const FOLLOW_UP_MS = 10_000;
-/** Milo's name and the forms the transcriber mishears it as. */
-export const NAME_RE = /(^|[^\p{L}\p{N}_])(milo|mylo|nilo|nylo|ilo|milow|mylow|meelo|mielo)(?![\p{L}\p{N}_])/iu;
+/** Milo's name and the forms the transcriber mishears it as, as a whole word. */
+export const NAME_RE = new RegExp(`(^|[^\\p{L}\\p{N}_])(${NAME_SPELLINGS.join('|')})(?![\\p{L}\\p{N}_])`, 'iu');
 
 export const byTime = (events: ScriptEvent[]): ScriptEvent[] => [...events].sort((a, b) => a.atMs - b.atMs);
 
@@ -48,7 +51,7 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
         speaker, sentence: ev.text, named, followUpAgoMs, held, lastLines: history.slice(-3), miloLast,
         state: `Round: ${s.round.minutes} minutes, ${Math.max(0, Math.round((s.round.startedAtMs + s.round.minutes * 60_000 - ev.atMs) / 60_000))} left. ${s.round.question ? `Question Milo last asked: ${JSON.stringify(s.round.question)}.` : 'Milo has asked no question yet.'}`,
       };
-      requests.push({ who: ev.who, lines: [ev.text] });
+      requests.push({ who: ev.who, lines: [...input.lastLines, ev.text] });
       const r = await call(model, input);
       const action: Action = r.action;
       if (action === 'stay_silent' || action === 'keep_listening') continue;
@@ -67,6 +70,19 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
   };
 }
 
+/** The decide rig offline: a scripted model that gives each request the next tool the truth wants from that speaker, else stays silent. */
+export const scriptedRig: Rig = (s) => {
+  const want = s.expect.filter((e) => e.action !== 'silent');
+  let next = 0;
+  return decideRig('scripted', async (model, input) => {
+    const e = want[next];
+    if (!e || e.who !== input.speaker.id) return { action: 'stay_silent', args: {}, ms: 0, model };
+    next += 1;
+    const action = e.action as Action;
+    return { action, args: TOOL_ARGS[action].length ? { text: e.argHas ?? input.sentence } : {}, ms: 0, model };
+  })(s);
+};
+
 /** Replays the expectation as a log: the scorer's own check that a perfect owner scores 100%. */
 export const perfectRig: Rig = async (s) => {
   const logged: Logged[] = [];
@@ -74,7 +90,7 @@ export const perfectRig: Rig = async (s) => {
     if (e.action === 'silent') continue;
     const at = s.events.find((x) => x.kind === 'sentence' && x.who === e.who)?.atMs ?? 0;
     const words = acceptedWords(e.words, s.round, at)?.[0];
-    logged.push({ who: e.who, action: e.action, words, args: e.argHas ? { text: e.argHas } : undefined, atMs: at });
+    logged.push({ who: e.who, action: e.action, words, args: TOOL_ARGS[e.action].length ? { text: e.argHas ?? 'as asked' } : undefined, atMs: at });
   }
   return { logged, decideRequests: [] };
 };
