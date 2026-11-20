@@ -6,8 +6,9 @@
 // What it keeps, in code:
 //   * Lanes. A sentence that is Milo's own line heard back, or a second lane's copy of someone else's sentence, is dropped before
 //     anything else: it is not judged, not context and not stored as that person's words (barge.ts).
-//   * The gate. A sentence reaches Decide only when its speaker holds the button, it holds a spelling of the name, or it is inside
-//     the speaker's follow-up window; never for a person the tenant gives no role; never while paused (floor.ts).
+//   * The gate. A sentence reaches Decide only when its speaker holds the button, or it holds a spelling of the name (a tenant
+//     may add a follow-up window with `followUpMs`; interviews has none); never for a person the tenant gives no role; never while
+//     paused (floor.ts).
 //   * One turn. A new onset from the asker before Milo's audio has started suspends their turn; their next sentence is merged with
 //     it and decided as one. `keep_listening` waits for the rest the same way. A turn that has acted is never merged.
 //   * Silence. Act speaks `cannot_help` only for the name or a hold; a wait that ends with nothing more is silence.
@@ -144,7 +145,7 @@ export class TurnOwner implements HandsfreeRun {
 
   constructor(private readonly deps: TurnOwnerDeps) {
     const { clock, listening } = deps;
-    this.floor = new Floor(() => clock.nowMs(), (s) => this.emit('state', s));
+    this.floor = new Floor(() => clock.nowMs(), (s) => this.emit('state', s), Math.max(0, deps.policy.followUpMs ?? 0));
     this.mics = new MicWatch((userId) => this.onset(userId));
     this.mouth = new Mouth({
       push: (pcm, last) => deps.relay.push(pcm, last),
@@ -305,7 +306,7 @@ export class TurnOwner implements HandsfreeRun {
       return;
     }
 
-    // 5. The gate: a hold, the name, or the asker's follow-up window. Nothing else reaches a model.
+    // 5. The gate: a hold or the name (and, only where the tenant sets one, the asker's follow-up window). Nothing else reaches a model.
     const via = this.floor.route(s.who, s.text, s.startMs);
     if (!via) return;
     if ((await this.deps.policy.roleOf(this.deps.call, s.who).catch(() => null)) === null) { this.trace('turn.no-role', {}); return; }

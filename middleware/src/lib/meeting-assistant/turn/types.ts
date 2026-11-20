@@ -46,7 +46,7 @@ export interface TurnSentence {
   text: string;
   /** When it ended, ms on the turn owner's clock. */
   atMs: number;
-  /** How it reached the turn: the name was heard in it, it is a follow-up inside the window after Milo answered this person, or the hold button was down. */
+  /** How it reached the turn: the name was heard in it, the hold button was down, or (only where the tenant sets `followUpMs`) it is a follow-up inside the window after Milo answered this person. */
   via: 'name' | 'follow-up' | 'hold';
 }
 
@@ -107,6 +107,11 @@ export interface TurnPolicy {
   markSpoken?(call: PolicyCall, rowId: string | null, line: SpokenLine, outcome: SpokenOutcome): Promise<void>;
   /** The money for saying one line: a release to call after, or null (refused: the line goes to the chat only). Absent: no hold. */
   holdSpeech?(call: PolicyCall, line: SpokenLine): Promise<{ release: () => Promise<void> } | null>;
+  /**
+   * How long, after Milo answers someone, their sentences reach Decide without the name (ms). Absent or 0: never, the name or the
+   * hold is required every time (interviews: the owner's decision of 20 November). A tenant that sets it gets `via: 'follow-up'`.
+   */
+  followUpMs?: number;
   /** May this role use this core tool. Absent: stay_silent, cannot_help, keep_listening and cancel for everyone; pause and leave too. */
   mayUseCore?(call: PolicyCall, role: string, tool: CoreToolName): boolean;
 }

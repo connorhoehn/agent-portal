@@ -9,7 +9,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { MILO_CAN_DO, MILO_INTRO, NO_QUESTION_YET, T0, timeLeftTruth } from './truth.mts';
 import { fakeClock } from './fake-clock.mts';
-import { perfectRig, decideRig, scriptedRig, type Rig } from './rigs.mts';
+import { NAME_RE, byTime, perfectRig, decideRig, scriptedRig, type Rig } from './rigs.mts';
 import { TRIALS, loadCorpus, runAll, runTrials } from './runner.mts';
 import { passEvery, scoreScenario, totals } from './score.mts';
 import { seedOf, sharedSeeds } from './seed.mts';
@@ -215,4 +215,45 @@ test('the decide rig makes no call for a declined candidate, a sentence with no 
   const decideScenarios = loadCorpus('dev').filter((s) => s.layer === 'decide' && (s.noModelCall || s.tags.includes('chatter')));
   await runAll(rig, decideScenarios);
   assert.equal(calls, 0);
+});
+
+// The name is required (owner decision, 20 November): Milo acts only when someone says his name (or a misheard form) or holds the
+// button. A follow-up without the name is silence, by design, so no scenario's truth holds an action for one.
+const reaches = (s: Scenario): number => {
+  const holds = new Set<string>();
+  let n = 0;
+  for (const ev of byTime(s.events)) {
+    if (ev.kind === 'hold') { if (ev.down) holds.add(ev.who); else holds.delete(ev.who); }
+    else if (ev.kind === 'sentence' && (NAME_RE.test(ev.text) || holds.has(ev.who))) n += 1;
+  }
+  return n;
+};
+const followUps = (set: Scenario[]): Scenario[] => set.filter((s) => s.tags.includes('follow-up'));
+
+test('the name is required: no scenario expects more actions than it has sentences with the name or under a hold', () => {
+  for (const name of ['dev', 'holdout'] as const) {
+    // Totals only: a failure must not print hold-out wording.
+    const over = loadCorpus(name).filter((s) => s.expect.filter((e) => e.action !== 'silent').length > reaches(s));
+    assert.equal(over.length, 0, `${name}: ${over.length} scenario(s) expect an action for a sentence with no name and no hold`);
+    assert.ok(followUps(loadCorpus(name)).some((s) => s.tags.includes('for-milo')), `${name} keeps its nameless follow-ups (they expect silence)`);
+  }
+});
+
+test('the decide rig asks no model about a follow-up without the name', async () => {
+  let calls = 0;
+  const rig = decideRig('fake', async () => { calls += 1; return { action: 'time_left', args: {}, ms: 1, model: 'fake' }; });
+  const set = followUps(loadCorpus('dev')).filter((s) => s.layer === 'decide');
+  await runAll(rig, set);
+  assert.equal(calls, set.reduce((n, s) => n + reaches(s), 0));
+});
+
+test('turn owner on the registered interviews policy: a follow-up without the name reaches no model and logs nothing', { skip: NEEDS_OWNER }, async () => {
+  const set = followUps(loadCorpus('dev')).filter((s) => s.tags.includes('for-milo') || s.tags.includes('candidate'));
+  assert.ok(set.length >= 5);
+  for (const s of set) {
+    const out = await ownerRig(() => fakeClock())(s);
+    assert.equal(out.decideRequests.length, reaches(s), s.id);
+    assert.equal(out.logged.length, reaches(s), s.id);
+    assert.deepEqual(scoreScenario(s, out).problems, [], s.id);
+  }
 });

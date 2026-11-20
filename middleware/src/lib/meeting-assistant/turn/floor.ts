@@ -1,11 +1,13 @@
 // The floor: who has Milo's ear, and how a sentence reaches him (docs/milo-rebuild/REBUILD-PLAN.md section 1, REBUILD-REVIEW.md
 // risks 5, 7 and 8). State only: no model, no audio, no timers of its own; the turn owner drives it and reads it.
 //
-//   idle ──a sentence with the name / a hold──► hearing ──► deciding ──► speaking ──► follow-up (10 s) ──► idle
+//   idle ──a sentence with the name / a hold──► hearing ──► deciding ──► speaking ──► idle
+//                                                    (a tenant with a follow-up window: speaking ──► follow-up ──► idle)
 //
 // How a sentence reaches Decide, in this order: the speaker holds the button (`hold`); the sentence holds a spelling of the name
-// anywhere (`name`: the grammar that used to judge "addressed" is gone, Decide tells a mention from a request); the speaker is
-// inside their follow-up window (`follow-up`). Anything else is not for Milo and is never sent to a model. While Milo is paused
+// anywhere (`name`: the grammar that used to judge "addressed" is gone, Decide tells a mention from a request). Anything else is not
+// for Milo and is never sent to a model: the name is required. Only a tenant whose policy sets `followUpMs` also lets the asker's
+// sentences through for that long after an answer (`follow-up`); interviews sets none (owner decision, 20 November). While Milo is paused
 // nothing reaches Decide; only a sentence with the name that asks him to listen again ends the pause.
 // One person has the floor; one more may wait (the latest sentence wins). The view is today's `RouteState`, so the portal bar is
 // unchanged: hearing and deciding show as `routing`, speaking as `answering`.
@@ -14,7 +16,7 @@ import { HANDSFREE, type RouteState } from '../handsfree/types.js';
 import { MISHEARD_FORMS } from '../handsfree/listening.js';
 import type { TurnSentence } from './types.js';
 
-/** After Milo's answer has played, the asker's sentences reach Decide without the name for this long. */
+/** The usual length of a follow-up window, for a tenant that sets one (`TurnPolicy.followUpMs`). The floor's own default is none. */
 export const FOLLOW_UP_MS = HANDSFREE.followUpMs;
 /** A second person's sentence waits this long at most for the floor. */
 export const QUEUE_KEEP_MS = HANDSFREE.queueKeepMs;
@@ -45,7 +47,8 @@ export class Floor {
   private shown = '';
   paused = false;
 
-  constructor(private readonly nowMs: () => number, private readonly onChange: (s: RouteState) => void = () => {}) {}
+  /** `followUpMs`: the tenant's follow-up window; 0 (the default) is none, so only the name or the hold reaches Milo. */
+  constructor(private readonly nowMs: () => number, private readonly onChange: (s: RouteState) => void = () => {}, private readonly followUpMs = 0) {}
 
   /** Today's view for the bar and the tile ring. */
   state(): RouteState {
@@ -95,8 +98,8 @@ export class Floor {
 
   deciding(who: string, via: Via): void { this.set('deciding', who, via); }
   speaking(who: string, via: Via): void { this.set('speaking', who, via); }
-  /** Milo answered `who`: their follow-up window runs from the end of the answer. */
-  answered(who: string, endMs: number): void { this.window = { who, untilMs: endMs + FOLLOW_UP_MS }; }
+  /** Milo answered `who`: where the tenant has a follow-up window, theirs runs from the end of the answer. */
+  answered(who: string, endMs: number): void { if (this.followUpMs > 0) this.window = { who, untilMs: endMs + this.followUpMs }; }
   endWindow(who?: string): void { if (!who || this.window?.who === who) this.window = null; this.tell(); }
   /** The turn is over: the floor goes back to the holder (still pressing), the window, or nobody. */
   free(): void {

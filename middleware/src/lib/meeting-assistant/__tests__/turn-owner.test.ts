@@ -83,6 +83,8 @@ function rig(over: Partial<TurnPolicy> = {}): Rig {
     logSpoken: async (_c, line) => { r.logged.push(line); return `row${r.logged.length}`; },
     markSpoken: async (_c, _id, _line, outcome) => { r.marks.push(outcome); },
     mayUseCore: (_c, role, t) => role !== 'candidate' || (t !== 'leave_call' && t !== 'pause_listening'),
+    // This test tenant keeps a follow-up window (a tenant's own setting; interviews has none: the name is required).
+    followUpMs: FOLLOW_UP_MS,
     ...over,
   };
   r.owner = new TurnOwner({
@@ -216,6 +218,51 @@ describe('silence unless named', () => {
     expect(r.requests.length).toBe(2);
     expect(r.requests[1]!.input).toContain('no name');
     expect(r.logged.length).toBe(1);
+  });
+
+  it('the name is required unless the tenant sets a follow-up window: after an answer, a sentence without the name is silence', async () => {
+    for (const over of [{ followUpMs: 0 }, { followUpMs: undefined }] as Array<Partial<TurnPolicy>>) {
+      const r = rig(over);
+      await r.to(10_000);
+      r.answers.push(pick('time_left'), pick('repeat_question'), pick('time_left'));
+      await r.say('lead', 'Milo, how much time is left?');
+      await r.by(3_000); // the line has played
+      expect(r.turns.map((t) => [t.result.line, t.said?.outcome])).toEqual([[TIME, 'spoken']]);
+      expect(r.owner.state()).toEqual({ phase: 'idle' });
+      await r.say('lead', 'And what was the question?');
+      await r.by(3_000);
+      expect(r.requests.length).toBe(1); // no model was asked
+      expect(r.ran.length).toBe(1);
+      // A split request is still one request: the name was said in its first half.
+      r.answers.unshift(pick('keep_listening'));
+      await r.say('lead', 'Milo, can you');
+      await r.by(1_000);
+      await r.say('lead', 'tell me the time');
+      await r.by(4_000);
+      expect(r.ran.map((x) => x.name)).toEqual(['time_left', 'repeat_question']);
+      expect(r.sentenceOf(r.requests.at(-1)!)).toBe('Milo, can you tell me the time');
+      // The hold needs no name.
+      expect(await r.owner.holdPress('lead')).toEqual({ ok: true });
+      await r.by(2_000);
+      r.owner.holdRelease('lead');
+      await r.by(700);
+      await r.say('lead', 'how long is left');
+      await r.by(4_000);
+      expect(r.ran.map((x) => x.name)).toEqual(['time_left', 'repeat_question', 'time_left']);
+      expect(r.requests.at(-1)!.input).toContain('held the button');
+      await r.owner.close();
+    }
+  });
+
+  it('a floor with no follow-up window: an answer opens nothing, and only the name or the hold reaches Milo', () => {
+    const now = 5_000;
+    const f = new Floor(() => now);
+    f.speaking('a', 'name'); f.answered('a', 1_000); f.free();
+    expect(f.state()).toEqual({ phase: 'idle' });
+    expect(f.route('a', 'and again', 2_000)).toBeNull();
+    expect(f.route('a', 'Milo, again', 2_000)).toBe('name');
+    f.hold('a');
+    expect(f.route('a', 'and again', 5_000)).toBe('hold');
   });
 
   it('the follow-up window is the asker\'s alone and ends 10 s after the answer has played', async () => {
@@ -425,7 +472,7 @@ describe('talking over Milo, the hold button, a second asker', () => {
 
   it('the floor view is today\'s RouteState', () => {
     let now = 0;
-    const f = new Floor(() => now);
+    const f = new Floor(() => now, undefined, FOLLOW_UP_MS);
     expect(f.state()).toEqual({ phase: 'idle' });
     f.deciding('a', 'name');
     expect(f.state()).toEqual({ phase: 'routing', userId: 'a', via: 'name', sinceMs: 0 });

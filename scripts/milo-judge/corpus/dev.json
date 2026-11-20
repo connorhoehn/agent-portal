@@ -3823,10 +3823,10 @@
     },
     {
      "who": "dana",
-     "action": "time_left",
-     "words": "@time_left"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-086",
@@ -3879,9 +3879,10 @@
     },
     {
      "who": "dana",
-     "action": "repeat_question"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-087",
@@ -3934,10 +3935,10 @@
     },
     {
      "who": "dana",
-     "action": "pad_write",
-     "argHas": "single"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-088",
@@ -3990,10 +3991,10 @@
     },
     {
      "who": "dana",
-     "action": "pad_write",
-     "argHas": "print"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-089",
@@ -4046,9 +4047,10 @@
     },
     {
      "who": "dana",
-     "action": "pause_listening"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-090",
@@ -4616,10 +4618,10 @@
     },
     {
      "who": "alex",
-     "action": "repeat_question",
-     "words": "@question"
+     "action": "silent"
     }
-   ]
+   ],
+   "note": "Name required (20 November): the follow-up has no name and no hold, so it expects silence."
   },
   {
    "id": "dev-101",

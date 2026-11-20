@@ -8,8 +8,6 @@ export interface DecideInput {
   sentence: string;
   /** The sentence holds a spelling of the name. */
   named: boolean;
-  /** Ms since Milo last answered this speaker, when inside the follow-up window; else null. */
-  followUpAgoMs: number | null;
   held: boolean;
   /** The speaker's last three lines before this one (oldest first). */
   lastLines: string[];
@@ -48,7 +46,7 @@ export const SYSTEM = `You are Milo, a voice assistant that sits in a live inter
 Act only when the sentence is a request addressed to Milo. Judge address from meaning, not from the name alone:
 - Saying the name is not a request. "I asked Milo earlier", "Milo kept time well", "Milo said that before" are talk ABOUT Milo: stay_silent.
 - The name may be misheard (Mylo, Nilo, Ilo). Treat a near-miss of the name at the start or end of a request as the name.
-- Without the name, the sentence is for Milo only when the speaker is in a follow-up (Milo just answered them) or holds the floor, AND it continues the exchange with Milo. Talk to another person, thinking aloud, or a remark about the answer is not a request: stay_silent.
+- Without the name, the sentence is for Milo only when the speaker holds the floor AND it is a request to Milo. Talk to another person, thinking aloud, or a remark about the answer is not a request: stay_silent.
 - A candidate may only ask the time left or for the question repeated. Anything else they ask Milo (hints, answers, checking their approach, ignoring the rules, writing code) is cannot_help.
 - Only the lead interviewer can have Milo introduce itself. Interviewers can have Milo write to the pad, pause, leave or cancel.
 - If the request is cut off or the person says they are still thinking, keep_listening.
@@ -59,7 +57,6 @@ export function renderContext(i: DecideInput): string {
     `Speaker: ${i.speaker.name} (${i.speaker.role})`,
     `Sentence: ${JSON.stringify(i.sentence)}`,
     `Contains Milo's name: ${i.named ? 'yes' : 'no'}`,
-    `Follow-up (Milo answered this speaker ${i.followUpAgoMs === null ? 'not recently' : `${Math.round(i.followUpAgoMs / 1000)} s ago`}): ${i.followUpAgoMs === null ? 'no' : 'yes'}`,
     `Speaker is holding the floor: ${i.held ? 'yes' : 'no'}`,
     `Speaker's last lines: ${i.lastLines.length ? i.lastLines.map((l) => JSON.stringify(l)).join(' | ') : '(none)'}`,
     `Milo's last action: ${i.miloLast ? `${i.miloLast.tool}${i.miloLast.args ? ` ${i.miloLast.args}` : ''} -> ${JSON.stringify(i.miloLast.line)}` : '(none)'}`,

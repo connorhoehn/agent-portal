@@ -10,6 +10,8 @@
 //                    lead       the panel's, plus introduce; confirm_pad_write and decline_pad_write while a candidate's pad
 //                               request waits for them
 //   answersFreely  never: no role gets model-written words in an interview. Every line is a fixed sentence or a tool's.
+//   followUpMs     0: no follow-up window. Milo acts only when someone says his name (or a misheard form of it) or holds the
+//                  button; a follow-up without the name gets silence, by design (owner decision, 20 November).
 //   cannotHelp     the candidate's fixed sentence (MILO_CAN_DO; with pad help, the one that names the pad); the lead's sentence of
 //                  what Milo can do in this round; a panel member gets silence.
 //   context        the round's time, the question (Milo's last, else the round's own), where the round is worked, and (for the lead) the candidate's
@@ -108,6 +110,8 @@ export function interviewsTurnPolicy(candidateAcceptedMilo: (interviewId: string
     },
 
     answersFreely: () => false,
+
+    followUpMs: 0,
 
     instructions: (_call, role) => INTERVIEW_TURN_INSTRUCTIONS[role as InterviewRole] ?? RULE,
 

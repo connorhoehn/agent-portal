@@ -116,6 +116,10 @@ describe('the contract', () => {
     expect(policy.mayHold(call, 'stranger')).toBe(false);
   });
 
+  it('the name is required in an interview: no follow-up window (owner decision, 20 November)', () => {
+    expect(policy.followUpMs).toBe(0);
+  });
+
   it('roles come from the live interview: lead, panel, candidate; a stranger, another tenant and an ended interview have none', async () => {
     expect(await policy.roleOf(call, LEAD)).toBe('lead');
     expect(await policy.roleOf(call, PANEL)).toBe('panel');

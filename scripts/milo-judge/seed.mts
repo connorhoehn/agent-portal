@@ -1,6 +1,6 @@
 // The seed phrasing of a scenario: the wording under test, with the name, casing, punctuation and filler taken out. The dev / hold-out
 // split is BY SEED: every scenario built on one seed (the same request from another role, with the name moved, misheard or dropped, on a
-// hold, as a follow-up) sits on one side only. A hold-out number then measures unseen wordings, not the dev wordings with the name moved.
+// hold, after an answer) sits on one side only. A hold-out number then measures unseen wordings, not the dev wordings with the name moved.
 import type { Scenario } from './types.mts';
 
 /** Milo's name and the forms the transcriber mishears it as. */

@@ -1,6 +1,6 @@
 // Rigs: the thing a script is run through. A rig takes one scenario and returns what was logged and which decide requests were made.
 //   owner     the real turn owner (lanes 1A/1B), driven on the fake clock. NEEDS TURN OWNER until it merges: see owner-adapter.mts.
-//   decide    a stand-in: name gate + follow-up window + hold + one minimal decide call. Runs `decide`-layer scenarios only. It is NOT the
+//   decide    a stand-in: name gate + hold + one minimal decide call (the name is required: no follow-up window). Runs `decide`-layer scenarios only. It is NOT the
 //             product path; it exists so the model bake-off and the scorer run today.
 //   scripted  the decide rig with a scripted model in place of the network: it answers each request with the tool the truth names.
 //             Offline. It proves the corpus, the gates and the scorer agree; it says nothing about any model.
@@ -8,7 +8,7 @@
 import { decide, type DecideInput, type DecideResult } from './decide.mts';
 import { fakeClock } from './fake-clock.mts';
 import type { Action, Logged, Outcome, Scenario, ScriptEvent } from './types.mts';
-import { SPEECH, TOOL_ARGS } from './types.mts';
+import { TOOL_ARGS } from './types.mts';
 import { NAME_SPELLINGS } from './seed.mts';
 import { MILO_CAN_DO, MILO_INTRO, NO_QUESTION_YET, acceptedWords, timeLeftTruth } from './truth.mts';
 
@@ -16,7 +16,6 @@ export type Rig = (s: Scenario) => Promise<Outcome>;
 /** The probe the stand-in rigs log (they have no writer): a question that passes truth.mts `isProbe`. */
 const STAND_IN_PROBE = 'What would you change in this part, and why?';
 
-export const FOLLOW_UP_MS = 10_000;
 /** Milo's name and the forms the transcriber mishears it as, as a whole word. */
 export const NAME_RE = new RegExp(`(^|[^\\p{L}\\p{N}_])(${NAME_SPELLINGS.join('|')})(?![\\p{L}\\p{N}_])`, 'iu');
 
@@ -30,7 +29,6 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
     const logged: Logged[] = [];
     const requests: Outcome['decideRequests'] = [];
     const lines = new Map<string, string[]>();
-    const answeredAt = new Map<string, number>();
     const holds = new Set<string>();
     let miloLast: DecideInput['miloLast'] = null;
     let introduced = false;
@@ -44,21 +42,18 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
       lines.set(ev.who, [...history, ev.text]);
       if (speaker.declined) continue;
       const named = NAME_RE.test(ev.text);
-      const at = answeredAt.get(ev.who);
-      const followUpAgoMs = at !== undefined && ev.atMs - at <= FOLLOW_UP_MS ? ev.atMs - at : null;
       const held = holds.has(ev.who);
-      if (!named && followUpAgoMs === null && !held) continue;
+      // The name is required (owner decision, 20 November): without it, and without a hold, no model is asked, whatever came before.
+      if (!named && !held) continue;
 
       const input: DecideInput = {
-        speaker, sentence: ev.text, named, followUpAgoMs, held, lastLines: history.slice(-3), miloLast,
+        speaker, sentence: ev.text, named, held, lastLines: history.slice(-3), miloLast,
         state: `Round: ${s.round.minutes} minutes, ${Math.max(0, Math.round((s.round.startedAtMs + s.round.minutes * 60_000 - ev.atMs) / 60_000))} left. ${s.round.question ? `Question Milo last asked: ${JSON.stringify(s.round.question)}.` : 'Milo has asked no question yet.'}`,
       };
       requests.push({ who: ev.who, lines: [...input.lastLines, ev.text] });
       const r = await call(model, input);
       const action: Action = r.action;
       if (action === 'stay_silent' || action === 'keep_listening') continue;
-      // No name and no hold: a refusal is silence (the follow-up window must not make Milo interrupt people).
-      if (action === 'cannot_help' && !named && !held) continue;
       let words: string | undefined;
       if (action === 'time_left') words = timeLeftTruth(s.round, ev.atMs);
       else if (action === 'repeat_question') words = s.round.question ?? NO_QUESTION_YET;
@@ -66,7 +61,6 @@ export function decideRig(model: string, call: (m: string, i: DecideInput) => Pr
       else if (action === 'cannot_help') words = speaker.role === 'candidate' ? MILO_CAN_DO : 'I cannot do that.';
       else if (action === 'ask_probe') words = STAND_IN_PROBE;
       logged.push({ who: ev.who, action, words, args: r.args, atMs: ev.atMs });
-      if (SPEECH.includes(action) || action === 'pad_write') answeredAt.set(ev.who, ev.atMs + 4_000);
       miloLast = { line: words ?? '', tool: action, args: action === 'pad_write' ? JSON.stringify(r.args) : undefined };
     }
     return { logged, decideRequests: requests };

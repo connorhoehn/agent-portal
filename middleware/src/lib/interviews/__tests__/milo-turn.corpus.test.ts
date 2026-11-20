@@ -31,7 +31,6 @@ const scenarios = (JSON.parse(readFileSync(join(JUDGE, 'corpus/dev.json'), 'utf8
 const spellings = /NAME_SPELLINGS = \[([^\]]+)\]/.exec(readFileSync(join(JUDGE, 'seed.mts'), 'utf8'))![1]!.replace(/['\s]/g, '').split(',');
 const NAME_RE = new RegExp(`(^|[^\\p{L}\\p{N}_])(${spellings.join('|')})(?![\\p{L}\\p{N}_])`, 'iu');
 const T0 = 1_800_000_000_000;
-const FOLLOW_UP_MS = 10_000;
 const SILENT = ['stay_silent', 'keep_listening'];
 const SPEECH = ['time_left', 'repeat_question', 'introduce', 'cannot_help'];
 const IV = 'iv-corpus';
@@ -77,7 +76,8 @@ async function run(s: Scenario): Promise<string[]> {
     if (ev.kind !== 'sentence' || !ev.text) continue;
     const named = NAME_RE.test(ev.text);
     const at = answeredAt.get(ev.who);
-    const followUp = at !== undefined && ev.atMs - at <= FOLLOW_UP_MS;
+    // The interviews policy has no follow-up window (followUpMs 0): without the name or a hold nothing reaches Decide.
+    const followUp = at !== undefined && ev.atMs - at <= (policy.followUpMs ?? 0) && (policy.followUpMs ?? 0) > 0;
     const held = holds.has(ev.who);
     if (!named && !followUp && !held) continue;
     const sentence: TurnSentence = { id: `${s.id}-${ev.atMs}-${ev.who}`, who: uid(ev.who), text: ev.text, atMs: now, via: held ? 'hold' : named ? 'name' : 'follow-up' };
