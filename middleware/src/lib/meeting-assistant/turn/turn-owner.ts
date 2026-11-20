@@ -21,7 +21,7 @@ import type { HandsfreeClock, HandsfreeRun, HeardLine as StoredLine, HoldResult,
 import type { PolicyCall } from '../policy.js';
 import type { SpeechBackend } from '../../voice/speech.js';
 import { act, type ActDeps, type ActResult } from './act.js';
-import { MicWatch, creditedLane, isMiloEcho, onTwoLanes, overlapOf, wordsOf, type LaneSentence, type PlayedLine } from './barge.js';
+import { ECHO_TAIL_MS, MicWatch, creditedLane, isMiloEcho, onTwoLanes, overlapOf, wordsOf, type LaneSentence, type PlayedLine } from './barge.js';
 import { decide, type DecideDeps } from './decide.js';
 import { Floor, HOLD_MAX_MS, QUEUE_KEEP_MS, asksToResume } from './floor.js';
 import { Mouth, type SpeakDeps, type SpeakResult } from './speak.js';
@@ -38,6 +38,11 @@ export const TWO_LANE_WAIT_MS = 1_500;
 export const WRITE_REPEAT_MS = 10_000;
 /** An onset in a mic straight after one in another mic is that voice arriving through a speaker, not this person starting. */
 const ONSET_LEAK_MS = 400;
+/** A line waits this long for people to stop speaking before its first audio; a line nobody asked for is dropped then. */
+export const GAP_WAIT_MS = 4_000;
+/** An answer someone asked for stays queued this long for a gap; after it, it is in the log and the chat only. */
+export const ANSWER_KEEP_MS = 30_000;
+const GAP_POLL_MS = 100;
 const RECENT_MAX = 60;
 const KEPT_MS = 30_000;
 
@@ -119,6 +124,8 @@ export class TurnOwner implements HandsfreeRun {
   private readonly finalWaiters = new Set<() => void>();
   private readonly verdicts = new Map<string, Promise<boolean>>();
   private readonly lastOnset = new Map<string, number>();
+  /** The line whose first audio is waiting for people to stop speaking, and who asked for it. */
+  private gapWait: { askedBy: string } | null = null;
   private readonly lastWrite = new Map<string, { key: string; atMs: number }>();
   private readonly joined = new Set<string>();
   private intake: Promise<void> = Promise.resolve();
@@ -147,6 +154,7 @@ export class TurnOwner implements HandsfreeRun {
       now: () => clock.nowMs(),
       sleep: (ms) => new Promise<void>((r) => { clock.setTimeout(() => r(), ms); }),
       onPlay: (ev) => this.onPlay(ev),
+      clearToStart: (line, signal) => this.clearToStart(line, signal),
     });
     this.sink = {
       append: () => { if (!this.closed) listening?.tick(); },
@@ -302,6 +310,8 @@ export class TurnOwner implements HandsfreeRun {
     if (!via) return;
     if ((await this.deps.policy.roleOf(this.deps.call, s.who).catch(() => null)) === null) { this.trace('turn.no-role', {}); return; }
     if (this.turn && !this.turn.dead) {
+      // Their earlier answer has not started (people are still speaking): what they ask now replaces it.
+      if (this.gapWait && this.gapWait.askedBy === s.who && this.turn.who === s.who) { this.trace('turn.speak.replaced', {}); this.mouth.stopCurrent(); }
       // The floor is taken: one sentence waits (the latest wins).
       this.queued = { s, via, recent: before, atMs: this.now() };
       this.emit('queued', { userId: s.who, sentenceStartMs: s.startMs });
@@ -434,6 +444,31 @@ export class TurnOwner implements HandsfreeRun {
     const p = this.deps.policy;
     if (this.deps.voiceOn?.() !== false) return p;
     return { logSpoken: (c, l) => p.logSpoken(c, l), ...(p.markSpoken ? { markSpoken: (c, id, l, o) => p.markSpoken!(c, id, l, o) } : {}), holdSpeech: async () => null };
+  }
+
+  /**
+   * Milo never starts a line while a person is speaking. Before a line's first audio every mic is checked: someone speaking, it
+   * waits for a gap (`SPEAKING_TAIL_MS` with no voice in any mic). No gap in `GAP_WAIT_MS`: a line nobody asked for (the fixed
+   * cannot-help line) is dropped; an answer someone asked for stays queued up to `ANSWER_KEEP_MS`. Either way the line is already
+   * in the log and the chat. Voice inside his last line's echo tail is his own, heard back, and holds nothing.
+   */
+  private async clearToStart(line: SpokenLine, signal: AbortSignal): Promise<{ go: boolean; waitedMs: number }> {
+    const from = this.now();
+    const asked = line.tool !== 'cannot_help';
+    const lastEnd = this.played.reduce((m, p) => Math.max(m, p.endMs ?? -Infinity), -Infinity);
+    let waiting = false; let told = false;
+    try {
+      for (;;) {
+        const waitedMs = this.now() - from;
+        if (signal.aborted || this.closed) return { go: false, waitedMs };
+        const speakers = this.mics.speakingAt(this.now(), lastEnd + ECHO_TAIL_MS);
+        if (!speakers.length) { if (waiting) this.trace('turn.speak.waited', { tool: line.tool, waitedMs }); return { go: true, waitedMs }; }
+        if (!waiting) { waiting = true; this.gapWait = { askedBy: line.askedBy }; this.trace('turn.speak.wait', { tool: line.tool, speakers: speakers.length }); }
+        if (waitedMs >= (asked ? ANSWER_KEEP_MS : GAP_WAIT_MS)) { this.trace('turn.speak.no-gap', { tool: line.tool, asked, waitedMs }); return { go: false, waitedMs }; }
+        if (asked && !told && waitedMs >= GAP_WAIT_MS) { told = true; this.trace('turn.speak.still-waiting', { tool: line.tool, waitedMs }); }
+        await new Promise<void>((r) => { this.deps.clock.setTimeout(() => r(), GAP_POLL_MS); });
+      }
+    } finally { this.gapWait = null; }
   }
 
   private onPlay(ev: { kind: 'start' | 'end'; line: SpokenLine; atMs: number }): void {

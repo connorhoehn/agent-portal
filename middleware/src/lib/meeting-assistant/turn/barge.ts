@@ -83,6 +83,8 @@ const LEAK_EARLY_SKIP_BINS = 3;
 const SPEECH_GAP_MS = 600;
 /** A stretch of speech that ends within this of a sentence's start is the tail of the sentence before it. */
 const SENTENCE_TAIL_MS = 200;
+/** A person counts as speaking this long after their mic's last voice: the gaps between words are shorter, a gap this long is room for a line. */
+export const SPEAKING_TAIL_MS = 400;
 
 /** RMS of 16-bit LE samples in [from, to) bytes. */
 function rmsOf(pcm: Buffer, from = 0, to = pcm.length): number {
@@ -222,6 +224,22 @@ export class MicWatch {
       return starts[i]! > fromMs && starts[i]! < toMs ? starts[i]! : fromMs;
     }
     return fromMs;
+  }
+
+  /**
+   * Who is speaking at `atMs`: every mic in a stretch of speech (200 ms or more: a click is not speech) whose last voice ended
+   * less than `SPEAKING_TAIL_MS` ago. Voice that ended by `after` is not counted (his own line's echo tail in an open speaker).
+   */
+  speakingAt(atMs: number, after = -Infinity): string[] {
+    const out: string[] = [];
+    for (const [userId, last] of this.lastVoiced) {
+      const end = last + 20;
+      if (end <= after || atMs - end >= SPEAKING_TAIL_MS) continue;
+      const starts = this.speechStarts.get(userId);
+      const start = starts?.[starts.length - 1];
+      if (start !== undefined && end - start >= PAUSE_ONSET_MS) out.push(userId);
+    }
+    return out;
   }
 
   /** Where the speech heard at `atMs` probably began: the start of the mic's voiced stretch (voiced in the last 2 s), else unknown. */

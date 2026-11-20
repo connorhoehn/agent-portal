@@ -11,6 +11,9 @@
 // played only after the backend has reported the exact text it sent and that text is the logged line, character for character.
 // A backend that changed the words, reported nothing, or runs at another sample rate plays nothing (`not-the-logged-words`,
 // `tts-failed`): the line stays logged and posted, marked unspoken.
+//
+// A line never starts over a person: before its first frame Speak asks `clearToStart` (the turn owner watches every mic), which
+// answers when there is a gap, or that there was none (`no-gap`: logged and posted, never said).
 import type { PolicyCall } from '../policy.js';
 import { trace } from '../trace.js';
 import { VOICE_FRAME_BYTES, VOICE_FRAME_MS, VOICE_SAMPLE_RATE } from '../voice.js';
@@ -31,8 +34,10 @@ export interface SpeakRequest {
 export interface SpeakResult {
   outcome: SpokenOutcome | 'not-logged';
   rowId: string | null;
-  /** Why it was not heard whole: the hold was refused, TTS failed, the voice would have said other words, or it was stopped. */
-  why?: 'no-hold' | 'tts-failed' | 'not-the-logged-words' | 'stopped';
+  /** Why it was not heard whole: the hold was refused, TTS failed, the voice would have said other words, it was stopped, or people never left a gap to start in. */
+  why?: 'no-hold' | 'tts-failed' | 'not-the-logged-words' | 'stopped' | 'no-gap';
+  /** How long its first audio waited for people to stop speaking (absent: nobody was). */
+  waitedMs?: number;
   /** Ms on `now()`: the first frame sent, and when the last frame has played out. */
   playStartMs: number | null;
   playEndMs: number | null;
@@ -51,6 +56,11 @@ export interface SpeakDeps {
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   onPlay?(ev: { kind: 'start' | 'end'; line: SpokenLine; atMs: number }): void;
+  /**
+   * Asked once per line, with its first frame ready and before it is sent: resolves `go` once nobody in the call is speaking, or
+   * not `go` when no gap came in the time this line is worth. `signal` aborts when the line is stopped. Absent: it starts at once.
+   */
+  clearToStart?(line: SpokenLine, signal: AbortSignal): Promise<{ go: boolean; waitedMs: number }>;
 }
 
 export interface Speaking {
@@ -101,6 +111,7 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
     let wake: (() => void) | null = null;
     const nudge = (): void => { const w = wake; wake = null; w?.(); };
     let sent = 0;
+    let noGap = false;
     const pump = (async () => {
       for (;;) {
         if (signal.aborted) return;
@@ -110,6 +121,12 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
         pending = pending.subarray(frame.length);
         const last = ended && pending.length === 0;
         if (result.playStartMs === null) {
+          if (deps.clearToStart) {
+            const clear = await deps.clearToStart(line, signal).catch(() => ({ go: true, waitedMs: 0 }));
+            if (signal.aborted) return;
+            if (clear.waitedMs > 0) result.waitedMs = clear.waitedMs;
+            if (!clear.go) { noGap = true; guard.abort(); return; }
+          }
           result.playStartMs = now();
           deps.onPlay?.({ kind: 'start', line, atMs: result.playStartMs });
         } else {
@@ -154,6 +171,7 @@ async function run(req: SpeakRequest, deps: SpeakDeps, stopSignal: AbortSignal):
       if (wait > 0) await sleep(wait);
     }
     const heard = result.playStartMs !== null;
+    if (noGap && !stopSignal.aborted) return await finish(req, { ...result, why: 'no-gap' }, 'unspoken');
     if (signal.aborted) return await finish(req, { ...result, why: 'stopped' }, heard ? 'partly' : 'unspoken');
     if (ttsFailed) return await finish(req, { ...result, why: 'tts-failed' }, heard ? 'partly' : 'unspoken');
     result.playEndMs = now();
@@ -197,4 +215,6 @@ export class Mouth {
   stopAll(): void { this.epoch += 1; this.current?.stop(); }
 
   get speaking(): boolean { return this.current !== null; }
+  /** Stop the line in hand only (queued lines stay queued). */
+  stopCurrent(): void { this.current?.stop(); }
 }

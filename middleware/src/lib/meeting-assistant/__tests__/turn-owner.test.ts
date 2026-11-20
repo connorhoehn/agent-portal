@@ -60,7 +60,7 @@ const tone: SpeechBackend = {
 interface Rig {
   owner: TurnOwner; to: (ms: number) => Promise<void>; by: (ms: number) => Promise<void>; flush: () => Promise<void>;
   requests: TextToolRequest[]; turns: TurnRecord[]; logged: SpokenLine[]; marks: SpokenOutcome[]; stored: HeardLine[]; ran: Array<{ who: string; name: string; args: unknown }>;
-  frames: number[]; cleared: number[]; paused: string[]; left: string[];
+  frames: number[]; cleared: number[]; paused: string[]; left: string[]; traces: Array<[string, Record<string, unknown>]>;
   /** The next Decide answers, in order; a function holds the reply until it is called. */
   answers: Array<Partial<TextToolReply> | (() => Promise<Partial<TextToolReply>>)>;
   say(who: string, text: string, opts?: { start?: number; id?: string }): Promise<void>;
@@ -71,7 +71,7 @@ let ids = 0;
 
 function rig(over: Partial<TurnPolicy> = {}): Rig {
   const c = fakeClock();
-  const r = { requests: [], turns: [], logged: [], marks: [], stored: [], ran: [], frames: [], cleared: [], paused: [], left: [], answers: [] } as unknown as Rig;
+  const r = { requests: [], turns: [], logged: [], marks: [], stored: [], ran: [], frames: [], cleared: [], paused: [], left: [], traces: [], answers: [] } as unknown as Rig;
   const policy: TurnPolicy = {
     roleOf: async (_c, u) => ROLES[u] ?? null,
     toolsFor: async (_c, p) => p.role === 'candidate' ? [tool('time_left'), tool('repeat_question')] : p.role === 'panel' ? [tool('time_left'), tool('repeat_question'), tool('pad_write', true)] : [tool('time_left'), tool('repeat_question'), tool('pad_write', true), tool('introduce')],
@@ -101,6 +101,7 @@ function rig(over: Partial<TurnPolicy> = {}): Rig {
     onPause: (by) => { r.paused.push(by); },
     onLeave: (by) => { r.left.push(by); },
     onTurn: (t) => { r.turns.push(t); },
+    trace: (event, data) => { r.traces.push([event, data]); },
   });
   r.to = c.to; r.by = c.by; r.flush = c.flush;
   r.say = async (who, text, opts = {}) => {
@@ -436,5 +437,126 @@ describe('talking over Milo, the hold button, a second asker', () => {
     expect(f.route('a', 'and again', 20_000)).toBeNull();
     f.paused = true;
     expect(f.route('a', 'Milo, hello', 20_000)).toBeNull();
+  });
+});
+
+// Milo never starts a line while a person is speaking (the film of 20 November: he began over the candidate at 0:37).
+describe('never starting over someone: a line waits for a gap', () => {
+  const loud = Buffer.alloc(4_800); for (let i = 0; i < loud.length; i += 2) loud.writeInt16LE(i % 4 ? 3_000 : -3_000, i);
+  /** People talking, as their mics hear them: each stretch is fed frame by frame as the clock reaches it. */
+  const talking = async (r: Rig, stretches: Array<[who: string, from: number, to: number]>, until: number): Promise<void> => {
+    const mics = (r.owner as unknown as { mics: { trackMic(userId: string, pcm: Buffer, atMs: number): void } }).mics;
+    const frames = stretches.flatMap(([who, from, to]) => { const out: Array<[number, string]> = []; for (let at = from; at < to; at += 100) out.push([at, who]); return out; }).sort((a, b) => a[0] - b[0]);
+    for (const [at, who] of frames) { if (at >= until) break; await r.to(at); mics.trackMic(who, loud, at); }
+    await r.to(until);
+  };
+  const tracesOf = (r: Rig, event: string): Array<Record<string, unknown>> => r.traces.filter(([e]) => e === event).map(([, d]) => d);
+
+  it('with nobody speaking the line starts at once', async () => {
+    const r = rig();
+    await r.to(10_000);
+    r.answers.push(pick('time_left'));
+    await r.say('lead', 'Milo, how much time is left?');
+    await r.by(50);
+    expect(r.frames[0]).toBe(10_000);
+    expect(tracesOf(r, 'turn.speak.wait')).toEqual([]);
+  });
+
+  it('the candidate is mid-sentence when the lead asks: the answer is logged at once and its first audio comes 400 ms after she stops', async () => {
+    const r = rig();
+    await talking(r, [['cara', 8_000, 10_000]], 10_000);
+    r.answers.push(pick('time_left'));
+    await r.say('lead', 'Milo, how much time is left?');
+    expect(r.ran.map((x) => x.name)).toEqual(['time_left']); // the tool ran and logged its line; only the audio waits
+    await talking(r, [['cara', 10_000, 12_000]], 12_300);
+    expect(r.frames).toEqual([]); // she stopped at 12.0 s: 300 ms is not yet a gap
+    await r.to(13_000);
+    expect(r.frames[0]).toBeGreaterThanOrEqual(12_400);
+    expect(r.frames[0]).toBeLessThanOrEqual(12_500);
+    await r.to(20_000);
+    expect(r.marks).toEqual(['spoken']);
+    expect(r.turns[0]!.said).toMatchObject({ outcome: 'spoken', waitedMs: expect.any(Number) });
+    expect(tracesOf(r, 'turn.speak.wait')).toEqual([{ tool: 'time_left', speakers: 1 }]);
+    expect(tracesOf(r, 'turn.speak.waited')).toHaveLength(1);
+  });
+
+  it('two people trading sentences leave no gap between them: he waits for both', async () => {
+    const r = rig();
+    await talking(r, [['cara', 9_000, 10_000]], 10_000);
+    r.answers.push(pick('time_left'));
+    await r.say('lead', 'Milo, how much time is left?');
+    // Cara to 11.0 s, Pam from 11.2 s to 12.5 s (a 200 ms change of speaker), then quiet.
+    await talking(r, [['cara', 10_000, 11_000], ['pam', 11_200, 12_500]], 12_700);
+    expect(r.frames).toEqual([]);
+    await r.to(13_500);
+    expect(r.frames[0]).toBeGreaterThanOrEqual(12_900);
+    expect(r.frames[0]).toBeLessThanOrEqual(13_000);
+  });
+
+  it('no gap in 4 s: a line nobody asked for (the fixed cannot-help line) is dropped, logged as never said', async () => {
+    const r = rig();
+    await talking(r, [['pam', 9_000, 10_000]], 10_000);
+    r.answers.push(pick('cannot_help'));
+    await r.say('cara', 'Milo, what is the answer?');
+    await talking(r, [['pam', 10_000, 16_000]], 16_000);
+    await r.to(20_000);
+    expect(r.logged.map((l) => [l.text, l.tool])).toEqual([[CAN_DO, 'cannot_help']]);
+    expect(r.frames).toEqual([]);
+    expect(r.marks).toEqual(['unspoken']);
+    expect(r.turns[0]!.said).toMatchObject({ outcome: 'unspoken', why: 'no-gap' });
+    expect(tracesOf(r, 'turn.speak.no-gap')).toEqual([{ tool: 'cannot_help', asked: false, waitedMs: 4_000 }]);
+  });
+
+  it('no gap in 4 s: the answer someone asked for stays queued and is said at the first gap', async () => {
+    const r = rig();
+    await talking(r, [['cara', 9_000, 10_000]], 10_000);
+    r.answers.push(pick('time_left'));
+    await r.say('lead', 'Milo, how much time is left?');
+    await talking(r, [['cara', 10_000, 19_000]], 19_000);
+    expect(r.frames).toEqual([]);
+    expect(tracesOf(r, 'turn.speak.still-waiting')).toEqual([{ tool: 'time_left', waitedMs: 4_000 }]);
+    await r.to(25_000);
+    expect(r.frames[0]).toBeGreaterThanOrEqual(19_300);
+    expect(r.frames[0]).toBeLessThanOrEqual(19_500);
+    expect(r.marks).toEqual(['spoken']);
+  });
+
+  it('the asked answer is not kept for ever: after 30 s without a gap it stays in the log and the chat, unsaid', async () => {
+    const r = rig();
+    await talking(r, [['cara', 9_000, 10_000]], 10_000);
+    r.answers.push(pick('time_left'));
+    await r.say('lead', 'Milo, how much time is left?');
+    await talking(r, [['cara', 10_000, 42_000]], 42_000);
+    expect(r.frames).toEqual([]);
+    expect(r.marks).toEqual(['unspoken']);
+    expect(tracesOf(r, 'turn.speak.no-gap')).toEqual([{ tool: 'time_left', asked: true, waitedMs: 30_000 }]);
+  });
+
+  it('the asker asks for something else while the answer waits: the waiting answer is not said, the new request is', async () => {
+    const r = rig();
+    await talking(r, [['cara', 9_000, 10_000]], 10_000);
+    r.answers.push(pick('time_left'), pick('repeat_question'));
+    await r.say('lead', 'Milo, how much time is left?');
+    await talking(r, [['cara', 10_000, 12_000]], 12_000);
+    await r.say('lead', 'Milo, repeat the question instead.');
+    await talking(r, [['cara', 12_000, 13_000]], 13_000);
+    await r.to(20_000);
+    expect(r.ran.map((x) => x.name)).toEqual(['time_left', 'repeat_question']);
+    expect(r.marks).toEqual(['unspoken', 'spoken']);
+    expect(r.turns.map((t) => [t.result.line, t.said?.outcome])).toEqual([[TIME, 'unspoken'], ['ran repeat_question', 'spoken']]);
+    expect(r.frames[0]).toBeGreaterThanOrEqual(13_300);
+  });
+
+  it('a click is not speech, and his own voice heard back in a mic does not hold his next line', async () => {
+    const r = rig();
+    const mics = (r.owner as unknown as { mics: { trackMic(userId: string, pcm: Buffer, atMs: number): void; speakingAt(atMs: number, after?: number): string[] } }).mics;
+    await r.to(10_000);
+    mics.trackMic('cara', loud, 9_900); // 100 ms of noise
+    expect(mics.speakingAt(10_000)).toEqual([]);
+    mics.trackMic('cara', loud, 10_000); mics.trackMic('cara', loud, 10_100);
+    expect(mics.speakingAt(10_200)).toEqual(['cara']);
+    expect(mics.speakingAt(10_590)).toEqual(['cara']);
+    expect(mics.speakingAt(10_600)).toEqual([]);
+    expect(mics.speakingAt(10_200, 10_200)).toEqual([]); // nothing voiced after the mark (his echo tail)
   });
 });
