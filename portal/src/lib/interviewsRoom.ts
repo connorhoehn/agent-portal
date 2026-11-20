@@ -293,12 +293,21 @@ export async function answerSuggestion(
 }
 
 /**
- * Esc on the deck while a suggestion shows is a Skip (decision W2P, finding I3.4b): the server lets it go, so the page's read
+ * Esc (or Hide) on the open suggestion is a Skip (decision W2P, finding I3.4b): the server lets it go, so the page's read
  * starts again and Milo's next suggestion comes. Hiding it alone left it waiting on the server, which shows the same one again
- * and never a new one, and the read had stopped. Returns the suggestion to skip, once (`skipped`: the one already sent).
+ * and never a new one, and the read had stopped. `collapsed`: the open question was a suggestion and was hidden. Returns the
+ * suggestion to skip, once (`skipped`: the one already sent). A click outside the popover only closes it: the suggestion keeps
+ * waiting on the footer's button.
  */
 export const escSkipsSuggestion = (collapsed: boolean, suggestionId: string | null, skipped: string | null): string | null =>
   collapsed && suggestionId !== null && suggestionId !== skipped ? suggestionId : null;
+
+/** Which of the room's waiting questions is on the footer bar's button (components/shell/InterviewRoomFooter.tsx). */
+export type InterviewAskKind = 'end' | 'knock' | 'suggestion';
+
+/** The button's words for the question that waits; `more` others wait behind it. Short, so the footer's row keeps its width. */
+export const askButtonLabel = (kind: InterviewAskKind, more: number): string =>
+  `${kind === 'end' ? 'End interview?' : kind === 'knock' ? 'Candidate waiting' : 'Milo suggests'}${more > 0 ? ` +${more}` : ''}`;
 
 /** One prompt per suggestion. */
 export const suggestionPromptId = (interviewId: string, suggestionId: string): string => `interview-suggestion:${interviewId}:${suggestionId}`;

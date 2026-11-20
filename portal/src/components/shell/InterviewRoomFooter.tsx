@@ -1,17 +1,18 @@
 // The interview's own elements in the shell footer (docs/interviews-tenant-plan.md decision 21, row I2.4), on the
 // same model as a work call: the room page (pages/interviews/InterviewRoomPage.tsx) registers what the footer
-// needs here; SocialFooter hands `useInterviewRoomBarActions` to the call bar as its actions (time left, what the
-// candidate turned off, the last answer's receipt, End interview for the lead) and draws `InterviewRoomAsks` in the
-// footer's prompt deck beside Milo's asks (the candidate is waiting: Admit / Not yet; End interview: End it / Keep
-// going). The footer is one row at every width: each action has a priority, and the bar moves the lowest into its
+// needs here; SocialFooter hands `useInterviewRoomBarActions` to the call bar as its actions (the waiting question,
+// time left, what the candidate turned off, the last answer's receipt, End interview for the lead). The footer is
+// one row at every width and nothing is drawn above it: a question that waits for the lead (the candidate is
+// waiting: Admit / Not yet; End interview: End it / Keep going; Milo's suggestion) is a button on the row that
+// opens the question in a popover, and each other action has a priority, so the bar moves the lowest into its
 // More menu when the row is short (the order is BAR_PRIORITY below). Nothing renders unless the shell's call is the
 // registered interview's, so no other tenant's footer changes.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, Inline, InlinePopover, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import type { HuddleBarAction } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, askButtonLabel, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type InterviewAskKind, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 import { useCallHost } from '../../lib/conversationCall';
 import { useFetch } from '../../hooks/useFetch';
 import { INTERVIEWS_API } from '../../lib/interviews';
@@ -60,7 +61,7 @@ const setReceipt = (v: string | null) => { if (receipt !== v) { receipt = v; emi
  * Which of the call bar's items stay on the row longest (higher stays; the library's own sit at chat 60, share 50,
  * media 40, meeting 30). When the row is short they move into the bar's More menu from the lowest up: device
  * settings, the candidate link, Introduce Milo, the quiet chips, the receipt, time left, then Message, and last the
- * connection error, End interview, Open the room and Rejoin. Microphone, camera and Leave never move.
+ * connection error, End interview, Open the room and Rejoin. Microphone, camera, Leave and a waiting question never move.
  */
 export const BAR_PRIORITY = {
   rejoin: 90, openRoom: 85, end: 80, error: 75, timeLeft: 55, receipt: 45, consent: 35, paused: 25, intro: 20, link: 15, devices: 5,
@@ -212,7 +213,7 @@ function useMiloIntroAction(interviewId: string | null): HuddleBarAction | null 
   };
 }
 
-/** The call bar's actions for the room: time left, the consent chip, the last answer's receipt, the lead's link, Introduce Milo and End interview. */
+/** The call bar's actions for the room: the waiting question, time left, the consent chip, the last answer's receipt, the lead's link, Introduce Milo and End interview. */
 export function useInterviewRoomBarActions(lobbyName: string | null | undefined, callStartedAt: number | string | null | undefined): HuddleBarAction[] {
   const room = useRoomFor(lobbyName);
   const now = useNow(15_000);
@@ -220,10 +221,12 @@ export function useInterviewRoomBarActions(lobbyName: string | null | undefined,
   const answered = useSyncExternalStore(subscribe, receiptSnapshot, receiptSnapshot);
   const link = useCandidateLinkAction(room?.lead && room.admission?.state !== 'admitted' ? room.interviewId : null, room?.candidateName ?? '');
   const intro = useMiloIntroAction(room?.lead ? room.interviewId : null);
+  const ask = useInterviewRoomAskAction(lobbyName);
   if (!room) return [];
   const left = callTimeLabel(callStartedAt, room.minutes, now);
   const said = answered ? `Answered · ${answered}` : null;
   return [
+    ...(ask ? [ask] : []),
     ...(left ? [{ id: 'interview-time-left', priority: BAR_PRIORITY.timeLeft, fact: left,
       node: <Chip size="sm" tone={timeLeftTone(left) === 'warning' ? 'warning' : 'neutral'} data-testid="interview-time-left">{left}</Chip> }] : []),
     ...(room.pausedLine ? [{ id: 'interview-suggestions-paused', priority: BAR_PRIORITY.paused, fact: room.pausedLine,
@@ -247,15 +250,28 @@ export function useInterviewRoomBarActions(lobbyName: string | null | undefined,
   ];
 }
 
-/** The footer's prompt deck for the room: the waiting candidate, and the End interview confirm. */
-export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | undefined }) {
+/**
+ * The room's waiting question, in the bar (the owner, 20 November: the footer is one row, nothing stacked above it): the
+ * waiting candidate (Admit / Not yet), the End interview confirm and Milo's suggestion (I'll ask it / Have Milo ask / Skip)
+ * are one button on the row, and the question with its answers opens in a popover over the page, so the row and the
+ * room above it keep their height. The End question (the lead just pressed End interview) and a knock open by themselves
+ * without taking focus; a suggestion waits as the button until the lead opens it (the question is the button's tooltip).
+ */
+function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined }) {
   const room = useRoomFor(lobbyName);
   const asked = useSyncExternalStore(subscribe, askedSnapshot, askedSnapshot);
   const scope = room ? `interview-room:${room.interviewId}` : null;
   const knock = room?.lead && room.admission?.state === 'waiting' ? room.admission : null;
+  // `self`: it opened by itself (a knock, the End question) and takes no focus; `hand`: the lead opened it from the button.
+  const [open, setOpen] = useState<'no' | 'self' | 'hand'>('no');
+  const byHand = open === 'hand';
+  // The suggestion an Esc already skipped: gone from the button before the room's next read says so.
+  const [skipped, setSkipped] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const prompts = useMemo<ComposerPrompt[]>(() => {
     if (!room || !scope) return [];
-    const base = { scope, keypad: 'deck' as const, focusOnArrive: false };
+    // An unasked question never takes focus; one the lead opened puts it on the first answer.
+    const base = { scope, keypad: 'deck' as const, focusOnArrive: byHand };
     const list: ComposerPrompt[] = [];
     if (asked && room.lead) list.push({
       ...base, id: `${scope}:end`, kind: 'choice', eyebrow: 'Interview', title: 'End the interview',
@@ -281,7 +297,7 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
       },
     });
     const sg = suggestionForPrompt(room.lead, room.suggestion);
-    if (sg) list.push({
+    if (sg && sg.id !== skipped) list.push({
       ...base, id: suggestionPromptId(room.interviewId, sg.id), kind: 'choice', eyebrow: 'Milo suggests', title: sg.competency.name,
       question: sg.text,
       // "Based on" is one line (the prompt presentation clamps it); the whole quote is its tooltip, one hover or focus away.
@@ -297,31 +313,53 @@ export function InterviewRoomAsks({ lobbyName }: { lobbyName: string | null | un
       },
     });
     return list;
-  }, [room, scope, asked, knock, room?.suggestion]);
+  }, [room, scope, asked, knock, room?.suggestion, byHand, skipped]);
   const deck = useComposerPromptDeck(prompts, { scope });
-  // A new knock asks again even after Esc hid the deck.
+  const activeId = deck.active?.id ?? null;
+  const endId = scope ? `${scope}:end` : null;
   const knockId = room && knock ? knockPromptId(room.interviewId, knock) : null;
-  useEffect(() => { if (knockId && deck.collapsed) deck.setCollapsed(false); }, [knockId]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Esc on a suggestion is a Skip (escSkipsSuggestion): the server lets it go and the next one comes back by itself.
   const suggestionId = room?.lead ? room.suggestion?.id ?? null : null;
-  const skippedByEsc = useRef<string | null>(null);
-  // Only on the Esc itself (the deck collapsing), so a suggestion that arrives later is never skipped unseen; the deck opens again
-  // once it is sent, so nothing else waits behind a hidden deck.
+  const kind: InterviewAskKind = activeId === endId ? 'end' : activeId === knockId ? 'knock' : 'suggestion';
+  // The End question and a knock (a new one too, after "Not yet") open by themselves; a suggestion that comes to the front closes
+  // the popover and waits as the button.
+  useEffect(() => { setOpen(activeId !== null && (activeId === endId || activeId === knockId) ? 'self' : 'no'); }, [activeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Closing the End question by any means is "Keep going"; the knock and a suggestion stay on the button.
+  const close = () => { setOpen('no'); if (kind === 'end' && activeId !== null) setEndAsked(false); };
+  // Esc or Hide on the open question closes it. On a suggestion that is a Skip (escSkipsSuggestion, decision W2P): the server
+  // lets it go and the next one comes by itself. A click outside only closes, and the suggestion keeps waiting on the button.
   useEffect(() => {
-    const skip = escSkipsSuggestion(deck.collapsed, suggestionId, skippedByEsc.current);
-    if (!skip || !room) return;
-    skippedByEsc.current = skip;
-    void room.answerSuggestion(skip, 'skip').finally(() => deck.setCollapsed(false));
+    if (!deck.collapsed) return;
+    const skip = escSkipsSuggestion(kind === 'suggestion' && activeId !== null, suggestionId, skipped);
+    if (skip && room) { setSkipped(skip); void room.answerSuggestion(skip, 'skip'); }
+    close();
+    deck.setCollapsed(false);
   }, [deck.collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (suggestionId && deck.collapsed) deck.setCollapsed(false); }, [suggestionId]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Esc on the End question is "Keep going".
-  useEffect(() => { if (deck.collapsed && asked) { setEndAsked(false); deck.setCollapsed(false); } }, [deck, asked]);
   // An answered prompt leaves the list (a suggestion answered is gone from the room). Its receipt ("Milo asked it aloud",
-  // "Admitted") is a chip in the call bar (useInterviewRoomBarActions), not the deck's answered row: with no question
-  // waiting, nothing is drawn above the footer's row.
+  // "Admitted") is a chip in the call bar (useInterviewRoomBarActions).
   const lastReceipt = room && !deck.active ? deck.receipt : null;
   useEffect(() => { setReceipt(lastReceipt); }, [lastReceipt]);
-  if (!room || !deck.active || deck.collapsed) return null;
-  // The compact form (plain buttons, no key-hint row, facts on one line each): the room's pad and its output keep their height at 1280.
-  return <ComposerPromptDeck deck={deck} presentation="prompt" className="mx-4 my-1" data-testid="interview-room-ask" />;
+  if (!room || !deck.active) return null;
+  const label = askButtonLabel(kind, deck.pending.length - 1);
+  const hint = kind === 'end' ? deck.active.question : `${deck.active.title}: ${deck.active.question}`;
+  return <>
+    <Tooltip content={hint} placement="top" disabled={open !== 'no'}>
+      <Button ref={trigger} size="sm" variant="primary" aria-haspopup="dialog" aria-expanded={open !== 'no'} aria-label={`${label}. ${hint}`}
+        onClick={() => { if (open === 'no') setOpen('hand'); else close(); }} data-ask={kind} data-testid="interview-room-ask-open">{label}</Button>
+    </Tooltip>
+    {open === 'no' && <T role="status" aria-live="polite" className="sr-only" data-testid="interview-room-ask-arrival">{`New question: ${deck.active.title}`}</T>}
+    <InlinePopover trigger={trigger} open={open !== 'no'} onClose={close} placement="top-end" kind="interview-ask" aria-label={deck.active.title}
+      focusOnOpen="none" escapeScope="inside" trapFocus={byHand} className="w-[min(26rem,calc(100vw-2rem))] p-0" data-testid="interview-room-ask-popover">
+      {/* The compact form (plain buttons, no key-hint row, facts on one line each), without a border of its own inside the popover's. */}
+      <ComposerPromptDeck deck={deck} presentation="prompt" variant="inset" className="border-b-0" data-testid="interview-room-ask" />
+    </InlinePopover>
+  </>;
+}
+
+/**
+ * The room's waiting question as a bar action, for the call bar and the pre-call bar alike (a candidate may knock before the
+ * lead has joined). It has no More-menu form, so it never leaves the row. Null for any other page's lobby.
+ */
+export function useInterviewRoomAskAction(lobbyName: string | null | undefined): HuddleBarAction | null {
+  const room = useRoomFor(lobbyName);
+  return useMemo(() => (room ? { id: 'interview-ask', node: <InterviewRoomAsk lobbyName={lobbyName} /> } : null), [!!room, lobbyName]); // eslint-disable-line react-hooks/exhaustive-deps
 }

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, SUGGESTIONS_MODEL_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
-  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, pollsConsents,
+  suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, askButtonLabel, pollsConsents,
   INTERVIEW_HINT_ENDED, INTERVIEW_HINT_KNOCK, hintsAfter, WAITING_FALLBACK_MS,
   roomCallTitle, roomHref, roomStartMs, startsOnJoin, timeLeftLabel, timeLeftTone,
 } from '../interviewsRoom.ts';
@@ -207,6 +207,13 @@ test('I3.4b: Esc on a showing suggestion skips it once on the server, so the rea
   assert.equal(escSkipsSuggestion(true, 'sg-1', 'sg-1'), null); // sent already
   assert.equal(escSkipsSuggestion(false, 'sg-1', null), null); // the deck is open
   assert.equal(escSkipsSuggestion(true, null, null), null); // Esc with no suggestion (the knock, the End question)
+});
+
+test('the footer bar\'s button for a waiting question: a few words by kind, and how many more wait behind it', () => {
+  assert.equal(askButtonLabel('suggestion', 0), 'Milo suggests');
+  assert.equal(askButtonLabel('knock', 0), 'Candidate waiting');
+  assert.equal(askButtonLabel('end', 0), 'End interview?');
+  assert.equal(askButtonLabel('knock', 1), 'Candidate waiting +1'); // a suggestion waits behind the knock
 });
 
 test('I3.4j: the open room reads the candidate\'s answers again until they exist, then stops; nobody outside the room reads them', () => {

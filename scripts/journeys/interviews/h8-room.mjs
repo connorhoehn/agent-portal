@@ -215,7 +215,9 @@ export async function padTab(page) {
 /** Wait for the lead's footer suggestion (the scripted coach can take up to 120 s). → the deck's text, or null. */
 export async function suggestion(page, ms = 160_000) {
   const deck = page.getByTestId('interview-room-ask');
-  return until(async () => ((await deck.getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? (await deck.innerText()).replace(/\s+/g, ' ').trim() : null), ms, 2500);
+  // The suggestion waits as a button on the footer's row (nothing is drawn above the row): open it, as the lead does.
+  const open = async () => { if (!(await deck.isVisible().catch(() => false))) await page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined); };
+  return until(async () => { await open(); return (await deck.getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? (await deck.innerText()).replace(/\s+/g, ' ').trim() : null; }, ms, 2500);
 }
 
 /**

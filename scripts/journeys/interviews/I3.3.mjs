@@ -14,7 +14,7 @@
 //          candidate's reads (their own routes and their call chat)
 //   I3.3g  Milo declined (transcript yes, Milo no): the lead's bar carries the "Milo off" consent line, Invite stays, and
 //          with lines said no suggestion comes (the read says none, the deck stays empty)
-import { liveRoom, inject, sleep, chatOf, guestReads, guestChatText, words } from './h3-call.mjs';
+import { liveRoom, inject, sleep, chatOf, guestReads, guestChatText, words, openAsk } from './h3-call.mjs';
 
 export default async function run(ctx) {
   const { SEED, record, resetMock, api, clock, shootPage } = ctx;
@@ -25,7 +25,7 @@ export default async function run(ctx) {
     try { const r = await fn(); record(name, r.ok, r.detail); } catch (e) { record(name, false, e instanceof Error ? e.message.split('\n')[0] : String(e)); }
   };
   const deckOf = (page) => page.getByTestId('interview-room-ask');
-  const deckText = async (page) => ((await deckOf(page).first().innerText().catch(() => '')) || '').replace(/\s+/g, ' ');
+  const deckText = async (page) => ((await (await openAsk(page)).first().innerText({ timeout: 1000 }).catch(() => '')) || '').replace(/\s+/g, ' ');
   /** The deck shows a suggestion: up to `ms`. → its text or ''. */
   const awaitDeck = async (page, ms) => {
     const end = Date.now() + ms;

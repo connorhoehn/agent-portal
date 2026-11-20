@@ -19,7 +19,7 @@
 //   I3.4i  the Milo-off lines on the lead's bar in place of Invite: "Milo waits for answers" with no answers, "Milo is off" with
 //          the transcript declined (after a reload); the panel member's bar carries the consent line ("No transcript or Milo") and no prompt
 //   I3.4j  the lead's open bar takes the candidate's answers without a reload (the room reads them again until they exist)
-import { liveRoom, inject, sleep, chatOf, guestReads, guestChatText, words, setCaps, guestIdentity, guestJoinCall, candidateAnswers, stubCallMedia, joinRoomCall } from './h3-call.mjs';
+import { liveRoom, inject, sleep, chatOf, guestReads, guestChatText, words, setCaps, guestIdentity, guestJoinCall, candidateAnswers, stubCallMedia, joinRoomCall, openAsk } from './h3-call.mjs';
 
 export default async function run(ctx) {
   const { SEED, record, resetMock, api, guestApi, clock, middleware, shootPage } = ctx;
@@ -30,7 +30,7 @@ export default async function run(ctx) {
     try { const r = await fn(); record(name, r.ok, r.detail); } catch (e) { record(name, false, e instanceof Error ? e.message.split('\n')[0] : String(e)); }
   };
   const deckOf = (page) => page.getByTestId('interview-room-ask');
-  const deckText = async (page) => ((await deckOf(page).first().innerText({ timeout: 1000 }).catch(() => '')) || '').replace(/\s+/g, ' ');
+  const deckText = async (page) => ((await (await openAsk(page)).first().innerText({ timeout: 1000 }).catch(() => '')) || '').replace(/\s+/g, ' ');
   const awaitDeck = async (page, re, ms) => {
     const end = Date.now() + ms;
     while (Date.now() < end) { const t = await deckText(page); if (re.test(t)) return t; await sleep(1000); }

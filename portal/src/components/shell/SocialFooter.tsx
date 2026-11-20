@@ -24,7 +24,9 @@
 // lowest-priority actions into its More menu (ui-components 2.543.0; the order
 // is InterviewRoomFooter's BAR_PRIORITY and the library's HUDDLE_BAR_PRIORITY),
 // the call's name is cut with its tooltip, and nothing that is only a status
-// line sits above the row. Below 40rem the phone layout keeps its own rules
+// line sits above the row. An interview's waiting question (a knock, the End
+// confirm, Milo's suggestion) is a button on the row that opens the question in
+// a popover (InterviewRoomFooter), not a card above it. Below 40rem the phone layout keeps its own rules
 // (socialFooter.css).
 import { useId, useLayoutEffect, useRef } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
@@ -47,7 +49,7 @@ import { MeetingTurnRunner } from './MeetingTurnRunner';
 import { AssistantPrivateAnswers } from './AssistantPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, footerCallItems, hasJoinedCall, idleHuddleControls } from './callShellModel';
-import { BAR_PRIORITY, InterviewRoomAsks, useInterviewRoomBarActions, useInterviewRoomReturnAction } from './InterviewRoomFooter';
+import { BAR_PRIORITY, useInterviewRoomAskAction, useInterviewRoomBarActions, useInterviewRoomReturnAction } from './InterviewRoomFooter';
 import { VoiceFooterSlot } from './VoiceFooterPane';
 import { lineStarts } from './footerLines';
 import { usePhoneFooter } from './phoneFooter';
@@ -181,6 +183,8 @@ function FooterIdle() {
   const composerMounted = focus.present;
   const lobby = host?.lobby ?? null;
   const items = footerCallItems(lobby?.lobbyName);
+  // An interview room's waiting question before the lead has joined (the candidate knocked): a button on this row too.
+  const roomAsk = useInterviewRoomAskAction(lobby?.lobbyName);
   // The tenant's own places, or nothing at all without a grant or a huddle page (callShellModel.idleHuddleControls).
   const idle = idleHuddleControls({ tenant: session?.tenant, hasLobby: !!lobby, hasSocialGrant: (session?.grants.social?.length ?? 0) > 0 });
   if (!idle.show) return null;
@@ -201,7 +205,7 @@ function FooterIdle() {
     onToggleChat={() => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }}
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
-    actions={[deviceSettings(() => host?.checkDevices(), !host)]}
+    actions={[...(roomAsk ? [roomAsk] : []), deviceSettings(() => host?.checkDevices(), !host)]}
     compact={compact}
     // At phone width it asks for no more than its icons, so it stays on the row when there is room and otherwise
     // wraps onto a second row of its own (it is the row's last slot).
@@ -218,7 +222,7 @@ function FooterIdle() {
     compact={compact}
     {...(items.idleMessage ? { onToggleChat: () => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }, chatLabel: 'Message' } : {})}
     {...(messageReason && items.idleMessage ? { chatDisabledReason: messageReason } : {})}
-    actions={[deviceSettings(() => host?.checkDevices(), !host)]}
+    actions={[...(roomAsk ? [roomAsk] : []), deviceSettings(() => host?.checkDevices(), !host)]}
     className="shell-collaboration-bar min-w-[10rem] flex-[1_1_0%] max-sm:min-w-0 max-sm:shrink-0 max-sm:grow-0 max-sm:basis-[7.5rem] border-l border-border"
     data-testid="shell-footer-context"
   />;
@@ -278,7 +282,6 @@ export function SocialFooter() {
     <AssistantConsentNotice />
     <AssistantBudgetAsk />
     <AssistantProposalAsk />
-    <InterviewRoomAsks lobbyName={host?.lobby?.lobbyName} />
     <MeetingTurnRunner />
     <AssistantPrivateAnswers />
     {/* From 40rem up: one row of one height, never wrapped. The HuddleBar is a size container with no intrinsic width, so it takes the width the other slots leave (`flex-[3_1_0%]`) and collapses its own actions to fit it. */}

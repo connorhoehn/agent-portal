@@ -152,7 +152,7 @@ export default async function run(ctx) {
       }
       const ask = hugo.page.getByTestId('interview-room-ask').getByRole('button', { name: /have milo ask/i });
       let got = false;
-      for (let i = 0; i < 20 && !got; i += 1) { if (await ask.isVisible().catch(() => false)) got = true; else await hugo.page.waitForTimeout(2500); }
+      for (let i = 0; i < 20 && !got; i += 1) { await hugo.page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined); if (await ask.isVisible().catch(() => false)) got = true; else await hugo.page.waitForTimeout(2500); }
       if (got) await state(hugo.page, 'the lead, a suggestion from Milo', STAFF);
       else console.log('NOT RUN E3 Milo suggestion state: none arrived within 50 seconds on the scripted model');
       await state(g.page, 'candidate in the technical room, Milo listening', GUEST);

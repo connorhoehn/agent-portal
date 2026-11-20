@@ -26,6 +26,16 @@ export function watchCallId(page) {
   return () => callId;
 }
 
+/**
+ * The lead's waiting question is a button on the footer's row (InterviewRoomFooter: nothing is drawn above the row). A knock and
+ * the End question open by themselves; Milo's suggestion waits as the button. Opens it unless it is open. → the deck's locator
+ */
+export async function openAsk(page) {
+  const deck = page.getByTestId('interview-room-ask');
+  if (!(await deck.isVisible().catch(() => false))) await page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined);
+  return deck;
+}
+
 export const roomUrl = (portal, id) => `${portal}/interviews/rounds/${id}/room`;
 export const seen = (page, id, ms = 30_000) => page.getByTestId(id).first().waitFor({ timeout: ms }).then(() => true, () => false);
 

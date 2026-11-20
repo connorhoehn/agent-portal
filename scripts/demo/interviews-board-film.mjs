@@ -395,7 +395,9 @@ async function askByHold(kind, id, expect) {
 }
 const deckOf = (page) => page.getByTestId('interview-room-ask');
 const squash = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
-const deckShown = async (page) => ((await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null);
+// The suggestion waits as a button on the footer's row (nothing is drawn above the row): the lead opens it to read and answer it.
+const openAsk = async (page) => { if (!(await deckOf(page).isVisible().catch(() => false))) await page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined); };
+const deckShown = async (page) => { await openAsk(page); return (await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null; };
 
 // ── Hands: the mouse at a hand's pace, the keyboard ──
 const cursorAt = new Map();

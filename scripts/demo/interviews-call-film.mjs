@@ -462,7 +462,9 @@ async function runAndRead(cp, hp, want, lineId = null) {
 
 // ── The coach's suggestion in Hugo's footer ──
 const deckOf = (page) => page.getByTestId('interview-room-ask');
-const deckShown = async (page) => ((await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null);
+// The suggestion waits as a button on the footer's row (nothing is drawn above the row): the lead opens it to read and answer it.
+const openAsk = async (page) => { if (!(await deckOf(page).isVisible().catch(() => false))) await page.getByTestId('interview-room-ask-open').click({ timeout: 1500 }).catch(() => undefined); };
+const deckShown = async (page) => { await openAsk(page); return (await deckOf(page).getByRole('button', { name: /have milo ask/i }).isVisible().catch(() => false)) ? squash(await deckOf(page).innerText()) : null; };
 const OPTION = { ask: /^I.ll ask it$/i, 'milo-ask': /have milo ask/i, skip: /^Skip$/ };
 /** A suggestion matching `re`, answered with `option` (within `ms`); → its text, or null when none came. */
 async function answerSuggestion(page, re, option, ms) {
