@@ -83,6 +83,18 @@ export function timeLeftLine(minutes: number, startMs: number | null, nowMs: num
   return left === 1 ? 'About 1 minute is left in this round.' : `About ${left} minutes are left in this round.`;
 }
 
+/**
+ * "The question" of an interview, for `repeat_question` and Decide's state: the last one Milo was approved to ask; when the lead
+ * asked it himself (Milo asked none), the round's question as the candidate has it on screen. Null: the round has none either.
+ */
+export async function questionOf(interviewId: string): Promise<{ text: string; from: 'milo' | 'round' } | null> {
+  const d = deps();
+  const asked = lastQuestion(await d.store().list(interviewId));
+  if (asked) return { text: asked, from: 'milo' };
+  const round = (await d.roundQuestion(interviewId).catch(() => null))?.trim();
+  return round ? { text: round, from: 'round' } : null;
+}
+
 /** The last question Milo was approved to ask in this interview, or null. */
 export function lastQuestion(rows: readonly SaidRecord[]): string | null {
   for (let i = rows.length - 1; i >= 0; i -= 1) if (rows[i]!.kind === 'question') return rows[i]!.text;
@@ -143,6 +155,8 @@ export interface SpeakDeps {
   newId: () => string;
   /** Hold the speech's money for one line (holdSpeechMoney). */
   holdSpeech: (interviewId: string, key: string) => Promise<SpeechHold>;
+  /** The round's question as the candidate has it on screen (the first of the round's, answer key removed), or null. */
+  roundQuestion: (interviewId: string) => Promise<string | null>;
 }
 
 const defaultDeps = (): SpeakDeps => ({
@@ -170,6 +184,11 @@ const defaultDeps = (): SpeakDeps => ({
   now: interviewsNowMs,
   newId: () => `said-${randomBytes(8).toString('hex')}`,
   holdSpeech: holdSpeechMoney,
+  roundQuestion: async (interviewId) => {
+    const d = (await import('../milo-tools/deps.js')).deps();
+    const interview = await d.interview(interviewId);
+    return interview ? (await d.questions(interview))[0]?.prompt ?? null : null;
+  },
 });
 
 let override: Partial<SpeakDeps> | null = null;
@@ -248,8 +267,7 @@ export async function sayApproved(interview: Pick<Interview, 'id' | 'callId'>, i
 export async function candidateLine(interview: Pick<Interview, 'id' | 'callId' | 'minutes' | 'scheduledAt'>, request: CandidateRequest): Promise<{ text: string; source: SaidSource }> {
   const d = deps();
   if (request === 'repeat') {
-    const q = lastQuestion(await d.store().list(interview.id));
-    return { text: q ?? NO_QUESTION_YET, source: 'repeat' };
+    return { text: (await questionOf(interview.id))?.text ?? NO_QUESTION_YET, source: 'repeat' };
   }
   if (request === 'time') {
     const callId = await d.callOf(interview).catch(() => interview.callId);

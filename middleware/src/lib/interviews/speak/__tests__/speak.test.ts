@@ -82,6 +82,14 @@ describe('the candidate\'s requests (decision 10)', () => {
     expect(candidateRequestOf('Milo, what is the time complexity of a heap?')).toBe('other');
   });
 
+  it('repeat: the round\'s question the candidate has on screen when the lead asked it himself (Milo asked none)', async () => {
+    setSpeakDeps({ store: () => store, roundQuestion: async (id) => (id === IV.id ? 'Design a news feed for 300 million users.' : null) });
+    expect(await candidateLine(IV, 'repeat')).toEqual({ text: 'Design a news feed for 300 million users.', source: 'repeat' });
+    // A question Milo was approved to ask later is the last one asked: it is read, not the round's.
+    await store.append({ id: 'said-q', interviewId: IV.id, callId: IV.callId, kind: 'question', source: 'suggestion', questionId: null, suggestionId: null, text: 'Where would you cache?', askedBy: 'u-wen', saidAt: new Date(NOW).toISOString(), posted: true, spoken: true });
+    expect((await candidateLine(IV, 'repeat')).text).toBe('Where would you cache?');
+  });
+
   it('repeat: the last approved question, or a plain sentence before there is one', async () => {
     expect((await candidateLine(IV, 'repeat')).text).toBe(NO_QUESTION_YET);
     await sayApproved(IV, { kind: 'question', source: 'suggestion', text: 'First question?', askedBy: 'u-wen' });

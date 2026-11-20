@@ -1,4 +1,5 @@
-// Milo's interview tool `repeat_question`: the last question the interviewer had Milo ask, again. Anyone in the interview may ask.
+// Milo's interview tool `repeat_question`: the question, again: the last one the interviewer had Milo ask, or, when the lead
+// asked it himself, the round's question as the candidate has it on screen (speak/index.ts `questionOf`). Anyone in the interview may ask.
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { candidateLine, candidateRequestOf } from '../speak/index.js';
@@ -7,7 +8,7 @@ import { noArgs } from './schema.js';
 
 export const REPEAT_QUESTION: ServerToolDef<MiloInterview, SaidSource> = {
   name: 'repeat_question',
-  description: 'Repeat the last question the interviewer had Milo ask.',
+  description: 'Read the interview question out again: the last question Milo asked, or the round\'s question the candidate has on screen. Use it whenever the speaker asks Milo to repeat, say again or read out the question.',
   parameters: noArgs(),
   says: 'Says the last approved question again.',
   mapsTo: 'server: lib/interviews/milo-tools repeat_question',

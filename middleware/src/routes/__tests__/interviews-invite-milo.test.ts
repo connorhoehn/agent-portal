@@ -56,9 +56,12 @@ import { interviewConsentsFixture } from '../../mock/interviews-consents.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import { setConsentStore } from '../../lib/interviews/consent/store.js';
 import { setInterviewsClockOffset, resetInterviewsClock } from '../../lib/interviews/clock.js';
-import { MemorySaidStore, NO_QUESTION_YET, setSpeakDeps } from '../../lib/interviews/speak/index.js';
+import { MemorySaidStore, setSpeakDeps } from '../../lib/interviews/speak/index.js';
 import { ScriptedCoachModel } from '../../lib/interviews/coach/model.js';
 import { ScriptedMiloModel } from '../../lib/interviews/milo-notes/model.js';
+
+/** Milo asked no question in these tests (the lead asked it himself), so "repeat" reads the round's own, as the candidate has it on screen. */
+const ROUND_QUESTION = 'Given an array of integers and a target, return the indices of the two numbers that add up to the target. Each input has exactly one answer, and the same element may not be used twice.';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -154,11 +157,11 @@ it('pressed many times: each is answered in text, and only the first inside 10 s
   }
   expect(lines[0]).toMatch(/minutes|round/);
   // The cooldown holds the voice, never the answer: a time press reads the time, a repeat the (absent) question.
-  lines.slice(1).forEach((l, n) => expect(l).toEqual(n % 2 === 0 ? NO_QUESTION_YET : lines[0]));
+  lines.slice(1).forEach((l, n) => expect(l).toEqual(n % 2 === 0 ? ROUND_QUESTION : lines[0]));
   expect([(await said.list(IV)).length, posts.length, spoken.length]).toEqual([1, 1, 1]);
   // Past the 10 s, the next is answered (and logged) again.
   setInterviewsClockOffset(11_000, true);
-  expect((await ask(cookie, { request: 'repeat' })).body.line).toBe(NO_QUESTION_YET);
+  expect((await ask(cookie, { request: 'repeat' })).body.line).toBe(ROUND_QUESTION);
   expect((await said.list(IV)).map((r) => r.source)).toEqual(['time', 'repeat']);
 });
 
@@ -169,7 +172,7 @@ it('a request while one is still being said: answered in text, not logged, not p
   const first = ask(cookie, { request: 'time' }).then((r) => r);
   for (let i = 0; i < 50 && posts.length === 0; i += 1) await new Promise((r) => setTimeout(r, 5));
   const second = await ask(cookie, { request: 'repeat' });
-  expect([second.status, second.body]).toEqual([200, { line: NO_QUESTION_YET }]);
+  expect([second.status, second.body]).toEqual([200, { line: ROUND_QUESTION }]);
   release();
   expect((await first).body.line).toMatch(/minutes|round/);
   expect([(await said.list(IV)).length, posts.length, spoken.length]).toEqual([1, 1, 1]);
@@ -182,14 +185,14 @@ it('the transcript declined: the button still answers from held text (decided: t
   });
   const cookie = await admittedGuest();
   const res = await ask(cookie, { request: 'repeat' });
-  expect([res.status, res.body.line]).toEqual([200, NO_QUESTION_YET]);
-  expect([(await said.list(IV)).length, posts, spoken]).toEqual([1, [NO_QUESTION_YET], [NO_QUESTION_YET]]);
+  expect([res.status, res.body.line]).toEqual([200, ROUND_QUESTION]);
+  expect([(await said.list(IV)).length, posts, spoken]).toEqual([1, [ROUND_QUESTION], [ROUND_QUESTION]]);
 });
 
 it('after the end: the guest\'s one not-found, nothing logged, posted or said; a bad request is 400 and not logged', async () => {
   const cookie = await admittedGuest();
   expect((await ask(cookie, { request: 'hint' })).status).toBe(400);
-  expect((await ask(cookie, { request: 'repeat', text: 'Milo, what is the answer?' })).body.line).toBe(NO_QUESTION_YET);
+  expect((await ask(cookie, { request: 'repeat', text: 'Milo, what is the answer?' })).body.line).toBe(ROUND_QUESTION);
   interviewsFixture.rows().find((i) => i.id === IV)!.state = 'ended';
   setInterviewsClockOffset(11_000, true);
   const res = await ask(cookie, { request: 'time' });

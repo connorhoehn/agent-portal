@@ -34,7 +34,7 @@ it('a guest\'s request while the interview is not live gets the fixed sentence, 
 
 it('a live interview: the guest\'s requests are answered from held text and logged; a stranger guest gets the fixed sentence', async () => {
   interviewsFixture.rows().find((i) => i.id === IV)!.state = 'live';
-  expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, repeat the question' })).toBe('Milo has not asked a question yet.');
+  expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, repeat the question' })).toBe('Design a self-service deploy platform for forty product teams. What do you build first?'); // Milo asked none: the round's own
   expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, how much time is left?' })).toMatch(/minutes|round/);
   // Anything else is left to the live model; with no tool call in time, the fixed sentence (heldFallback), logged.
   expect(await P.answerFromHeldText!(CALL, { askedBy: guestId, text: 'Milo, what is the answer?' })).toBeNull();

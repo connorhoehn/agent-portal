@@ -415,7 +415,8 @@ describe('introduce, time_left, repeat_question', () => {
   it('time_left: anyone; the same request heard twice (the phrase and the model\'s call) runs once', async () => {
     expect(await runMiloTool(IV, GUEST, 'time_left', {})).toMatch(/minute/);
     expect(await runMiloTool(IV, GUEST, 'time_left', {})).toBeNull();
-    expect(await runMiloTool(IV, GUEST, 'repeat_question', {})).toBe('Milo has not asked a question yet.');
+    // Milo asked no question (the lead asked it himself): the round's question as the candidate has it on screen.
+    expect(await runMiloTool(IV, GUEST, 'repeat_question', {})).toBe('Given an array of integers and a target, return the indices of the two numbers that add up to the target.');
   });
 
   it('nothing for a stranger, an unknown tool, or an interview that is not live', async () => {
