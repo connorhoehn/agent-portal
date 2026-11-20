@@ -7,7 +7,8 @@ import { decide } from '../../meeting-assistant/turn/decide.js';
 import { TENANT_INSTRUCTIONS_MAX, type TurnPolicy, type TurnSentence } from '../../meeting-assistant/turn/types.js';
 import { TextToolError, type TextToolReply, type TextToolRequest } from '../../voice/openai-text.js';
 import { INTERVIEWS_MILO_POLICY, setInterviewConsentSource } from '../milo-policy.js';
-import { INTERVIEW_TURN_INSTRUCTIONS } from '../milo-turn.js';
+import { INTERVIEW_TURN_INSTRUCTIONS, speechHoldKey } from '../milo-turn.js';
+import { interviewSpendSourceId } from '../spend.js';
 import { MemoryMiloSettingsStore } from '../milo-settings.js';
 import { interviewCall, PAD_OFF, resetMiloTools, sessionToolsFor, setMiloToolDeps } from '../milo-tools/index.js';
 import {
@@ -300,6 +301,15 @@ describe("the lead's confirm on a candidate's pad write", () => {
     expect((await turn(LEAD, 'Milo, go ahead.', { tool: 'confirm_pad_write' })).out.line).toBe(PAD_OFF);
     expect(pad.text).toBe(TWO_SUM.starter!.python);
     expect(NOTHING_TO_CONFIRM).toMatch(/no pad change/);
+  });
+});
+
+describe('the speech hold', () => {
+  it('the turn owner\'s real sentence ids (a lane with "/" and ":", or "say:1") make a spend key the money door accepts, one per sentence', () => {
+    const ids = ['mwp2micp.1/u-hugo:1:2', 'mwp2ntjp.3/guest:inv-352aa764-5c8a:1:3', 'say:1'];
+    for (const id of ids) expect(() => interviewSpendSourceId({ openingId: 'op-1', interviewId: IV }, 'speech', speechHoldKey(id))).not.toThrow();
+    expect(() => interviewSpendSourceId({ openingId: 'op-1', interviewId: IV }, 'speech', `turn-${ids[0]}`)).toThrow(/spend key part/);
+    expect(new Set(ids.map(speechHoldKey)).size).toBe(ids.length);
   });
 });
 

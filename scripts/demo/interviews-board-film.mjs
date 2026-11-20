@@ -57,6 +57,9 @@ const MILO = args.includes('--milo') && !NO_CALL;
 // --handsfree (with --milo): the middleware runs Milo hands-free (MEETING_ASSISTANT_HANDSFREE=1); people talk to him by name, and
 // Hugo holds the bar's talk button once.
 const HANDSFREE = MILO && args.includes('--handsfree');
+// --turn-owner (with --handsfree): the middleware runs MILO_TURN_OWNER=1, so the interviews call is heard and answered by the turn
+// owner (floor, Decide, Act, Speak) in the hands-free runtime's place. The report says which path the take ran on.
+const TURN_OWNER = HANDSFREE && args.includes('--turn-owner');
 const MAX_MINUTES = Number(flag('--max-minutes') ?? 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -116,7 +119,7 @@ function miloEnv() {
   const key = line.replace(/^\s*OPENAI_API_KEY\s*=\s*/, '').trim().replace(/^['"]|['"]$/g, '');
   if (!key) { console.error('film: no provider key in IVFILM_KEY_FILE'); process.exit(2); }
   return {
-    OPENAI_API_KEY: key, MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1', ...(HANDSFREE ? { MEETING_ASSISTANT_HANDSFREE: '1' } : {}),
+    OPENAI_API_KEY: key, MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1', ...(HANDSFREE ? { MEETING_ASSISTANT_HANDSFREE: '1' } : {}), MILO_TURN_OWNER: TURN_OWNER ? '1' : '0',
     MEETING_ASSISTANT_MAX_MINUTES: String(MAX_MINUTES), MEETING_ASSISTANT_HARD_MAX_MINUTES: String(MAX_MINUTES),
     MEETING_ASSISTANT_TRACE_FILE: path.join(WORK, 'trace.jsonl'),
     MEETING_ASSISTANT_MEDIA_URL: process.env.IVFILM_MEDIA_URL || 'http://127.0.0.1:3911',
@@ -168,7 +171,7 @@ const { joinCall, letSound } = await import('../journeys/interviews/h8-room.mjs'
 // ── The record ──
 const VIEW = { width: 1280, height: 800 };
 const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
-const report = { startedAt: new Date().toISOString(), interview: null, steps: [], notes: [], turns: [], floorReads: {} };
+const report = { startedAt: new Date().toISOString(), turnOwner: TURN_OWNER, interview: null, steps: [], notes: [], turns: [], floorReads: {} };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
 // Scenes are numbered in the order they come (a --milo take has more of them).

@@ -405,7 +405,10 @@ describe('the turn owner seam (MILO_TURN_OWNER)', () => {
     listening!.emit('sentence', { userId: ALICE, sentenceId: 's1', text: 'Milo, is my approach right?', startMs: 1000, endMs: 2200, named: true });
     await until(() => sent.length === 1 && mockPosts.replies.length === 1);
     await new Promise<void>((r) => setTimeout(r, 150)); // the frame has played out
-    expect(inner().audio).toEqual([]);
+    // Nothing of the room reaches the session: only the keepalive's silence (one frame per interval, so the provider does not end it as idle).
+    audioTap.sink!.append(pcm(2));
+    expect(inner().audio).toHaveLength(1);
+    expect(inner().audio[0]!.every((x: number) => x === 0)).toBe(true);
     expect(bodies).toHaveLength(1);
     expect(bodies[0]!.store).toBe(false);
     expect(JSON.stringify(bodies[0]!.input)).toContain('Milo, is my approach right?');

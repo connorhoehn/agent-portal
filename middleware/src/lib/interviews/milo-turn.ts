@@ -49,6 +49,16 @@ const quoted = (text: string, max: number): string => JSON.stringify(text.length
  * The interviews turn contract. `candidateAcceptedMilo`: the candidate's own answer (the transcript and Milo both accepted), asked
  * by the policy that holds the consent source; anything else, or an unreadable answer, is no.
  */
+
+/**
+ * The spend key of one line's speech hold. A sentence id carries its lane (`<owner mark>.<n>/<userId>:<session>:<n>`, or `say:<n>`),
+ * and a spend key may hold letters, digits, dot, dash and underscore only (spend.ts), so every other character is replaced. The
+ * owner's mark and the numbers are kept, so the key stays one per sentence.
+ */
+export function speechHoldKey(sentenceId: string): string {
+  return `turn-${sentenceId.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+}
+
 export function interviewsTurnPolicy(candidateAcceptedMilo: (interviewId: string) => Promise<boolean>): TurnPolicy {
   // What `cannotHelp` (which may not wait) says to a role in a call: worked out whenever that role's tools are, just before.
   const fixedLines = new Map<string, string | null>();
@@ -151,7 +161,7 @@ export function interviewsTurnPolicy(candidateAcceptedMilo: (interviewId: string
     holdSpeech: async (call, line) => {
       const interviewId = interviewOfLobby(call.lobby);
       if (!interviewId) return null;
-      const hold = await holdSpeechMoney(interviewId, `turn-${line.sentenceId}`);
+      const hold = await holdSpeechMoney(interviewId, speechHoldKey(line.sentenceId));
       return hold.ok ? { release: hold.release } : null;
     },
   };

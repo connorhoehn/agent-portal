@@ -64,7 +64,7 @@ import { HandsfreeRuntime } from './handsfree/runtime.js';
 import { createListeningSide } from './handsfree/listening.js';
 import { createHandsfreeRules, handsfreeFamilyRules } from './handsfree/rules.js';
 import { openAiTranscriberFactory } from '../voice/openai-transcribe.js';
-import type { HandsfreeClock, HandsfreeRules, HandsfreeRun, HeardLine, ListeningSide } from './handsfree/types.js';
+import { HANDSFREE, type HandsfreeClock, type HandsfreeRules, type HandsfreeRun, type HeardLine, type ListeningSide } from './handsfree/types.js';
 import { APPROVED_MS_PER_CHAR, APPROVED_STREAM_LAG_MS, heardPart, pcmMs, saidSoFar, saidVerbatim, sayBoundMs, SAY_BREATH_MS, SAY_BREATH_WAIT_MS, SAY_QUIET_MAX_WAIT_MS, SAY_QUIET_STEP_MS, SAY_QUIET_WAIT_MS, SAY_SILENCE_MS, SAY_SILENCE_WAIT_MS, speakableText, type SayOutcome, type SayResult, type SayWithheldWhy } from './approved-speech.js';
 import { periodOf, periodRequests, sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
@@ -85,6 +85,9 @@ const TYPED_MENTION = new RegExp(`(^|[^\\w])@(?:${NAME_ALTERNATION})\\b`, 'i');
 export const addressesAssistant = (text: string): boolean => TYPED_MENTION.test(text) || findAddress(text) !== null;
 /** Replacements after an unexpected close (a dropped socket, a provider close) per call. */
 export const MAX_REPLACEMENTS = 3;
+/** With the turn owner on, the session it does not use is fed one silent frame this often, so the provider does not end it as idle (30 s). */
+export const OWNER_SESSION_KEEPALIVE_MS = 10_000;
+const OWNER_SESSION_SILENCE = Buffer.alloc(HANDSFREE.frameBytes);
 /** Replacements for a transcript stall (`checkHearing`) per call: their own budget, so a stall never spends a dropped socket's. */
 export const MAX_STALL_REPLACEMENTS = 2;
 /** The provider's session is replaced this long before its `expires_at` (about two hours after it starts). */
@@ -979,10 +982,18 @@ export class AssistantRuntime {
     const turnPolicy = session instanceof HandsfreeTalking && turnOwnerEnabled() ? turnPolicyOf(run.policy) : null;
     const owner = turnPolicy ? this.startTurnOwner(run, turnPolicy) : null;
     const hf = owner ?? (session instanceof HandsfreeTalking ? this.startHandsfree(run, session) : null);
+    // The turn owner's session hears nothing, and the provider ends a session fed nothing after 30 s (an unexpected close: replaced,
+    // and after MAX_REPLACEMENTS Milo leaves). So it is fed one silent frame per keepalive interval, as the hands-free runtime fed it idle.
+    let keptOpenAt = -Infinity;
+    const keepOpen = owner && session instanceof HandsfreeTalking ? (): void => {
+      const now = this.now();
+      if (now - keptOpenAt < OWNER_SESSION_KEEPALIVE_MS) return;
+      keptOpenAt = now; session.feed([OWNER_SESSION_SILENCE]);
+    } : null;
     // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
     this.deps.audio?.attach(run.ctx.callId, {
       // Hands-free: the room mix is only the tick (the router feeds the session); otherwise it is what the session hears.
-      append: (pcm) => { try { if (hf) hf.sink.append(pcm); else run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
+      append: (pcm) => { try { if (hf) { hf.sink.append(pcm); keepOpen?.(); } else run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
       placed: (userId, pcm, atMs) => {
         run.heardAt = this.now();
         if (run.deaf?.kind === 'audio') run.deaf = null;
