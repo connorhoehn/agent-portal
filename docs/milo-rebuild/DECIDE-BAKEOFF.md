@@ -108,3 +108,22 @@ Gate (action 95%, silence 98%, both sets): **PASS**. The hold-out is still at th
 - What Milo asked in one run, for the record of the wording: "What non-functional requirements shape the CDN edge, Redis cache, and key-value store in the redirect path?" (the lead asked about non-functional requirements in this part of the design; the labels are the frame the candidate last drew in); "How would you invalidate the Redis cache when a short URL's destination changes?"; "How would this redirect path behave during a regional outage?"; on the pad round, "What edge cases would change how this behaves?".
 
 Not covered: the part of the board "under discussion" is the frame of the newest change in the last saved board (saved at most every 30 s). Where the lead is looking lives on the clients' awareness and does not reach the server, so it is not used. The run was made on mains power; the laptop had dropped to 1% battery earlier in the session and was charging at 19% when the judge ran.
+
+## Name required (2026-11-20)
+
+Owner decision, 20 November: Milo acts only when someone says his name ("Milo", "Hey Milo", a misheard form) or holds the button. A follow-up without the name gets silence, by design. The interviews policy now has no follow-up window (`TurnPolicy.followUpMs`, 0 for interviews; a tenant that wants a window sets it), so such a sentence never reaches a model. A split request ("Milo, can you" ... "write a test") is still one request, and the hold still needs no name.
+
+**Relabel.** The follow-up scenarios whose second sentence has no name and no hold used to expect an action; they now expect silence for that sentence (the first, named, request keeps its truth). Dev: 6 scenarios (five `follow-up,for-milo`, one `follow-up,candidate`). Hold-out: 5 scenarios (four `follow-up,for-milo`, one `follow-up,candidate`). The relabel was mechanical and by structure, the same rule on both files: in a scenario tagged `follow-up` with one expectation per sentence, the expectation of a sentence with no spelling of the name and no hold became `silent`, and the scenario got a note. No hold-out wording was read, and no wording changed on either side, so the seed split is as it was. A judge test now holds the rule: no scenario expects more actions than it has sentences with the name or under a hold. The stand-in decide rig lost its window too.
+
+The judge again on the registered interviews policy (owner rig, `gpt-5.4-mini`, three trials a scenario, pass^3), live:
+
+| run | set | action | silence | content | allow-list | unsteady | errors over all trials | decide fallbacks |
+|---|---|---|---|---|---|---|---|---|
+| name required | dev | **93/93 (100%)** | **38/38 (100%)** | 93/93 | 131/131 | 0 | none | 0 |
+| | hold-out | **60/60 (100%)** | **24/24 (100%)** | 60/60 | 84/84 | 0 | none | 0 |
+
+Gate (action 95%, silence 98%, both sets): **PASS**.
+
+- Every miss of the run above was a false silence, and they are all gone: the follow-ups without the name were the sentences the model was unsteady on, and they no longer reach it. All 21 dev and 14 hold-out `follow-up` scenarios were clean in all three trials.
+- What this costs: "And how long after that?" straight after an answer now gets nothing; the person says the name again. A technical round's opening line tells the candidate so ("If you'd like help, just say 'Hey Milo'.").
+- The numbers are not comparable with the rows above as a model score: 11 scenarios changed their truth. They are the gate for the product as decided. The run was made on mains power.

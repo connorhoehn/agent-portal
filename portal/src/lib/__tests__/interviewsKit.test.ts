@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  blankQuestion, blankRound, changesLine, kitChanges, kitLine, kitTitle, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
+  BOARD_ROUND_INTRO, TECHNICAL_ROUND_INTRO, offeredIntro, blankQuestion, blankRound, changesLine, kitChanges, kitLine, kitTitle, moved, newId, padLine, problemsByPath, roundHasPad, rowsWithProblems, starterLine,
   toggledCompetency, withoutCompetency, type OpeningKit,
 } from '../interviewsKit.ts';
 
@@ -89,4 +89,13 @@ test('removing a competency unticks it in every round that assessed it', () => {
   assert.deepEqual(after.competencies, []);
   assert.deepEqual(after.rounds.map((r) => r.competencyIds), [[], []]);
   assert.deepEqual(after.questions, KIT.questions);
+});
+
+test('a technical round offers the line the interviewer reads out: how to ask Milo, and (on the pad) what for; a behavioural round offers none', () => {
+  assert.equal(TECHNICAL_ROUND_INTRO, "If you'd like help, just say 'Hey Milo'. Milo can add test cases for you to speed things up.");
+  assert.equal(offeredIntro(blankRound('rd-new')), TECHNICAL_ROUND_INTRO);
+  assert.equal(offeredIntro({ type: 'technical', surface: 'pad' }), TECHNICAL_ROUND_INTRO);
+  assert.equal(offeredIntro({ type: 'technical', surface: 'board' }), BOARD_ROUND_INTRO);
+  assert.equal(offeredIntro({ type: 'behavioural' }), null);
+  assert.equal(blankRound('rd-new').intro, undefined); // nothing saved: the offered line is read
 });

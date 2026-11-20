@@ -51,7 +51,8 @@ export interface RoomView {
   opening: { id: string; title: string };
   candidate: { name: string };
   /** `surface`: the code pad or the whiteboard (lib/interviewsBoard.ts surfaceOf); missing from an older server. */
-  round: { id: string; name: string; type: RoundType; minutes: number; surface?: RoundSurface | null };
+  /** `intro`: the line the interviewer reads to the candidate when the round starts; null or missing: none. */
+  round: { id: string; name: string; type: RoundType; minutes: number; surface?: RoundSurface | null; intro?: string | null };
   scheduledAt: string | null;
   endedAt: string | null;
   state: RoomState;

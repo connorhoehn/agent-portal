@@ -52,6 +52,11 @@ export interface KitRound {
   /** A technical round's surface; absent on behavioural rounds and on kits saved before the board. */
   surface?: RoundSurface;
   /**
+   * The line the interviewer reads to the candidate when the round starts. Absent: a technical round reads the default
+   * (kit.ts `roundIntro`: how to ask Milo for help), a behavioural round has none.
+   */
+  intro?: string;
+  /**
    * The competencies this round assesses, by id, in any order (the kit's order is the one shown). Every screen that
    * lists a round's competencies reads them through `competenciesOfRound` (kit.ts). Absent on a kit saved before rounds
    * named theirs: such a round assesses every competency of the kit, as it did then; the next save writes the list.

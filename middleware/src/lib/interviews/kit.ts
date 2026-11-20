@@ -41,6 +41,8 @@ export const KIT_LIMITS = {
   /** A system design question's expected clarifying questions. */
   clarifying: 5,
   name: 60,
+  /** The line the interviewer reads out when a round starts. */
+  intro: 240,
   lookFor: 400,
   anchor: 200,
   prompt: 1000,
@@ -112,6 +114,22 @@ export function checkBoard(raw: unknown, maxBytes: number = KIT_LIMITS.boardByte
   const elements = kept.filter((e) => e['isDeleted'] !== true);
   if (Buffer.byteLength(JSON.stringify(elements), 'utf8') > maxBytes) return { ok: false, why: 'large' };
   return { ok: true, board: { name, elements } };
+}
+
+/**
+ * What the interviewer reads to the candidate at the start of a technical round, unless the kit's round has its own line: Milo acts
+ * only when someone says his name (or holds the button), so the candidate is told how to ask and what for.
+ */
+export const TECHNICAL_ROUND_INTRO = "If you'd like help, just say 'Hey Milo'. Milo can add test cases for you to speed things up.";
+/** A whiteboard round has no test cases: only how to ask. */
+export const BOARD_ROUND_INTRO = "If you'd like help, just say 'Hey Milo'.";
+
+/** The line the interviewer reads when the round starts: the round's own, else the default for a technical round, else none. */
+export function roundIntro(round: Pick<KitRound, 'type' | 'surface' | 'intro'> | null | undefined): string | null {
+  if (!round) return null;
+  const own = round.intro?.trim();
+  if (own) return own;
+  return round.type === 'technical' ? (round.surface === 'board' ? BOARD_ROUND_INTRO : TECHNICAL_ROUND_INTRO) : null;
 }
 
 export const EMPTY_KIT: OpeningKit = { rounds: [], competencies: [], questions: [] };
@@ -236,6 +254,11 @@ export function checkKit(input: unknown, previous: OpeningKit = EMPTY_KIT, inUse
       p.add(`${at}.surface`, `Round ${n} is behavioural, which has no whiteboard; make it technical or use no board.`);
     }
     if (type === 'technical') out.surface = surface === 'board' ? 'board' : 'pad';
+    // The line the interviewer reads out: the round's own, or none saved (a technical round then reads the default, `roundIntro`).
+    const intro = r['intro'];
+    if (intro !== undefined && intro !== null && typeof intro !== 'string') p.add(`${at}.intro`, `Round ${n}'s line to read out must be text.`);
+    else if (typeof intro === 'string' && intro.trim().length > KIT_LIMITS.intro) p.add(`${at}.intro`, `Round ${n}'s line to read out is longer than ${KIT_LIMITS.intro} characters.`);
+    else if (typeof intro === 'string' && intro.trim()) out.intro = intro.trim();
     return out;
   });
   duplicates(p, 'rounds', rounds, 'Round', 'rounds');

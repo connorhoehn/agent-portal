@@ -13,7 +13,7 @@
 // details or résumé: the panel reads the candidate's name and nothing else about them here.
 
 import { seatOf } from './assign.js';
-import { competenciesOfRound, roundSurface } from './kit.js';
+import { competenciesOfRound, roundIntro, roundSurface } from './kit.js';
 import { hasAnswerKey } from './answer-key.js';
 import type { Interview, InterviewState, KitBoard, KitCompetency, KitQuestion, Opening, PadLanguage, RoundSurface, Seat } from './types.js';
 
@@ -44,7 +44,8 @@ export interface RoomView {
   opening: { id: string; title: string };
   candidate: { name: string };
   /** `surface`: what the round works on, the code pad or the whiteboard; null for a behavioural round (kit.ts roundSurface). */
-  round: { id: string; name: string; type: Interview['type']; minutes: number; surface: RoundSurface | null };
+  /** `intro`: the line the interviewer reads to the candidate when the round starts (kit.ts roundIntro); null: none. */
+  round: { id: string; name: string; type: Interview['type']; minutes: number; surface: RoundSurface | null; intro: string | null };
   scheduledAt: string | null;
   endedAt: string | null;
   state: InterviewState;
@@ -69,7 +70,7 @@ export function roomView(i: Interview, opening: Opening, candidateName: string, 
     lobbyName: roomLobbyName(i.id),
     opening: { id: opening.id, title: opening.title },
     candidate: { name: candidateName },
-    round: { id: i.roundId, name: round?.name ?? 'Round', type: i.type, minutes: i.minutes, surface: roundSurface({ type: i.type, surface: round?.surface }) },
+    round: { id: i.roundId, name: round?.name ?? 'Round', type: i.type, minutes: i.minutes, surface: roundSurface({ type: i.type, surface: round?.surface }), intro: roundIntro({ type: i.type, surface: round?.surface, intro: round?.intro }) },
     scheduledAt: i.scheduledAt,
     endedAt: i.endedAt,
     state: i.state,

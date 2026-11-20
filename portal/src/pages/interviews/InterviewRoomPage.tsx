@@ -321,6 +321,9 @@ function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost,
       : tab === 'design'
       ? <ProvidedDesignTab room={room} onRevealed={() => setTab('pad')} inset={inset} />
       : <Stack gap="lg" className={`min-h-0 flex-1 overflow-y-auto py-4 ${inset}`} data-testid={`interview-room-tab-${tab}`}>
+        {(tab === 'questions' || tab === 'plan') && room.round.intro && <PageSection size="sm" title="Read to the candidate" data-testid="interview-room-intro">
+          <T size="sm" wrap>{room.round.intro}</T>
+        </PageSection>}
         {tab === 'questions' && <Questions questions={room.questions} interviewId={room.id} asks={lead && room.state === 'live'}
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={lead && room.state === 'live'} /><Competencies room={room} /></>}

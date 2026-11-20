@@ -3,7 +3,7 @@
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import { HUGO, WEN, interviewCandidatesFixture, interviewOpeningsFixture, interviewsFixture, interviewApplicationsFixture } from '../../../mock/interviews.js';
 import { endMove, roomLobbyName, roomView, startMove } from '../room.js';
-import { competenciesOfRound } from '../kit.js';
+import { competenciesOfRound, roundIntro, TECHNICAL_ROUND_INTRO } from '../kit.js';
 import type { Interview, InterviewState } from '../types.js';
 
 afterEach(() => fixtureRegistry.resetAll('default'));
@@ -58,6 +58,20 @@ describe('the room view', () => {
     expect(v.competencies).toEqual(competenciesOfRound(opening.kit, i.roundId));
     expect(v.competencies.map((c) => c.id)).toEqual(['people-leadership', 'delivery', 'influence', 'communication']);
     expect(v.competencies[0]!.anchors[4]).toBeTruthy();
+  });
+
+  it('the round carries the line the interviewer reads to the candidate: the default on a technical round, the round\'s own when the kit has one, none on a behavioural round', () => {
+    const tech = structuredClone(interviewsFixture.rows().find((x) => x.type === 'technical')!);
+    const t = parts(tech);
+    const v = roomView(tech, t.opening, t.candidate.name, tech.leadId, people)!;
+    expect(v.round.intro).toBe(roundIntro({ type: 'technical', surface: v.round.surface ?? undefined }));
+    expect(v.round.surface === 'board' || v.round.intro === TECHNICAL_ROUND_INTRO).toBe(true);
+    const own = structuredClone(t.opening);
+    own.kit.rounds.find((r) => r.id === tech.roundId)!.intro = 'Say "Hey Milo" for the time.';
+    expect(roomView(tech, own, t.candidate.name, tech.leadId, people)!.round.intro).toBe('Say "Hey Milo" for the time.');
+    const beh = row('iv-n5z9f2cq');
+    const b = parts(beh);
+    expect(roomView(beh, b.opening, b.candidate.name, HUGO, people)!.round.intro).toBeNull();
   });
 
   it('each chosen question names its competency; a behavioural one has no starter code', () => {

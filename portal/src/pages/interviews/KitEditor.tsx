@@ -16,7 +16,7 @@ import { BoardScene } from './board/BoardScene';
 import { AnswerKeyEditor } from './AnswerKeyEditor';
 import { ROUND_TYPE_LABELS, type RoundType } from '../../lib/interviews';
 import {
-  PAD_LANGUAGES, PAD_LANGUAGE_LABELS, blankCompetency, blankQuestion, blankRound, moved, newId, padLine, roundHasPad, rowsWithProblems, starterLine,
+  PAD_LANGUAGES, PAD_LANGUAGE_LABELS, INTRO_MAX, blankCompetency, blankQuestion, blankRound, moved, newId, offeredIntro, padLine, roundHasPad, rowsWithProblems, starterLine,
   toggledCompetency, withoutCompetency,
   type KitCompetency, type KitQuestion, type KitRound, type OpeningKit, type PadLanguage,
 } from '../../lib/interviewsKit';
@@ -97,6 +97,12 @@ export function KitEditor({ kit, onChange, problems, open, onOpen }: Props) {
       ? <Select size="sm" aria-label={`Round ${i + 1} works on`} value={r.surface === 'board' ? 'board' : 'pad'} options={SURFACE_OPTIONS}
           invalid={problems.has(`rounds.${i}.surface`)} onChange={(e) => setRound(i, { surface: e.target.value as 'pad' | 'board' })} data-testid="interviews-kit-round-surface" />
       : <T size="sm" tone="tertiary">{padLine(r.type)}</T>) },
+    // The line the interviewer reads to the candidate when the round starts. Left empty, a technical round reads the offered one.
+    { key: 'intro', header: 'Read to the candidate', render: (r, i) => (
+      <Input size="sm" aria-label={`Round ${i + 1} line to read to the candidate`} value={r.intro ?? ''} maxLength={INTRO_MAX}
+        placeholder={offeredIntro(r) ?? 'Nothing to read out'} title={r.intro || offeredIntro(r) || undefined} invalid={problems.has(`rounds.${i}.intro`)}
+        onChange={(e) => setRound(i, { intro: e.target.value || undefined })} data-testid="interviews-kit-round-intro" />
+    ) },
   ];
 
   // ── competencies ────────────────────────────────────────────────────────

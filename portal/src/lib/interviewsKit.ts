@@ -21,7 +21,19 @@ export const OPENING_STATE_LABELS: Readonly<Record<OpeningState, string>> = { op
  * answers (a kit saved before rounds named theirs reads as all of them), so the editor always saves the list; a new
  * round starts with none and the server asks for at least one. A technical round names its surface (pad or board).
  */
-export interface KitRound { id: string; name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board'; competencyIds: string[] }
+export interface KitRound {
+  id: string; name: string; type: RoundType; minutes: number; surface?: 'pad' | 'board'; competencyIds: string[];
+  /** The line the interviewer reads to the candidate when the round starts. Absent: the one the round offers (`offeredIntro`). */
+  intro?: string;
+}
+
+/** The lines a round offers when the kit gives it none of its own (the server's kit.ts `roundIntro` reads the same ones). */
+export const TECHNICAL_ROUND_INTRO = "If you'd like help, just say 'Hey Milo'. Milo can add test cases for you to speed things up.";
+export const BOARD_ROUND_INTRO = "If you'd like help, just say 'Hey Milo'.";
+export const INTRO_MAX = 240;
+/** What the interviewer reads out if the round's own line is left empty: a technical round's default; a behavioural round has none. */
+export const offeredIntro = (round: Pick<KitRound, 'type' | 'surface'>): string | null =>
+  (round.type === 'technical' ? (round.surface === 'board' ? BOARD_ROUND_INTRO : TECHNICAL_ROUND_INTRO) : null);
 export interface KitCompetency { id: string; name: string; lookFor: string; anchors: { 1: string; 2: string; 3: string; 4: string } }
 export interface KitQuestion {
   id: string;

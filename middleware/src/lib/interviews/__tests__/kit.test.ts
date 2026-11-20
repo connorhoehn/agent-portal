@@ -1,7 +1,7 @@
 // The kit and an opening's details, checked before anything is written (lib/interviews/kit.ts; rows I1.3, I1.8).
 import {
   EMPTY_KIT, KIT_LIMITS, NOTHING_IN_USE, checkBoard, checkKit, checkOpeningDetails, competenciesOfRound, competencyIdsOfRound, kitInUse,
-  openingIdFor, problemsLine, questionsOfRound, roundHasPad, roundSurface,
+  openingIdFor, problemsLine, questionsOfRound, roundHasPad, roundIntro, roundSurface, TECHNICAL_ROUND_INTRO,
 } from '../kit.js';
 import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { EM_KIT } from '../../../mock/interviews-behavioural.js';
@@ -531,5 +531,32 @@ describe('a board question\'s answer key: provided design, design questions, red
     const b = kit.questions.findIndex((q) => q['roundType'] === 'behavioural');
     Object.assign(kit.questions[b]!, { providedDesign: blueprintBoard(), designQuestions: [{ text: 'a' }], redFlags: [{ group: 'other', text: 'a' }] });
     expect(paths(checkKit(kit))).toEqual([`questions.${b}.providedDesign`, `questions.${b}.designQuestions`, `questions.${b}.redFlags`]);
+  });
+});
+
+describe('the line the interviewer reads to the candidate when a round starts', () => {
+  it('a technical round on the pad offers the default; a board round only how to ask; a behavioural round none', () => {
+    expect(TECHNICAL_ROUND_INTRO).toBe("If you'd like help, just say 'Hey Milo'. Milo can add test cases for you to speed things up.");
+    expect(roundIntro({ type: 'technical' })).toBe(TECHNICAL_ROUND_INTRO);
+    expect(roundIntro({ type: 'technical', surface: 'pad' })).toBe(TECHNICAL_ROUND_INTRO);
+    expect(roundIntro({ type: 'technical', surface: 'board' })).toBe("If you'd like help, just say 'Hey Milo'.");
+    expect(roundIntro({ type: 'behavioural' })).toBeNull();
+    expect(roundIntro(null)).toBeNull();
+  });
+
+  it('a round\'s own line replaces the default; the kit keeps it trimmed, keeps none for an empty one and refuses one that is too long', () => {
+    expect(roundIntro({ type: 'technical', intro: 'Say "Hey Milo" for the time.' })).toBe('Say "Hey Milo" for the time.');
+    expect(roundIntro({ type: 'behavioural', intro: 'Milo keeps the time.' })).toBe('Milo keeps the time.');
+    const kit = seedKit('op-backend');
+    kit.rounds[0]!.intro = '  Say "Hey Milo" for the time.  ';
+    (kit.rounds[1] as { intro?: unknown }).intro = '   ';
+    const saved = checkKit(kit);
+    expect(saved.ok && saved.value.rounds[0]!.intro).toBe('Say "Hey Milo" for the time.');
+    expect(saved.ok && 'intro' in saved.value.rounds[1]!).toBe(false);
+    kit.rounds[0]!.intro = 'x'.repeat(KIT_LIMITS.intro + 1);
+    (kit.rounds[1] as { intro?: unknown }).intro = 7;
+    const refused = checkKit(kit);
+    expect(paths(refused)).toEqual(expect.arrayContaining(['rounds.0.intro', 'rounds.1.intro']));
+    expect(messages(refused)).toEqual(expect.arrayContaining([`Round 1's line to read out is longer than ${KIT_LIMITS.intro} characters.`]));
   });
 });
