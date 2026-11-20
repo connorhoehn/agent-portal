@@ -13,7 +13,7 @@ import { INTRODUCE } from './introduce.js';
 import { PAD_ADD_HELPER } from './pad-add-helper.js';
 import { PAD_ADD_IMPORT } from './pad-add-import.js';
 import { PAD_ADD_TESTS } from './pad-add-tests.js';
-import { TURN_PAD_TOOLS } from './pad-request.js';
+import { CONFIRM_PAD_WRITE, DECLINE_PAD_WRITE, PAD_WRITE } from './pad-request.js';
 import { notePadSeen } from './pad-notes.js';
 import { REPEAT_QUESTION } from './repeat-question.js';
 import { TIME_LEFT } from './time-left.js';
@@ -61,7 +61,7 @@ export const INTERVIEW_TOOL_FAMILY: ServerToolFamily<MiloInterview, SaidSource> 
   family: 'interviews:interview',
   tenants: ['interviews'],
   // The six the old live session is offered, then the turn owner's pad tools (pad-request.ts), which no session is ever offered.
-  tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER, ...TURN_PAD_TOOLS],
+  tools: [TIME_LEFT, REPEAT_QUESTION, INTRODUCE, PAD_ADD_TESTS, PAD_ADD_IMPORT, PAD_ADD_HELPER, PAD_WRITE, CONFIRM_PAD_WRITE, DECLINE_PAD_WRITE],
   context: async (call) => {
     const interviewId = interviewOfLobby(call.lobby);
     return interviewId ? liveInterview(interviewId) : null;

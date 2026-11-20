@@ -394,7 +394,7 @@
   "coveredPages": 113,
   "pagesWithPageId": 113,
   "v1Tools": 16,
-  "serverTools": 6,
+  "serverTools": 9,
   "v2Tools": 15,
   "v2Decisions": {
    "not-yet": 230,
@@ -2716,6 +2716,45 @@
    "mapsTo": "server: lib/interviews/milo-tools pad_add_helper (the pad, as Milo)",
    "file": "middleware/src/lib/interviews/milo-tools/pad-add-helper.ts",
    "line": 13
+  },
+  {
+   "name": "pad_write",
+   "kind": "server",
+   "family": "interviews:interview",
+   "tenants": [
+    "interviews"
+   ],
+   "writes": true,
+   "spend": "tools",
+   "mapsTo": "server: lib/interviews/milo-tools pad_write (the turn owner only)",
+   "file": "middleware/src/lib/interviews/milo-tools/pad-request.ts",
+   "line": 89
+  },
+  {
+   "name": "confirm_pad_write",
+   "kind": "server",
+   "family": "interviews:interview",
+   "tenants": [
+    "interviews"
+   ],
+   "writes": true,
+   "spend": "tools",
+   "mapsTo": "server: lib/interviews/milo-tools confirm_pad_write (the turn owner only)",
+   "file": "middleware/src/lib/interviews/milo-tools/pad-request.ts",
+   "line": 114
+  },
+  {
+   "name": "decline_pad_write",
+   "kind": "server",
+   "family": "interviews:interview",
+   "tenants": [
+    "interviews"
+   ],
+   "writes": false,
+   "spend": null,
+   "mapsTo": "server: lib/interviews/milo-tools decline_pad_write (the turn owner only)",
+   "file": "middleware/src/lib/interviews/milo-tools/pad-request.ts",
+   "line": 127
   }
  ],
  "navigatePages": [

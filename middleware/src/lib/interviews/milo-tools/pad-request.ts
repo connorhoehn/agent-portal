@@ -136,6 +136,3 @@ export const DECLINE_PAD_WRITE: ServerToolDef<MiloInterview, SaidSource> = {
   mayAsk: leadOnly,
   run: (interview, askedBy) => confirmPadWrite(interview, askedBy, false),
 };
-
-/** The turn owner's pad tools, as the family registers them after the six the old session is offered. */
-export const TURN_PAD_TOOLS = [PAD_WRITE, CONFIRM_PAD_WRITE, DECLINE_PAD_WRITE] as const;
