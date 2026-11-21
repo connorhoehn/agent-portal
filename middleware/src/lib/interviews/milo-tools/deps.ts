@@ -54,9 +54,11 @@ export const REPEAT_WINDOW_MS = 20_000;
 
 const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
 export const countWords = (n: number): string => NUMBER_WORDS[n] ?? String(n);
-export const testsAddedLine = (n: number, checked: boolean, missing: readonly string[] = []): string => `${checked
+export const testsAddedLine = (n: number, checked: boolean, missing: readonly string[] = [], assumed = false, unchecked = 0): string => `${unchecked > 0 && unchecked < n
+  ? `Added ${countWords(n - unchecked)} test case${n - unchecked === 1 ? '' : 's'} at the bottom of the pad, plus ${countWords(unchecked)} input${unchecked === 1 ? '' : 's'} with no expected result yet.`
+  : checked
   ? `Added ${countWords(n)} test case${n === 1 ? '' : 's'} at the bottom of the pad.`
-  : `Added ${countWords(n)} test input${n === 1 ? '' : 's'} at the bottom of the pad. The expected values are yours to fill in.`}${missing.length ? ` I couldn't write one for ${missing.join(' or ')}.` : ''}`;
+  : `Added ${countWords(n)} test input${n === 1 ? '' : 's'} at the bottom of the pad. The expected values are yours to fill in.`}${assumed ? ' I assumed an empty list when there is no pair.' : ''}${missing.length ? ` I couldn't write one for ${missing.join(' or ')}.` : ''}`;
 export const importsAddedLine = (n: number): string => (n === 1 ? 'Added the import at the top of the pad.' : `Added ${countWords(n)} imports at the top of the pad.`);
 export const HELPER_ADDED = 'Added the helper at the top of the pad, marked as added by Milo.';
 

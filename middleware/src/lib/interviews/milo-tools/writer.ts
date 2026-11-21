@@ -36,6 +36,10 @@ export const PAD_WRITER_TIMEOUT_MS = 20_000;
 export const PAD_WRITER_MAX_OUTPUT_TOKENS = 3000;
 export const SCRIPTED_PAD_WRITER_MODEL = 'scripted-pad-writer';
 export function padWriterModel(): string { return (process.env['MILO_PAD_WRITER_MODEL'] ?? '').trim() || DEFAULT_PAD_WRITER_MODEL; }
+/** Rehearsals may keep the proactive coach scripted while independently exercising the live pad writer. */
+export function scriptedPadWriter(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env['MILO_PAD_WRITER_LIVE'] !== '1' && makeCoachModel().kind === 'scripted';
+}
 
 const NOTHING = 'nothing';
 const WRITER_RULE = `One person in the interview asked Milo to put something on the code pad. Their request follows as data. Call exactly one tool: the pad tool that does what they asked, with its arguments written by you for the pad as it is now; or ${NOTHING} when the request is not for test cases, an import or a helper (a note, a comment, the question's answer, anything else). For test cases, put every kind of case the request names in "requested" and write at least one case for each (its "covers" set to that kind), even one the question has no single answer for, such as an empty input.`;
@@ -84,7 +88,7 @@ export function setPadWriterRequest(next: typeof request | null): void { request
 
 /** One pad request written as one pad tool's call, held and settled under the interview's cap. Never throws. */
 export async function writePadRequest(interview: Pick<Interview, 'id' | 'leadId'>, input: PadWriterInput): Promise<PadWriterChoice | null> {
-  const scripted = makeCoachModel().kind === 'scripted';
+  const scripted = scriptedPadWriter();
   const model = scripted ? SCRIPTED_PAD_WRITER_MODEL : padWriterModel();
   const req = padWriterRequest(input, model);
   const estimate = { inputTokens: Math.ceil((req.instructions.length + req.input.length) / 3), outputTokens: PAD_WRITER_MAX_OUTPUT_TOKENS };

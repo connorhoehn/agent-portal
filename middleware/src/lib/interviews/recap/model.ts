@@ -1,6 +1,6 @@
 // Milo's recap model (docs/interviews-tenant-plan.md decisions 6, 7; row I5.2; contract E0): Amazon Nova through Bedrock's
-// Converse API, or a scripted stand-in. Which one runs is the coach's one switch (`makeCoachModel().kind === 'scripted'`),
-// so the mock world, tests and a test's `setCoachModelFactory` flip the recap with the coach.
+// Converse API, or a scripted stand-in. Defaults follow the coach (`makeCoachModel().kind === 'scripted'`).
+// INTERVIEWS_RECAP_MODEL=openai explicitly selects the independent live backend in openai-model.ts.
 //
 // Rules kept here, as the coach's model.ts keeps them:
 //   * a timeout and at most one retry (the SDK's attempts count the first try); a failure is a code, never an exception;
@@ -11,7 +11,8 @@ import type { ConverseCommandInput } from '@aws-sdk/client-bedrock-runtime';
 import { converseOnce, type ConverseSend } from '../bedrock.js';
 import { COACH_TIMEOUT_MS, coachModelId, makeCoachModel, type CoachModelResult, type TokenCounts } from '../coach/model.js';
 import { buildRecapRequest, MAX_CLAIMS_PER_COMPETENCY, MAX_QUOTE_CHARS, RECAP_SYSTEM_PROMPT, recapUserText, type RecapInput } from './prompt.js';
-import { addressesMilo } from './parse.js';
+import { addressesMilo, courtesyOnly } from './parse.js';
+import { OpenAIRecapModel } from './openai-model.js';
 
 export const SCRIPTED_RECAP_MODEL_ID = 'scripted-recap';
 /**
@@ -21,8 +22,9 @@ export const SCRIPTED_RECAP_MODEL_ID = 'scripted-recap';
 export const RECAP_TIMEOUT_MS = COACH_TIMEOUT_MS * 3;
 
 export interface RecapModel {
-  readonly kind: 'bedrock' | 'scripted';
+  readonly kind: 'bedrock' | 'scripted' | 'openai';
   readonly modelId: string;
+  readonly promptVersion?: string;
   write(input: RecapInput): Promise<CoachModelResult>;
 }
 
@@ -63,6 +65,37 @@ export class BedrockRecapModel implements RecapModel {
 
 const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 const opening = (s: string): string => words(s).split(' ').slice(0, 6).join(' ');
+/** Match a bounded question opening with at most one ASR word substitution/insertion/deletion.
+ * Short titles still require an exact match; a similar topic alone never opens a window. */
+export function hearsQuestion(text: string, phrase: string): boolean {
+  const heard = words(text).split(' ');
+  const expected = phrase.split(' ');
+  if (` ${words(text)} `.includes(` ${phrase} `)) return true;
+  if (expected.length < 6) return false;
+  for (let from = 0; from < heard.length; from += 1) {
+    for (const length of [expected.length - 1, expected.length, expected.length + 1]) {
+      const span = heard.slice(from, from + length);
+      if (span.length !== length) continue;
+      let previous = Array.from({ length: span.length + 1 }, (_, j) => j);
+      for (let i = 1; i <= expected.length; i += 1) {
+        const current = [i];
+        for (let j = 1; j <= span.length; j += 1) current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (expected[i - 1] === span[j - 1] ? 0 : 1));
+        previous = current;
+      }
+      if (previous[span.length]! <= 1) return true;
+    }
+  }
+  return false;
+}
+
+/** The deterministic stand-in can quote substantive answers, never social acknowledgments or a tool request. */
+const isAnswer = (text: string): boolean => {
+  const normalized = words(text);
+  return !addressesMilo(text) && !courtesyOnly(text) && normalized.split(' ').length >= 4;
+};
+const codeQualityAnswer = (text: string): boolean => isAnswer(text)
+  && /\b(?:tests?|assertions?|duplicates?|empty|indices|index|readab\w*|naming|exception|validation)\b/i.test(text)
+  && /\b(?:because|so|before|after|expect\w*|return\w*|check\w*|avoid\w*|prevent\w*|ensure\w*)\b/i.test(text);
 /**
  * How a question is named aloud: its first six words, and, for a prompt with a title before a colon ("Design Twitter: people
  * post…", a board round's question, which is on the board and named rather than read), the title of two to six words.
@@ -92,7 +125,7 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
   const notCovered: string[] = [];
   const openingsOf = (competencyId: string | null) => input.questions.filter((q) => competencyId === null || q.competencyId === competencyId)
     .flatMap((q) => openingsOfText(q.text));
-  const opens = (n: number, openings: readonly string[]) => input.lines[n]!.side === 'panel' && openings.some((o) => ` ${words(input.lines[n]!.text)} `.includes(` ${o} `));
+  const opens = (n: number, openings: readonly string[]) => input.lines[n]!.side === 'panel' && openings.some((o) => hearsQuestion(input.lines[n]!.text, o));
   const anyQuestion = openingsOf(null);
   for (const c of input.competencies) {
     const own = openingsOf(c.id);
@@ -103,18 +136,18 @@ export function scriptedRecap(input: RecapInput): { competencies: { id: string; 
       const answers: number[] = [];
       for (let k = n + 1; k < input.lines.length && !opens(k, anyQuestion); k += 1) {
         const line = input.lines[k]!;
-        if (line.side === 'candidate' && !addressesMilo(line.text) && quoteOf(line.text)) answers.push(k);
+        if (line.side === 'candidate' && isAnswer(line.text)) answers.push(k);
       }
       windows.push(answers.sort((a, b) => input.lines[b]!.text.length - input.lines[a]!.text.length || a - b));
     });
     // Communication is not asked in a question of its own; it is read across everything the candidate said once a question was asked.
-    if (windows.length === 0 && CROSS_CUTTING.includes(c.id)) {
+    if (windows.length === 0 && (CROSS_CUTTING.includes(c.id) || c.id === 'code-quality')) {
       const first = input.lines.findIndex((_l, n) => opens(n, anyQuestion));
       if (first >= 0) {
         const all: number[] = [];
         for (let k = first + 1; k < input.lines.length; k += 1) {
           const line = input.lines[k]!;
-          if (line.side === 'candidate' && !addressesMilo(line.text) && quoteOf(line.text)) all.push(k);
+          if (line.side === 'candidate' && isAnswer(line.text) && (c.id !== 'code-quality' || codeQualityAnswer(line.text))) all.push(k);
         }
         windows.push(all.sort((a, b) => input.lines[b]!.text.length - input.lines[a]!.text.length || a - b));
       }
@@ -142,7 +175,8 @@ export class ScriptedRecapModel implements RecapModel {
   }
 }
 
-/** E0's one switch: the scripted recap whenever the coach is scripted. */
+/** Explicit live override for local proof runs; otherwise preserve the coach's model selection. */
 export function makeRecapModel(): RecapModel {
+  if (process.env['INTERVIEWS_RECAP_MODEL'] === 'openai') return new OpenAIRecapModel();
   return makeCoachModel().kind === 'scripted' ? new ScriptedRecapModel() : new BedrockRecapModel();
 }

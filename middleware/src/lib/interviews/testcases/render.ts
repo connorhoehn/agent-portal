@@ -16,7 +16,7 @@ import type { PadLanguage } from '../types.js';
 /** One case: the arguments in order, and (checked against the question's reference) the value the call returns. JSON values only. */
 /** `covers`: the case the asker named that this one answers. `edge`: an input the question's reference has no single answer for
  * (an empty array for two_sum), written because it was asked for: shown with what the function returns, no expected value. */
-export interface TestCase { args: unknown[]; expected?: unknown; covers?: string; edge?: boolean }
+export interface TestCase { args: unknown[]; expected?: unknown; covers?: string; edge?: boolean; assumption?: string }
 
 /** The block's first line in every language, after the comment marker: how a reader (and the record) finds Milo's block. */
 export const TEST_CASES_TITLE = 'Test cases from Milo';
@@ -94,9 +94,10 @@ export function scriptLiteral(v: unknown): string {
   return typeof v === 'string' ? quoted(v) : JSON.stringify(v);
 }
 
-function header(language: PadLanguage, count: number, checked: boolean): string[] {
+function header(language: PadLanguage, count: number, checked: boolean, assumed = false): string[] {
   const c = COMMENT[language];
-  return [`${c} --- ${TEST_CASES_TITLE} (${count}) ---`, ...(checked ? TEST_CASES_NOTE : TEST_INPUTS_NOTE).map((l) => `${c} ${l}`)];
+  const note = assumed ? ['Expected values are reference-checked except those marked as assumptions.', 'Milo did not run or judge your code: edit or delete any case.'] : checked ? TEST_CASES_NOTE : TEST_INPUTS_NOTE;
+  return [`${c} --- ${TEST_CASES_TITLE} (${count}) ---`, ...note.map((l) => `${c} ${l}`)];
 }
 
 /**
@@ -111,15 +112,20 @@ export function renderTestCases(all: readonly TestCase[], language: PadLanguage,
   const checked = rest.length > 0 && rest.every((t) => t.expected !== undefined);
   const cases = checked ? rest : all;
   const tail = checked ? edges : [];
-  const lines = header(language, all.length, checked);
+  const lines = header(language, all.length, checked, all.some((t) => !!t.assumption));
   const runs = fn !== null && RUNS_AS_SCRIPT.has(language);
   const py = (t: TestCase) => `(${t.args.map(pythonLiteral).join(', ')}${t.args.length === 1 ? ',' : ''})`;
   if (runs && language === 'python') {
     if (checked) {
       lines.push('milo_test_cases = [', '    # (arguments, expected)');
-      for (const t of cases) lines.push(`    (${py(t)}, ${pythonLiteral(t.expected)}),`);
-      lines.push(']', 'for args, expected in milo_test_cases:', `    got = ${fn}(*args)`,
-        '    print("ok  " if got == expected else "DIFF", args, "->", got, "| expected", expected)');
+      for (const t of cases) {
+        if (t.assumption) lines.push(`    # ${t.assumption}`);
+        lines.push(`    (${py(t)}, ${pythonLiteral(t.expected)}),`);
+      }
+      lines.push(']', 'milo_failures = 0', 'for args, expected in milo_test_cases:', `    got = ${fn}(*args)`,
+        '    milo_failures += int(got != expected)',
+        '    print("ok  " if got == expected else "DIFF", args, "->", got, "| expected", expected)',
+        'assert milo_failures == 0, f"{milo_failures} test case(s) failed"');
       if (tail.length) {
         lines.push(`${c} ${EDGE_INPUTS_NOTE}`, 'milo_edge_inputs = [');
         for (const t of tail) lines.push(`    ${py(t)},`);
@@ -137,10 +143,15 @@ export function renderTestCases(all: readonly TestCase[], language: PadLanguage,
     const body: string[] = [];
     if (checked) {
       body.push(`const miloTestCases${typed ? ': Array<[unknown[], unknown]>' : ''} = [`, '  // [arguments, expected]');
-      for (const t of cases) body.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
-      body.push('];', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
-        '  console.log(JSON.stringify(got) === JSON.stringify(expected) ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
-        '}');
+      for (const t of cases) {
+        if (t.assumption) body.push(`  // ${t.assumption}`);
+        body.push(`  [[${t.args.map(scriptLiteral).join(', ')}], ${scriptLiteral(t.expected)}],`);
+      }
+      body.push('];', 'let miloFailures = 0;', 'for (const [args, expected] of miloTestCases) {', `  const got = ${call};`,
+        '  const passed = JSON.stringify(got) === JSON.stringify(expected);',
+        '  if (!passed) miloFailures += 1;',
+        '  console.log(passed ? "ok  " : "DIFF", JSON.stringify(args), "->", JSON.stringify(got), "| expected", JSON.stringify(expected));',
+        '}', 'if (miloFailures) throw new Error(`${miloFailures} test case(s) failed`);');
       if (tail.length) {
         body.push(`// ${EDGE_INPUTS_NOTE}`, `const miloEdgeInputs${typed ? ': unknown[][]' : ''} = [`);
         for (const t of tail) body.push(`  [${t.args.map(scriptLiteral).join(', ')}],`);
@@ -154,7 +165,10 @@ export function renderTestCases(all: readonly TestCase[], language: PadLanguage,
     lines.push('{', ...body.map((l) => `  ${l}`), '}');
   } else {
     const name = fn ?? 'f';
-    for (const t of cases) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')})${checked ? ` -> ${scriptLiteral(t.expected)}` : ''}`);
+    for (const t of cases) {
+      if (t.assumption) lines.push(`${c} ${t.assumption}`);
+      lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')})${checked ? ` -> ${scriptLiteral(t.expected)}` : ''}`);
+    }
     for (const t of tail) lines.push(`${c} ${name}(${t.args.map(scriptLiteral).join(', ')}) -> ? (asked for; no single right answer)`);
   }
   return `${lines.join('\n')}\n`;

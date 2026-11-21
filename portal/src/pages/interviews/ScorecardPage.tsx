@@ -407,10 +407,13 @@ function RecapView({ recap, error, hidden, competencies, ratings }: {
           const evidence = evidenceFor(recap, c.id);
           return (
             <DetailSection key={c.id} variant="heading" title={c.name} data-testid="interviews-recap-competency">
-              <KeyValue items={[
-                ...(readers ? [] : [{ label: 'Your rating', value: mine ? <RatingStars rating={mine} anchor={c.anchors[mine]} /> : 'Not rated', muted: !mine }]),
-                { label: 'Milo\'s evidence', muted: evidence.length === 0, value: <EvidenceList claims={evidence} /> },
-              ]} />
+              <Stack gap="sm">
+                {!readers && <KeyValue items={[
+                  { label: 'Your rating', value: mine ? <RatingStars rating={mine} anchor={c.anchors[mine]} /> : 'Not rated', muted: !mine },
+                ]} />}
+                {/* Evidence is multiline content; KeyValue's single-line values inherit nowrap and clip expanded quotes. */}
+                <EvidenceList claims={evidence} />
+              </Stack>
             </DetailSection>
           );
         })}
@@ -517,7 +520,7 @@ function EvidenceList({ claims }: { claims: readonly RecapClaim[] }) {
         return (
           <Disclosure key={key} variant="plain" summary={line} data-testid="interviews-recap-claim">
             <Stack gap="xs">
-              {row.fullQuote && <T size="sm" wrap>{`“${row.fullQuote}”`}</T>}
+              {row.fullQuote && <T size="sm" wrap data-testid="interviews-recap-full-quote">{`“${row.fullQuote}”`}</T>}
               {row.context && <T size="sm" tone="secondary" wrap>{row.context}</T>}
             </Stack>
           </Disclosure>

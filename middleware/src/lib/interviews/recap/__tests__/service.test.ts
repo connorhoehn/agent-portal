@@ -71,6 +71,14 @@ beforeEach(() => {
 });
 afterAll(() => setRecapDeps(null));
 
+test('an explicit OpenAI recap keeps its provider and extraction prompt version in the record', async () => {
+  deps.model.mockReturnValue({ ...answering(JSON.stringify({ competencies: [], notCovered: [] })),
+    kind: 'openai', modelId: 'gpt-5.4-mini', promptVersion: 'recap-extract-2026-11-20.1' });
+  await openRecap(refOf(), WEN, ratings());
+  expect(deps.settle).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', model: 'gpt-5.4-mini', inputTokens: 5000, outputTokens: 500 }));
+  expect(await store.getRecap(IV)).toMatchObject({ promptVersion: 'recap-extract-2026-11-20.1', modelId: 'gpt-5.4-mini' });
+});
+
 describe('a question Milo asked aloud (Have Milo ask): its answer is evidence, under its own question', () => {
   const at = (sec: number) => new Date(Date.UTC(2026, 11, 1, 15, 0, sec)).toISOString();
   const slip = () => refOf().opening.kit.questions.find((q) => q.id === 'q-em-slip')!;

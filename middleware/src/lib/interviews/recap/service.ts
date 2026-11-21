@@ -194,7 +194,7 @@ async function book(d: RecapDeps, model: RecapModel, input: RecapInput, held: { 
     const usage = result.usage ?? estimateRecapTokens(input);
     const cost = estimateUsageCost(model.modelId, usage);
     await d.settle({
-      sourceId: held.sourceId, costUsd: cost, basis: cost === null ? 'unknown' : 'estimated', model: model.modelId, actorId: actor, provider: 'bedrock',
+      sourceId: held.sourceId, costUsd: cost, basis: cost === null ? 'unknown' : 'estimated', model: model.modelId, actorId: actor, provider: model.kind === 'openai' ? 'openai' : 'bedrock',
       inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
     });
   } catch (e) {
@@ -239,7 +239,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
     if (parsed.ok) {
       const row: RecapRecord = {
         interviewId: interview.id, state: 'ready', content: parsed.recap, writtenAt: iso(d.now()), modelId: model.modelId,
-        promptVersion: RECAP_PROMPT_VERSION, attempts: attempt, droppedCodes: [...count.codes], droppedClaims: parsed.droppedClaims,
+        promptVersion: model.promptVersion ?? RECAP_PROMPT_VERSION, attempts: attempt, droppedCodes: [...count.codes], droppedClaims: parsed.droppedClaims,
       };
       const kept = await store.putRecap(row);
       await store.clearAttempts(interview.id);
@@ -251,7 +251,7 @@ async function write(d: RecapDeps, ref: RecapRef, actor: string): Promise<RecapB
   }
   const failed: RecapRecord = {
     interviewId: interview.id, state: 'failed', content: { competencies: [], notCovered: [] } satisfies RecapContent, writtenAt: iso(d.now()),
-    modelId: model.modelId, promptVersion: RECAP_PROMPT_VERSION, attempts: count.n, droppedCodes: [...count.codes], droppedClaims: 0,
+    modelId: model.modelId, promptVersion: model.promptVersion ?? RECAP_PROMPT_VERSION, attempts: count.n, droppedCodes: [...count.codes], droppedClaims: 0,
   };
   const kept = await store.putRecap(failed);
   await store.clearAttempts(interview.id);

@@ -1,5 +1,5 @@
 // Milo's interview tool `pad_add_tests`: test cases for the round's coding question, written at the bottom of the pad as Milo. The
-// cases come from the session's background agent; an expected value is kept only when the question's reference agrees (tests.ts).
+// cases come from the session's background agent; expected values are reference-checked or explicitly marked assumptions (tests.ts).
 import type { ServerToolDef } from '../../meeting-assistant/server-tools.js';
 import type { SaidSource } from '../speak/store.js';
 import { atEnd } from '../pad/milo-writer.js';
@@ -37,7 +37,7 @@ export const PAD_ADD_TESTS: ServerToolDef<MiloInterview, SaidSource> = {
     },
     required: ['cases', 'count'], additionalProperties: false,
   },
-  says: 'Writes the test cases into the pad as Milo; an expected value is kept only when the question\'s reference agrees.',
+  says: 'Writes test cases into the pad as Milo; expected values are reference-checked or marked as explicit out-of-contract assumptions.',
   mapsTo: 'server: lib/interviews/milo-tools pad_add_tests (the pad, as Milo)',
   writes: true,
   spend: null,
@@ -58,7 +58,7 @@ export const PAD_ADD_TESTS: ServerToolDef<MiloInterview, SaidSource> = {
       const verdict = await step.judge({ questions: step.prompts, code: made.block, entries: step.entries, kind: 'tests' });
       if (verdict !== 'helper') return step.refuse(TESTS_NOT_ADDED);
     }
-    step.done(testsAddedLine(made.count, made.checked, made.missing), 'tests');
+    step.done(testsAddedLine(made.count, made.checked, made.missing, made.assumed, made.unchecked), 'tests');
     step.kind('tests');
     return atEnd(made.block);
   }, { testsBatch: true }),
