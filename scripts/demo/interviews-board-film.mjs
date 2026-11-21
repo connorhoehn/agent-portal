@@ -50,8 +50,16 @@ fs.mkdirSync(OUT, { recursive: true });
 const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'interviews-film-compose.py');
 const FINAL = flag('--final') ?? path.join(OUT, 'system-design.mp4');
 const py = (...a) => new Promise((resolve) => spawn('python3', [COMPOSE, ...a], { stdio: 'inherit' }).on('exit', (c) => resolve(c ?? 1)));
-if (args.includes('--compose-only')) process.exit(await py('compose', '--out', OUT, '--final', FINAL));
+const reviewFilm = () => new Promise((resolve) => {
+  const child = spawn('uv', ['run', '--offline', '--no-project', '--python', '3.10', '--with', 'faster-whisper', '--with', 'matplotlib', 'python',
+    path.join(ROOT, 'scripts/demo/interviews-film-review.py'), OUT], { stdio: 'inherit' });
+  child.on('error', () => resolve(1)); child.on('exit', (code) => resolve(code ?? 1));
+});
+if (args.includes('--compose-only')) { const code = await py('compose', '--out', OUT, '--final', FINAL); process.exit(code || await reviewFilm()); }
 const REHEARSE = args.includes('--rehearse');
+// A coherent demonstration; the legacy branch remains available for deliberate turn-contract stress tests.
+const COHERENT = args.includes('--coherent');
+if (process.platform === 'darwin') spawn('caffeinate', ['-dimsu', '-w', String(process.pid)], { stdio: 'ignore', detached: true }).unref();
 // --no-call (a check of the board alone, without a media server): the round is started by its route and nobody joins the call.
 const NO_CALL = args.includes('--no-call');
 const MILO = args.includes('--milo') && !NO_CALL;
@@ -159,6 +167,7 @@ start('middleware', [path.join(ROOT, 'middleware', 'node_modules', '.bin', 'tsx'
   // No Bedrock: refused by these keys; the coach is the scripted stand-in. Milo's live session only with --milo (miloEnv).
   AWS_ACCESS_KEY_ID: 'film-blocks-bedrock', AWS_SECRET_ACCESS_KEY: 'film-blocks-bedrock', AWS_EC2_METADATA_DISABLED: 'true',
   INTERVIEWS_COACH_MODEL: 'scripted', OPENAI_API_KEY: '', ...miloEnv(),
+  ...(COHERENT && MILO ? { INTERVIEWS_RECAP_MODEL: 'openai' } : {}),
 });
 start('portal', [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
   VITE_GATEWAY_URL: `http://localhost:${MW_PORT}`, API_PROXY_TARGET: MIDDLEWARE,
@@ -176,7 +185,9 @@ const { joinCall, letSound } = await import('../journeys/interviews/h8-room.mjs'
 // ── The record ──
 const VIEW = { width: 1280, height: 800 };
 const timeline = { size: VIEW, videos: {}, film: { fromMs: null, toMs: null }, scenes: [], cuts: [], speech: [], labels: { lead: 'Hugo Marchetti (lead)', cand: 'Mateo Alvarez' } };
-const report = { startedAt: new Date().toISOString(), turnOwner: TURN_OWNER, interview: null, steps: [], notes: [], turns: [], floorReads: {} };
+const report = { startedAt: new Date().toISOString(), turnOwner: TURN_OWNER, coherent: COHERENT,
+  models: { coach: 'scripted', recap: COHERENT && MILO ? 'openai' : 'scripted', voice: MILO ? 'live' : 'none' },
+  interview: null, steps: [], notes: [], turns: [], floorReads: {} };
 const step = (id, ok, detail) => { report.steps.push({ id, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${id}: ${detail}`); };
 const note = (s) => { report.notes.push(s); console.log(`note: ${s}`); };
 // Scenes are numbered in the order they come (a --milo take has more of them).
@@ -268,17 +279,22 @@ async function person(key, userId) {
 /** A line: its clip is placed in the edit now; resolves when it would end. Lines never overlap. */
 const busy = { until: 0 };
 async function say(id, gapMs = 350, { now = false } = {}) {
-  const wait = now ? 0 : busy.until + gapMs - Date.now(); if (wait > 0) await sleep(wait);
+  const prior = timeline.speech.at(-1);
+  const responsePause = COHERENT && prior && prior.who !== LINES[id][0] ? (/\?\s*$/.test(prior.text) ? 800 : 600) : 0;
+  const wait = now ? 0 : busy.until + Math.max(gapMs, responsePause) - Date.now(); if (wait > 0) await sleep(wait);
   const c = CLIPS[id] ?? { who: LINES[id][0], text: LINES[id][1], file: null, durMs: 900 + 62 * LINES[id][1].length };
+  if (!REHEARSE && !c.file) throw new Error(`Missing voice for ${id}`);
+  if (c.file && c.text !== LINES[id][1]) throw new Error(`Stale voice text for ${id}`);
   const atMs = Date.now();
   timeline.speech.push({ id, who: c.who, text: c.text, file: c.file ? path.relative(OUT, c.file) : null, atMs, durMs: c.durMs });
   busy.until = atMs + c.durMs;
   console.log(`  [${at()}] ${c.who}: ${c.text}`);
   const p = c.who === 'hugo' ? lead : cand;
   if (MILO && c.file && p) {
-    await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`).catch((e) => note(`line ${id} did not play: ${String(e).slice(0, 120)}`));
+    await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`);
     busy.until = Math.max(busy.until, Date.now());
   } else await sleep(c.durMs);
+  if (Date.now() - atMs > c.durMs + 10_000) throw new Error(`Recording stalled during ${id}; discard this take`);
 }
 /** Waits until line `id` is `leadMs` from its end. */
 async function nearEnd(id, leadMs) {
@@ -439,6 +455,7 @@ async function note2(page, [x, y], text) {
   await moveTo(page, ax, ay, 300); await page.mouse.click(ax, ay); await sleep(100);
   for (const [i, part] of text.split('\n').entries()) { if (i) await page.keyboard.press('Enter'); await page.keyboard.type(part, { delay: 22 }); }
   await page.keyboard.press('Escape');
+  if (COHERENT) { await page.keyboard.press('Escape'); await page.keyboard.press('v'); }
   await sleep(80);
 }
 /** Lines said back to back while the hands work; resolves when both are done. */
@@ -547,21 +564,29 @@ try {
   await say('i02', 300);
   if (NAME_REQUIRED) {
     // The round's opening line (a board round: only how to ask). It quotes his name; it is not a request.
-    const q = await watchSilence('opening line', 'h01', 5000);
-    step('O the opening line ("just say Hey Milo") gets no reply', !q.replied, `Milo ${q.replied ? 'REPLIED' : 'stayed silent'} within 5 s`);
+    const q = await watchSilence('opening line', 'h01', COHERENT ? 1000 : 5000);
+    step('O the opening line ("just say Hey Milo") gets no reply', !q.replied, `Milo ${q.replied ? 'REPLIED' : 'stayed silent'} during the opening`);
   }
   if (HANDSFREE) {
     const t = await askByHold('introduce', 'h00', /Milo|assistant/i);
     step('H Hugo holds the talk button; Milo introduces himself', !!t?.right && t.holding, t ? `holding=${t.holding}; chips ${JSON.stringify(t.chips)}; ${t.latencyS ?? '-'} s after the release; said "${t.said.slice(0, 120)}"` : 'no hold button');
   }
-  const i03 = say('i03', 300);
+  const promptReady = await until(async () => {
+    for (const page of [hp, cp]) {
+      const view = await board(page); const title = view?.textAt['Design Twitter'];
+      if (!view || !title || view.zoom < .5 || -view.scrollX > title[0] + 10 || -view.scrollX + view.width / view.zoom < title[0] + 600) return null;
+    }
+    return true;
+  }, 10_000, 250);
+  step('1a the prompt is on both boards before the question is read', !!promptReady, 'Design Twitter visible in the shared board on both sides');
+  if (!promptReady) throw new Error('Cannot read a problem that is absent from the shared board');
   // The coach's first suggestion (the round's own question, before anyone said it): Hugo asks it himself.
   if (MILO) {
     const first = await until(deckShown.bind(null, hp), 4000, 400);
     if (first) await press(hp, deckOf(hp).getByRole('button', { name: /^I.ll ask it$/i }).first(), { pause: 300 }).catch((e) => note(`first suggestion: ${String(e).slice(0, 80)}`));
     note(`the coach's first suggestion by "It's a classic": ${first ? `"${first.slice(0, 100)}", answered I'll ask it` : 'none yet'}`);
     // Until "where to go deep", any other suggestion is the one Hugo asks himself (a waiting one would hold the follow-up back).
-    (async () => {
+    if (!COHERENT) (async () => {
       while (!deckWatch.stop) {
         const t = await deckShown(hp);
         if (t && (HANDSFREE || !/home timeline built|tens of millions of followers/i.test(t))) {
@@ -571,7 +596,7 @@ try {
       }
     })();
   }
-  await i03;
+  await say('i03', 300);
   const n0 = await same('2 the Design Twitter master template on both sides', 'after "Start from a board"', 80);
   const title = (await board(cp))?.textAt['Design Twitter'];
   if (title) ORIGIN = [title[0], title[1]]; else note('no "Design Twitter" title on the candidate\'s board');
@@ -626,6 +651,12 @@ try {
     step('T Milo tells Mateo the time left, aloud', spoke && /minutes? (?:are|is) left|end of its time|minutes long/i.test(t.said), `spoke=${spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
   }
 
+  if (COHERENT) {
+    for (const page of [hp, cp]) await press(page, page.getByRole('button', { name: /^Minimise$/ }).first(), { pause: 200, timeout: 5000 });
+    const clear = !!await until(async () => (!(await hp.getByTestId('interview-room-gallery-recording-note').isVisible()) && !(await cp.getByTestId('join-room-gallery-recording-note').isVisible())) || null, 5000, 100);
+    step('4a call tiles minimised before drawing', clear, 'The real call controls free the board area; audio continues through the footer');
+    if (!clear) throw new Error('Call tiles still cover the drawing area');
+  }
   scene(3, 'Your design: the requirements noted, then the high-level design from the palette.');
   const PANEL = 215;
   await beat(['d01', 'b07'], async () => {
@@ -684,14 +715,14 @@ try {
   }, 200);
   const n5 = await same('11 the purposes, same on both sides', 'after the drag and two notes', n4 + 2);
 
-  if (NAME_REQUIRED) {
+  if (NAME_REQUIRED && !COHERENT) {
     scene(4, 'Hugo has Milo ask a probe about the non-functional requirements; Mateo answers.');
     const pr = await askByVoice('ask_probe', 'lead', 'p01', 'name first (Hey Milo)', /\?/, 25_000);
     step('P Milo asks Mateo a probe on the non-functional requirements', pr.right, `spoke=${pr.spoke}; ${pr.latencyS ?? '-'} s after the request; said "${pr.said.slice(0, 160)}"`);
     await say('p02', 400);
   }
   scene(5, 'Where to go deep? Hugo picks the fan-out.');
-  if (NAME_REQUIRED) {
+  if (NAME_REQUIRED && !COHERENT) {
     scene(4, 'Hugo asks Milo the time; the follow-up without the name gets silence, and Hugo reads the question himself.');
     const t = await askByVoice('time_left', 'lead', 't03', 'name first', /minute|end of its time/i);
     step('U Milo tells Hugo the time left (name first)', t.right, `spoke=${t.spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
@@ -709,7 +740,7 @@ try {
     const x = await turn('ask_probe (interrupted)', 'lead', LINES.p03[1], endMs, n, posts0, !!began);
     x.how = 'name first, cut in'; x.barge = barge; x.right = !!began;
     step('X Hugo talks over Milo and Milo stops', !!barge && barge.playoutEndAfterS <= 2.5, `barge-in ${JSON.stringify(barge)}; said "${x.said.slice(0, 120)}"`);
-  } else if (HANDSFREE) {
+  } else if (HANDSFREE && !COHERENT) {
     scene(4, 'Hugo asks Milo the time, then the question again without the name.');
     const t = await askByVoice('time_left', 'lead', 't03', 'name first', /minute|end of its time/i);
     step('U Milo tells Hugo the time left (name first)', t.right, `spoke=${t.spoke}; ${t.latencyS ?? '-'} s after the question; said "${t.said.slice(0, 120)}"`);
@@ -717,6 +748,18 @@ try {
     step('F Milo answers the follow-up without his name', f.right, `spoke=${f.spoke}; ${f.latencyS ?? '-'} s after the follow-up; said "${f.said.slice(0, 120)}"`);
   }
   await beat(['b12'], () => camera(cp, region(VIEW_DRAWING), 1.0, 0), 250);
+  if (COHERENT) {
+    const views = [];
+    for (const page of [hp, cp]) {
+      const view = await board(page); const workers = lowest(view, 'Workers');
+      const point = workers ? px(view, workers[0] + 45, workers[1] + 25) : null;
+      views.push(point ? await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.tagName === 'CANVAS', point) : false);
+    }
+    step('11a the workers are unobscured on both boards for the follow-up', views.every(Boolean), JSON.stringify(views));
+    if (!views.every(Boolean)) throw new Error('The workers are covered during the fan-out discussion');
+    await hp.screenshot({ path: path.join(OUT, 'design-unobscured-lead.png') });
+    await cp.screenshot({ path: path.join(OUT, 'design-unobscured-candidate.png') });
+  }
   const lv2 = await board(hp);
   const wk = lowest(lv2, 'Workers');
   const point = wk ? (async () => { const [hx, hy] = px(lv2, wk[0] + 50, wk[1] + 32); await moveTo(hp, hx, hy, 800); })() : null;
@@ -724,7 +767,7 @@ try {
   // --milo: the coach's follow-up is in Hugo's footer by now (it waits 90 s after the first one); he has Milo ask it aloud.
   let askedByMilo = false;
   deckWatch.stop = true;
-  if (MILO && !HANDSFREE) {
+  if (MILO && (!HANDSFREE || COHERENT)) {
     const FOLLOW_UP = /home timeline built|tens of millions of followers/i;
     const deck = await until(async () => {
       const t = await deckShown(hp);
@@ -747,7 +790,8 @@ try {
       const t = await turn('have_milo_ask', 'lead (button)', deck, pressedAt, n, posts0, askedByMilo);
       const rc = (await receipt) ?? '';
       step('S Have Milo ask: Milo asks the follow-up aloud', askedByMilo && rc === 'Milo asked it aloud' && FOLLOW_UP.test(t.said), `deck "${deck.slice(0, 120)}"; receipt "${rc || 'none'}"; voice ${t.latencyS ?? '-'} s after the press; said "${t.said.slice(0, 120)}"`);
-    } else note('no follow-up suggestion within 30 s; Hugo asks his own');
+    } else if (COHERENT) throw new Error('No relevant follow-up suggestion; cannot stage a successful Milo question');
+    else note('no follow-up suggestion within 30 s; Hugo asks his own');
   }
   if (!askedByMilo) await say('h13');
   // Mateo walks the fan-out with his pointer while Hugo looks at the provided design in his own pane.
@@ -764,6 +808,14 @@ try {
     `lead's design canvas ${pd}; candidate: tab ${candTab}, canvas ${candCanvas}, the words "Provided design" on the page ${candText}`);
   await d08; await walk;
   await say('h14', 250);
+
+  if (COHERENT) {
+    const openSuggestion = deckOf(hp).getByRole('button', { name: /^Skip$/ }).first();
+    if (await openSuggestion.isVisible()) await press(hp, openSuggestion, { pause: 300 });
+    const closed = !(await deckOf(hp).isVisible());
+    step('S2 no suggestion left open at the close', closed, 'Hugo resolved the follow-up before ending the round');
+    if (!closed) throw new Error('Unresolved suggestion still open at the end');
+  }
 
   scene(6, 'Hugo ends the round. The board is kept on the record.');
   const nFinal = (await board(cp))?.count ?? n5;
@@ -815,6 +867,11 @@ try {
     }
     await talk;
     step('R ratings and the red flags list on the board round\'s scorecard', rated === nGroups && nGroups > 0 && nFlags > 0, `${rated} of ${nGroups} competencies rated; ${nFlags} red flags listed, none ticked`);
+    if (COHERENT) {
+      const note = hp.getByTestId('interviews-scorecard-required').filter({ hasText: /System design/ }).first().getByTestId('interviews-scorecard-note');
+      await press(hp, note, { timeout: 5000 });
+      await hp.keyboard.type('Clarified the read/write ratio and freshness. Drew the write queue, workers and timeline cache, then explained why large accounts need a read-time merge.', { delay: 18 });
+    }
     try {
       await press(hp, hp.getByTestId('interviews-scorecard-to-recap'), { pause: 100, timeout: 10_000, ms: 500 });
       const open = hp.getByTestId('interviews-scorecard-ask-option-open');
@@ -824,6 +881,39 @@ try {
     const adviceBox = hp.getByTestId('interviews-scorecard-milo-advice').first();
     const adviceShown = await adviceBox.waitFor({ timeout: 90_000 }).then(() => true, () => false);
     const adviceText = adviceShown ? squash(await adviceBox.innerText().catch(() => '')) : '';
+    if (COHERENT) {
+      const recap = (await (await lead.api.get(`${PORTAL}/api/interviews/interviews/${IV}/recap`)).json()).recap ?? {};
+      report.recap = recap;
+      const covered = ['system-design', 'communication'].every((id) => (recap.competencies ?? []).some((c) => c.id === id && c.evidence?.length));
+      step('E both competencies have source evidence from this call', recap.state === 'ready' && covered, JSON.stringify(recap));
+      if (!covered) throw new Error('System design recap lacks evidence; cannot claim a recommendation');
+      await say('s_evidence', 300);
+      const sections = hp.getByTestId('interviews-recap-competency');
+      const geometry = [];
+      for (let i = 0; i < await sections.count(); i += 1) {
+        const section = sections.nth(i);
+        const summary = section.getByTestId('interviews-recap-evidence').getByText(/Milo.s evidence/).first();
+        await press(hp, summary, { pause: 200, timeout: 5000 });
+        const claims = section.getByTestId('interviews-recap-claim');
+        const texts = await claims.allTextContents();
+        const longest = texts.reduce((best, text, i) => text.length > texts[best].length ? i : best, 0);
+        const claim = claims.nth(longest);
+        await press(hp, claim, { pause: 200, timeout: 5000 });
+        const full = section.getByTestId('interviews-recap-full-quote').first();
+        const expanded = await full.isVisible();
+        const shownQuote = expanded ? full : claim.getByText(/^“/).first();
+        await shownQuote.waitFor({ state: 'visible', timeout: 5000 });
+        geometry.push({ expanded, ...await shownQuote.evaluate((el) => {
+          const range = document.createRange(); range.selectNodeContents(el);
+          const box = el.getBoundingClientRect();
+          return { whiteSpace: getComputedStyle(el).whiteSpace, fits: [...range.getClientRects()].every((r) => r.left >= box.left - 1 && r.right <= box.right + 1 && r.bottom <= box.bottom + 1) };
+        }) });
+        await sleep(3200);
+        await press(hp, summary, { pause: 100, timeout: 5000 });
+      }
+      report.quoteGeometry = geometry;
+      step('E2 source quotes are visible and fit for both competencies', geometry.length === 2 && geometry.every((g) => g.fits && (!g.expanded || g.whiteSpace !== 'nowrap')), JSON.stringify(geometry));
+    }
     if (adviceShown) {
       const shownAt = Date.now();
       const b = await adviceBox.boundingBox().catch(() => null); if (b) await moveTo(hp, b.x + Math.min(160, b.width / 2), b.y + b.height / 2, 600);
@@ -833,7 +923,7 @@ try {
     }
     const evidence = hp.getByTestId('interviews-recap-evidence').first();
     const evidenceOpen = (await evidence.count()) ? await evidence.evaluate((el) => !!(el.closest('details')?.open ?? el.querySelector('details')?.open ?? el.getAttribute('aria-expanded') === 'true')).catch(() => null) : null;
-    step('G Milo recommends on the scorecard, its evidence closed', adviceShown && /Milo recommends\s*(Advance|Inconclusive|Don.t advance)|Milo has no recommendation yet/i.test(adviceText),
+    step('G Milo recommends on the scorecard, its evidence closed', adviceShown && (COHERENT ? /Milo recommends\s*(Advance|Inconclusive|Don.t advance)/i : /Milo recommends\s*(Advance|Inconclusive|Don.t advance)|Milo has no recommendation yet/i).test(adviceText),
       `pill "${adviceText.slice(0, 200)}"; evidence disclosure present=${(await evidence.count()) > 0}, open=${evidenceOpen}`);
   }
   await hp.goto(`${PORTAL}/interviews/rounds/${IV}/record`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
@@ -871,5 +961,7 @@ try {
   clearTimeout(ceiling);
 }
 console.log(`film: report ${report.passed} passed, ${report.failed} failed`);
-if (REHEARSE || !timeline.film.fromMs) process.exit(0);
-process.exit(await py('compose', '--out', OUT, '--final', FINAL));
+if (REHEARSE || !timeline.film.fromMs) process.exit(report.failed ? 1 : 0);
+const composed = await py('compose', '--out', OUT, '--final', FINAL);
+const reviewed = composed ? 1 : await reviewFilm();
+process.exit(report.failed || reviewed ? 1 : 0);

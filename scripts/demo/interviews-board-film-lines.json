@@ -10,9 +10,9 @@
   }
  },
  "lines": {
-  "i01": ["hugo", "Hi Mateo, welcome back! This is your second round of interviews: system design. We've got about an hour, and the whiteboard is yours."],
+  "i01": ["hugo", "Hi Mateo, welcome back. This is the system design round. Let's work through the high-level design and a trade-off on the shared whiteboard."],
   "i02": ["cand", "Hey Hugo, good to be back. Sounds great!"],
-  "i03": ["hugo", "It's a classic: design Twitter."],
+  "i03": ["hugo", "Design Twitter: people post short messages, follow other people, and read a home timeline of posts from the people they follow."],
   "r01": ["cand", "Okay, let me read it. Short posts, following people, and a home timeline, newest first."],
   "b02": ["cand", "Before I draw anything: what's the read to write ratio? Are people mostly reading timelines?"],
   "b03": ["hugo", "Very read heavy. Think a hundred reads for every tweet."],
@@ -30,13 +30,13 @@
   "b12": ["cand", "That's the high level. Where would you like me to go deep?"],
   "h13": ["hugo", "The fan-out. Walk me through it."],
   "d08": ["cand", "Sure. For most people it's fan-out on write: a worker reads the follower list and pushes the tweet ID into each cached timeline. Celebrities are the exception: their tweets are merged in when the timeline is read."],
-  "h14": ["hugo", "Nice, that's close to what we had in mind."],
+  "h14": ["hugo", "That explains the fan-out trade-off. Thanks."],
   "b15": ["hugo", "Good. Let's stop there, that's our time. Thanks, Mateo."],
   "b16": ["cand", "Thank you, that was fun."],
   "b17": ["hugo", "And the whole board stays on the record, with its snapshots."],
   "t01": ["cand", "Milo, how much time do we have?"],
   "m01": ["hugo", "Good question. There's a follow-up I'd like you to hear first."],
-  "s15": ["hugo", "Good. Let's stop there for today. Thanks, Mateo."],
+  "s15": ["hugo", "We've covered the high-level design and its main trade-off. Let's stop here for today. Thanks, Mateo."],
   "s01": ["hugo", "Now my scorecard. I rate each competency myself, then tick any red flags I saw."],
   "s41a": ["hugo", "Milo suggests advance, and I agree."],
   "s41i": ["hugo", "Milo says inconclusive. Fair, I'll put my notes in for the panel."],
@@ -52,6 +52,7 @@
   "p01": ["hugo", "Hey Milo, can you ask a probe about the non-functional requirements in this part of the design?"],
   "p02": ["cand", "Good one. Timeline reads should come back in about two hundred milliseconds, and a few seconds of staleness is fine, so the cache takes most of the load."],
   "f02": ["hugo", "Sure. Design Twitter: people post tweets, follow each other, and read a home timeline, newest first."],
-  "p03": ["hugo", "Milo, can you ask Mateo that probe once more?"]
+  "p03": ["hugo", "Milo, can you ask Mateo that probe once more?"],
+  "s_evidence": ["hugo", "I'll check the source quotes for system design and communication before reading the recommendation."]
  }
 }

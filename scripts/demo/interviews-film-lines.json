@@ -412,7 +412,7 @@
   ],
   "r_empty_question": [
    "cand",
-   "I'll use Python. The prompt guarantees a pair, but what should empty input return? I'd normally return an empty list when there isn't a pair."
+   "The prompt guarantees a pair, but what should empty input return? I'd normally return an empty list when there isn't a pair."
   ],
   "r_empty_agree": [
    "hugo",
@@ -509,6 +509,10 @@
   "r_evidence": [
    "hugo",
    "I'll open the evidence for each competency and check the source quotes against what we discussed."
+  ],
+  "r_choose_python": [
+   "cand",
+   "I'll use Python."
   ]
  }
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Review the FINAL mixed film, using the same local faster-whisper workflow as ai-3d-storymaker.
 
-uv run --offline --no-project --python 3.10 --with faster-whisper python \
+uv run --offline --no-project --python 3.10 --with faster-whisper --with matplotlib python \
   scripts/demo/interviews-film-review.py <take-directory>
 
-Requires cached Systran/faster-whisper-base, ffmpeg and ffprobe. Writes a fresh qa/ directory;
+Requires cached Systran/faster-whisper-base, matplotlib, ffmpeg and ffprobe. Writes a fresh qa/ directory;
 refuses to overwrite a prior review. Read review.md and inspect its frames before accepting a take.
 Transcription and similarity scores flag places to inspect; they cannot certify conversational sense.
 """
@@ -87,6 +87,16 @@ def main():
 
     # Sample the final rendered film, including the ending; these are review aids, not screenshots of a new session.
     frames = sorted(set([min(info.duration - 0.2, float(n)) for n in range(15, int(info.duration), 30)] + [max(0, info.duration - 1)]))
+    # Check the screen at the actual dialogue cues, not only an arbitrary 30-second grid.
+    for cue in cues:
+        if cue['expected'].startswith(("Today's problem is Two Sum.", 'Design Twitter:', 'The prompt guarantees a pair,',
+                                       'Checking every pair', 'If the loop finishes')):
+            frames.append(min(info.duration - 0.2, cue['start'] + 0.5))
+        if cue['expected'].startswith(('Now the high level.', 'Tweets are written', 'Timelines are read',
+                                       'When someone tweets', 'For big accounts', 'And the purposes.',
+                                       'Sure. For most people', 'We have enough time,', 'If you refactored')):
+            frames.append(min(info.duration - 0.2, cue['end'] - 0.2))
+    frames = sorted(set(frames))
     frame_lines = []
     for index, at in enumerate(frames):
         filename = f'frame-{index:02d}-{int(at):03d}s.png'
@@ -99,6 +109,7 @@ def main():
              f'Model modes recorded by the runner: `{json.dumps(report.get("models", {}))}`', '',
              '## Questions to resolve', '',
              '- Does each response answer the preceding speaker, with no duplicate introduction or missing result reaction?',
+             '- Is the question and starter visible on both pads before the problem is read, and does subsequent code match what each speaker points to?',
              '- Do spoken test claims match actual executable cases and run results?',
              '- Do the assessment claims occur in this conversation, with substantive cited evidence?',
              '- Are all cuts honest about elapsed work, and is the final call-to-scorecard transition continuous?', '',
@@ -111,8 +122,11 @@ def main():
         if cue['orderedSimilarity'] < 0.8:
             lines += [f'- {timestamp(cue["start"])} {cue["who"]} ({cue["orderedSimilarity"]:.2f})',
                       f'  - Script: {cue["expected"]}', f'  - Whisper: {cue["heard"]}']
-    lines += ['', '## Frame samples', '', *frame_lines, '', '## Whole-film transcript', '', (output / 'transcript.txt').read_text()]
+    lines += ['', '## Response timing', '', '[Speaker lanes, waveform and gap graph](dialogue-timing.png) · [Adjacent responses and measurements](dialogue-timing.md)',
+              '', '## Frame samples', '', *frame_lines, '', '## Whole-film transcript', '', (output / 'transcript.txt').read_text()]
     (output / 'review.md').write_text('\n'.join(lines) + '\n')
+    from interviews_film_timing import audit
+    audit(take)
     print(f'Review written to {output / "review.md"}', flush=True)
 
 

@@ -1,5 +1,7 @@
 # Milo rebuild, film 3: the board film with the name required (2026-11-20)
 
+> Superseded for demonstration use by [the coherent system-design revision](FILM-8-SYSTEM-DESIGN-REPORT.md). This historical report describes a voice-contract stress-test film, not the revised delivery.
+
 **Verdict: the turn contract holds; two of Milo's answers have the wrong words.** On the film take Milo answered every request made with his name or the hold, stayed silent on the three lines that only mentioned or quoted him, never started while a person was talking, and stopped when Hugo cut in. The words were wrong twice: the introduction is the coding round's ("I won't write your algorithm") in a board round, and the probe was the scripted stand-in's template, not a written question. The scorecard still has no recommendation from Milo. Every answer started 3.2 to 4.1 s after the speech ended.
 
 Setup: `scripts/demo/interviews-board-film.mjs --milo --handsfree --turn-owner --name-required --barge-on none`, its own stack on its own ports, Milo live on OpenAI (Decide `gpt-5.4-mini`), the human voices from earlier films plus five new lines (Qwen3-TTS, each checked with Whisper). The machine was on AC power (36%, charging). The film is take 2 (263.7 s, 0 cuts), kept as `film/FINAL-system-design.mp4` in the scratchpad; the phase-1 film is kept as `film/system-design-phase1.mp4`. Nothing is in the repository.

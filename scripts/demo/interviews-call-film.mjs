@@ -71,7 +71,7 @@ const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'interviews-film-compose.py')
 const FINAL = flag('--final') ?? path.join(OUT, 'interviews-call.mp4');
 const py = (...a) => new Promise((resolve) => spawn('python3', [COMPOSE, ...a], { stdio: 'inherit' }).on('exit', (c) => resolve(c ?? 1)));
 const reviewFilm = () => new Promise((resolve) => {
-  const child = spawn('uv', ['run', '--offline', '--no-project', '--python', '3.10', '--with', 'faster-whisper', 'python',
+  const child = spawn('uv', ['run', '--offline', '--no-project', '--python', '3.10', '--with', 'faster-whisper', '--with', 'matplotlib', 'python',
     path.join(ROOT, 'scripts/demo/interviews-film-review.py'), OUT], { stdio: 'inherit' });
   child.on('error', (error) => { console.error(`film: full-audio review could not start: ${error.message}`); resolve(1); });
   child.on('exit', (code) => resolve(code ?? 1));
@@ -81,11 +81,11 @@ if (args.includes('--compose-only')) {
   process.exit(composed || await reviewFilm());
 }
 
-// A take needs the machine awake for its whole length: one that slept on battery dropped both browsers and ended the call. Refuse to start
-// on battery, and hold the system, display and disk awake (caffeinate -dimsu) until this process exits.
+// Keep the machine awake for the entire take. Battery recording requires an explicit override;
+// caffeinate's display/idle assertions still apply on battery (its system assertion is AC-only).
 if (process.platform === 'darwin') {
   const power = execFileSync('pmset', ['-g', 'batt']).toString();
-  if (!/'AC Power'/.test(power)) { console.error(`film: refusing to start on battery (pmset: ${power.split('\n')[0]}); plug the machine in`); process.exit(2); }
+  if (!/'AC Power'/.test(power) && !args.includes('--allow-battery')) { console.error(`film: refusing to start on battery (pmset: ${power.split('\n')[0]}); plug the machine in or use --allow-battery for an attended take`); process.exit(2); }
   spawn('caffeinate', ['-dimsu', '-w', String(process.pid)], { stdio: 'ignore', detached: true }).unref();
 }
 
@@ -306,10 +306,13 @@ async function person(key, userId) {
 }
 /** Plays a line into its speaker's microphone; resolves when the clip ends. */
 const busy = { until: 0 };
-// v1.2: no pause over 0.6 s between two people's lines unless a screen action needs it (that action is awaited before say()).
+// Keep same-speaker narration moving; allow a response pause at speaker changes and after questions.
 const GAP_MAX_MS = 400;
 async function say(p, id, gapMs = 1800, { heard, now = false } = {}) {
-  const wait = now ? 0 : busy.until + Math.min(gapMs, GAP_MAX_MS) - Date.now();
+  const prior = timeline.speech.at(-1);
+  const who = p === lead ? 'hugo' : 'cand';
+  const responsePause = prior && prior.who !== who ? (/\?\s*$/.test(prior.text) ? 800 : 600) : 0;
+  const wait = now ? 0 : busy.until + Math.max(responsePause, Math.min(gapMs, GAP_MAX_MS)) - Date.now();
   if (wait > 0) await sleep(wait);
   const c = CLIPS[id] ?? (LINES[id] ? { who: LINES[id][0], text: LINES[id][1], file: null, durMs: 900 + 62 * LINES[id][1].length } : null);
   if (!c) throw new Error(`no line ${id}`);
@@ -321,6 +324,7 @@ async function say(p, id, gapMs = 1800, { heard, now = false } = {}) {
   console.log(`  [${timeline.film.fromMs ? ((atMs - timeline.film.fromMs) / 1000).toFixed(1) : '-'}] ${c.who}: ${c.text}`);
   if (!c.file) await sleep(c.durMs); // a rehearsal without this take: its estimated length
   else await p.page.evaluate((u) => window.__filmSay(u), `${PORTAL}/__film-audio/${id}.wav`);
+  if (Date.now() - atMs > c.durMs + 10_000) throw new Error(`Recording stalled during ${id}; discard this take instead of continuing after sleep`);
   busy.until = Date.now();
   if (heard !== false) await heardByScript(p, heard ?? c.text);
 }
@@ -753,7 +757,9 @@ try {
   // Every suggestion Hugo's footer shows, with when it first showed (the steps on the coach's timing read it).
   const decksSeen = [];
   const watchDeck = setInterval(() => {
-    void deckShown(hp).then((t) => { if (t && !decksSeen.some((d) => d.text === t)) decksSeen.push({ text: t, atMs: Date.now() }); }, () => undefined);
+    // Observe the waiting button without opening it. A monitor must never click the product.
+    void hp.getByTestId('interview-room-ask-open').getAttribute('aria-label', { timeout: 500 })
+      .then((t) => { if (t && !decksSeen.some((d) => d.text === t)) decksSeen.push({ text: t, atMs: Date.now() }); }, () => undefined);
   }, 700);
 
   // Act 2. Hello, and Milo says hello. Hugo invites Milo and turns its voice on while they say good morning; the caption comes
@@ -790,6 +796,18 @@ try {
   async function namedRound() {
     await miloReady;
     const s = {};
+    const resolveWaitingSuggestion = async (askPattern = null) => {
+      const button = hp.getByTestId('interview-room-ask-open');
+      if (!await button.isVisible() || await button.getAttribute('data-ask') !== 'suggestion') return;
+      const text = await button.getAttribute('aria-label') ?? '';
+      const option = askPattern?.test(text) ? 'ask' : 'skip';
+      if (!await deckOf(hp).isVisible()) await press(hp, button, { pause: 500 });
+      await press(hp, deckOf(hp).getByRole('button', { name: OPTION[option] }).first(), { pause: 400 });
+      report.suggestionDecisions ??= [];
+      report.suggestionDecisions.push({ atMs: Date.now(), text, option });
+      const closed = !!await until(async () => !(await deckOf(hp).isVisible()) || null, 5000, 200);
+      if (!closed) throw new Error('Answered suggestion is still open');
+    };
     // Milo handles tests and time; all reasoning and follow-up questions belong to the two people.
     await line('r_welcome', 400);
     await line('n02', 300);
@@ -827,14 +845,11 @@ try {
     const padReady = (async () => { await padTab(hp); await padTab(cp); return !!(await until(async () => ((await synced(hp)) && (await synced(cp))) || null, 20_000, 500)); })();
     // The coach's first suggestion is the chosen question: Hugo takes it as his own (I'll ask it), so its card is closed before the menu.
     const s1p = (async () => ((s1Early && await s1Early) || answerSuggestion(hp, /array of integers/i, 'ask', 8000)))();
-    await line('r_problem', 400);
     await line('r_language', 300);
+    await line('r_choose_python', 300);
     const sync = await padReady;
     await s1p;
-    const python = chooseLanguage(cp, 'Python').catch((e) => note(`language Python: ${String(e).slice(0, 100)}`));
-    await line('r_empty_question', 300);
-    await line('r_empty_agree', 300);
-    await python;
+    await chooseLanguage(cp, 'Python');
     for (let k = 0; k < 3; k += 1) {
       await press(hp, hp.getByTestId('interview-pad-insert'), { timeout: 8000 });
       if (await hp.getByRole('menuitem').first().waitFor({ timeout: 2500 }).then(() => true, () => false)) { await press(hp, hp.getByRole('menuitem').first(), { timeout: 5000 }); break; }
@@ -847,6 +862,22 @@ try {
     scene(4, 'Two Sum, in the candidate\'s language.', '');
     problemAt = Date.now();
     step('4 the question in the pad, Python', sync && starter && (await padLanguage(cp)) === 'python', `synced=${sync}; starter=${starter}; language ${await padLanguage(cp)}; candidate may ask Milo for the pad=${helpOn}`);
+    // Speech must follow the shared screen state, not merely precede an eventual insert.
+    const promptOnBoth = !!(await until(async () => {
+      for (const page of [hp, cp]) {
+        const text = await padText(page) ?? '';
+        if (!/Given an array of integers/i.test(text) || !text.includes('def two_sum(') || !await padOf(page).isVisible()) return null;
+      }
+      return true;
+    }, 10_000, 200));
+    step('4a prompt visible on both screens before problem dialogue', promptOnBoth, 'Both visible pads contain the question and Python starter before Hugo reads the problem');
+    if (!promptOnBoth) throw new Error('Cannot discuss the problem before its prompt and starter are visible on both screens');
+    await hp.screenshot({ path: path.join(OUT, 'prompt-before-dialogue-lead.png') });
+    await cp.screenshot({ path: path.join(OUT, 'prompt-before-dialogue-candidate.png') });
+    report.promptReadyAtMs = Date.now();
+    await line('r_problem', 400);
+    await line('r_empty_question', 300);
+    await line('r_empty_agree', 300);
     scene(5, 'Mateo explains and implements his approach.', '');
     const thinking = line('r_approach', 400);
     await nearEnd('r_approach', 2200);
@@ -899,6 +930,7 @@ try {
     solvedAt = Date.now();
     await line('r_result', 500);
     await line('r_why_duplicate', 300); await line('r_duplicate_reason', 300);
+    await resolveWaitingSuggestion(/complexity|time and space/i);
     await line('r_complexity_question', 300); await line('r_complexity', 300);
     await line('r_negative_question', 300); await line('r_negative', 300);
     const adding = line('r_manual', 300);
@@ -914,7 +946,11 @@ try {
     await line('r_rerun', 400);
     // No artificial elapsed-time sleep. The live clock answers honestly; they explicitly finish early after one last question.
     scene(8, 'A final question and a continuous wrap-up.', '');
-    await line('r_time_intro', 300);
+    await resolveWaitingSuggestion();
+    const deckClosed = !(await deckOf(hp).isVisible());
+    step('8a no unresolved suggestion left open at wrap-up', deckClosed, JSON.stringify(report.suggestionDecisions ?? []));
+    if (!deckClosed) throw new Error('Suggestion obscures the closing exchange');
+    // Mateo checks the clock before Hugo introduces the last question, so no question is left hanging.
     s.time = await askByVoice('time left (candidate, name last)', 'cand', 'n16', 'name last', /minute|end of its time/i, 20_000);
     step('9 Milo answers the actual time remaining', s.time.right, s.time.said);
     await line('r_finish_early', 300);

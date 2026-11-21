@@ -1,8 +1,16 @@
 # Film 7: one coherent coding interview
 
-20 November 2026. Branch `codex/milo-coding-film`, based on `7a201de17`.
+20 November 2026 (revised after owner review). Branch `codex/milo-coding-film`, based on `7a201de17`.
 
-Final take: **Film 7 take 4**, approximately **6:10**, with **26 product checks passed, zero failed, and no browser page errors**. Its complete Whisper transcript and key rendered frames were reviewed. All three competencies have four source quotes, both code runs pass, and the scorecard displays Advance. This report supersedes the old Film 5 acceptance claims; the rejected Film 6 remains preserved as evidence. The detailed diagnosis is in [CODING-FILM-RESTART.md](CODING-FILM-RESTART.md).
+Initial delivery: **Film 7 take 4**, approximately **6:10**, with **26 product checks passed, zero failed, and no browser page errors**. The owner correctly rejected its opening: the pad stayed blank while Hugo read the problem and they discussed empty input. The transcript review and sampled frames missed this timing defect. Its green checks were insufficient for acceptance. The detailed original diagnosis is in [CODING-FILM-RESTART.md](CODING-FILM-RESTART.md).
+
+The revised sequence retains the DSA/Claude Code exchange and the motivated Anthropic news link. They choose Python first; Hugo inserts the question and starter; both screens must visibly contain them before the problem audio can start. A missing prompt now aborts the take. The review also captures frames at the actual problem, empty-input, approach, and return-value dialogue cues rather than relying only on a 30-second sampling grid.
+
+The owner also identified the awkward closing turn: Hugo announced a final question, but Mateo asked Milo about time before Hugo could ask it. The revised sequence puts Mateo's clock check first, followed by Hugo's decision to finish early, his actual final question, and Mateo's answer. The premature announcement is removed.
+
+Final revised delivery: **Film 7 take 8**, **6:13**, **28 checks passed, zero failed**, no browser page errors. The full Whisper transcript, response graph, and cue-specific frames were reviewed. The earlier take 7 passed the product checks but prompted the extra response pauses.
+
+The lingering Milo card came from the recording monitor itself: it opened the suggestion every 700 ms. The monitor now reads the waiting button without clicking. Hugo explicitly accepts or skips a suggestion at a relevant boundary; the wrap-up verifies no card is left open.
 
 ## Product changes
 
@@ -41,7 +49,7 @@ Actor speech is prerecorded Qwen audio and the cameras are visibly fictional. Ge
 Run the review independently with:
 
 ```sh
-uv run --offline --no-project --python 3.10 --with faster-whisper python \
+uv run --offline --no-project --python 3.10 --with faster-whisper --with matplotlib python \
   scripts/demo/interviews-film-review.py /absolute/path/to/a/fresh/take
 ```
 
@@ -57,15 +65,20 @@ The automated output explicitly requires a full transcript read and visual inspe
 
 ## Final artifacts and review
 
-The local delivery is `~/Projects/milo-film-handoff/film7/t4/`:
+The revised delivery is `~/Projects/milo-film-handoff/film7/t8/`:
 
-- `interviews-call.mp4`: the final film, 369.9 seconds from 372.5 seconds recorded. Its only cut removes about 2.7 seconds while the invitation opens; no interview work or ending is spliced out.
-- `report.json`, `timeline.json`, `composition.json`, `milo-pad.py`, and `product-transcript.txt`: actual product state, executable-case snapshot, and edit provenance.
-- `qa/transcript.txt` and `qa/transcript.json`: uncorrected whole-film Whisper output, with word times and the film's SHA-256.
-- `qa/acceptance.md`, `qa/review.md`, and sampled PNG frames: the completed editorial/visual review. This is a transcript and frame review, not a claim of listening to every second manually.
+- `interviews-call.mp4`: 373.1 seconds from 376.5 seconds recorded. Its only cut removes 3.4 seconds while the invitation opens. No work or closing exchange is cut.
+- `report.json`, `timeline.json`, `composition.json`, `milo-pad.py`, and `product-transcript.txt`: checks, timing provenance, actual generated cases, and saved product transcript.
+- `qa/transcript.txt` and `.json`: whole-film Whisper output, preserved uncorrected.
+- `qa/dialogue-timing.html`: local video player with a clickable graph and adjacent-response table. PNG, SVG, JSON, and Markdown versions are alongside it. The local player was tested for seeking and for keeping the video visible after selecting a response.
+- `qa/acceptance.md`, `qa/review.md`, and PNG frames: the completed review, including the exact two-minute frame, final question, and expanded evidence.
 
-The three silences longer than five seconds correspond to confirmation and writing tests, entering notes/loading the recap, and visibly reading source quotes. There is no fabricated six-minute work interval. Whisper spelling differences for Claude Code, Two Sum, and the spoken number list are preserved in the raw output. “Same here” occurs once in the right exchange; the problem is introduced once; both successful runs receive a reaction; the ending and recommendation match the product.
+The prompt and Python starter are visible on both sides before the problem starts at about 1:42. The DSA/Claude Code exchange and motivated Anthropic news link remain. At the close, the time check finishes before Hugo introduces and asks his final question; Mateo answers directly. The suggestion card is closed, with a visible Skip receipt.
 
-All three expanded source quotes measured `white-space: normal` and fit their containers in the final call. The source review and recommendation are also visibly legible in the exported frames. The separate six rating-form audit findings above remain documented, not silently waived.
+The graph shows **no source-window voice overlaps**, a **0.74-second median human response gap**, and at least **0.601 seconds between consecutive human source clips when the speaker changes**. Whisper occasionally places adjacent word boundaries at the same timestamp; those approximate boundaries are not claims of overlapping speech. Milo's measured word-to-word response gaps are 3.74 and 2.48 seconds. Gaps over five seconds correspond to confirmation/test writing (7.12 s), notes/recap loading (5.70 s), and visibly reading evidence (12.90 s).
 
-The final film's SHA-256 is `c613e262d718c5be41a8370a7a3f24546c74f9027d6ab7a106404cb5dd161517`. Voice files and launch scripts are preserved in `film7/`, outside Claude's temporary scratchpad. The isolated middleware, portal, SFU, Redis, DynamoDB, and platform API used for recording have been stopped; ports 4182, 5282, and 3912 and the `ivsnappy-*` containers were checked clear. No production deployment was performed.
+Both real runs pass. The actual generated cases include `([], 0) -> []`, `([3, 3], 6) -> [0, 1]`, and `([1, 5, 1, 5], 10) -> [1, 3]`; the candidate adds negative-number and no-pair assertions. All three competencies have four source quotes and the recommendation is Advance. Both long quotes opened in this take wrap and fit; the remaining first quote is short. The exported frame confirms the long Communication quote is fully visible.
+
+Review means a full transcript/response-table read and key frame inspection, not a manual listen to every second. Raw ASR spelling errors remain visible in both transcripts; no evidence was silently rewritten. The six separate rating-form audit findings described above are still outside this repair.
+
+Film SHA-256: `f00850c5d3c103000161ce499217c63d14c71045a31d1398cd1935a6eab066ba`. Launch scripts and voice assets are retained outside the old scratchpad. The source revision and artifact hashes are in `delivery-manifest.json`. No production deployment was performed.
