@@ -86,9 +86,10 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
     reason: 'MicrovmRuntime/MicrovmExecutionRole is design §12 exactly: ecr:GetAuthorizationToken, xray:Put* and cloudwatch:PutMetricData '
       + '(namespace-conditioned) have no resource-level permission; logs are limited to log-group:/aws/bedrock-agentcore/runtimes/<prefix>_microvm*; '
       + 'the foundation-model ARNs carry a wildcard region because a cross-region inference profile routes to any region (same as the devbox). '
-      + 'test/microvm-stacks.test.ts pins the Sids and which of them may name *.',
+      + 'test/microvm-stacks.test.ts pins the Sids and which of them may name *. MicrovmWorkloadAccess: GetWorkloadAccessToken on the runtime\'s own '
+      + 'workload identity, workload-identity/<prefix>_microvm-* (named after the runtime id, which CloudFormation does not expose to Fn::GetAtt).',
     stacks: ['MicrovmRuntime'],
-    paths: ['MicrovmExecutionRole'],
+    paths: ['MicrovmExecutionRole', 'MicrovmWorkloadAccess'],
   },
   {
     id: 'AwsSolutions-IAM5',
@@ -116,6 +117,14 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
       + 'code-interpreter-custom/<prefix>_code_interpreter-*, GSI index/*, bucket objects /*, the canary score log group) and actions with no resource-level permission.',
     stacks: ['MiddlewareService'],
     paths: ['MiddlewareTaskRole', 'MiddlewareExecutionRole'],
+  },
+  {
+    id: 'AwsSolutions-IAM5',
+    reason: 'MiddlewareService feature policies (one managed policy per opt-in feature on the task role): the microVM runner\'s '
+      + 'secret:<prefix>/github-app* and secret:<prefix>/github-user/* (one secret per linked person), the runs bucket\'s runs/* objects and '
+      + 'ssm /<prefix>/microvm/*; the interviews résumé bucket\'s objects (/*).',
+    stacks: ['MiddlewareService'],
+    paths: ['*TaskPolicy'],
   },
   {
     id: 'AwsSolutions-IAM5',

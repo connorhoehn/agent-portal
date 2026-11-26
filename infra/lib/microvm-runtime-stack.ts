@@ -172,6 +172,9 @@ export class MicrovmRuntimeStack extends cdk.Stack {
       environmentVariables: {
         AGENT_NAME: 'devbox',
         ORGIQ_RUNNER: 'microvm',
+        // The lab broker's socket (agents/devbox/main.py). Not its default, /run/orgiq: /run is root's in the
+        // image and the runtime user cannot create a directory there. /tmp is where the workspace already lives.
+        LAB_BROKER_SOCKET: '/tmp/orgiq-lab/lab.sock',
         PROJECT_PREFIX: prefix,
         CLAUDE_CODE_USE_BEDROCK: '1',
         ANTHROPIC_MODEL: modelId,
@@ -188,15 +191,17 @@ export class MicrovmRuntimeStack extends cdk.Stack {
       },
     });
 
-    // The workload identity AgentCore creates for this runtime. A separate
-    // policy, not inline: the runtime needs the role first, the ARN needs the runtime.
-    const workloadIdentityArn = cdk.Fn.getAtt(runtime.logicalId, 'WorkloadIdentityDetails.WorkloadIdentityArn').toString();
+    // The workload identity AgentCore creates for this runtime, named after its
+    // id (`<runtimeName>-<suffix>`), and the directory it sits in. By pattern:
+    // CloudFormation does not expose WorkloadIdentityDetails.WorkloadIdentityArn
+    // to Fn::GetAtt, so the first real deploy failed on it.
+    const directory = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:workload-identity-directory/default`;
     new iam.Policy(this, 'MicrovmWorkloadAccess', {
       roles: [this.executionRole],
       statements: [new iam.PolicyStatement({
         sid: 'Workload',
         actions: ['bedrock-agentcore:GetWorkloadAccessToken'],
-        resources: [workloadIdentityArn],
+        resources: [directory, `${directory}/workload-identity/${runtimeName}-*`],
       })],
     });
 

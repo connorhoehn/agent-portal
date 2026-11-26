@@ -19,6 +19,8 @@ import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import { microvmLabApiBase } from './microvm-network-stack';
+import { SFU_PORTS, sfuParameterNames } from './social-media-stack';
+import { meetingAssistantParameterNames, meetingAssistantSinkSecretName } from './meeting-assistant-config';
 import { contextFlag } from './context-flags';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
@@ -137,6 +139,12 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly microvmRuntimeArn?: string;
   readonly microvmEndpointArn?: string;
   readonly microvmRunsBucketName?: string;
+  /**
+   * The interviews tenant's résumé bucket (OrgIQ-Foundation `-c interviews=true`), required with that flag:
+   * the task role gets object read, write and delete in it and the task INTERVIEWS_RESUME_BUCKET.
+   */
+  readonly interviewResumesBucketName?: string;
+  readonly interviewResumesBucketArn?: string;
   /**
    * The microVM runtime's deployed `maxLifetime` in seconds
    * (MicrovmRuntimeStack.maxLifetime, from the same `microvmTaskTimeoutSeconds`
@@ -297,6 +305,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
       assumedBy: trustedService(this, 'ecs-tasks.amazonaws.com'),
       description: `Runtime role for ${prefix}-middleware Fargate task`,
     });
+    // An opt-in feature's grants go in a managed policy of its own, attached to the task role. The role's
+    // default inline policy is near IAM's size limit; past it CDK spills statements into an overflow policy
+    // that it creates in an aspect, after nag's path suppressions were applied, so the synth fails
+    // (test/middleware-feature-policies.test.ts holds the role to no overflow with every feature on).
+    const featurePolicy = (id: string, statements: iam.PolicyStatement[]): iam.ManagedPolicy =>
+      new iam.ManagedPolicy(this, id, { roles: [taskRole], statements });
 
     // Secrets Manager — session signing key
     const signingSecret = secretsmanager.Secret.fromSecretCompleteArn(
@@ -1011,32 +1025,33 @@ export class MiddlewareServiceStack extends cdk.Stack {
       if (!/^\d+(\.\d+)?$/.test(rate)) {
         throw new Error(`--context microvmComputeUsdPerSecond must be a non-negative number, got ${rate}`);
       }
-      taskRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'MicrovmInvokeAndStop',
-        actions: ['bedrock-agentcore:InvokeAgentRuntime', 'bedrock-agentcore:StopRuntimeSession'],
-        resources: [props.microvmRuntimeArn, props.microvmEndpointArn],
-      }));
-      taskRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'MicrovmGithubSecrets',
-        actions: ['secretsmanager:GetSecretValue'],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-app*`,
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-user/*`,
-        ],
-      }));
-      taskRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'MicrovmRunObjects',
-        actions: ['s3:PutObject', 's3:GetObject'],
-        resources: [`arn:aws:s3:::${props.microvmRunsBucketName}/runs/*`],
-      }));
-      // The runtime's own parameters (OrgIQ-MicrovmRuntime): the dispatcher
-      // reads them at start-up when MICROVM_RUNTIME_ARN / MICROVM_RUNS_BUCKET
-      // are unset (lib/microvm-config.ts). Read-only, that path only.
-      taskRole.addToPolicy(new iam.PolicyStatement({
-        sid: 'MicrovmParameters',
-        actions: ['ssm:GetParameter'],
-        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/microvm/*`],
-      }));
+      // The dispatcher also reads the runtime's own parameters (OrgIQ-MicrovmRuntime) at start-up when
+      // MICROVM_RUNTIME_ARN / MICROVM_RUNS_BUCKET are unset (lib/microvm-config.ts): read-only, that path only.
+      featurePolicy('MicrovmTaskPolicy', [
+        new iam.PolicyStatement({
+          sid: 'MicrovmInvokeAndStop',
+          actions: ['bedrock-agentcore:InvokeAgentRuntime', 'bedrock-agentcore:StopRuntimeSession'],
+          resources: [props.microvmRuntimeArn, props.microvmEndpointArn],
+        }),
+        new iam.PolicyStatement({
+          sid: 'MicrovmGithubSecrets',
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [
+            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-app*`,
+            `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-user/*`,
+          ],
+        }),
+        new iam.PolicyStatement({
+          sid: 'MicrovmRunObjects',
+          actions: ['s3:PutObject', 's3:GetObject'],
+          resources: [`arn:aws:s3:::${props.microvmRunsBucketName}/runs/*`],
+        }),
+        new iam.PolicyStatement({
+          sid: 'MicrovmParameters',
+          actions: ['ssm:GetParameter'],
+          resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/microvm/*`],
+        }),
+      ]);
       microvmEnv = {
         MICROVM_RUNTIME_ARN: props.microvmRuntimeArn,
         MICROVM_RUNS_BUCKET: props.microvmRunsBucketName,
@@ -1293,12 +1308,17 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // operator creates by hand (`<prefix>/openai/api-key`). The stack imports
     // it by name: it never creates it, never holds the value, and the task
     // definition carries only the ARN. The task role may read that one secret.
-    if (contextFlag(this, 'voice', false)) {
+    // The meeting assistant's OpenAI provider (below) reads the same secret.
+    const useOpenAiKey = (): void => {
+      if (containerSecrets['OPENAI_API_KEY']) return;
       const openaiKeyRef = secretsmanager.Secret.fromSecretNameV2(
         this, 'OpenAiApiKeyRef', `${prefix}/openai/api-key`,
       );
       openaiKeyRef.grantRead(taskRole);
       containerSecrets['OPENAI_API_KEY'] = ecs.Secret.fromSecretsManager(openaiKeyRef);
+    };
+    if (contextFlag(this, 'voice', false)) {
+      useOpenAiKey();
       const voiceCtx = (k: string, d: string): string => {
         const v = this.node.tryGetContext(k);
         return v === undefined || v === null || v === '' ? d : String(v);
@@ -1310,6 +1330,102 @@ export class MiddlewareServiceStack extends cdk.Stack {
         VOICE_LIVE_MODEL: voiceCtx('voiceModel', 'gpt-live-1'),
         ...(this.node.tryGetContext('voiceVoice') ? { VOICE_VOICE: String(this.node.tryGetContext('voiceVoice')) } : {}),
       });
+    }
+
+    // ── Interviews tenant (docs/interviews-tenant-plan.md), `-c interviews=true` ──
+    // The tenant's server flag, the private résumé bucket (OrgIQ-Foundation), and the candidate's realtime
+    // token. The tables (schema/interviews_schema.sql) come from the deploy's schema migration; run
+    // `schema/apply_all_seed.py --roles-only` after it so this task's login can reach them.
+    const interviews = contextFlag(this, 'interviews', false);
+    const meetingAssistant = contextFlag(this, 'meetingAssistant', false);
+    const featureWarn = (m: string) => cdk.Annotations.of(this).addWarningV2('orgiq:feature-wiring', m);
+    if (interviews) {
+      if (!props.interviewResumesBucketName || !props.interviewResumesBucketArn) {
+        throw new Error('-c interviews=true needs interviewResumesBucketName and interviewResumesBucketArn (OrgIQ-Foundation with the same flag)');
+      }
+      featurePolicy('InterviewsTaskPolicy', [
+        new iam.PolicyStatement({
+          sid: 'InterviewResumeObjects',
+          actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+          resources: [`${props.interviewResumesBucketArn}/*`],
+        }),
+        // A candidate's Run (lib/interviews/runs/agentcore-executor.ts): one session per run on AWS's built-in
+        // interpreter. Not a custom one: a custom interpreter serves its execution role's credentials on the
+        // sandbox's metadata endpoint, and a candidate's stdout comes back to the candidate (found live,
+        // 2026-11-17). The built-in has no execution role, so there is nothing to serve.
+        new iam.PolicyStatement({
+          sid: 'InterviewRunSessions',
+          actions: [
+            'bedrock-agentcore:StartCodeInterpreterSession',
+            'bedrock-agentcore:InvokeCodeInterpreter',
+            'bedrock-agentcore:StopCodeInterpreterSession',
+          ],
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:aws:code-interpreter/${INTERVIEWS_CODE_INTERPRETER}`],
+        }),
+      ]);
+      // A candidate joins the call on this task's gateway with a guest realtime token. It needs the gateway,
+      // and platform-api and the social gateway at the commits that refuse a guest outside its own interview
+      // (scripts/docker/document-workspace-sources.json socialSources).
+      const guestRealtime = contextFlag(this, 'interviewsGuestRealtime', realtime.enabled);
+      if (guestRealtime && !realtime.enabled) {
+        throw new Error('-c interviewsGuestRealtime=true needs realtimeGateway=true: the candidate joins on this task\'s gateway');
+      }
+      if (!guestRealtime) featureWarn('interviews=true without the realtime gateway: a candidate cannot join the call (INTERVIEWS_GUEST_REALTIME off).');
+      if (!meetingAssistant) featureWarn('interviews=true without meetingAssistant=true: Milo cannot be invited into an interview.');
+      Object.assign(environment, {
+        INTERVIEWS_ENABLED: 'true',
+        INTERVIEWS_RESUME_BUCKET: props.interviewResumesBucketName,
+        INTERVIEWS_GUEST_REALTIME: String(guestRealtime),
+        INTERVIEWS_CODE_INTERPRETER_ID: INTERVIEWS_CODE_INTERPRETER,
+        ...interviewsSettingsEnv(this.node.tryGetContext('interviewsSettings')),
+      });
+    }
+
+    // ── Meeting assistant, Milo (docs/meeting-assistant-design.md), `-c meetingAssistant=true` ──
+    // Listening needs three things besides the flag: the OpenAI key, the media server's admin API (to arm
+    // one audio tap per participant) and an address the media server posts audio to. The media server is
+    // OrgIQ-SocialMedia; it gets the sink secret below as its LIVE_CAPTIONS_SHARED_SECRET and sends it on
+    // every audio post, so a token read back from a tap listing is not enough on its own (audit B4).
+    if (meetingAssistant) {
+      const sinkSecret = new secretsmanager.Secret(this, 'MeetingAssistantSinkSecret', {
+        secretName: meetingAssistantSinkSecretName(prefix),
+        description: 'Milo audio sink: MEETING_ASSISTANT_SINK_SECRET here, LIVE_CAPTIONS_SHARED_SECRET on the SFU',
+        generateSecretString: { passwordLength: 48, excludePunctuation: true },
+      });
+      new ssm.StringParameter(this, 'MeetingAssistantSinkSecretArnParameter', {
+        parameterName: meetingAssistantParameterNames(prefix).sinkSecretArn,
+        stringValue: sinkSecret.secretArn,
+        description: 'Complete ARN of the Milo sink secret; OrgIQ-SocialMedia reads it by name',
+      });
+      containerSecrets['MEETING_ASSISTANT_SINK_SECRET'] = ecs.Secret.fromSecretsManager(sinkSecret);
+      environment['MEETING_ASSISTANT_ENABLED'] = 'true';
+
+      // The live session is OpenAI's (lib/meeting-assistant/live-session.ts): its transcription layer, and a background
+      // session with the tool catalogue whose calls come back as actions the asker's browser runs. Same key as `voice`.
+      useOpenAiKey();
+
+      // Where the media server posts audio: the portal's public URL (CloudFront, the one path the ALB
+      // admits), or -c meetingAssistantSinkBaseUrl=https://… The SFU's LIVE_CAPTIONS_ORIGIN is the same origin.
+      const sinkBase = ctxStr('meetingAssistantSinkBaseUrl');
+      if (sinkBase) {
+        environment['MEETING_ASSISTANT_SINK_BASE_URL'] = sinkBase.replace(/\/+$/, '');
+      } else if (portalUrls) {
+        containerSecrets['MEETING_ASSISTANT_SINK_BASE_URL'] = portalSecret(portalParams.url, 'MeetingAssistantSinkBaseParameter');
+      } else {
+        featureWarn('meetingAssistant=true without portalPublicUrls or meetingAssistantSinkBaseUrl: the media server has nowhere to send audio, so an invite answers "Milo isn\'t set up here".');
+      }
+      // The media server's admin API, in this VPC, once OrgIQ-SocialMedia has written its parameters
+      // (deploy.sh infers sfuLive from them); OrgIQ-SocialMedia admits this task's security group on it.
+      if (ctxOn('sfuLive')) {
+        const sfuParams = sfuParameterNames(prefix);
+        const sfuIp = ssm.StringParameter.valueForStringParameter(this, sfuParams.privateIp);
+        environment['MEETING_ASSISTANT_MEDIA_URL'] = `http://${sfuIp}:${SFU_PORTS.api}`;
+        const adminToken = secretsmanager.Secret.fromSecretCompleteArn(this, 'SfuAdminTokenRef',
+          ssm.StringParameter.valueForStringParameter(this, sfuParams.secretArns.adminToken));
+        containerSecrets['MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN'] = ecs.Secret.fromSecretsManager(adminToken);
+      } else {
+        featureWarn('meetingAssistant=true without sfuLive=true: no media server yet, so Milo cannot listen until a middleware deploy after OrgIQ-SocialMedia (deploy.sh infers sfuLive).');
+      }
     }
 
     // ── Task size and the one-task rule ────────────────────────────────────
@@ -1788,4 +1904,29 @@ export class MiddlewareServiceStack extends cdk.Stack {
       exportName: `${prefix}-middleware-service-name`,
     });
   }
+}
+
+/** AWS's built-in code interpreter, which candidate code runs on (see InterviewRunSessions). */
+export const INTERVIEWS_CODE_INTERPRETER = 'aws.codeinterpreter.v1';
+
+/**
+ * `-c interviewsSettings='{"INTERVIEWS_INTERVIEW_CAP_USD":"6"}'`: the tenant's optional settings
+ * (middleware lib/interviews/settings.ts lists each one). Only INTERVIEWS_* names, string values, and never
+ * the ones this stack owns.
+ */
+export function interviewsSettingsEnv(raw: unknown): Record<string, string> {
+  if (raw === undefined || raw === null || raw === '') return {};
+  let parsed: unknown = raw;
+  if (typeof raw === 'string') {
+    try { parsed = JSON.parse(raw); } catch { throw new Error('--context interviewsSettings must be a JSON object'); }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('--context interviewsSettings must be a JSON object');
+  const owned = new Set(['INTERVIEWS_ENABLED', 'INTERVIEWS_RESUME_BUCKET', 'INTERVIEWS_GUEST_REALTIME', 'INTERVIEWS_CODE_INTERPRETER_ID', 'INTERVIEWS_RUN_BACKEND']);
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!/^INTERVIEWS_[A-Z0-9_]+$/.test(k) || owned.has(k)) throw new Error(`--context interviewsSettings: ${k} is not a settable interviews setting`);
+    if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'boolean') throw new Error(`--context interviewsSettings: ${k} must be a string, number or boolean`);
+    out[k] = String(v);
+  }
+  return out;
 }

@@ -28,7 +28,7 @@ import {
   DEFAULT_RUN_LIMITS, RUN_LANGUAGES, isTerminal, serviceResult,
   type Executor, type ExecutorOutput, type ExecutorRun, type RunLanguage, type RunLimits, type RunResult, type RunStatus, type RunStream,
 } from './executor.js';
-import { createRunExecutor } from './backend.js';
+import { createExecutor } from './select.js';
 import { runStore, type RunPerson, type RunRecord, type RunStore, type StoredRunEvent } from './store.js';
 import {
   releaseInterviewSpend, reserveInterviewSpend, settleInterviewSpend,
@@ -149,8 +149,9 @@ export interface RunDeps {
 let defaultExecutor: Executor | null = null;
 const DEFAULTS: RunDeps = {
   store: runStore,
-  // The mock, unless INTERVIEWS_RUN_BACKEND=docker picks the Docker runner on a developer's machine (backend.ts).
-  executor: () => (defaultExecutor ??= createRunExecutor()),
+  // select.ts: the mock in the mock world, the Docker runner when a developer asks for it, the AgentCore Code
+  // Interpreter on a cluster that names one, else none.
+  executor: () => (defaultExecutor ??= createExecutor()),
   reserve: reserveInterviewSpend,
   settle: settleInterviewSpend,
   release: releaseInterviewSpend,

@@ -1,6 +1,6 @@
 // The Docker runner (docs/interviews-tenant-plan.md "I4.6 answer", "The Docker runner on a developer's machine"): a
 // real backend for a developer's machine, behind the same `Executor` as the mock. Chosen only by
-// `INTERVIEWS_RUN_BACKEND=docker` (backend.ts); the default stays the mock, and the deployed path is not this.
+// `INTERVIEWS_RUN_BACKEND=docker` (select.ts); the default stays the mock, and the deployed path is not this.
 //
 // One fresh container per run, made by docker-process.ts with no network, a read-only root, no capabilities, no new
 // privileges, an unprivileged user, process, memory and CPU limits, and `--rm`. The files and the input go in as a tar

@@ -9,6 +9,8 @@ import * as ssm from 'aws-cdk-lib/aws-ssm';
 import type { Construct } from 'constructs';
 import { socialRepoName } from './social-images-stack';
 import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopic } from './realtime-alarms';
+import { meetingAssistantParameterNames } from './meeting-assistant-config';
+import { portalParameterNames } from './portal-stack';
 
 export interface SfuPortPlan {
   readonly api: number;
@@ -120,6 +122,11 @@ export interface SocialMediaStackProps extends cdk.StackProps {
    * it when set.
    */
   readonly cognitoUserPoolId?: string;
+  /**
+   * The middleware task's security group. With `-c meetingAssistant=true` it is admitted on the SFU API
+   * port, where the middleware arms Milo's per-participant audio taps.
+   */
+  readonly middlewareSecurityGroupId?: string;
 }
 
 /**
@@ -375,6 +382,28 @@ export class SocialMediaStack extends cdk.Stack {
       ...(maxTransports ? [['MAX_TRANSPORTS_PER_POD', String(maxTransports)]] as Array<[string, string]> : []),
       ...(admission ? [['ADMISSION_GATE_CAPACITY', String(admission)]] as Array<[string, string]> : []),
     ];
+    // Milo's audio (`-c meetingAssistant=true`, docs/meeting-assistant-design.md): the middleware creates
+    // taps on this API with the admin token, each pointing at its sink; the SFU signs every audio post with
+    // LIVE_CAPTIONS_SHARED_SECRET when the tap's origin is LIVE_CAPTIONS_ORIGIN. Both come from the
+    // middleware's side: the sink secret it created (by its SSM parameter) and the portal URL it posts through
+    // (OrgIQ-Portal's parameter, which is why app.ts puts this stack after the portal), or
+    // -c meetingAssistantSinkBaseUrl when the sink is somewhere else.
+    const sfuMiloLines: string[] = [];
+    if (flag('meetingAssistant')) {
+      if (!props.middlewareSecurityGroupId) throw new Error('meetingAssistant=true needs middlewareSecurityGroupId');
+      this.securityGroup.addIngressRule(ec2.Peer.securityGroupId(props.middlewareSecurityGroupId),
+        ec2.Port.tcp(ports.api), 'Middleware to SFU API (Milo audio taps)');
+      const sinkBase = this.node.tryGetContext('meetingAssistantSinkBaseUrl') as string | undefined;
+      const origin = sinkBase
+        ? new URL(sinkBase).origin
+        : ssm.StringParameter.valueForStringParameter(this, portalParameterNames(prefix).url);
+      env.push(['LIVE_CAPTIONS_ORIGIN', origin]);
+      const sinkSecretArn = ssm.StringParameter.valueForStringParameter(this, meetingAssistantParameterNames(prefix).sinkSecretArn);
+      secretsmanager.Secret.fromSecretCompleteArn(this, 'MeetingAssistantSinkSecretRef', sinkSecretArn).grantRead(role);
+      sfuMiloLines.push(
+        `LIVE_CAPTIONS_SHARED_SECRET=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${sinkSecretArn} --query SecretString --output text)`,
+      );
+    }
     const registry = `${this.account}.dkr.ecr.${this.region}.amazonaws.com`;
 
     // ── TURN relay (opt-in: deployTurn=true; capacity review ranked change #6)
@@ -445,6 +474,7 @@ export class SocialMediaStack extends cdk.Stack {
       `WEBHOOK_HMAC_SECRET=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${this.webhookSecret.secretArn} --query SecretString --output text)`,
       `LVS_SERVICE_TOKEN=$(aws secretsmanager get-secret-value --region ${this.region} --secret-id ${this.serviceTokenSecret.secretArn} --query SecretString --output text)`,
       ...sfuTurnLines,
+      ...sfuMiloLines,
       'umask 077',
       '{',
       ...env.map(([k, v]) => `  echo "${k}=${v}"`),
@@ -454,6 +484,7 @@ export class SocialMediaStack extends cdk.Stack {
       '  echo "WEBHOOK_HMAC_SECRET=$WEBHOOK_HMAC_SECRET"',
       '  echo "LVS_SERVICE_TOKEN=$LVS_SERVICE_TOKEN"',
       ...(turn ? ['  echo "LVS_TURN_STATIC_SECRET=$LVS_TURN_STATIC_SECRET"'] : []),
+      ...(sfuMiloLines.length ? ['  echo "LIVE_CAPTIONS_SHARED_SECRET=$LIVE_CAPTIONS_SHARED_SECRET"'] : []),
       '} > /run/lvs-sfu.env',
       'docker rm -f lvs-sfu >/dev/null 2>&1 || true',
       `exec docker run --name lvs-sfu --network host --ulimit nofile=65536:65536 --env-file /run/lvs-sfu.env ${imageRef}`,

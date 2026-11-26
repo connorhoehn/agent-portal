@@ -493,6 +493,31 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     live_read RT_GW ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
       --query "taskDefinition.containerDefinitions[0].environment[?name=='REALTIME_GATEWAY'].value | [0]" --output text
     [[ "$RT_GW" == "on" ]] && infer realtimeGateway true
+    # The opt-in features the task carries, so a deploy that does not name them keeps them (the interviews
+    # flag also holds OrgIQ-Foundation's résumé bucket, whose exports the middleware imports).
+    taskdef_env() {  # taskdef_env <var> <ENV_NAME>
+      live_read "$1" ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
+        --query "taskDefinition.containerDefinitions[0].environment[?name=='$2'].value | [0]" --output text
+    }
+    taskdef_env MW_VOICE VOICE_LIVE_MODEL
+    [[ -n "$MW_VOICE" && "$MW_VOICE" != "None" ]] && infer voice true
+    taskdef_env MW_INTERVIEWS INTERVIEWS_ENABLED
+    if [[ "$MW_INTERVIEWS" == "true" ]]; then
+      infer interviews true
+      taskdef_env MW_IV_GUEST INTERVIEWS_GUEST_REALTIME
+      [[ "$MW_IV_GUEST" == "true" || "$MW_IV_GUEST" == "false" ]] && infer interviewsGuestRealtime "$MW_IV_GUEST"
+      # Any optional INTERVIEWS_* setting it was given (-c interviewsSettings), as the same JSON.
+      live_read MW_IV_ENV ecs describe-task-definition --task-definition "$MW_TASKDEF" --region "$REGION" \
+        --query "taskDefinition.containerDefinitions[0].environment[?starts_with(name, 'INTERVIEWS_')]" --output json
+      MW_IV_SETTINGS=$(printf '%s' "${MW_IV_ENV:-[]}" | python3 -c '
+import json, sys
+owned = {"INTERVIEWS_ENABLED", "INTERVIEWS_RESUME_BUCKET", "INTERVIEWS_GUEST_REALTIME"}
+rows = [r for r in json.load(sys.stdin) or [] if r["name"] not in owned]
+print(json.dumps({r["name"]: r["value"] for r in rows}, separators=(",", ":")) if rows else "")')
+      [[ -n "$MW_IV_SETTINGS" ]] && infer interviewsSettings "$MW_IV_SETTINGS"
+    fi
+    taskdef_env MW_MILO MEETING_ASSISTANT_ENABLED
+    [[ "$MW_MILO" == "true" ]] && infer meetingAssistant true
   fi
 
   # The opt-in Social stacks. Each consumes the middleware's exports, so a
@@ -513,7 +538,13 @@ if [[ "${DEPLOY_INFER_CONTEXT:-true}" == "true" ]]; then
     [[ "$SFU_AMI" == ami-* ]] && infer sfuAmiId "$SFU_AMI"
     stack_output SFU_CIDRS ${STACK_PREFIX}SocialMedia SfuAllowedCidrs
     [[ "$SFU_CIDRS" =~ ^[0-9] ]] && infer sfuAllowCidr "$SFU_CIDRS"
+    # The middleware resolves the SFU's address and admin token from these parameters (Milo's audio taps).
+    live_read SFU_IP_PARAM ssm get-parameter --name "/${PREFIX}/social/sfu-private-ip" --region "$REGION" \
+      --query 'Parameter.Value' --output text
+    [[ "$SFU_IP_PARAM" =~ ^[0-9] ]] && infer sfuLive true
   fi
+  # The microVM runner's two stacks (-c microvm=true); the middleware imports the runtime's exports.
+  stack_live ${STACK_PREFIX}MicrovmRuntime && infer microvm true
   # TURN (opt-in on OrgIQ-SocialMedia): its relay and allowlist must be
   # re-supplied or the next deploy deletes the relay (DE-23).
   if stack_live ${STACK_PREFIX}SocialMedia; then

@@ -555,6 +555,12 @@ const middlewareService = new MiddlewareServiceStack(app, stackId(environment, '
     microvmMaxLifetimeSeconds: microvmRuntime.maxLifetime,
   }),
 
+  // The interviews tenant (-c interviews=true): its résumé bucket in OrgIQ-Foundation.
+  ...(foundation.interviewResumesBucket && {
+    interviewResumesBucketName: cdk.Fn.importValue(`${prefix}-interview-resumes-bucket-name`),
+    interviewResumesBucketArn: cdk.Fn.importValue(`${prefix}-interview-resumes-bucket-arn`),
+  }),
+
   description: 'OrgIQ Middleware Service: ECS Fargate + ALB for the Express middleware API',
 });
 middlewareService.addDependency(foundation);
@@ -608,6 +614,8 @@ const socialMedia = deploySocialMedia
     prefix,
     vpc: middlewareService.vpc,
     cognitoUserPoolId: authentication.userPoolId,
+    // Milo's audio taps (-c meetingAssistant=true): the middleware arms them on the SFU API.
+    middlewareSecurityGroupId: middlewareService.serviceSecurityGroupId,
     description: 'OrgIQ Social media: the mediasoup SFU on EC2 with an Elastic IP (allowlisted ingress)',
   })
   : undefined;
@@ -674,6 +682,9 @@ if (ctxFlag('deployPortal')) {
     description: 'OrgIQ Portal: S3 + CloudFront for the portal, HTTPS in front of the middleware, platform-api and SFU signalling',
   });
   portal.addDependency(middlewareService);
+  // The SFU's LIVE_CAPTIONS_ORIGIN for Milo's audio is the portal URL, read from OrgIQ-Portal's parameter
+  // at deploy time, so the portal goes first.
+  if (socialMedia && ctxFlag('meetingAssistant')) socialMedia.addDependency(portal);
 }
 
 // cdk-nag AwsSolutions over every stack, with the reviewed suppressions in

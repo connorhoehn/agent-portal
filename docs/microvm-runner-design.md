@@ -265,6 +265,26 @@ The runner was built in three lanes. Nothing has run against AWS: every lane is 
   - The run-token and envelope path from the broker through `lab.<prefix>.internal` to `/api/runs/:ref/skills` and `/brief`.
   - The new SQL statements against a real PostgreSQL. They have only been checked with stubbed `exec`, including the `to_jsonb(agent_jobs)` runner guard, which works on clusters without the column.
 
+### First deploy (2026-11-17, 647757222309)
+
+OrgIQ-MicrovmNetwork, OrgIQ-Devbox and OrgIQ-MicrovmRuntime were deployed from `infra-interviews-milo-cloud`. A `boot` was invoked directly on the runtime's `DEFAULT` endpoint, with `octocat/Hello-World` and a lab API pointed at `example.com`. It cloned through Network Firewall, started the broker, and refused `skills-unavailable` (HTTP 502). The VPC's query log showed `github.com` allowed and `example.com` answered NXDOMAIN by DNS Firewall. That is the egress allowlist working from inside a session. A cold session took about 9.6 s to the response.
+
+Answered:
+
+- AgentCore creates the session interfaces itself (`agentic_ai`, in both runtime subnets). The execution role needs no EC2 statements.
+- The runtime would not start until the VPC held ECR, Logs and S3 (see `infra/SECURITY-NOTES.md`, "What the runtime needs to start").
+
+Fixed:
+
+- The workload grant used an attribute CloudFormation does not expose.
+- The broker's default socket directory, `/run/orgiq`, cannot be created by the runtime user, so `LAB_BROKER_SOCKET` is now `/tmp/orgiq-lab/lab.sock`.
+
+Note: the named endpoint `<prefix>_microvm_endpoint` stays on runtime version 1 because nothing moves it. Everything invokes `DEFAULT`, which follows the latest version, so do not probe through the named endpoint. The devbox and agent stacks' named endpoints behave the same way.
+
+Teardown: deleting OrgIQ-MicrovmRuntime does not free the runtime subnets right away. AgentCore keeps its two `agentic_ai` interfaces attached for at least 90 minutes after the runtime is gone. They are owned by the service, so they cannot be detached or deleted, and OrgIQ-MicrovmNetwork stops in `DELETE_FAILED` on the runtime security group and subnets. Once the Network Firewall, NAT gateway and endpoints are deleted, nothing left bills. Retry `delete-stack` after the interfaces are gone. `destroy.sh` does not wait for this.
+
+Not yet run: `task`, `push` and `debrief`, which need the BFF reachable as `lab.<prefix>.internal`; the ACM certificate; and the ALB route from the runner VPC.
+
 ### Gaps against what the other lanes ship
 
 - **No `cloning` status.** `boot` does the clone inside one op and reports nothing in between, so the dispatcher never writes `cloning`.

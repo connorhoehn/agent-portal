@@ -11,7 +11,7 @@ import { DEFAULT_RUN_LIMITS, RUN_LANGUAGES, type ExecutorOutput, type RunLanguag
 import { checkSpec, createDockerProcesses, dockerRunArgs, type ContainerSpec, type DockerChild, type SpawnImpl } from '../docker-process.js';
 import { DOCKER_IMAGES, DOCKER_RUNTIMES } from '../docker-runtimes.js';
 import { createDockerExecutor, DOCKER_BACKEND, DOCKER_SENTENCES, runTar } from '../docker-executor.js';
-import { createRunExecutor, runBackendChoice } from '../backend.js';
+import { createExecutor, runBackend } from '../select.js';
 import { MockExecutor } from '../mock-executor.js';
 import { COMPILE_ALLOWANCE_MS } from '../service.js';
 
@@ -417,15 +417,13 @@ describe('the Docker runner: when Docker is not there', () => {
 });
 
 describe('choosing the backend', () => {
-  it('the mock unless INTERVIEWS_RUN_BACKEND=docker, and never the Docker runner in production', () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    expect(runBackendChoice({})).toBe('mock');
-    expect(runBackendChoice({ INTERVIEWS_RUN_BACKEND: 'agentcore' })).toBe('mock');
-    expect(runBackendChoice({ INTERVIEWS_RUN_BACKEND: 'docker' })).toBe('docker');
-    expect(runBackendChoice({ INTERVIEWS_RUN_BACKEND: ' Docker ' })).toBe('docker');
-    expect(runBackendChoice({ INTERVIEWS_RUN_BACKEND: 'docker', NODE_ENV: 'production' })).toBe('mock');
-    expect(createRunExecutor({})).toBeInstanceOf(MockExecutor);
-    expect(createRunExecutor({ INTERVIEWS_RUN_BACKEND: 'docker' }).backend).toBe(DOCKER_BACKEND);
-    warn.mockRestore();
+  it('the Docker runner only when INTERVIEWS_RUN_BACKEND=docker asks for it, and never in production', () => {
+    expect(runBackend({}, true)).toBe('mock');
+    expect(runBackend({ INTERVIEWS_RUN_BACKEND: 'docker' }, true)).toBe('docker');
+    expect(runBackend({ INTERVIEWS_RUN_BACKEND: ' Docker ' }, false)).toBe('docker');
+    // A production process refuses it outright: it never gets the Docker runner, and never the mock in its place.
+    expect(() => runBackend({ INTERVIEWS_RUN_BACKEND: 'docker', NODE_ENV: 'production' }, false)).toThrow(/developer's machine/);
+    expect(createExecutor({ INTERVIEWS_RUN_BACKEND: 'mock' })).toBeInstanceOf(MockExecutor);
+    expect(createExecutor({ INTERVIEWS_RUN_BACKEND: 'docker' }).backend).toBe(DOCKER_BACKEND);
   });
 });

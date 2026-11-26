@@ -64,8 +64,10 @@ export function statementsForRole(template: Template, roleName: string): Stateme
   for (const doc of (role.Properties?.Policies ?? []) as any[]) {
     statements.push(...(doc?.PolicyDocument?.Statement ?? []));
   }
-  // addToPolicy() → a separate AWS::IAM::Policy referencing the role
-  for (const policy of Object.values<any>(template.findResources('AWS::IAM::Policy'))) {
+  // addToPolicy() → a separate AWS::IAM::Policy referencing the role; a feature's own
+  // AWS::IAM::ManagedPolicy (and CDK's overflow policies) attach the same way.
+  for (const policy of [...Object.values<any>(template.findResources('AWS::IAM::Policy')),
+    ...Object.values<any>(template.findResources('AWS::IAM::ManagedPolicy'))]) {
     const attached = (policy.Properties?.Roles ?? []) as any[];
     const targetsRole = attached.some((r) => r?.Ref === logicalId);
     if (targetsRole) statements.push(...(policy.Properties?.PolicyDocument?.Statement ?? []));

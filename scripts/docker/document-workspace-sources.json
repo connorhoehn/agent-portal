@@ -10,9 +10,9 @@
     "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "907991255b1426f3051d943dda853dc42313609b" }
   },
   "socialSources": {
-    "_comment": "The OrgIQ-SocialImages builds (scripts/docker/social-images-build.mjs). Kept apart from `sources` so the document-workspace build neither archives nor rebuilds them; the commits are the clean sibling HEADs on 2026-09-29, the trees the compose `social` profile builds from. Move a pin by editing the full 40-char sha.",
-    "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "423c91fd4cbe2f542111de43955dc36ca008867a" },
-    "platform-api": { "url": "git@github.com:connorhoehn/platform-api.git", "commit": "1f0d3f279fbc4d9d9ff7420659b627a944615aac" },
-    "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "b039d20958b3d54291da66ad56f22b9ca6350eed" }
+    "_comment": "The OrgIQ-SocialImages builds (scripts/docker/social-images-build.mjs). Kept apart from `sources` so the document-workspace build neither archives nor rebuilds them; the commits are the sibling main HEADs on 2026-11-17: platform-api with the interview guest refusal and panel-only recordings, realtime-examples with the gateway that seats no interview guest, live-video-streaming with the signed audio taps Milo needs (5d050af). Move a pin by editing the full 40-char sha.",
+    "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "3db0a544eb7c4bb3747079e0faddabf984f93860" },
+    "platform-api": { "url": "git@github.com:connorhoehn/platform-api.git", "commit": "e02931306783cbf9ca7ae99828b8d72d5dc1a33e" },
+    "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "67c976b8edbdf3d33df20410cfb00efc48195d1d" }
   }
 }

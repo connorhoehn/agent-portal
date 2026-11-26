@@ -568,6 +568,26 @@ Built 17 November 2026 on the owner's decision ("locally you can use anything (D
 
 **Rows a build would add.** **I4.7** the AgentCore Code Interpreter executor for Python, JavaScript and TypeScript (M). **I4.8** the language images and the run server, pinned by digest (L). **I4.9** the container runner executor on AgentCore Runtime in VPC mode (M). **I4.10** the hostile-program runs against both real backends, by hand, written here (S).
 
+### I4.7 built; the interpreter half of I4.10 (2026-11-17)
+
+`middleware/src/lib/interviews/runs/agentcore-executor.ts` runs Python 3.12, JavaScript (Node.js 24) and TypeScript (tsx on Node.js 24) on AgentCore Code Interpreter, one session per run, and answers the compiled languages with `internal_error` and a plain message. `select.ts` picks it when `INTERVIEWS_CODE_INTERPRETER_ID` is set. A cluster without one answers "Running code is not set up in this deployment." and never falls back to the mock. With `-c interviews=true` the middleware gets `INTERVIEWS_CODE_INTERPRETER_ID=aws.codeinterpreter.v1`, AWS's built-in interpreter, and may start, invoke and stop sessions on it only. `interviewsSettings` cannot set the backend or the id.
+
+Run against the real service in 647757222309 (us-east-1), on the built-in `aws.codeinterpreter.v1` (`INTERVIEWS_CI_LIVE=1 npx jest src/lib/interviews/runs/`): the whole contract passes for all three languages, with every status, truncation, a repeated `runId`, the queue, cancel and the 61st run. These hostile cases also pass:
+
+- A fork bomb ends within the wall time, and the next run is unaffected. `ulimit -u` is 256: tsx's esbuild cannot start under 64.
+- DNS, a socket to 1.1.1.1 and metadata credentials are all closed.
+- A file written in one run is gone in the next.
+- An output flood is cut.
+
+Found on the way: V8 aborts on a full heap, but the process then wrote a core file until the wall time, so the run read `timed_out`. The wrapper now sets `ulimit -c 0`, and the out-of-memory message is checked before the exit code.
+
+Why the built-in and not a tenant interpreter: a custom `orgiq_interview_runs` (SANDBOX, an execution role with no permissions) was deployed and run through the same cases. Everything passed except the metadata check. Code inside it read the execution role's temporary credentials. Candidate output comes back to the candidate, so the custom interpreter was dropped.
+
+Not yet done:
+
+- A write outside the working directory is not refused. It lands in a session that is stopped after the run.
+- The runner half of I4.10 (I4.8, I4.9).
+
 ## Ledger
 
 Sizes: S is under a day of builder time, M one to two, L more. Every row merges on its own after the full verification chain. "Judged by" is what the judge script checks; a row is done when the judge says so, never when this table is edited. The journey `journey:interviews` starts with I1.1 and gains a step with each row that names a walk step; it is not written at the end. Rows that change another repository say so: "library" is `ui-components`, "realtime" is `realtime-modules`, "media" is `platform-api`. Rows marked "install" need a package the owner installs first.

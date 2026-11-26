@@ -36,9 +36,9 @@ row_I4_4() {
   needF "if (!SCRIPTS.has(spec.script))" "$DP" "the script must be on the allowlist"
   needF "readonly backend = 'mock';" "$RD/mock-executor.ts" "the mock executor is still there"
   local execs; execs=$(grep -rlE "implements Executor\b" "$MW" --include=*.ts 2>/dev/null | grep -v __tests__ | sort | tr '\n' ' ' || true)
-  if [ "$execs" = "$RD/docker-executor.ts $RD/mock-executor.ts " ]; then ok "the middleware's Executors are the mock and the Docker runner"; else fail "Executors in the middleware: $execs"; fi
-  needF "if (raw !== 'docker') return 'mock';" "$RD/backend.ts" "the mock is the default; the Docker runner only by INTERVIEWS_RUN_BACKEND=docker"
-  needF "if (env['NODE_ENV'] === 'production')" "$RD/backend.ts" "a production process never gets the Docker runner"
+  if [ "$execs" = "$RD/agentcore-executor.ts $RD/docker-executor.ts $RD/mock-executor.ts " ]; then ok "the middleware's Executors are the mock, the Docker runner and the AgentCore interpreter"; else fail "Executors in the middleware: $execs"; fi
+  needF "if (raw === 'docker') {" "$RD/select.ts" "the Docker runner only by INTERVIEWS_RUN_BACKEND=docker"
+  needF "if (env['NODE_ENV'] === 'production') throw" "$RD/select.ts" "a production process never gets the Docker runner"
   needF 'exactly the hardened argument list' "$RD/__tests__/docker-executor.test.ts" "the runner's suite proves the argument list, the allowlist, the timers, cancel and truncation"
   needF 'only docker-process.ts can start a process' "$RD/__tests__/docker-executor.test.ts" "the runner's suite holds the one-spawner rule too"
   exists "$RD/__tests__/docker-executor.real.test.ts" "the real-Docker suite (REAL_DOCKER_RUNS=1)"

@@ -12,7 +12,7 @@ import { Template } from 'aws-cdk-lib/assertions';
 import { synthApp } from './helpers/app-assembly';
 import { middlewareServiceStack, newApp, withoutEcrLookup, PREFIX } from './helpers/stacks';
 import { actionsOf, statementsForRole, type Statement } from './helpers/cfn';
-import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS, GITHUB_NETS_VARIABLE } from '../lib/microvm-network-stack';
+import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS, GITHUB_NETS_VARIABLE, microvmStartupNames } from '../lib/microvm-network-stack';
 import { GITHUB_EGRESS_CIDRS, GITHUB_IP_RANGES_FETCHED, GITHUB_META_KEYS } from '../lib/github-ip-ranges';
 import {
   MicrovmRuntimeStack, MICROVM_ROLE_SIDS, microvmMaxLifetime, type MicrovmRuntimeStackProps,
@@ -90,7 +90,11 @@ describe('execution role (design §12)', () => {
     assert.match(logs, /log-group:\/aws\/bedrock-agentcore\/runtimes\/orgiq_microvm\*/);
     const workload = roleStatements.find((s) => s.Sid === 'Workload')!;
     assert.deepEqual(actionsOf(workload), ['bedrock-agentcore:GetWorkloadAccessToken']);
-    assert.deepEqual(workload.Resource, { 'Fn::GetAtt': ['MicrovmRuntime', 'WorkloadIdentityDetails.WorkloadIdentityArn'] });
+    // Not Fn::GetAtt WorkloadIdentityDetails.WorkloadIdentityArn: CloudFormation refuses that attribute.
+    const resources = JSON.stringify(workload.Resource);
+    assert.ok(!resources.includes('WorkloadIdentityDetails'), resources);
+    assert.match(resources, /workload-identity-directory\/default"/);
+    assert.match(resources, /workload-identity-directory\/default\/workload-identity\/orgiq_microvm-\*"/);
   });
 
   test('the trust policy carries aws:SourceAccount and aws:SourceArn', () => {
@@ -134,6 +138,11 @@ describe('the runtime (design §2, §7)', () => {
     assert.equal(env.LAB_API_BASE, 'https://lab.orgiq.internal');
     assert.equal(env.ORGIQ_RUNNER, 'microvm');
     assert.ok(!Object.keys(env).some((k) => k.startsWith('LAB_CALLBACK_SECRET')));
+  });
+
+  test('the lab broker listens under /tmp, which the runtime user can write in a session', () => {
+    const [r] = microvmRuntime(runtime);
+    assert.equal(r.Properties.EnvironmentVariables.LAB_BROKER_SOCKET, '/tmp/orgiq-lab/lab.sock');
   });
 
   test('a plaintext lab callback secret is refused', () => {
@@ -261,6 +270,32 @@ describe('network (design §5)', () => {
     assert.deepEqual(types, ['ALERT', 'FLOW']);
   });
 
+  test('the runtime can start: ECR, Logs and the ECR layer bucket inside the VPC, and their names resolve', () => {
+    // A runtime created after AgentCore's 2026-05-05 rollout pulls its image through this VPC; without these the
+    // first real session failed its health check.
+    const eps = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint'));
+    const service = (e: any) => JSON.stringify(e.Properties.ServiceName);
+    for (const name of ['ecr.api', 'ecr.dkr', 'logs']) {
+      const ep = eps.find((e) => service(e).includes(`.${name}"`));
+      assert.ok(ep, `no ${name} endpoint`);
+      assert.equal(ep.Properties.VpcEndpointType, 'Interface');
+      assert.equal(ep.Properties.PrivateDnsEnabled, true);
+    }
+    const s3 = eps.find((e) => service(e).includes('.s3"'));
+    assert.equal(s3.Properties.VpcEndpointType, 'Gateway');
+    // Through S3: read the ECR layers, write AgentCore's own runtime logs, nothing else.
+    const sts = s3.Properties.PolicyDocument.Statement.map((st: any) => [st.Sid, st.Effect, st.Action, JSON.stringify(st.Resource)]);
+    assert.equal(sts.length, 2);
+    assert.deepEqual(sts[0].slice(0, 3), ['EcrImageLayers', 'Allow', 's3:GetObject']);
+    assert.match(sts[0][3], /prod-.*-starport-layer-bucket\/\*/);
+    assert.deepEqual(sts[1].slice(0, 3), ['AgentCoreRuntimeLogs', 'Allow', 's3:PutObject']);
+    assert.match(sts[1][3], /kepler-ola-.*-prod-logs-bucket\/\*/);
+    const inVpc = JSON.stringify(network.findResources('AWS::Route53Resolver::FirewallDomainList')['DnsAllowInVpc'].Properties.Domains);
+    // The layer bucket answers through a CNAME to s3-r-w.<region>; DNS Firewall checks every name in the chain.
+    assert.ok(microvmStartupNames('us-east-1', '647757222309').includes('s3-r-w.us-east-1.amazonaws.com'));
+    assert.ok(inVpc.includes('api.ecr.') && inVpc.includes('*.s3.') && inVpc.includes('s3-r-w.'));
+  });
+
   test('DNS Firewall allows the GitHub names (and the two in-VPC names) and blocks everything else', () => {
     const lists = network.findResources('AWS::Route53Resolver::FirewallDomainList');
     const domainsOf = (id: string) => lists[id].Properties.Domains;
@@ -292,7 +327,7 @@ describe('network (design §5)', () => {
   });
 
   test('the bedrock-runtime endpoint has private DNS and a policy naming exactly the role\'s model ARNs', () => {
-    const [ep] = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint'));
+    const [ep] = Object.values<any>(network.findResources('AWS::EC2::VPCEndpoint')).filter((e) => /bedrock-runtime/.test(JSON.stringify(e.Properties.ServiceName)));
     assert.equal(ep.Properties.PrivateDnsEnabled, true);
     assert.match(JSON.stringify(ep.Properties.ServiceName), /bedrock-runtime/);
     const [st] = ep.Properties.PolicyDocument.Statement;
