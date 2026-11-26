@@ -204,6 +204,12 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 | H-3 | `scripts/audit-loop/run.sh` points at three files that no longer exist, so it cannot run. | Path check on 25 November | Open | Delete the folder or restore the prompts | S |
 | H-4 | `scripts/README.md` predates the interviews and learning-loop validators, the Milo judge and probe, the meeting assistant scripts, the voice harness and the film scripts. | Last changed 7 November | Open | Add a row per newer tool | S |
 
+## Planned work
+
+| Id | Item | Evidence | Status | Next action | Size |
+|---|---|---|---|---|---|
+| K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first; it depends on D-1 | L |
+
 ## Documents that now mislead
 
 - `docs/next-steps.md`: "Where things stand", sections 1 to 4, and the CI line in section 10.
