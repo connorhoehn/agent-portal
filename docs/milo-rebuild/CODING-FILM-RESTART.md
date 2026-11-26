@@ -111,7 +111,7 @@ The existing script disables recap-content, transcript-attribution, and some rec
 
 ## What to reuse from ai-3d-storymaker
 
-Use its transcription and final-mix review approach: `library/scripts/soundtrack.py` provides `transcribe` and `check_dialogue`, and `library/toolkit_common/audio_config.py` locates the speech helper. Consult `docs/AUDIO.md` for the local runtime. No Blender scene rebuild is necessary for this browser film.
+Use its transcription and final-mix review approach: `library/scripts/soundtrack.py` provides `transcribe` and `check_dialogue`, and `library/toolkit_common/audio_config.py` locates the speech helper. Consult that toolkit's own `AUDIO.md` (in its docs folder) for the local runtime. No Blender scene rebuild is necessary for this browser film.
 
 The important limitation is visible in the implementation: `words_missing` compares a typo-tolerant, order-insensitive pool of words. That can confirm that a line is audible, but it cannot tell whether “Same here” answers the right person, a result was earned, or a scorecard note is true. Borrowing that checker alone would still accept the central editorial defect.
 

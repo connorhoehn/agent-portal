@@ -39,7 +39,7 @@ The one decision everything else hangs on: **agents write the deck format, never
 
 ### The editor
 
-- ui-components already ships the editor: `PresentationEditor`, `DeckReader`, `DeckPresentationDialog`, the filmstrip, slide form, sources and speaker notes (ui-components `docs/COMPONENT_INDEX.md:610-686`). The portal wraps it in one page for all four tenants (`portal/src/components/decks/DeckEditorPage.tsx:229-252`).
+- ui-components already ships the editor: `PresentationEditor`, `DeckReader`, `DeckPresentationDialog`, the filmstrip, slide form, sources and speaker notes (ui-components' `COMPONENT_INDEX.md:610-686`, in its docs folder). The portal wraps it in one page for all four tenants (`portal/src/components/decks/DeckEditorPage.tsx:229-252`).
 - People can add, remove, reorder and edit slides, save versions, see each other's presence, ask an agent to revise, present in a dialog, download `.pptx`, and share the file into a Social conversation.
 - Readers of initiative decks can ask a question about the slide in front of them (`middleware/src/lib/presentation-context.ts:7-41`).
 
