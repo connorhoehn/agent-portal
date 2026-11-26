@@ -18,7 +18,7 @@ const cells = (i: Interview): Record<string, unknown> => ({
   id: i.id, application_id: i.applicationId, round_id: i.roundId, type: i.type, lead_id: i.leadId, panel_ids: [...i.panelIds],
   scheduled_at: ts(i.scheduledAt), minutes: i.minutes, state: i.state, question_ids: [...i.questionIds], assigned_by: i.assignedBy,
   assigned_at: ts(i.assignedAt), call_id: i.callId, started_at: ts(i.startedAt ?? null), ended_at: ts(i.endedAt),
-  acceptances: JSON.stringify(i.acceptances), declines: JSON.stringify(i.declines), revision: i.revision,
+  acceptances: JSON.stringify(i.acceptances), declines: JSON.stringify(i.declines), cancellation: i.cancellation ? JSON.stringify(i.cancellation) : null, revision: i.revision,
 });
 
 function roomTableExec(): SqlExec {
@@ -34,6 +34,15 @@ function roomTableExec(): SqlExec {
       if (!row || row['revision'] !== b.get('revision')) return [];
       if (sql === SqlInterviewsStore.START_INTERVIEW_SQL) { row['state'] = 'live'; if (b.get('started_at')) row['started_at'] = ts(String(b.get('started_at'))); }
       else { row['state'] = 'ended'; row['ended_at'] = ts(String(b.get('ended_at'))); }
+      row['revision'] = Number(row['revision']) + 1;
+      return [row];
+    }
+    if (sql === SqlInterviewsStore.CANCEL_INTERVIEW_SQL) {
+      const row = find();
+      if (!row || row['revision'] !== b.get('revision')) return [];
+      if (row['state'] === 'live') row['ended_at'] = ts(String(b.get('at')));
+      row['state'] = 'cancelled';
+      row['cancellation'] = b.get('cancellation');
       row['revision'] = Number(row['revision']) + 1;
       return [row];
     }
@@ -80,6 +89,30 @@ describe.each([
     expect(await read(before.id)).toEqual(before);
   });
 
+  const CANCEL = { reason: 'rescheduling' as const, note: 'Moving to next week.', by: 'u-greta', at: AT };
+
+  it('cancels a round not yet live: cancelled with its cancellation, no ended time', async () => {
+    const before = await read('iv-n5z9f2cq');
+    const out = await store.cancelInterview(before.id, CANCEL, before.revision);
+    expect(out).toEqual({ ok: true, row: { ...before, state: 'cancelled', cancellation: CANCEL, revision: before.revision + 1 } });
+    expect(await read(before.id)).toEqual({ ...before, state: 'cancelled', cancellation: CANCEL, revision: before.revision + 1 });
+  });
+
+  it('cancelling a live round (did not take place) also records when it ended', async () => {
+    const before = await read('iv-n5z9f2cq');
+    const started = await store.startInterview(before.id, before.revision);
+    if (!started.ok) throw new Error('start failed');
+    const notHeld = { ...CANCEL, reason: 'no_show' as const, note: null };
+    const out = await store.cancelInterview(before.id, notHeld, started.row.revision);
+    expect(out).toEqual({ ok: true, row: { ...before, state: 'cancelled', endedAt: AT, cancellation: notHeld, revision: before.revision + 2 } });
+  });
+
+  it('a stale cancel writes nothing; an unknown one is not found', async () => {
+    const before = await read('iv-k1p5w8ra');
+    expect(await store.cancelInterview(before.id, CANCEL, before.revision + 5)).toEqual({ ok: false, reason: 'stale', row: before });
+    expect(await store.cancelInterview('iv-nobody', CANCEL, 1)).toEqual({ ok: false, reason: 'not-found' });
+  });
+
   it('an unknown interview is not found', async () => {
     expect(await store.startInterview('iv-nobody', 1)).toEqual({ ok: false, reason: 'not-found' });
     expect(await store.endInterview('iv-nobody', AT, 1)).toEqual({ ok: false, reason: 'not-found' });
@@ -90,7 +123,7 @@ describe('the room write statements match schema/interviews_schema.sql', () => {
   const ddl = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
   const body = /CREATE TABLE IF NOT EXISTS interviews \(([\s\S]*?)\n\);/.exec(ddl)![1]!;
   const cols = new Set(body.split('\n').map((l) => /^\s{2}([a-z_]+)\s+[A-Z]/.exec(l)?.[1]).filter((c): c is string => !!c));
-  it.each([['start', SqlInterviewsStore.START_INTERVIEW_SQL], ['end', SqlInterviewsStore.END_INTERVIEW_SQL]])('%s names only declared columns', (_label, statement) => {
+  it.each([['start', SqlInterviewsStore.START_INTERVIEW_SQL], ['end', SqlInterviewsStore.END_INTERVIEW_SQL], ['cancel', SqlInterviewsStore.CANCEL_INTERVIEW_SQL]])('%s names only declared columns', (_label, statement) => {
     const named = [
       ...[...statement.matchAll(/(\w+) = (?:CAST\(|')?:?\w/g)].map((m) => m[1]!),
       ...(/RETURNING ([\s\S]+)$/.exec(statement)?.[1]?.split(',') ?? []),

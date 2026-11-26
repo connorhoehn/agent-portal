@@ -9,7 +9,8 @@ import type {
 import { mayReadOpeningMoney, mayReadStageHistory, reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
-import type { Seat } from './types.js';
+import type { CancelReason, Seat } from './types.js';
+import { CANCEL_REASON_LABEL } from './cancel.js';
 import { latestByAuthor } from './scorecard.js';
 import { competenciesOfRound, competencyIdsOfRound, questionsOfRound } from './kit.js';
 
@@ -101,6 +102,8 @@ export interface InterviewRow {
   myAnswer: 'to-answer' | 'accepted' | null;
   /** Who declined and why, oldest first. The recruiter and the hiring manager read them; an interviewer gets none. */
   declines: Array<{ person: PersonRef; seat: Seat; reason: string; at: string }>;
+  /** Why the round was cancelled, by whom and when (lib/interviews/cancel.ts); null unless the state is `cancelled`. */
+  cancellation: { reason: CancelReason; label: string; note: string | null; by: PersonRef; at: string } | null;
   /** The revision a write must name (row I1.4: compare-and-set). */
   revision: number;
 }
@@ -346,6 +349,9 @@ export class WorldIndex {
       myAnswer: (() => { const s = seatOf(i, this.viewer.id); return s ? (hasAccepted(i, this.viewer.id, s) ? 'accepted' : 'to-answer') : null; })(),
       declines: reachOf(this.viewer.role) === 'assigned' ? []
         : i.declines.map((d) => ({ person: this.people(d.userId), seat: d.seat, reason: d.reason, at: d.at })),
+      cancellation: i.state === 'cancelled' && i.cancellation
+        ? { reason: i.cancellation.reason, label: CANCEL_REASON_LABEL[i.cancellation.reason], note: i.cancellation.note, by: this.people(i.cancellation.by), at: i.cancellation.at }
+        : null,
       revision: i.revision,
     };
   }

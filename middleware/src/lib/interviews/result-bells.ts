@@ -12,7 +12,8 @@
 // (with `import { interviewEnded, scorecardSubmitted } from '../../lib/interviews/result-bells.js';`). The third is called
 // by routes/interviews/debrief.ts itself. Each never throws and logs nothing of the interview.
 import { runWithDbTenant } from '../../providers/db-tenant.js';
-import { notifyInterviewDecided, notifyInterviewScorecardDue, notifyInterviewScorecardIn } from '../social-notify.js';
+import { notifyInterviewCancelled, notifyInterviewDecided, notifyInterviewScorecardDue, notifyInterviewScorecardIn } from '../social-notify.js';
+import { CANCEL_REASON_LABEL } from './cancel.js';
 import { seatedOf } from './scorecard.js';
 import { loadWorld } from './store.js';
 import { interviewsStore } from './store-select.js';
@@ -42,6 +43,21 @@ export async function interviewEnded(interviewId: string): Promise<string[]> {
 }
 
 /** A scorecard version was stored: tell the recruiter, and the hiring manager when the last seat's first version is in. */
+/** A round moved to `cancelled` (lib/interviews/cancel.ts) → each seat but the one who cancelled it. Never throws. */
+export async function interviewCancelled(interviewId: string, actorId: string): Promise<string[]> {
+  try {
+    const found = roundOf(await load(), interviewId);
+    if (!found || found.interview.state !== 'cancelled' || !found.interview.cancellation) return [];
+    const reason = found.interview.cancellation.reason;
+    return await notifyInterviewCancelled({
+      interviewId, openingTitle: found.opening.title, roundName: found.roundName, userIds: seatedOf(found.interview), actorId,
+      reasonLabel: CANCEL_REASON_LABEL[reason], notHeld: reason === 'no_show' || reason === 'did_not_take_place',
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function scorecardSubmitted(interviewId: string, authorId: string, version: number): Promise<string[]> {
   try {
     const world = await load();

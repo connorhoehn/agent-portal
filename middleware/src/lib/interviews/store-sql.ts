@@ -10,7 +10,7 @@
 // text and JSONB as JSON text, each CAST in the statement; an absent value is NULL.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type {
-  Application, ApplicationStage, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
+  Application, ApplicationStage, Cancellation, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
   OpeningDetails, Recommendation, RoundType, Scorecard, SeatAcceptance, SeatDecline, StageChange,
 } from './types.js';
 import { DuplicateCandidateError, type InterviewsStore, type NewOpening, type WriteResult } from './store.js';
@@ -27,7 +27,7 @@ export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, 
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
 const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
-  assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, revision`;
+  assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, cancellation, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
 export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason, red_flags_seen
@@ -168,6 +168,7 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
     assignedAt: isoOf(r['assigned_at']), callId: strOrNull(r['call_id']),
     ...(isoOrNull(r['started_at']) ? { startedAt: isoOrNull(r['started_at']) } : {}),
     endedAt: isoOrNull(r['ended_at']), acceptances: json<SeatAcceptance[]>(r['acceptances'], []), declines: json<SeatDecline[]>(r['declines'], []),
+    ...(json<Cancellation | null>(r['cancellation'], null) ? { cancellation: json<Cancellation | null>(r['cancellation'], null) } : {}),
     revision: num(r['revision']),
   };
 }
@@ -240,6 +241,19 @@ export class SqlInterviewsStore implements InterviewsStore {
 
   async endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>> {
     return this.casInterview(id, await this.exec(SqlInterviewsStore.END_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision), textParam('ended_at', endedAt)]));
+  }
+
+  /** Cancel (lib/interviews/cancel.ts): a live round also gets its ended_at, as the memory store does. */
+  static readonly CANCEL_INTERVIEW_SQL = `UPDATE interviews
+  SET ended_at = CASE WHEN state = 'live' THEN CAST(:at AS TIMESTAMPTZ) ELSE ended_at END,
+    state = 'cancelled', cancellation = CAST(:cancellation AS JSONB), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+
+  async cancelInterview(id: string, cancellation: Cancellation, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.CANCEL_INTERVIEW_SQL, [
+      textParam('id', id), intParam('revision', revision), textParam('at', cancellation.at), textParam('cancellation', JSON.stringify(cancellation)),
+    ]));
   }
 
   async createInterview(input: Interview): Promise<Interview | null> {

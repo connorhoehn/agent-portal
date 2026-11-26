@@ -21,7 +21,7 @@
 // saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
+import type { Application, Cancellation, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
@@ -58,6 +58,8 @@ export interface InterviewWrites {
   startInterview(id: string, revision: number, startedAt?: string): Promise<WriteResult<Interview>>;
   /** The room (row I2.4): the state to `ended` with `endedAt`, against `revision`. Whether it may move is room.ts endMove. */
   endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>>;
+  /** Any state → `cancelled` with its cancellation (lib/interviews/cancel.ts decides when). A live round also gets `endedAt`. */
+  cancelInterview(id: string, cancellation: Cancellation, revision: number): Promise<WriteResult<Interview>>;
   /** A seat's answer: the state, the panel, the acceptances and the declines, against `revision`. */
   answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>>;
   /** New seats: the lead, the panel, the state and the acceptances that still hold, against `revision`. */
@@ -156,6 +158,14 @@ export class MemoryInterviewsStore implements InterviewsStore {
 
   async endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>> {
     return casInterview(id, revision, (i) => { i.state = 'ended'; i.endedAt = endedAt; });
+  }
+
+  async cancelInterview(id: string, cancellation: Cancellation, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => {
+      if (i.state === 'live') i.endedAt = cancellation.at;
+      i.state = 'cancelled';
+      i.cancellation = structuredClone(cancellation);
+    });
   }
 
   async createInterview(input: Interview): Promise<Interview | null> {

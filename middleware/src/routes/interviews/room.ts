@@ -4,6 +4,8 @@
 //   GET  /interviews/:id/room    the lead and the panel: the room view (lib/interviews/room.ts roomView)
 //   POST /interviews/:id/start   the lead, when they join the call: accepted or ready → live. Body `{ revision }`.
 //   POST /interviews/:id/end     the lead, from End interview: live → ended, with endedAt. Body `{ revision }`.
+//                                The recruiter (AssignInterviews) too, for a live round the lead left (gap audit
+//                                2026-11-20 §1): the same End, scorecards owed (lib/interviews/cancel.ts recruiterEndMove).
 //
 // Outside the seats (another interviewer, the recruiter, the hiring manager, the admin) the interview is not
 // found: 404, as phase 0 does. A panel member asking to start or end is refused (403): they know the round
@@ -13,8 +15,10 @@
 import { interviewEnded } from '../../lib/interviews/result-bells.js';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
-import { requireAction, resolveSession } from '../../lib/authz.js';
-import { interviewsAction } from '../../lib/interviews/gate.js';
+import { isAllowed, resolveSession } from '../../lib/authz.js';
+import { interviewsAction, interviewsAnyAction } from '../../lib/interviews/gate.js';
+import { recruiterEndMove } from '../../lib/interviews/cancel.js';
+import { seatOf } from '../../lib/interviews/assign.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 import { endMove, roomView, startMove, type RoomMove } from '../../lib/interviews/room.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
@@ -29,6 +33,8 @@ export const roomRouter = Router();
 const NO_INTERVIEW = 'There is no interview here that you can open.';
 // A member without ConductInterview reads the same not-found (lib/interviews/gate.ts), never a 403.
 const conduct = interviewsAction('ConductInterview', NO_INTERVIEW);
+// End: the lead (ConductInterview) or the recruiter (AssignInterviews); anyone else reads the not-found.
+const conductOrAssign = interviewsAnyAction(['ConductInterview', 'AssignInterviews'], NO_INTERVIEW);
 const STALE = 'Someone else changed this interview while you were in the room. The room now shows what was saved: try again.';
 const OUT_OF_DATE = 'This page is out of date. Reload it and try again.';
 
@@ -61,13 +67,13 @@ roomRouter.get('/interviews/:id/room', asyncHandler(async (req, res) => {
   res.json({ room: view });
 }));
 
-function roomWrite(move: (i: Interview, userId: string) => RoomMove, write: (i: Interview, revision: number) => Promise<WriteResult<Interview>>) {
+function roomWrite(move: (i: Interview, userId: string, req: Request) => RoomMove | Promise<RoomMove>, write: (i: Interview, revision: number) => Promise<WriteResult<Interview>>) {
   return asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
     const ix = await indexFor(req);
     const i = ix.world.interviews.find((x) => x.id === param(req, 'id'));
     if (!i) throw new NotFoundError(NO_INTERVIEW);
-    const out = move(i, session.sub);
+    const out = await move(i, session.sub, req);
     if (!out.ok && out.reason === 'no-seat') throw new NotFoundError(NO_INTERVIEW);
     const revision = revisionOf(req);
     if (revision === null) { res.status(400).json({ error: OUT_OF_DATE }); return; }
@@ -78,13 +84,31 @@ function roomWrite(move: (i: Interview, userId: string) => RoomMove, write: (i: 
   });
 }
 
+/**
+ * The lead's End, or the recruiter's on a round they hold no seat on. A seated person is always answered as a seat
+ * (a panel member is refused); a recruiter without a seat gets recruiterEndMove.
+ */
+async function endMoveFor(i: Interview, userId: string, req: Request): Promise<RoomMove> {
+  if (seatOf(i, userId)) return endMove(i, userId);
+  const session = resolveSession(req)!;
+  if (await isAllowed({ sub: session.sub, role: session.role, tenant: session.tenant }, 'AssignInterviews')) return recruiterEndMove(i);
+  return endMove(i, userId);
+}
+
+/**
+ * The call is over for the candidate: the gateway's verdict cache forgets every yes it holds for the guest. The
+ * candidate's page learns it now, not on its next poll: the hint goes out first, while the guest still holds its
+ * subscription. Shared by End and by "did not take place" on a live round (routes/interviews/cancel.ts).
+ */
+export async function closeRoom(interviewId: string): Promise<void> {
+  await publishInterviewHint(interviewId, 'ended');
+  await forgetInterviewGuest(interviewId, 'interview-ended');
+}
+
 roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision, interviewsNow().toISOString())));
-roomRouter.post('/interviews/:id/end', conduct, roomWrite(endMove, async (i, revision) => {
+roomRouter.post('/interviews/:id/end', conductOrAssign, roomWrite(endMoveFor, async (i, revision) => {
   const r = await interviewsStore().endInterview(i.id, interviewsNow().toISOString(), revision);
   if (r.ok) void interviewEnded(i.id); // the scorecard-due bells (I5.6)
-  // The call is over for the candidate: the gateway's verdict cache forgets every yes it holds for the guest.
-  // The candidate's page learns it now, not on its next poll: the hint goes out first, while the guest still holds its subscription.
-  if (r.ok) await publishInterviewHint(i.id, 'ended');
-  if (r.ok) await forgetInterviewGuest(i.id, 'interview-ended');
+  if (r.ok) await closeRoom(i.id);
   return r;
 }));

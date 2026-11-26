@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS interviews (
   -- [{ userId, seat, reason, at }] for every decline, kept across reassignments.
   acceptances        JSONB NOT NULL DEFAULT '[]'::jsonb,
   declines           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  -- Why a cancelled round was cancelled: { reason, note, by, at } (lib/interviews/cancel.ts). NULL otherwise.
+  cancellation       JSONB,
   -- Bumped by every write; a write names the revision it was made against (compare-and-set).
   revision           INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1)
 );
@@ -146,6 +148,8 @@ ALTER TABLE interviews ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
 ALTER TABLE interviews ADD COLUMN IF NOT EXISTS acceptances JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE interviews ADD COLUMN IF NOT EXISTS declines JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE interviews ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1 CHECK (revision >= 1);
+-- Why a cancelled round was cancelled: { reason, note, by, at } (lib/interviews/cancel.ts). NULL on every other round.
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS cancellation JSONB;
 CREATE INDEX IF NOT EXISTS interviews_application_idx ON interviews (application_id);
 CREATE INDEX IF NOT EXISTS interviews_lead_idx ON interviews (lead_id);
 

@@ -219,6 +219,24 @@ export interface SeatDecline {
   at: string;
 }
 
+/**
+ * Why a round was cancelled (gap audit 2026-11-20, section 1). The recruiter picks one of the first five on Cancel; the
+ * lead or the recruiter picks `no_show` or `did_not_take_place` on "Did not take place"; `candidate_withdrew` is
+ * written when the recruiter marks the application withdrawn. lib/interviews/cancel.ts holds the rules.
+ */
+export type CancelReason = 'candidate_unavailable' | 'interviewer_unavailable' | 'rescheduling' | 'opening_closed' | 'other'
+  | 'no_show' | 'did_not_take_place' | 'candidate_withdrew';
+export const CANCEL_REASONS: readonly CancelReason[] = ['candidate_unavailable', 'interviewer_unavailable', 'rescheduling', 'opening_closed', 'other',
+  'no_show', 'did_not_take_place', 'candidate_withdrew'];
+
+/** Who cancelled a round, when, why, and the optional note (at most 280 characters). */
+export interface Cancellation {
+  reason: CancelReason;
+  note: string | null;
+  by: string;
+  at: string;
+}
+
 export interface Interview {
   id: string;
   applicationId: string;
@@ -246,6 +264,8 @@ export interface Interview {
   acceptances: SeatAcceptance[];
   /** Every decline, oldest first, kept across reassignments (row I1.4). */
   declines: SeatDecline[];
+  /** Set when the round moves to `cancelled` (lib/interviews/cancel.ts); absent on every other round. */
+  cancellation?: Cancellation | null;
   /** Bumped by every write; a write names the revision it was made against (store.ts "Writes"). */
   revision: number;
 }

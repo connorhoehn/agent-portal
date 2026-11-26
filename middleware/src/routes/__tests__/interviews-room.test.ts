@@ -171,14 +171,29 @@ describe('starting and ending', () => {
 
   it.each([
     ['an interviewer without a seat', WEN, MATEO, 404],
-    // No ConductInterview reads the room's not-found, never a 403 (lib/interviews/gate.ts).
-    ['the recruiter (no ConductInterview)', GRETA, NADIA, 404],
+    // No ConductInterview and no AssignInterviews reads the room's not-found, never a 403 (lib/interviews/gate.ts).
     ['the hiring manager (no ConductInterview)', AMARA, NADIA, 404],
-    ['the admin, no seat', OPERATOR, NADIA, 404],
     ['another tenant\'s role', PRIYA, NADIA, 403],
   ])('%s: refused on both writes', async (_label, as, id, status) => {
     expect((await as.post(`/interviews/${id}/start`, { revision: 1 })).status).toBe(status);
     expect((await as.post(`/interviews/${id}/end`, { revision: 1 })).status).toBe(status);
+  });
+
+  // The recruiter (and the admin, who holds every action) may End a live round the lead left (gap audit 2026-11-20 §1),
+  // but never start one: start stays the lead's.
+  it.each([['the recruiter', GRETA], ['the admin, no seat', OPERATOR]])('%s: start is not found; End of a round not live is 409', async (_label, as) => {
+    expect((await as.post(`/interviews/${NADIA}/start`, { revision: 1 })).status).toBe(404);
+    const res = await as.post(`/interviews/${NADIA}/end`, { revision: await revisionOf(NADIA) });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('This interview has not started, so there is nothing to end.');
+  });
+
+  it('the recruiter ends a live round the lead left: ended, scorecards owed', async () => {
+    const r1 = await revisionOf(NADIA);
+    await WEN.post(`/interviews/${NADIA}/start`, { revision: r1 });
+    const ended = await GRETA.post(`/interviews/${NADIA}/end`, { revision: r1 + 1 });
+    expect(ended.status).toBe(200);
+    expect(ended.body.interview).toMatchObject({ id: NADIA, state: 'ended', revision: r1 + 2, bucket: 'scorecard-due' });
   });
 });
 

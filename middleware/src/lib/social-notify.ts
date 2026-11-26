@@ -966,6 +966,45 @@ export async function notifyInterviewScorecardDue(ev: InterviewScorecardDueEvent
   }
 }
 
+export interface InterviewCancelledEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The lead and the panel of the round. */
+  userIds: readonly string[];
+  /** Who cancelled it: never told of their own move. */
+  actorId: string;
+  /** The reason in words (lib/interviews/cancel.ts CANCEL_REASON_LABEL). Nothing about the candidate. */
+  reasonLabel: string;
+  /** true for "did not take place" (no show), false for a cancel. */
+  notHeld: boolean;
+}
+
+/** A round was cancelled or marked as not having taken place → each seat but the actor's, once. No scorecard is owed. */
+export async function notifyInterviewCancelled(ev: InterviewCancelledEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const to = [...new Set(ev.userIds.filter((u) => u !== ev.actorId))];
+    if (!to.length) return [];
+    const by = await displayName(ev.actorId);
+    const sent: string[] = [];
+    for (const userId of to) {
+      sent.push(...await notify([userId], {
+        id: `interview-cancelled:${roundKey(ev.interviewId)}:${userId}`,
+        type: 'system',
+        title: `${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)} ${ev.notHeld ? 'did not take place' : 'is cancelled'}`,
+        body: `${snippet(ev.reasonLabel, 60)}. Recorded by ${by}. No scorecard is due for it.`,
+        payload: { tenant: 'interviews', kind: 'interview-cancelled', audience: 'interviewer', actorId: ev.actorId },
+        action: { label: 'Open My interviews', href: '/interviews/my-interviews' },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-cancelled producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 export interface InterviewScorecardInEvent {
   interviewId: string;
   openingTitle: string;

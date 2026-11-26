@@ -7,3 +7,8 @@ import { requireActionOr } from '../authz.js';
 export function interviewsAction(action: string, notFound: string) {
   return requireActionOr(action, (_req, _res, next) => next(new NotFoundError(notFound)));
 }
+
+/** interviewsAction for a write two roles reach by different authorities: the first action that allows passes, else the not-found. */
+export function interviewsAnyAction(actions: readonly [string, string], notFound: string) {
+  return requireActionOr(actions[0], requireActionOr(actions[1], (_req, _res, next) => next(new NotFoundError(notFound))));
+}
