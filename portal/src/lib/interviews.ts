@@ -82,6 +82,8 @@ export interface InterviewRow {
   myAnswer: 'to-answer' | 'accepted' | null;
   /** Who declined and why; the recruiter and the hiring manager read them, an interviewer gets none. */
   declines: Array<{ person: PersonRef; seat: 'lead' | 'panel'; reason: string; at: string }>;
+  /** Why a cancelled round was cancelled (lib/interviewsCancel.ts); null on every other round. Absent from an older server. */
+  cancellation?: { reason: string; label: string; note: string | null; by: PersonRef; at: string } | null;
   /** The revision a write names. */
   revision: number;
 }

@@ -22,12 +22,14 @@
 // shows its no-file line and the contact fields show what the redaction left.
 
 import {
-  Avatar, Button, Chip, DataTable, DetailSection, DropdownMenu, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, Tabs, WorkflowStepper,
+  Avatar, Button, Chip, ConfirmButton, DataTable, DetailSection, DropdownMenu, FileUploadDrop, Inline, KeyValue, LoadingState, PageHeader, Stack, T, Tabs, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { canAssignAgain, canWithdraw, cancelledLine, withdrawApplication } from '../../lib/interviewsCancel';
+import { RoundCloseDialog, roundCloseItems, type RoundCloseMode } from './RoundCloseDialog';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
@@ -68,7 +70,16 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
   },
   {
     key: 'status', header: 'Status', width: '136px',
-    render: (r) => { const s = roundStatus(r.state); return <Chip tone={s.tone} size="sm" data-testid="interviews-profile-round-status">{s.label}</Chip>; },
+    render: (r) => {
+      const s = roundStatus(r.state);
+      const why = cancelledLine(r);
+      return (
+        <Stack gap="xs">
+          <Chip tone={s.tone} size="sm" data-testid="interviews-profile-round-status">{s.label}</Chip>
+          {why && <T size="sm" tone="secondary" wrap data-testid="interviews-profile-round-cancelled">{why}</T>}
+        </Stack>
+      );
+    },
   },
   {
     key: 'result', header: 'Result',
@@ -221,7 +232,7 @@ function CandidateProfile({ id }: { id: string }) {
           </T>
         )}
         {applications.length === 0 && <T size="sm" tone="secondary">This candidate has no application you can read.</T>}
-        {applications.map((a) => <StageSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id} />)}
+        {applications.map((a) => <StageSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id} manages={manages} onChanged={refresh} />)}
         <Tabs idPrefix="interviews-profile" aria-label="Candidate" variant="underline" size="sm" value={tab} onValueChange={(v) => setTab(v as ProfileTab)}
           getItemTestId={(item) => `interviews-profile-tab-${item.id}`}
           items={[
@@ -232,7 +243,7 @@ function CandidateProfile({ id }: { id: string }) {
             ...(readsActivity ? [{ id: 'activity', label: 'Activity' }] : []),
           ]} />
         {tab === 'rounds' && applications.map((a) => (
-          <RoundsSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id} assigns={manages} />
+          <RoundsSection key={a.applicationId} app={a} several={applications.length > 1} candidateId={candidate.id} assigns={manages} viewerId={String(session?.sub ?? '')} onChanged={refresh} />
         ))}
         {tab === 'resume' && <ResumeSection candidateId={candidate.id} manages={manages} state={resume} />}
         {tab === 'recordings' && <RecordingsSection rows={recorded} />}
@@ -259,28 +270,60 @@ type ProfileTab = 'rounds' | 'resume' | 'recordings' | 'activity';
 const CLOSED_STAGES = new Set(['rejected', 'withdrawn', 'hired']);
 
 /** The stage tracker, above the tabs: where the application stands and the way to its debrief. */
-function StageSection({ app, several, candidateId }: { app: ProfileApplication; several: boolean; candidateId: string }) {
+/** The recruiter's "Mark withdrawn": asks once in place, then cancels the application's rounds not yet live (server side). */
+function WithdrawAction({ app, onDone }: { app: ProfileApplication; onDone: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  if (!canWithdraw(app.stage, app.interviews)) return null;
+  const withdraw = async () => {
+    const out = await withdrawApplication(app.applicationId, app.history.length, '');
+    if (out.ok) { setError(null); onDone(); } else setError(out.error);
+  };
+  return (
+    <Inline gap="sm">
+      {error && <T size="sm" tone="danger" data-testid="interviews-profile-withdraw-error">{error}</T>}
+      <ConfirmButton size="sm" variant="secondary" tone="destructive" label="Mark withdrawn" question="Mark withdrawn? Rounds not yet held are cancelled." confirmLabel="Mark withdrawn"
+        onConfirm={withdraw} data-testid="interviews-profile-withdraw" />
+    </Inline>
+  );
+}
+
+function StageSection({ app, several, candidateId, manages, onChanged }: { app: ProfileApplication; several: boolean; candidateId: string; manages: boolean; onChanged: () => void }) {
   const steps = stageSteps(app.stage, app.history, dateLabel);
   return (
-    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={<DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} />}>
+    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={manages ? <Inline gap="sm"><WithdrawAction app={app} onDone={onChanged} /><DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} /></Inline> : <DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} />}>
       <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
     </DetailSection>
   );
 }
 
-/** A round that lost an interviewer (declined, or a seat declined) needs a new one: that stays a button. Any other round keeps Reassign in the row's menu. */
-function ReassignAction({ round: r, candidateId }: { round: ProfileRound; candidateId: string }) {
+/**
+ * A round that lost an interviewer (declined, or a seat declined) needs a new one: that stays a button. A cancelled
+ * round offers "Assign again" as a button (gap audit 2026-11-20 §1). Every other move sits in the row's menu: Reassign,
+ * and the recruiter's End, "Did not take place" and Cancel (RoundCloseDialog), or the lead's "Did not take place".
+ */
+function RoundActions({ round: r, candidateId, applicationId, manages, viewerId, onClose }: {
+  round: ProfileRound; candidateId: string; applicationId: string; manages: boolean; viewerId: string; onClose: (r: ProfileRound, mode: RoundCloseMode) => void;
+}) {
   const navigate = useNavigate();
-  if (!canReassign(r.state)) return null;
+  if (manages && canAssignAgain(r.state)) {
+    return <Button size="sm" variant="secondary" data-testid="interviews-profile-assign-again" onClick={() => navigate(assignHref(candidateId, { application: applicationId }))}>Assign again</Button>;
+  }
   const reassign = () => navigate(assignHref(candidateId, { round: r.id }));
-  return r.state === 'declined' || declineLines(r).length > 0
-    ? <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>
-    : <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions"
-      sections={[{ items: [{ label: 'Reassign…', onSelect: reassign }] }]} />;
+  if (manages && canReassign(r.state) && (r.state === 'declined' || declineLines(r).length > 0)) {
+    return <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>;
+  }
+  const items = [
+    ...(manages && canReassign(r.state) ? [{ label: 'Reassign…', onSelect: reassign }] : []),
+    ...roundCloseItems(r, { asRecruiter: manages, isLead: r.lead.id === viewerId }, (mode) => onClose(r, mode)),
+  ];
+  if (!items.length) return null;
+  return <DropdownMenu trigger="Actions ▾" triggerLabel={`Actions for ${r.round.name}`} align="end" triggerTestId="interviews-profile-round-actions" sections={[{ items }]} />;
 }
 
-function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApplication; several: boolean; candidateId: string; assigns: boolean }) {
+function RoundsSection({ app, several, candidateId, assigns, viewerId, onChanged }: { app: ProfileApplication; several: boolean; candidateId: string; assigns: boolean; viewerId: string; onChanged: () => void }) {
   const navigate = useNavigate();
+  const [closing, setClosing] = useState<{ round: ProfileRound; mode: RoundCloseMode } | null>(null);
+  const acts = assigns || app.interviews.some((r) => r.lead.id === viewerId);
   const rounds = [...app.interviews].sort((a, b) => (a.scheduledAt ?? '9999').localeCompare(b.scheduledAt ?? '9999'));
   return (
     <DetailSection variant="heading" as="h2" first title={several ? `Rounds, ${app.opening.title}` : 'Rounds'} hint={plural(rounds.length, 'round')} data-testid="interviews-profile-rounds-section"
@@ -291,10 +334,11 @@ function RoundsSection({ app, several, candidateId, assigns }: { app: ProfileApp
       <DataTable narrow rowHeight="content" data-testid="interviews-profile-rounds" aria-label="Rounds" data={rounds}
         columns={rounds.some((r) => declineLines(r).length > 0) ? ROUND_COLUMNS : ROUND_COLUMNS.filter((c) => c.key !== 'declined')}
         keyField={(r) => r.id} staticRows="Each round with its status and result; its record opens from the Record column" emptyMessage="No round has been assigned yet."
-        {...(assigns ? {
+        {...(acts ? {
           rowActionsHeader: 'Actions', rowActionsHeaderHidden: true,
-          rowActions: (r: ProfileRound) => <ReassignAction round={r} candidateId={candidateId} />,
+          rowActions: (r: ProfileRound) => <RoundActions round={r} candidateId={candidateId} applicationId={app.applicationId} manages={assigns} viewerId={viewerId} onClose={(round, mode) => setClosing({ round, mode })} />,
         } : {})} />
+      <RoundCloseDialog round={closing?.round ?? null} mode={closing?.mode ?? null} onClose={() => setClosing(null)} onDone={onChanged} />
     </DetailSection>
   );
 }

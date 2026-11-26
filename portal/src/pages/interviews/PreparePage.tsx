@@ -5,6 +5,7 @@
 // The server decides everything (middleware lib/interviews/prepare.ts); a stale save shows what was saved.
 
 import { Button, ChevronIcon, Chip, ContextColumn, DataTable, DetailPage, DetailSection, DocumentIcon, EmptyState, IconButton, Inline, MetaLine, Stack, T, TrashIcon, type ContextColumnState, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { cancelledLine } from '../../lib/interviewsCancel';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { FlushDetailFrame, useFlushTrailItems } from '../../components/shell/FlushPage';
@@ -197,7 +198,8 @@ const ofMax = (n: number, max: number): string => `${n} ${n === 1 ? 'question' :
 function readOnlyLine(r: InterviewRecord): string | null {
   if (r.state === 'assigned') return r.seat === 'lead' ? 'Accept this round first: you choose its questions once you have.' : `${r.lead.name.split(' ')[0]} chooses the questions once they accept.`;
   if (r.state === 'live' || r.state === 'ended' || r.state === 'scored' || r.state === 'reviewed') return 'This round has started, so its plan is fixed.';
-  if (r.state === 'declined' || r.state === 'cancelled') return 'This round is no longer going ahead.';
+  if (r.state === 'cancelled') { const why = cancelledLine(r); return why ? `This round was cancelled: ${why}.` : 'This round is no longer going ahead.'; }
+  if (r.state === 'declined') return 'This round is no longer going ahead.';
   return r.seat === 'lead' ? `${r.lead.name} chooses the questions for this round.` : null;
 }
 

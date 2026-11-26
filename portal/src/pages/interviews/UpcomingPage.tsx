@@ -8,7 +8,8 @@
 
 import { DateTimeField } from '@connorhoehn/ui-components';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { Button, Chip, CollectionToolbar, CopyIdButton, DataTable, DropdownMenu, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, CollectionToolbar, CopyIdButton, DataTable, DropdownMenu, Inline, Stack, T, type DataTableColumn, type DropdownMenuItem } from '@connorhoehn/ui-components/shared';
+import { RoundCloseDialog, roundCloseItems, type RoundCloseMode } from './RoundCloseDialog';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
@@ -76,8 +77,10 @@ function InviteStatusLoader({ row, override, link }: { row: InterviewRow; overri
 }
 
 /** The row's actions: Join for a live round, and one menu for the time and the link. */
-function RowActions({ row, joinedId, override, busy, onJoin, onSetTime, onClearTime, onMake, onRevoke }: {
+function RowActions({ row, joinedId, override, busy, onJoin, onSetTime, onClearTime, onMake, onRevoke, closeItems }: {
   row: InterviewRow; joinedId: string | null; override: InviteStatus | undefined; busy: boolean; onJoin(): void; onSetTime(): void; onClearTime(): void; onMake(status: InviteStatus | null): void; onRevoke(): void;
+  /** End, "Did not take place" and Cancel (RoundCloseDialog roundCloseItems), last in the menu. */
+  closeItems: DropdownMenuItem[];
 }) {
   const timeable = isTimeable(row.state);
   const { data } = useFetch<{ invite: InviteStatus }>(timeable && row.scheduledAt ? `${INTERVIEWS_API}/interviews/${encodeURIComponent(row.id)}/invite` : null, undefined, { share: true });
@@ -88,6 +91,7 @@ function RowActions({ row, joinedId, override, busy, onJoin, onSetTime, onClearT
     ...(timeable && row.scheduledAt ? [{ label: 'Clear the time…', onSelect: onClearTime }] : []),
     ...(timeable && row.scheduledAt && !busy ? [{ label: live ? 'Make a new link…' : 'Make the invite link', onSelect: () => onMake(status) }] : []),
     ...(timeable && row.scheduledAt && live && !busy ? [{ label: 'Revoke the link…', danger: true, onSelect: onRevoke }] : []),
+    ...closeItems,
   ];
   return (
     <Inline gap="xs" align="center" wrap={false}>
@@ -102,6 +106,9 @@ function UpcomingWorkspace() {
   const joinedId = useJoinedInterviewCall();
   const { session } = useSession();
   const { data, error, isLoading, refresh } = useFetch<ItemsResponse<InterviewRow>>(`${INTERVIEWS_API}/interviews`, 30_000);
+  const { session: me } = useSession();
+  const recruits = ['recruiter', 'admin'].includes(String(me?.role));
+  const [closing, setClosing] = useState<{ round: InterviewRow; mode: RoundCloseMode } | null>(null);
   const withConsent = showsConsentColumn(session?.role);
   const consents = useFetch<ItemsResponse<ConsentEffect>>(withConsent ? CONSENT_EFFECTS_PATH : null, 30_000);
   const consentOf = useMemo(() => new Map((consents.data?.items ?? []).map((c) => [c.interviewId, c])), [consents.data]);
@@ -271,7 +278,8 @@ function UpcomingWorkspace() {
               rowActions={(r) => (
                 <RowActions row={r} joinedId={joinedId} override={statuses.get(r.id)} busy={busy === r.id} onJoin={() => void navigate(roomHref(r.id))}
                   onSetTime={() => { setRowError(null); setEditing(r.id); }} onClearTime={() => ask({ kind: 'time', row: r, iso: null })}
-                  onMake={(s) => (s?.state === 'live' ? ask({ kind: 'replace', row: r }) : void make(r))} onRevoke={() => ask({ kind: 'revoke', row: r })} />
+                  onMake={(s) => (s?.state === 'live' ? ask({ kind: 'replace', row: r }) : void make(r))} onRevoke={() => ask({ kind: 'revoke', row: r })}
+                  closeItems={roundCloseItems(r, { asRecruiter: recruits, isLead: r.seat === 'lead' }, (mode) => setClosing({ round: r, mode }))} />
               )}
               rowActionsHeader="Actions"
               rowActionsHeaderHidden
@@ -281,6 +289,7 @@ function UpcomingWorkspace() {
             />
           )}
         </Stack>
+        <RoundCloseDialog round={closing?.round ?? null} mode={closing?.mode ?? null} onClose={() => setClosing(null)} onDone={refresh} />
         <CollectionCommandHost adapter={adapter} prompts={prompts} />
       </Stack>
     </CollectionCommandPage>

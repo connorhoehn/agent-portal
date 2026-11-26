@@ -23,6 +23,8 @@
 // The lead's join starts the interview (POST start); End interview ends it (POST end), leaves the call and goes
 // to the scorecard that is now due. Anyone without a seat reads the not-found page.
 import { PAD_CONFIRM_POLL_MS, answerPadConfirm, readPadConfirm, type PadConfirmWaiting } from '../../lib/interviewsMilo';
+import { canMarkNotHeld } from '../../lib/interviewsCancel';
+import { RoundCloseDialog } from './RoundCloseDialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Button, ChatComposer, Chip, Disclosure, EmptyState, Inline, KeyValue, LoadingState, PageHeader, PageSection, Stack, T, Tabs } from '@connorhoehn/ui-components/shared';
@@ -211,6 +213,13 @@ function InterviewRoom({ id }: { id: string }) {
     navigate(scorecardPath(room.id));
     return {};
   }, [room, refresh, call.here, leave, navigate]);
+  // "Did not take place": the round closes without a result, so the lead leaves the call for the desk, not a scorecard.
+  const [notHeld, setNotHeld] = useState(false);
+  const closedNotHeld = useCallback(async () => {
+    if (call.here) await leave?.();
+    if (room) hostRef.current?.unbind(room.lobbyName);
+    navigate(MY_INTERVIEWS_HREF);
+  }, [room, call.here, leave, navigate]);
   const knock = useCallback(async (admit: boolean): Promise<{ error?: string }> => {
     const out = await answerKnock(id, admit);
     if (!out.ok) return { error: out.error };
@@ -242,7 +251,8 @@ function InterviewRoom({ id }: { id: string }) {
     <RoomWorkspace room={room} here={call.here} joined={joined} live={call.live} admission={admission} off={offForFact(consents.error ? null : consents.data?.off)}
       onBack={() => navigate(MY_INTERVIEWS_HREF)} lost={lost.loss ? callLossWords(room.seat === 'lead' ? 'lead' : 'panel') : null} onRestart={lost.restart}
       miloLine={lost.loss ? miloLostLine(lostMilo.view, room.seat) : null} onBoardCheckpoints={setBoardCheckpoints}
-      folded={drawn} />
+      folded={drawn} onNotHeld={() => setNotHeld(true)} />
+    <RoundCloseDialog round={notHeld ? room : null} mode={notHeld ? 'not-held' : null} onClose={() => setNotHeld(false)} onDone={() => { void closedNotHeld(); }} />
     {drawn && callMode !== 'docked' && <RoomCallGallery mode={callMode} onMode={setCallMode} positionKey="interviews.room.call-gallery.position.v2"
       count={callCounts(host?.call.call ?? null).joined} recordingNote={host?.recordingNote ?? null} testId="interview-room-gallery" />}
     {drawn && callMode === 'docked' && <RoomCallDockedPane onMode={setCallMode} recordingNote={host?.recordingNote ?? null} paneId="interview-room-call" testId="interview-room-stage" />}
@@ -265,7 +275,9 @@ function roomStateTitle(room: RoomView, live: boolean, lost: { title: string } |
  * the call is this room's, the room is the huddle pane's owner (pages/social/RoomPane.tsx's pattern): the shell's own
  * chat pane never opens, and a focus request for the call's chat (the footer's Message) selects the Chat tab.
  */
-function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints, folded }: {
+function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost, onRestart, miloLine, onBoardCheckpoints, folded, onNotHeld }: {
+  /** The lead's "Did not take place" (gap audit 2026-11-20 §1): offered on a live round, or one past its start. */
+  onNotHeld?: () => void;
   room: RoomView; here: boolean; /** This person is in the call (not only bound to its lobby). */ joined: boolean; live: boolean; admission: Admission | null; off: string | null; onBack(): void;
   lost: ReturnType<typeof callLossWords> | null; onRestart: (() => void) | null; miloLine: string | null;
   onBoardCheckpoints: (c: BoardCheckpoints | null) => void;
@@ -313,6 +325,9 @@ function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost,
   const action = !open ? <Button variant="secondary" size="sm" onClick={onBack} data-testid="interview-room-closed">Open My interviews</Button>
     : lost?.action && onRestart ? <Button variant="primary" size="sm" onClick={onRestart} data-testid="interview-room-restart-call">{lost.action}</Button>
     : null;
+  const notHeld = lead && onNotHeld && canMarkNotHeld(room)
+    ? <Button variant="secondary" size="sm" onClick={onNotHeld} data-testid="interview-room-not-held">Did not take place</Button> : null;
+  const actions = action && notHeld ? <Inline gap="sm">{notHeld}{action}</Inline> : action ?? notHeld;
   const status = waiting ? <Chip size="sm" tone={candidateStatusTone(admission?.state)} data-testid="interview-room-candidate-status">{waiting}</Chip> : null;
   // Milo's record for a lost call is said on the header line too, not only under Details.
   const badge = status || miloLine ? <Inline gap="sm" align="center" wrap={false}>
@@ -322,7 +337,7 @@ function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost,
   return <Stack gap="none" className="min-h-0 min-w-0 flex-1" data-testid="interview-room-pane">
     {/* The page's one h1 (the shell's trail is only a breadcrumb): the essentials, the candidate's status, what the call is doing. */}
     <PageHeader density="compact" title={roomHeadline(room)} description={`${roomStateTitle(room, live, lost)}. ${hint}${miloLine ? ` ${miloLine}` : ''}`}
-      badge={badge} actions={action ?? undefined} className={inset || undefined} data-testid={lost ? 'interview-room-call-lost' : 'interview-room-idle'} />
+      badge={badge} actions={actions ?? undefined} className={inset || undefined} data-testid={lost ? 'interview-room-call-lost' : 'interview-room-idle'} />
     <Tabs idPrefix="interview-room" aria-label="The interview room" variant="underline" items={tabs} value={tab}
       onValueChange={(next) => setTab((t) => roomTabOf(type, next, t, design))} className={`shrink-0 ${inset}`} />
     {/* A board round's board stays mounted under the other tabs: its canvas, its follow and its live document survive a
