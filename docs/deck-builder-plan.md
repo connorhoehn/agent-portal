@@ -193,7 +193,7 @@ Each phase ends in something usable. Phases 1 and 2 can run side by side after p
 ### Phase 0: one engine, debts paid
 
 - Move the engine's authority to realtime-modules; platform-api and ui-components import it.
-- Level the pins first: this repo's middleware is on realtime-modules 0.147.1 while the frontend is on 0.151.0 (ledger row D-1). That is a prerequisite, not a side task.
+- The pins are level as of 26 November: this repo's middleware and frontend both run realtime-modules 0.151.0, so the engine has one consumer version to move.
 - Generate the model-facing schema text from the engine, fixing the 300/400/200 bullet mismatch.
 - Put deck drafting and revision behind `reserveSpend` with a `deck` source.
 - Replace the four tenants' repeated code with host records and one route factory.

@@ -20,13 +20,13 @@ Keeping it: when a row is done, delete it and name the row id in the commit mess
 - **Finished work is sitting unmerged in two places:** a cloud branch pushed from the deploy machine (B-2), and two uncommitted side worktrees in pipeline-runtime and ui-components (B-3, B-4).
 - **Milo's rebuild is half landed.** Phases 0 and 1 are on `main` and the text judge passes both sets, but the new turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 (coding) and 8 (system design) are delivered.
 - **Closed and quiet:** the security work of 6 to 10 November, the learning loop, the value sweep and the voice navigator. The access tenant, described as unfinished in `next-steps.md`, is built.
-- **The portal is three ui-components releases behind**, and its middleware runs a different realtime-modules version from its frontend (D-1, D-2).
+- **The portal is three ui-components releases behind** (D-2). Its middleware and frontend have both run realtime-modules 0.151.0 since 26 November.
 
 ## Do first
 
 3. **CI-1** Owner: get Actions running again on the private repositories, then re-run the latest `main` run in each and cut realtime-examples 0.2.15 (D-7).
 4. **B-3, B-4** Commit and push the two side worktrees before anything else touches them. They hold about 3,600 lines of pipeline-runtime and eleven ui-components source files that exist nowhere else.
-5. **D-1, D-2** One pin round in the portal: middleware to realtime-modules 0.151.0, frontend to ui-components 2.546.0.
+5. **D-2** The portal's frontend to ui-components 2.546.0.
 6. **B-2** Land the cloud branch, then rewrite the microVM runner's "unproven" section with what the real deploy showed.
 7. **C-1, then C-2 to C-4** Candidates: cancel, no-show and withdraw is the one blocker in the gap audit; stage dead ends, the simulated runner and the waiting-candidate bell come next.
 8. **M-1 to M-3** Milo: build the audio gate, make the turn owner the default, then do the phase-1 deletion in one commit.
@@ -137,7 +137,7 @@ Cloud work happens on another machine, so the deploy rows could only be read fro
 | P-7 | `k8s/crds/middleware-workload.yaml` ships `REPLACE_ME` for the signing secret and policy store, and the media server's metrics scrape needs a token. | `k8s/crds/middleware-workload.yaml:30-38`; `docs/next-steps.md:458` | Open by design until a cluster exists | Leave; note it in the deploy runbook | S |
 | P-8 | Owner decisions parked on 10 November and never recorded as decided: history rewrite, the registry prefix default in `scripts/build.sh`, back-publishing old library versions, program-owner scope on budgets and grants, who edits SDLC policies, who sees the guardrail editor, the steward check on work-item comments, whether leaders may retry a failed run. | `docs/next-steps.md:67-73`, `:765`, `:810`, `:1042` | Open | One high-effort pass that writes each decision into section 9 of `next-steps.md`, then implements it | M |
 | P-9 | Privacy in the public repository: account ids remain in eight tracked `infra/` files, one tracked spec holds a machine path, and commits on `main` carry an author address on a local hostname (git has no email configured on the build machine). | Audit finding F13; `docs/next-steps.md:809`; `portal/e2e/_tmp/shot.spec.ts` | Open | Move the ids to untracked config, delete `portal/e2e/_tmp/`, set the commit email to the noreply address; decide on history | M |
-| P-10 | A fresh clone still needs access to private dependency repositories or the vendored tarballs. | Audit finding F7; `portal/vendor/` | Open | Follows from D-1 and the library releases; restate once the pins are level | M |
+| P-10 | A fresh clone still needs access to private dependency repositories or the vendored tarballs. | Audit finding F7; `portal/vendor/` | Open | Follows from the library releases; restate once the pins are level | M |
 
 ## Voice navigator
 
@@ -179,7 +179,6 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| D-1 | The portal's middleware runs realtime-modules 0.147.1 while its frontend runs 0.151.0, both from tarballs in `portal/vendor/`. | `middleware/package.json:43`; `portal/package.json:48` | Open | Move the middleware to 0.151.0 as its own change (0.148.0 fails closed without authorization hooks), typecheck, delete the old tarball | S |
 | D-2 | The portal vendors ui-components 2.543.0; the library is at 2.546.0 (expandable table rows, `FilterBand`, `RowActions` with in-row confirm, `Table` size xs, `TitleCard`, gallery selection). 2.545.0 changes the `CatalogGrid` default gap from 20px to 16px. | `portal/package.json:49`; ui-components `CHANGELOG.md` | Open | One bump to 2.546.0 (or 2.547.0 after B-4); check every `CatalogGrid` page and re-run the DOM audit | S |
 | D-3 | The portal's vendored CDK construct package is 0.1.0; its source in realtime-examples is 0.2.0. | `infra/package.json:14`; realtime-examples `cdk/package.json` | Impact unverified | Read the diff before the next cloud deploy and re-vendor if the stacks need it | S |
 | D-4 | Local images for the `social` compose profile predate the 25 November pull, so the local gateway lacks the two guest-isolation commits. | `docker-compose.yml:136`; realtime-examples `18bff74f`, `3db0a544` | Open | Rebuild through `node scripts/social-documents.mjs up` | S |
@@ -208,7 +207,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first; it depends on D-1 | L |
+| K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first | L |
 
 ## Documents that now mislead
 
