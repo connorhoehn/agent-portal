@@ -20,13 +20,12 @@ Keeping it: when a row is done, delete it and name the row id in the commit mess
 - **Finished work is sitting unmerged in two places:** a cloud branch pushed from the deploy machine (B-2), and two uncommitted side worktrees in pipeline-runtime and ui-components (B-3, B-4).
 - **Milo's rebuild is half landed.** Phases 0 and 1 are on `main` and the text judge passes both sets, but the new turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 (coding) and 8 (system design) are delivered.
 - **Closed and quiet:** the security work of 6 to 10 November, the learning loop, the value sweep and the voice navigator. The access tenant, described as unfinished in `next-steps.md`, is built.
-- **The portal is three ui-components releases behind** (D-2). Its middleware and frontend have both run realtime-modules 0.151.0 since 26 November.
+- **The portal's pins are level as of 26 November:** ui-components 2.546.0, and realtime-modules 0.151.0 in both the middleware and the frontend.
 
 ## Do first
 
 3. **CI-1** Owner: get Actions running again on the private repositories, then re-run the latest `main` run in each and cut realtime-examples 0.2.15 (D-7).
 4. **B-3, B-4** Commit and push the two side worktrees before anything else touches them. They hold about 3,600 lines of pipeline-runtime and eleven ui-components source files that exist nowhere else.
-5. **D-2** The portal's frontend to ui-components 2.546.0.
 6. **B-2** Land the cloud branch, then rewrite the microVM runner's "unproven" section with what the real deploy showed.
 7. **C-1, then C-2 to C-4** Candidates: cancel, no-show and withdraw is the one blocker in the gap audit; stage dead ends, the simulated runner and the waiting-candidate bell come next.
 8. **M-1 to M-3** Milo: build the audio gate, make the turn owner the default, then do the phase-1 deletion in one commit.
@@ -179,7 +178,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| D-2 | The portal vendors ui-components 2.543.0; the library is at 2.546.0 (expandable table rows, `FilterBand`, `RowActions` with in-row confirm, `Table` size xs, `TitleCard`, gallery selection). 2.545.0 changes the `CatalogGrid` default gap from 20px to 16px. | `portal/package.json:49`; ui-components `CHANGELOG.md` | Open | One bump to 2.546.0 (or 2.547.0 after B-4); check every `CatalogGrid` page and re-run the DOM audit | S |
+| D-2 | ui-components 2.546.0 is adopted; its smaller `CatalogGrid` default gap (20px to 16px) has not been looked at on the two pages that use the default. | `portal/src/pages/ScoresCohortPage.tsx:43`; `portal/src/pages/SelectContextPage.tsx:426` | Open | Look at both pages once and re-run the DOM audit | S |
 | D-3 | The portal's vendored CDK construct package is 0.1.0; its source in realtime-examples is 0.2.0. | `infra/package.json:14`; realtime-examples `cdk/package.json` | Impact unverified | Read the diff before the next cloud deploy and re-vendor if the stacks need it | S |
 | D-4 | Local images for the `social` compose profile predate the 25 November pull, so the local gateway lacks the two guest-isolation commits. | `docker-compose.yml:136`; realtime-examples `18bff74f`, `3db0a544` | Open | Rebuild through `node scripts/social-documents.mjs up` | S |
 | D-5 | platform-api has 17 commits since 0.1.8 with no version, including mid-call interview recording and the captions shared secret. | platform-api `CHANGELOG.md:6` "Unreleased"; head `e029313` | Open | Cut 0.1.9, or 0.2.0 because `refresh-token` stopped forwarding `role`; re-run CI | S |
