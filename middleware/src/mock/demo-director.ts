@@ -41,6 +41,7 @@
 
 import { demoBeatMs, setDemoActive, setDemoPaceOverride, sleepBeats } from './demo-pace.js';
 import { liveBotRuns } from './bots.js';
+import { spendHolds } from './spend-holds.js';
 import { workItems } from './work-items.js';
 import { getBox, replayEvents, appendEvent, reserveBox, releaseBox, type FleetEvent } from '../lib/devbox-fleet.js';
 import { reconcileBotRuns } from '../lib/bot-runner.js';
@@ -297,7 +298,10 @@ async function until(ready: () => boolean, maxBeats: number, signal: { cancelled
 function settled(runId: string | null): boolean {
   if (!runId) return false;
   const row = liveBotRuns.rows().find((r) => r.id === runId);
-  return row != null && row.status !== 'running';
+  if (row == null || row.status === 'running') return false;
+  // The run's status flips before its hold settles; a hold still open here would count
+  // against the envelope's hard cap and turn the next pickup's 409 into a 403.
+  return !spendHolds.rows().some((h) => h.status === 'held' && h.sourceId === runId);
 }
 
 function titleOf(workItemId: string): string {

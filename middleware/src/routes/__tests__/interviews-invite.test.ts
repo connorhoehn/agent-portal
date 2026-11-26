@@ -426,7 +426,7 @@ describe('the waiting room', () => {
     expect(open.headers['referrer-policy']).toBe('no-referrer');
     expect(open.body.room).toMatchObject({
       interviewId: IV, lobbyName: `interviews:interview:${IV}`, self: { displayName: 'Candidate' },
-      round: { type: 'technical', minutes: 60 }, startedAt: null, state: 'open',
+      round: { type: 'technical', minutes: 10 }, startedAt: null, state: 'open', // the seeded ten-minute round (the coding film's)
     });
     expect(String(open.body.room.self.userId)).toMatch(/^guest:/);
     // The lead's call id names whose tile carries the lead's name (E4 #32; the call's frames carry it anyway); no name, no other id.
