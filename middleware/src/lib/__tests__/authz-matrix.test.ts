@@ -482,6 +482,16 @@ describe('capability boundaries that must not regress', () => {
     expect(role('interviews/recruiter').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ConductInterview"[\s\S]*principal\.role == "recruiter"/);
   });
 
+  test('interviews cancel, did not take place, withdraw (gap audit 2026-11-20 §1): no new action, the existing ones', () => {
+    // routes/interviews/cancel.ts gates Cancel on AssignInterviews, "did not take place" on ConductInterview (then the
+    // lead's seat) or AssignInterviews, and withdrawing an application on ManageCandidates; routes/interviews/room.ts
+    // opens End to AssignInterviews for a live round the lead left. So the recruiter cancels, ends and withdraws, the
+    // interviewer only marks their own round not held, and the hiring manager does none of it.
+    expect([has('interviews/recruiter', 'AssignInterviews'), has('interviews/recruiter', 'ManageCandidates')]).toEqual([true, true]);
+    expect([has('interviews/interviewer', 'ConductInterview'), has('interviews/interviewer', 'AssignInterviews'), has('interviews/interviewer', 'ManageCandidates')]).toEqual([true, false, false]);
+    expect([has('interviews/hiring-manager', 'ConductInterview'), has('interviews/hiring-manager', 'AssignInterviews'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false, false]);
+  });
+
   test('an orgiq member cannot view the assessment tenant', () => {
     expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });

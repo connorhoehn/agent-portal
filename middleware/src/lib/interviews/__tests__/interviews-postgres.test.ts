@@ -592,6 +592,17 @@ async function seedWorld(): Promise<void> {
     });
   });
 
+  it('cancel (gap audit §1): a compare-and-set to cancelled with the cancellation as JSONB; a live round also gets ended_at', async () => {
+    const before = (await interviews.getInterview('iv-r6d1k9wt'))!;
+    const cancellation = { reason: 'rescheduling' as const, note: 'Next week.', by: 'u-greta', at: at(1) };
+    const out = await interviews.cancelInterview(before.id, cancellation, before.revision);
+    expect(out).toMatchObject({ ok: true, row: { state: 'cancelled', endedAt: before.endedAt, cancellation, revision: before.revision + 1 } });
+    expect(await interviews.cancelInterview(before.id, cancellation, before.revision)).toMatchObject({ ok: false, reason: 'stale' });
+    const live = (await interviews.getInterview(KWAME_LIVE))!;
+    const notHeld = { reason: 'no_show' as const, note: null, by: 'u-hugo', at: at(2) };
+    expect(await interviews.cancelInterview(live.id, notHeld, live.revision)).toMatchObject({ ok: true, row: { state: 'cancelled', endedAt: new Date(at(2)).toISOString(), cancellation: notHeld } });
+  });
+
   it('every consent write names its revision: two first answers at once insert one row', async () => {
     const c = interviewConsentsFixture.rows()[0]!;
     await psql(`DELETE FROM interview_consents WHERE interview_id = ${literal(c.interviewId)};`);
