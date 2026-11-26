@@ -1,5 +1,7 @@
 # Next steps and recommendations
 
+The current list of open work is [ledger.md](ledger.md), written 25 November 2026. This file stays as history and as the record of decisions; several of its status lines are out of date.
+
 Written 6 November 2026, right after the hand-over sweep that replaced the working notes in every repository with a plain README. This is the list of what is loose, what is owed, and what I would do next, in the order I would do it. Each item says where to look.
 
 The twelve repositories and how they depend on each other are described in [project-story.md](project-story.md). Section 7 is a security review of all twelve; read it before showing the stack to anyone outside, and fix the "first" list before deploying again. The short version: `distributed-core` is the only leaf, everything else stacks on it, and `aws-agentcore` (this repo) and `realtime-examples` sit on top and consume almost everything.
