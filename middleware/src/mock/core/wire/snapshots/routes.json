@@ -2073,7 +2073,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:262"
+      "source": "src/index.ts:265"
     },
     {
       "method": "GET",
@@ -4828,7 +4828,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:261"
+      "source": "src/index.ts:264"
     },
     {
       "method": "DELETE",
@@ -4913,7 +4913,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:263"
+      "source": "src/index.ts:266"
     }
   ],
   "unresolved": []
