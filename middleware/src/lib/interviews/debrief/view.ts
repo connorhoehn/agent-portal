@@ -3,13 +3,14 @@
 // One candidate, per application the viewer may see: the stage and its history (each decision with what was decided
 // and how many scorecards were missing), and each round with its state, lead and panel, when it ran, every
 // submitted scorecard (the latest version whole, whether a rating changed after the recap, the correction reason,
-// how many earlier versions there are), who has not submitted yet, and where its recap (E3) and record (E2) are.
+// how many earlier versions there are, the red flags it ticked), the round's ticked red flags with who ticked each,
+// who has not submitted yet, and where its recap (E3) and record (E2) are.
 //
 // Readers: the recruiter, the hiring manager of that opening, the admin. An interviewer reads no debrief whatever
 // they have submitted (their view of the others stays the scorecard page's). Nothing about the candidate's consent
 // answers (decision 5). No average, no total, no ranking (decision 6): what people wrote, side by side.
 
-import { latestByAuthor, seatedOf } from '../scorecard.js';
+import { latestByAuthor, redFlagsTicked, seatedOf } from '../scorecard.js';
 import { competencyIdsOfRound } from '../kit.js';
 import { reachOf } from '../scope.js';
 import type { ApplicationStage, Interview, InterviewState, KitCompetency, Recommendation, RoundType, StageChange } from '../types.js';
@@ -30,6 +31,8 @@ export interface DebriefScorecard {
   correctionReason: string | null;
   /** How many versions came before this one. */
   earlierVersions: number;
+  /** A board round: the red flags this version ticked, in the round's questions' order; absent when none. */
+  redFlagsSeen?: string[];
 }
 
 export interface DebriefRound {
@@ -46,6 +49,11 @@ export interface DebriefRound {
   competencyIds: string[];
   /** Each seat's latest scorecard, lead first, then the panel in seat order. */
   scorecards: DebriefScorecard[];
+  /**
+   * The red flags ticked on this round's submitted scorecards (each author's latest version), each once with who ticked it,
+   * in seat order; empty when none. Read from the viewer's visible world, so the scorecards' blind rule holds (scope.ts).
+   */
+  redFlags: Array<{ text: string; by: PersonRef[] }>;
   /** Seats whose scorecard is not in on a round that has been held; empty before the round runs. */
   due: PersonRef[];
   /** The recap's API path (E3) and the record's page path (E2), once the round has been held; null before. */
@@ -124,15 +132,18 @@ function roundOf(ix: WorldIndex, i: Interview, names: ReadonlyMap<string, string
   const seats = seatedOf(i);
   const order = (id: string) => { const k = seats.indexOf(id); return k < 0 ? seats.length : k; };
   const held = HELD.has(i.state);
+  const bySeat = [...latest].sort((a, b) => order(a.interviewerId) - order(b.interviewerId));
   return {
     interviewId: i.id, name: roundName, type: i.type, minutes: i.minutes, state: i.state,
     lead: ix.people(i.leadId), panel: i.panelIds.map((p) => ix.people(p)), scheduledAt: i.scheduledAt, endedAt: i.endedAt, competencyIds,
-    scorecards: [...latest].sort((a, b) => order(a.interviewerId) - order(b.interviewerId)).map((s) => ({
+    scorecards: bySeat.map((s) => ({
       id: s.id, interviewer: ix.people(s.interviewerId), version: s.version, submittedAt: s.submittedAt, recommendation: s.recommendation, summary: s.summary,
       ratings: s.ratings.map((r) => ({ competencyId: r.competencyId, competency: names.get(r.competencyId) ?? r.competencyId, rating: r.rating, note: r.note })),
       changedAfterRecap: s.changedAfterRecap, correctionReason: s.correctionReason,
       earlierVersions: all.filter((e) => e.interviewerId === s.interviewerId && e.version < s.version).length,
+      ...(s.redFlagsSeen?.length ? { redFlagsSeen: [...s.redFlagsSeen] } : {}),
     })),
+    redFlags: redFlagsTicked(bySeat).map((f) => ({ text: f.text, by: f.by.map((p) => ix.people(p)) })),
     due: held ? seats.filter((p) => !latest.some((s) => s.interviewerId === p)).map((p) => ix.people(p)) : [],
     recapPath: held ? `/api/interviews/interviews/${encodeURIComponent(i.id)}/recap` : null,
     recordPath: held ? `/interviews/rounds/${encodeURIComponent(i.id)}/record` : null,

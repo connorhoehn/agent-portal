@@ -32,6 +32,7 @@ import { sessionMiddleware, type Session } from '../../lib/session.js';
 import { listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
+import { interviewScorecardsFixture } from '../../mock/interviews.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import { registerExportSection, clearExportSections } from '../../lib/interviews/export/registry.js';
 import { exportNotices, exportSuggestions } from '../../lib/interviews/export/sections.js';
@@ -114,6 +115,14 @@ describe('consent records on the profile', () => {
 });
 
 describe('the export of what Milo showed', () => {
+  it('carries the red flags ticked on the round\'s submitted scorecards, with who ticked them; none when nobody ticked one', async () => {
+    expect(JSON.parse((await exportOf('u-greta', 'iv-f2b6t5zh')).text).redFlags).toEqual([]);
+    const card = interviewScorecardsFixture.rows().find((c) => c.interviewId === 'iv-f2b6t5zh')!;
+    card.redFlagsSeen = ['Cannot say where the data lives.'];
+    const doc = JSON.parse((await exportOf('u-greta', 'iv-f2b6t5zh')).text);
+    expect(doc.redFlags).toEqual([{ text: 'Cannot say where the data lives.', by: [{ id: card.interviewerId, name: expect.any(String) }] }]);
+  });
+
   it('gives the recruiter the interview, the seeded suggestions whole and the notice, as an attachment', async () => {
     const res = await exportOf('u-greta', 'iv-f2b6t5zh');
     expect(res.status).toBe(200);

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  confirmQuestion, debriefHref, dueLine, missingLine, readsDebrief, reasonProblem, recapLine, roundEmptyLine, scorecardNotes, sideBySide, applicationSideBySide,
+  confirmQuestion, debriefHref, dueLine, missingLine, readsDebrief, reasonProblem, recapLine, redFlagLines, roundEmptyLine, scorecardNotes, sideBySide, applicationSideBySide,
   type DebriefApplication, type DebriefScorecard,
 } from '../interviewsDebrief.ts';
 
@@ -103,4 +103,14 @@ test('five interviewers over two rounds give five columns, each under its round,
   assert.deepEqual(columns.map((c) => c.roundId), ['iv-1', 'iv-1', 'iv-1', 'iv-2', 'iv-2']);
   assert.ok(176 + columns.length * 300 > 1280);
   assert.deepEqual(Object.keys(rows[0]!.cells).sort(), ['a', 'b', 'c', 'd', 'e']);
+});
+
+test('the round\'s ticked red flags read one sentence each with who ticked them; none when nobody ticked one', () => {
+  const hugo = { id: 'u-hugo', name: 'Hugo Marchetti' };
+  const wen = { id: 'u-wen', name: 'Wen Zhao' };
+  assert.deepEqual(redFlagLines({ redFlags: [{ text: 'Cannot say where the data lives.', by: [hugo, wen] }, { text: 'Skips the clarifying questions', by: [wen] }] }), [
+    'Red flag: Cannot say where the data lives, ticked by Hugo Marchetti and Wen Zhao.',
+    'Red flag: Skips the clarifying questions, ticked by Wen Zhao.',
+  ]);
+  assert.deepEqual(redFlagLines({ redFlags: [] }), []);
 });

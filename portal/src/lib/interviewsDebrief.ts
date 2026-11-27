@@ -25,6 +25,8 @@ export interface DebriefScorecard {
   changedAfterRecap: boolean;
   correctionReason: string | null;
   earlierVersions: number;
+  /** A board round: the red flags this version ticked; absent when none. */
+  redFlagsSeen?: string[];
 }
 
 export interface DebriefRound {
@@ -38,6 +40,8 @@ export interface DebriefRound {
   scheduledAt: string | null;
   endedAt: string | null;
   scorecards: DebriefScorecard[];
+  /** The red flags ticked on the round's submitted scorecards, each once with who ticked it; empty when none. */
+  redFlags: Array<{ text: string; by: PersonRef[] }>;
   due: PersonRef[];
   recapPath: string | null;
   recordPath: string | null;
@@ -130,6 +134,11 @@ export function scorecardNotes(s: DebriefScorecard): string[] {
   if (s.correctionReason) out.push(`${s.interviewer.name} corrected this in version ${s.version}: ${s.correctionReason}`);
   if (s.earlierVersions) out.push(`${plural(s.earlierVersions, 'earlier version')} of ${s.interviewer.name}'s scorecard ${s.earlierVersions === 1 ? 'is' : 'are'} kept on the scorecard page.`);
   return out;
+}
+
+/** The round's ticked red flags, one sentence each: the flag and who ticked it. None when nobody ticked one. */
+export function redFlagLines(r: Pick<DebriefRound, 'redFlags'>): string[] {
+  return (r.redFlags ?? []).map((f) => `Red flag: ${f.text.replace(/[.\s]+$/, '')}, ticked by ${f.by.map((p) => p.name).join(' and ')}.`);
 }
 
 /** The recap's state in one sentence, or null when there is evidence to show. */

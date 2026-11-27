@@ -3,7 +3,7 @@
 import { interviewApplicationsFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../../mock/interviews.js';
 import { fixtureRegistry } from '../../../mock/core/index.js';
 import {
-  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, scorecardCompetencies, latestByAuthor, newScorecardVersion, stateRefusal, submitMove, versionsOf,
+  SCORECARD_LIMITS, changedAfterRecap, checkScorecard, isScoredNow, scorecardCompetencies, latestByAuthor, newScorecardVersion, redFlagsTicked, stateRefusal, submitMove, versionsOf,
 } from '../scorecard.js';
 import { othersRevealed, visibleWorld } from '../scope.js';
 import type { Interview, InterviewsWorld, KitCompetency, Scorecard } from '../types.js';
@@ -226,5 +226,42 @@ describe('others hidden until yours is in (scope.ts)', () => {
     expect(nadiaCards(world([wens, hugos]), 'u-someone-else', 'hiring-manager')).toEqual([]);
     expect(othersRevealed(world([wens, hugos]), 'u-third', 'app-efd7rc6g')).toBe(false);
     expect(nadiaCards(world([wens, hugos]), 'u-third', 'interviewer')).toEqual([]);
+  });
+});
+
+// Gap audit 2026-11-20 (minor): the red flags ticked on submitted scorecards reach the debrief and the export through
+// redFlagsTicked, fed from the viewer's visible world, so they follow the scorecards' blind rule exactly.
+describe('the red flags ticked, and the blind rule over them', () => {
+  const FLAG_A = 'Jumps to a design before asking about scale.';
+  const FLAG_B = 'Cannot say where the data lives.';
+
+  it('each flag once, with who ticked it, from each author\'s latest version only', () => {
+    const cards = [
+      card({ id: 'sc-1', interviewerId: 'u-wen', redFlagsSeen: [FLAG_A, FLAG_B] }),
+      card({ id: 'sc-2', interviewerId: 'u-hugo', redFlagsSeen: [FLAG_A] }),
+      card({ id: 'sc-3', interviewerId: 'u-hugo', version: 2, redFlagsSeen: [FLAG_B], correctionReason: 'Misread the note.' }),
+    ];
+    expect(redFlagsTicked(cards)).toEqual([{ text: FLAG_A, by: ['u-wen'] }, { text: FLAG_B, by: ['u-wen', 'u-hugo'] }]);
+    expect(redFlagsTicked([card({})])).toEqual([]);
+  });
+
+  // Nadia's leadership round: Wen leads, Hugo on the panel (as in the block above).
+  function world(cards: Scorecard[]): InterviewsWorld {
+    const interviews = interviewsFixture.rows().map((i) => (i.id === 'iv-n5z9f2cq' ? { ...i, state: 'ended' as const } : i.id === 'iv-m8t3h6ng' ? { ...i, state: 'cancelled' as const } : i));
+    return { openings: interviewOpeningsFixture.rows(), candidates: [], applications: [{ id: 'app-efd7rc6g', candidateId: 'cand-xbmv4nvd', openingId: 'op-em', stage: 'interviewing', appliedAt: 'T', history: [] }],
+      interviews, scorecards: [...interviewScorecardsFixture.rows(), ...cards] };
+  }
+  const flagsFor = (w: InterviewsWorld, id: string, role: string) => redFlagsTicked(visibleWorld(w, { id, role }).scorecards.filter((s) => s.interviewId === 'iv-n5z9f2cq'));
+  const wens = card({ id: 'sc-w', interviewId: 'iv-n5z9f2cq', interviewerId: 'u-wen', redFlagsSeen: [FLAG_A] });
+  const hugos = card({ id: 'sc-h', interviewId: 'iv-n5z9f2cq', interviewerId: 'u-hugo' });
+
+  it('before Hugo\'s own scorecard is in, he reads none of Wen\'s flags; the recruiter and the hiring manager read them as they arrive', () => {
+    expect(flagsFor(world([wens]), 'u-hugo', 'interviewer')).toEqual([]);
+    expect(flagsFor(world([wens]), 'u-greta', 'recruiter')).toEqual([{ text: FLAG_A, by: ['u-wen'] }]);
+    expect(flagsFor(world([wens]), 'u-amara', 'hiring-manager')).toEqual([{ text: FLAG_A, by: ['u-wen'] }]);
+  });
+
+  it('once Hugo\'s own scorecard is in, he reads Wen\'s flags with her name on them', () => {
+    expect(flagsFor(world([wens, hugos]), 'u-hugo', 'interviewer')).toEqual([{ text: FLAG_A, by: ['u-wen'] }]);
   });
 });

@@ -151,6 +151,23 @@ describe('who reads the debrief', () => {
     for (const k of keys) expect([k, /consent|average|total|rank|score$/i.test(k)]).toEqual([k, false]);
   });
 
+  it('carries the red flags ticked on submitted scorecards: on each scorecard, and once per round with who ticked them (gap audit 2026-11-20)', async () => {
+    const FLAG = 'Cannot say how the system behaves under load.';
+    interviewScorecardsFixture.rows().find((c) => c.interviewId === 'iv-d7q4n9xe' && c.interviewerId === 'u-hugo')!.redFlagsSeen = [FLAG];
+    for (const as of [GRETA, AMARA, OPERATOR]) {
+      const coding = (await debrief(as, 'cand-qz63q3a3')).body.debrief.applications[0].rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-d7q4n9xe');
+      expect(coding.scorecards[0].redFlagsSeen).toEqual([FLAG]);
+      expect(coding.redFlags).toEqual([{ text: FLAG, by: [{ id: 'u-hugo', name: 'Hugo Marchetti' }] }]);
+    }
+    expect((await debrief(HUGO, 'cand-qz63q3a3')).status).toBe(404);
+  });
+
+  it('a round with no flag ticked has an empty list and no flags on its scorecards', async () => {
+    const coding = (await debrief(AMARA, 'cand-qz63q3a3')).body.debrief.applications[0].rounds.find((r: { interviewId: string }) => r.interviewId === 'iv-d7q4n9xe');
+    expect(coding.redFlags).toEqual([]);
+    expect(coding.scorecards[0]).not.toHaveProperty('redFlagsSeen');
+  });
+
   it('a round still owed a scorecard names who is due; one not yet held has no recap or record', async () => {
     const jonah = (await debrief(AMARA, 'cand-zrtncmb2')).body.debrief.applications[0];
     expect(jonah.rounds[0]).toMatchObject({ state: 'ended', scorecards: [], due: [{ id: 'u-wen', name: 'Wen Zhao' }] });

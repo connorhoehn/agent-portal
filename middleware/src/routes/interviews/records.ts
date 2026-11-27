@@ -15,6 +15,7 @@ import { resolveSession } from '../../lib/authz.js';
 import { consentStore } from '../../lib/interviews/consent/store.js';
 import { buildMiloExport } from '../../lib/interviews/export/service.js';
 import { competenciesOfRound } from '../../lib/interviews/kit.js';
+import { redFlagsTicked } from '../../lib/interviews/scorecard.js';
 import { indexFor, param } from '../../lib/interviews/request.js';
 
 export const recordsRouter = Router();
@@ -82,6 +83,8 @@ recordsRouter.get('/interviews/:id/milo-export', asyncHandler(async (req, res) =
   const doc = await buildMiloExport({
     interview, candidateId: app?.candidateId ?? null, openingId: app?.openingId ?? null, roundName: ix.brief(interview).roundName,
     competencies: opening ? competenciesOfRound(opening.kit, interview.roundId) : [],
+    // From the reader's visible world (indexFor), as the scorecards are: the blind rule holds.
+    redFlags: redFlagsTicked(ix.world.scorecards.filter((s) => s.interviewId === interview.id)).map((f) => ({ text: f.text, by: f.by.map((p) => ix.people(p)) })),
   });
   // That an export happened, and nothing of what it held.
   console.info(JSON.stringify({ event: 'interviews.milo-export', by: session.sub, interviewId: interview.id, at: doc.exportedAt }));

@@ -124,6 +124,25 @@ export function redFlagsOfRound(i: Pick<Interview, 'questionIds'>, kit: Pick<Ope
 }
 
 /**
+ * The red flags ticked on submitted scorecards (gap audit 2026-11-20, minor): each flag once, with who ticked it, from each
+ * author's latest version only (a correction that unticks a flag takes it away). Flags keep the order the cards hold them
+ * in (the round's questions' order); the authors keep the order of `cards`. It reads only what it is given: callers pass
+ * the scorecards of the viewer's visible world (scope.ts visibleWorld), so the blind rule of decision 14 holds here as it
+ * does for the scorecards themselves.
+ */
+export function redFlagsTicked(cards: readonly Scorecard[]): Array<{ text: string; by: string[] }> {
+  const out = new Map<string, string[]>();
+  for (const s of latestByAuthor(cards)) {
+    for (const text of s.redFlagsSeen ?? []) {
+      const by = out.get(text) ?? [];
+      if (!by.includes(s.interviewerId)) by.push(s.interviewerId);
+      out.set(text, by);
+    }
+  }
+  return [...out].map(([text, by]) => ({ text, by }));
+}
+
+/**
  * Check a submit's body against `competencies` (what this scorecard rates, scorecardCompetencies): every one in
  * `required` rated (default: all of them), the rest optional, anything else refused. A correction must carry a
  * reason; a first version must not.

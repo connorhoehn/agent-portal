@@ -31,7 +31,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, dateLabel, whenLabel, ROUND_TYPE_LABELS, STAGE_LABELS, recommendationTone, roundStatus, type InterviewRow } from '../../lib/interviews';
 import {
   DECISION_CHOICES, DECISION_DONE, confirmQuestion, debriefApi, debriefHref, decideStage, decisionTone, dueLine, missingLine, reasonProblem, recapLine,
-  roundEmptyLine, scorecardNotes, applicationSideBySide,
+  redFlagLines, roundEmptyLine, scorecardNotes, applicationSideBySide,
   type DebriefApplication, type DebriefMove, type DebriefRound, type DebriefView, type Decision, type RecapBody, type SideCell, type SideRow,
 } from '../../lib/interviewsDebrief';
 import { plural } from '../../lib/plural';
@@ -184,13 +184,14 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
     : body;
 }
 
-/** What the table does not say about one round: when it was, who sat on it, who is still due, and Milo's recap under it. */
+/** What the table does not say about one round: when it was, who sat on it, who is still due, the red flags ticked, and Milo's recap under it. */
 function RoundBlock({ round, nested }: { round: DebriefRound; nested: boolean }) {
   const navigate = useNavigate();
   const status = roundStatus(round.state);
   const empty = roundEmptyLine(round);
   const due = dueLine(round);
   const notes = round.scorecards.flatMap(scorecardNotes);
+  const flags = redFlagLines(round);
   return (
     <DetailSection variant="heading" as={nested ? 'h3' : 'h2'} title={round.name} data-testid="interviews-debrief-round"
       hint={<MetaLine size="sm" items={[
@@ -209,6 +210,7 @@ function RoundBlock({ round, nested }: { round: DebriefRound; nested: boolean })
       <Stack gap="sm">
         {empty && <T size="sm" tone="secondary" data-testid="interviews-debrief-round-empty">{empty}</T>}
         {due && <T size="sm" tone="secondary" data-testid="interviews-debrief-due">{due}</T>}
+        {flags.map((f) => <T key={f} size="sm" data-testid="interviews-debrief-red-flag">{f}</T>)}
         {notes.map((n) => <T key={n} size="xs" tone="secondary" data-testid="interviews-debrief-note">{n}</T>)}
         {round.recapPath && <RecapInPlace path={round.recapPath} />}
       </Stack>

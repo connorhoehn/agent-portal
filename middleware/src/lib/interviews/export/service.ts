@@ -1,5 +1,6 @@
 // The export of what Milo showed on one interview (row I6.2): a JSON document built from the sections registered in
-// registry.ts. The interview carries ids, the round, times and state; the candidate appears by id, never by name. A
+// registry.ts. The interview carries ids, the round, times and state; the candidate appears by id, never by name. The
+// red flags the panel ticked on its submitted scorecards ride beside the sections. A
 // section that throws leaves its key with an error code and the export carries on. Nothing here writes a log: the
 // route says that an export happened (who, which interview, when) and nothing of what it held.
 import type { Interview } from '../types.js';
@@ -15,6 +16,11 @@ export interface MiloExport {
     round: { id: string; name: string; type: string; minutes: number; competencies: Array<{ id: string; name: string }> };
     scheduledAt: string | null; endedAt: string | null; state: string;
   };
+  /**
+   * The red flags ticked on the round's submitted scorecards, each once with who ticked it (scorecard.ts redFlagsTicked);
+   * empty when none. Built by the route from the reader's visible world, so the scorecards' blind rule holds.
+   */
+  redFlags: Array<{ text: string; by: Array<{ id: string; name: string }> }>;
   sections: Record<string, unknown>;
 }
 
@@ -25,6 +31,8 @@ export interface ExportContext {
   roundName: string;
   /** The competencies the round assesses (kit.ts competenciesOfRound); none when the opening could not be read. */
   competencies?: ReadonlyArray<{ id: string; name: string }>;
+  /** The round's ticked red flags (MiloExport.redFlags); none when not given. */
+  redFlags?: ReadonlyArray<{ text: string; by: ReadonlyArray<{ id: string; name: string }> }>;
 }
 
 export async function buildMiloExport(ctx: ExportContext, now: Date = interviewsNow()): Promise<MiloExport> {
@@ -44,6 +52,7 @@ export async function buildMiloExport(ctx: ExportContext, now: Date = interviews
       round: { id: i.roundId, name: ctx.roundName, type: i.type, minutes: i.minutes, competencies: (ctx.competencies ?? []).map((c) => ({ id: c.id, name: c.name })) },
       scheduledAt: i.scheduledAt, endedAt: i.endedAt, state: i.state,
     },
+    redFlags: (ctx.redFlags ?? []).map((f) => ({ text: f.text, by: f.by.map((p) => ({ id: p.id, name: p.name })) })),
     sections,
   };
 }
