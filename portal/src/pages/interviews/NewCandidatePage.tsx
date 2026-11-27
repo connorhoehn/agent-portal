@@ -1,6 +1,6 @@
 // /interviews/candidates/new — the recruiter adds a candidate to an opening (UI round 2, contract U13). Same shape as New
 // opening: the details, then a confirm in the composer's prompt deck (never a dialog); the server checks each field and
-// answers a sentence on it, and the same email twice on one opening is refused plainly. Then the candidate's profile,
+// answers a sentence on it, only an open opening is offered (a paused or closed one takes no one new), and the same email twice on one opening is refused plainly. Then the candidate's profile,
 // where the résumé is uploaded.
 
 import { Button, FormField, Inline, Input, PageFrame, Select, Stack } from '@connorhoehn/ui-components/shared';
@@ -13,7 +13,7 @@ import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, candidateHref, type ItemsResponse, type OpeningRow } from '../../lib/interviews';
-import { BLANK_CANDIDATE, candidateChanged, createCandidate, type NewCandidate } from '../../lib/interviewsCandidates';
+import { BLANK_CANDIDATE, candidateChanged, createCandidate, openToCandidates, type NewCandidate } from '../../lib/interviewsCandidates';
 import { problemsByPath } from '../../lib/interviewsKit';
 
 const LIST = '/interviews/candidates';
@@ -63,7 +63,8 @@ export default function NewCandidatePage() {
       if (!('optionId' in a) || a.optionId !== 'create') { setAsking(null); return { receipt: 'Still editing. Nobody was added.' }; }
       const r = await createCandidate(form);
       if (!r.ok) {
-        setProblems(r.duplicate ? new Map([['email', r.error]]) : problemsByPath(r.fields));
+        // The server names the field when it can (a paused or closed opening is a sentence on the opening); a duplicate is the email's.
+        setProblems(r.fields.length ? problemsByPath(r.fields) : r.duplicate ? new Map([['email', r.error]]) : new Map());
         setAsking(null);
         return { error: r.error };
       }
@@ -104,7 +105,7 @@ export default function NewCandidatePage() {
           <Inline gap="sm" align="start">
             <FormField label="Opening" required error={problems.get('openingId')} className="min-w-[16rem] flex-1">
               {(w) => <Select {...w} size="sm" value={form.openingId} data-testid="interviews-candidate-opening"
-                options={[{ value: '', label: 'Choose an opening' }, ...(openings.data?.items ?? []).filter((o) => o.state !== 'closed').map((o) => ({ value: o.id, label: `${o.title} · ${o.team}` }))]}
+                options={[{ value: '', label: 'Choose an opening' }, ...(openings.data?.items ?? []).filter(openToCandidates).map((o) => ({ value: o.id, label: `${o.title} · ${o.team}` }))]}
                 onChange={(e) => set({ openingId: e.target.value })} />}
             </FormField>
             {text('source', 'Where they came from', false, 'For example Referral or Careers page.')}

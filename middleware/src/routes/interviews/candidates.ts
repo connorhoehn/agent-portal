@@ -1,6 +1,7 @@
 // POST /api/interviews/candidates (UI round 2, lane DESK-B; contract U13): the recruiter adds a candidate to an opening.
 // The write pattern is openings.ts's: the mount gate, ManageCandidates (a guest and every other role is refused), the
-// opening in the viewer's scope (404), the input (400, one sentence per field), the duplicate (409), then the write.
+// opening in the viewer's scope (404), the input (400, one sentence per field), an opening that is not open (409), the
+// duplicate (409), then the write.
 // The route checks; the store only writes. The new candidate has no résumé yet; it is uploaded on the profile.
 
 import { randomBytes } from 'node:crypto';
@@ -19,6 +20,7 @@ const manage = requireAction('ManageCandidates');
 
 const NO_OPENING = 'There is no opening here that you can open.';
 const DUPLICATE = 'This person is already a candidate for this opening.';
+const NOT_OPEN = 'This opening is not open, so it takes no new candidates. Open it again first.';
 export const CANDIDATE_LIMITS = { name: 120, email: 200, headline: 120, location: 80, source: 60 } as const;
 const EMAIL = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
 
@@ -57,15 +59,18 @@ candidatesRouter.post('/candidates', manage, asyncHandler(async (req, res) => {
   const session = resolveSession(req)!;
   const checked = checkCandidate(req.body);
   const wanted = clean((req.body as Record<string, unknown> | undefined)?.['openingId']);
-  if (wanted) {
-    const ix = await indexFor(req);
-    if (!ix.openings.get(wanted)) throw new NotFoundError(NO_OPENING);
-  }
+  const ix = wanted ? await indexFor(req) : null;
+  if (ix && !ix.openings.get(wanted)) throw new NotFoundError(NO_OPENING);
   if (!checked.ok) {
     res.status(400).json({ error: `The candidate was not added: ${checked.problems.length === 1 ? 'one thing needs' : `${checked.problems.length} things need`} fixing.`, fields: checked.problems });
     return;
   }
   const v = checked.value;
+  // A paused or closed opening takes no one new: its rounds could not be assigned (assign.ts) and nobody would move them.
+  if (ix?.openings.get(v.openingId)?.state !== 'open') {
+    res.status(409).json({ error: NOT_OPEN, fields: [{ path: 'openingId', message: NOT_OPEN }] });
+    return;
+  }
   const store = interviewsStore();
   const [candidates, applications] = await Promise.all([store.listCandidates(), store.listApplications()]);
   const emailOf = new Map(candidates.map((c) => [c.id, c.email.trim().toLowerCase()]));

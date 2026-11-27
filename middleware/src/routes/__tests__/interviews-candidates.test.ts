@@ -35,6 +35,7 @@ import { requireTenant } from '../../lib/authz.js';
 import { listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
+import { interviewOpeningsFixture } from '../../mock/interviews.js';
 import { DuplicateCandidateError, MemoryInterviewsStore } from '../../lib/interviews/store.js';
 import type { Session } from '../../lib/session.js';
 
@@ -125,6 +126,26 @@ describe('add a candidate', () => {
       expect(raced.status).toBe(409);
       expect(raced.body.error).toBe('This person is already a candidate for this opening.');
     } finally { spy.mockRestore(); }
+  });
+
+  it('refuses a paused or a closed opening with a 409 and one sentence on the opening, and writes nothing', async () => {
+    const before = (await GRETA.get('/candidates')).body.items.length;
+    for (const state of ['paused', 'closed'] as const) {
+      interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.state = state;
+      const res = await GRETA.post('/candidates', BODY);
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('This opening is not open, so it takes no new candidates. Open it again first.');
+      expect(res.body.fields).toEqual([{ path: 'openingId', message: res.body.error }]);
+    }
+    expect((await GRETA.get('/candidates')).body.items.length).toBe(before);
+    interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.state = 'open';
+    expect((await GRETA.post('/candidates', BODY)).status).toBe(201);
+  });
+
+  it('refuses a paused opening to a hiring manager or interviewer with the 403, not the 409', async () => {
+    interviewOpeningsFixture.rows().find((o) => o.id === 'op-backend')!.state = 'paused';
+    expect((await AMARA.post('/candidates', BODY)).status).toBe(403);
+    expect((await HUGO.post('/candidates', BODY)).status).toBe(403);
   });
 
   it('answers 404 for an opening that is not there', async () => {

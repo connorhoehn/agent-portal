@@ -6,6 +6,9 @@ import { writeJson } from './writeJson.ts';
 export interface NewCandidate { name: string; email: string; headline: string; location: string; source: string; openingId: string }
 export const BLANK_CANDIDATE: NewCandidate = { name: '', email: '', headline: '', location: '', source: '', openingId: '' };
 
+/** Only an open opening takes a new candidate; the server refuses a paused or closed one with a sentence on the opening. */
+export const openToCandidates = (o: { state: string }): boolean => o.state === 'open';
+
 /** Whether the form holds anything a person typed or chose (the opening they were sent from does not count on its own). */
 export const candidateChanged = (d: NewCandidate): boolean => (Object.keys(BLANK_CANDIDATE) as Array<keyof NewCandidate>).some((k) => d[k].trim() !== '');
 
