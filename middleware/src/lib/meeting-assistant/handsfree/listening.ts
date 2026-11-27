@@ -61,7 +61,11 @@ export interface ListeningOptions {
   callId: string;
   transcriber: TranscriberFactory;
   clock: HandsfreeClock;
-  /** Whether this person acknowledged the recording notice and allows the transcript. Asked at every `open`. */
+  /**
+   * Whether this person acknowledged the recording notice and allows the transcript, now. Asked at every `open` and for every
+   * placed frame, so it must be cheap and synchronous; false (also for an unknown person or an unreadable answer) drops the
+   * frame, and a lane that is open closes, so an acknowledgement withdrawn mid-call stops their transcription at once.
+   */
   consented: (userId: string) => boolean;
   /** Epoch ms (for `HeardLine.at`). */
   epochNow?: () => number;
@@ -112,6 +116,8 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
   const log = opts.log ?? (() => {});
   const epochNow = opts.epochNow ?? Date.now;
   const lanes = new Map<string, Lane>();
+  /** People refused for no consent (at open or mid-call), by speaker name: their lane opens when the check says yes again. */
+  const refused = new Map<string, string>();
   const listeners: { [K in keyof ListeningEvents]: Set<(e: ListeningEvents[K]) => void> } = {
     line: new Set(), name: new Set(), sentence: new Set(), words: new Set(), lane: new Set(), frame: new Set(),
   };
@@ -314,11 +320,39 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
     for (const f of queued) streamFrame(lane, f.pcm, f.atMs);
   };
 
+  /** Fail closed: a check that throws or answers anything but true is no consent. */
+  const consentedNow = (userId: string): boolean => { try { return opts.consented(userId) === true; } catch { return false; } };
+  /** Close a lane: its ring, queue and stream go, and nothing it had not finalised is reported. */
+  const dropLane = (userId: string, reason: 'left' | 'no-consent'): void => {
+    const lane = lanes.get(userId);
+    if (!lane) return;
+    lanes.delete(userId);
+    lane.generation += 1;
+    lane.ring.clear();
+    lane.queue = [];
+    if (lane.retry) opts.clock.clearTimeout(lane.retry);
+    lane.unsubs.forEach((u) => u());
+    const s = lane.stream; lane.stream = null;
+    if (s) void s.close().catch(() => {});
+    emit('lane', { userId, state: 'down', reason });
+  };
+
   const side: ListeningSide = {
     placed(userId, pcm24k, atMs) {
       if (closing) return;
       const lane = lanes.get(userId);
-      if (!lane) return;
+      if (!lane) {
+        // Someone refused earlier who has acknowledged since (a new period's notice): their lane opens; this frame is not kept.
+        const name = refused.get(userId);
+        if (name !== undefined && consentedNow(userId)) void side.open(userId, name).catch(() => undefined);
+        return;
+      }
+      if (!consentedNow(userId)) {
+        log({ event: 'listening-no-consent', userId });
+        refused.set(userId, lane.speakerName);
+        dropLane(userId, 'no-consent');
+        return;
+      }
       for (const f of lane.ring.write(pcm24k, atMs)) {
         const voiced = trackOnset(lane, f.pcm, f.atMs);
         emit('frame', { userId, pcm: f.pcm, atMs: f.atMs });
@@ -334,11 +368,13 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
 
     async open(userId, speakerName) {
       if (closing || lanes.has(userId)) return;
-      if (!opts.consented(userId)) {
+      if (!consentedNow(userId)) {
         log({ event: 'listening-no-consent', userId });
+        refused.set(userId, speakerName);
         emit('lane', { userId, state: 'down', reason: 'no-consent' });
         return;
       }
+      refused.delete(userId);
       const lane: Lane = {
         userId, speakerName, ring: new PersonRing(), stream: null, generation: 0, opening: false, queue: [], breaks: [], streamMs: 0,
         lastStreamedEnd: null, lastHeardEnd: null, gateUntil: -Infinity, recent: [], sentences: new Map(), sentenceSeq: 0, lastSentenceEndMs: 0, onsets: [], quietMs: 0, voiced: false,
@@ -353,19 +389,7 @@ export function createListeningSide(opts: ListeningOptions): ListeningSide {
       }
     },
 
-    closeLane(userId) {
-      const lane = lanes.get(userId);
-      if (!lane) return;
-      lanes.delete(userId);
-      lane.generation += 1;
-      lane.ring.clear();
-      lane.queue = [];
-      if (lane.retry) opts.clock.clearTimeout(lane.retry);
-      lane.unsubs.forEach((u) => u());
-      const s = lane.stream; lane.stream = null;
-      if (s) void s.close().catch(() => {});
-      emit('lane', { userId, state: 'down', reason: 'left' });
-    },
+    closeLane(userId) { refused.delete(userId); dropLane(userId, 'left'); },
 
     tick() {
       if (closing) return;

@@ -68,6 +68,8 @@ interface Armed {
   dirty: boolean;
   bucket: { tokens: number; at: number };
   syncSeq: number;
+  /** False until the first read and after a failed one: `hears` answers no until a read succeeds again. */
+  readOk: boolean;
   lastSync: number;
   lastFlush: number;
 }
@@ -122,7 +124,7 @@ export class AudioIntake {
     const armed: Armed = {
       callId, hash, channelArn, gate: { listening: false, acked: new Set(), invitedBy: '' },
       counters: zeroCounters(), base, dirty: false,
-      bucket: { tokens: this.burst, at: this.clock() }, syncSeq: 0, lastSync: -Infinity, lastFlush: this.clock(),
+      bucket: { tokens: this.burst, at: this.clock() }, syncSeq: 0, readOk: false, lastSync: -Infinity, lastFlush: this.clock(),
     };
     this.byHash.set(hash.toString('base64url'), armed);
     this.byCall.set(callId, armed);
@@ -249,8 +251,20 @@ export class AudioIntake {
     armed.lastSync = this.clock();
     try {
       const record = await this.store().get(armed.callId);
-      if (seq === armed.syncSeq) armed.gate = gateOf(record);
-    } catch { /* keep the last gate; a failed read never opens it */ }
+      if (seq === armed.syncSeq) { armed.gate = gateOf(record); armed.readOk = true; }
+    } catch { if (seq === armed.syncSeq) armed.readOk = false; /* keep the last gate for the tap; a failed read never opens it */ }
+  }
+
+  /**
+   * Whether this person's audio may be heard on this call now, by the same gate `accept` drops chunks with (the record's
+   * acknowledgements, refreshed on every acknowledgement and every 500 ms). Synchronous, from memory, for the hands-free
+   * listening side. Fails closed: no armed tap for the call, the call not listening, an empty id, or a last read that failed.
+   */
+  hears(callId: string, userId: string): boolean {
+    const armed = this.byCall.get(callId);
+    if (!armed || !armed.readOk || !userId) return false;
+    const gate = armed.gate;
+    return gate.listening && (userId === gate.invitedBy || gate.acked.has(userId));
   }
 
   // -------------------------------------------------------------------------------------------------------------

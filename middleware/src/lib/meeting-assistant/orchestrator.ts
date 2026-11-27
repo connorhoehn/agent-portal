@@ -2833,11 +2833,13 @@ function hookProposals(): void {
 /**
  * The process's hands-free sides for one call (used only with MEETING_ASSISTANT_HANDSFREE on): lane A's listening side over the
  * provider's transcription stream, lane C's rules with the call's roster (a follow-up turned to a colleague by name is an aside).
- * Audio reaches `placed` only for people the audio intake taps (they acknowledged); `admit` checks again at every trigger.
+ * The listening side asks the audio intake's gate (the record's acknowledgements) per speaker at every lane open and every
+ * placed frame, so it drops audio for anyone not acknowledged, on its own, and stops at once when an acknowledgement goes;
+ * `admit` checks again at every trigger.
  */
-export function productionHandsfree(call: PolicyCall, clock: HandsfreeClock, roster: () => readonly string[]): { listening: ListeningSide; rules: HandsfreeRules } {
+export function productionHandsfree(call: PolicyCall, clock: HandsfreeClock, roster: () => readonly string[], hears: (callId: string, userId: string) => boolean = (c, u) => assistantAudio().hears(c, u)): { listening: ListeningSide; rules: HandsfreeRules } {
   return {
-    listening: createListeningSide({ callId: call.callId, transcriber: openAiTranscriberFactory(), clock, consented: () => true }),
+    listening: createListeningSide({ callId: call.callId, transcriber: openAiTranscriberFactory(), clock, consented: (userId) => hears(call.callId, userId) }),
     rules: createHandsfreeRules({ roster: () => roster() }),
   };
 }
