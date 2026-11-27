@@ -31,6 +31,7 @@
     "journey:budgets-selection": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-selection",
     "journey:budgets-audit": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-audit",
     "journey:interviews": "node ../scripts/journeys/run-demo-moments.mjs --journey interviews",
+    "journey:decks": "node ../scripts/journeys/run-demo-moments.mjs --journey decks",
     "journey:call-chat-unread": "node ../scripts/journeys/run-demo-moments.mjs --journey call-chat-unread"
   },
   "dependencies": {
