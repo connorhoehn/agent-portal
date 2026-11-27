@@ -66,9 +66,11 @@ test('(a) an operator builds a run report from the run detail page; the editor s
     await kofi.page.goto(`/pipelines/runs/${encodeURIComponent(runId)}`);
     await expect(kofi.page.getByTestId('pipeline-run-decks')).toBeVisible({ timeout: 20_000 });
     await kofi.page.getByTestId('run-deck-generate').click();
+    // The new run report is a page (no dialog), the run in its address and "From this run's facts" chosen.
+    await expect(kofi.page).toHaveURL(/\/pipelines\/decks\/new\?runId=/);
     await kofi.page.getByTestId('run-deck-narrative').click();
     const created = kofi.page.waitForResponse(r => /\/api\/pipelines\/runs\/[^/]+\/decks$/.test(r.url()) && r.request().method() === 'POST');
-    await kofi.page.getByTestId('run-deck-submit').click();
+    await kofi.page.getByTestId('run-deck-new-submit').click();
     const response = await created;
     expect(response.status()).toBe(201);
     const body = await response.json();

@@ -360,7 +360,7 @@ async function assertDecided(s, page) {
 const M3 = {
   title: "A deck of this initiative's progress this past sprint", persona: 'vera',
   async hand(s, page) {
-    await s('New › Presentation with the Focus field, Build deck', async () => {
+    await s('New › Presentation opens the new-deck page; the Focus field, Build deck', async () => {
       await go(page, `${INITIATIVE}?tab=docs`);
       await page.getByTestId('initiative-files-new').click();
       await page.getByRole('menuitem', { name: /Presentation/ }).click();
@@ -368,7 +368,7 @@ const M3 = {
       await focus.waitFor({ timeout: 10000 });
       const field = (await focus.evaluate((e) => e.matches('input,textarea'))) ? focus : focus.locator('input,textarea').first();
       await field.fill("this initiative's progress this past sprint");
-      await page.getByTestId('initiative-deck-submit').click();
+      await page.getByTestId('initiative-deck-new-submit').click();
     });
     await assertDeck(s, page);
   },

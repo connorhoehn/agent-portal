@@ -71,7 +71,9 @@ test('(a) an assessor creates a review deck; the run completes and the editor sh
     await asha.page.getByRole('button', { name: /^Actions for/ }).click();
     await asha.page.getByRole('menuitem', { name: 'Create review deck' }).click();
     const created = asha.page.waitForResponse(r => /\/api\/assessment\/teams\/[^/]+\/decks$/.test(r.url()) && r.request().method() === 'POST');
-    await asha.page.getByTestId('create-deck-submit').click();
+    // New review deck is a page (no dialog): the team is in the address, "From this assessment's facts" is the first choice.
+    await expect(asha.page).toHaveURL(/\/assessment\/decks\/new\?teamId=/);
+    await asha.page.getByTestId('assessment-deck-new-submit').click();
     const response = await created;
     expect(response.status()).toBe(202);
     const body = await response.json();

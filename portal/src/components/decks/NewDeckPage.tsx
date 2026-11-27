@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, FormField, InlineAlert, Inline, Input, PageFrame, PageSection, SegmentedControl, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, DetailSection, FormField, InlineAlert, Inline, Input, PageFrame, SegmentedControl, Stack, T } from '@connorhoehn/ui-components/shared';
 import { TemplateGallery, type DeckTemplate } from '@connorhoehn/ui-components/doc-editor';
 import { useFlushTrailItems } from '../shell/FlushPage';
 import { listDeckTemplates, type DeckTemplateSummary, type DeckTenantId } from './deckApi';
@@ -114,14 +114,14 @@ export function NewDeckPage(props: NewDeckPageProps) {
               </FormField>
             </Inline>
             {source === 'facts' && facts ? (
-              <PageSection title={facts.label}>
+              <DetailSection title={facts.label} as="h2">
                 <Stack gap="md">
                   {facts.fields}
                   {facts.note && <InlineAlert tone="info">{facts.note}</InlineAlert>}
                 </Stack>
-              </PageSection>
+              </DetailSection>
             ) : (
-              <PageSection title="From an example" description={props.exampleNote ?? EXAMPLE_NOTE}>
+              <DetailSection title="From an example" as="h2" hint={props.exampleNote ?? EXAMPLE_NOTE}>
                 {templatesError ? (
                   <InlineAlert tone="error">The examples could not be read: {templatesError} <Button size="sm" variant="link" onClick={() => setAttempt((n) => n + 1)}>Retry</Button></InlineAlert>
                 ) : (
@@ -130,7 +130,7 @@ export function NewDeckPage(props: NewDeckPageProps) {
                     testIdPrefix={`${testIdPrefix}-template`} />
                 )}
                 {chosen && <T size="xs" tone="secondary" wrap>{chosen.title}: {chosen.slideCount} slides, {chosen.layouts.length} layouts.</T>}
-              </PageSection>
+              </DetailSection>
             )}
           </>
         )}

@@ -96,7 +96,7 @@ test('preparation: the schema, the tenant, the role, and an open, saved, writabl
   assert.equal(schema.result.outcome, 'refused');
   const tooMany = await update({ operations: Array.from({ length: 6 }, () => ({ op: 'set_theme', theme: 'plain' })) });
   assert.equal(tooMany.prepared, false);
-  const role = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { allow: ['ViewWorkItems'] });
+  const role = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { allow: ['Search'] });
   assert.match(String(role.result.output['reason']), /can't change this deck with your role/);
   const closed = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { page: () => null });
   assert.match(String(closed.result.output['reason']), /Open the deck first/);
