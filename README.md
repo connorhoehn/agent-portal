@@ -63,6 +63,23 @@ Environment variables for the run:
 
 This repository was called `aws-agentcore` (the checkout folder may still be). The Work tenant's code name is `orgiq`, which is why the middleware package is `@orgiq/middleware`, the health check reports `orgiq-middleware`, and `orgiq` appears throughout the code. They all mean the same thing as "Agent Portal"; the old names have not been mass-renamed.
 
+## The six tenants
+
+The portal hosts six products, called tenants. They are separate products that share only the backend (`middleware/`): each has its own navigation, roles and pages. They are registered in `tenants/manifest.json`; the page code is under `portal/src/pages/`.
+
+| Tenant | Shown as | Roles | What it is for |
+| --- | --- | --- | --- |
+| `orgiq` | Work | member, sme, program-owner, org-leader, hr-admin | The original product: initiatives, people, knowledge, agent runs and runbooks, search and the voice navigator. Its code name is why `orgiq` appears throughout the code. |
+| `assessment` | Assessment | assessor, lead-assessor, program-lead | Reviewing teams: submissions are scored by agents against dimensions, reviewed by people and published as reports and decks. |
+| `social` | Social | participant, moderator, community-admin | Channels, direct messages, calls, rooms and recordings. The same communication plane is also embedded in the other tenants. |
+| `pipelines` | Pipelines | author, operator, pipeline-admin | Definitions, workflows and runs of durable pipelines, with approvals and artifacts. Its runs act for the other products. |
+| `access` | Access | requester, approver, access-admin | Requesting access from a catalog, approval chains computed from the directory, separation-of-duties policies, review campaigns and an audit trail. |
+| `interviews` | Candidates | recruiter, interviewer, hiring-manager | Running job interviews end to end: openings and a question kit, candidates, rounds, an interview room with a shared code pad, scorecards, a debrief and a decision. A candidate joins from an invite link without an account. Design record: [interviews-tenant-plan.md](docs/interviews-tenant-plan.md). |
+
+The role `admin` applies across all of them.
+
+Milo is the meeting assistant: it joins a call, transcribes, and raises suggestions that a person confirms. It is used in Work meetings and in Candidates interviews. See [the rebuild plan](docs/milo-rebuild/REBUILD-PLAN.md) and the [meeting assistant design](docs/meeting-assistant-design.md).
+
 ## Related projects
 
 These repositories provide shared components and supporting services. **You do not need to clone them for the basic mock setup**: the app pins them as dependencies or vendors them. Two of them, service-runtime and distributed-core, are private and fetched over SSH during `npm install` (see Prerequisites).
@@ -76,5 +93,44 @@ These repositories provide shared components and supporting services. **You do n
 - [platform-api](https://github.com/connorhoehn/platform-api) — API for calls, document workspaces, and lobby admission.
 - [live-video-streaming](https://github.com/connorhoehn/live-video-streaming) — media server for audio and video calls.
 - [managed-nosql-store](https://github.com/connorhoehn/managed-nosql-store) — local DynamoDB-compatible storage.
+
+## Map of the documents
+
+The list of open work is [docs/ledger.md](docs/ledger.md). "History" means the document records what was decided or found at the time and may be out of date; the ledger says which parts mislead.
+
+| Document | What it is | Status |
+| --- | --- | --- |
+| [docs/ledger.md](docs/ledger.md) | The single list of open work, with evidence and a next action per row. | Current |
+| [docs/next-steps.md](docs/next-steps.md) | Dated narrative of what was built and the record of decisions. | History |
+| [docs/project-story.md](docs/project-story.md) | How the twelve repositories came to be, and how they depend on each other. | History |
+| [docs/demo-script.md](docs/demo-script.md) | A ten-minute walk through the app on the mock backend. | Current |
+| [docs/journeys.md](docs/journeys.md) | How the journey scripts that walk the demo moments are run. | Current |
+| [docs/release-order.md](docs/release-order.md) | Which repository to release first when a shared library changes. | Current |
+| [docs/repo-consolidation.md](docs/repo-consolidation.md) | Measurements and a recommendation on merging repositories. | History |
+| [docs/spend-map.md](docs/spend-map.md) | What costs money, what reaches the spend ledger, what the backend can carry. | History |
+| [docs/fail-open-audit.md](docs/fail-open-audit.md) | Audit of defaults that decide security when nothing is set, across twelve repositories. | History |
+| [docs/interviews-tenant-plan.md](docs/interviews-tenant-plan.md) | Design and decision record for the Candidates tenant. | Design record; the tenant is built |
+| [docs/audits/candidates-gap-audit-2026-11-20.md](docs/audits/candidates-gap-audit-2026-11-20.md) | Product gap audit of the Candidates tenant. | History |
+| [docs/meeting-assistant-design.md](docs/meeting-assistant-design.md) | Design and plan for the meeting assistant (Milo) in calls. | Design record; built |
+| [docs/meeting-assistant-audit.md](docs/meeting-assistant-audit.md) | Audits of the meeting assistant and the repairs that followed. | History |
+| [docs/meeting-consent-design.md](docs/meeting-consent-design.md) | Design for proposals Milo notices and the consent they need. | Design only |
+| [docs/milo-rebuild/REBUILD-PLAN.md](docs/milo-rebuild/REBUILD-PLAN.md) | The plan for rebuilding Milo's turn-taking, with its [review](docs/milo-rebuild/REBUILD-REVIEW.md), [probe](docs/milo-rebuild/REBUILD-PROBE.md), [model bake-off](docs/milo-rebuild/DECIDE-BAKEOFF.md) and [voice research](docs/milo-rebuild/VOICE-ASSISTANT-RESEARCH.md). | Plan and supporting research |
+| [docs/milo-rebuild/AUDIT-2026-11-19.md](docs/milo-rebuild/AUDIT-2026-11-19.md) | Audit of two days of work on Candidates, Milo and the voice gate. | History |
+| [docs/milo-rebuild/CODING-FILM-RESTART.md](docs/milo-rebuild/CODING-FILM-RESTART.md) | Why the coding interview film was redone; it supersedes the acceptance in the Film 5 report. | History |
+| [docs/milo-rebuild/FILM-7-CODING-REPORT.md](docs/milo-rebuild/FILM-7-CODING-REPORT.md) | Report on the coding interview film. The other `FILM-*` reports in that folder are earlier takes. | History |
+| [docs/voice-navigator-spec.md](docs/voice-navigator-spec.md) | Design of the voice navigator. | Design record; built |
+| [docs/voice-navigator-gaps.md](docs/voice-navigator-gaps.md) | What was missing from the navigator on 8 November; section 4 now reads as a plan but is built. | History |
+| [docs/voice-tool-inventory.md](docs/voice-tool-inventory.md) | What the application can do and the tool catalogue that covers it (also `docs/voice-tool-inventory.json`). | Generated; recapture when routes change |
+| [docs/voice/page-ids.md](docs/voice/page-ids.md) | The stable page ids the voice `open` tool uses, per tenant. | Current |
+| [docs/voice/replay.md](docs/voice/replay.md) | How recorded voice sessions are replayed in tests. | Current |
+| [docs/learning-loop-design.md](docs/learning-loop-design.md) | How a finished run writes what it learned into a runbook; decisions are in [docs/learning-loop-decisions.md](docs/learning-loop-decisions.md), handoff in [docs/learning-loop-handoff.md](docs/learning-loop-handoff.md). | Design record; built |
+| [docs/value-sweep-2026-11-11.md](docs/value-sweep-2026-11-11.md) | A sweep of the Work tenant for features one step from done. | History |
+| [docs/create-initiative-design.md](docs/create-initiative-design.md) | Creating an initiative by hand. | Design record; built |
+| [docs/microvm-runner-design.md](docs/microvm-runner-design.md) | Design for the runner that does one work item per session; section 16 is out of date. | Design record |
+| [docs/deck-builder-plan.md](docs/deck-builder-plan.md) | Plan for building presentations in the product. | Plan; nothing built |
+| [docs/ui-components-queue.md](docs/ui-components-queue.md) | Gaps found in the component library, each with the workaround used here. | Current |
+| [docs/ux-audit-ai-3d-storymaker-2026-11-08.md](docs/ux-audit-ai-3d-storymaker-2026-11-08.md) | Copy of a UX audit of the Studio project. | History |
+| [docs/design/README.md](docs/design/README.md) | The design reference sheet and mock-up prompts. | Current |
+| [scripts/README.md](scripts/README.md) | What each script and validator is and whether it still works. | Current |
 
 For more context, see the [project story](docs/project-story.md) and [next steps](docs/next-steps.md).
