@@ -49,3 +49,31 @@ test('the knock and the waiting read carry the server\'s told, one boolean; anyt
     globalThis.fetch = real;
   }
 });
+
+test("sendCantMake (gap audit 2026-11-20 §6): sends the note only when there is one; told, refused or a dead link", async () => {
+  const { sendCantMake } = await import('../guestApi.ts');
+  const real = globalThis.fetch;
+  try {
+    const sent: Array<string | undefined> = [];
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      sent.push(init?.body as string | undefined);
+      return new Response(JSON.stringify({ cantMake: { sentAt: '2026-11-20T09:00:00.000Z' }, message: 'The recruiter has been told.' }), { status: 200 });
+    }) as typeof fetch;
+    assert.deepEqual(await sendCantMake('  '), { kind: 'told', sentAt: '2026-11-20T09:00:00.000Z', message: 'The recruiter has been told.' });
+    await sendCantMake('Friday suits me');
+    assert.deepEqual(sent, ['{}', '{"note":"Friday suits me"}']);
+    answering(409, { error: 'This interview has already started or closed, so there is nothing to tell the recruiter from here.' });
+    assert.equal((await sendCantMake('')).kind, 'refused');
+    answering(404, {});
+    assert.deepEqual(await sendCantMake(''), { kind: 'dead' });
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('the notice is rendered as text only: no component that shows it sets HTML', async () => {
+  const { readFileSync } = await import('node:fs');
+  for (const f of ['src/pages/join/CantMakeTime.tsx', 'src/pages/interviews/interviewsCells.tsx']) {
+    assert.equal(readFileSync(f, 'utf8').includes('dangerouslySetInnerHTML'), false, f);
+  }
+});

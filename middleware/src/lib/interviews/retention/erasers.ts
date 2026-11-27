@@ -18,6 +18,8 @@
 //   private-notes,          media   the interviews store's own erase (store.ts PrivateNoteWrites): an interviewer's notes
 //   scorecard-drafts                and unsubmitted drafts are working material about the candidate, not the record,
 //                                   so they go with the media, and at once on a deletion request.
+//   cant-make               media   the candidate's "I can't make this time" and its note (lib/interviews/cant-make.ts):
+//                                   their own words, so with the media, and at once on a personal-data request.
 // The suggestion log's eraser is the coach's (`eraseSuggestions`), registered by the integrator.
 //
 // The mock world has no media server and, for the seeded finished interviews, no stored call: their recording and words are
@@ -186,6 +188,10 @@ export function scorecardsEraser(records: () => RecordStatements = recordStateme
 export function privateNotesEraser(store: () => Pick<InterviewsStore, 'erasePrivateNotes'> = interviewsStore): Eraser {
   return { kind: 'private-notes', class: 'media', erase: (ids) => store().erasePrivateNotes(ids) };
 }
+/** The candidate's "I can't make this time" and its note (cant-make.ts): their own words, so media, and at once on a personal-data request. */
+export function cantMakeEraser(store: () => Pick<InterviewsStore, 'eraseCantMake'> = interviewsStore): Eraser {
+  return { kind: 'cant-make', class: 'media', erase: (ids) => store().eraseCantMake(ids) };
+}
 export function scorecardDraftsEraser(store: () => Pick<InterviewsStore, 'eraseScorecardDrafts'> = interviewsStore): Eraser {
   return { kind: 'scorecard-drafts', class: 'media', erase: (ids) => store().eraseScorecardDrafts(ids) };
 }
@@ -208,4 +214,5 @@ export function registerOwnErasers(): void {
   registerEraser({ kind: 'runs', class: 'media', erase: eraseRuns });
   registerEraser(privateNotesEraser());
   registerEraser(scorecardDraftsEraser());
+  registerEraser(cantMakeEraser());
 }

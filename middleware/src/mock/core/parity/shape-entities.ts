@@ -577,6 +577,7 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (i: { id: string }) => i.id,
     unmodelledColumns: {
       cancellation: 'Written only when a round is cancelled (lib/interviews/cancel.ts), and absent from the row otherwise, in both stores. The seed holds no cancelled round: a seeded one would have to name who cancelled it and why, for an act nobody performed.',
+      cant_make: 'Written only when a candidate says they cannot make the time (lib/interviews/cant-make.ts), and absent from the row otherwise, in both stores. The seed holds none: it would put words in a candidate\'s mouth for a notice nobody sent.',
     },
   },
   {

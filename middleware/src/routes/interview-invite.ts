@@ -43,6 +43,8 @@ import { ringWaiting, waitingTold } from '../lib/interviews/waiting-room.js';
 import { guestRoomState, guestRoomView } from '../lib/interviews/invite/room.js';
 import { config } from '../config.js';
 import { interviewsNow } from '../lib/interviews/clock.js';
+import { cantMakeMove, checkCantMake, noticeWritten, ringCantMake } from '../lib/interviews/cant-make.js';
+import type { WriteResult } from '../lib/interviews/store.js';
 
 export const interviewInviteRouter: Router = Router();
 
@@ -153,7 +155,8 @@ interviewInviteRouter.get('/interview', interviewsFlagGate, requireGuest(), asyn
   const { listUsers } = await import('../providers/identity.js');
   const users = await listUsers().catch(() => []);
   const lead = users.find((u) => u.id === interview.leadId)?.displayName ?? null;
-  res.json({ interview: { ...view, panel: { lead, others: interview.panelIds.length } } });
+  // Whether the candidate has told the recruiter they cannot make the time, and when: never the note back, nothing of the recruiter's.
+  res.json({ interview: { ...view, panel: { lead, others: interview.panelIds.length }, cantMake: interview.cantMake ? { sentAt: interview.cantMake.at } : null } });
 }));
 
 // ── Row I2.2 (lane SEAT): the guest's realtime token and the waiting room ────────────────────────────────────
@@ -227,4 +230,39 @@ interviewInviteRouter.get('/room', interviewsFlagGate, requireGuest({ endedAfter
   const application = applications.find((a) => a.id === interview.applicationId);
   const opening = application ? openings.find((o) => o.id === application.openingId) ?? null : null;
   res.json({ room: guestRoomView({ userId: guestSubject(guest.inviteId), displayName: GUEST_DISPLAY_NAME }, interview, opening, state) });
+}));
+
+// ── Gap audit 2026-11-20 §6: "I can't make this time" ───────────────────────────────────────────────────────────────────
+
+const TOLD = 'The recruiter has been told you cannot make this time. They will be in touch about what happens next.';
+
+/**
+ * The candidate cannot make the time (lib/interviews/cant-make.ts). Body `{ note? }`, at most 280 characters of plain
+ * text. The guest session's own interview only; a round that has started or closed is refused (409). The first notice in
+ * the window writes one record and rings the recruiters; a repeat inside it answers the same and does neither. The answer
+ * is the confirmation and when the notice was sent: never the note back, nothing else.
+ */
+interviewInviteRouter.post('/cant-make', interviewsFlagGate, rateLimit, requireGuest(), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  const checked = checkCantMake(req.body);
+  if (!checked.ok) { res.status(400).json({ error: checked.problems[0]!.message, fields: checked.problems }); return; }
+  const store = interviewsStore();
+  let interview = await store.getInterview(req.guest!.interviewId);
+  if (!interview) { res.status(404).json(GUEST_REFUSAL); return; }
+  // One read again when someone else wrote the round meanwhile; the move is judged afresh on what was read.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const move = cantMakeMove(interview, checked.value.note, interviewsNow());
+    if (!move.ok) { res.status(409).json({ error: move.message }); return; }
+    if (move.kind === 'repeat') { res.json({ cantMake: { sentAt: interview.cantMake?.at ?? null }, message: TOLD }); return; }
+    const written: WriteResult<Interview> = await store.setCantMake(interview.id, move.notice, interview.revision);
+    if (written.ok) {
+      noticeWritten(interview.id, move.notice);
+      await ringCantMake(written.row);
+      res.json({ cantMake: { sentAt: move.notice.at }, message: TOLD });
+      return;
+    }
+    if (written.reason === 'not-found') { res.status(404).json(GUEST_REFUSAL); return; }
+    interview = written.row;
+  }
+  res.status(409).json({ error: 'Something changed on this page. Try again.' });
 }));

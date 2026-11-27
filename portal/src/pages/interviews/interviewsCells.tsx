@@ -113,3 +113,17 @@ export function NoHiringManagerAlert({ openingId, canEdit, linked = true }: { op
     </InlineAlert>
   );
 }
+
+/**
+ * The candidate's "I can't make this time" on a round's row (gap audit 2026-11-20 §6): a chip, when they said it, and their
+ * note rendered as text only (never markup). Nothing for a round without one.
+ */
+export function CantMakeCell({ notice, ago }: { notice: { at: string; note: string | null } | null | undefined; ago: (iso: string) => string }) {
+  if (!notice) return null;
+  return (
+    <>
+      <Chip tone="warning" size="sm" title={new Date(notice.at).toLocaleString()} data-testid="interviews-round-cant-make">{`Can't make it · ${ago(notice.at)}`}</Chip>
+      {notice.note && <T size="sm" tone="secondary" wrap data-testid="interviews-round-cant-make-note">{`“${notice.note}”`}</T>}
+    </>
+  );
+}

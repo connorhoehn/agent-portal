@@ -31,6 +31,7 @@ import { DeviceCheckStep } from './join/DeviceCheckStep';
 import JoinRoom, { type GuestInterview } from './join/JoinRoom';
 import { WaitingStep } from './join/WaitingStep';
 import { HeldStep } from './join/HeldStep';
+import { CantMakeTime } from './join/CantMakeTime';
 import { LinkDead, readAdmission, readConsents, readRoom } from './join/guestApi.ts';
 import { declinedRequired, landingStep, meetingLine, stepAfterConsents, type GuestConsents, type JoinStep } from './join/steps.ts';
 
@@ -77,8 +78,9 @@ async function load(token: string | null): Promise<View> {
     // The exchange answers what the link opens; who the candidate meets comes with the read (best effort).
     if (token && !interview.panel) {
       const read = await fetch(`${API}/interview`, init).catch(() => null);
-      const panel = read?.ok ? ((await read.json().catch(() => null)) as { interview?: GuestInterview } | null)?.interview?.panel : undefined;
-      if (panel) interview = { ...interview, panel };
+      const fresh = read?.ok ? ((await read.json().catch(() => null)) as { interview?: GuestInterview } | null)?.interview : undefined;
+      if (fresh?.panel) interview = { ...interview, panel: fresh.panel };
+      if (fresh?.cantMake !== undefined) interview = { ...interview, cantMake: fresh.cantMake };
     }
     try {
       const [consents, admission] = await Promise.all([readConsents(), readAdmission().catch(() => null)]);
@@ -173,6 +175,7 @@ export default function JoinPage() {
           <Inline gap="sm">
             <Button variant="primary" onClick={() => go('consents')} data-testid="join-continue">Continue</Button>
           </Inline>
+          <CantMakeTime sentAt={interview.cantMake?.sentAt ?? null} onLinkDead={() => setView({ kind: 'dead' })} />
         </Stack>
       )}
       {step === 'consents' && (

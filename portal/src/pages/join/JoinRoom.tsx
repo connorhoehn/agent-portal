@@ -49,6 +49,8 @@ export interface GuestInterview {
   scheduledAt: string | null;
   /** Who the candidate meets: the lead's name and how many others (the read only; the exchange leaves it out). */
   panel?: GuestPanel;
+  /** Gap audit 2026-11-20 §6: whether the candidate has told the recruiter they cannot make the time (the read only). */
+  cantMake?: { sentAt: string } | null;
 }
 
 type TokenState = { kind: 'loading' } | { kind: 'ready'; token: RealtimeToken } | { kind: 'off' } | { kind: 'failed' };

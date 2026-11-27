@@ -211,7 +211,7 @@ describe('the exchange and the guest\'s read', () => {
     const read = await readAsGuest(guestCookie(res));
     expect(read.status).toBe(200);
     // The read adds who the candidate is meeting: the lead's display name and how many others sit on the panel.
-    expect(read.body).toEqual({ interview: { ...res.body.interview, panel: { lead: 'Hugo Marchetti', others: iv.panelIds.length } } });
+    expect(read.body).toEqual({ interview: { ...res.body.interview, panel: { lead: 'Hugo Marchetti', others: iv.panelIds.length }, cantMake: null } });
     // Nothing else of the panel's or the candidate's record: no ids, no emails, no other names.
     const text = JSON.stringify(read.body);
     for (const name of ['Wen', 'Greta', 'Amara', 'Mateo', 'app-', 'u-', '@']) expect(text).not.toContain(name);

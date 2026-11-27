@@ -93,6 +93,7 @@ describe('served only by the guest\'s own router', () => {
       'GET /api/interview-invite/realtime-token',
       'GET /api/interview-invite/room',
       'GET /api/interview-invite/runs', 'GET /api/interview-invite/runs/:runId', 'GET /api/interview-invite/runs/events', // lane RUNS (row I4.4)
+      'POST /api/interview-invite/cant-make', // gap audit 2026-11-20 §6: the candidate's "I can't make this time"
       'POST /api/interview-invite/exchange', 'POST /api/interview-invite/knock',
       'POST /api/interview-invite/media/participant', // the candidate's own media id, bound to its session's subject (routes/interview-invite-media.ts)
       'POST /api/interview-invite/milo/hold/:action', // hands-free Milo (lane D): the candidate's hold, only with pad help on

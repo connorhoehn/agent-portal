@@ -20,7 +20,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { ofTotal } from '../../lib/plural';
 import {
-  INTERVIEWS_API, ROUND_TYPE_LABELS, candidateHref, isTimeable, matches, roundStatus, upcomingOrder, whenLabel, whenWithZone, zoneName,
+  INTERVIEWS_API, ROUND_TYPE_LABELS, candidateHref, dateLabel, isTimeable, matches, roundStatus, upcomingOrder, whenLabel, whenWithZone, zoneName,
   type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
 import {
@@ -30,7 +30,7 @@ import { finishedCount, isLive, upcomingRows, type UpcomingShow } from '../../li
 import { conflictsLine } from '../../lib/interviewsAssign';
 import { roomEntryLabel, roomHref } from '../../lib/interviewsRoom';
 import { useJoinedInterviewCall } from '../../components/shell/InterviewRoomFooter';
-import { PanelCell, PersonCell } from './interviewsCells';
+import { CantMakeCell, PanelCell, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
 type TimeFilter = '' | 'no-time' | 'timed';
@@ -219,6 +219,7 @@ function UpcomingWorkspace() {
         return (
           <Stack gap="none">
             {isLive(r) ? <Chip tone="success" size="sm" data-testid="interviews-upcoming-live">Live now</Chip> : <Chip tone={s.tone} size="sm" data-testid="interviews-upcoming-state">{s.label}</Chip>}
+            <CantMakeCell notice={r.cantMake} ago={(iso) => dateLabel(iso)} />
             {withConsent && <T size="xs" tone={!c?.answered ? 'secondary' : undefined} title={consents.data ? consentColumnLabel(c) : undefined} data-testid="interviews-upcoming-consent">{consents.data ? consentColumnLabel(c) : '—'}</T>}
           </Stack>
         );

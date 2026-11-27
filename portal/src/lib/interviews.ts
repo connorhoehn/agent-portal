@@ -72,6 +72,8 @@ export interface InterviewRow {
   scheduledAt: string | null;
   state: InterviewState;
   bucket: Bucket;
+  /** Gap audit 2026-11-20 §6: the candidate's "I can't make this time" and their note (plain text), for contact readers; null otherwise. */
+  cantMake?: { at: string; note: string | null } | null;
   seat: 'lead' | 'panel' | null;
   questions: number;
   myScorecard: { recommendation: Recommendation; submittedAt: string } | null;

@@ -26,6 +26,7 @@ import { recapRouter } from './interviews/recap.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { roomRouter } from './interviews/room.js';
 import { cancelRouter } from './interviews/cancel.js';
+import { cantMakeRouter } from './interviews/cant-make.js';
 import { privateNotesRouter } from './interviews/private-notes.js';
 import { stageMovesRouter } from './interviews/stage-moves.js';
 import { recordRouter } from './interviews/record.js';
@@ -60,6 +61,7 @@ interviewsRouter.use(assignmentsRouter); // lane ASSIGN (row I1.4): assign a rou
 
 interviewsRouter.use(roomRouter); // lane ROOM (row I2.4): the panel's room, start and end the interview
 interviewsRouter.use(cancelRouter); // ledger C-1: cancel a round, did not take place, withdraw an application
+interviewsRouter.use(cantMakeRouter); // gap audit §6: the recruiter clears the candidate's "I can't make this time"
 interviewsRouter.use(stageMovesRouter); // ledger C-2: the recruiter's stage moves (screening, hired, offer declined, reopen)
 interviewsRouter.get('/openings', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

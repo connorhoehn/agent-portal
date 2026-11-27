@@ -10,7 +10,7 @@
 // text and JSONB as JSON text, each CAST in the statement; an absent value is NULL.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type {
-  Application, ApplicationStage, Cancellation, Candidate, CandidateEdit, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
+  Application, ApplicationStage, Cancellation, Candidate, CandidateEdit, CantMakeNotice, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
   OpeningDetails, Recommendation, RoundType, Scorecard, SeatAcceptance, SeatDecline, StageChange,
 } from './types.js';
 import { DuplicateCandidateError, type InterviewsStore, type NewOpening, type WriteResult } from './store.js';
@@ -28,7 +28,7 @@ export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, 
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
 const INTERVIEW_COLUMNS = `id, application_id, round_id, type, lead_id, panel_ids, scheduled_at, minutes, state, question_ids,
-  assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, cancellation, revision`;
+  assigned_by, assigned_at, call_id, started_at, ended_at, acceptances, declines, cancellation, cant_make, revision`;
 export const LIST_INTERVIEWS_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews ORDER BY scheduled_at NULLS LAST, id`;
 export const LIST_SCORECARDS_SQL = `SELECT id, interview_id, interviewer_id, ratings, recommendation, summary, submitted_at, version, changed_after_recap, correction_reason, red_flags_seen
@@ -60,12 +60,15 @@ export const OPENING_WRITE_STATEMENTS = [GET_OPENING_SQL, INSERT_OPENING_SQL, UP
 // ── the interview writes (row I1.4) ─────────────────────────────────────────
 export const GET_INTERVIEW_SQL = `SELECT ${INTERVIEW_COLUMNS}
   FROM interviews WHERE id = :id`;
-/** A taken id inserts nothing and returns no row. TEXT[] travels as JSON text and is turned into an array in the statement. */
+/**
+ * A taken id inserts nothing and returns no row. TEXT[] travels as JSON text and is turned into an array in the statement.
+ * A new round has no cancellation and no candidate's notice: those two columns take NULL, so the values match the columns.
+ */
 export const INSERT_INTERVIEW_SQL = `INSERT INTO interviews (${INTERVIEW_COLUMNS})
   VALUES (:id, :application_id, :round_id, :type, :lead_id, ARRAY(SELECT jsonb_array_elements_text(CAST(:panel_ids AS JSONB))),
     CAST(:scheduled_at AS TIMESTAMPTZ), :minutes, :state, ARRAY(SELECT jsonb_array_elements_text(CAST(:question_ids AS JSONB))),
     :assigned_by, CAST(:assigned_at AS TIMESTAMPTZ), :call_id, CAST(:started_at AS TIMESTAMPTZ), CAST(:ended_at AS TIMESTAMPTZ),
-    CAST(:acceptances AS JSONB), CAST(:declines AS JSONB), 1)
+    CAST(:acceptances AS JSONB), CAST(:declines AS JSONB), NULL, NULL, 1)
   ON CONFLICT (id) DO NOTHING
   RETURNING ${INTERVIEW_COLUMNS}`;
 export const ANSWER_SEAT_SQL = `UPDATE interviews
@@ -80,7 +83,7 @@ export const REASSIGN_SQL = `UPDATE interviews
   RETURNING ${INTERVIEW_COLUMNS}`;
 
 export const SET_TIME_SQL = `UPDATE interviews
-  SET scheduled_at = CAST(:scheduled_at AS TIMESTAMPTZ), revision = revision + 1
+  SET scheduled_at = CAST(:scheduled_at AS TIMESTAMPTZ), cant_make = NULL, revision = revision + 1
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
 
@@ -171,6 +174,7 @@ export function interviewFromRow(r: Record<string, unknown>): Interview {
     ...(isoOrNull(r['started_at']) ? { startedAt: isoOrNull(r['started_at']) } : {}),
     endedAt: isoOrNull(r['ended_at']), acceptances: json<SeatAcceptance[]>(r['acceptances'], []), declines: json<SeatDecline[]>(r['declines'], []),
     ...(json<Cancellation | null>(r['cancellation'], null) ? { cancellation: json<Cancellation | null>(r['cancellation'], null) } : {}),
+    ...(json<CantMakeNotice | null>(r['cant_make'], null) ? { cantMake: json<CantMakeNotice | null>(r['cant_make'], null) } : {}),
     revision: num(r['revision']),
   };
 }
@@ -289,10 +293,31 @@ export class SqlInterviewsStore implements InterviewsStore {
     return this.casInterview(id, await this.exec(SqlInterviewsStore.END_INTERVIEW_SQL, [textParam('id', id), intParam('revision', revision), textParam('ended_at', endedAt)]));
   }
 
+  /** The candidate's notice (cant-make.ts): set or cleared against the revision. */
+  static readonly SET_CANT_MAKE_SQL = `UPDATE interviews
+  SET cant_make = CAST(:cant_make AS JSONB), revision = revision + 1
+  WHERE id = :id AND revision = :revision
+  RETURNING ${INTERVIEW_COLUMNS}`;
+  /** Erasure (retention/erasers.ts cantMakeEraser): the notice goes with the candidate's other words; one row per interview that held one. */
+  static readonly ERASE_CANT_MAKE_SQL = `UPDATE interviews SET cant_make = NULL, revision = revision + 1
+  WHERE id = ANY(ARRAY(SELECT jsonb_array_elements_text(CAST(:ids AS JSONB)))) AND cant_make IS NOT NULL
+  RETURNING id`;
+
+  async setCantMake(id: string, notice: CantMakeNotice | null, revision: number): Promise<WriteResult<Interview>> {
+    return this.casInterview(id, await this.exec(SqlInterviewsStore.SET_CANT_MAKE_SQL, [
+      textParam('id', id), intParam('revision', revision), textParam('cant_make', notice ? JSON.stringify(notice) : null),
+    ]));
+  }
+
+  async eraseCantMake(interviewIds: readonly string[]): Promise<number> {
+    if (!interviewIds.length) return 0;
+    return (await this.exec(SqlInterviewsStore.ERASE_CANT_MAKE_SQL, [textParam('ids', JSON.stringify(interviewIds))])).length;
+  }
+
   /** Cancel (lib/interviews/cancel.ts): a live round also gets its ended_at, as the memory store does. */
   static readonly CANCEL_INTERVIEW_SQL = `UPDATE interviews
   SET ended_at = CASE WHEN state = 'live' THEN CAST(:at AS TIMESTAMPTZ) ELSE ended_at END,
-    state = 'cancelled', cancellation = CAST(:cancellation AS JSONB), revision = revision + 1
+    state = 'cancelled', cancellation = CAST(:cancellation AS JSONB), cant_make = NULL, revision = revision + 1
   WHERE id = :id AND revision = :revision
   RETURNING ${INTERVIEW_COLUMNS}`;
 

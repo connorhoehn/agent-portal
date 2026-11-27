@@ -40,6 +40,7 @@ const GUEST_ROUTES = new Set([
   'GET /api/interview-invite/interview',
   'GET /api/interview-invite/realtime-token',
   'POST /api/interview-invite/knock',
+  'POST /api/interview-invite/cant-make',
   'GET /api/interview-invite/admission',
   'GET /api/interview-invite/consents',
   'PUT /api/interview-invite/consents',
@@ -425,7 +426,7 @@ describe('lane H6: every guest route, from the router', () => {
     const named = new Set([...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]);
     expect([...mounted].filter((k) => !named.has(k)).sort()).toEqual([]);
     expect([...named].filter((k) => !mounted.has(k)).sort()).toEqual([]);
-    expect(mounted.size).toBe(20);
+    expect(mounted.size).toBe(21);
   });
 
   it('refuses each guest route to no cookie and to a staff session, with the one not-found', async () => {

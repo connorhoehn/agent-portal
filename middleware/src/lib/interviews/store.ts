@@ -21,7 +21,7 @@
 // saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Cancellation, Candidate, CandidateEdit, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
+import type { Application, Cancellation, Candidate, CandidateEdit, CantMakeNotice, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 import type { PrivateNote, ScorecardDraft } from './private-notes.js';
 import { candidateVersion } from './types.js';
@@ -63,11 +63,15 @@ export interface InterviewWrites {
   endInterview(id: string, endedAt: string, revision: number): Promise<WriteResult<Interview>>;
   /** Any state → `cancelled` with its cancellation (lib/interviews/cancel.ts decides when). A live round also gets `endedAt`. */
   cancelInterview(id: string, cancellation: Cancellation, revision: number): Promise<WriteResult<Interview>>;
+  /** The candidate's "I can't make this time" (cant-make.ts): set, or cleared (`null`), against `revision`. Nothing else changes. */
+  setCantMake(id: string, notice: CantMakeNotice | null, revision: number): Promise<WriteResult<Interview>>;
+  /** Erasure (retention/erasers.ts): the notices of these interviews go; how many there were. */
+  eraseCantMake(interviewIds: readonly string[]): Promise<number>;
   /** A seat's answer: the state, the panel, the acceptances and the declines, against `revision`. */
   answerSeat(id: string, change: SeatAnswerChange, revision: number): Promise<WriteResult<Interview>>;
   /** New seats: the lead, the panel, the state and the acceptances that still hold, against `revision`. */
   reassign(id: string, change: Reassignment, revision: number): Promise<WriteResult<Interview>>;
-  /** Set (an ISO instant, UTC) or clear (`null`) the time, against `revision`. The state is not touched. */
+  /** Set (an ISO instant, UTC) or clear (`null`) the time, against `revision`. The state is not touched; the candidate's notice, if any, goes (a new time answers it). */
   setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>>;
   /** The lead's chosen questions in order and the state they leave (prepare.ts readyState), against `revision`. */
   setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>>;
@@ -199,7 +203,20 @@ export class MemoryInterviewsStore implements InterviewsStore {
       if (i.state === 'live') i.endedAt = cancellation.at;
       i.state = 'cancelled';
       i.cancellation = structuredClone(cancellation);
+      delete i.cantMake;
     });
+  }
+
+  async setCantMake(id: string, notice: CantMakeNotice | null, revision: number): Promise<WriteResult<Interview>> {
+    return casInterview(id, revision, (i) => { if (notice) i.cantMake = structuredClone(notice); else delete i.cantMake; });
+  }
+
+  async eraseCantMake(interviewIds: readonly string[]): Promise<number> {
+    let n = 0;
+    for (const i of interviewsFixture.rows()) {
+      if (interviewIds.includes(i.id) && i.cantMake) { delete i.cantMake; i.revision += 1; n += 1; }
+    }
+    return n;
   }
 
   async createInterview(input: Interview): Promise<Interview | null> {
@@ -219,7 +236,7 @@ export class MemoryInterviewsStore implements InterviewsStore {
   }
 
   async setTime(id: string, scheduledAt: string | null, revision: number): Promise<WriteResult<Interview>> {
-    return casInterview(id, revision, (i) => { i.scheduledAt = scheduledAt; });
+    return casInterview(id, revision, (i) => { i.scheduledAt = scheduledAt; delete i.cantMake; });
   }
 
   async setQuestions(id: string, questionIds: string[], state: InterviewState, revision: number): Promise<WriteResult<Interview>> {

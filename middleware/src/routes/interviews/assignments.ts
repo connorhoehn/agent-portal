@@ -29,6 +29,7 @@
 // person and version. Declining never needs it. Rounds accepted under an earlier version stay accepted; GET
 // /interviews/panel-notice (F2, row I6.4) lets My interviews ask such a person again, blocking nothing.
 
+import { forgetCantMake } from '../../lib/interviews/cant-make.js';
 import { Router, type Request, type Response } from 'express';
 import { asyncHandler, NotFoundError } from '../../lib/async-handler.js';
 import { requireAction, resolveSession } from '../../lib/authz.js';
@@ -230,6 +231,8 @@ assignmentsRouter.put('/interviews/:id/time', assign, asyncHandler(async (req, r
   const checked = checkTime(req.body, i);
   if (!checked.ok) { res.status(400).json({ error: timeProblemsLine(checked.problems.length), fields: checked.problems }); return; }
   const written = await interviewsStore().setTime(i.id, checked.value.scheduledAt, revision);
+  // A new time answers the candidate's "I can't make this time": the store cleared it, and the window starts afresh (cant-make.ts).
+  if (written.ok) forgetCantMake(i.id);
   const after = await answerWrite(req, res, written, 200, true);
   if (after && written.ok && checked.value.scheduledAt !== i.scheduledAt && (checked.value.scheduledAt !== null || i.scheduledAt !== null)) {
     void notifyInterviewTimed({ interviewId: i.id, ...bellWords(after, i), userIds: [i.leadId, ...i.panelIds], actorId: session.sub, changed: i.scheduledAt !== null, cleared: checked.value.scheduledAt === null });

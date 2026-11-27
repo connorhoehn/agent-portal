@@ -108,6 +108,11 @@ export interface InterviewRow {
   declines: Array<{ person: PersonRef; seat: Seat; reason: string; at: string }>;
   /** Why the round was cancelled, by whom and when (lib/interviews/cancel.ts); null unless the state is `cancelled`. */
   cancellation: { reason: CancelReason; label: string; note: string | null; by: PersonRef; at: string } | null;
+  /**
+   * The candidate's "I can't make this time" (cant-make.ts): when, and their words as they wrote them (render as text only).
+   * Only for those who read the candidate's contact details (scope.ts mayReadCandidateContact); null for an interviewer.
+   */
+  cantMake: { at: string; note: string | null } | null;
   /** Still waiting to go live, and its start is more than its length in the past by the tenant's clock (missed.ts). Never stored. */
   missed: boolean;
   /** The revision a write must name (row I1.4: compare-and-set). */
@@ -385,6 +390,7 @@ export class WorldIndex {
       myAnswer: (() => { const s = seatOf(i, this.viewer.id); return s ? (hasAccepted(i, this.viewer.id, s) ? 'accepted' : 'to-answer') : null; })(),
       declines: reachOf(this.viewer.role) === 'assigned' ? []
         : i.declines.map((d) => ({ person: this.people(d.userId), seat: d.seat, reason: d.reason, at: d.at })),
+      cantMake: i.cantMake && mayReadCandidateContact(this.viewer.role) ? { at: i.cantMake.at, note: i.cantMake.note } : null,
       cancellation: i.state === 'cancelled' && i.cancellation
         ? { reason: i.cancellation.reason, label: CANCEL_REASON_LABEL[i.cancellation.reason], note: i.cancellation.note, by: this.people(i.cancellation.by), at: i.cancellation.at }
         : null,

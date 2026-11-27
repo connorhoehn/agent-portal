@@ -1047,6 +1047,35 @@ export async function notifyInterviewCancelled(ev: InterviewCancelledEvent): Pro
   }
 }
 
+export interface InterviewCantMakeEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The holders of the recruiter role in the tenant. */
+  recruiterIds: readonly string[];
+}
+
+/**
+ * The candidate said they cannot make the time (lib/interviews/cant-make.ts) → the recruiters, a bell that opens the round on
+ * the candidate's profile. Names the round and the opening only: never the candidate, their note or the time.
+ */
+export async function notifyInterviewCantMake(ev: InterviewCantMakeEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    return await notify([...new Set(ev.recruiterIds)], {
+      id: `interview-cant-make:${roundKey(ev.interviewId)}:${Date.now().toString(36)}`,
+      type: 'system',
+      title: `The candidate can't make ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+      body: 'They have been told you will be in touch. Open the round to arrange a new time.',
+      payload: { tenant: 'interviews', kind: 'interview-cant-make', audience: 'recruiter' },
+      action: { label: 'Open the round', href: `/interviews/rounds/${encodeURIComponent(ev.interviewId)}` },
+    });
+  } catch (err) {
+    console.warn(`[social-notify] interview-cant-make producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 export interface InterviewScorecardInEvent {
   interviewId: string;
   openingTitle: string;

@@ -81,3 +81,23 @@ export async function readRoom(): Promise<RoomRead> {
     return { kind: 'failed' };
   }
 }
+
+/** Gap audit 2026-11-20 §6: the longest note the candidate may send with "I can't make this time". */
+export const CANT_MAKE_NOTE_MAX = 280;
+
+export type CantMakeOutcome = { kind: 'told'; sentAt: string | null; message: string } | { kind: 'refused'; message: string } | { kind: 'dead' };
+
+/** "I can't make this time": the recruiter is told; a repeat within the server's window answers the same. */
+export async function sendCantMake(note: string): Promise<CantMakeOutcome> {
+  try {
+    const res = await fetch(`${GUEST_API}/cant-make`, {
+      ...INIT, method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(note.trim() ? { note } : {}),
+    });
+    if (res.status === 404) return { kind: 'dead' };
+    const body = (await res.json().catch(() => ({}))) as { cantMake?: { sentAt?: string | null }; message?: string; error?: string };
+    if (res.ok) return { kind: 'told', sentAt: body.cantMake?.sentAt ?? null, message: body.message ?? 'The recruiter has been told. They will be in touch.' };
+    return { kind: 'refused', message: body.error ?? 'That did not go through. Try again in a moment.' };
+  } catch {
+    return { kind: 'refused', message: 'That did not go through. Check your connection and try again.' };
+  }
+}

@@ -152,3 +152,11 @@ export function invitationMessage(m: InvitationInput, timeZone?: string): string
     `${expect} The link is yours alone, so please do not share it. If you cannot make this time, open the link and tell us.`,
   ].join('\n');
 }
+
+// ── The candidate's "I can't make this time" (gap audit 2026-11-20 §6) ─────────────────────────────────────────────────
+
+/** The recruiter clears the notice once they have been in touch (rescheduling and cancelling clear it too). */
+export async function clearCantMake(id: string, revision: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  const r = await writeJson<{ interview?: unknown }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/cant-make/clear`, 'POST', { revision });
+  return r.ok ? { ok: true } : { ok: false, error: r.error ?? 'The notice could not be cleared. Try again.' };
+}

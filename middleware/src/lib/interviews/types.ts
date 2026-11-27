@@ -248,6 +248,12 @@ export interface Cancellation {
   at: string;
 }
 
+/**
+ * The candidate's "I can't make this time" (gap audit 2026-11-20 §6; lib/interviews/cant-make.ts): when they said it and
+ * their own words, trimmed, or null. Nothing else: the round keeps its time and state, and the recruiter decides.
+ */
+export interface CantMakeNotice { at: string; note: string | null }
+
 export interface Interview {
   id: string;
   applicationId: string;
@@ -277,6 +283,8 @@ export interface Interview {
   declines: SeatDecline[];
   /** Set when the round moves to `cancelled` (lib/interviews/cancel.ts); absent on every other round. */
   cancellation?: Cancellation | null;
+  /** The candidate's notice that they cannot make the time (cant-make.ts); absent while there is none. Rescheduling, cancelling, the recruiter's clear and erasure remove it. */
+  cantMake?: CantMakeNotice | null;
   /** Bumped by every write; a write names the revision it was made against (store.ts "Writes"). */
   revision: number;
 }

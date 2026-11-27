@@ -54,7 +54,8 @@ import {
   REDACTED_NAME, askedByLine, deletionDone, deletionQuestion, deletionState, personalDeletionQuestion, deletionsPath, lateLine, leftLines, removedLine, requestDeletion,
   type DeletionView, type RetentionPeriods,
 } from '../../lib/interviewsRetention';
-import { Dash, PanelCell, StageChip } from './interviewsCells';
+import { CantMakeCell, Dash, PanelCell, StageChip } from './interviewsCells';
+import { clearCantMake } from '../../lib/interviewsUpcoming';
 import ResumeViewer from './ResumeViewer';
 import ProfileConsents from './ProfileConsents';
 import { CandidateDetailsDialog } from './CandidateDetailsDialog';
@@ -79,6 +80,7 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
         <Stack gap="xs">
           <Chip tone={s.tone} size="sm" data-testid="interviews-profile-round-status">{s.label}</Chip>
           {why && <T size="sm" tone="secondary" wrap data-testid="interviews-profile-round-cancelled">{why}</T>}
+          <CantMakeCell notice={r.cantMake} ago={(iso) => dateLabel(iso)} />
         </Stack>
       );
     },
@@ -312,8 +314,8 @@ function StageSection({ app, several, candidateId, manages, onChanged }: { app: 
  * round offers "Assign again" as a button (gap audit 2026-11-20 §1). Every other move sits in the row's menu: Reassign,
  * and the recruiter's End, "Did not take place" and Cancel (RoundCloseDialog), or the lead's "Did not take place".
  */
-function RoundActions({ round: r, candidateId, applicationId, manages, viewerId, onClose }: {
-  round: ProfileRound; candidateId: string; applicationId: string; manages: boolean; viewerId: string; onClose: (r: ProfileRound, mode: RoundCloseMode) => void;
+function RoundActions({ round: r, candidateId, applicationId, manages, viewerId, onClose, onChanged }: {
+  round: ProfileRound; candidateId: string; applicationId: string; manages: boolean; viewerId: string; onClose: (r: ProfileRound, mode: RoundCloseMode) => void; onChanged: () => void;
 }) {
   const navigate = useNavigate();
   if (manages && canAssignAgain(r.state)) {
@@ -324,6 +326,8 @@ function RoundActions({ round: r, candidateId, applicationId, manages, viewerId,
     return <Button size="sm" variant="primary" data-testid="interviews-profile-reassign" onClick={reassign}>Reassign</Button>;
   }
   const items = [
+    // The candidate's "I can't make this time": cleared once the recruiter has been in touch (a new time clears it too).
+    ...(manages && r.cantMake ? [{ label: "Clear \"can't make this time\"", onSelect: () => { void clearCantMake(r.id, r.revision).then(onChanged); }, 'data-testid': 'interviews-round-cant-make-clear' }] : []),
     ...(manages && canReassign(r.state) ? [{ label: 'Reassign…', onSelect: reassign }] : []),
     ...roundCloseItems(r, { asRecruiter: manages, isLead: r.lead.id === viewerId }, (mode) => onClose(r, mode)),
   ];
@@ -347,7 +351,7 @@ function RoundsSection({ app, several, candidateId, assigns, viewerId, onChanged
         keyField={(r) => r.id} staticRows="Each round with its status and result; its record opens from the Record column" emptyMessage="No round has been assigned yet."
         {...(acts ? {
           rowActionsHeader: 'Actions', rowActionsHeaderHidden: true,
-          rowActions: (r: ProfileRound) => <RoundActions round={r} candidateId={candidateId} applicationId={app.applicationId} manages={assigns} viewerId={viewerId} onClose={(round, mode) => setClosing({ round, mode })} />,
+          rowActions: (r: ProfileRound) => <RoundActions round={r} candidateId={candidateId} applicationId={app.applicationId} manages={assigns} viewerId={viewerId} onClose={(round, mode) => setClosing({ round, mode })} onChanged={onChanged} />,
         } : {})} />
       <RoundCloseDialog round={closing?.round ?? null} mode={closing?.mode ?? null} onClose={() => setClosing(null)} onDone={onChanged} />
     </DetailSection>
