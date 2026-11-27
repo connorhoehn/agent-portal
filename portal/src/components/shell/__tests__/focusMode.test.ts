@@ -37,3 +37,11 @@ test('the deck editor asks for focus mode while it presents in place, and nothin
   assert.match(page, /onFocusModeChange=\{focus\.request\}/);
   assert.doesNotMatch(page, /DeckPresentationDialog|onOpenPresentationView/);
 });
+
+test('focus mode folds the primary rail over an open dialogue, and the dialogue choice survives it', () => {
+  const rule = read('../useDialogueRailFold.ts');
+  assert.match(rule, /const folded = focused \? true :/);
+  assert.match(rule, /if \(wasOpen\.current && !open && !focused\) setChoice\(null\)/);
+  // The deck page reads the same focus mode to step its own chrome aside while presenting.
+  assert.match(read('../../decks/DeckEditorPage.tsx'), /const presenting = focus\.active;/);
+});

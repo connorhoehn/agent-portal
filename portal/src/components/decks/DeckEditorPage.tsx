@@ -17,9 +17,11 @@ import { deckSaveState } from './deckDocumentModel';
 import { useDeckCollaboration } from './useDeckCollaboration';
 import { useDeckDocument, type DeckDocumentApi, type DeckDocumentShape } from './useDeckDocument';
 import { DECK_EXPORTS, deckFileName, deckRenderKey, deckSourceOptions, revisionSeq } from './decksModel';
-import { ShareToSocialAction } from './ShareToSocialAction';
+import { ShareToSocialAction, ShareToSocialPanel } from './ShareToSocialAction';
 import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
+import { DeckFindingsLine } from './DeckFindingsLine';
+import { withPlaceholderSources } from './deckFindings';
 import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
@@ -99,8 +101,11 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reportPanel, setReportPanel] = useState(false);
+  const [sharePanel, setSharePanel] = useState(false);
   const savingNow = useRef(false);
   const focus = useShellFocusMode();
+  // Presenting in place holds focus mode: the page's own chrome (findings, assistant pane, head actions) steps aside with the rails.
+  const presenting = focus.active;
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   // `?tab=layouts` (the voice's `open { scope: 'this-page', tab: 'layouts' }`, or a link) shows the example layouts in place of the stage.
@@ -189,11 +194,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       )}
       {conflict && <DeckConflictBanner noun={noun} onReload={loadLatest} testId={`${testIdPrefix}-conflict`} />}
       {extraNotices?.(deck)}
-      {warnings.length > 0 && (
-        <Banner variant="warning" title={warnings.length === 1 ? 'The preview found one thing to fix' : `The preview found ${warnings.length} things to fix`} data-testid={`${testIdPrefix}-preview-warnings`}>
-          <Stack gap="xs">{warnings.map((w, i) => <T key={i} size="xs" wrap>{w}</T>)}</Stack>
-        </Banner>
-      )}
+      {warnings.length > 0 && <DeckFindingsLine warnings={warnings} slideCount={spec?.slides.length ?? 0} testId={`${testIdPrefix}-preview-warnings`} />}
     </>
   );
 
@@ -216,8 +217,11 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   // The operations route works on the saved head: no unsaved edits, and the head in view (useDeckAgentRun's rule).
   const reportBlocked = dirty ? SAVE_FIRST_LINE : !onHead ? 'Open the newest version first: a report fills the saved head.' : null;
   const themes = [{ id: tenant, name: DECK_TENANT_THEME_NAMES[tenant] }];
+  // A slide added in the editor cites the server's placeholder (`example:unsourced`), as `add_slide` does:
+  // Save stays on, the preview draws it, and the findings line asks for the real source.
+  const editSpec = (next: DeckSpec) => setSpec(withPlaceholderSources(spec, next));
   const addLayout = (layout: SlideLayout) => {
-    const next = addSlide(spec, selectedIndex, layout);
+    const next = withPlaceholderSources(spec, addSlide(spec, selectedIndex, layout));
     setSpec(next);
     const added = next.slides[selectedIndex + 1];
     closeLayouts();
@@ -232,7 +236,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   );
   const fileActions = (
     <Inline gap="xs" align="center" wrap={false} className="deck-document-actions" role={compactReview && cannotEdit ? undefined : 'toolbar'} aria-label="Presentation file actions">
-      {!cannotEdit && reports.length > 0 && <Button size="sm" variant="ghost" aria-pressed={reportPanel} onClick={() => setReportPanel(open => !open)}
+      {!cannotEdit && reports.length > 0 && <Button size="sm" variant="ghost" aria-pressed={reportPanel} onClick={() => { setReportPanel(open => !open); setSharePanel(false); }}
         title={selectedSlide?.layout === 'chart' ? 'Fill this chart from a report' : 'Turn this slide into a chart from a report'} data-testid={`${testIdPrefix}-report-open`}>Fill from a report</Button>}
       {!cannotEdit && extras.footer && <Button size="sm" variant="ghost" disabled={!composerFocus.present}
         onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>}
@@ -257,11 +261,23 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
           'data-testid': item.format === 'pptx' ? `${testIdPrefix}-download` : `${testIdPrefix}-download-${item.format}`,
         })) }]} />}
       {revisionId && shareable && (
-        <ShareToSocialAction deckId={deckId} revisionId={revisionId} fileName={deckFileName(deck.title, revisionSeq(deck.revisions, revisionId))}
-          fileUrl={fileUrl(deckId, revisionId)} disabled={dirty || saving} />
+        <ShareToSocialAction disabled={dirty || saving} open={sharePanel} onOpenChange={open => { setSharePanel(open); if (open) setReportPanel(false); }} />
       )}
     </Inline>
   );
+  const reportPanelOpen = !cannotEdit && reportPanel && !presenting;
+  const reportPanelNode = reportPanelOpen ? (
+    <DeckReportChartPanel tenant={tenant} deckId={deckId} headRevisionId={deck.activeRevisionId} reports={reports} blockedReason={reportBlocked}
+      slide={selectedSlide ? { id: selectedSlide.id, index: selectedIndex, title: selectedSlide.title, isChart: selectedSlide.layout === 'chart' } : null}
+      onApplied={out => { setReportPanel(false); void reload().then(next => { if (next) setRevisionId(out.revision.id); }); }}
+      onClose={() => setReportPanel(false)} testIdPrefix={testIdPrefix} />
+  ) : null;
+  // Share a copy opens in the same place as Fill from a report: under the toolbar, in the page's flow.
+  const sharePanelNode = sharePanel && !presenting && revisionId && shareable && !dirty ? (
+    <ShareToSocialPanel deckId={deckId} revisionId={revisionId} fileName={deckFileName(deck.title, revisionSeq(deck.revisions, revisionId))}
+      fileUrl={fileUrl(deckId, revisionId)} onClose={() => setSharePanel(false)} />
+  ) : null;
+  const toolbarPanel = reportPanelNode ?? sharePanelNode;
   const frame = (parts: PresentationEditorFrame) => (
     <EditorShell
       title={deck.title}
@@ -271,19 +287,15 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       {...collab.shellProps}
       {...(cannotEdit ? { statusPill: <T as="span" size="xs" tone="secondary">View only</T> }
         : saveState ? { saveState: { ...saveState, detail: saving ? 'Saving…' : dirty ? 'Unsaved changes' : 'All changes saved' } } : {})}
-      headActions={compactReview && cannotEdit ? null : fileActions}
-      surface="workspace" toolbar={parts.toolbar}
+      headActions={presenting || (compactReview && cannotEdit) ? null : fileActions}
+      // Fill from a report (or Share) opens under the toolbar, above the stage: the toolbar row does not scroll, so selecting a
+      // slide (which scrolls the surface to its stage) never carries the panel out of view.
+      surface="workspace" toolbar={toolbarPanel ? <Stack gap="sm">{parts.toolbar}{toolbarPanel}</Stack> : parts.toolbar}
       {...(parts.footer ? { footer: parts.footer } : {})}
       className={`min-h-0 flex-1 deck-review-workspace${compactReview ? ' deck-review-compact' : ''}`} data-testid={`${testIdPrefix}-shell`}
     >
-      {notices}
-      {collab.followBar}
-      {!cannotEdit && reportPanel && (
-        <DeckReportChartPanel tenant={tenant} deckId={deckId} headRevisionId={deck.activeRevisionId} reports={reports} blockedReason={reportBlocked}
-          slide={selectedSlide ? { id: selectedSlide.id, index: selectedIndex, title: selectedSlide.title, isChart: selectedSlide.layout === 'chart' } : null}
-          onApplied={out => { setReportPanel(false); void reload().then(next => { if (next) setRevisionId(out.revision.id); }); }}
-          onClose={() => setReportPanel(false)} testIdPrefix={testIdPrefix} />
-      )}
+      {!presenting && notices}
+      {!presenting && collab.followBar}
       {showLayouts && !cannotEdit ? layoutsPanel : parts.surface}
     </EditorShell>
   );
@@ -291,13 +303,13 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   return (
     <>
       <DeckPresenceSource deckId={deckId} tenant={tenant} selectedSlideId={collab.selectedSlideId} slideTitle={slideTitle} editing={dirty} onChange={collab.setPresence} />
-      {extras.assistant}
+      {!presenting && extras.assistant}
       {cannotEdit ? <DeckReader onFocusModeChange={focus.request} onFocusConversation={focusConversation} compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
         slideViewers={collab.presence.slideViewers} selectSlideRequest={collab.selectSlideRequest}
         onSelectedSlideChange={collab.setSelectedSlideId} onNavigateSlide={collab.selectSlide} renderFrame={frame}
         footer={ctx => extras.footer ? extras.footer(ctx) : <HuddleComposerDock dock={call.block} page={huddlePage} />}
         data-testid={`${testIdPrefix}-reader`} /> : <PresentationEditor
-        spec={spec} onChange={setSpec} preview={preview} onRequestPreview={request}
+        spec={spec} onChange={editSpec} preview={preview} onRequestPreview={request}
         onSaveRevision={save} revisions={editorRevisions} activeRevisionId={revisionId ?? ''}
         onSelectRevision={selectRevision}
         sources={sourceOptions}

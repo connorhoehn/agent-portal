@@ -216,7 +216,7 @@ test('(f) Share to Social: a channel member downloads the attachment, a non-memb
     await expect(farah.page.getByTestId('deck-editor')).toBeVisible({ timeout: 30_000 });
     await expect(farah.page.getByTestId('deck-share-open')).toBeVisible();
     await farah.page.getByTestId('deck-share-open').click();
-    const dialog = farah.page.getByTestId('deck-share-dialog');
+    const dialog = farah.page.getByTestId('deck-share-panel');
     await expect(dialog).toBeVisible();
     // Only conversations she is a member of are offered: #General and #Design reviews, not #Moderators.
     await expect(dialog.getByText('#Moderators')).toHaveCount(0);

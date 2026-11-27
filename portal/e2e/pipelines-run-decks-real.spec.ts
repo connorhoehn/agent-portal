@@ -150,7 +150,7 @@ test('(d) Share to Social is offered to a holder of a social grant and hidden fr
     await admin.page.goto(`/pipelines/decks/${deckId}`);
     await expect(admin.page.getByTestId('run-deck-editor')).toBeVisible({ timeout: 30_000 });
     await admin.page.getByTestId('deck-share-open').click();
-    await expect(admin.page.getByTestId('deck-share-dialog')).toBeVisible();
+    await expect(admin.page.getByTestId('deck-share-panel')).toBeVisible();
     for (const p of [kofi, admin]) expect(p.errors).toEqual([]);
   } finally { await Promise.all([kofi.context.close(), admin.context.close()]); }
 });

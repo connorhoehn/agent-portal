@@ -58,7 +58,7 @@ async function bundleOnce(): Promise<{ render(what: string, url: string): string
           loader: 'js', resolveDir: PORTAL,
           contents: {
             doc: 'export const useDeckDocument = () => globalThis.__deckTest.doc;',
-            share: 'export const ShareToSocialAction = () => null;',
+            share: 'export const ShareToSocialAction = () => null; export const ShareToSocialPanel = () => null;',
             presence: 'export const DeckPresenceSource = () => null;',
             call: 'export const useCallBlock = () => ({ holds: false, block: null }); export const useCallHost = () => null;',
             dock: 'export const HuddleComposerDock = () => null;',
@@ -112,4 +112,16 @@ test('the four new-deck pages render inline, with their subject and no dialog', 
     // One h1: the page's (its sections are h2). Inline styles come only from the library's own skeleton tiles.
     assert.equal(html.match(/<h1[ >]/g)?.length, 1, `${what}: one h1`);
   }
+});
+
+test('Share to Social is an inline panel in the page flow, not a Modal', async () => {
+  const { readFileSync } = await import('node:fs');
+  const share = readFileSync(`${PORTAL}src/components/decks/ShareToSocialAction.tsx`, 'utf8');
+  assert.doesNotMatch(share, /\bModal\b|role="dialog"|aria-modal/);
+  assert.match(share, /export function ShareToSocialPanel/);
+  assert.match(share, /<DetailSection title=/);
+  assert.match(share, /data-testid="deck-share-panel"/);
+  // The page renders it under the toolbar, beside Fill from a report.
+  const page = readFileSync(`${PORTAL}src/components/decks/DeckEditorPage.tsx`, 'utf8');
+  assert.match(page, /const toolbarPanel = reportPanelNode \?\? sharePanelNode;/);
 });

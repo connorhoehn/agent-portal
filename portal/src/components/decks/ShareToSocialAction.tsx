@@ -1,5 +1,5 @@
-// "Share to Social" for an assessment deck revision. Two steps in one library
-// Modal: pick a destination the person is a member of, then confirm (members
+// "Share to Social" for a deck revision. Two steps in an inline panel in the
+// page's flow (no modal): pick a destination the person is a member of, then confirm (members
 // of that conversation will be able to download a copy). The copy is the
 // revision's .pptx, fetched through the BFF, uploaded over the gateway's file
 // feature (useChatAttachmentSend, lib/conversationComposer.ts) and posted with useChat as a message carrying
@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { Button, ChoiceRow, InlineAlert, Inline, Input, Modal, Prose, SectionLabel, ShareIcon, Spinner, Stack, T, FormField } from '@connorhoehn/ui-components/shared';
+import { Button, ChoiceRow, DetailSection, InlineAlert, Inline, Input, Prose, ShareIcon, Spinner, Stack, T, FormField } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useChatAttachmentSend } from '../../lib/conversationComposer';
 import { useEmbeddedSocial } from '../shell/EmbeddedSocial';
@@ -25,36 +25,38 @@ export interface ShareToSocialActionProps {
 }
 const CONFIRM_TIMEOUT_MS = 15_000;
 
-export function ShareToSocialAction(props: ShareToSocialActionProps) {
+/** The Share button in the page's file actions. It opens `ShareToSocialPanel` in the page's own flow (no modal). */
+export function ShareToSocialAction({ disabled, open, onOpenChange }: Pick<ShareToSocialActionProps, 'disabled'> & { open: boolean; onOpenChange(open: boolean): void }) {
   const { session } = useSession();
-  const [open, setOpen] = useState(false);
   if (!session || (session.grants.social?.length ?? 0) === 0) return null;
-  return <>
-    <Button variant="secondary" size="sm" disabled={props.disabled} title={props.disabled ? 'Save your changes before sharing a copy.' : 'Share a PowerPoint copy to a conversation'}
-      onClick={() => setOpen(true)} data-testid="deck-share-open"><ShareIcon size={14} />Share</Button>
-    {open && <ShareDialog {...props} onClose={() => setOpen(false)} />}
-  </>;
+  return (
+    <Button variant="secondary" size="sm" disabled={disabled} aria-pressed={open}
+      title={disabled ? 'Save your changes before sharing a copy.' : 'Share a PowerPoint copy to a conversation'}
+      onClick={() => onOpenChange(!open)} data-testid="deck-share-open"><ShareIcon size={14} />Share</Button>
+  );
 }
 
-function ShareDialog({ deckId, revisionId, fileName, fileUrl, onClose }: ShareToSocialActionProps & { onClose(): void }) {
+/** Share a copy, inline: pick a conversation, then confirm. Rendered by the page above the stage, like Fill from a report. */
+export function ShareToSocialPanel({ deckId, revisionId, fileName, fileUrl, onClose }: ShareToSocialActionProps & { onClose(): void }) {
+  const { session } = useSession();
   const fetched = useFetch<unknown>('/api/social/share-destinations');
   const destinations = useMemo(() => readShareDestinations(fetched.data), [fetched.data]);
   const [chosen, setChosen] = useState<ShareDestination | null>(null);
   const [confirming, setConfirming] = useState(false);
-  return <Modal open onClose={onClose} maxWidth={520}>
-    <Stack gap="md" className="px-4.5 py-4" data-testid="deck-share-dialog">
-      <SectionLabel as="h3" className="text-sm font-semibold text-text-primary normal-case tracking-normal">
-        {confirming ? 'Share a copy?' : 'Share presentation'}
-      </SectionLabel>
+  if (!session || (session.grants.social?.length ?? 0) === 0) return null;
+  return (
+    <DetailSection title={confirming ? 'Share a copy?' : 'Share to a conversation'} hint={fileName}
+      actions={<Button size="sm" variant="ghost" onClick={onClose} data-testid="deck-share-close">Close</Button>}
+      data-testid="deck-share-panel">
       {confirming && chosen
         ? <ConfirmStep key={chosen.channel} destination={chosen} deckId={deckId} revisionId={revisionId} fileName={pptxName(fileName)} fileUrl={fileUrl ?? deckFileUrl(deckId, revisionId)}
           onBack={() => setConfirming(false)} onClose={onClose} />
-        : <>
-          {fetched.isLoading && !fetched.data && <Inline gap="sm" align="center"><Spinner size="sm" /><T size="sm" className="text-text-secondary">Loading your conversations…</T></Inline>}
+        : <Stack gap="sm">
+          {fetched.isLoading && !fetched.data && <Inline gap="sm" align="center"><Spinner size="sm" /><T size="sm" tone="secondary">Loading your conversations…</T></Inline>}
           {fetched.error && <InlineAlert tone="error">Your Social conversations could not be loaded. {fetched.error}</InlineAlert>}
           {!fetched.isLoading && !fetched.error && destinations.length === 0
-            && <T size="sm" className="text-text-secondary" wrap>You are not a member of any channel or direct message yet. Join a channel in Social first.</T>}
-          <Stack gap="xs" className="max-h-72 overflow-y-auto">
+            && <T size="sm" tone="secondary" wrap>You are not a member of any channel or direct message yet. Join a channel in Social first.</T>}
+          <Stack gap="xs" className="max-h-56 overflow-y-auto">
             {destinations.map(d => <ChoiceRow key={d.channel} title={d.label} description={d.detail} selected={chosen?.channel === d.channel}
               onSelect={() => setChosen(d)} data-testid={`deck-share-destination-${d.kind}`} />)}
           </Stack>
@@ -62,9 +64,9 @@ function ShareDialog({ deckId, revisionId, fileName, fileUrl, onClose }: ShareTo
             <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" disabled={!chosen} onClick={() => setConfirming(true)} data-testid="deck-share-next">Continue</Button>
           </Inline>
-        </>}
-    </Stack>
-  </Modal>;
+        </Stack>}
+    </DetailSection>
+  );
 }
 
 type Phase = 'idle' | 'sending' | 'done';
