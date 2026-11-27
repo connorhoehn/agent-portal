@@ -45,6 +45,7 @@ import { InterviewHintListener, type InterviewHint } from '../../lib/InterviewHi
 import { useRegisterInterviewRoomFooter, type InterviewRoomFooterState } from '../../components/shell/InterviewRoomFooter';
 import { whenWithZone } from '../../lib/interviews';
 import { PadTab } from './room/PadTab';
+import { NotesTab } from './room/NotesTab';
 import { BoardTab } from './room/BoardTab';
 import { ProvidedDesignTab } from './room/ProvidedDesignTab';
 import { answerKeyQuestions } from '../../lib/interviewsAnswerKey';
@@ -366,6 +367,7 @@ function RoomWorkspace({ room, here, joined, live, admission, off, onBack, lost,
           onAsked={type === 'technical' ? (q, said) => { queuePadQuestion(room.id, q); if (said === 'spoken') setTab('pad'); } : undefined} />}
         {tab === 'plan' && <><Questions questions={room.questions} title="The plan" interviewId={room.id} asks={lead && room.state === 'live'} /><Competencies room={room} /></>}
         {tab === 'milo' && <MiloForYou room={room} {...milo} />}
+        {tab === 'notes' && <NotesTab room={room} />}
         {tab === 'details' && <Stack gap="md" data-testid="interview-room-details">
           {miloLine && <T size="sm" tone="secondary" wrap data-testid="interview-room-milo-left">{miloLine}</T>}
           <KeyValue items={facts} labelWidth="w-28" aria-label="This round" />

@@ -71,7 +71,10 @@ test('the draft is kept per interview and version in this browser, and cleared o
   const store: DraftStore = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => { m.set(k, v); }, removeItem: (k) => { m.delete(k); } };
   const d = { ...emptyDraft(), ratings: { ownership: 2 as const }, summary: 'half' };
   saveDraft('iv-1', 0, d, store);
-  assert.deepEqual(loadDraft('iv-1', 0, store), d);
+  // The browser's copy carries when it was kept, so the server's copy can be preferred unless this one is newer.
+  const { savedAt, ...back } = loadDraft('iv-1', 0, store)!;
+  assert.deepEqual(back, d);
+  assert.ok(savedAt && !Number.isNaN(Date.parse(savedAt)));
   assert.equal(loadDraft('iv-2', 0, store), null);
   assert.equal(loadDraft('iv-1', 1, store), null);
   clearDraft('iv-1', 0, store);

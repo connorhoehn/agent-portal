@@ -92,6 +92,8 @@ export interface Draft {
   redFlagsSeen?: string[];
   /** The recap was opened from this draft: going back to it asks nothing again (the server keeps the first open only). */
   recapOpened: boolean;
+  /** When this browser last kept it: the scorecard prefers the server's copy unless this one is newer (lib/interviewsPrivateNotes.ts chooseDraft). */
+  savedAt?: string;
 }
 
 export const emptyDraft = (): Draft => ({ ratings: {}, notes: {}, recommendation: null, summary: '', reason: '', step: 'rate', recapOpened: false });
@@ -167,20 +169,24 @@ export interface DraftStore { getItem(k: string): string | null; setItem(k: stri
 const draftKey = (interviewId: string, basedOn: number) => `interviews:scorecard-draft:${interviewId}:${basedOn}`;
 const browser = (): DraftStore | null => { try { return typeof localStorage === 'undefined' ? null : localStorage; } catch { return null; } };
 
+/** A draft as stored (this browser's, or the server's copy) made whole: missing fields filled, a step past the ratings
+ *  kept only when the recap was opened from it. */
+export function normalizeDraft(d: Partial<Draft>): Draft {
+  const opened = d.recapOpened === true;
+  const step = opened && (SCORECARD_STEPS as readonly string[]).includes(d.step ?? '') ? d.step! : 'rate';
+  return { ...emptyDraft(), ...d, step, recapOpened: opened, ratings: { ...(d.ratings ?? {}) }, notes: { ...(d.notes ?? {}) } };
+}
+
 export function loadDraft(interviewId: string, basedOn: number, store: DraftStore | null = browser()): Draft | null {
   try {
     const raw = store?.getItem(draftKey(interviewId, basedOn));
     if (!raw) return null;
-    const d = JSON.parse(raw) as Partial<Draft>;
-    const opened = d.recapOpened === true;
-    // A step past the ratings is only resumed when the recap was opened from this draft.
-    const step = opened && (SCORECARD_STEPS as readonly string[]).includes(d.step ?? '') ? d.step! : 'rate';
-    return { ...emptyDraft(), ...d, step, recapOpened: opened, ratings: { ...(d.ratings ?? {}) }, notes: { ...(d.notes ?? {}) } };
+    return normalizeDraft(JSON.parse(raw) as Partial<Draft>);
   } catch { return null; }
 }
 
 export function saveDraft(interviewId: string, basedOn: number, d: Draft, store: DraftStore | null = browser()): void {
-  try { store?.setItem(draftKey(interviewId, basedOn), JSON.stringify(d)); } catch { /* the draft is a convenience */ }
+  try { store?.setItem(draftKey(interviewId, basedOn), JSON.stringify({ ...d, savedAt: new Date().toISOString() })); } catch { /* the draft is a convenience */ }
 }
 
 export function clearDraft(interviewId: string, basedOn: number, store: DraftStore | null = browser()): void {

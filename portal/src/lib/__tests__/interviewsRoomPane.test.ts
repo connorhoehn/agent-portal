@@ -11,9 +11,9 @@ const MIN = 60_000;
 const T0 = Date.parse('2026-11-16T14:00:00.000Z');
 
 test('the pane has the round type’s tabs in order, opens on the first, and Message selects Chat', () => {
-  assert.deepEqual(roomTabIds('technical'), ['pad', 'questions', 'milo', 'chat', 'details']);
-  assert.deepEqual(roomTabIds('behavioural'), ['plan', 'milo', 'chat', 'details']);
-  assert.deepEqual(roomTabs('behavioural').map((t) => t.label), ['Plan', 'Milo', 'Chat', 'Details']);
+  assert.deepEqual(roomTabIds('technical'), ['pad', 'questions', 'milo', 'notes', 'chat', 'details']);
+  assert.deepEqual(roomTabIds('behavioural'), ['plan', 'milo', 'notes', 'chat', 'details']);
+  assert.deepEqual(roomTabs('behavioural').map((t) => t.label), ['Plan', 'Milo', 'Notes', 'Chat', 'Details']);
   assert.equal(defaultRoomTab('technical'), 'pad');
   assert.equal(defaultRoomTab('behavioural'), 'plan');
   assert.equal(ROOM_MESSAGE_TAB, 'chat');

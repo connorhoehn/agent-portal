@@ -5,7 +5,7 @@
 // show only once the viewer's own is in (the server decides: middleware lib/interviews/scope.ts othersRevealed). The
 // recruiter and the hiring manager read the submissions here and submit nothing.
 //
-// What is typed before Submit is kept in this browser only, per interview, and cleared on submit
+// What is typed before Submit is kept for its author on the server (lib/interviewsPrivateNotes.ts) and in this browser as a fallback, per interview, and cleared on submit
 // (lib/interviewsScorecard.ts loadDraft / saveDraft / clearDraft).
 //
 // Milo's recap (row I5.2, decision 14) sits between the ratings and the recommendation: "Continue to the recap" asks once,
@@ -32,13 +32,14 @@ import { AppLink } from './interviewsCells';
 import { recordPath } from '../../lib/interviewsRecord';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
+import { SAVE_DELAY_MS, chooseDraft, myDraftUrl, myNotesUrl, offersNotes, saveServerDraft, type MyDraft, type MyNotes } from '../../lib/interviewsPrivateNotes';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { INTERVIEWS_API, RECOMMENDATION_LABELS, ROUND_TYPE_LABELS, dateLabel, recommendationTone, roundStatus, type Recommendation } from '../../lib/interviews';
 import { MILO_QUESTION_MAX, NO_SEAT_NOT_FOUND, keepExchange, type MiloExchange } from '../../lib/interviewsRoom';
 import type { KitCompetency } from '../../lib/interviewsKit';
 import { adviceWords, draftRatings, evidenceRow, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
 import {
-  RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, nextStep, openBodyOf, openRecap,
+  RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, normalizeDraft, nextStep, openBodyOf, openRecap,
   SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type RecapClaim, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
@@ -74,6 +75,47 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const goTo = (step: ScorecardStep) => setDraft((d) => ({ ...d, step }));
   const [problem, setProblem] = useState<string | null>(null);
   useEffect(() => { if (editing) saveDraft(interview.id, basedOn, draft); }, [editing, interview.id, basedOn, draft]);
+  // The draft is kept on the server for its author too (gap audit 2026-11-20 §5): the server's copy is preferred unless
+  // this browser's is newer, a browser draft the server lacks is uploaded once, and every pause in typing saves it.
+  const myNotes = useFetch<{ notes: MyNotes }>(seated ? myNotesUrl(interview.id) : null).data?.notes ?? null;
+  const serverDraft = useFetch<{ draft: MyDraft }>(seated && view.canSubmit ? myDraftUrl(interview.id) : null).data?.draft ?? null;
+  const [draftSync, setDraftSync] = useState<'local' | 'saved' | 'failed' | 'stale'>('local');
+  const serverRev = useRef<number | null>(null);
+  const skipPush = useRef(false);
+  const pushDraft = useCallback(async (d: Draft) => {
+    if (serverRev.current === null) return;
+    const out = await saveServerDraft(interview.id, d, basedOn, serverRev.current);
+    if (out.ok) { serverRev.current = out.value.draft?.revision ?? serverRev.current; setDraftSync('saved'); return; }
+    const now = out.value?.draft ?? null;
+    if (out.stale && now) {
+      // Saved from another window: the form shows what was saved there.
+      serverRev.current = now.revision;
+      if (now.basedOn === basedOn) { skipPush.current = true; setDraft(normalizeDraft(now.draft as Partial<Draft>)); }
+      setDraftSync('stale');
+      return;
+    }
+    setDraftSync('failed');
+  }, [interview.id, basedOn]);
+  useEffect(() => {
+    if (!serverDraft || serverRev.current !== null) return;
+    const local = loadDraft(interview.id, basedOn);
+    const pick = chooseDraft(serverDraft.draft, local, basedOn);
+    serverRev.current = pick.revision;
+    if (pick.use === 'server' && serverDraft.draft) { skipPush.current = true; setDraft(normalizeDraft(serverDraft.draft.draft as Partial<Draft>)); setDraftSync('saved'); }
+    if (pick.upload && local && serverDraft.canWrite) void pushDraft(local);
+  }, [serverDraft, interview.id, basedOn, pushDraft]);
+  useEffect(() => {
+    if (!editing || serverRev.current === null || !serverDraft?.canWrite) return undefined;
+    if (skipPush.current) { skipPush.current = false; return undefined; }
+    const t = setTimeout(() => void pushDraft(draft), SAVE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [editing, draft, serverDraft, pushDraft]);
+  const draftLine = draftSync === 'failed' ? 'Your draft is kept in this browser; it could not be saved to your account just now.'
+    : draftSync === 'stale' ? 'This draft was changed in another window. The form shows what was saved there.'
+      : 'Your draft is saved for you alone until you submit.';
+  const useNotes = editing && offersNotes(myNotes, draft.summary)
+    ? <Button variant="secondary" size="sm" onClick={() => setDraft((d) => ({ ...d, summary: myNotes!.body }))} data-testid="interviews-scorecard-use-notes">Use my notes from the interview</Button>
+    : null;
   // A draft saved while correcting reopens the correction.
   useEffect(() => { if (mine && view.canSubmit && loadDraft(interview.id, basedOn)?.reason) setCorrecting(true); }, [mine, view.canSubmit, interview.id, basedOn]);
 
@@ -196,7 +238,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       <Stack gap="sm">
         {!rated && <T size="sm" tone="secondary" data-testid="interviews-scorecard-missing">{missing[0]}</T>}
         {problemLine}
-        <T size="xs" tone="tertiary">What you type here is kept in this browser only until you submit.</T>
+        <T size="xs" tone={draftSync === 'failed' || draftSync === 'stale' ? 'danger' : 'tertiary'} aria-live="polite" data-testid="interviews-scorecard-draft-state">{draftLine}</T>
         {deck}
         <Inline gap="sm">
           <Button size="sm" variant="primary" disabled={!rated || asking !== null} data-testid="interviews-scorecard-to-recap"
@@ -231,6 +273,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
         <Stack gap="sm">
           <RadioGroup<Recommendation | ''> name={`recommendation-${interview.id}`} orientation="horizontal" value={draft.recommendation ?? ''}
             onChange={(v) => setDraft((d) => ({ ...d, recommendation: v || null }))} options={[...RECOMMENDATION_CHOICES]} data-testid="interviews-scorecard-recommendation" />
+          {useNotes}
           <FormField label="Summary" required hint="A few sentences another interviewer could read on their own.">
             {({ labelId: _labelId, ...wiring }) => (
               <Textarea {...wiring} minRows={3} autoResize value={draft.summary} maxLength={limits.summaryChars}
@@ -242,7 +285,7 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
       <Stack gap="sm">
         {missing.length > 0 && <T size="sm" tone="secondary" data-testid="interviews-scorecard-missing">{missing.join(' ')}</T>}
         {problemLine}
-        <T size="xs" tone="tertiary">What you type here is kept in this browser only until you submit.</T>
+        <T size="xs" tone={draftSync === 'failed' || draftSync === 'stale' ? 'danger' : 'tertiary'} aria-live="polite" data-testid="interviews-scorecard-draft-state">{draftLine}</T>
         {deck}
         <Inline gap="sm">
           <Button size="sm" variant="primary" disabled={missing.length > 0 || asking !== null} data-testid="interviews-scorecard-submit"
