@@ -67,3 +67,40 @@ The goal documents, journey logs and CLAUDE.md that the old judges read were rem
 | `portal/e2e/user-search-probe.spec.ts`, `user-search-catalog.ts` | removed | Imported the user-search scripts deleted in the first pass. |
 
 Everything else that mentions `docs/` only does so in a comment, or writes output under a `docs/` folder it creates (`docs/audit-loop`, `docs/demo-content`, `docs/journeys`). Those are left as they are.
+
+## Added since the second pass
+
+Tools written after 7 November. "Needs" says what must be running or configured; none of these were run when this table was written.
+
+| File | Decision | Why |
+|---|---|---|
+| validate-interviews.sh and validate-interviews.d/ | new | Judge for the Candidates tenant (`docs/interviews-tenant-plan.md`). `--quick` is static checks only; the full run starts its own mock stack and walks the journey in a browser. |
+| validate-learning-loop.sh | new | Judge for the learning loop (`docs/learning-loop-design.md`). Runs the learning-loop journeys through `journeys/run-demo-moments.mjs`, which starts its own mock stack. |
+| validate-ui.sh | new | Definition of done for a change under `portal/src`: the ui-components lint, the component-discipline judge, then the packaged DOM audit on each route you name with `--route`. The audit step needs a running stack. |
+| audit-ui-inheritance.cjs and its test | new | Reports composition drift as well as raw HTML under `portal/`; `--check` enforces only the documented contracts. Static; run after `npm ci` in `portal`. |
+| count-hitl-modals.py | new | Counts human-in-the-loop decisions asked in a modal instead of the composer deck; used as a ratchet by `validate-component-discipline.sh`. Static. |
+| count-raw-typography.py | new | Counts raw `text-` and `font-` utilities on bare elements in `portal/src`; used as a ratchet by `validate-component-discipline.sh`. Static. |
+| gen-tenants.mjs | new | Writes the TypeScript and SQL that every consumer of `tenants/manifest.json` imports; `check-tenant-manifest.mjs` verifies them. Static. |
+| install-committed-library.mjs | new | Installs tracked release artifacts without re-preparing unchanged Git dependency graphs. Needs network and GitHub access; run `npm install` first after a dependency change. |
+| profile-portal-bundle.mjs | new | Builds a throwaway production bundle and reports which modules make it up. No server. |
+| document-workspace.mjs | new | Starts isolated local document services from the owning project's Compose stack. Needs Docker. |
+| docker/ | new | Build and push scripts for the middleware and document-workspace images and a locked install. Need Docker; the push scripts need registry credentials. |
+| avatars/ | new | Generates and backfills seed portraits. Generation and hosted checks need external services. |
+| dev/ | new | `social-sim.mjs` logs in seeded Social users and holds them online so the local demo looks populated; needs a running mock middleware. `native-speech-cli.py` is a local speech helper. |
+| lib/ | new | Shared shell and Node helpers for the judges and journeys. Not run directly. |
+| loadtest/ | new | Compose files and a driver for realtime call and chat load tests; see its own README. Needs Docker. |
+| research/ | new | One-off probes of the document canvas, toolkit and container store. Not part of any judge; most need a running document stack. |
+| learning-loop/ | new | `debrief-e2e.mjs` and `local-report-e2e.mjs` prove acceptance items 13 and 10 on a test stack of their own with a stub `claude`; no paid model calls. |
+| voice/inventory.mjs | new | Derives what the application can do and what the voice catalogue covers, and writes `docs/voice-tool-inventory.json`. Static. |
+| voice/sessions-to-replay.mjs | new | Turns the middleware's voice session logs into the replay fixture described in `docs/voice/replay.md`. Reads local logs only. |
+| voice/probe-realtime.mjs, voice/probe-voices.mjs, voice/probe-middleware-body.mjs | new | Probes of the OpenAI Live API: the handshake and tools, the voices on offer, and the exact session body the middleware mints. Need an OpenAI key and spend money. |
+| voice-harness/ | new | Feeds recorded scenario speech into a Live session or the hands-free gate and scores it. `gate.mts --driver fake` needs no key; `--driver direct` needs an OpenAI key and audio clips. Run from `middleware/`. |
+| milo-judge/ | new | The Milo judge and the model bake-off for the Decide call, run with `npm run milo-judge` from `middleware/`. The scripted and perfect rigs need no key; the `owner` rig and the bake-off call OpenAI. |
+| milo-probe/probe.mts | new | Measures latency and tool choice for the Milo rebuild design in text, speech and live modes. Needs an OpenAI key. |
+| meeting-assistant/ | new | Scenario suite for the meeting assistant (`scenarios.mjs`), a stand-in for the media server's audio taps (`tap-sim.mjs`), the decision watcher's one paid check (`watcher-check.mjs`, prints the request without `--yes`) and the end-to-end run with real audio (`live-e2e.mjs`, `--dry` uses a fake provider). |
+| journeys/demo-moments.mjs, journeys/run-demo-moments.mjs | new | The five demo moments of `docs/demo-script.md`; the runner starts its own mock middleware and portal, runs the journey and stops them. See `docs/journeys.md`. |
+| journeys/learning-loop*.mjs, voice-coverage.mjs, meeting-assistant.mjs, interviews.mjs, call-chat-unread.mjs, budgets-audit.mjs, budgets-selection.mjs, leftovers2-walk.mjs | new | Browser journeys for single features, run through the same runner on the mock world. The learning-loop, voice-coverage and meeting-assistant ones use no model; `leftovers2-walk.mjs` takes `PORTAL_URL`, `MIDDLEWARE_URL` and `OUT_DIR` for a stack that is already running. |
+| journeys/desktop-audit.mjs, journeys/gateway-refusal.mjs, journeys/clone-dm.mjs | new | Audit helpers on the journey stack: the desktop-width contract audit, a read-only tenant isolation proof against the realtime gateway, and a rule that DM journeys post only between fresh clones. Need a running stack. |
+| journeys/measure.sh, journeys/seal.sh, journeys/journey-vite.mjs, journeys/journey-map.ts | new | Measure each route's rendered contract on a shared stack, seal a journey log directory after a walk, and the Vite and map helpers the runner uses. Need a running stack; the log trees they write to were removed. |
+| journeys/maps.mjs, journeys/walk.mjs, journeys/run-maps.mjs | new | The journey-map runner: load and validate maps, walk one in a browser, command-line entry. Nothing to walk until maps are written again (see the second-pass table). |
+| demo/ | new | Demo films. `assistant-meeting-film.mjs` records Milo in a call on the mock world (`--live` uses a real model); `interviews-call-film.mjs` and `interviews-board-film.mjs` record a coding round and a whiteboard round; the `.py` files compose, voice and review the cuts. They start their own stacks and need ffmpeg, a browser and, for voices, local text-to-speech. |
