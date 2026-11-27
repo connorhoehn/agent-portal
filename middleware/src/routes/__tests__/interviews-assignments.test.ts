@@ -48,6 +48,7 @@ import { interviewPanelNoticesFixture } from '../../mock/interviews-panel-notice
 import { interviewApplicationsFixture, interviewsFixture } from '../../mock/interviews.js';
 import { CONSENT_NOTICE } from '../../lib/interviews/consent/notice.js';
 import type { Session } from '../../lib/session.js';
+import { resetInterviewsClock, setInterviewsClockOffset } from '../../lib/interviews/clock.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
   ({ id, displayName, email: null, personId: null, epoch: 0, grants });
@@ -361,6 +362,25 @@ describe('double-booking is a warning (ledger row C-17)', () => {
     const set = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: new Date(Date.parse(other.scheduledAt) + 60 * 60_000).toISOString() });
     expect(set.status).toBe(200);
     expect(set.body.conflicts).toEqual([]);
+  });
+});
+
+describe('a missed round says so (ledger row C-17)', () => {
+  afterEach(() => resetInterviewsClock());
+  it('reads missed once its window has passed by the tenant\'s clock, keeps its state, and can still be marked as not held', async () => {
+    const before = await rowOf(GRETA, 'iv-k1p5w8ra'); // ready, ten minutes, tomorrow
+    expect(before).toMatchObject({ state: 'ready', missed: false });
+    const end = Date.parse(before.scheduledAt) + before.round.minutes * 60_000;
+    expect(setInterviewsClockOffset(end - Date.now() - 60_000, true)).toBe(true);
+    expect((await rowOf(GRETA, 'iv-k1p5w8ra')).missed).toBe(false);
+    setInterviewsClockOffset(end - Date.now() + 60_000, true);
+    const after = await rowOf(GRETA, 'iv-k1p5w8ra');
+    expect(after).toMatchObject({ state: 'ready', missed: true, revision: before.revision });
+    const listed = (await GRETA.get('/interviews')).body.items.find((r: { id: string }) => r.id === 'iv-k1p5w8ra');
+    expect(listed.missed).toBe(true);
+    const notHeld = await GRETA.post('/interviews/iv-k1p5w8ra/not-held', { revision: after.revision, reason: 'did_not_take_place' });
+    expect(notHeld.status).toBe(200);
+    expect((await rowOf(GRETA, 'iv-k1p5w8ra'))).toMatchObject({ state: 'cancelled', missed: false });
   });
 });
 

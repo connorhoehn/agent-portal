@@ -14,6 +14,8 @@ import { CANCEL_REASON_LABEL } from './cancel.js';
 import { latestByAuthor } from './scorecard.js';
 import { competenciesOfRound, competencyIdsOfRound, questionsOfRound } from './kit.js';
 import { seatConflicts, type SeatConflict } from './conflicts.js';
+import { isMissed } from './missed.js';
+import { interviewsNowMs } from './clock.js';
 
 export interface PersonRef { id: string; name: string }
 export type People = (id: string) => PersonRef;
@@ -105,6 +107,8 @@ export interface InterviewRow {
   declines: Array<{ person: PersonRef; seat: Seat; reason: string; at: string }>;
   /** Why the round was cancelled, by whom and when (lib/interviews/cancel.ts); null unless the state is `cancelled`. */
   cancellation: { reason: CancelReason; label: string; note: string | null; by: PersonRef; at: string } | null;
+  /** Still waiting to go live, and its start is more than its length in the past by the tenant's clock (missed.ts). Never stored. */
+  missed: boolean;
   /** The revision a write must name (row I1.4: compare-and-set). */
   revision: number;
 }
@@ -225,7 +229,8 @@ export class WorldIndex {
   readonly openings: Map<string, Opening>;
   readonly candidates: Map<string, Candidate>;
   readonly applications: Map<string, InterviewsWorld['applications'][number]>;
-  constructor(readonly world: InterviewsWorld, readonly people: People, readonly viewer: Viewer) {
+  /** `nowMs` is the tenant's clock (clock.ts); a test passes its own. */
+  constructor(readonly world: InterviewsWorld, readonly people: People, readonly viewer: Viewer, readonly nowMs: () => number = interviewsNowMs) {
     this.openings = new Map(world.openings.map((o) => [o.id, o]));
     this.candidates = new Map(world.candidates.map((c) => [c.id, c]));
     this.applications = new Map(world.applications.map((a) => [a.id, a]));
@@ -379,6 +384,7 @@ export class WorldIndex {
       cancellation: i.state === 'cancelled' && i.cancellation
         ? { reason: i.cancellation.reason, label: CANCEL_REASON_LABEL[i.cancellation.reason], note: i.cancellation.note, by: this.people(i.cancellation.by), at: i.cancellation.at }
         : null,
+      missed: isMissed(i, this.nowMs()),
       revision: i.revision,
     };
   }

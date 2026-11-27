@@ -84,6 +84,11 @@ export interface InterviewRow {
   declines: Array<{ person: PersonRef; seat: 'lead' | 'panel'; reason: string; at: string }>;
   /** Why a cancelled round was cancelled (lib/interviewsCancel.ts); null on every other round. Absent from an older server. */
   cancellation?: { reason: string; label: string; note: string | null; by: PersonRef; at: string } | null;
+  /**
+   * Still waiting to go live and its start is more than its length in the past, by the server's clock (middleware
+   * lib/interviews/missed.ts, ledger row C-17). Never stored; absent from an older server.
+   */
+  missed?: boolean;
   /** The revision a write names. */
   revision: number;
 }
@@ -163,8 +168,9 @@ export function stageSteps(stage: ApplicationStage, history: ReadonlyArray<Pick<
   });
 }
 
-/** What a round is waiting for, in words. */
-export function roundStatus(state: InterviewState): { label: string; tone: ChipTone } {
+/** What a round is waiting for, in words. A missed round (its window passed, nobody started it) says so. */
+export function roundStatus(state: InterviewState, missed = false): { label: string; tone: ChipTone } {
+  if (missed) return { label: 'Missed', tone: 'danger' };
   switch (state) {
     case 'assigned': return { label: 'To accept', tone: 'warning' };
     case 'accepted': return { label: 'Accepted', tone: 'info' };
@@ -178,7 +184,8 @@ export function roundStatus(state: InterviewState): { label: string; tone: ChipT
 }
 
 /** What an interview on the viewer's desk is waiting for, in their words. */
-export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>): string {
+export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat' | 'missed'>): string {
+  if (row.missed) return 'Missed';
   if (row.bucket === 'to-accept') return row.seat === 'panel' ? 'Panel: accept or decline' : 'Accept or decline';
   if (row.bucket === 'to-prepare') return 'Choose questions';
   if (row.bucket === 'scorecard-due') return 'Scorecard due';
@@ -189,7 +196,8 @@ export function deskLabel(row: Pick<InterviewRow, 'bucket' | 'state' | 'seat'>):
   return row.state === 'ready' ? 'Prepared' : 'Choose questions';
 }
 
-export function deskTone(row: Pick<InterviewRow, 'bucket' | 'state'>): ChipTone {
+export function deskTone(row: Pick<InterviewRow, 'bucket' | 'state' | 'missed'>): ChipTone {
+  if (row.missed) return 'danger';
   if (row.bucket === 'to-accept') return 'warning';
   if (row.bucket === 'to-prepare') return 'accent';
   if (row.bucket === 'scorecard-due') return 'caution';

@@ -203,7 +203,7 @@ function UpcomingWorkspace() {
     {
       key: 'state', header: withConsent ? 'State and consent' : 'State', width: withConsent ? '150px' : '112px',
       render: (r) => {
-        const s = roundStatus(r.state);
+        const s = roundStatus(r.state, r.missed);
         const c = consentOf.get(r.id);
         return (
           <Stack gap="none">

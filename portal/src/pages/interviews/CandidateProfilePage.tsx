@@ -72,7 +72,7 @@ const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
   {
     key: 'status', header: 'Status', width: '136px',
     render: (r) => {
-      const s = roundStatus(r.state);
+      const s = roundStatus(r.state, r.missed);
       const why = cancelledLine(r);
       return (
         <Stack gap="xs">

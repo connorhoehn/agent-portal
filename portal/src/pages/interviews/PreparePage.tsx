@@ -66,7 +66,7 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
   const missingShown = reader ? (record.missing && /^Waiting for a time from the recruiter\.?$/.test(record.missing) ? record.missing : null) : record.missing;
   const editable = record.canPrepare;
   const full = plan.length >= record.maxQuestions;
-  const status = roundStatus(record.state);
+  const status = roundStatus(record.state, record.missed);
 
   const save = async () => {
     setBusy(true); setProblem(null); setNote(null); onCarried(null);

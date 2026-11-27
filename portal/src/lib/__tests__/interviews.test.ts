@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  byStageLine, candidateHref, dateLabel, deskLabel, deskOrder, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, upcomingOrder, whenLabel, whenWithZone,
+  byStageLine, candidateHref, dateLabel, deskLabel, deskOrder, deskTone, inDeskView, lastResultLine, matches, nextInterviewLine, recommendationTone, roundStatus, stageSteps, stageTone, upcomingOrder, whenLabel, whenWithZone,
   type InterviewRow,
 } from '../interviews.ts';
 
@@ -127,4 +127,16 @@ test('dateLabel is relative under a week and a plain date after, one shape every
   assert.equal(dateLabel(null, NOW, TZ), '');
   assert.equal(roundStatus('live').label, 'Live now');
   assert.equal(nextInterviewLine({ id: 'iv-1', roundName: 'Coding', type: 'technical', scheduledAt: '2026-11-16T00:28:00Z', state: 'live', lead: { id: 'u-hugo', name: 'Hugo Marchetti' } }, NOW, TZ), 'Coding · Live now');
+});
+
+// A missed round (ledger row C-17): the server says so on the row; every list that shows the status reads it.
+test('a missed round reads "Missed" in the status pill and on the desk, whatever it was waiting for', () => {
+  assert.deepEqual(roundStatus('ready', true), { label: 'Missed', tone: 'danger' });
+  assert.deepEqual(roundStatus('ready'), { label: 'Scheduled', tone: 'info' });
+  assert.equal(roundStatus('accepted', false).label, 'Accepted');
+  for (const bucket of ['to-accept', 'to-prepare', 'upcoming'] as const) {
+    assert.equal(deskLabel({ bucket, state: 'accepted', seat: 'lead', missed: true }), 'Missed');
+    assert.equal(deskTone({ bucket, state: 'accepted', missed: true }), 'danger');
+  }
+  assert.equal(deskLabel({ bucket: 'to-prepare', state: 'accepted', seat: 'lead' }), 'Choose questions');
 });
