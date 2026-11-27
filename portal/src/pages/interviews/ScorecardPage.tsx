@@ -114,7 +114,8 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
     : draftSync === 'stale' ? 'This draft was changed in another window. The form shows what was saved there.'
       : 'Your draft is saved for you alone until you submit.';
   const useNotes = editing && offersNotes(myNotes, draft.summary)
-    ? <Button variant="secondary" size="sm" onClick={() => setDraft((d) => ({ ...d, summary: myNotes!.body }))} data-testid="interviews-scorecard-use-notes">Use my notes from the interview</Button>
+    // In a row of its own: alone in the form's column the button stretched to the full width (journey piece G2).
+    ? <Inline gap="sm"><Button variant="secondary" size="sm" onClick={() => setDraft((d) => ({ ...d, summary: myNotes!.body }))} data-testid="interviews-scorecard-use-notes">Use my notes from the interview</Button></Inline>
     : null;
   // A draft saved while correcting reopens the correction.
   useEffect(() => { if (mine && view.canSubmit && loadDraft(interview.id, basedOn)?.reason) setCorrecting(true); }, [mine, view.canSubmit, interview.id, basedOn]);
