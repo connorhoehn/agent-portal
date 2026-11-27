@@ -33,6 +33,8 @@ export interface CreateDeckInput {
   title?: string;
   dimensionIds?: string[];
   audience?: string;
+  /** From an example (docs/deck-edit-operations.md): 201 with the deck written at once, no run. */
+  templateId?: string;
 }
 
 const api = makeDeckApi<DeckDetail>({ tenant: 'assessment', base: BASE, decksPath: '/decks', listParam: 'teamId' });
@@ -42,9 +44,11 @@ export const deckPaths = {
   ...api.paths,
   revise: (deckId: string) => `${BASE}/decks/${encodeURIComponent(deckId)}/revise`,
   run: (runId: string) => `${BASE}/runs/${encodeURIComponent(runId)}`,
+  /** The new-deck page, for one team (or none: the page asks). */
+  newPage: (teamId?: string) => `/assessment/decks/new${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`,
 } as const;
 
-export function createDeck(teamId: string, input: CreateDeckInput): Promise<{ deckId: string; runId: string }> {
+export function createDeck(teamId: string, input: CreateDeckInput): Promise<{ deckId: string; runId?: string }> {
   return deckPost(deckPaths.teamDecks(teamId), input);
 }
 

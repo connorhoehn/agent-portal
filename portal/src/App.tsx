@@ -29,6 +29,7 @@ const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
 const InitiativeDeckPage = lazy(() => import('./pages/projects/decks/InitiativeDeckPage'));
+const NewInitiativeDeckPage = lazy(() => import('./pages/projects/decks/NewInitiativeDeckPage'));
 const DocumentRecordPage = lazy(() => import('./pages/iq/DocumentRecordPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const IqLayout = lazy(() => import('./pages/iq/IqLayout'));
@@ -46,6 +47,7 @@ const AssessmentRunsPage = lazy(() => import('./pages/assessment/RunsPage'));
 const AssessmentActivityPage = lazy(() => import('./pages/assessment/ActivityPage'));
 const AssessmentDecksPage = lazy(() => import('./pages/assessment/decks/DecksListPage'));
 const AssessmentDeckPage = lazy(() => import('./pages/assessment/decks/DeckPage'));
+const AssessmentNewDeckPage = lazy(() => import('./pages/assessment/decks/NewReviewDeckPage'));
 const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
 const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
 const SocialProfilePage = lazy(() => import('./pages/social/ProfilePage'));
@@ -60,11 +62,14 @@ const SocialRecordingsPage = lazy(() => import('./pages/social/RecordingsPage'))
 const SocialConfigurationPage = lazy(() => import('./pages/social/ConfigurationPage'));
 const SocialWorkGraphPage = lazy(() => import('./pages/social/WorkGraphPage'));
 const SocialDeckPage = lazy(() => import('./pages/social/decks/SocialDeckPage'));
+const SocialNewDeckPage = lazy(() => import('./pages/social/decks/NewSocialDeckPage'));
 const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
 const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
 const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
 const PipelinesActivityPage = lazy(() => import('./pages/pipelines/ActivityPage'));
 const PipelinesRunDeckPage = lazy(() => import('./pages/pipelines/decks/PipelineDeckPage'));
+const PipelinesNewDeckPage = lazy(() => import('./pages/pipelines/decks/NewRunDeckPage'));
+const PipelinesRunReportsPage = lazy(() => import('./pages/pipelines/decks/RunReportsListPage'));
 const PipelinesConfigurationPage = lazy(() => import('./pages/pipelines/ConfigurationPage'));
 const IqRunsPage = lazy(() => import('./pages/iq/RunsPage'));
 const IqRunPage = lazy(() => import('./pages/iq/RunPage'));
@@ -380,6 +385,8 @@ export function App() {
             {/* A submission opens as a page beside its list rail (record + revision history). */}
             <Route path="submissions/:submissionId" element={<Page element={<AssessmentSubmissionsPage />} />} />
             <Route path="decks" element={<Page element={<AssessmentDecksPage />} />} />
+            {/* New deck is a page (no dialog): the team inline, the build or an example (docs/deck-edit-operations.md). */}
+            <Route path="decks/new" element={<Page element={<AssessmentNewDeckPage />} />} />
             <Route path="decks/:deckId" element={<Page element={<AssessmentDeckPage />} />} />
             <Route path="feedback" element={<Page element={<AssessmentFeedbackPage />} />} />
             <Route path="feedback/:taskId" element={<Page element={<AssessmentFeedbackPage />} />} />
@@ -438,6 +445,7 @@ export function App() {
             {/* The work graph: open to every social role (ViewSocial), like /api/social/work-graph. */}
             <Route path="work-graph" element={<Page element={<SocialWorkGraphPage />} />} />
             <Route path="configuration" element={<Page element={<SocialConfigurationPage />} />} />
+            <Route path="decks/new" element={<Page element={<SocialNewDeckPage />} />} />
             <Route path="decks/:deckId" element={<Page element={<SocialDeckPage />} />} />
             {/* Social settings was a registration stub (UX walk D): presence and do-not-disturb live on Profile, so the old URL lands there. */}
             <Route path="settings" element={<Navigate to="/social/profile" replace />} />
@@ -484,6 +492,8 @@ export function App() {
               <Route path="recordings" element={<Page element={<CommunicationPlane route="recordings" />} />} />
             </Route>
             <Route path="calls" element={<Navigate to="/pipelines/communication/calls" replace />} />
+            <Route path="decks" element={<Page element={<PipelinesRunReportsPage />} />} />
+            <Route path="decks/new" element={<Page element={<PipelinesNewDeckPage />} />} />
             <Route path="decks/:deckId" element={<Page element={<PipelinesRunDeckPage />} />} />
             <Route path="approvals" element={<Page element={<PipelinesApprovalsPage />} />} />
             <Route path="approvals/:approvalId" element={<Page element={<PipelinesApprovalsPage />} />} />
@@ -710,6 +720,7 @@ export function App() {
           {LoggingPage && <Route path="voice-log/:sessionId" element={<LegacyVoiceLogRedirect />} />}
           {/* Initiative status deck (agentic-flows slice 6): reached from the
               initiative page, not the rail. The server gates every read. */}
+          <Route path="decks/new" element={<Page element={<NewInitiativeDeckPage />} />} />
           <Route path="decks/:deckId" element={<Page element={<InitiativeDeckPage />} />} />
           {/* Sprints merged into Initiatives as a lens — one program surface,
               two zooms. The old URL keeps working. */}

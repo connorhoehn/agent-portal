@@ -202,6 +202,7 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
       case 'documents':
         return [{ label: 'Engage' }, { label: 'Search', path: '/iq/search' }, ...(b ? [{ label: shortId(b), id: b }] : [])];
       case 'decks':
+        if (b === 'new') return [{ label: 'Initiatives', path: '/iq/projects' }, { label: 'New presentation' }];
         return [{ label: 'Initiatives', path: '/iq/projects' }, ...(b ? [{ label: 'Deck', id: b }] : [])];
       case 'sprints': return [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' }, { label: 'Sprints' }];
       case 'invoke': return [{ label: 'Engage' }, { label: 'Ask' }];
@@ -291,7 +292,7 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
     if (a === 'decks') return [
       { label: 'Workspace', path: '/assessment/workspace?view=library' },
       { label: 'Presentations', path: '/assessment/workspace?view=presentations' },
-      ...(b ? [{ label: 'Presentation', id: b }] : []),
+      ...(b === 'new' ? [{ label: 'New review deck' }] : b ? [{ label: 'Presentation', id: b }] : []),
     ];
     // Every page names its rail group first, as the other tenants' trails do ("Request › Catalog",
     // "Talk › Channels"): a one-crumb trail drew nothing (UX walk D: Dashboard, Submissions,
@@ -315,6 +316,7 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
   // the group the page sits under, then the page (Layout.tsx NAV_ITEMS).
   if (root === 'social') {
     const page = a ?? 'channels';
+    if (b === 'new' && page === 'decks') return [{ label: 'Library' }, { label: 'Work graph', path: '/social/work-graph' }, { label: 'New deck' }];
     if (b && page === 'contacts') return [{ label: SOCIAL_GROUPS[page] ?? 'Social' }, { label: SOCIAL_LABELS[page] ?? page, path: '/social/contacts' }, { label: shortId(b), id: b }];
     return [{ label: SOCIAL_GROUPS[page] ?? 'Social' }, { label: SOCIAL_LABELS[page] ?? page }];
   }
@@ -331,6 +333,7 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
       return rec ? [...trail, { label, path: '/pipelines/logging' }, { label: shortId(rec), id: rec }] : [...trail, { label }];
     }
     // Any other collection's record, opened beside its list rail; the page registers its title.
+    if (b === 'new' && page === 'decks') return [...trail, { label, path: '/pipelines/decks' }, { label: 'New run report' }];
     if (b && (page === 'definitions' || page === 'approvals')) return [...trail, { label, path: `/pipelines/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];
   }

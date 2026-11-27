@@ -72,15 +72,9 @@ test('revise: a stale base is a conflict naming the head; a refusal is a DeckApi
   await assert.rejects(reviseInitiativeDeck('d1', { instruction: 'x', baseRevisionId: 'irev-1' }), (e: unknown) => e instanceof DeckApiError && e.status === 403);
 });
 
-test('status deck dialog: reader/no deck, reader/with deck, builder/no deck', async () => {
-  const { statusDeckDialogState } = await import('../initiativeDecksApi.ts');
-  const r0 = statusDeckDialogState({ canBuild: false, deckCount: 0, projectName: 'Auth' });
-  assert.equal(r0.showBuild, false); assert.equal(r0.primary, 'none');
-  assert.match(r0.notice!, /read status decks but not build one/); assert.ok(r0.emptyText);
-  const r1 = statusDeckDialogState({ canBuild: false, deckCount: 2, projectName: 'Auth' });
-  assert.equal(r1.showBuild, false); assert.equal(r1.primary, 'open'); assert.ok(r1.notice); assert.equal(r1.emptyText, null);
-  const b0 = statusDeckDialogState({ canBuild: true, deckCount: 0, projectName: 'Auth' });
-  assert.equal(b0.showBuild, true); assert.equal(b0.primary, 'build'); assert.equal(b0.notice, null); assert.match(b0.emptyText!, /No status deck for Auth yet/);
+test('the new-deck page is a page under /iq, for one initiative', async () => {
+  const { initiativeDeckPaths } = await import('../initiativeDecksApi.ts');
+  assert.equal(initiativeDeckPaths.newPage('p 1'), '/iq/decks/new?projectId=p%201');
 });
 
 test('G55: the dialog posts the focus as `brief` (what the voice path sends), turns the narrative on, and a blank focus changes nothing', async () => {

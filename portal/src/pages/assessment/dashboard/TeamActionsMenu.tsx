@@ -19,7 +19,8 @@ import {
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { sendJson } from '../../../lib/writeJson';
-import { CreateDeckDialog } from '../decks/CreateDeckDialog';
+import { useNavigate } from 'react-router';
+import { deckPaths } from '../decks/decksApi';
 
 interface TeamActionsMenuProps {
   teamId: string;
@@ -36,7 +37,7 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
   const [leadOpen, setLeadOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deckOpen, setDeckOpen] = useState(false);
+  const navigate = useNavigate();
   const [lead, setLead] = useState(currentLead);
   const [busy, setBusy] = useState(false);
 
@@ -96,7 +97,7 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
         align="end"
         sections={[{
           items: [
-            ...(canDeck ? [{ label: 'Create review deck', onSelect: () => setDeckOpen(true) }] : []),
+            ...(canDeck ? [{ label: 'Create review deck', onSelect: () => navigate(deckPaths.newPage(teamId)) }] : []),
             ...(canScore ? [
               { label: 'Change lead', onSelect: () => setLeadOpen(true) },
               { label: 'Reset assessment', onSelect: () => setResetOpen(true) },
@@ -105,8 +106,6 @@ export function TeamActionsMenu({ teamId, teamName, currentLead, onChanged, onDe
           ],
         }]}
       />
-
-      <CreateDeckDialog open={deckOpen} onClose={() => setDeckOpen(false)} teamId={teamId} teamName={teamName} />
 
       <Modal
         open={leadOpen}

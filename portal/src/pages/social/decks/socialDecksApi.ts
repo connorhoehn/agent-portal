@@ -77,6 +77,11 @@ export const fetchDeckStatus = (runId: string, signal?: AbortSignal, doFetch?: F
 export const saveDeckRun = (runId: string, doFetch?: Fetch): Promise<SavedDeck> => deckPost(socialDeckPaths.saveRun(runId), undefined, undefined, doFetch);
 export const requestDeckPost = (deckId: string, doFetch?: Fetch): Promise<DeckPostMessage> => deckPost(socialDeckPaths.post(deckId), undefined, undefined, doFetch);
 
+/** From an example (docs/deck-edit-operations.md): Social's one direct create, on a conversation. */
+export const createSocialDeckFromTemplate = (channel: string, input: { templateId: string; title?: string }, doFetch?: Fetch): Promise<{ deckId: string; revisionId: string }> =>
+  deckPost(`${BASE}/decks`, { channel, ...input }, undefined, doFetch);
+/** The new-deck page, for one conversation (or none: the page asks). */
+export const socialNewDeckPage = (channel?: string) => `/social/decks/new${channel ? `?channel=${encodeURIComponent(channel)}` : ''}`;
 export const getSocialDeck = api.getDeck;
 export const getSocialDeckSpec = api.getRevisionSpec;
 export const previewSocialDeck = api.previewDeck;

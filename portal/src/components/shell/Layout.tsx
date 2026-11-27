@@ -220,6 +220,8 @@ const NAV_ITEMS: NavItem[] = [
   // Communication: the Social plane, with run huddles as its Calls shelf; every pipelines role, so no roles.
   { path: '/pipelines/communication', label: 'Communication', tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/artifacts',     label: 'Artifacts',     tenant: 'pipelines', group: 'Runs' },
+  // Beside Artifacts (what runs produced): the report decks built from runs, table first.
+  { path: '/pipelines/decks',         label: 'Run reports',   tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/agents',        label: 'Agents',        tenant: 'pipelines', group: 'Sources' },
   { path: '/pipelines/bots',          label: 'Bots',          tenant: 'pipelines', group: 'Sources' },
   { path: '/pipelines/commands',      label: 'Commands',      tenant: 'pipelines', group: 'Sources' },

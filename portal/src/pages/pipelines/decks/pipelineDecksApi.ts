@@ -31,9 +31,11 @@ export const runDeckPaths = {
   revise: (deckId: string) => `${BASE}/decks/${encodeURIComponent(deckId)}/revise`,
   run: (deckId: string, runId: string) => `${BASE}/decks/${encodeURIComponent(deckId)}/runs/${encodeURIComponent(runId)}`,
   page: (deckId: string) => `/pipelines/decks/${encodeURIComponent(deckId)}`,
+  /** The new-deck page (a page, not a dialog), for one run (or none: the page asks). */
+  newPage: (runId?: string) => `/pipelines/decks/new${runId ? `?runId=${encodeURIComponent(runId)}` : ''}`,
 } as const;
 
-export const createRunDeck = (runId: string, input: { title?: string; narrative?: boolean }): Promise<CreatedRunDeck> => deckPost(runDeckPaths.create(runId), input);
+export const createRunDeck = (runId: string, input: { title?: string; narrative?: boolean; templateId?: string }): Promise<CreatedRunDeck> => deckPost(runDeckPaths.create(runId), input);
 export const getRunDeck = api.getDeck;
 export const getRunDeckSpec = api.getRevisionSpec;
 export const previewRunDeck = api.previewDeck;

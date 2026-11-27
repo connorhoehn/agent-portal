@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { DataTable, ErrorState, PageHeader, Stack, StatStrip } from '@connorhoehn/ui-components/shared';
+import { Button, DataTable, ErrorState, PageHeader, Stack, StatStrip } from '@connorhoehn/ui-components/shared';
+import { useCapabilities } from '../../../lib/capabilities';
 import { formatRelativeTime } from '../secondaryFormat';
-import { listDecks, type DeckSummary } from './decksApi';
+import { deckPaths, listDecks, type DeckSummary } from './decksApi';
 
 function DecksListPage() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ function DecksListPage() {
   const [decks, setDecks] = useState<DeckSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const { can } = useCapabilities();
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -25,7 +27,8 @@ function DecksListPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Review decks" description={teamId ? `Team ${teamId}` : 'PowerPoint reviews of each team’s assessment'} />
+      <PageHeader title="Review decks" description={teamId ? `Team ${teamId}` : 'PowerPoint reviews of each team’s assessment'}
+        actions={can('RunAssessmentAgent') ? <Button size="sm" variant="primary" onClick={() => navigate(deckPaths.newPage(teamId))} data-testid="assessment-deck-new-open">New review deck</Button> : undefined} />
       {!error && decks && (
         <StatStrip
           aria-label="Deck summary"
@@ -42,7 +45,7 @@ function DecksListPage() {
         <DataTable<DeckSummary>
           data={decks ?? []}
           loading={decks === null}
-          emptyMessage="No review decks yet. Open a team's scorecard and choose Create review deck from its actions menu."
+          emptyMessage="No review decks yet. Choose New review deck, or Create review deck from a team's actions menu."
           keyField={(d) => d.id}
           striped
           pageSize={20}

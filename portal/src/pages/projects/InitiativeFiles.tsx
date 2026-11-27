@@ -11,7 +11,6 @@ import { createWorkspaceDocument, documentRecordHref, readWorkDocuments, readWor
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError } from '../../lib/toastStore';
 import { relativeTime } from '../../lib/relativeTime';
-import { InitiativeStatusDecks } from './decks/InitiativeStatusDecks';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { documentKind, workspaceDocuments } from './initiativePaneModel';
 import { initiativeDeckPaths, type InitiativeDeckSummary } from './decks/initiativeDecksApi';
@@ -42,7 +41,6 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const { can, ready: capabilitiesReady } = useCapabilities();
   const { session, setRole } = useSession();
   const [creating, setCreating] = useState(false);
-  const [newDeck, setNewDeck] = useState(false);
   // No title dialog: the page is created as "Untitled page" and opens at once,
   // where its title and body are written (as a meeting chat's /create does).
   const newDocument = async (kind: 'page' | 'whiteboard') => {
@@ -66,7 +64,7 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const newMenu: DropdownMenuSection[] = [{ items: [
     ...(choices.includes('document') ? [{ label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') }] : []),
     ...(choices.includes('whiteboard') ? [{ label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') }] : []),
-    ...(mayDeck ? [{ label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => setNewDeck(true) }] : []),
+    ...(mayDeck ? [{ label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => navigate(initiativeDeckPaths.newPage(projectId)) }] : []),
   ] }];
   // G55: the voice is told the choices this persona sees, and the call that makes each, for the initiative in view.
   usePublishPageOffers(choices.length ? { path: pathname, what: 'New file', offers: newFileOffers(choices) } : null);
@@ -151,7 +149,6 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     </FileToolbar>
     {/* Why New is disabled: a line under the toolbar, not a cell squeezing the search box. */}
     {showNewFileHint({ capabilitiesReady, pending, choices }) && <T size="xs" tone="secondary" wrap data-testid="initiative-files-new-hint">{NEW_FILE_DENIED_HINT}</T>}
-    {mayDeck && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
     {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
     {recordingsLine && <InlineAlert tone="info" data-testid="initiative-files-recordings-note">{recordingsLine}</InlineAlert>}
     {pending ? <LoadingState label="Loading project files…" /> : <>

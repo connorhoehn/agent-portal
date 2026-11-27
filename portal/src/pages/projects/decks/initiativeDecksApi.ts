@@ -30,7 +30,7 @@ export interface InitiativeDeckSummary {
 export interface DeckBriefWindow { sprintId: string; name: string; startsOn: string | null; endsOn: string | null; status: string; which: 'last-ended' | 'current' }
 export interface CreatedInitiativeDeck { deckId: string; revisionId: string; includesBudget: boolean; narrative: NarrativeOutcome; brief?: { words: string; window: DeckBriefWindow | null } | null }
 
-/** The Presentation dialog's Focus field: the same words the voice path sends as `brief` (G55); the route caps them at 200. */
+/** The new-deck page's Focus field: the same words the voice path sends as `brief` (G55); the route caps them at 200. */
 export const DECK_FOCUS_MAX = 200;
 /** One line, control characters and runs of spaces folded, cut to the cap; null when nothing is left. */
 export function cleanFocus(raw: string): string | null {
@@ -40,7 +40,7 @@ export function cleanFocus(raw: string): string | null {
 }
 
 /**
- * The body the dialog posts. A focus steers the narrative (that is where the route uses it, as the voice path does:
+ * The body the new-deck page posts. A focus steers the narrative (that is where the route uses it, as the voice path does:
  * `{ narrative: true, brief }`), so typing one turns the narrative on; with none the body is exactly what it was.
  */
 export function deckCreateBody(input: { title: string; narrative: boolean; includeBudget: boolean; focus: string }): { title?: string; narrative?: boolean; includeBudget?: boolean; brief?: string } {
@@ -67,9 +67,11 @@ export const initiativeDeckPaths = {
   create: (projectId: string) => `${BASE}/projects/${encodeURIComponent(projectId)}`,
   ...api.paths,
   page: (deckId: string) => `/iq/decks/${encodeURIComponent(deckId)}`,
+  /** The new-deck page (a page, not a dialog), for one initiative. */
+  newPage: (projectId: string) => `/iq/decks/new?projectId=${encodeURIComponent(projectId)}`,
 } as const;
 
-export const createInitiativeDeck = (projectId: string, input: { title?: string; narrative?: boolean; includeBudget?: boolean; brief?: string }): Promise<CreatedInitiativeDeck> =>
+export const createInitiativeDeck = (projectId: string, input: { title?: string; narrative?: boolean; includeBudget?: boolean; brief?: string; templateId?: string }): Promise<CreatedInitiativeDeck> =>
   deckPost(initiativeDeckPaths.create(projectId), input);
 export const getInitiativeDeck = api.getDeck;
 export const getInitiativeDeckSpec = api.getRevisionSpec;
@@ -86,21 +88,4 @@ export function shareWithheldReason(deck: Pick<InitiativeDeckDetail, 'includesBu
   return deck.includesBudget
     ? 'This deck carries budget figures, so it cannot be shared to a channel. Build one without budget figures to share it.'
     : null;
-}
-
-// What the initiative page's Status deck dialog offers. Pure so the three
-// states (reader/no deck, reader/with deck, builder/no deck) are testable.
-export type StatusDeckDialogState = {
-  showBuild: boolean;          // Build form + footer button (DispatchAgentRun only)
-  primary: 'build' | 'open' | 'none';
-  notice: string | null;       // honest read-only voice for viewers who cannot build
-  emptyText: string | null;
-};
-export function statusDeckDialogState(input: { canBuild: boolean; deckCount: number; projectName: string }): StatusDeckDialogState {
-  const { canBuild, deckCount, projectName } = input;
-  const notice = canBuild ? null : 'Your role can read status decks but not build one — an SME or program owner can.';
-  const emptyText = deckCount > 0 ? null : canBuild
-    ? `No status deck for ${projectName} yet. Every number in one comes from the initiative record.`
-    : `No status deck for ${projectName} has been built yet.`;
-  return { showBuild: canBuild, primary: canBuild ? 'build' : deckCount > 0 ? 'open' : 'none', notice, emptyText };
 }
