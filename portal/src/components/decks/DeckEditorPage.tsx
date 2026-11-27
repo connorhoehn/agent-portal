@@ -12,7 +12,7 @@ import { DeckConflictBanner } from './DeckConflictBanner';
 import { deckSaveState } from './deckDocumentModel';
 import { useDeckCollaboration } from './useDeckCollaboration';
 import { useDeckDocument, type DeckDocumentApi, type DeckDocumentShape } from './useDeckDocument';
-import { deckFileName, deckRenderKey, deckSourceOptions, revisionSeq } from './decksModel';
+import { DECK_EXPORTS, deckFileName, deckRenderKey, deckSourceOptions, revisionSeq } from './decksModel';
 import { ShareToSocialAction } from './ShareToSocialAction';
 import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
@@ -192,10 +192,15 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       {!cannotEdit && <Button size="sm" variant="primary" disabled={saveDisabled} title={saveHint}
         aria-label={saving ? 'Saving presentation' : `Save as ${nextRevisionLabel(deck.revisions)}`}
         onClick={() => { void saveChanges(); }} data-testid={`${testIdPrefix}-save`}>{saving ? 'Saving…' : 'Save'}</Button>}
-      {revisionId && <Button size="sm" variant="secondary" disabled={dirty || saving || downloading} onClick={download} aria-label={downloading ? 'Downloading .pptx' : 'Download .pptx'}
-        title={dirty ? 'Save your changes before downloading.' : 'Download the saved PowerPoint version'} data-testid={`${testIdPrefix}-download`}>
-        <DownloadIcon size={14} /><T as="span" size="xs">{downloading ? 'Downloading…' : 'PPTX'}</T>
-      </Button>}
+      {revisionId && <DropdownMenu trigger={<Inline gap="xs" align="center" wrap={false}><DownloadIcon size={14} /><T as="span" size="xs" weight="medium">{downloading ? 'Downloading…' : 'Download'}</T></Inline>}
+        triggerLabel={downloading ? 'Downloading the presentation' : 'Download the presentation'} triggerVariant="default" align="end"
+        triggerTitle={dirty ? 'Save your changes before downloading.' : 'Download the saved version'}
+        disabled={dirty || saving || downloading} triggerTestId={`${testIdPrefix}-download-menu`}
+        // The PowerPoint row keeps the old button's test id (portal/e2e reaches it by `<prefix>-download`).
+        sections={[{ label: 'Download as', items: DECK_EXPORTS.map(item => ({
+          id: item.format, label: item.label, onSelect: () => download(item.format),
+          'data-testid': item.format === 'pptx' ? `${testIdPrefix}-download` : `${testIdPrefix}-download-${item.format}`,
+        })) }]} />}
       {revisionId && shareable && (
         <ShareToSocialAction deckId={deckId} revisionId={revisionId} fileName={deckFileName(deck.title, revisionSeq(deck.revisions, revisionId))}
           fileUrl={fileUrl(deckId, revisionId)} disabled={dirty || saving} />

@@ -1,4 +1,4 @@
-const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+import { DECK_EXPORTS, deckExportUrl, type DeckExportFormat } from './decksModel';
 
 /** Prefer the server's attachment name; retain the saved-version name if absent. */
 export function deckDownloadName(disposition: string | null, fallback: string): string {
@@ -14,17 +14,19 @@ export function deckDownloadName(disposition: string | null, fallback: string): 
 }
 
 /** Fetching the attachment keeps the active document (and its huddle) alive. */
-export async function downloadDeckFile(fileUrl: string, fallbackName: string, signal: AbortSignal): Promise<void> {
-  const url = new URL(fileUrl, window.location.href);
+export async function downloadDeckFile(fileUrl: string, fallbackName: string, signal: AbortSignal, format: DeckExportFormat = 'pptx'): Promise<void> {
+  const expected = DECK_EXPORTS.find(e => e.format === format)!;
+  const url = new URL(deckExportUrl(fileUrl, format), window.location.href);
   if (url.origin !== window.location.origin) throw new Error('The presentation file must be downloaded from this workspace.');
   const response = await fetch(url.href, { credentials: 'same-origin', mode: 'same-origin', signal });
   if (!response.ok) {
     throw new Error(response.status === 401 ? 'Your session has expired. Sign in again to download this presentation.'
       : response.status === 403 ? 'You do not have permission to download this presentation.'
-        : `The presentation could not be downloaded (${response.status}). Try again.`);
+        : response.status === 503 ? 'The presentation took too long to render. Try again, or shorten it.'
+          : `The presentation could not be downloaded (${response.status}). Try again.`);
   }
-  if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== PPTX_MIME) {
-    throw new Error('The server did not return a PowerPoint file. Try again.');
+  if (response.headers.get('content-type')?.split(';', 1)[0]?.trim() !== expected.mime) {
+    throw new Error(format === 'pptx' ? 'The server did not return a PowerPoint file. Try again.' : `The server did not return the ${expected.label} file. Try again.`);
   }
   const file = await response.blob();
   signal.throwIfAborted();

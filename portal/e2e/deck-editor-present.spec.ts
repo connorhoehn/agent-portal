@@ -26,7 +26,7 @@ test('editable shared deck presents selected slide and returns with dirty text a
   await title.fill(editedTitle);
   await expect(page.getByTestId('fixture-deck-shell')).toContainText('Unsaved changes');
   await expect(page.getByTestId('fixture-deck-save')).toBeEnabled();
-  await expect(page.getByTestId('fixture-deck-download')).toBeDisabled();
+  await expect(page.getByTestId('fixture-deck-download-menu')).toBeDisabled();
   await expect.poll(async () => (await proof()).previewSpec?.slides.find(slide => slide.id === 'details')?.title).toBe(editedTitle);
   const input = page.getByTestId('fixture-editor-question-input').locator('[contenteditable="true"]');
   const draft = 'Keep this draft beside my unsaved slide edit.';

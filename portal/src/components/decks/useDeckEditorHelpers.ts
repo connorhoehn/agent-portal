@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
 import { downloadDeckFile } from './downloadDeckFile';
+import { deckExportFallbackName, isDeckExportFormat, type DeckExportFormat } from './decksModel';
 
 /** "Slide <n> · <title>" for a slide id, undefined when the slide is gone. */
 export function useDeckSlideTitle(spec: DeckSpec | null): (slideId: string) => string | undefined {
@@ -22,12 +23,14 @@ export function useDeckDownload(fileUrl: (deckId: string, revisionId: string) =>
     setError(null); setDownloading(false);
     return () => { pending.current?.abort(); pending.current = null; };
   }, [deckId, revisionId]);
-  const download = useCallback(() => {
+  /** `format` defaults to the PowerPoint file (an event passed by `onClick={download}` counts as no format). */
+  const download = useCallback((format?: unknown) => {
     if (!revisionId || pending.current) return;
+    const chosen: DeckExportFormat = isDeckExportFormat(format) ? format : 'pptx';
     const controller = new AbortController();
     pending.current = controller;
     setDownloading(true); setError(null);
-    void downloadDeckFile(fileUrl(deckId, revisionId), fileName, controller.signal)
+    void downloadDeckFile(fileUrl(deckId, revisionId), deckExportFallbackName(fileName, chosen), controller.signal, chosen)
       .catch(reason => {
         if (pending.current === controller && !controller.signal.aborted) {
           setError(reason instanceof Error ? reason.message : 'The presentation could not be downloaded. Try again.');

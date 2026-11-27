@@ -58,8 +58,35 @@ export function hasPendingRun(deck: Pick<DeckDetail, 'pendingRun'> | null): deck
  * renderRevisionFile). The slug is lowercase [a-z0-9-], at most 60 characters.
  */
 export function deckFileName(title: string, seq: number): string {
+  return deckExportName(title, seq, 'pptx');
+}
+
+/** The download formats a saved version offers (`GET …/revisions/:rid/file?format=`). */
+export type DeckExportFormat = 'pptx' | 'pdf' | 'png';
+
+export const DECK_EXPORTS: ReadonlyArray<{ format: DeckExportFormat; label: string; mime: string; suffix: string }> = [
+  { format: 'pptx', label: 'PowerPoint (.pptx)', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', suffix: '.pptx' },
+  { format: 'pdf', label: 'PDF (.pdf)', mime: 'application/pdf', suffix: '.pdf' },
+  { format: 'png', label: 'Images (.zip)', mime: 'application/zip', suffix: '-slides.zip' },
+];
+
+export const isDeckExportFormat = (v: unknown): v is DeckExportFormat => DECK_EXPORTS.some((e) => e.format === v);
+
+/** The server's download name for a format: "<slug>-v<seq>.pptx", ".pdf" or "-slides.zip". */
+export function deckExportName(title: string, seq: number, format: DeckExportFormat): string {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'review-deck';
-  return `${slug}-v${seq}.pptx`;
+  return `${slug}-v${seq}${DECK_EXPORTS.find((e) => e.format === format)!.suffix}`;
+}
+
+/** A PowerPoint download name ("x-v3.pptx") as another format's ("x-v3.pdf", "x-v3-slides.zip"). */
+export function deckExportFallbackName(pptxName: string, format: DeckExportFormat): string {
+  return `${pptxName.replace(/\.pptx$/i, '')}${DECK_EXPORTS.find((e) => e.format === format)!.suffix}`;
+}
+
+/** The download URL of a format: the PowerPoint file is the route's default, so its URL is unchanged. */
+export function deckExportUrl(fileUrl: string, format: DeckExportFormat): string {
+  if (format === 'pptx') return fileUrl;
+  return `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}format=${format}`;
 }
 
 /** A revision's sequence number: revisions are newest first and append-only, so it is its position from the end. */

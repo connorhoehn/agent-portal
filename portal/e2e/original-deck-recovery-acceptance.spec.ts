@@ -125,6 +125,7 @@ test('original saved v7 is readable at the same URL with truthful historical ver
       expect(new URL(page.url()).pathname).toBe(pageURL);
       const assistantCollapse = page.getByRole('button', { name: 'Collapse presentation assistant', exact: true });
       if (await assistantCollapse.isVisible()) await assistantCollapse.click();
+      await page.getByTestId('initiative-deck-download-menu').click({ timeout: 30_000 });
       const [download] = await Promise.all([page.waitForEvent('download', { timeout: 30_000 }), page.getByTestId('initiative-deck-download').click({ timeout: 30_000 })]);
       const file = resolve(output, `recovered-v7-${userId}.pptx`); await download.saveAs(file);
       const pptx = JSON.parse(execFileSync('python3', ['-c', `import zipfile,json,re,sys
