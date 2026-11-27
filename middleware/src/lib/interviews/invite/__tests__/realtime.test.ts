@@ -88,6 +88,7 @@ describe('served only by the guest\'s own router', () => {
     expect(routes.sort()).toEqual([
       'GET /api/interview-invite/admission',
       'GET /api/interview-invite/calls/:callId/chat/reads', // the candidate's call chat read position (routes/interview-invite-chat-reads.ts)
+      'GET /api/interview-invite/captions', // gap audit 2026-11-20 §11: the candidate's own live captions, off by default
       'GET /api/interview-invite/consents', 'GET /api/interview-invite/interview',
       'GET /api/interview-invite/milo/floor', // hands-free Milo (lane D): who is talking to Milo, and the candidate's hold button
       'GET /api/interview-invite/realtime-token',
