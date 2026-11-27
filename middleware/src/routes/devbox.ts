@@ -759,12 +759,16 @@ export async function runTaskAndForward(opts: {
     actorId: opts.spend.actorId,
     source: opts.spend.source,
     sourceId,
-    forecast: await forecastP75ForModel(model ?? null),
-    ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
     // A task sent into a box a governed run holds (reserveBox) is a reply
     // inside that run — a person answering its question — whose money the
     // run's own hold already covers. It is held for visibility, never
-    // refused: refusing it would strand a run that is already spending.
+    // refused: refusing it would strand a run that is already spending. Its
+    // hold is $0 while in flight (P-11): counting a forecast again would
+    // count the same money twice in every held sum and could refuse
+    // unrelated work at a hard cap. The row still says who replied, when and
+    // into which box, and its ledger entry records the real cost at settle.
+    forecast: judged ? await forecastP75ForModel(model ?? null) : { costUsdP75: 0 },
+    ...(opts.confirmed ? { confirmed: opts.confirmed } : {}),
     judge: judged,
     expiresInMs: holdTtlMs,
   });

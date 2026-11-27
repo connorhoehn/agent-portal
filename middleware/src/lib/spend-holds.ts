@@ -88,7 +88,8 @@ export interface ReserveSpendInput {
   forecast: AllocationForecast;
   /** The route's confirm flags. Absent = nothing confirmed. No flag opens a hard cap. */
   confirmed?: { allocation?: boolean; envelope?: boolean; userBudget?: boolean };
-  /** false = hold for visibility only, never refuse (a reply inside a governed run). Default true. */
+  /** false = hold for visibility only, never refuse (a reply inside a governed run). Default true.
+   *  The box task route passes a $0 forecast with it (P-11): the run's own hold covers the money. */
   judge?: boolean;
   /** An essential bot's scheduled firing (DE-55): judged against the
    *  initiative's maintenance reserve (spilling into discretionary money while

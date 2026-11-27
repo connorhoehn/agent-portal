@@ -347,10 +347,11 @@ async function tell(baseUrl: string, signal: { cancelled: boolean }): Promise<vo
   await until(() => state.milestones.running3, 40, signal, 'all three computers to start');
 
   // ── B's question: a person answers, or the director does for Nora ───────
-  // The director's own answer waits for C's second pickup to be judged. A reply into a computer a run holds takes a
-  // second hold on the same envelope (routes/devbox.ts: held for visibility, never refused), and with it in flight
-  // the pickup crosses the envelope's hard cap (403) instead of stopping at the money gate (409) the story shows.
-  // On a slow machine the answer used to land first.
+  // The director's own answer waits for C's second pickup to be judged, which keeps the story's order stable. It
+  // used to be needed for the money too: a reply into a computer a run holds took a second hold at its forecast on
+  // the same envelope, and with it in flight the pickup crossed the hard cap (403) instead of the money gate (409).
+  // Since P-11 that reply is held at $0 (routes/devbox.ts), so the money reason is gone. The order still matters to
+  // the story: answered early, Basil finishes and settles before the pickup, frees its hold, and the pickup fits.
   let secondPickupJudged = false;
   const answering = (async () => {
     await until(() => state.milestones.questionAsked, 80, signal, `${b.name} to ask its question`);

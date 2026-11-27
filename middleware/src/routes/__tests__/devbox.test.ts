@@ -455,6 +455,31 @@ describe('POST /api/devbox/:sessionId/task — a box changing hands', () => {
     }
   });
 
+  it('holds a reply into a box a run holds at $0 and unjudged; a task into a free box holds its forecast, judged (P-11)', async () => {
+    const { reserveSpend, meterForHold } = jest.requireMock('../../lib/spend-holds.js') as { reserveSpend: jest.Mock; meterForHold: jest.Mock };
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION, projectId: 'p-auth-migration' });
+    mockDataClient(async () => done());
+    reserveSpend.mockClear();
+    meterForHold.mockClear();
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    expect(reserveSpend).toHaveBeenLastCalledWith(expect.objectContaining({
+      source: 'box_task', judge: true, forecast: { costUsdP75: 0.5 },
+    }));
+    expect(meterForHold).toHaveBeenCalledTimes(1);
+    reserveBox(box.id, 'run-governed');
+    try {
+      await request(buildApp({ sub: 'u-answerer' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'yes, proceed', resume: true }).expect(200);
+      expect(reserveSpend).toHaveBeenLastCalledWith(expect.objectContaining({
+        source: 'box_task', actorId: 'u-answerer', initiativeId: 'p-auth-migration', judge: false, forecast: { costUsdP75: 0 },
+      }));
+      // Never metered, so never topped up against a cap.
+      expect(meterForHold).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseBox(box.id, 'run-governed');
+    }
+  });
+
   it('lets the same person resume their own conversation', async () => {
     _resetFleet();
     registerBox({ sessionId: SESSION });

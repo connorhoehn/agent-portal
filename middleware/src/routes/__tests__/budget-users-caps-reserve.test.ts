@@ -44,7 +44,7 @@ import { bots } from '../../mock/bots.js';
 import { workItems } from '../../mock/work-items.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
-import { mockHolds } from '../../providers/spend-holds.js';
+import { mockHolds, openHeldUsd, openHeldUsdForActor, openHeldUsdForGrant } from '../../providers/spend-holds.js';
 import { recordSpend } from '../../providers/spend-ledger.js';
 import { reserveSpend } from '../../lib/spend-holds.js';
 
@@ -292,6 +292,71 @@ describe('DE-36: hard caps before the soft brakes', () => {
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ gate: 'envelope-cap', envelope: { grantId: 'bg-obs-3' } });
     expect(openHolds()).toHaveLength(0);
+  });
+
+  // P-11: the demo director's numbers. An envelope with a 1.19 hard cap and
+  // 0.45 spent has 0.74 of headroom; one run holds 0.30; a person's reply into
+  // that run's box is in flight; the next 0.30 pickup must fit.
+  describe('P-11: a reply into a box a run holds is held at $0', () => {
+    const HEADROOM = 1.19 - 0.45;
+    const RUN = 0.3;
+    // The hold a box task into a reserved box takes (routes/devbox.ts runTaskAndForward).
+    const reply = (sourceId: string, costUsdP75 = 0) => reserveSpend({
+      initiativeId: OBS, actorId: 'u-layla', source: 'box_task', sourceId,
+      forecast: { costUsdP75 }, judge: false, expiresInMs: 60_000,
+    });
+    const pickup = (sourceId: string) => reserveSpend({
+      initiativeId: OBS, actorId: 'u-layla', source: 'box_task', sourceId,
+      forecast: { costUsdP75: RUN }, confirmed: { allocation: true, envelope: true, userBudget: true }, expiresInMs: 60_000,
+    });
+    async function demoEnvelope(): Promise<number> {
+      const before = (await loadEnvelope(OBS, 'u-layla'))!;
+      const g = budgetGrants.rows().find((x) => x.id === 'bg-obs-3')!;
+      g.allocatedUsd = before.attributedSpentUsd + 10;
+      g.hardCapUsd = before.attributedSpentUsd + HEADROOM;
+      return before.attributedSpentUsd;
+    }
+
+    it('adds nothing to the grant, initiative or user held sums, and the next pickup is judged as if it were not in flight', async () => {
+      await demoEnvelope();
+      expect(await pickup('box-run:1')).toMatchObject({ kind: 'held', grantId: 'bg-obs-3', amountUsd: RUN });
+      const sums = async () => ({ grant: await openHeldUsdForGrant('bg-obs-3'), initiative: await openHeldUsd(OBS), user: await openHeldUsdForActor('u-layla') });
+      const before = await sums();
+      const r = await reply('box-run:reply-1');
+      expect(r).toMatchObject({ kind: 'held', grantId: 'bg-obs-3', amountUsd: 0 });
+      // The row exists, for visibility: who replied, against which initiative and envelope.
+      const row = mockHolds().find((h) => h.sourceId === 'box-run:reply-1')!;
+      expect(row).toMatchObject({ status: 'held', amountUsd: 0, actorId: 'u-layla', initiativeId: OBS, grantId: 'bg-obs-3', source: 'box_task' });
+      expect(await sums()).toEqual(before);
+      // 0.45 + 0.30 held + 0.30 new = 1.05, inside the 1.19 hard cap.
+      expect(await pickup('box-run:2')).toMatchObject({ kind: 'held', amountUsd: RUN });
+    });
+
+    it('the old rule (the reply held at its forecast) is what refused the pickup at the hard cap', async () => {
+      await demoEnvelope();
+      await pickup('box-run:1');
+      await reply('box-run:reply-1', RUN);
+      expect(await pickup('box-run:2')).toMatchObject({ kind: 'capped', gate: 'envelope-cap' });
+    });
+
+    it('the reply\'s real cost is recorded at settle and shows in spent', async () => {
+      await demoEnvelope();
+      const spent = (await userSpendThisPeriod('u-layla')).spentUsd;
+      await reply('box-run:reply-1');
+      await recordSpend({ source: 'box_task', sourceId: 'box-run:reply-1', initiativeId: OBS, boxId: 'box-run', actorId: 'u-layla', model: 'haiku', costUsd: 0.12 });
+      expect(mockHolds().find((h) => h.sourceId === 'box-run:reply-1')!.status).toBe('settled');
+      expect(spendEntries.rows().find((e) => e.sourceId === 'box-run:reply-1')).toMatchObject({ costUsd: 0.12, initiativeId: OBS, actorId: 'u-layla' });
+      expect((await userSpendThisPeriod('u-layla')).spentUsd).toBeCloseTo(spent + 0.12, 6);
+    });
+
+    it('a task into a box no run holds is held at its forecast and judged as before', async () => {
+      await demoEnvelope();
+      await pickup('box-run:1');
+      await pickup('box-run:2');
+      expect(await openHeldUsdForGrant('bg-obs-3')).toBeCloseTo(2 * RUN, 6);
+      // 0.45 + 0.60 held + 0.30 = 1.35, past the 1.19 hard cap.
+      expect(await pickup('box-run:3')).toMatchObject({ kind: 'capped', gate: 'envelope-cap' });
+    });
   });
 
   it('PUT /api/budgets/:id refuses a cap below the allocation (400) and stores a valid one', async () => {
