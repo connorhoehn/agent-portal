@@ -80,7 +80,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
   { id: 'bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'codebases', tenants: ['orgiq'], roles: ['hr-admin'] },
-  { id: 'changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin'] },
+  { id: 'changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin', 'org-leader', 'sme'] },
   { id: 'computers', tenants: ['orgiq'] },
   { id: 'runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', tenants: ['orgiq'] },

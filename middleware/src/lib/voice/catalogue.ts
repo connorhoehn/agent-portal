@@ -145,7 +145,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'budgets', path: '/admin/budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
   { id: 'bots', path: '/admin/bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'codebases', path: '/admin/projects', tenants: ['orgiq'], roles: ['hr-admin'] },
-  { id: 'changes', path: '/admin/changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin'] },
+  { id: 'changes', path: '/admin/changes', tenants: ['orgiq'], roles: ['program-owner', 'hr-admin', 'org-leader', 'sme'] },
   { id: 'computers', path: '/iq/computers', tenants: ['orgiq'] },
   { id: 'runbooks', path: '/iq/runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', path: '/iq/runbooks/proposals', tenants: ['orgiq'] },
