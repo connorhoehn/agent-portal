@@ -54,6 +54,7 @@ import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
+import { expectDeckExports } from '../../test-support/deck-exports.js';
 import { statusLabel } from '../../lib/initiative-deck/facts.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { spendHolds } from '../../mock/spend-holds.js';
@@ -191,6 +192,7 @@ describe('initiative status deck — budget-tier redaction', () => {
       expect((await request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/spec`)).status).toBe(404);
       expect((await request(app).post(`${BASE}/${made.deckId}/preview`).send({ spec: made.spec })).status).toBe(404);
       expect((await request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file`)).status).toBe(404);
+      for (const format of ['pdf', 'png']) expect((await request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file?format=${format}`)).status).toBe(404);
     }
     const sme = as('sme');
     expect((await request(sme).post(`${BASE}/${made.deckId}/revisions`).send({ spec: made.spec, baseRevisionId: made.revisionId })).status).toBe(404);
@@ -297,6 +299,8 @@ describe('initiative status deck — revisions, preview, download', () => {
     const zip = await JSZip.loadAsync(file.body as Buffer);
     expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('presentationml');
     expect((await request(app).get(`${BASE}/${made.deckId}/revisions/irev-00000000-0000-0000-0000-000000000000/file`)).status).toBe(404);
+    expect(made.spec.theme).toEqual({ ref: 'orgiq' });
+    await expectDeckExports((q) => request(app).get(`${BASE}/${made.deckId}/revisions/${made.revisionId}/file${q}`), made.spec.slides.length);
     expect((await request(app).get(`${BASE}/not-a-deck`)).status).toBe(404);
   });
 });

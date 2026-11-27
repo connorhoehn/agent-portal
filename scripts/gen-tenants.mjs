@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const CAPABILITIES = ['huddleChat', 'discussions', 'searchIndexed', 'governedByAccess', 'channelPartition', 'presenceLobby'];
 const ID = /^[a-z][a-z0-9-]*$/;
+const HEX = /^#[0-9a-fA-F]{6}$/;
 
 export function validateManifest(m) {
   const errs = [];
@@ -27,7 +28,7 @@ export function validateManifest(m) {
   const seenT = new Set(); const seenR = new Set(m.crossTenantRoles ?? []);
   for (const [i, t] of m.tenants.entries()) {
     const at = `tenants[${i}]${t?.id ? ` (${t.id})` : ''}`;
-    const known = new Set(['id', 'displayName', 'roles', 'apiPrefix', 'portalRoot', 'home', 'featureFlag', 'demoGrant', ...CAPABILITIES]);
+    const known = new Set(['id', 'displayName', 'roles', 'apiPrefix', 'portalRoot', 'home', 'featureFlag', 'demoGrant', 'brand', ...CAPABILITIES]);
     for (const k of Object.keys(t ?? {})) if (!known.has(k)) errs.push(`${at}: unknown key "${k}"`);
     if (typeof t?.id !== 'string' || !ID.test(t.id)) { errs.push(`${at}: id must match ${ID}`); continue; }
     if (seenT.has(t.id)) errs.push(`${at}: duplicate tenant id`); seenT.add(t.id);
@@ -43,6 +44,16 @@ export function validateManifest(m) {
     if (typeof t.home !== 'string' || !t.home.startsWith(`${t.portalRoot}/`)) errs.push(`${at}: home must sit under portalRoot (${t.portalRoot}/…)`);
     if (t.featureFlag !== null && (typeof t.featureFlag !== 'string' || !/^VITE_[A-Z0-9_]+$/.test(t.featureFlag))) errs.push(`${at}: featureFlag must be null or a VITE_* name`);
     for (const k of ['demoGrant', ...CAPABILITIES]) if (typeof t[k] !== 'boolean') errs.push(`${at}: ${k} must be a boolean`);
+    if (t.brand !== undefined) {
+      // The tenant's brand colours as portal/src/app.css sets them (a test holds the two equal); deck themes derive from them.
+      const b = t.brand;
+      if (!b || typeof b !== 'object' || Array.isArray(b)) errs.push(`${at}: brand must be an object`);
+      else {
+        for (const k of Object.keys(b)) if (k !== 'accent' && k !== 'accentInk') errs.push(`${at}: brand has unknown key "${k}"`);
+        if (typeof b.accent !== 'string' || !HEX.test(b.accent)) errs.push(`${at}: brand.accent must be #RRGGBB`);
+        if (b.accentInk !== undefined && (typeof b.accentInk !== 'string' || !HEX.test(b.accentInk))) errs.push(`${at}: brand.accentInk must be #RRGGBB`);
+      }
+    }
   }
   return errs;
 }
@@ -109,6 +120,11 @@ export function renderMiddleware(m) {
     `} as const;`,
     '',
     ...subsets(m),
+    '',
+    `/** Each tenant's brand colours (manifest \`brand\`), exactly as portal/src/app.css sets them; deck themes derive from these. */`,
+    `export const TENANT_BRANDS: Partial<Record<Tenant, { accent: string; accentInk?: string }>> = {`,
+    ...m.tenants.filter(t => t.brand).map(t => `  ${t.id}: { accent: ${q(t.brand.accent)}${t.brand.accentInk ? `, accentInk: ${q(t.brand.accentInk)}` : ''} },`),
+    `};`,
     '',
   ].join('\n');
 }

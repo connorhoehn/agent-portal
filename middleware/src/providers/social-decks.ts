@@ -137,10 +137,10 @@ export const savePersonRevision = async (
 };
 
 /** Renders any DeckSpec the caller sends (nothing is stored). */
-export const previewSpec = shared.previewSpec;
+export const previewSpec = (spec: unknown): Result<DeckPreviewOut> => shared.previewSpec(spec, 'social');
 
-export const renderRevisionFile = (deckId: string, revisionId: string): Promise<{ bytes: Buffer; filename: string } | null> =>
-  shared.renderRevisionFile(socialDeckRevisions, () => socialDeckStore.getDeck(deckId), deckId, revisionId, 'conversation-deck');
+export const renderRevisionFile = (deckId: string, revisionId: string, format: shared.DeckFileFormat = 'pptx'): Promise<shared.DeckRevisionFile | null> =>
+  shared.renderRevisionFile(socialDeckRevisions, () => socialDeckStore.getDeck(deckId), deckId, revisionId, 'conversation-deck', 'social', format);
 
 // ─── Agent revise (synchronous) ──────────────────────────────────────────────
 //

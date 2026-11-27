@@ -16,7 +16,8 @@
       "searchIndexed": true,
       "governedByAccess": true,
       "channelPartition": true,
-      "presenceLobby": true
+      "presenceLobby": true,
+      "brand": { "accent": "#4f46e5", "accentInk": "#1e1b4b" }
     },
     {
       "id": "assessment",
@@ -32,7 +33,8 @@
       "searchIndexed": true,
       "governedByAccess": true,
       "channelPartition": true,
-      "presenceLobby": true
+      "presenceLobby": true,
+      "brand": { "accent": "#0B6666", "accentInk": "#0B3A3A" }
     },
     {
       "id": "social",
@@ -48,7 +50,8 @@
       "searchIndexed": true,
       "governedByAccess": true,
       "channelPartition": false,
-      "presenceLobby": false
+      "presenceLobby": false,
+      "brand": { "accent": "#7c3aed", "accentInk": "#2e1065" }
     },
     {
       "id": "pipelines",
@@ -64,7 +67,8 @@
       "searchIndexed": true,
       "governedByAccess": true,
       "channelPartition": true,
-      "presenceLobby": true
+      "presenceLobby": true,
+      "brand": { "accent": "#2f6b57", "accentInk": "#12302a" }
     },
     {
       "id": "access",
@@ -80,7 +84,8 @@
       "searchIndexed": true,
       "governedByAccess": false,
       "channelPartition": true,
-      "presenceLobby": false
+      "presenceLobby": false,
+      "brand": { "accent": "#a0522d", "accentInk": "#3b1a0a" }
     },
     {
       "id": "interviews",
@@ -96,7 +101,8 @@
       "searchIndexed": false,
       "governedByAccess": false,
       "channelPartition": true,
-      "presenceLobby": false
+      "presenceLobby": false,
+      "brand": { "accent": "#9d2a5c", "accentInk": "#3a0c20" }
     }
   ]
 }

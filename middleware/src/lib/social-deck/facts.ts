@@ -162,7 +162,7 @@ export function buildConversationDeckFacts(src: ConversationDeckSource): DeckFac
   }
 
   const subtitle = clip(`${src.conversationName} · ${period}`, 200);
-  return { teamId: src.runId, slides, spec: { title: clip(src.title, MAX_TITLE_CHARS), subtitle, theme: 'plain', slides: slides.map(s => s.base) } };
+  return { teamId: src.runId, slides, spec: { title: clip(src.title, MAX_TITLE_CHARS), subtitle, theme: { ref: 'social' }, slides: slides.map(s => s.base) } };
 }
 
 /** The drafter's input for `draft-review-deck`: `teamId` carries the run id. */

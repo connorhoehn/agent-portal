@@ -160,10 +160,10 @@ export const savePersonRevision = (
   shared.savePersonRevision(pipelineDeckRevisions, () => pipelineDeckStore.getDeck(deckId), deckId, body, sub);
 
 export const previewDeck = (deckId: string, spec: unknown): Promise<Result<DeckPreviewOut>> =>
-  shared.previewDeck(() => pipelineDeckStore.getDeck(deckId), spec);
+  shared.previewDeck(() => pipelineDeckStore.getDeck(deckId), spec, 'pipelines');
 
-export const renderRevisionFile = (deckId: string, revisionId: string): Promise<{ bytes: Buffer; filename: string } | null> =>
-  shared.renderRevisionFile(pipelineDeckRevisions, () => pipelineDeckStore.getDeck(deckId), deckId, revisionId, 'run-report');
+export const renderRevisionFile = (deckId: string, revisionId: string, format: shared.DeckFileFormat = 'pptx'): Promise<shared.DeckRevisionFile | null> =>
+  shared.renderRevisionFile(pipelineDeckRevisions, () => pipelineDeckStore.getDeck(deckId), deckId, revisionId, 'run-report', 'pipelines', format);
 
 // ─── Agent revise (durable flow run) ─────────────────────────────────────────
 //

@@ -262,5 +262,5 @@ export function buildDeckFacts(source: TeamDeckSource, options: DeckFactsOptions
 
   const title = clip(options.title?.trim() || `${team.name} — assessment review`, MAX_TITLE_CHARS);
   const subtitle = clip(`${detail.team.cohort_label} · ${date}${options.audience?.trim() ? ` · for ${options.audience.trim()}` : ''}`, 200);
-  return { teamId, slides, spec: { title, subtitle, theme: 'plain', slides: slides.map((s) => s.base) } };
+  return { teamId, slides, spec: { title, subtitle, theme: { ref: 'assessment' }, slides: slides.map((s) => s.base) } };
 }

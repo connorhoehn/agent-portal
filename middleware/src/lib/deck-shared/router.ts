@@ -10,21 +10,29 @@
 
 import type { Request, RequestHandler, Response } from 'express';
 import { asyncHandler, NotFoundError } from '../async-handler.js';
-import { PPTX_CONTENT_TYPE } from '@connorhoehn/realtime-modules/deck';
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { DeckReviseOut } from './revise.js';
+import type { DeckRevisionFile } from './service.js';
+import { DECK_FILE_FORMATS, DeckRenderBudgetError, isDeckFileFormat, type DeckFileFormat } from './render.js';
 import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
 
 export function sendFail(res: Response, result: { status: number; reason: string; details?: Record<string, unknown> }): void {
   res.status(result.status).json({ error: result.reason, ...(result.details ?? {}) });
 }
 
-export function sendPptx(res: Response, file: { bytes: Buffer; filename: string }): void {
-  res.setHeader('Content-Type', PPTX_CONTENT_TYPE);
+/** Sends a rendered deck file as an attachment (the PowerPoint file, the PDF or the slide images' zip). */
+export function sendDeckFile(res: Response, file: DeckRevisionFile): void {
+  res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
   res.setHeader('Content-Length', String(file.bytes.length));
   res.setHeader('Cache-Control', 'private, no-store');
   res.end(file.bytes);
+}
+
+/** `?format=` of a download: absent is the PowerPoint file; null for anything not a known format. */
+export function parseFileFormat(raw: unknown): DeckFileFormat | null {
+  if (raw === undefined) return 'pptx';
+  return isDeckFileFormat(raw) ? raw : null;
 }
 
 export interface DeckHandlerOptions<Ctx> {
@@ -44,7 +52,8 @@ export interface DeckHandlerOptions<Ctx> {
   /** Agent revise (`POST /:id/revise`); omit for a tenant whose revise is a flow run of its own. Gated by `saveGuard` like a save. */
   revise?: (deckId: string, body: Record<string, unknown>, ctx: Ctx, req: Request) => Promise<Result<DeckReviseOut>>;
   preview: (deckId: string, spec: unknown, ctx: Ctx) => Promise<Result<DeckPreviewOut>>;
-  file: (deckId: string, revisionId: string, ctx: Ctx) => Promise<{ bytes: Buffer; filename: string } | null>;
+  /** One revision as `format` (`?format=`: pptx by default, pdf, or png for a zip of slide images). */
+  file: (deckId: string, revisionId: string, ctx: Ctx, format: DeckFileFormat) => Promise<DeckRevisionFile | null>;
 }
 
 export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>) {
@@ -106,9 +115,21 @@ export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>)
   const file: RequestHandler = asyncHandler(async (req, res) => {
     const id = deckId(req.params['id']);
     const ctx = await ctxFor(req, id);
-    const out = await opts.file(id, revisionId(req.params['rid']), ctx);
+    const rid = revisionId(req.params['rid']);
+    const format = parseFileFormat(req.query['format']);
+    if (!format) {
+      res.status(400).json({ error: `The format must be one of ${DECK_FILE_FORMATS.join(', ')}; leave it out for the PowerPoint file.` });
+      return;
+    }
+    let out: DeckRevisionFile | null;
+    try {
+      out = await opts.file(id, rid, ctx, format);
+    } catch (error) {
+      if (error instanceof DeckRenderBudgetError) { res.status(503).json({ error: error.message }); return; }
+      throw error;
+    }
     if (!out) throw new NotFoundError('revision not found');
-    sendPptx(res, out);
+    sendDeckFile(res, out);
   });
 
   return { detail, spec, save, revise, preview, file, deckId, revisionId, ctxFor };

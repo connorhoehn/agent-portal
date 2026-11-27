@@ -54,7 +54,7 @@ const h = makeDeckHandlers<decks.DeckViewer>({
   save: (id, body, viewer, req) => decks.savePersonRevision(id, body, viewer, req.session?.sub ?? null),
   revise: (id, body, viewer, req) => decks.reviseDeck(id, body, viewer, req.session?.sub ?? null),
   preview: (id, spec, viewer) => decks.previewDeck(id, spec, viewer),
-  file: (id, rid, viewer) => decks.renderRevisionFile(id, rid, viewer),
+  file: (id, rid, viewer, format) => decks.renderRevisionFile(id, rid, viewer, format),
 });
 
 initiativeDecksRouter.post('/projects/:projectId', asyncHandler(async (req, res) => {

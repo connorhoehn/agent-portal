@@ -248,10 +248,10 @@ export const savePersonRevision = (
   shared.savePersonRevision(initiativeDeckRevisions, () => visibleDeck(deckId, viewer), deckId, body, sub);
 
 export const previewDeck = (deckId: string, spec: unknown, viewer: DeckViewer): Promise<Result<DeckPreviewOut>> =>
-  shared.previewDeck(() => visibleDeck(deckId, viewer), spec);
+  shared.previewDeck(() => visibleDeck(deckId, viewer), spec, 'orgiq');
 
-export const renderRevisionFile = (deckId: string, revisionId: string, viewer: DeckViewer): Promise<{ bytes: Buffer; filename: string } | null> =>
-  shared.renderRevisionFile(initiativeDeckRevisions, () => visibleDeck(deckId, viewer), deckId, revisionId, 'initiative-status');
+export const renderRevisionFile = (deckId: string, revisionId: string, viewer: DeckViewer, format: shared.DeckFileFormat = 'pptx'): Promise<shared.DeckRevisionFile | null> =>
+  shared.renderRevisionFile(initiativeDeckRevisions, () => visibleDeck(deckId, viewer), deckId, revisionId, 'initiative-status', 'orgiq', format);
 
 // ─── Agent revise (synchronous) ──────────────────────────────────────────────
 //

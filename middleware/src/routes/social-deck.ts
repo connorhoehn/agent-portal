@@ -197,7 +197,7 @@ const h = makeDeckHandlers<DeckAccess>({
     return reviseFacts(deck, base, access.userId);
   }),
   preview: (_id, spec) => Promise.resolve(decks.previewSpec(spec)),
-  file: (_id, rid, access) => decks.renderRevisionFile(access.deck.id, rid),
+  file: (_id, rid, access, format) => decks.renderRevisionFile(access.deck.id, rid, format),
 });
 
 socialDeckRouter.get('/decks', asyncHandler(async (req, res) => {

@@ -44,6 +44,7 @@ import { agentcore } from '../../providers/index.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunStore, pendingFlowRuns } from '../../lib/flow-runs/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
+import { expectDeckExports } from '../../test-support/deck-exports.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { mockHolds } from '../../providers/spend-holds.js';
@@ -165,6 +166,7 @@ describe('run report deck — authz', () => {
     for (const app of [orgiq, assessment]) {
       expect((await request(app).get('/api/pipelines/decks')).status).toBe(403);
       expect((await request(app).post('/api/pipelines/runs/job:x/decks').send({})).status).toBe(403);
+      expect((await request(app).get('/api/pipelines/decks/x/revisions/y/file?format=pdf')).status).toBe(403);
     }
   });
 });
@@ -207,6 +209,8 @@ describe('run report deck — revisions, preview, download', () => {
     const zip = await JSZip.loadAsync(file.body as Buffer);
     expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('presentationml');
     expect((await request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/prev-00000000-0000-0000-0000-000000000000/file`)).status).toBe(404);
+    expect(spec.theme).toEqual({ ref: 'pipelines' });
+    await expectDeckExports((q) => request(app).get(`/api/pipelines/decks/${made.deckId}/revisions/${made.revisionId}/file${q}`), spec.slides.length);
   });
 });
 

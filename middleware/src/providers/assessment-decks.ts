@@ -295,7 +295,7 @@ export const savePersonRevision = (
   shared.savePersonRevision(deckRevisions, () => deckStore.getDeck(deckId), deckId, body, sub);
 
 export const previewDeck = (deckId: string, spec: unknown): Promise<Result<DeckPreviewOut>> =>
-  shared.previewDeck(() => deckStore.getDeck(deckId), spec);
+  shared.previewDeck(() => deckStore.getDeck(deckId), spec, 'assessment');
 
-export const renderRevisionFile = (deckId: string, revisionId: string): Promise<{ bytes: Buffer; filename: string } | null> =>
-  shared.renderRevisionFile(deckRevisions, () => deckStore.getDeck(deckId), deckId, revisionId, 'review-deck');
+export const renderRevisionFile = (deckId: string, revisionId: string, format: shared.DeckFileFormat = 'pptx'): Promise<shared.DeckRevisionFile | null> =>
+  shared.renderRevisionFile(deckRevisions, () => deckStore.getDeck(deckId), deckId, revisionId, 'review-deck', 'assessment', format);

@@ -38,7 +38,7 @@ const h = makeDeckHandlers({
   spec: (id, rid) => decks.getRevisionSpec(id, rid),
   save: (id, body, _ctx, req) => decks.savePersonRevision(id, body, req.session?.sub ?? null),
   preview: (id, spec) => decks.previewDeck(id, spec),
-  file: (id, rid) => decks.renderRevisionFile(id, rid),
+  file: (id, rid, _ctx, format) => decks.renderRevisionFile(id, rid, format),
 });
 
 pipelineDecksRouter.post('/runs/:id/decks', asyncHandler(async (req, res) => {

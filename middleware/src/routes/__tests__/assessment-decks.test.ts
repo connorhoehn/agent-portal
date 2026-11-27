@@ -41,6 +41,7 @@ import { mockDeckRunResult } from '../../providers/assessment-decks.js';
 import { assessmentDecksFixture, assessmentDeckRevisionsFixture } from '../../mock/assessment-decks.js';
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
+import { expectDeckExports } from '../../test-support/deck-exports.js';
 
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
@@ -134,6 +135,15 @@ describe('review decks — generation and reads', () => {
     const zip = await JSZip.loadAsync(res.body as Buffer);
     expect(await zip.file('[Content_Types].xml')!.async('string')).toContain('presentationml.presentation.main+xml');
   });
+
+  it('downloads as PowerPoint, PDF or slide images; a new deck names the tenant theme; an unknown format is 400', async () => {
+    const app = as('assessor');
+    const { deckId } = await createDeck(app, 'TEAM-005');
+    const rid = (await request(app).get(`/api/assessment/decks/${deckId}`)).body.activeRevisionId as string;
+    const spec = (await request(app).get(`/api/assessment/decks/${deckId}/revisions/${rid}/spec`)).body as DeckSpec;
+    expect(spec.theme).toEqual({ ref: 'assessment' });
+    await expectDeckExports((q) => request(app).get(`/api/assessment/decks/${deckId}/revisions/${rid}/file${q}`), spec.slides.length);
+  });
 });
 
 describe('review decks — revisions, CAS and agent revise', () => {
@@ -211,6 +221,7 @@ describe('review decks — authz', () => {
     const spec = (await request(reader).get(`/api/assessment/decks/${deckId}/revisions/${head}/spec`)).body;
     expect((await request(reader).post(`/api/assessment/decks/${deckId}/preview`).send({ spec })).status).toBe(200);
     expect((await request(reader).get(`/api/assessment/decks/${deckId}/revisions/${head}/file`)).status).toBe(200);
+    expect((await request(reader).get(`/api/assessment/decks/${deckId}/revisions/${head}/file?format=pdf`)).status).toBe(200);
     expect((await request(reader).post(`/api/assessment/decks/${deckId}/revisions`).send({ spec, baseRevisionId: head })).status).toBe(403);
     expect((await request(reader).post(`/api/assessment/decks/${deckId}/revise`).send({ instruction: 'x', baseRevisionId: head })).status).toBe(403);
     expect((await request(reader).post('/api/assessment/teams/TEAM-005/decks').send({})).status).toBe(403);
@@ -222,7 +233,7 @@ describe('review decks — authz', () => {
     const rid = 'rev-00000000-0000-0000-0000-000000000000';
     for (const [method, path] of [
       ['get', '/api/assessment/decks'], ['get', `/api/assessment/decks/${deckId}`],
-      ['get', `/api/assessment/decks/${deckId}/revisions/${rid}/spec`], ['get', `/api/assessment/decks/${deckId}/revisions/${rid}/file`],
+      ['get', `/api/assessment/decks/${deckId}/revisions/${rid}/spec`], ['get', `/api/assessment/decks/${deckId}/revisions/${rid}/file`], ['get', `/api/assessment/decks/${deckId}/revisions/${rid}/file?format=pdf`],
       ['post', `/api/assessment/decks/${deckId}/revisions`], ['post', `/api/assessment/decks/${deckId}/preview`],
       ['post', `/api/assessment/decks/${deckId}/revise`], ['post', '/api/assessment/teams/TEAM-002/decks'],
     ] as const) {

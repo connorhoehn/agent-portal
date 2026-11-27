@@ -5,3 +5,5 @@ export * from './revise.js';
 export * from './router.js';
 export * from './store.js';
 export * from './authority.js';
+export * from './render.js';
+export * from './themes.js';

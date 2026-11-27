@@ -27,6 +27,7 @@ import { deckTitleFrom, parseDeckArgs } from '../../lib/social-deck/args.js';
 import { buildConversationDeckFacts, topicChunks } from '../../lib/social-deck/facts.js';
 import { deckIdForRun } from '../../providers/social-decks.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
+import { expectDeckExports } from '../../test-support/deck-exports.js';
 import type { Session } from '../../lib/session.js';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { spendEntries } from '../../mock/spend-ledger.js';
@@ -245,6 +246,11 @@ describe('a saved deck: who may read, edit and post', () => {
     const file = await request(app).get(`/api/chat/decks/${deckId}/revisions/${revisionId}/file`).set('Authorization', await bearer('u-theo'));
     expect(file.status).toBe(200);
     expect(file.headers['content-type']).toContain('presentationml');
+    const latest = (await getDeck('u-theo', deckId)).body.activeRevisionId as string;
+    const saved = (await getSpec('u-theo', deckId, latest)).body;
+    expect(spec.theme).toEqual({ ref: 'social' });
+    const token = await bearer('u-theo');
+    await expectDeckExports((q) => request(app).get(`/api/chat/decks/${deckId}/revisions/${latest}/file${q}`).set('Authorization', token), saved.slides.length);
   });
 
   it('a non-member, a removed member and a person without ViewSocial get a 404 / 403, never the deck', async () => {
@@ -259,6 +265,7 @@ describe('a saved deck: who may read, edit and post', () => {
     expect((await postPreview('u-sana', modDeck, { spec: { title: 't', slides: [] } })).status).toBe(404);
     expect((await postToConversation('u-sana', modDeck)).status).toBe(404);
     expect((await getFile('u-sana', modDeck, modRev)).status).toBe(404);
+    expect((await request(app).get(`/api/chat/decks/${modDeck}/revisions/${modRev}/file?format=pdf`).set(await auth('u-sana'))).status).toBe(404);
     expect(revisionId).toBeTruthy();
     // A member who leaves loses it at once.
     socialChannelMembersFixture.rows().find(m => m.channel === CHANNEL && m.userId === 'u-theo')!.removedAt = new Date().toISOString();

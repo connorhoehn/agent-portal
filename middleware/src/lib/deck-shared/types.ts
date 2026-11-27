@@ -7,6 +7,8 @@ export interface DeckRevisionSummary { id: string; label: string; createdAt: str
 export interface DeckPreviewOut {
   slides: Array<{ id: string; svg: string; title?: string; generated?: boolean }>;
   warnings: string[];
+  /** The layout's measured findings (overflow, wrapped titles, crowding), also summarised in `warnings`. */
+  findings?: Array<{ slideId: string; kind: string; region: string; detail: string; byPoints?: number }>;
 }
 
 export type Result<T> =

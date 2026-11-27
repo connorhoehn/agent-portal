@@ -41,3 +41,13 @@ export const TENANTS_GOVERNED_BY_ACCESS = ['orgiq', 'assessment', 'social', 'pip
 export const TENANTS_CHANNEL_PARTITIONED = ['orgiq', 'assessment', 'pipelines', 'access', 'interviews'] as const;
 /** Tenants with a `<tenant>:lobby` shell presence channel (`presenceLobby`). */
 export const TENANTS_WITH_PRESENCE_LOBBY = ['orgiq', 'assessment', 'pipelines'] as const;
+
+/** Each tenant's brand colours (manifest `brand`), exactly as portal/src/app.css sets them; deck themes derive from these. */
+export const TENANT_BRANDS: Partial<Record<Tenant, { accent: string; accentInk?: string }>> = {
+  orgiq: { accent: '#4f46e5', accentInk: '#1e1b4b' },
+  assessment: { accent: '#0B6666', accentInk: '#0B3A3A' },
+  social: { accent: '#7c3aed', accentInk: '#2e1065' },
+  pipelines: { accent: '#2f6b57', accentInk: '#12302a' },
+  access: { accent: '#a0522d', accentInk: '#3b1a0a' },
+  interviews: { accent: '#9d2a5c', accentInk: '#3a0c20' },
+};

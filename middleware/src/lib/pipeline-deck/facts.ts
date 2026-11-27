@@ -186,7 +186,7 @@ export function buildRunDeckFacts(src: RunDeckSource, options: { title?: string 
 
   const title = clip(options.title?.trim() || `${run.context.title || run.id} — run report`, MAX_TITLE_CHARS);
   const subtitle = clip(`${run.definitionId} · ${run.status} · ${day(run.startedAt)}`, 200);
-  return { teamId: run.id, slides, spec: { title, subtitle, theme: 'plain', slides: slides.map((s) => s.base) } };
+  return { teamId: run.id, slides, spec: { title, subtitle, theme: { ref: 'pipelines' }, slides: slides.map((s) => s.base) } };
 }
 
 /** The drafter's input for `pipeline-run-deck`: `teamId` carries the run id. */

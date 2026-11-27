@@ -256,7 +256,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
 
   const title = clip(options.title?.trim() || `${project.name} — status`, MAX_TITLE_CHARS);
   const subtitle = clip(`${statusLabel(project.status, 'Status not set')} · as of ${src.asOf}${brief?.window ? ` · focus: ${windowLabel(brief.window)}` : ''}`, 200);
-  return { teamId: project.id, slides, spec: { title, subtitle, theme: 'plain', slides: slides.map((s) => s.base) } };
+  return { teamId: project.id, slides, spec: { title, subtitle, theme: { ref: 'orgiq' }, slides: slides.map((s) => s.base) } };
 }
 
 /**

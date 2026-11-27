@@ -169,6 +169,7 @@ import { assessmentDocumentProposalsRouter } from './routes/assessment-document-
 import { trustedProxyHops } from './lib/trusted-proxy.js';
 import { securityHeaders } from './lib/security-headers.js';
 import { startModelPriceRefresh } from './lib/model-prices.js';
+import { logDeckThemeAdjustments } from './lib/deck-shared/themes.js';
 
 const app = express();
 
@@ -241,6 +242,8 @@ const runtimeProfile = resolveRuntimeProfile({ profile: process.env['ORGIQ_RUNTI
   }
   console.log(`[runtime-profile] ${runtimeProfile.profile}`);
 }
+// Each tenant's deck theme is derived from its brand once; contrast fixes are logged here, never per request.
+logDeckThemeAdjustments();
 // The column probe caches its answer for the process lifetime (applying the
 // migration is a deploy step with a restart), so a long TTL here only bounds
 // how often a failed information_schema read is retried.

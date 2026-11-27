@@ -7,9 +7,9 @@
 import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
-import { previewDeckSpec } from '@connorhoehn/realtime-modules/deck';
-import { renderPptx } from '@connorhoehn/realtime-modules/deck';
-import { SOURCES_SLIDE_ID } from '@connorhoehn/realtime-modules/deck';
+import { MAX_SLIDES, SOURCES_SLIDE_ID } from '@connorhoehn/realtime-modules/deck';
+import { renderPreview, renderRevisionBytes, type DeckFileFormat } from './render.js';
+import { resolveDeckTheme, type DeckHostTenant } from './themes.js';
 import { clip, type DeckFacts } from './plan.js';
 import { mergeDraft, mockDraftResult, mockReviseResult, type ReviseDeckInput } from './narrative.js';
 import { DECK_REVISE_MODE_BY_TENANT, narrativeModeAllowed, reviseModeAllowed, type DeckReviseTenant } from './narrative-modes.js';
@@ -72,37 +72,56 @@ export async function savePersonRevision<D extends DeckHead>(
   return { ok: true, value: summaryOf(appended.revision) };
 }
 
-/** Renders any DeckSpec the caller sends (nothing is stored). */
-export function previewSpec(spec: unknown): Result<DeckPreviewOut> {
-  const outcome = previewDeckSpec(spec);
-  if (!outcome.ok) return { ok: false, status: outcome.status, reason: 'invalid DeckSpec', details: { errors: outcome.errors } };
+/**
+ * Renders any DeckSpec the caller sends (nothing is stored), with the theme it
+ * names resolved for `tenant`. Too many slides is a 413 the editor can act on;
+ * anything else invalid is a 400 listing what is wrong.
+ */
+export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckPreviewOut> {
+  const slideCount = Array.isArray((spec as { slides?: unknown } | null)?.slides) ? (spec as { slides: unknown[] }).slides.length : 0;
+  if (slideCount > MAX_SLIDES) {
+    return { ok: false, status: 413, reason: 'invalid DeckSpec', details: { errors: [`deck.slides: ${slideCount} slides, the cap is ${MAX_SLIDES}`] } };
+  }
+  const valid = validateDeckSpec(spec);
+  if (!valid.ok) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: valid.errors } };
+  const preview = renderPreview(valid.spec, resolveDeckTheme(valid.spec.theme, tenant));
   return {
     ok: true,
     value: {
-      slides: outcome.preview.slides.map((s) => ({
+      slides: preview.slides.map((s) => ({
         id: s.id, svg: s.svg, title: s.title, ...(s.id === SOURCES_SLIDE_ID ? { generated: true } : {}),
       })),
-      warnings: outcome.preview.warnings,
+      warnings: preview.warnings,
+      findings: preview.findings,
     },
   };
 }
 
 /** Preview of a spec, for a deck the caller may open (404 otherwise). */
-export async function previewDeck<D extends DeckHead>(lookup: DeckLookup<D>, spec: unknown): Promise<Result<DeckPreviewOut>> {
+export async function previewDeck<D extends DeckHead>(lookup: DeckLookup<D>, spec: unknown, tenant: DeckHostTenant): Promise<Result<DeckPreviewOut>> {
   if (!(await lookup())) return { ok: false, status: 404, reason: 'deck not found' };
-  return previewSpec(spec);
+  return previewSpec(spec, tenant);
 }
 
-/** The .pptx of one revision of a deck the caller may open, with its filename; null when either is missing. */
+/** A rendered file of one revision, ready to send. */
+export interface DeckRevisionFile { bytes: Buffer; filename: string; contentType: string }
+
+/**
+ * One revision of a deck the caller may open, as `format` (the PowerPoint file
+ * by default), with its filename; null when either is missing. Throws
+ * `DeckRenderBudgetError` when the render runs past its budget.
+ */
 export async function renderRevisionFile<D extends DeckHead>(
   revisions: ArtifactRevisionStore<DeckSpec>, lookup: DeckLookup<D>, deckId: string, revisionId: string, fallbackSlug: string,
-): Promise<{ bytes: Buffer; filename: string } | null> {
+  tenant: DeckHostTenant, format: DeckFileFormat = 'pptx',
+): Promise<DeckRevisionFile | null> {
   const deck = await lookup();
   if (!deck) return null;
   const revision = await revisions.getRevision(deckId, revisionId);
   if (!revision) return null;
   const slug = deck.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || fallbackSlug;
-  return { bytes: await renderPptx(revision.spec), filename: `${slug}-${revisionLabel(revision.seq)}.pptx` };
+  const file = await renderRevisionBytes(revision.id, revision.spec, resolveDeckTheme(revision.spec.theme, tenant), format);
+  return { bytes: file.bytes, contentType: file.contentType, filename: `${slug}-${revisionLabel(revision.seq)}${file.extension}` };
 }
 
 // ─── Narrative (generate-with-prose) ─────────────────────────────────────────
