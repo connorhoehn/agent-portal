@@ -1,7 +1,8 @@
 // /api/interviews — the interview room, the panel's side (docs/interviews-tenant-plan.md row I2.4, decision 21;
 // contract C5). Mounted in routes/interviews.ts with one line, after the router's ViewInterviews gate.
 //
-//   GET  /interviews/:id/room    the lead and the panel: the room view (lib/interviews/room.ts roomView)
+//   GET  /interviews/:id/room    the lead and the panel: the room view (lib/interviews/room.ts roomView), with
+//                                `mayAdmit` (lib/interviews/waiting-room.ts mayAdmitNow)
 //   POST /interviews/:id/start   the lead, when they join the call: accepted or ready → live. Body `{ revision }`.
 //   POST /interviews/:id/end     the lead, from End interview: live → ended, with endedAt. Body `{ revision }`.
 //                                The recruiter (AssignInterviews) too, for a live round the lead left (gap audit
@@ -27,6 +28,7 @@ import type { Interview } from '../../lib/interviews/types.js';
 import { interviewsNow } from '../../lib/interviews/clock.js';
 import { forgetInterviewGuest } from '../../lib/interviews/invite/admission.js';
 import { publishInterviewHint } from '../../lib/interviews/live-hint.js';
+import { mayAdmitNow, resolveWaiting } from '../../lib/interviews/waiting-room.js';
 
 export const roomRouter = Router();
 
@@ -62,9 +64,10 @@ roomRouter.get('/interviews/:id/room', asyncHandler(async (req, res) => {
   const opening = app ? ix.openings.get(app.openingId) : undefined;
   const candidate = app ? ix.candidates.get(app.candidateId) : undefined;
   const view = i && opening && candidate ? roomView(i, opening, candidate.name, session.sub, ix.people) : null;
-  if (!view) throw new NotFoundError(NO_INTERVIEW);
+  if (!view || !i) throw new NotFoundError(NO_INTERVIEW);
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ room: view });
+  // Whether this seat may let the candidate in now (the lead always; a panel member in the call while the lead is not).
+  res.json({ room: { ...view, mayAdmit: await mayAdmitNow(i, seatOf(i, session.sub), session.sub) } });
 }));
 
 function roomWrite(move: (i: Interview, userId: string, req: Request) => RoomMove | Promise<RoomMove>, write: (i: Interview, revision: number) => Promise<WriteResult<Interview>>) {
@@ -103,6 +106,8 @@ async function endMoveFor(i: Interview, userId: string, req: Request): Promise<R
 export async function closeRoom(interviewId: string): Promise<void> {
   await publishInterviewHint(interviewId, 'ended');
   await forgetInterviewGuest(interviewId, 'interview-ended');
+  // Nobody is let in any more: a waiting bell still in a seat's inbox leaves it (lib/interviews/waiting-room.ts).
+  void resolveWaiting(interviewId, null);
 }
 
 roomRouter.post('/interviews/:id/start', conduct, roomWrite(startMove, (i, revision) => interviewsStore().startInterview(i.id, revision, interviewsNow().toISOString())));

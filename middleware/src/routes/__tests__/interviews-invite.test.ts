@@ -344,7 +344,8 @@ describe('the waiting room', () => {
 
   it('knock, wait, be let in: the guest and the lead read the same admission', async () => {
     const cookie = await guest();
-    expect((await mine(cookie)).body).toEqual({ admission: { state: 'not-knocked', knockedAt: null, decidedAt: null } });
+    // The guest's read: the admission and one boolean (told: the seats know), nothing else (gap audit 2026-11-20 §4).
+    expect((await mine(cookie)).body).toEqual({ admission: { state: 'not-knocked', knockedAt: null, decidedAt: null }, told: false });
     expect((await HUGO.get(`/interviews/${IV}/waiting`)).body.admission.state).toBe('not-knocked');
     const knocked = await knock(cookie);
     expect(knocked.status).toBe(200);

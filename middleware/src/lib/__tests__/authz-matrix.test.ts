@@ -492,6 +492,17 @@ describe('capability boundaries that must not regress', () => {
     expect([has('interviews/hiring-manager', 'ConductInterview'), has('interviews/hiring-manager', 'AssignInterviews'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false, false]);
   });
 
+  test('interviews waiting room (gap audit 2026-11-20 §4): no new action, ConductInterview and the seat', () => {
+    // routes/interviews/admission.ts gates GET /waiting and POST /admit on ConductInterview, then the seat on that round
+    // (lib/interviews/lobby.ts); a panel member may let the candidate in only from the call while the lead is not in it
+    // (lib/interviews/waiting-room.ts). So the interviewer admits from a seat, and the recruiter, the hiring manager and
+    // every other tenant's role admit nothing (ConductInterview is forbidden to the recruiter outright).
+    expect(has('interviews/interviewer', 'ConductInterview')).toBe(true);
+    expect([has('interviews/recruiter', 'ConductInterview'), has('interviews/hiring-manager', 'ConductInterview')]).toEqual([false, false]);
+    expect(has('access/access-admin', 'ConductInterview')).toBe(false);
+    expect(role('interviews/recruiter').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ConductInterview"[\s\S]*principal\.role == "recruiter"/);
+  });
+
   test('interviews stage moves (gap audit 2026-11-20 §2): no new action, ManageCandidates', () => {
     // routes/interviews/stage-moves.ts gates POST /applications/:id/move (start screening, mark hired, offer declined,
     // reopen) on ManageCandidates, as withdraw is. So the recruiter moves the stage; the interviewer does not; the

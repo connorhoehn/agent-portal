@@ -516,6 +516,27 @@ export class CallChatRuntime implements CallLifecycleObserver {
     return (await this.opts.calls.getCall(callId))?.lobbyName ?? null;
   }
   /**
+   * Who is in `lobbyName`'s live call now: the user ids behind its connected, non-departed seats, each read from the
+   * socket's verified context (never a client's claim), found through the call store's lobby index. Empty when the
+   * store keeps no lobby index, the call has ended, or on any failed read.
+   */
+  async usersInLobbyCall(lobbyName: string): Promise<string[]> {
+    try {
+      if (this.disposed || !this.opts.calls.getCallIdsByLobby) return [];
+      const users = new Set<string>();
+      for (const callId of await this.opts.calls.getCallIdsByLobby(lobbyName)) {
+        if (this.controls.get(callId)?.ended) continue;
+        const call = await this.opts.calls.getCall(callId);
+        if (!call || call.lobbyName !== lobbyName) continue;
+        const departed = this.controls.get(callId)?.departed;
+        const sessions = await Promise.all(call.participantClientIds.filter((id) => !departed?.has(id))
+          .map((id) => resolveConnectedCallSession(this.opts.router, id).catch(() => null)));
+        for (const s of sessions) if (s) users.add(s.sub);
+      }
+      return [...users];
+    } catch { return []; }
+  }
+  /**
    * People who hold or held a seat in this call while it lives: the chat roster, active or departed.
    * Empty once the call has ended (the roster is cleared with it).
    */

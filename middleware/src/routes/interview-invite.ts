@@ -39,6 +39,7 @@ import { realtimeSigningSecret } from '../lib/realtime-token.js';
 import { GUEST_DISPLAY_NAME, guestRealtimeEnabled, guestSubject, mintGuestRealtimeToken } from '../lib/interviews/invite/realtime.js';
 import { admissionOf, applyAdmission } from '../lib/interviews/invite/admission.js';
 import { publishInterviewHint } from '../lib/interviews/live-hint.js';
+import { ringWaiting, waitingTold } from '../lib/interviews/waiting-room.js';
 import { guestRoomState, guestRoomView } from '../lib/interviews/invite/room.js';
 import { config } from '../config.js';
 import { interviewsNow } from '../lib/interviews/clock.js';
@@ -185,7 +186,9 @@ interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHa
   if (written.ok) {
     // The lead's room reads who is waiting now, not on its next poll. A repeated knock changes nothing and says nothing.
     if (written.changed) await publishInterviewHint(req.guest!.interviewId, 'knock');
-    res.json({ admission: written.admission }); return;
+    // A new waiting spell rings the seats' bells (lib/interviews/waiting-room.ts); a refresh's knock is the same spell.
+    if (written.changed && written.admission.state === 'waiting') void ringWaiting(req.guest!.interviewId, written.admission.knockedAt);
+    res.json({ admission: written.admission, told: await waitingTold(req.guest!.interviewId, written.admission) }); return;
   }
   if (written.reason === 'no-guest') { res.status(404).json(GUEST_REFUSAL); return; }
   if (written.reason === 'precondition' && written.why === 'declined-required') {
@@ -196,10 +199,12 @@ interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHa
   res.status(409).json({ error: written.reason === 'precondition' ? NOT_YET : 'Something changed on this page. Try again.' });
 }));
 
-/** The guest's own admission, for the waiting page to read. */
+/** The guest's own admission, and whether the seats have been told, for the waiting page to read. */
 interviewInviteRouter.get('/admission', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   guestHeaders(res);
-  res.json({ admission: admissionOf(await inviteStore().getInvite(req.guest!.inviteId)) });
+  const admission = admissionOf(await inviteStore().getInvite(req.guest!.inviteId));
+  // `told`: one boolean, whether the seats know the candidate is waiting (a bell went out, or a seat is in the call). No who.
+  res.json({ admission, told: await waitingTold(req.guest!.interviewId, admission) });
 }));
 
 /**

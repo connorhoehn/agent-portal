@@ -44,6 +44,8 @@ export interface NotificationInputLike {
 export interface NotificationSink {
   notifyUser(userId: string, input: NotificationInputLike): Promise<unknown>;
   listForUser?(userId: string): Promise<Array<{ id: string; timestamp?: string; read?: boolean; payload?: Record<string, unknown> }>>;
+  /** The library's resolve (realtime-modules 0.147): the items leave the store and every open inbox of the user. */
+  resolveMany?(userId: string, keys: readonly string[]): Promise<unknown>;
 }
 
 /** An item this seam will send: the tenant is required, the rest is the library's input. */
@@ -1077,5 +1079,86 @@ export async function notifyInterviewDecided(ev: InterviewDecidedEvent): Promise
   } catch (err) {
     console.warn(`[social-notify] interview-decided producer failed: ${(err as Error).message}`);
     return [];
+  }
+}
+
+// ── The interviews tenant, the waiting room (gap audit 2026-11-20 §4) ─────────────────────────────────────────
+//
+// The candidate knocked: each seat of the round (the lead and the panel) gets one bell per waiting spell, opening the
+// room. The bell's id names the round, the person and the spell (the knock's instant), so a page refresh (the same
+// spell) never rings again and a later spell rings afresh. When the spell is over (let in, turned away, the round
+// ended or cancelled) the bells leave every inbox through the library's resolve. Says the opening and the round, never
+// the candidate's name.
+
+const WAITING_PREFIX = 'interview-waiting:';
+const waitingKey = (interviewId: string, userId: string, knockedAt: string): string =>
+  `${WAITING_PREFIX}${roundKey(interviewId)}:${userId}:${roundKey(knockedAt)}`;
+/** The waiting bell's id for one seat and one spell (lib/interviews/waiting-room.ts reads an inbox for it). */
+export const waitingBellId = waitingKey;
+
+export interface InterviewWaitingEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** The lead and the panel of the round. */
+  userIds: readonly string[];
+  /** The knock's instant: the waiting spell this bell is for. */
+  knockedAt: string;
+}
+
+/** The candidate is waiting → each seat, once per waiting spell, a bell that opens the room. Resolves to who was rung. */
+export async function notifyInterviewWaiting(ev: InterviewWaitingEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const sent: string[] = [];
+    const inbox = notificationInbox();
+    for (const userId of new Set(ev.userIds)) {
+      const id = waitingKey(ev.interviewId, userId, ev.knockedAt);
+      // Idempotent in the store, as the starting-soon bell is: one already in the person's inbox is not rung again.
+      if (inbox && (await inbox.listForUser(userId).catch(() => [])).some((r) => r.id === id)) { sent.push(userId); continue; }
+      sent.push(...await notify([userId], {
+        id,
+        type: 'system',
+        title: `The candidate is waiting: ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+        body: 'They are in the waiting room. Open the room to let them in.',
+        payload: { tenant: 'interviews', kind: 'interview-waiting', audience: 'interviewer' },
+        action: { label: 'Open the room', href: `/interviews/rounds/${encodeURIComponent(ev.interviewId)}/room` },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-waiting producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/** Whether the notification service in use can take a bell back out of the inboxes (the library's resolve). */
+export function notificationResolveSupported(): boolean {
+  return typeof sink?.resolveMany === 'function';
+}
+
+/**
+ * The waiting spell is over → every waiting bell of the round leaves each seat's inbox: the ones the inbox lists, and the
+ * current spell's own id (`knockedAt`) when the inbox cannot be read. A service without resolve leaves them. Never throws.
+ */
+export async function resolveInterviewWaiting(interviewId: string, userIds: readonly string[], knockedAt: string | null): Promise<number> {
+  try {
+    const active = sink;
+    if (!active?.resolveMany) return 0;
+    const inbox = notificationInbox();
+    let asked = 0;
+    for (const userId of new Set(userIds)) {
+      const prefix = `${WAITING_PREFIX}${roundKey(interviewId)}:${userId}:`;
+      const keys = new Set<string>(knockedAt ? [waitingKey(interviewId, userId, knockedAt)] : []);
+      if (inbox) for (const r of await inbox.listForUser(userId).catch(() => [])) if (r.id.startsWith(prefix)) keys.add(r.id);
+      if (!keys.size) continue;
+      try { await active.resolveMany(userId, [...keys]); asked += keys.size; } catch (err) {
+        console.warn(`[social-notify] interview-waiting resolve for ${userId} failed: ${(err as Error).message}`);
+      }
+    }
+    return asked;
+  } catch (err) {
+    console.warn(`[social-notify] interview-waiting resolve failed: ${(err as Error).message}`);
+    return 0;
   }
 }
