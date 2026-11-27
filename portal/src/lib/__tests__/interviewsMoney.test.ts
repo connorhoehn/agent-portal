@@ -1,7 +1,7 @@
 // The opening's money line and who asks for it (lib/interviewsKit.ts; docs/interviews-tenant-plan.md row I0.6).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { moneyLine, readsOpeningMoney, type OpeningMoney } from '../interviewsKit.ts';
+import { NO_SPENDING_CAP_WARNING, moneyLine, noSpendingCapFix, readsOpeningMoney, type OpeningMoney } from '../interviewsKit.ts';
 
 const M: OpeningMoney = {
   capUsd: 150, interviewCapUsd: null, defaultInterviewCapUsd: 10, effectiveInterviewCapUsd: 10, spentUsd: 1.5, heldUsd: 3, leftUsd: 145.5, unknownCount: 0,
@@ -18,4 +18,10 @@ test('with no cap the line says nothing can start', () => {
 
 test('an interviewer never asks for the money', () => {
   assert.deepEqual(['recruiter', 'hiring-manager', 'admin', 'interviewer', undefined].map(readsOpeningMoney), [true, true, true, false, false]);
+});
+
+test('the no-cap warning is the opening page\'s line, and says how to set one: on the editor for the recruiter, through the recruiter for anyone else', () => {
+  assert.equal(moneyLine({ ...M, capUsd: null, leftUsd: null })[0], NO_SPENDING_CAP_WARNING);
+  assert.equal(noSpendingCapFix(true), 'Set one on the Details tab of the opening\'s editor.');
+  assert.match(noSpendingCapFix(false), /^Ask the recruiter to set one/);
 });

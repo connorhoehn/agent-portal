@@ -17,7 +17,7 @@ import type { OpeningRecord } from '../../lib/interviewsKit';
 import {
   PANEL_SEATS, assignRound, canReassign, declineLines, panelChoices, reassignRound, seatingOf, seatsOfRow, type FieldProblem,
 } from '../../lib/interviewsAssign';
-import { NoHiringManagerAlert } from './interviewsCells';
+import { NoHiringManagerAlert, NoSpendingCapAlert } from './interviewsCells';
 
 const NOBODY = '';
 
@@ -34,7 +34,7 @@ export default function AssignRoundPage() {
 
   const round = roundId ? record?.applications.flatMap((a) => a.interviews).find((r) => r.id === roundId) ?? null : null;
   const app = record?.applications.find((a) => a.applicationId === (round?.applicationId ?? params.get('application'))) ?? record?.applications[0];
-  const opening = useFetch<{ opening: OpeningRecord }>(app && !roundId ? `${INTERVIEWS_API}/openings/${encodeURIComponent(app.opening.id)}` : null);
+  const opening = useFetch<{ opening: OpeningRecord }>(app ? `${INTERVIEWS_API}/openings/${encodeURIComponent(app.opening.id)}` : null);
 
   const [kitRound, setKitRound] = useState('');
   const [leadId, setLeadId] = useState(NOBODY);
@@ -101,6 +101,7 @@ export default function AssignRoundPage() {
         )}>
         <Stack gap="md" data-testid="interviews-assign-form">
           {opening.data && !opening.data.opening.hiringManager && <NoHiringManagerAlert openingId={app.opening.id} canEdit />}
+          {opening.data && opening.data.opening.budgetCapUsd === null && <NoSpendingCapAlert openingId={app.opening.id} canEdit />}
           {error && <T size="sm" tone="danger" data-testid="interviews-assign-error">{error}</T>}
           {locked && <T size="sm" tone="secondary">This round has already started, so who sits on it can no longer change.</T>}
           {round && round.declines.length > 0 && (

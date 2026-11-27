@@ -35,6 +35,7 @@ import { requireTenant } from '../../lib/authz.js';
 import { getUser, listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
+import { interviewOpeningsFixture, interviewApplicationsFixture, interviewsFixture } from '../../mock/interviews.js';
 import type { Session } from '../../lib/session.js';
 
 const u = (id: string, displayName: string, grants: Record<string, string[]>): UserInfo =>
@@ -141,6 +142,16 @@ describe('PUT /interviews/:id/questions', () => {
   it('another tenant\'s session is refused at the mount', async () => {
     const other = who('u-priya', 'access', 'access-admin');
     expect([403, 404]).toContain((await other.put('/interviews/iv-k1p5w8ra/questions', { revision: 1, questionIds: [] })).status);
+  });
+
+  it('says whether the opening has a spending cap, and only that: true with one, false once it is cleared (gap audit 2026-11-20 §10)', async () => {
+    expect((await readRow(HUGO, 'iv-k1p5w8ra')).spendingCapSet).toBe(true);
+    const appId = interviewsFixture.rows().find((i) => i.id === 'iv-k1p5w8ra')!.applicationId;
+    const openingId = interviewApplicationsFixture.rows().find((a) => a.id === appId)!.openingId;
+    interviewOpeningsFixture.rows().find((o) => o.id === openingId)!.budgetCapUsd = null;
+    const row = await readRow(HUGO, 'iv-k1p5w8ra');
+    expect(row.spendingCapSet).toBe(false);
+    expect(JSON.stringify(row)).not.toMatch(/budget|spent|capUsd/i);
   });
 
   it('the plan names nothing of the opening\'s money', async () => {

@@ -10,6 +10,7 @@ import demoPortraits from '../../lib/demoPortraits.json';
 import { useSession } from '../../lib/auth';
 import { debriefHref, readsDebrief } from '../../lib/interviewsDebrief';
 import { NO_HIRING_MANAGER_WARNING, noHiringManagerFix, openingEditHref } from '../../lib/interviewsStageMoves';
+import { NO_SPENDING_CAP_WARNING, noSpendingCapFix } from '../../lib/interviewsKit';
 import {
   RECOMMENDATION_LABELS, STAGE_LABELS, lastResultLine, recommendationTone, stageTone,
   type ApplicationStage, type ResultBrief,
@@ -94,6 +95,16 @@ export function DebriefResultCell({ candidateId, result, due = false, ready = fa
  * An opening with no hiring manager (gap audit 2026-11-20 §2): nobody can decide on its candidates. Nothing is refused;
  * the opening's page and the assign form say so once, with the way to set one (the recruiter, on the editor's Details tab).
  */
+/** An opening with no spending cap (gap audit 2026-11-20 §10): Run and Milo would be refused in the room, so say so before it. */
+export function NoSpendingCapAlert({ openingId, canEdit }: { openingId: string; canEdit: boolean }) {
+  return (
+    <InlineAlert tone="warning" data-testid="interviews-no-spending-cap">
+      {`${NO_SPENDING_CAP_WARNING}. ${noSpendingCapFix(canEdit)} `}
+      {canEdit && <AppLink to={openingEditHref(openingId)} data-testid="interviews-no-spending-cap-edit">Edit the opening</AppLink>}
+    </InlineAlert>
+  );
+}
+
 export function NoHiringManagerAlert({ openingId, canEdit, linked = true }: { openingId: string; canEdit: boolean; /** false inside the editor itself */ linked?: boolean }) {
   return (
     <InlineAlert tone="warning" data-testid="interviews-no-hiring-manager">

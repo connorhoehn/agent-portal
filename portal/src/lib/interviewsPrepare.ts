@@ -16,6 +16,8 @@ export interface InterviewRecord extends InterviewRow {
   canPrepare: boolean;
   missing: string | null;
   maxQuestions: number;
+  /** Whether the opening has a spending cap; without one Run and Milo are refused in the room, so the page warns. */
+  spendingCapSet?: boolean;
 }
 
 export const preparePath = (id: string): string => `/interviews/rounds/${encodeURIComponent(id)}/prepare`;

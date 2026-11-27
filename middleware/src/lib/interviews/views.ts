@@ -141,6 +141,11 @@ export interface InterviewRecord extends InterviewRow {
   /** What is still missing before the round is ready, in one plain line; null when nothing is. */
   missing: string | null;
   maxQuestions: number;
+  /**
+   * Whether the opening has a spending cap (gap audit 2026-11-20 §10). Without one nothing that costs money starts in the
+   * round (spend.ts), so the prepare page warns. Only whether one is set, never the amount: the amount stays the money readers'.
+   */
+  spendingCapSet: boolean;
 }
 
 /** What a candidate's record shows of their résumé (row I1.6): the file itself is read from its own route. */
@@ -391,6 +396,7 @@ export class WorldIndex {
       canPrepare: mayChoose(i, this.viewer.id) && isPreparable(i.state) && hasAccepted(i, i.leadId, 'lead'),
       missing: missingLine(i),
       maxQuestions: MAX_QUESTIONS,
+      spendingCapSet: o.budgetCapUsd !== null,
       questionsChosen: i.questionIds.map((q) => o.kit.questions.find((k) => k.id === q)).filter((q): q is KitQuestion => !!q)
         .map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId })),
       competencies: competenciesOfRound(o.kit, i.roundId),

@@ -16,6 +16,8 @@ import { INTERVIEWS_API, ROUND_TYPE_LABELS, roundStatus, whenWithZone } from '..
 import { moved } from '../../lib/interviewsKit';
 import { askForPlan, bankGroups, canOpenRoom, draftLine, planFromDraft, roomPath, samePlan, savePlan, type BankQuestion, type DraftQuestion, type InterviewRecord, type PlanDraft } from '../../lib/interviewsPrepare';
 import ResumeViewer from './ResumeViewer';
+import { NoSpendingCapAlert } from './interviewsCells';
+import { useCapabilities } from '../../lib/capabilities';
 
 export default function PreparePage() {
   const { id = '' } = useParams();
@@ -58,6 +60,7 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
   useEffect(() => { if (dirty) onCarried(null); }, [dirty, onCarried]);
   const shownProblem = problem ?? carried;
   // A reader (the panel, the recruiter) is not asked to choose: the plan is the lead's, named by first name.
+  const { can } = useCapabilities();
   const reader = record.seat !== 'lead';
   const leadFirst = record.lead.name.split(' ')[0] ?? record.lead.name;
   const missingShown = reader ? (record.missing && /^Waiting for a time from the recruiter\.?$/.test(record.missing) ? record.missing : null) : record.missing;
@@ -118,6 +121,7 @@ function PrepareWorkspace({ record, trail, onChanged, carried, onCarried }: {
 
   const planSection = (
     <Stack gap="md">
+      {record.spendingCapSet === false && <NoSpendingCapAlert openingId={record.opening.id} canEdit={can('ManageCandidates')} />}
       <DetailSection variant="heading" as="h2" title={reader ? `${leadFirst}'s plan` : 'Your plan'} hint={reader && plan.length === 0 ? undefined : ofMax(plan.length, record.maxQuestions)}>
         <Stack gap="sm">
           {editable && (

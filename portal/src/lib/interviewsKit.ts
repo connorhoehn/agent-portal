@@ -98,9 +98,15 @@ export const openingMoneyPath = (openingId: string): string => `${INTERVIEWS_API
 
 const usd = (n: number): string => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/** The no-cap warning (gap audit 2026-11-20 §10): the opening page's money row, and one alert on Assign and Prepare. */
+export const NO_SPENDING_CAP_WARNING = 'No spending cap yet: nothing that costs money can start in these interviews';
+/** How to set one: the recruiter, on the Details tab of the opening's editor; anyone else is told who does. */
+export const noSpendingCapFix = (canEdit: boolean): string =>
+  (canEdit ? 'Set one on the Details tab of the opening\'s editor.' : 'Ask the recruiter to set one in the opening\'s details before the interview.');
+
 /** The money row's items: "Spending cap $150.00 · $0.00 spent · $0.00 set aside · $150.00 left · Up to $10.00 per interview". */
 export function moneyLine(m: OpeningMoney): string[] {
-  if (m.capUsd == null) return ['No spending cap yet: nothing that costs money can start in these interviews', `Up to ${usd(m.effectiveInterviewCapUsd)} per interview`];
+  if (m.capUsd == null) return [NO_SPENDING_CAP_WARNING, `Up to ${usd(m.effectiveInterviewCapUsd)} per interview`];
   return [
     `Spending cap ${usd(m.capUsd)}`, `${usd(m.spentUsd)} spent`, `${usd(m.heldUsd)} set aside`, `${usd(m.leftUsd ?? 0)} left`,
     `Up to ${usd(m.effectiveInterviewCapUsd)} per interview${m.interviewCapUsd == null ? ' (the default)' : ''}`,
