@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { builtinTheme } from '@connorhoehn/realtime-modules/deck/layout';
 import {
-  DECK_ENGINE_VERSION, DeckRenderBudgetError, renderCache, renderDeckFile, renderPreview, renderRevisionBytes, renderStats,
+  DECK_ENGINE_VERSION, DECK_PREVIEW_PNG_WIDTH, DeckRenderBudgetError, previewSlideCache, renderCache, renderDeckFile, renderPreview, renderRevisionBytes, renderStats,
   setDeckRenderClockForTests, themeHash,
 } from '../render.js';
 import { ByteLru } from '../byte-lru.js';
@@ -39,7 +39,7 @@ describe('deck themes', () => {
       expect(resolveDeckTheme(deck(name).theme, 'assessment')).toEqual(builtinTheme(name));
     }
     expect(resolveDeckTheme(undefined, 'social')).toEqual(builtinTheme());
-    const plainSvg = renderPreview(deck('plain'), resolveDeckTheme('plain', 'orgiq')).slides[1]!.svg;
+    const plainSvg = renderPreview(deck('plain'), resolveDeckTheme('plain', 'orgiq'), 'vector').slides[1]!.svg;
     expect(plainSvg).toContain(builtinTheme('plain').colors.accent);
   });
 
@@ -54,7 +54,7 @@ describe('deck themes', () => {
     // The brand accents pass contrast on the base background, so they are used as they are.
     const orgiq = tenantDeckTheme('orgiq');
     expect(orgiq.colors.accent).toBe(TENANT_BRANDS.orgiq!.accent.toUpperCase());
-    const svg = renderPreview(deck({ ref: 'orgiq' }), orgiq).slides[1]!.svg;
+    const svg = renderPreview(deck({ ref: 'orgiq' }), orgiq, 'vector').slides[1]!.svg;
     expect(svg).toContain(orgiq.colors.accent);
     expect(svg).not.toContain(builtinTheme('plain').colors.accent);
   });
@@ -68,7 +68,7 @@ describe('deck themes', () => {
 });
 
 describe('the preview', () => {
-  it('answers one SVG per slide plus Sources, and turns overflow findings into warnings', () => {
+  it('answers one slide image per slide plus Sources, and turns overflow findings into warnings', () => {
     const long = Array.from({ length: 6 }, (_, i) => `Bullet ${i + 1}: ${'a long line of words that keeps going '.repeat(5).trim()}`.slice(0, 200));
     const valid = validateDeckSpec({ title: 'Crowded', slides: [{ id: 'b', layout: 'bullets', title: 'Too much', bullets: long, sources: src }] });
     if (!valid.ok) throw new Error(valid.errors.join('; '));
@@ -77,6 +77,44 @@ describe('the preview', () => {
     expect(preview.slides[0]!.svg).toMatch(/^<svg/);
     expect(preview.findings.some((f) => f.kind === 'overflow')).toBe(true);
     expect(preview.warnings.some((w) => /^Slide 1 \(b\) .*overflow|^Slide 1 \(b\) body/.test(w))).toBe(true);
+  });
+
+  it('each slide is a stage-sized SVG wrapping one PNG painted with the bundled fonts, never a font family name', () => {
+    const preview = renderPreview(deck('plain'), builtinTheme('plain'));
+    for (const slide of preview.slides) {
+      const m = /^<svg [^>]*width="(\d+)" height="(\d+)" viewBox="0 0 \1 \2"><image [^>]*href="data:image\/png;base64,([A-Za-z0-9+/=]+)"\/><\/svg>$/.exec(slide.svg);
+      expect(m).not.toBeNull();
+      expect(slide.svg).not.toMatch(/font-family|<text/);
+      const png = Buffer.from(m![3]!, 'base64');
+      expect(png.subarray(1, 4).toString('latin1')).toBe('PNG');
+      expect(png.readUInt32BE(16)).toBe(DECK_PREVIEW_PNG_WIDTH); // IHDR width
+    }
+    // The vector form stays available and names the engine's fonts.
+    expect(renderPreview(deck('plain'), builtinTheme('plain'), 'vector').slides[0]!.svg).toMatch(/<text/);
+  });
+
+  it('an unchanged slide is not painted again, and a 10-slide preview stays a reasonable size', () => {
+    previewSlideCache.clear();
+    const bullets = Array.from({ length: 4 }, (_, i) => `Point ${i + 1} about the rollout and what it changed`);
+    const tenSlides = (edit: string): DeckSpec => {
+      const valid = validateDeckSpec({
+        title: 'Ten slides', theme: 'plain',
+        slides: Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, layout: 'bullets', title: i === 3 ? edit : `Slide ${i + 1}`, bullets, sources: src })),
+      });
+      if (!valid.ok) throw new Error(valid.errors.join('; '));
+      return valid.spec;
+    };
+    const before = renderStats.previewPngs;
+    const first = renderPreview(tenSlides('Before'), builtinTheme('plain'));
+    expect(renderStats.previewPngs - before).toBe(first.slides.length);
+    const bytes = JSON.stringify(first).length;
+    expect(bytes).toBeLessThan(2_500_000);
+    const again = renderPreview(tenSlides('After'), builtinTheme('plain'));
+    expect(renderStats.previewPngs - before).toBe(first.slides.length + 1); // only the edited slide
+    expect(again.slides[3]!.svg).not.toBe(first.slides[3]!.svg);
+    expect(again.slides[0]!.svg).toBe(first.slides[0]!.svg);
+    // eslint-disable-next-line no-console
+    if (process.env.DECK_PREVIEW_SIZE) console.log(`10-slide preview: ${bytes} bytes`);
   });
 });
 

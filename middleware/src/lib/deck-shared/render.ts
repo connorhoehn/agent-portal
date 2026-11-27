@@ -1,6 +1,7 @@
 // The one rendering path for every tenant's decks: a validated DeckSpec and a
 // resolved theme are laid out once (realtime-modules `layoutDeck`, with the
-// bundled font metrics), then painted as the preview (SVG per slide), the
+// bundled font metrics), then painted as the preview (a PNG per slide in a
+// stage-sized SVG wrapper, so the bundled fonts show), the
 // PowerPoint file, the PDF or the slide images (a zip of 1920-wide PNGs).
 //
 // Time budget: rendering runs on the request's own thread (this repository has
@@ -67,7 +68,7 @@ export function deckFonts(): { files: FontFileSet; metrics: FontMetrics } {
 
 // ─── Seams (tests count renders through these) ───────────────────────────────
 
-export const renderStats = { layouts: 0, files: 0 };
+export const renderStats = { layouts: 0, files: 0, previewPngs: 0 };
 
 /** A test's clock; production uses Date.now. */
 let now: () => number = () => Date.now();
@@ -96,10 +97,47 @@ export interface DeckPreviewRender {
   findings: LayoutFinding[];
 }
 
-/** One SVG per slide (Sources last) and the warnings, for a validated spec. Nothing is cached: a preview is of unsaved edits. */
-export function renderPreview(spec: DeckSpec, theme: DeckThemeSpec): DeckPreviewRender {
+/**
+ * The width of each preview slide's raster. An SVG shown through an image
+ * element cannot load fonts, so the preview carries a PNG painted with the
+ * bundled fonts; 1600 is sharp for the stage on a 2x display without being
+ * the 1920 of the export.
+ */
+export const DECK_PREVIEW_PNG_WIDTH = 1600;
+
+/** Painted preview slides, keyed by the scene's content, so an unchanged slide (most thumbnails) is not rasterised again. */
+export const DECK_PREVIEW_CACHE_BYTES = 48 * 1024 * 1024;
+export const previewSlideCache = new ByteLru<string>(DECK_PREVIEW_CACHE_BYTES, (s) => s.length);
+
+/** A minimal SVG of the stage size whose only content is the slide's PNG, so the page's image path shows the true fonts. */
+export function pngPreviewSvg(png: Buffer, stage: { width: number; height: number }): string {
+  const { width, height } = stage;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`
+    + `<image width="${width}" height="${height}" preserveAspectRatio="none" href="data:image/png;base64,${png.toString('base64')}"/></svg>`;
+}
+
+function rasterPreviewSlide(scene: DeckLayout['scenes'][number], stage: DeckLayout['stage']): string {
+  const key = createHash('sha256')
+    .update(`${DECK_ENGINE_VERSION}|${DECK_PREVIEW_PNG_WIDTH}|${stage.width}x${stage.height}|`)
+    .update(JSON.stringify(scene))
+    .digest('hex');
+  const hit = previewSlideCache.get(key);
+  if (hit) return hit;
+  renderStats.previewPngs += 1;
+  const svg = pngPreviewSvg(paintPng(scene, { fonts: deckFonts().files, width: DECK_PREVIEW_PNG_WIDTH, stage }), stage);
+  previewSlideCache.set(key, svg);
+  return svg;
+}
+
+/**
+ * One slide image per slide (Sources last) and the warnings, for a validated
+ * spec. Each slide's `svg` wraps a PNG painted with the bundled fonts (the
+ * default); `vector` returns the engine's pure SVG for anything that needs
+ * vectors. Painted slides are cached by their content, never the whole preview.
+ */
+export function renderPreview(spec: DeckSpec, theme: DeckThemeSpec, mode: 'png' | 'vector' = 'png'): DeckPreviewRender {
   const layout = layoutSpec(spec, theme);
-  const svgs = paintSvg(layout);
+  const svgs = mode === 'vector' ? paintSvg(layout) : layout.scenes.map((scene) => rasterPreviewSlide(scene, layout.stage));
   return {
     slides: layout.scenes.map((scene, i) => ({ id: scene.id, svg: svgs[i]!, title: scene.title })),
     warnings: [...deckWarnings(spec), ...layout.findings.map((f) => findingWarning(f, layout))],
