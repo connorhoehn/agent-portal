@@ -2358,7 +2358,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:200"
+      "source": "src/routes/interview-invite.ts:203"
     },
     {
       "method": "GET",
@@ -2383,17 +2383,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:110"
+      "source": "src/routes/interview-invite.ts:111"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:145"
+      "source": "src/routes/interview-invite.ts:146"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:182"
+      "source": "src/routes/interview-invite.ts:183"
     },
     {
       "method": "POST",
@@ -2423,12 +2423,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:164"
+      "source": "src/routes/interview-invite.ts:165"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:211"
+      "source": "src/routes/interview-invite.ts:216"
     },
     {
       "method": "GET",
@@ -2563,7 +2563,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/admit",
-      "source": "src/routes/interviews/admission.ts:58"
+      "source": "src/routes/interviews/admission.ts:66"
     },
     {
       "method": "POST",
@@ -2608,7 +2608,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/end",
-      "source": "src/routes/interviews/room.ts:109"
+      "source": "src/routes/interviews/room.ts:114"
     },
     {
       "method": "DELETE",
@@ -2723,7 +2723,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/room",
-      "source": "src/routes/interviews/room.ts:57"
+      "source": "src/routes/interviews/room.ts:59"
     },
     {
       "method": "GET",
@@ -2768,7 +2768,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/start",
-      "source": "src/routes/interviews/room.ts:108"
+      "source": "src/routes/interviews/room.ts:113"
     },
     {
       "method": "GET",
@@ -2793,7 +2793,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/waiting",
-      "source": "src/routes/interviews/admission.ts:52"
+      "source": "src/routes/interviews/admission.ts:59"
     },
     {
       "method": "GET",
