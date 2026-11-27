@@ -38,10 +38,22 @@ export interface DeckOpsPlan {
   done: string;
 }
 
+/** The refusal code when no deck is open: the dock is told plainly to open one (refusals.ts). */
+export const NO_DECK_OPEN = 'no-deck-open';
+
+const PAST: Readonly<Record<string, string>> = { Add: 'Added', Rename: 'Renamed', Move: 'Moved', Remove: 'Removed', Fill: 'Filled', Use: 'Now using' };
+/** A card line ("Fill slide 4 with …") said as done ("Filled slide 4 with …."); "3 changes to X" becomes "Made 3 changes to X.". */
+export function spokenDone(line: string): string {
+  const [verb, ...rest] = line.split(' ');
+  const said = verb && PAST[verb] ? [PAST[verb], ...rest].join(' ') : /^\d+ changes to /.test(line) ? `Made ${line}` : line;
+  return /[.!?]$/.test(said) ? said : `${said}.`;
+}
+
 /** The open deck, or the sentence that says why there is none to change. */
 export function openDeck(ctx: Pick<ToolContext, 'page' | 'tenant'>, ref: string): { deck: PageDeck } | { result: ToolResult } {
   const deck = ctx.page?.()?.deck ?? null;
-  if (!deck) return { result: refused('Open the deck first: a deck is changed by voice only in its editor.', { code: NOT_ON_PAGE }) };
+  // Plainly: no deck is open. No `not-on-this-page` code, whose hint (list or search instead) does not help here.
+  if (!deck) return { result: refused('No deck is open. Open the deck first: a deck is changed by voice only in its editor.', { code: NO_DECK_OPEN }) };
   if (deck.tenant !== ctx.tenant) return { result: refused('That deck belongs to another workspace.') };
   const named = ref.trim();
   if (named.startsWith('deck:') && named.slice(5) !== deck.id) return { result: refused('Only the deck in view is changed by voice; open that deck first.', { code: NOT_ON_PAGE }) };
@@ -196,10 +208,11 @@ export function runDeckOperations(ctx: ToolContext, plan: DeckOpsPlan): Promise<
     const revisionId = typeof revision?.['id'] === 'string' ? revision['id'] : null;
     if (revisionId) announceDeckRevision(plan.deckId, revisionId);
     const summary = typeof body?.['summary'] === 'string' ? body['summary'] : plan.done;
+    // Spoken: the card's own words in the past tense ("Filled slide 4 with a pie chart from Runs by outcome"), never ids.
     const examples = Array.isArray(body?.['exampleSourceSlideIds']) ? (body!['exampleSourceSlideIds'] as unknown[]).length : 0;
     return done('updated', {
       ref: `deck:${plan.deckId}`, ...(revisionId ? { revisionId } : {}), summary,
-      say: `${summary}${examples ? ` ${examples === 1 ? 'One slide still cites' : `${examples} slides still cite`} example content.` : ''}`,
+      say: `${spokenDone(plan.done)}${examples ? ` ${examples === 1 ? 'One slide still cites' : `${examples} slides still cite`} example content.` : ''}`,
     }, summary);
   }, () => done('updated', { ref: `deck:${plan.deckId}`, already: true }, `${plan.done} already; nothing was sent again`));
 }

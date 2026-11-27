@@ -42,6 +42,7 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
     navigated: { reason: 'This request already opened a page, so nothing more runs for it.', code: 'navigated' },
     'not-dispatchable': { reason: '"Rotate keys" cannot be dispatched: size this item first.', code: 'not-dispatchable' },
     'not-on-initiative': { reason: '"Rotate keys" is not work of Alpha you can dispatch.', code: 'not-on-initiative' },
+    'no-deck-open': { reason: 'No deck is open. Open the deck first: a deck is changed by voice only in its editor.', code: 'no-deck-open' },
     other: { reason: 'Something odd.' },
   };
   assert.deepEqual(Object.keys(reasons).sort(), [...REFUSAL_CODES].sort(), 'one case per code');

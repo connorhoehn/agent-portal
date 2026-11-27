@@ -210,7 +210,7 @@ export function deckChartResolver(req: Request, tenant: DeckHostTenant, ctx: Rep
         chart: { kind, labels: fit.labels, series },
         source: { documentId: `report:${def.id}`, anchor: data.period.slice(0, 60), title: `${data.sourceTitle} (${data.period})`.slice(0, 200) },
         note: `Chart data read from the ${def.id} report at ${readAt}${fit.trimmed ? `, trimmed to the ${fit.trimmed}` : ''}.`,
-        summary: `${def.id} (${data.period}${fit.trimmed ? `, ${fit.trimmed}` : ''})`,
+        summary: `${data.title} (${data.period}${fit.trimmed ? `, ${fit.trimmed}` : ''})`,
         title: data.title.slice(0, 120),
       },
     };

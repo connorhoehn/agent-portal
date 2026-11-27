@@ -9,6 +9,7 @@ import { pageContextNote, type PageDeck, type PublishedPage } from '../pageConte
 import { fakeFetch, route, toolContext, type Route } from './voiceHarness.ts';
 import { deckVoiceContext, DECK_OFFER } from '../../../components/decks/deckVoiceContext.ts';
 import { DECK_REVISED_EVENT } from '../../../components/decks/deckApi.ts';
+import { spokenDone } from '../decks.ts';
 import type { Action } from '../../capabilities';
 
 const SLIDES = [
@@ -61,7 +62,8 @@ test('add_slide: the card says what changes in words, and the request is the con
   assert.deepEqual(writes(r.log), [['/api/initiative-decks/idk-1/operations', { baseRevisionId: 'irev-7', operations: [{ op: 'add_slide', layout: 'timeline', after: 'summary', title: 'Plan' }] }]]);
   assert.equal(r.result.outcome, 'done');
   assert.equal(r.result.output['revisionId'], 'irev-9');
-  assert.match(String(r.result.output['say']), /Added a timeline slide at slide 4\. One slide still cites example content\./);
+  // Said in the card's own words, past tense: never the server's ids.
+  assert.equal(String(r.result.output['say']), 'Added a timeline slide after slide 3 titled "Plan". One slide still cites example content.');
 });
 
 test('every operation reads as a sentence on the card, and each maps to its typed operation', async () => {
@@ -99,7 +101,8 @@ test('preparation: the schema, the tenant, the role, and an open, saved, writabl
   const role = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { allow: ['Search'] });
   assert.match(String(role.result.output['reason']), /can't change this deck with your role/);
   const closed = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { page: () => null });
-  assert.match(String(closed.result.output['reason']), /Open the deck first/);
+  assert.match(String(closed.result.output['reason']), /^No deck is open\. Open the deck first/);
+  assert.equal(closed.result.output['code'], 'no-deck-open');
   const unsaved = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { page: () => page(deck({ dirty: true })) });
   assert.match(String(unsaved.result.output['reason']), /unsaved changes\. Save them first/);
   const viewOnly = await update({ operations: [{ op: 'set_theme', theme: 'plain' }] }, { page: () => page(deck({ readOnly: true })) });
@@ -212,4 +215,14 @@ test('open: "show me example slides" is the new-deck page or the open deck\'s la
     await runPreparedCall(q.call, c, VOICE_RUNNERS);
     assert.deepEqual(c.navigations, [`/${tenant}/decks/new`], tenant);
   }
+});
+
+test('the voice says what was done in words: slide numbers and the report\'s name, never slide ids or report ids', async () => {
+  assert.equal(spokenDone('Fill slide 4 with a pie chart from Runs by outcome'), 'Filled slide 4 with a pie chart from Runs by outcome.');
+  assert.equal(spokenDone('Use the engineering theme'), 'Now using the engineering theme.');
+  assert.equal(spokenDone('3 changes to Auth'), 'Made 3 changes to Auth.');
+  const r = await update({ operations: [{ op: 'set_chart', slide: '4', kind: 'pie', report: 'runs-by-outcome' }] });
+  const say = String(r.result.output['say']);
+  assert.match(say, /^Filled slide 4 with a pie chart from Runs by outcome\./);
+  assert.doesNotMatch(say, /s-[0-9a-f]{8}|runs-by-outcome|work-status/);
 });

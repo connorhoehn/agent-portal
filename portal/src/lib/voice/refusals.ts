@@ -143,6 +143,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     case 'allowlist':
       fix = 'That command is not one the dock may run: offer to open a shell on the computer (computer, action open-shell) so the user can type it.';
       break;
+    case 'no-deck-open':
+      fix = 'No deck is open: tell the user plainly that a deck must be open in its editor to change it by voice, and offer to open it; do not list or search instead.';
+      break;
     case 'not-on-this-page':
       fix = 'The page in view does not show it: drop scope "this-page" and list or search that kind instead, or open its page first.';
       break;
