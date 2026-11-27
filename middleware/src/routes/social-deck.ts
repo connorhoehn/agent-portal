@@ -23,9 +23,9 @@
 // request: a member who left, or whose grant was revoked, is a 404 at once.
 // A person who is not the owner and not a member gets 404, never 403.
 
-import { Router, type Request } from 'express';
+import { Router, type Request, type RequestHandler } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
-import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail as fail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, sendFail as fail } from '../lib/deck-shared/index.js';
 import { canonicalCallPage } from '../lib/call-pages.js';
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { DeckFacts } from '../lib/deck-shared/plan.js';
@@ -209,6 +209,23 @@ socialDeckRouter.get('/decks', asyncHandler(async (req, res) => {
   const channel = typeof req.query['channel'] === 'string' && req.query['channel'] ? req.query['channel'] : undefined;
   const rows = await decks.socialDeckStore.listOwned(userId, channel);
   res.json(rows.map(d => ({ id: d.id, channel: d.channel, title: d.title, headRevisionId: d.headRevisionId, updatedAt: d.updatedAt })));
+}));
+
+// Templates and the layout gallery (docs/deck-edit-operations.md): any Social reader.
+const t = makeTemplateHandlers('social');
+const socialReader: RequestHandler = asyncHandler(async (req, _res, next) => { await socialSubject(req, 'ViewSocial'); next(); });
+socialDeckRouter.get('/deck-templates', socialReader, t.list);
+socialDeckRouter.get('/deck-templates/:templateId', socialReader, t.read);
+socialDeckRouter.get('/deck-layouts', socialReader, t.layouts);
+
+/** A deck in a conversation from a template: { channel, templateId, title? }; the build rule (PostMessage + current membership). */
+socialDeckRouter.post('/decks', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof body['channel'] !== 'string' || !body['channel']) { res.status(400).json({ error: 'channel is required' }); return; }
+  const { sub } = await deckWriteAuthority('social', { tenant: 'social', channel: body['channel'] }, req, 'build');
+  const made = await decks.createDeckFromTemplate(body['channel'], body, sub);
+  if (!made.ok) { fail(res, made); return; }
+  res.status(201).json(made.value);
 }));
 
 socialDeckRouter.get('/decks/:id', h.detail);

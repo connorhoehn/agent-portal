@@ -16,6 +16,8 @@ import type { DeckRevisionFile } from './service.js';
 import { DECK_FILE_FORMATS, DeckRenderBudgetError, isDeckFileFormat, type DeckFileFormat } from './render.js';
 import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
 import type { OperationsOut } from './operations.js';
+import { listLayouts, listTemplates, readTemplate } from './templates.js';
+import type { DeckHostTenant } from './themes.js';
 
 export function sendFail(res: Response, result: { status: number; reason: string; details?: Record<string, unknown> }): void {
   res.status(result.status).json({ error: result.reason, ...(result.details ?? {}) });
@@ -158,4 +160,20 @@ export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>)
   });
 
   return { detail, spec, save, revise, preview, file, operations, chartReports, deckId, revisionId, ctxFor };
+}
+
+/**
+ * The template reads every deck tenant serves (`GET /deck-templates`,
+ * `GET /deck-templates/:templateId`, `GET /deck-layouts`), previewed in
+ * `tenant`'s theme. Each tenant router declares the paths behind its read gate.
+ */
+export function makeTemplateHandlers(tenant: DeckHostTenant) {
+  const list: RequestHandler = (_req, res) => { res.json(listTemplates(tenant)); };
+  const read: RequestHandler = (req, res) => {
+    const out = readTemplate(tenant, String(req.params['templateId'] ?? ''));
+    if (!out) { res.status(404).json({ error: 'template not found' }); return; }
+    res.json(out);
+  };
+  const layouts: RequestHandler = (_req, res) => { res.json(listLayouts(tenant)); };
+  return { list, read, layouts };
 }

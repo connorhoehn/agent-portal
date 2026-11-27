@@ -17,7 +17,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/assessment-decks.js';
 import { isValidTeamId } from '../providers/assessment.js';
 
@@ -50,10 +50,22 @@ assessmentDecksRouter.post('/teams/:teamId/decks', asyncHandler(async (req, res)
   const teamId = String(req.params['teamId'] ?? '');
   if (!isValidTeamId(teamId)) throw new ValidationError('team id must match ^TEAM-[A-Za-z0-9-]+$');
   await deckWriteAuthority('assessment', { tenant: 'assessment', teamId }, req, 'build');
-  const result = await decks.createDeck(teamId, (req.body ?? {}) as Record<string, unknown>, req.session?.sub ?? null);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (body['templateId'] !== undefined) {
+    const made = await decks.createDeckFromTemplate(teamId, body, req.session?.sub ?? null);
+    if (!made.ok) { sendFail(res, made); return; }
+    res.status(201).json(made.value);
+    return;
+  }
+  const result = await decks.createDeck(teamId, body, req.session?.sub ?? null);
   if (!result.ok) { sendFail(res, result); return; }
   res.status(202).json(result.value);
 }));
+
+const t = makeTemplateHandlers('assessment');
+assessmentDecksRouter.get('/deck-templates', viewGate, t.list);
+assessmentDecksRouter.get('/deck-templates/:templateId', viewGate, t.read);
+assessmentDecksRouter.get('/deck-layouts', viewGate, t.layouts);
 
 assessmentDecksRouter.get('/decks', viewGate, asyncHandler(async (req, res) => {
   const teamId = typeof req.query['teamId'] === 'string' && req.query['teamId'] ? req.query['teamId'] : undefined;

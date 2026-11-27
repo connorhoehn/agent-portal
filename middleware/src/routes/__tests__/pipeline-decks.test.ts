@@ -474,3 +474,23 @@ describe('run report deck — live drafter narrative', () => {
     ]);
   });
 });
+
+describe('run report deck — from a template and by edit operations', () => {
+  it('a run operator creates a deck from a template; a reader cannot; operations apply under the same rule', async () => {
+    const runId = await pickRun();
+    const url = `/api/pipelines/runs/${encodeURIComponent(runId)}/decks`;
+    expect((await request(as('pipeline-reader')).post(url).send({ templateId: 'run-report' })).status).toBe(403);
+    const app = as('operator');
+    expect((await request(app).get('/api/pipelines/deck-templates')).body.templates).toHaveLength(5);
+    const made = await request(app).post(url).send({ templateId: 'run-report', title: 'Run review' });
+    expect(made.status).toBe(201);
+    expect(made.body.revision.producedBy).toBe('template:run-report');
+    const ops = (who: express.Express) => request(who).post(`/api/pipelines/decks/${made.body.deckId}/operations`)
+      .send({ baseRevisionId: made.body.revisionId, operations: [{ op: 'set_title', slideId: 'title', title: 'Nightly run' }] });
+    expect((await ops(as('pipeline-reader'))).status).toBe(403);
+    const done = await ops(app);
+    expect(done.status).toBe(201);
+    expect(done.body.touchedSlideIds).toEqual(['title']);
+    expect((await request(app).get(`/api/pipelines/decks/${made.body.deckId}/chart-reports`)).body).toEqual({ reports: [] });
+  });
+});

@@ -5,7 +5,9 @@
 //
 //   POST /projects/:projectId        deckWriteAuthority 201 { deckId, revisionId, includesBudget, narrative, brief }
 //                                    body { title?, narrative?, includeBudget?, brief? } — brief (G55, ≤ 200 chars) is
-//                                    the requester's words: it picks a sprint window and steers the prose, never the facts
+//                                    the requester's words: it picks a sprint window and steers the prose, never the facts;
+//                                    with templateId: { templateId, title? } makes the deck from a template instead
+//   GET  /deck-templates[/:templateId], /deck-layouts   signed-in orgiq   templates and the layout gallery
 //   GET  /?projectId=                signed-in orgiq   DeckListItem[]   (budget decks only for budget readers)
 //   GET  /:id                        signed-in orgiq   DeckDetail
 //   GET  /:id/revisions/:rid/spec    signed-in orgiq   DeckSpec
@@ -23,7 +25,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { requireSession, resolveSession } from '../lib/authz.js';
-import { applyDeckOperations, deckChartResolver, deckWriteAuthority, listDeckReports, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckChartResolver, deckWriteAuthority, listDeckReports, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/initiative-decks.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 
@@ -70,10 +72,19 @@ const h = makeDeckHandlers<decks.DeckViewer>({
 initiativeDecksRouter.post('/projects/:projectId', asyncHandler(async (req, res) => {
   // deckWriteAuthority asks stewardsInitiative: the initiative's own people build its decks.
   await deckWriteAuthority('orgiq', { tenant: 'orgiq', projectId: String(req.params['projectId'] ?? '') }, req, 'build');
-  const result = await decks.createDeck(String(req.params['projectId'] ?? ''), (req.body ?? {}) as Record<string, unknown>, await viewerOf(req), req.session?.sub ?? null);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = body['templateId'] !== undefined
+    ? await decks.createDeckFromTemplate(String(req.params['projectId'] ?? ''), body, req.session?.sub ?? null)
+    : await decks.createDeck(String(req.params['projectId'] ?? ''), body, await viewerOf(req), req.session?.sub ?? null);
   if (!result.ok) { sendFail(res, result); return; }
   res.status(201).json(result.value);
 }));
+
+// Templates and the layout gallery, declared before `/:id` (docs/deck-edit-operations.md).
+const t = makeTemplateHandlers('orgiq');
+initiativeDecksRouter.get('/deck-templates', readGate, t.list);
+initiativeDecksRouter.get('/deck-templates/:templateId', readGate, t.read);
+initiativeDecksRouter.get('/deck-layouts', readGate, t.layouts);
 
 initiativeDecksRouter.get('/', readGate, asyncHandler(async (req, res) => {
   const projectId = typeof req.query['projectId'] === 'string' && req.query['projectId'] ? req.query['projectId'] : undefined;

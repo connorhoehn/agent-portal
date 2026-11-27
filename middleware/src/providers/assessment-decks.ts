@@ -299,3 +299,15 @@ export const previewDeck = (deckId: string, spec: unknown): Promise<Result<DeckP
 
 export const renderRevisionFile = (deckId: string, revisionId: string, format: shared.DeckFileFormat = 'pptx'): Promise<shared.DeckRevisionFile | null> =>
   shared.renderRevisionFile(deckRevisions, () => deckStore.getDeck(deckId), deckId, revisionId, 'review-deck', 'assessment', format);
+
+// ─── From a template (docs/deck-edit-operations.md) ──────────────────────────
+
+/** A new deck on the team whose first revision is a template's deck, in the assessment theme. No run is launched. */
+export async function createDeckFromTemplate(teamId: string, body: { templateId?: unknown; title?: unknown }, sub: string | null): Promise<Result<shared.TemplateDeckOut>> {
+  const made = shared.templateDeckSpec(body, 'assessment');
+  if (!made.ok) return made;
+  if (!await getTeamDeckSource(teamId)) return { ok: false, status: 404, reason: `team ${teamId} not found` };
+  const deckId = deckRevisions.newArtifactId();
+  await deckStore.insertDeck({ id: deckId, teamId, title: made.value.spec.title, audience: null, dimensionIds: [], createdBy: sub, headRevisionId: null, lastRunId: null });
+  return shared.appendTemplateRevision(deckRevisions, deckId, made.value, sub);
+}

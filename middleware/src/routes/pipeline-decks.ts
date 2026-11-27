@@ -16,7 +16,7 @@
 import { Router, type Request } from 'express';
 import { AppError, NotFoundError, asyncHandler } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/pipeline-decks.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 
@@ -47,11 +47,19 @@ const h = makeDeckHandlers({
 
 pipelineDecksRouter.post('/runs/:id/decks', asyncHandler(async (req, res) => {
   await deckWriteAuthority('pipelines', { tenant: 'pipelines', runId: String(req.params['id'] ?? '') }, req, 'build');
-  const result = await decks.createDeck(String(req.params['id'] ?? ''), (req.body ?? {}) as Record<string, unknown>, req.session?.sub ?? null);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const result = body['templateId'] !== undefined
+    ? await decks.createDeckFromTemplate(String(req.params['id'] ?? ''), body, req.session?.sub ?? null)
+    : await decks.createDeck(String(req.params['id'] ?? ''), body, req.session?.sub ?? null);
   if (!result.ok) { sendFail(res, result); return; }
   void notifyPipelinesWorkGraphChanged(String(req.params['id'] ?? ''), 'deck');
   res.status(201).json(result.value);
 }));
+
+const t = makeTemplateHandlers('pipelines');
+pipelineDecksRouter.get('/deck-templates', viewGate, t.list);
+pipelineDecksRouter.get('/deck-templates/:templateId', viewGate, t.read);
+pipelineDecksRouter.get('/deck-layouts', viewGate, t.layouts);
 
 pipelineDecksRouter.get('/decks', viewGate, asyncHandler(async (req, res) => {
   const runId = typeof req.query['runId'] === 'string' && req.query['runId'] ? req.query['runId'] : undefined;

@@ -524,3 +524,21 @@ describe('pure pieces', () => {
     expect(topicChunks(Array.from({ length: 100 }, (_, i) => i))).toHaveLength(4);
   });
 });
+
+describe('social deck — from a template and by edit operations', () => {
+  it('a member creates a conversation deck from a template; a non-member cannot; the owner applies operations', async () => {
+    const templates = await request(app).get('/api/chat/deck-templates').set(await auth('u-sana'));
+    expect(templates.status).toBe(200);
+    expect((await request(app).post('/api/chat/decks').set(await auth('u-sana')).send({ channel: 'social:ch:moderators', templateId: 'proposal' })).status).toBe(403);
+    expect((await request(app).post('/api/chat/decks').set(await auth('u-sana')).send({ templateId: 'proposal' })).status).toBe(400);
+    const made = await request(app).post('/api/chat/decks').set(await auth('u-sana')).send({ channel: CHANNEL, templateId: 'proposal', title: 'Van lease' });
+    expect(made.status).toBe(201);
+    expect(made.body.revision.producedBy).toBe('template:proposal');
+    expect((await listDecks('u-sana')).body.map((d: { id: string }) => d.id)).toContain(made.body.deckId);
+    const ops = await request(app).post(`/api/chat/decks/${made.body.deckId}/operations`).set(await auth('u-sana'))
+      .send({ baseRevisionId: made.body.revisionId, operations: [{ op: 'add_slide', layout: 'bullets', after: 'compare', fields: { bullets: ['One more point'] } }] });
+    expect(ops.status).toBe(201);
+    expect(ops.body.summary).toBe('Added a bullets slide at slide 4.');
+    expect((await request(app).get(`/api/chat/decks/${made.body.deckId}/chart-reports`).set(await auth('u-sana'))).body).toEqual({ reports: [] });
+  });
+});

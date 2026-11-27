@@ -271,3 +271,18 @@ export const reviseDeck = (
     },
     agentId: DRAFTER_AGENT_ID, initiativeOf: (deck) => deck.projectId, sub, body,
   });
+
+// ─── From a template (docs/deck-edit-operations.md) ──────────────────────────
+
+/** A new deck on the initiative whose first revision is a template's deck, in the orgiq theme. Never a budget deck. */
+export async function createDeckFromTemplate(projectId: string, body: { templateId?: unknown; title?: unknown }, sub: string | null): Promise<Result<shared.TemplateDeckOut>> {
+  const made = shared.templateDeckSpec(body, 'orgiq');
+  if (!made.ok) return made;
+  if (!await getProject(projectId)) return { ok: false, status: 404, reason: `initiative ${projectId} not found` };
+  const deckId = initiativeDeckRevisions.newArtifactId();
+  const finishCreation = trackInitiativeDeckCreation(deckId);
+  try {
+    await initiativeDeckStore.insertDeck({ id: deckId, projectId, title: made.value.spec.title, includesBudget: false, createdBy: sub, headRevisionId: null });
+    return await shared.appendTemplateRevision(initiativeDeckRevisions, deckId, made.value, sub);
+  } finally { finishCreation(); }
+}

@@ -298,3 +298,46 @@ describe('charts from reports', () => {
     expect(trimForChart({ labels, series: [{ name: 's', values }] }, 'bar').trimmed).toBeNull();
   });
 });
+
+describe('templates on the initiative deck routes', () => {
+  it('lists templates with previews, reads one, and serves the layout gallery to any signed-in reader', async () => {
+    const app = as('member');
+    const list = await request(app).get(`${BASE}/deck-templates`);
+    expect(list.status).toBe(200);
+    expect(list.body.templates.map((t: { id: string }) => t.id)).toEqual(['status-update', 'proposal', 'review', 'interview-debrief', 'run-report']);
+    expect(list.body.templates[0]).toMatchObject({ title: 'Status update', audience: expect.any(String), slideCount: 7 });
+    expect(list.body.templates[0].preview).toHaveLength(3);
+    const one = await request(app).get(`${BASE}/deck-templates/proposal`);
+    expect(one.body.spec.theme).toEqual({ ref: 'orgiq' });
+    expect((await request(app).get(`${BASE}/deck-templates/nope`)).status).toBe(404);
+    const layouts = await request(app).get(`${BASE}/deck-layouts`);
+    expect(layouts.body.layouts).toHaveLength(13);
+    expect(layouts.body.layouts.find((l: { layout: string }) => l.layout === 'timeline')).toMatchObject({ useFor: expect.any(String), example: { templateId: 'status-update' } });
+    const other = appAs({ role: 'sme' as Session['role'], tenant: 'assessment', sub: 'u-sme' });
+    expect((await request(other).get(`${BASE}/deck-templates`)).status).toBe(403);
+  });
+
+  it('creates a deck from a template under the build rule; it saves with its example sources and takes operations', async () => {
+    const body = { templateId: 'status-update', title: 'Auth migration: status' };
+    expect((await request(as('member')).post(`${BASE}/projects/${PID}`).send(body)).status).toBe(403);
+    const off = appAs({ role: 'sme' as Session['role'], tenant: 'orgiq', sub: 'u-off' });
+    expect((await request(off).post(`${BASE}/projects/${PID}`).send(body)).status).toBe(403);
+    expect((await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ templateId: 'nope' })).status).toBe(400);
+    const app = as('sme');
+    const made = await request(app).post(`${BASE}/projects/${PID}`).send(body);
+    expect(made.status).toBe(201);
+    expect(made.body).toMatchObject({ templateId: 'status-update', revision: { producedBy: 'template:status-update' } });
+    expect(made.body.exampleSourceSlideIds).toHaveLength(7);
+    const spec = await specOf(app, made.body.deckId, made.body.revisionId);
+    expect(spec).toMatchObject({ title: 'Auth migration: status', theme: { ref: 'orgiq' } });
+    // The save rule is the format's: a placeholder source satisfies it, so the save succeeds; the preview names each slide.
+    const preview = await request(app).post(`${BASE}/${made.body.deckId}/preview`).send({ spec });
+    expect(preview.body.warnings.filter((w: string) => w.includes("the template's example source"))).toHaveLength(7);
+    const saved = await request(app).post(`${BASE}/${made.body.deckId}/revisions`).send({ spec, baseRevisionId: made.body.revisionId });
+    expect(saved.status).toBe(201);
+    const themed = await ops(app, made.body.deckId, saved.body.id, [{ op: 'set_theme', theme: 'engineering' }]);
+    expect(themed.status).toBe(201);
+    expect(themed.body.exampleSourceSlideIds).toHaveLength(7);
+    expect((await specOf(app, made.body.deckId, themed.body.revision.id)).theme).toBe('engineering');
+  });
+});

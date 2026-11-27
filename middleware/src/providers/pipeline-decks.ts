@@ -309,3 +309,15 @@ export async function getReviseRunFor(sub: string, deckId: string, runId: string
   const run = await flowRunStore.getFor('pipelines', sub, runId);
   return run && run.kind === PIPELINE_DECK_REVISE_KIND && run.scope === deckId ? run : null;
 }
+
+// ─── From a template (docs/deck-edit-operations.md) ──────────────────────────
+
+/** A new deck on the run whose first revision is a template's deck, in the pipelines theme. */
+export async function createDeckFromTemplate(runId: string, body: { templateId?: unknown; title?: unknown }, sub: string | null): Promise<Result<shared.TemplateDeckOut>> {
+  const made = shared.templateDeckSpec(body, 'pipelines');
+  if (!made.ok) return made;
+  if (!await loadRunDeckSource(runId)) return { ok: false, status: 404, reason: `run ${runId} not found` };
+  const deckId = pipelineDeckRevisions.newArtifactId();
+  await pipelineDeckStore.insertDeck({ id: deckId, runId, title: made.value.spec.title, createdBy: sub, headRevisionId: null });
+  return shared.appendTemplateRevision(pipelineDeckRevisions, deckId, made.value, sub);
+}

@@ -167,3 +167,16 @@ const reviseDeckRaw = (
     // A Social deck belongs to a conversation, not an initiative: booked unattributed, to the requester.
     initiativeOf: () => null, sub, body,
   });
+
+// ─── From a template (docs/deck-edit-operations.md) ──────────────────────────
+
+/** A new deck in `channel`, owned by `sub`, whose first revision is a template's deck. The CALLER has decided this person may. */
+export async function createDeckFromTemplate(channel: string, body: { templateId?: unknown; title?: unknown }, sub: string): Promise<Result<shared.TemplateDeckOut>> {
+  const made = shared.templateDeckSpec(body, 'social');
+  if (!made.ok) return made;
+  const deckId = socialDeckRevisions.newArtifactId();
+  await socialDeckStore.insertDeck({ id: deckId, channel, runId: null, title: made.value.spec.title, createdBy: sub, headRevisionId: null });
+  const out = await shared.appendTemplateRevision(socialDeckRevisions, deckId, made.value, sub);
+  if (out.ok) deckChanged(channel);
+  return out;
+}
