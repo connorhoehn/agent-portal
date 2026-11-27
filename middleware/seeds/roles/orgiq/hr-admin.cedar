@@ -1,5 +1,6 @@
 // HRAdmin: People Ops. Sees everything (incl. salary/performance) and is the
-// only tenant role that can edit guardrails / authorization policies. HR can
+// only tenant role that can edit authorization policies (the guardrail is
+// admin's alone, docs/next-steps.md section 9, 28 November item 6). HR can
 // label agent-output feedback for evaluator training, but cannot approve
 // transactions (that authority belongs to org leaders only).
 // Scoped to the orgiq tenant.
@@ -15,7 +16,6 @@ permit (
     // one-line add when those endpoints land; today they gate nothing.
     OrgIQ::Action::"ViewSalary",
     OrgIQ::Action::"ViewPerformance",
-    OrgIQ::Action::"EditGuardrail",
     OrgIQ::Action::"EditPolicy",
     OrgIQ::Action::"EditSchema",
     OrgIQ::Action::"ViewIdentityAdmin",

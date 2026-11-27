@@ -944,7 +944,8 @@ export function App() {
                 same 2,000-line page mounted at two routes under two lazy
                 names. One prompt library, one place to edit it. */}
             <Route path="prompts" element={<Navigate to="/iq/prompts" replace />} />
-            <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
+            {/* The guardrail: admin edits, org-leader reads, nobody else sees it (routes/capabilities.ts `readGuardrail`). */}
+            <Route path="guardrails" element={<Gate roles={['org-leader']}><Page element={<CapabilitiesGuardrailsPage />} /></Gate>} />
             <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
             <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
             {/* Rendered the same /api/sessions table as Observability →

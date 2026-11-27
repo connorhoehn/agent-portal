@@ -86,6 +86,8 @@ const STATE_LABEL: Record<CapabilityState, string> = {
  * a capability nobody has found a job for, and saying so is more useful than
  * a demo that implies otherwise.
  */
+const GUARDRAILS_PAGE = '/admin/capabilities/guardrails';
+
 /** The three guardrails differ only by which role they apply to. */
 function GUARDRAIL_ROLE(role: string) {
   return {
@@ -95,7 +97,7 @@ function GUARDRAIL_ROLE(role: string) {
       to: '/iq/invoke',
       description: 'The supervisor attaches this when it builds the model for a request in this role.',
     },
-    tools: { label: 'Policy & blocked-content log', to: '/admin/capabilities/guardrails' },
+    tools: { label: 'Policy & blocked-content log', to: GUARDRAILS_PAGE },
   };
 }
 
@@ -160,6 +162,10 @@ export default function CapabilitiesHomePage() {
   const { session } = useSession();
   const navigate = useNavigate();
   const canOpenIngest = !!session && (session.role === 'admin' || INGEST_ROLES.includes(session.role));
+  // The guardrail page is admin's and org-leader's only (App.tsx); the rows
+  // still list the guardrails for everyone else, without a link that bounces.
+  const canOpenGuardrails = !!session && (session.role === 'admin' || session.role === 'org-leader');
+  const opens = (c: CapabilityStatus) => canOpenGuardrails || ROLES[c.key].tools.to !== GUARDRAILS_PAGE;
 
   const { data, isLoading, error, refresh } = useFetch<{ capabilities: CapabilityStatus[] }>(
     '/api/capabilities/reconcile', 60_000,
@@ -248,6 +254,7 @@ export default function CapabilitiesHomePage() {
       header: '',
       render: (c) => {
         const tools = ROLES[c.key].tools;
+        if (!opens(c)) return null;
         return (
           <Link to={tools.to} className="text-xs whitespace-nowrap text-primary no-underline hover:underline">
             {tools.label} →
@@ -310,7 +317,7 @@ export default function CapabilitiesHomePage() {
           keyField={(c) => c.key}
           // A row opens the capability's own page (its diagnostics); the
           // "What uses it" link in the row still goes to the feature.
-          onRowClick={(c) => navigate(ROLES[c.key].tools.to)}
+          onRowClick={(c) => { if (opens(c)) navigate(ROLES[c.key].tools.to); }}
           striped
           columns={columns}
           emptyMessage={caps.length > 0

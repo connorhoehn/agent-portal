@@ -31,11 +31,14 @@
 const mockGateActions: string[] = [];
 const mockRequestGates: string[] = [];
 
+const mockReadGates: string[] = [];
 jest.mock('../../lib/authz.js', () => ({
   requireAction: (action: string) => {
     mockGateActions.push(action);
     return (_req: unknown, _res: unknown, next: () => void) => { mockRequestGates.push(action); next(); };
   },
+  readForRolesElseAction: (roles: string[], action: string) =>
+    (_req: unknown, _res: unknown, next: () => void) => { mockReadGates.push(`${roles.join(',')}|${action}`); next(); },
 }));
 
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1' } }));
@@ -97,6 +100,7 @@ beforeEach(() => {
   togglePii.mockReset(); updateTopic.mockReset(); addTopic.mockReset();
   removeTopic.mockReset(); terminateCodeSession.mockReset();
   mockRequestGates.length = 0;
+  mockReadGates.length = 0;
 });
 
 describe('capabilitiesRouter — gate construction (module load, not per-request)', () => {
@@ -200,5 +204,14 @@ describe('capabilitiesRouter — reads stay open', () => {
     getGuardrailMock.mockResolvedValue({ piiFilters: [], deniedTopics: [] });
     const res = await request(buildApp()).get('/api/capabilities/guardrail');
     expect(res.status).toBe(200);
+    expect(mockRequestGates).toEqual([]);
+  });
+
+  // 28 November item 6: the guardrail is read by org-leader by role and
+  // otherwise only by an EditGuardrail holder (admin).
+  it('the guardrail reads ask the org-leader-or-EditGuardrail gate; other reads ask nothing', async () => {
+    (guardrails.getGuardrail as jest.Mock).mockResolvedValue({ piiFilters: [], deniedTopics: [] });
+    await request(buildApp()).get('/api/capabilities/guardrail');
+    expect(mockReadGates).toEqual(['org-leader|EditGuardrail']);
   });
 });

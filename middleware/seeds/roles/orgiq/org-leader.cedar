@@ -65,10 +65,6 @@ permit (
     // runs are judged by (docs/next-steps.md §9 item 8b). Replaces
     // EditSdlcPolicy, which hr-admin held.
     OrgIQ::Action::"ManageSdlcPolicies",
-    // Edit the Bedrock guardrail (PII filters, denied topics). The guardrail
-    // editor is open to org-leader, hr-admin and admin (§9 item 8c); everyone
-    // with ViewObservability keeps the read-only detail view.
-    OrgIQ::Action::"EditGuardrail",
     // Resolve or reject a waiting decision (G54, POST /api/graph/decisions/:id/decide).
     // Role-wide, because anyone can be named a decision's decider; the route
     // scopes it to the decider and the initiative's owner, with org-leader and

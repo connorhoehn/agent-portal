@@ -29,6 +29,7 @@ jest.mock('../../lib/authz.js', () => ({
     gateActions.push(action);
     return (_req: unknown, _res: unknown, next: () => void) => next();
   },
+  readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', guardrail: { id: 'gr-test' } },

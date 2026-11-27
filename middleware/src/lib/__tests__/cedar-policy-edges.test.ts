@@ -417,9 +417,10 @@ describe('§9 item 8: the program-owner budget forbid and the new org-leader gra
     expect(role('orgiq/program-owner').statements[1]).toMatch(/ApproveTransaction/);
   });
 
-  test('org-leader grants ManageSdlcPolicies and EditGuardrail on its general permit, tenant-guarded, unconditioned otherwise', () => {
+  test('org-leader grants ManageSdlcPolicies on its general permit, tenant-guarded, unconditioned otherwise; EditGuardrail is admin\'s alone (28 November item 6)', () => {
     const general = permits(role('orgiq/org-leader'))[0]!;
-    for (const a of ['ManageSdlcPolicies', 'EditGuardrail']) expect(general).toContain(`OrgIQ::Action::"${a}"`);
+    expect(general).toContain('OrgIQ::Action::"ManageSdlcPolicies"');
+    expect(general).not.toContain('OrgIQ::Action::"EditGuardrail"');
     expect(whenBody(general)).toBe('principal.role == "org-leader" && principal has tenant && principal.tenant == "orgiq"');
     expect(forbids(role('orgiq/org-leader')).some((s) => /ManageSdlcPolicies|EditGuardrail/.test(s))).toBe(false);
   });

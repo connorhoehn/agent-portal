@@ -195,15 +195,16 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'OperateDevbox', 'RunDevboxTask',
       // Start an initiative by hand (package 14 of the value sweep).
       'CreateInitiative',
-      // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
-      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision',
+      // §9 item 8b: the SDLC policy editor. The guardrail editor is admin's
+      // alone since 28 November (item 6); org-leader reads it by role.
+      'ManageSdlcPolicies', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision',
     ],
   },
   'orgiq/hr-admin': {
     tenant: 'orgiq',
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance',
-      'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
+      'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ViewWorkItems', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'OperateDevbox', 'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
       'ConnectLocalCompute', 'ViewSessionBrief',
@@ -402,7 +403,7 @@ describe('capability boundaries that must not regress', () => {
 
   test('hr-admin owns the admin surface (ingest/users/policy/devbox) + budgets, but not approval or masquerade', () => {
     for (const cap of [
-      'ManageIngest', 'ManageUsers', 'EditPolicy', 'EditGuardrail', 'EditSchema',
+      'ManageIngest', 'ManageUsers', 'EditPolicy', 'EditSchema',
       'ManageDevbox', 'ManageKB', 'ViewIdentityAdmin', 'ManageBudgets', 'DispatchAgentRun',
     ]) {
       expect(has('orgiq/hr-admin', cap)).toBe(true);
@@ -840,9 +841,11 @@ describe('DE-42 box and agent-change actions', () => {
 describe('§9 item 8: guardrail editor, comments, program-owner budgets', () => {
   const ORGIQ = ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin'];
 
-  test('EditGuardrail: org-leader and hr-admin (plus admin), nobody else in any tenant', () => {
+  // 28 November item 6: admins only edit the guardrail; org-leader reads it
+  // by role (routes/capabilities.ts `readGuardrail`), nobody else sees it.
+  test('EditGuardrail: admin only, no tenant role in any tenant', () => {
     const holders = [...roles.entries()].filter(([k, r]) => k !== '*/admin' && r.granted.includes('EditGuardrail')).map(([k]) => k).sort();
-    expect(holders).toEqual(['orgiq/hr-admin', 'orgiq/org-leader']);
+    expect(holders).toEqual([]);
   });
 
   test('ViewWorkItems: every orgiq role, and no role in another tenant', () => {

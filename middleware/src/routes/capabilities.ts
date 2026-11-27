@@ -26,7 +26,7 @@ import {
   subscribeCrawl,
 } from '../lib/crawler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
-import { requireAction } from '../lib/authz.js';
+import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import { reconcileCapabilities } from '../providers/capability-reconcile.js';
 
 const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
@@ -42,12 +42,13 @@ function actorOf(req: Request): { userId: string | null; tenant: string | null }
 // Code-interpreter executions, browser microVM sessions and crawls spend real
 // AWS resources, so every mutation on this surface requires ManageDevbox.
 // Guardrail edits are the exception: they spend nothing and carry their own
-// action, EditGuardrail, which org-leader, hr-admin and admin hold
-// (docs/next-steps.md §9 item 8c); an org-leader holds no ManageDevbox, so the
-// floor would hide the editor from the role it is meant for. Reads stay open
-// so the capabilities dashboard renders for any role.
+// action, EditGuardrail, which only admin holds (docs/next-steps.md section 9,
+// 28 November item 6). The guardrail itself is read by admin and org-leader
+// and nobody else (`readGuardrail`); every other read stays open so the
+// capabilities dashboard renders for any role.
 const manageCaps = requireAction('ManageDevbox');
 const editGuardrail = requireAction('EditGuardrail');
+const readGuardrail = readForRolesElseAction(['org-leader'], 'EditGuardrail');
 capabilitiesRouter.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') { next(); return; }
   if (req.path === '/guardrail' || req.path.startsWith('/guardrail/')) { editGuardrail(req, res, next); return; }
@@ -56,12 +57,12 @@ capabilitiesRouter.use((req, res, next) => {
 
 // ── Guardrails ────────────────────────────────────────────────────────────────
 
-capabilitiesRouter.get('/guardrail', asyncHandler(async (_req, res) => {
+capabilitiesRouter.get('/guardrail', readGuardrail, asyncHandler(async (_req, res) => {
   const snapshot = await guardrails.getGuardrail();
   res.json(snapshot);
 }));
 
-capabilitiesRouter.get('/guardrail/metrics', asyncHandler(async (req, res) => {
+capabilitiesRouter.get('/guardrail/metrics', readGuardrail, asyncHandler(async (req, res) => {
   const hours = Math.max(1, Math.min(168, parseInt((req.query['hours'] as string) ?? '24', 10) || 24));
   const summary = await cloudwatch.getGuardrailMetrics(config.guardrail.id, hours);
   res.json(summary);
