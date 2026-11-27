@@ -493,6 +493,17 @@ describe('capability boundaries that must not regress', () => {
     expect([has('interviews/hiring-manager', 'ConductInterview'), has('interviews/hiring-manager', 'AssignInterviews'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false, false]);
   });
 
+  test('interviews candidate edit and the candidate\'s "I can\'t make this time" (gap audit 2026-11-20 §6): no new action', () => {
+    // routes/interviews/candidates.ts gates PATCH /candidates/:id on ManageCandidates, and clearing a round's notice
+    // (routes/interviews/cant-make.ts) on AssignInterviews, as Cancel is. So the recruiter edits and clears; the
+    // interviewer and the hiring manager do neither, and no other tenant's role does. The candidate's own notice is a guest
+    // route (routes/interview-invite.ts) behind requireGuest, never an action.
+    expect([has('interviews/recruiter', 'ManageCandidates'), has('interviews/recruiter', 'AssignInterviews')]).toEqual([true, true]);
+    expect([has('interviews/interviewer', 'ManageCandidates'), has('interviews/interviewer', 'AssignInterviews')]).toEqual([false, false]);
+    expect([has('interviews/hiring-manager', 'ManageCandidates'), has('interviews/hiring-manager', 'AssignInterviews')]).toEqual([false, false]);
+    expect([has('access/access-admin', 'ManageCandidates'), has('access/access-admin', 'AssignInterviews')]).toEqual([false, false]);
+  });
+
   test('interviews waiting room (gap audit 2026-11-20 §4): no new action, ConductInterview and the seat', () => {
     // routes/interviews/admission.ts gates GET /waiting and POST /admit on ConductInterview, then the seat on that round
     // (lib/interviews/lobby.ts); a panel member may let the candidate in only from the call while the lead is not in it

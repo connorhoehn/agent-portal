@@ -21,9 +21,10 @@
 // saved first, with the row as it now is).
 
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
-import type { Application, Cancellation, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
+import type { Application, Cancellation, Candidate, CandidateEdit, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
 import type { PrivateNote, ScorecardDraft } from './private-notes.js';
+import { candidateVersion } from './types.js';
 import { interviewPrivateNotesFixture, interviewScorecardDraftsFixture } from '../../mock/interviews-private-notes.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
@@ -135,6 +136,13 @@ export interface InterviewsStore extends OpeningWrites, InterviewWrites, Scoreca
    * has none, so is never given a new application). DuplicateCandidateError when the opening already holds this address.
    */
   createApplication(application: Application): Promise<Application | null>;
+  /**
+   * The recruiter's edit of a candidate's name, email, headline and location (gap audit 2026-11-20 §6), stamped `at`. A
+   * compare-and-set on `basedOn`, the candidate's version as the page read it (types.ts candidateVersion). An erased
+   * candidate (no address) is `not-found`. Each of the candidate's applications takes the new address as its key, so the
+   * one-person-per-opening rule follows it: DuplicateCandidateError when another candidate on one of those openings holds it.
+   */
+  updateCandidate(id: string, edit: CandidateEdit, at: string, basedOn: string): Promise<WriteResult<Candidate>>;
 }
 
 /** The order every store returns: the SQL statements' ORDER BY clauses, in code. */
@@ -264,6 +272,20 @@ export class MemoryInterviewsStore implements InterviewsStore {
     }
     interviewApplicationsFixture.rows().push(structuredClone(application));
     return structuredClone(application);
+  }
+
+  async updateCandidate(id: string, edit: CandidateEdit, at: string, basedOn: string): Promise<WriteResult<Candidate>> {
+    const candidates = interviewCandidatesFixture.rows();
+    const row = candidates.find((c) => c.id === id);
+    if (!row || row.email.trim() === '') return { ok: false, reason: 'not-found' };
+    if (Date.parse(candidateVersion(row)) !== Date.parse(basedOn)) return { ok: false, reason: 'stale', row: structuredClone(row) };
+    // The schema's unique index on (opening, address), in code, for each opening this candidate is on.
+    const key = edit.email.trim().toLowerCase();
+    const mine = new Set(interviewApplicationsFixture.rows().filter((a) => a.candidateId === id).map((a) => a.openingId));
+    if (interviewApplicationsFixture.rows().some((a) => a.candidateId !== id && mine.has(a.openingId)
+      && (candidates.find((c) => c.id === a.candidateId)?.email ?? '').trim().toLowerCase() === key)) throw new DuplicateCandidateError();
+    Object.assign(row, { name: edit.name, email: edit.email, headline: edit.headline, location: edit.location, updatedAt: at });
+    return { ok: true, row: structuredClone(row) };
   }
 
   async getPrivateNote(interviewId: string, authorId: string): Promise<PrivateNote | null> {

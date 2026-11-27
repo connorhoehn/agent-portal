@@ -39,6 +39,20 @@ function tablesExec(): SqlExec {
       keys.set(String(row.id), key);
       return [row];
     }
+    if (sql === SqlInterviewsStore.UPDATE_CANDIDATE_SQL) {
+      // UPDATE … WHERE id AND btrim(email) <> '' AND the version matches; the applications take the new key, judged by the index.
+      const c = candidates.find((x) => x['id'] === b.get('id') && String(x['email']).trim() !== '');
+      const stamp = (v: unknown) => Date.parse(`${String(v).replace(' ', 'T')}${String(v).endsWith('Z') ? '' : 'Z'}`);
+      if (!c || stamp(c['updated_at'] ?? c['created_at']) !== Date.parse(String(b.get('based_on')))) return [];
+      const mine = apps.filter((a) => a['candidate_id'] === c['id']);
+      const next = new Map(keys);
+      for (const a of mine) next.set(String(a['id']), `${String(a['opening_id'])}\u0000${String(b.get('email')).trim().toLowerCase()}`);
+      if (new Set(next.values()).size !== next.size) throw new Error('duplicate key value violates unique constraint "interview_applications_opening_email_key"');
+      for (const [k, v] of next) keys.set(k, v);
+      Object.assign(c, { name: b.get('name'), email: b.get('email'), headline: b.get('headline'), location: b.get('location'), updated_at: String(b.get('at')).replace('T', ' ').replace('Z', '') });
+      return [{ ...c }];
+    }
+    if (sql === SqlInterviewsStore.GET_CANDIDATE_SQL) return candidates.filter((x) => x['id'] === b.get('id')).map((x) => ({ ...x }));
     throw new Error(`unexpected statement: ${sql}`);
   };
 }
@@ -109,7 +123,46 @@ describe.each([
   });
 });
 
+// Gap audit 2026-11-20 §6: the recruiter's edit, a compare-and-set on the candidate's version, in both stores alike.
+describe.each([
+  ['memory', () => new MemoryInterviewsStore() as InterviewsStore],
+  ['sql', () => new SqlInterviewsStore(tablesExec()) as InterviewsStore],
+])('the %s store\'s updateCandidate', (_name, make) => {
+  const EDIT = { name: 'Nadia Novak', email: 'nadia.novak@mail.example', headline: 'Principal engineer', location: 'Brno' };
+  const LATER = '2026-11-18T10:00:00.000Z';
+  it('writes the four fields and the stamp against the version, and the list shows the same row', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    const out = await store.updateCandidate('cand-new1', EDIT, LATER, AT);
+    const want = { ...candidate(), ...EDIT, updatedAt: LATER };
+    expect(out).toEqual({ ok: true, row: want });
+    expect((await store.listCandidates()).find((c) => c.id === 'cand-new1')).toEqual(want);
+  });
+  it('an old version is stale with the row as it now is; an unknown or erased candidate is not found', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    await store.updateCandidate('cand-new1', EDIT, LATER, AT);
+    expect(await store.updateCandidate('cand-new1', { ...EDIT, name: 'Again' }, '2026-11-19T10:00:00.000Z', AT)).toEqual({ ok: false, reason: 'stale', row: { ...candidate(), ...EDIT, updatedAt: LATER } });
+    expect(await store.updateCandidate('cand-none', EDIT, LATER, AT)).toEqual({ ok: false, reason: 'not-found' });
+    await store.createCandidate({ ...candidate('cand-gone'), email: '' }, application('app-gone', 'cand-gone'));
+    expect(await store.updateCandidate('cand-gone', EDIT, LATER, AT)).toEqual({ ok: false, reason: 'not-found' });
+  });
+  it('an address another candidate on the same opening holds is DuplicateCandidateError, and nothing changes', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    await store.createCandidate({ ...candidate('cand-two'), email: 'other@mail.example' }, application('app-two', 'cand-two'));
+    await expect(store.updateCandidate('cand-two', { ...EDIT, email: 'NADIA@mail.example' }, LATER, AT)).rejects.toBeInstanceOf(DuplicateCandidateError);
+    expect((await store.listCandidates()).find((c) => c.id === 'cand-two')!.email).toBe('other@mail.example');
+  });
+});
+
 describe('the statement and the schema', () => {
+  it('the edit writes columns the schema has, adds updated_at idempotently, and moves the applications\' address key', () => {
+    const schema = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
+    expect(schema).toContain('ALTER TABLE interview_candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;');
+    expect(LIST_CANDIDATES_SQL).toContain('updated_at');
+    expect(SqlInterviewsStore.UPDATE_CANDIDATE_SQL).toContain("UPDATE interview_applications SET email_key = lower(btrim(:email))");
+  });
   const schema = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
   it('names only declared columns', () => {
     const cols = /INSERT INTO interview_candidates \(([^)]+)\)/.exec(SqlInterviewsStore.CREATE_CANDIDATE_SQL)![1]!.split(',').map((c) => c.trim());

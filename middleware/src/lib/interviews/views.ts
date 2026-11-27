@@ -10,6 +10,7 @@ import { mayReadCandidateContact, mayReadOpeningMoney, mayReadStageHistory, reac
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { CancelReason, Seat } from './types.js';
+import { candidateVersion } from './types.js';
 import { CANCEL_REASON_LABEL } from './cancel.js';
 import { latestByAuthor } from './scorecard.js';
 import { competenciesOfRound, competencyIdsOfRound, questionsOfRound } from './kit.js';
@@ -165,14 +166,17 @@ export interface ResumeSummary { fileName: string; sizeBytes: number; uploadedAt
 export type InterviewerCandidateView = Pick<Candidate, 'id' | 'name' | 'headline' | 'location' | 'source'>;
 
 /** The whole record, for those who may read it (scope.ts mayReadCandidateContact). */
-export type FullCandidateView = Pick<Candidate, 'id' | 'name' | 'email' | 'headline' | 'location' | 'source' | 'resumeFileId' | 'notes' | 'createdAt'>;
+export type FullCandidateView = Pick<Candidate, 'id' | 'name' | 'email' | 'headline' | 'location' | 'source' | 'resumeFileId' | 'notes' | 'createdAt'> & {
+  /** What an edit is made against (types.ts candidateVersion): the last edit's time, else when the record was added. */
+  version: string;
+};
 
 /** Each field is copied by name so a column added to the row never reaches a reader by default. */
 export function profileCandidate(c: Candidate, role: string): InterviewerCandidateView | FullCandidateView {
   if (!mayReadCandidateContact(role)) return { id: c.id, name: c.name, headline: c.headline, location: c.location, source: c.source };
   return {
     id: c.id, name: c.name, email: c.email, headline: c.headline, location: c.location, source: c.source,
-    resumeFileId: c.resumeFileId, notes: c.notes, createdAt: c.createdAt,
+    resumeFileId: c.resumeFileId, notes: c.notes, createdAt: c.createdAt, version: candidateVersion(c),
   };
 }
 

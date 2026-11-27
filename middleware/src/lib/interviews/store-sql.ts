@@ -10,7 +10,7 @@
 // text and JSONB as JSON text, each CAST in the statement; an absent value is NULL.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type {
-  Application, ApplicationStage, Cancellation, Candidate, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
+  Application, ApplicationStage, Cancellation, Candidate, CandidateEdit, CompetencyRating, Interview, InterviewState, Opening, OpeningKit, OpeningState,
   OpeningDetails, Recommendation, RoundType, Scorecard, SeatAcceptance, SeatDecline, StageChange,
 } from './types.js';
 import { DuplicateCandidateError, type InterviewsStore, type NewOpening, type WriteResult } from './store.js';
@@ -23,7 +23,7 @@ const OPENING_COLUMNS = 'id, title, level, team, location, hiring_manager_id, re
 
 export const LIST_OPENINGS_SQL = `SELECT ${OPENING_COLUMNS}
   FROM interview_openings ORDER BY opened_at DESC, id`;
-export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, source, resume_file_id, notes, created_at
+export const LIST_CANDIDATES_SQL = `SELECT id, name, email, headline, location, source, resume_file_id, notes, created_at, updated_at
   FROM interview_candidates ORDER BY name, id`;
 export const LIST_APPLICATIONS_SQL = `SELECT id, candidate_id, opening_id, stage, applied_at, history
   FROM interview_applications ORDER BY applied_at, id`;
@@ -151,6 +151,7 @@ export function candidateFromRow(r: Record<string, unknown>): Candidate {
   return {
     id: str(r['id']), name: str(r['name']), email: str(r['email']), headline: str(r['headline']), location: str(r['location']),
     source: str(r['source']), resumeFileId: strOrNull(r['resume_file_id']), notes: str(r['notes']), createdAt: isoOf(r['created_at']),
+    ...(isoOrNull(r['updated_at']) ? { updatedAt: isoOrNull(r['updated_at'])! } : {}),
   };
 }
 
@@ -444,6 +445,40 @@ export class SqlInterviewsStore implements InterviewsStore {
       throw e;
     });
     return rows[0] ? applicationFromRow(rows[0]) : null;
+  }
+
+  /**
+   * The recruiter's edit (store.ts updateCandidate): the row changes only while its version (the last edit, else the
+   * creation, to the millisecond) is still `:based_on` and it has an address; the candidate's applications take the new
+   * address as their key in the same statement, so the schema's one-person-per-opening index judges it.
+   */
+  static readonly UPDATE_CANDIDATE_SQL = `WITH c AS (
+    UPDATE interview_candidates
+    SET name = :name, email = :email, headline = :headline, location = :location, updated_at = CAST(:at AS TIMESTAMPTZ)
+    WHERE id = :id AND btrim(email) <> ''
+      AND date_trunc('milliseconds', COALESCE(updated_at, created_at)) = date_trunc('milliseconds', CAST(:based_on AS TIMESTAMPTZ))
+    RETURNING id, name, email, headline, location, source, resume_file_id, notes, created_at, updated_at),
+  a AS (
+    UPDATE interview_applications SET email_key = lower(btrim(:email))
+    WHERE candidate_id IN (SELECT id FROM c) AND email_key IS NOT NULL
+    RETURNING id)
+  SELECT * FROM c`;
+  static readonly GET_CANDIDATE_SQL = `SELECT id, name, email, headline, location, source, resume_file_id, notes, created_at, updated_at
+  FROM interview_candidates WHERE id = :id`;
+
+  async updateCandidate(id: string, edit: CandidateEdit, at: string, basedOn: string): Promise<WriteResult<Candidate>> {
+    const written = await this.exec(SqlInterviewsStore.UPDATE_CANDIDATE_SQL, [
+      textParam('id', id), textParam('name', edit.name), textParam('email', edit.email), textParam('headline', edit.headline),
+      textParam('location', edit.location), textParam('at', at), textParam('based_on', basedOn),
+    ]).catch((e: unknown) => {
+      if (/interview_applications_opening_email_key/.test(String((e as Error)?.message ?? e))) throw new DuplicateCandidateError();
+      throw e;
+    });
+    if (written[0]) return { ok: true, row: candidateFromRow(written[0]) };
+    const now = (await this.exec(SqlInterviewsStore.GET_CANDIDATE_SQL, [textParam('id', id)]))[0];
+    if (!now) return { ok: false, reason: 'not-found' };
+    const row = candidateFromRow(now);
+    return row.email.trim() === '' ? { ok: false, reason: 'not-found' } : { ok: false, reason: 'stale', row };
   }
 
   async getPrivateNote(interviewId: string, authorId: string): Promise<PrivateNote | null> {

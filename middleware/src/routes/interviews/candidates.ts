@@ -5,6 +5,14 @@
 // The route checks; the store only writes. The new candidate has no résumé yet; it is uploaded on the profile. An address
 // already on a candidate (not erased) adds an application to that candidate instead of a second record, and the answer
 // is that candidate: the caller holds ManageCandidates and already reads every candidate, so nothing new is revealed.
+//
+// PATCH /api/interviews/candidates/:id (gap audit 2026-11-20 §6): the recruiter (ManageCandidates) edits the name, email,
+// headline and location. Body `{ version, name, email, headline, location }`, `version` being the profile's
+// `candidate.version` (the last edit's time, else when the record was added): a compare-and-set, 409 with the record as
+// it now is when someone saved first. The fields are checked as the create checks them (400, one sentence per field).
+// The candidate outside the viewer's scope is not found (404); an erased candidate is refused (409) and stays erased; an
+// address that belongs to another candidate who is not erased is refused (409) and nothing is merged. No history is
+// written: the profile's only history is each application's stage moves, and an edit is not a stage move.
 
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
@@ -16,7 +24,8 @@ import { indexFor } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { DuplicateCandidateError } from '../../lib/interviews/store.js';
 import { isRedacted } from '../../lib/interviews/retention/rules.js';
-import type { Application, Candidate } from '../../lib/interviews/types.js';
+import { candidateVersion, type Application, type Candidate, type CandidateEdit } from '../../lib/interviews/types.js';
+import { param } from '../../lib/interviews/request.js';
 
 export const candidatesRouter = Router();
 const manage = requireAction('ManageCandidates');
@@ -56,6 +65,60 @@ export function checkCandidate(body: unknown): { ok: true; value: NewCandidateFi
   if (problems.length) return { ok: false, problems };
   return { ok: true, value: { name, email, headline, location, source, openingId } };
 }
+
+/** The edit's body, cleaned: the create's rules for the four fields it changes. */
+export function checkCandidateEdit(body: unknown): { ok: true; value: CandidateEdit } | { ok: false; problems: FieldProblem[] } {
+  const b = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
+  // The create's own check, with the opening and the source it does not ask for here filled in so they pass.
+  const checked = checkCandidate({ name: b['name'], email: b['email'], headline: b['headline'], location: b['location'], openingId: '-' });
+  if (!checked.ok) return { ok: false, problems: checked.problems.filter((p) => p.path !== 'source') };
+  const { name, email, headline, location } = checked.value;
+  return { ok: true, value: { name, email, headline, location } };
+}
+
+const NO_CANDIDATE = 'There is no candidate here that you can open.';
+const ERASED = "This candidate's details were deleted, so they cannot be edited.";
+const TAKEN = 'Another candidate already has this email address. Check the address, or open that candidate instead.';
+const EDIT_STALE = 'Someone else changed this candidate while you were looking. The page now shows what was saved: check it, then try again.';
+
+/** Edit a candidate's name, email, headline and location. */
+candidatesRouter.patch('/candidates/:id', manage, asyncHandler(async (req, res) => {
+  const ix = await indexFor(req);
+  const c = ix.candidates.get(param(req, 'id'));
+  if (!c) throw new NotFoundError(NO_CANDIDATE);
+  res.setHeader('Cache-Control', 'no-store');
+  const version = (req.body as Record<string, unknown> | undefined)?.['version'];
+  if (typeof version !== 'string' || Number.isNaN(Date.parse(version))) {
+    res.status(400).json({ error: 'This page is out of date. Reload it and try again.', fields: [] });
+    return;
+  }
+  if (isRedacted(c)) { res.status(409).json({ error: ERASED }); return; }
+  const checked = checkCandidateEdit(req.body);
+  if (!checked.ok) {
+    res.status(400).json({ error: `The details were not saved: ${checked.problems.length === 1 ? 'one thing needs' : `${checked.problems.length} things need`} fixing.`, fields: checked.problems });
+    return;
+  }
+  const v = checked.value;
+  const store = interviewsStore();
+  // One person, one record: an address another live candidate holds is refused, never merged (the create's rule, retention/rules.ts).
+  const others = (await store.listCandidates()).filter((o) => o.id !== c.id && !isRedacted(o) && o.email.trim().toLowerCase() === v.email);
+  if (others.length) { res.status(409).json({ error: TAKEN, fields: [{ path: 'email', message: TAKEN }] }); return; }
+  // Strictly after the version it replaces, so two edits in one millisecond still tell apart.
+  const at = new Date(Math.max(interviewsNow().getTime(), Date.parse(candidateVersion(c)) + 1)).toISOString();
+  let written: Awaited<ReturnType<typeof store.updateCandidate>>;
+  try {
+    written = await store.updateCandidate(c.id, v, at, version);
+  } catch (e) {
+    if (e instanceof DuplicateCandidateError) { res.status(409).json({ error: TAKEN, fields: [{ path: 'email', message: TAKEN }] }); return; }
+    throw e;
+  }
+  if (!written.ok && written.reason === 'not-found') { res.status(409).json({ error: ERASED }); return; }
+  const fresh = await indexFor(req);
+  const now = fresh.candidates.get(c.id);
+  const record = now ? fresh.candidateRecord(now).candidate : null;
+  if (!written.ok) { res.status(409).json({ error: EDIT_STALE, candidate: record }); return; }
+  res.json({ candidate: record });
+}));
 
 /** Add a candidate and their application to an opening, at the first stage. */
 candidatesRouter.post('/candidates', manage, asyncHandler(async (req, res) => {

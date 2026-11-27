@@ -477,6 +477,9 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     table: 'interview_candidates',
     mockRows: async () => (await import('../../interviews.js')).interviewCandidatesFixture.rows('default'),
     mockId: (c: { id: string }) => c.id,
+    unmodelledColumns: {
+      updated_at: 'Written only when the recruiter edits a candidate\'s details (routes/interviews/candidates.ts PATCH), and absent from the row otherwise, in both stores. The seed holds no edited candidate: a seeded edit would name a correction nobody made.',
+    },
   },
   {
     name: 'interview_resumes',

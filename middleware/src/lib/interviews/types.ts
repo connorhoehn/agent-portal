@@ -179,7 +179,18 @@ export interface Candidate {
   resumeFileId: string | null;
   notes: string;
   createdAt: string;
+  /**
+   * When the recruiter last edited the name, email, headline or location (gap audit 2026-11-20 §6); absent until the
+   * first edit, in both stores. An edit is a compare-and-set on `updatedAt ?? createdAt` (store.ts updateCandidate).
+   */
+  updatedAt?: string;
 }
+
+/** The fields the recruiter edits on a candidate's profile (routes/interviews/candidates.ts checkCandidateEdit). */
+export interface CandidateEdit { name: string; email: string; headline: string; location: string }
+
+/** The stamp an edit is made against: the last edit, or the record's creation before there was one. */
+export const candidateVersion = (c: Pick<Candidate, 'createdAt' | 'updatedAt'>): string => c.updatedAt ?? c.createdAt;
 
 export interface StageChange {
   stage: ApplicationStage;

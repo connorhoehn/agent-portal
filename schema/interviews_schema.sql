@@ -67,8 +67,11 @@ CREATE TABLE IF NOT EXISTS interview_candidates (
   -- The uploaded résumé (row I1.6).
   resume_file_id     TEXT,
   notes              TEXT NOT NULL DEFAULT '',
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- The recruiter's last edit of the name, email, headline or location (gap audit 2026-11-20 §6); NULL until then.
+  updated_at         TIMESTAMPTZ
 );
+ALTER TABLE interview_candidates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 -- ── résumés ─────────────────────────────────────────────────────────────────
 -- A candidate's current résumé (row I1.6): one row per candidate, a new upload replaces it. The bytes are

@@ -21,3 +21,27 @@ export async function createCandidate(d: NewCandidate): Promise<CandidateOutcome
   if (r.ok && r.data?.candidate) return { ok: true, candidateId: r.data.candidate.id };
   return { ok: false, error: r.error ?? 'The candidate could not be added. Try again.', fields: r.data?.fields ?? [], duplicate: r.status === 409 };
 }
+
+// ── The recruiter's edit (gap audit 2026-11-20 §6; PATCH /api/interviews/candidates/:id) ─────────────────────────────────
+// Name, email, headline and location, against the version the profile read. The server checks as the create does, and
+// refuses an address another candidate holds, an erased candidate, and a stale version, each in one sentence.
+
+export interface CandidateDetails { name: string; email: string; headline: string; location: string }
+
+/** The form's starting values, from the profile's record. */
+export const detailsOf = (c: { name: string; email?: string; headline: string; location: string }): CandidateDetails =>
+  ({ name: c.name, email: c.email ?? '', headline: c.headline, location: c.location });
+
+/** Whether the form differs from the record (spaces at the ends aside). */
+export const detailsChanged = (was: CandidateDetails, now: CandidateDetails): boolean =>
+  (Object.keys(was) as Array<keyof CandidateDetails>).some((k) => was[k].trim() !== now[k].trim());
+
+export type EditOutcome =
+  | { ok: true }
+  | { ok: false; error: string; fields: FieldProblem[]; stale: boolean };
+
+export async function editCandidate(id: string, version: string, d: CandidateDetails): Promise<EditOutcome> {
+  const r = await writeJson<{ fields?: FieldProblem[]; candidate?: unknown }>(`${INTERVIEWS_API}/candidates/${encodeURIComponent(id)}`, 'PATCH', { version, ...d });
+  if (r.ok) return { ok: true };
+  return { ok: false, error: r.error ?? 'The details could not be saved. Try again.', fields: r.data?.fields ?? [], stale: r.status === 409 && !!r.data?.candidate };
+}

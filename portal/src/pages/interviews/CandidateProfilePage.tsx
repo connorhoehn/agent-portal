@@ -57,6 +57,7 @@ import {
 import { Dash, PanelCell, StageChip } from './interviewsCells';
 import ResumeViewer from './ResumeViewer';
 import ProfileConsents from './ProfileConsents';
+import { CandidateDetailsDialog } from './CandidateDetailsDialog';
 import { readsConsents } from '../../lib/interviewsRecords';
 
 const ROUND_COLUMNS: DataTableColumn<ProfileRound>[] = [
@@ -186,6 +187,7 @@ function CandidateProfile({ id }: { id: string }) {
   const readsActivity = readsHistory(role) || readsConsents(role) || deletions.reads;
   const resume = useResumeState(id, profile?.candidate.name ?? '', manages);
   const [tab, setTab] = useState<ProfileTab>('rounds');
+  const [editing, setEditing] = useState(false);
 
   // The dock floats over the foot of the column: the room under the last section lets the rows and a prompt's receipt scroll clear of it (pb-56 below).
   // The résumé's and the deletion's prompts live in the page's dock, whichever tab is open.
@@ -224,8 +226,15 @@ function CandidateProfile({ id }: { id: string }) {
               { label: 'Applied', value: <T size="sm" data-testid="interviews-profile-applied" title={first?.history[0] ? new Date(first.history[0].at).toLocaleString() : undefined}>{first?.history[0] ? dateLabel(first.history[0].at) : '—'}</T> },
               { label: 'Came from', value: <T size="sm" data-testid="interviews-profile-source">{candidate.source || '—'}</T> },
               { label: 'Based in', value: <T size="sm" data-testid="interviews-profile-location">{redacted ? 'Removed' : candidate.location || '—'}</T> },
+              // Only a contact reader's record carries the address (scope.ts mayReadCandidateContact): never an interviewer's.
+              ...(candidate.email !== undefined ? [{ label: 'Email', value: <T size="sm" data-testid="interviews-profile-email">{redacted ? 'Removed' : candidate.email || '—'}</T> }] : []),
             ]} />
           </Inline>
+          {manages && !redacted && candidate.version && (
+            <Inline gap="xs">
+              <Button size="sm" variant="secondary" data-testid="interviews-profile-edit" onClick={() => setEditing(true)}>Edit details…</Button>
+            </Inline>
+          )}
         </ProfileHead>
         {redacted && (
           <T size="sm" tone="secondary" data-testid="interviews-profile-redacted">
@@ -256,6 +265,7 @@ function CandidateProfile({ id }: { id: string }) {
           </Stack>
         )}
       </Stack>
+      {manages && !redacted && <CandidateDetailsDialog candidate={candidate} open={editing} onClose={() => setEditing(false)} onSaved={refresh} />}
     </ProfileFrame>
   );
 }

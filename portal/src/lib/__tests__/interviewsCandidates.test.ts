@@ -26,3 +26,13 @@ test('only an open opening is offered; a paused or closed one is not, and the se
   answer(409, { error: line, fields: [{ path: 'openingId', message: line }] });
   assert.deepEqual(await createCandidate(BLANK_CANDIDATE), { ok: false, error: line, fields: [{ path: 'openingId', message: line }], duplicate: true });
 });
+
+test('the details form starts from the record and knows when it changed (gap audit 2026-11-20 §6)', async () => {
+  const { detailsOf, detailsChanged } = await import('../interviewsCandidates.ts');
+  const was = detailsOf({ name: 'Robin Example', email: 'robin@example.com', headline: 'Engineer', location: 'Lisbon' });
+  assert.deepEqual(was, { name: 'Robin Example', email: 'robin@example.com', headline: 'Engineer', location: 'Lisbon' });
+  assert.equal(detailsOf({ name: 'A', headline: '', location: '' }).email, '');
+  assert.equal(detailsChanged(was, { ...was }), false);
+  assert.equal(detailsChanged(was, { ...was, name: ' Robin Example  ' }), false);
+  assert.equal(detailsChanged(was, { ...was, email: 'robyn@example.com' }), true);
+});

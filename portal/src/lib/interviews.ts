@@ -109,7 +109,7 @@ export interface ProfileApplication {
 /** GET /api/interviews/candidates/:id. */
 export interface CandidateProfile {
   /** An interviewer's read carries only id, name, headline, location and source; the rest is for the recruiter, the hiring manager and the admin. */
-  candidate: { id: string; name: string; headline: string; location: string; source: string; email?: string; notes?: string; resumeFileId?: string | null; createdAt?: string };
+  candidate: { id: string; name: string; headline: string; location: string; source: string; email?: string; notes?: string; resumeFileId?: string | null; createdAt?: string; version?: string };
   applications: ProfileApplication[];
 }
 

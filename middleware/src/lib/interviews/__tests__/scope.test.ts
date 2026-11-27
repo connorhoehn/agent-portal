@@ -180,7 +180,7 @@ describe('the wire shapes', () => {
   });
 
   it('the profile read gives each role exactly its candidate fields: an assigned interviewer never the contact details or notes', () => {
-    const full = ['createdAt', 'email', 'headline', 'id', 'location', 'name', 'notes', 'resumeFileId', 'source'];
+    const full = ['createdAt', 'email', 'headline', 'id', 'location', 'name', 'notes', 'resumeFileId', 'source', 'version'];
     const keysFor = (id: string, role: string) => Object.keys(index(id, role).candidateRecord(index(id, role).candidates.get('cand-qz63q3a3')!).candidate).sort();
     expect(keysFor('u-wen', 'interviewer')).toEqual(['headline', 'id', 'location', 'name', 'source']);
     expect(keysFor('u-greta', 'recruiter')).toEqual(full);
