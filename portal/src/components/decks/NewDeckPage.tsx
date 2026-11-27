@@ -122,7 +122,9 @@ export function NewDeckPage(props: NewDeckPageProps) {
                 </Stack>
               </DetailSection>
             ) : (
-              <DetailSection title="From an example" as="h2" description={props.exampleNote ?? EXAMPLE_NOTE}>
+              <DetailSection title="From an example" as="h2">
+                {/* The note on its own wrapping line: as a hint beside the title it truncated at phone width. */}
+                <T size="xs" tone="secondary" wrap>{props.exampleNote ?? EXAMPLE_NOTE}</T>
                 {templatesError ? (
                   <InlineAlert tone="error">The examples could not be read: {templatesError} <Button size="sm" variant="link" onClick={() => setAttempt((n) => n + 1)}>Retry</Button></InlineAlert>
                 ) : (
