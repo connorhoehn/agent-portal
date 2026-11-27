@@ -18,6 +18,9 @@ import {
 import { BUILTIN_THEMES } from '@connorhoehn/realtime-modules/deck/layout';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { layoutSpec } from './render.js';
+import { LAYOUT_PAYLOAD, LAYOUT_TITLE, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE } from './slide-starters.js';
+
+export { LAYOUT_PAYLOAD, SLIDE_LAYOUTS, UNSOURCED_SOURCE };
 import { summaryOf, type DeckLookup, type DeckHead } from './service.js';
 import { resolveDeckTheme, type DeckHostTenant } from './themes.js';
 import type { DeckRevisionSummary, Result } from './types.js';
@@ -29,16 +32,7 @@ export const DECK_OPERATION_KINDS = [
 ] as const;
 export type DeckOperationKind = typeof DECK_OPERATION_KINDS[number];
 
-export const SLIDE_LAYOUTS: readonly SlideLayout[] = [
-  'title', 'section', 'bullets', 'two-column', 'chart', 'quote', 'image',
-  'key-figures', 'table', 'comparison', 'timeline', 'agenda', 'closing',
-];
 
-/** The payload field each layout owns (bullets and eyebrow may sit on any slide). */
-export const LAYOUT_PAYLOAD: Readonly<Partial<Record<SlideLayout, keyof DeckSlide>>> = {
-  'two-column': 'columns', chart: 'chart', quote: 'quote', image: 'image', 'key-figures': 'figures',
-  table: 'table', comparison: 'comparison', timeline: 'timeline', agenda: 'agenda', closing: 'closing',
-};
 const PAYLOAD_FIELDS = Object.values(LAYOUT_PAYLOAD) as string[];
 
 /** The fields `set_fields` and `add_slide.fields` may name on a slide of `layout`. */
@@ -54,7 +48,6 @@ export function layoutFields(layout: SlideLayout): string[] {
  * the slides still carrying one so a page can ask for the real document.
  */
 export const EXAMPLE_SOURCE_PREFIX = 'example:';
-export const UNSOURCED_SOURCE: DeckSource = { documentId: 'example:unsourced', title: 'Needs a source: this slide was added by an edit and cites nothing yet' };
 
 export const isExampleSource = (s: DeckSource): boolean => s.documentId.startsWith(EXAMPLE_SOURCE_PREFIX);
 
@@ -63,29 +56,7 @@ export function exampleSourceSlideIds(spec: DeckSpec): string[] {
   return spec.slides.filter((s) => s.sources.length > 0 && s.sources.every(isExampleSource)).map((s) => s.id);
 }
 
-/**
- * Starting content for a slide added without its layout's payload: words that
- * read as placeholders, never numbers. A chart has none: its data must come
- * from `fields.chart` or a `set_chart` later in the same list.
- */
-const STARTERS: Partial<Record<SlideLayout, Partial<DeckSlide>>> = {
-  bullets: { bullets: ['First point'] },
-  'two-column': { columns: [['Left point'], ['Right point']] },
-  quote: { quote: { text: 'The quote goes here.', by: 'Who said it' } },
-  image: { image: { alt: 'Describe the image' } },
-  'key-figures': { figures: [{ value: 'TBD', label: 'First figure' }, { value: 'TBD', label: 'Second figure' }] },
-  table: { table: { header: ['Item', 'Detail'], rows: [['First row', 'To fill in']] } },
-  comparison: { comparison: { left: { title: 'Option A', points: ['First point'] }, right: { title: 'Option B', points: ['First point'] } } },
-  timeline: { timeline: [{ date: 'Start', label: 'First step' }, { date: 'Next', label: 'Second step' }, { date: 'Then', label: 'Third step' }] },
-  agenda: { agenda: { items: ['First item', 'Second item'] } },
-  closing: { closing: { line: 'Thank you.' } },
-};
 
-const LAYOUT_TITLE: Record<SlideLayout, string> = {
-  title: 'Title', section: 'Section', bullets: 'Key points', 'two-column': 'Two columns', chart: 'Chart', quote: 'Quote',
-  image: 'Image', 'key-figures': 'Key figures', table: 'Table', comparison: 'Comparison', timeline: 'Timeline',
-  agenda: 'Agenda', closing: 'Next steps',
-};
 
 /** A chart read from one of the app's reports, ready to put on a slide. */
 export interface ResolvedChart {
@@ -260,6 +231,8 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
     return slide;
   };
   const position = (s: number): string => `slide ${s + 1}`;
+  /** A slide by its place in the deck as it stands at that operation, never its id: the summary is read aloud and shown in the history. */
+  const named = (slide: DeckSlide): string => position(spec.slides.indexOf(slide));
 
   try {
     for (const [n, raw] of (body.operations as unknown[]).entries()) {
@@ -297,9 +270,10 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             only(op, ['slideId']);
             const slide = editable(op);
             if (spec.slides.length === 1) throw new OpError(400, 'a deck keeps at least one slide');
+            const was = named(slide);
             spec.slides.splice(spec.slides.indexOf(slide), 1);
             touched.delete(slide.id);
-            phrases.push(`removed slide ${slide.id}`);
+            phrases.push(`removed ${was} ("${slide.title}")`);
             break;
           }
           case 'move_slide': {
@@ -308,11 +282,12 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             if ((op['after'] === undefined) === (op['to'] === undefined)) throw new OpError(400, "give either after (a slide id) or to: 'start'");
             if (op['to'] !== undefined && op['to'] !== 'start') throw new OpError(400, "to must be 'start'");
             if (op['after'] === slide.id) throw new OpError(400, 'a slide cannot move after itself');
+            const from = named(slide);
             spec.slides.splice(spec.slides.indexOf(slide), 1);
             const at = op['to'] === 'start' ? 0 : indexOf(op['after'], 'after') + 1;
             spec.slides.splice(at, 0, slide);
             touched.add(slide.id);
-            phrases.push(`moved ${slide.id} to ${position(at)}`);
+            phrases.push(`moved ${from} to ${position(at)}`);
             break;
           }
           case 'set_title': {
@@ -320,7 +295,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             const slide = editable(op);
             slide.title = str(op, 'title');
             touched.add(slide.id);
-            phrases.push(`retitled ${slide.id}`);
+            phrases.push(`retitled ${named(slide)}`);
             break;
           }
           case 'set_notes': {
@@ -330,7 +305,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             else if (typeof op['notes'] !== 'string') throw new OpError(400, 'notes must be a string, or null to clear them');
             else slide.notes = op['notes'];
             touched.add(slide.id);
-            phrases.push(`set the notes of ${slide.id}`);
+            phrases.push(`set the notes of ${named(slide)}`);
             break;
           }
           case 'set_fields': {
@@ -339,7 +314,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             if (!isObj(op['fields']) || !Object.keys(op['fields']).length) throw new OpError(400, 'fields must name at least one field');
             for (const [k, v] of Object.entries(op['fields'])) setField(slide, k, v);
             touched.add(slide.id);
-            phrases.push(`edited ${Object.keys(op['fields']).join(', ')} on ${slide.id}`);
+            phrases.push(`edited ${Object.keys(op['fields']).join(', ')} on ${named(slide)}`);
             break;
           }
           case 'change_layout': {
@@ -353,7 +328,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
               for (const [k, v] of Object.entries(op['fields'])) setField(slide, k, v);
             }
             touched.add(slide.id);
-            phrases.push(`changed ${slide.id} from ${from} to ${slide.layout}${dropped.length ? ` (dropped ${dropped.join(', ')})` : ''}`);
+            phrases.push(`changed ${named(slide)} from ${from} to ${slide.layout}${dropped.length ? ` (dropped ${dropped.join(', ')})` : ''}`);
             break;
           }
           case 'set_theme': {
@@ -377,7 +352,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             let phrase: string;
             if (op['data'] !== undefined) {
               chart = explicitChart(kind, op['data']);
-              phrase = `set a ${kind} chart on ${slide.id}`;
+              phrase = `set a ${kind} chart on ${named(slide)}`;
             } else {
               const ref = op['report'];
               if (!isObj(ref) || typeof ref['report'] !== 'string') throw new OpError(400, 'report must be { report: <id>, params? }');
@@ -389,7 +364,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
               slide.sources = [resolved.value.source, ...slide.sources.filter((s) => !isExampleSource(s) && s.documentId !== resolved.value.source.documentId)].slice(0, 10);
               slide.notes = [slide.notes, resolved.value.note].filter(Boolean).join('\n').slice(-2000);
               if (PLACEHOLDER_TITLES.has(slide.title)) slide.title = resolved.value.title;
-              phrase = `set a ${kind} chart on ${slide.id} from ${resolved.value.summary}`;
+              phrase = `set a ${kind} chart on ${named(slide)} from ${resolved.value.summary}`;
             }
             if (slide.layout !== 'chart') changeSlideLayout(slide, 'chart');
             slide.chart = chart;

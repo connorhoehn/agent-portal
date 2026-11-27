@@ -9,6 +9,7 @@ import { agentcore } from '../../providers/index.js';
 import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { MAX_SLIDES, SOURCES_SLIDE_ID } from '@connorhoehn/realtime-modules/deck';
 import { renderPreview, renderRevisionBytes, type DeckFileFormat } from './render.js';
+import { previewableDraft } from './draft.js';
 import { resolveDeckTheme, type DeckHostTenant } from './themes.js';
 import { clip, type DeckFacts } from './plan.js';
 import { mergeDraft, mockDraftResult, mockReviseResult, type ReviseDeckInput } from './narrative.js';
@@ -74,16 +75,20 @@ export async function savePersonRevision<D extends DeckHead>(
 
 /**
  * Renders any DeckSpec the caller sends (nothing is stored), with the theme it
- * names resolved for `tenant`. Too many slides is a 413 the editor can act on;
- * anything else invalid is a 400 listing what is wrong.
+ * names resolved for `tenant`. Too many slides is a 413 the editor can act on.
+ * An unfinished draft previews from stand-ins (draft.ts) with each such slide
+ * named in the warnings; anything that is not a deck at all is a 400.
  */
 export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckPreviewOut> {
   const slideCount = Array.isArray((spec as { slides?: unknown } | null)?.slides) ? (spec as { slides: unknown[] }).slides.length : 0;
   if (slideCount > MAX_SLIDES) {
     return { ok: false, status: 413, reason: 'invalid DeckSpec', details: { errors: [`deck.slides: ${slideCount} slides, the cap is ${MAX_SLIDES}`] } };
   }
-  const valid = validateDeckSpec(spec);
-  if (!valid.ok) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: valid.errors } };
+  const checked = validateDeckSpec(spec);
+  // An unfinished draft (a slide just added, blank fields) still previews, with the slides drawn from stand-ins named.
+  const draft = checked.ok ? null : previewableDraft(spec);
+  if (!checked.ok && !draft) return { ok: false, status: 400, reason: 'invalid DeckSpec', details: { errors: checked.errors } };
+  const valid = checked.ok ? checked : { spec: draft!.spec };
   const preview = renderPreview(valid.spec, resolveDeckTheme(valid.spec.theme, tenant));
   return {
     ok: true,
@@ -91,7 +96,7 @@ export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckP
       slides: preview.slides.map((s) => ({
         id: s.id, svg: s.svg, title: s.title, ...(s.id === SOURCES_SLIDE_ID ? { generated: true } : {}),
       })),
-      warnings: [...preview.warnings, ...exampleSourceWarnings(valid.spec)],
+      warnings: [...(draft?.unfinished ?? []), ...preview.warnings, ...exampleSourceWarnings(valid.spec)],
       findings: preview.findings,
     },
   };
