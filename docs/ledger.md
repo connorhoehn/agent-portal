@@ -60,7 +60,7 @@ The owner asked for these to be decided rather than held for review. Each is rec
 - **CI-1** Actions on the private repositories. It blocks D-7 and leaves four repositories verified locally only.
 - **B-3, B-4** The two side worktrees: commit and push them, or say that this lane may. About 3,600 lines of pipeline-runtime and eleven ui-components source files exist nowhere else.
 - **K-1** Read the deck plan and overrule any of its twelve decisions.
-- **P-8, P-9** The parked decisions. The standing rule is decide, record, implement, so one pass can make most of them; the commit address and any rewrite of history are the owner's own.
+- **P-9** The account ids in tracked `infra/` files, which the deploy machine must move together with its config. The parked decisions (P-8) were all taken on 28 November.
 - **C-27, C-15, C-1** The candidate notice wording, whether the panel confers in the product, and whether a round should start on first admit (the films rely on the lead's join starting it).
 - **The deploy machine.** Pull `main`: it holds the merged cloud branch, so `origin/infra-interviews-milo-cloud` can go. Write the deployed-state paragraph (P-1), build the social images from the new pins, and read the CDK package diff (D-3).
 
