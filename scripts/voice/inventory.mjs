@@ -638,6 +638,7 @@ export const V2_RULES = [
   // Interviews
   [/^(POST \/api\/interviews\/openings|PUT \/api\/interviews\/openings\/:[^/]+\/(details|kit))$/, 'never', null, 'hiring setup (ManageCandidates): an opening, its details and its interview kit are edited on the opening page'],
   [/^(POST|PUT) \/api\/interview-invite\//, 'n/a', null, 'the candidate\'s guest door, not a staff route'],
+  [/^GET \/api\/interview-invite\/captions$/, 'never', null, 'the candidate\'s own live captions are a guest read on the candidate\'s page, never a staff voice action'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(pad\/events|board\/snapshots|board\/reveal|board\/reveal\/shown|runs|runs\/:[^/]+\/cancel)$/, 'never', null, 'the code pad\'s log, the whiteboard\'s checkpoints and the runs belong to the room, never to the voice navigator'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/say$/, 'never', null, 'Milo saying an approved question aloud is the lead\'s choice in the room, never the voice navigator\'s'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-intro$/, 'never', null, 'Milo introducing itself is the lead\'s button in the room (or Milo\'s own `introduce` server tool in the call), never the voice navigator\'s'],

@@ -60,6 +60,7 @@ const GUEST_ADMITTED_ROUTES = new Set([
   'POST /api/interview-invite/media/participant',
   'GET /api/interview-invite/calls/:callId/chat/reads',
   'PUT /api/interview-invite/calls/:callId/chat/reads',
+  'GET /api/interview-invite/captions',
 ]);
 
 /** The routes rounds 3 to 6 added (OWED O-184), as the routers name them. */
@@ -426,7 +427,7 @@ describe('lane H6: every guest route, from the router', () => {
     const named = new Set([...GUEST_ROUTES, ...GUEST_ADMITTED_ROUTES]);
     expect([...mounted].filter((k) => !named.has(k)).sort()).toEqual([]);
     expect([...named].filter((k) => !mounted.has(k)).sort()).toEqual([]);
-    expect(mounted.size).toBe(21);
+    expect(mounted.size).toBe(22);
   });
 
   it('refuses each guest route to no cookie and to a staff session, with the one not-found', async () => {
@@ -454,7 +455,7 @@ describe('lane H6: every guest route, from the router', () => {
 
   it('answers an admitted guest of a live round on its own routes', async () => {
     for (const key of GUEST_ADMITTED_ROUTES) {
-      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant' || key.includes('/chat/reads') || key.includes('/milo/hold/')) continue; // a stream; a call the mock has not started; no hands-free run
+      if (key === 'GET /api/interview-invite/runs/events' || key === 'POST /api/interview-invite/media/participant' || key.includes('/chat/reads') || key.includes('/milo/hold/') || key.endsWith('/captions')) continue; // a stream; a call the mock has not started; no hands-free run; captions off by default
       const [method] = key.split(' ');
       const a = await call(method!, pathOf(key), admittedKwame, BODIES[key] ?? {});
       expect([key, a.status < 300]).toEqual([key, true]);
@@ -463,6 +464,8 @@ describe('lane H6: every guest route, from the router', () => {
     expect((await call('POST', pathOf('POST /api/interview-invite/milo/hold/:action'), admittedKwame, {})).status).toBe(409);
     // No call is running, so the media binding is the same not-found as any other (the bound case is interview-invite-media's).
     expect((await call('POST', '/api/interview-invite/media/participant', admittedKwame, BODIES['POST /api/interview-invite/media/participant'])).status).toBe(404);
+    // The candidate's captions are off unless the deployment turns them on (INTERVIEWS_CANDIDATE_CAPTIONS; interviews-invite-captions.test.ts).
+    expect((await call('GET', '/api/interview-invite/captions', admittedKwame)).status).toBe(404);
     // The call chat's read position is the guest's only in a call of their interview they are seated in: none runs here.
     for (const method of ['GET', 'PUT']) {
       expect((await call(method, pathOf('GET /api/interview-invite/calls/:callId/chat/reads'), admittedKwame, BODIES['PUT /api/interview-invite/calls/:callId/chat/reads'])).status).toBe(404);

@@ -45,34 +45,42 @@ import { config } from '../config.js';
 import { interviewsNow } from '../lib/interviews/clock.js';
 import { cantMakeMove, checkCantMake, noticeWritten, ringCantMake } from '../lib/interviews/cant-make.js';
 import type { WriteResult } from '../lib/interviews/store.js';
+import { candidateCaptionsOn, captionsAfter, guestCaptions } from '../lib/interviews/invite/captions.js';
+import { consentStore } from '../lib/interviews/consent/store.js';
 
 export const interviewInviteRouter: Router = Router();
 
 // ── the throttle (routes/drop.ts's, kept separate so one door's flood does not close the other) ──
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS_PER_WINDOW = 30;
-const hits = new Map<string, { count: number; resetAt: number }>();
-function throttled(key: string): boolean {
+/** The captions read polls (a few seconds apart for a whole round), so it has its own window, so it never closes the exchange. */
+const MAX_CAPTION_READS_PER_WINDOW = 60;
+type Slots = Map<string, { count: number; resetAt: number }>;
+const hits: Slots = new Map();
+const captionHits: Slots = new Map();
+function throttled(slots: Slots, key: string, max: number): boolean {
   const now = Date.now();
-  const slot = hits.get(key);
+  const slot = slots.get(key);
   if (!slot || now >= slot.resetAt) {
-    hits.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    if (hits.size > 5000) for (const [k, v] of hits) if (now >= v.resetAt) hits.delete(k);
+    slots.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    if (slots.size > 5000) for (const [k, v] of slots) if (now >= v.resetAt) slots.delete(k);
     return false;
   }
   slot.count++;
-  return slot.count > MAX_REQUESTS_PER_WINDOW;
+  return slot.count > max;
 }
 /** For tests: start every client's window afresh. */
-export function resetInviteThrottle(): void { hits.clear(); }
+export function resetInviteThrottle(): void { hits.clear(); captionHits.clear(); }
 
-function rateLimit(req: Request, res: Response, next: express.NextFunction): void {
-  if (throttled(req.ip || req.socket.remoteAddress || 'unknown')) {
+const limiter = (slots: Slots, max: number) => (req: Request, res: Response, next: express.NextFunction): void => {
+  if (throttled(slots, req.ip || req.socket.remoteAddress || 'unknown', max)) {
     res.status(429).json({ error: 'Too many requests. Wait a minute and try again.' });
     return;
   }
   next();
-}
+};
+const rateLimit = limiter(hits, MAX_REQUESTS_PER_WINDOW);
+const captionsRateLimit = limiter(captionHits, MAX_CAPTION_READS_PER_WINDOW);
 
 /** Every exchange answers no sooner than this, so a refusal and a success take the same time to arrive. */
 export const EXCHANGE_FLOOR_MS = 200;
@@ -229,7 +237,7 @@ interviewInviteRouter.get('/room', interviewsFlagGate, requireGuest({ endedAfter
   if (!state || !interview) { res.status(404).json(GUEST_REFUSAL); return; }
   const application = applications.find((a) => a.id === interview.applicationId);
   const opening = application ? openings.find((o) => o.id === application.openingId) ?? null : null;
-  res.json({ room: guestRoomView({ userId: guestSubject(guest.inviteId), displayName: GUEST_DISPLAY_NAME }, interview, opening, state) });
+  res.json({ room: guestRoomView({ userId: guestSubject(guest.inviteId), displayName: GUEST_DISPLAY_NAME }, interview, opening, state, candidateCaptionsOn()) });
 }));
 
 // ── Gap audit 2026-11-20 §6: "I can't make this time" ───────────────────────────────────────────────────────────────────
@@ -265,4 +273,28 @@ interviewInviteRouter.post('/cant-make', interviewsFlagGate, rateLimit, requireG
     interview = written.row;
   }
   res.status(409).json({ error: 'Something changed on this page. Try again.' });
+}));
+
+// ── Gap audit 2026-11-20 §11: the candidate's own live captions (lib/interviews/invite/captions.ts) ───────────────────────
+
+/**
+ * GET /captions?after=<seq>: the live transcript's newest lines (at most CAPTIONS_MAX_LINES) after `after`, each only its
+ * seq, `you` / `interviewer` / `milo` and its text. Only while INTERVIEWS_CANDIDATE_CAPTIONS is on, the interview is live,
+ * this guest was let in and the candidate accepted the transcript; anything else is the one not-found. Its own throttle.
+ */
+interviewInviteRouter.get('/captions', interviewsFlagGate, captionsRateLimit, requireGuest(), asyncHandler(async (req, res) => {
+  guestHeaders(res);
+  const guest = req.guest!;
+  const enabled = candidateCaptionsOn();
+  const [invite, interview, consent] = enabled
+    ? await Promise.all([inviteStore().getInvite(guest.inviteId), interviewsStore().getInterview(guest.interviewId), consentStore().getConsent(guest.interviewId)])
+    : [null, null, null];
+  const body = await guestCaptions({
+    enabled,
+    interview: interview ? { id: interview.id, callId: interview.callId, state: interview.state } : null,
+    admitted: !!invite && invite.interviewId === guest.interviewId && admissionOf(invite).state === 'admitted',
+    consent: consent ? { transcription: consent.transcription } : null,
+  }, captionsAfter(req.query['after']));
+  if (!body) { res.status(404).json(GUEST_REFUSAL); return; }
+  res.json(body);
 }));

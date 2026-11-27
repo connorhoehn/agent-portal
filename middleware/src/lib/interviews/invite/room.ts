@@ -48,10 +48,12 @@ export interface GuestRoomView {
   state: GuestRoomState;
   /** The lead's id in the call: whose tile carries the lead's name (E4 #32). */
   leadCallId: string;
+  /** Whether this deployment offers the candidate their own live captions (INTERVIEWS_CANDIDATE_CAPTIONS, invite/captions.ts). */
+  captions: boolean;
 }
 
 /** `self` is the guest's call identity as its realtime token names it (realtime.ts; passed in, since guest.ts imports this file). */
-export function guestRoomView(self: GuestRoomView['self'], interview: Interview, opening: Pick<Opening, 'kit'> | null, state: GuestRoomState): GuestRoomView {
+export function guestRoomView(self: GuestRoomView['self'], interview: Interview, opening: Pick<Opening, 'kit'> | null, state: GuestRoomState, captions = false): GuestRoomView {
   const round = opening?.kit.rounds.find((r) => r.id === interview.roundId);
   return {
     interviewId: interview.id,
@@ -63,5 +65,6 @@ export function guestRoomView(self: GuestRoomView['self'], interview: Interview,
     startedAt: null,
     state,
     leadCallId: interview.leadId,
+    captions,
   };
 }

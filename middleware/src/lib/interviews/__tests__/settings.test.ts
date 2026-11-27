@@ -12,7 +12,7 @@ describe('interviewsSettings', () => {
     const all = interviewsSettings({});
     expect(all.map((s) => s.name)).toEqual([
       'INTERVIEWS_ENABLED', 'INTERVIEWS_MEDIA_RETENTION_DAYS', 'INTERVIEWS_RECORD_RETENTION_YEARS', 'INTERVIEWS_DELETION_WITHIN_DAYS',
-      'INTERVIEWS_SOON_MINUTES', 'INTERVIEWS_SCORECARD_OVERDUE_HOURS', 'INTERVIEWS_REQUIRED_CONSENTS', 'INTERVIEWS_INTERVIEW_CAP_USD', 'INTERVIEWS_RUN_PRICE_USD', 'INTERVIEWS_MILO_RECOMMENDATION', 'INTERVIEWS_GUEST_REALTIME',
+      'INTERVIEWS_SOON_MINUTES', 'INTERVIEWS_SCORECARD_OVERDUE_HOURS', 'INTERVIEWS_REQUIRED_CONSENTS', 'INTERVIEWS_INTERVIEW_CAP_USD', 'INTERVIEWS_RUN_PRICE_USD', 'INTERVIEWS_MILO_RECOMMENDATION', 'INTERVIEWS_CANDIDATE_CAPTIONS', 'INTERVIEWS_GUEST_REALTIME',
       'INTERVIEWS_RUN_BACKEND', 'INTERVIEWS_CODE_INTERPRETER_ID',
     ]);
     for (const s of all) expect([s.name, s.value]).toEqual([s.name, s.default]);
@@ -26,6 +26,8 @@ describe('interviewsSettings', () => {
     expect(byName({ INTERVIEWS_MILO_RECOMMENDATION: 'on' })['INTERVIEWS_MILO_RECOMMENDATION']).toMatchObject({ value: true, default: false });
     expect(byName({ INTERVIEWS_MILO_RECOMMENDATION: 'off' })['INTERVIEWS_MILO_RECOMMENDATION']!.value).toBe(false);
     expect(byName({ INTERVIEWS_MILO_RECOMMENDATION: 'maybe' })['INTERVIEWS_MILO_RECOMMENDATION']!.value).toBe(false);
+    expect(byName({})['INTERVIEWS_CANDIDATE_CAPTIONS']).toMatchObject({ value: false, default: false });
+    expect(byName({ INTERVIEWS_CANDIDATE_CAPTIONS: 'on' })['INTERVIEWS_CANDIDATE_CAPTIONS']).toMatchObject({ value: true, default: false });
   });
 
   it('lists the runner choice read-only, as the selector reads it', () => {
