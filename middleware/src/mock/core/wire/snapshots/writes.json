@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T15:35:54.783Z",
-  "serverHandlerSha": "b2613bb7f57f577e8c6342054bca18149932d6ab109103d3871577dd7220cf6f",
+  "capturedAt": "2026-11-27T17:09:51.911Z",
+  "serverHandlerSha": "77808143d710baeada222d069c0369f2fb5853e612396dd15b4e0453ffea5beb",
   "baseUrl": "http://127.0.0.1:3011",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -631,6 +631,12 @@
       "refused": {
         "rule": "fires",
         "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes ingest-schedules.json and starts or stops a node-cron task."
+      }
+    },
+    "PATCH /api/interviews/candidates/:id": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "PATCH /api/local-compute/nodes/:id": {
@@ -3132,6 +3138,12 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/interview-invite/cant-make": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/interview-invite/exchange": {
       "refused": {
         "rule": "unclassified",
@@ -3247,6 +3259,12 @@
       }
     },
     "POST /api/interviews/interviews/:id/cancel": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/interviews/interviews/:id/cant-make/clear": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."

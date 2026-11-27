@@ -2358,7 +2358,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:205"
+      "source": "src/routes/interview-invite.ts:208"
     },
     {
       "method": "GET",
@@ -2369,6 +2369,11 @@
       "method": "PUT",
       "path": "/api/interview-invite/calls/:callId/chat/reads",
       "source": "src/routes/interview-invite-chat-reads.ts:47"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interview-invite/cant-make",
+      "source": "src/routes/interview-invite.ts:245"
     },
     {
       "method": "GET",
@@ -2383,17 +2388,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:111"
+      "source": "src/routes/interview-invite.ts:113"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:146"
+      "source": "src/routes/interview-invite.ts:148"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:183"
+      "source": "src/routes/interview-invite.ts:186"
     },
     {
       "method": "POST",
@@ -2423,12 +2428,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:165"
+      "source": "src/routes/interview-invite.ts:168"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:218"
+      "source": "src/routes/interview-invite.ts:221"
     },
     {
       "method": "GET",
@@ -2478,17 +2483,22 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:86"
+      "source": "src/routes/interviews.ts:88"
     },
     {
       "method": "POST",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews/candidates.ts:61"
+      "source": "src/routes/interviews/candidates.ts:124"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:95"
+      "source": "src/routes/interviews.ts:97"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/interviews/candidates/:id",
+      "source": "src/routes/interviews/candidates.ts:85"
     },
     {
       "method": "GET",
@@ -2543,22 +2553,22 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviewers",
-      "source": "src/routes/interviews/assignments.ts:104"
+      "source": "src/routes/interviews/assignments.ts:105"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:111"
+      "source": "src/routes/interviews.ts:113"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews/assignments.ts:110"
+      "source": "src/routes/interviews/assignments.ts:111"
     },
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:123"
+      "source": "src/routes/interviews.ts:125"
     },
     {
       "method": "POST",
@@ -2568,7 +2578,7 @@
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/answer",
-      "source": "src/routes/interviews/assignments.ts:130"
+      "source": "src/routes/interviews/assignments.ts:131"
     },
     {
       "method": "POST",
@@ -2599,6 +2609,11 @@
       "method": "POST",
       "path": "/api/interviews/interviews/:id/cancel",
       "source": "src/routes/interviews/cancel.ts:95"
+    },
+    {
+      "method": "POST",
+      "path": "/api/interviews/interviews/:id/cant-make/clear",
+      "source": "src/routes/interviews/cant-make.ts:22"
     },
     {
       "method": "GET",
@@ -2693,12 +2708,12 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/panel",
-      "source": "src/routes/interviews/assignments.ts:204"
+      "source": "src/routes/interviews/assignments.ts:205"
     },
     {
       "method": "POST",
       "path": "/api/interviews/interviews/:id/panel-notice",
-      "source": "src/routes/interviews/assignments.ts:183"
+      "source": "src/routes/interviews/assignments.ts:184"
     },
     {
       "method": "POST",
@@ -2803,7 +2818,7 @@
     {
       "method": "PUT",
       "path": "/api/interviews/interviews/:id/time",
-      "source": "src/routes/interviews/assignments.ts:222"
+      "source": "src/routes/interviews/assignments.ts:223"
     },
     {
       "method": "GET",
@@ -2818,12 +2833,12 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/panel-notice",
-      "source": "src/routes/interviews/assignments.ts:168"
+      "source": "src/routes/interviews/assignments.ts:169"
     },
     {
       "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:64"
+      "source": "src/routes/interviews.ts:66"
     },
     {
       "method": "POST",
@@ -2833,7 +2848,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:72"
+      "source": "src/routes/interviews.ts:74"
     },
     {
       "method": "PUT",

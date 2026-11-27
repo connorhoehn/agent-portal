@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T15:35:38.410Z",
-  "serverHandlerSha": "b2613bb7f57f577e8c6342054bca18149932d6ab109103d3871577dd7220cf6f",
+  "capturedAt": "2026-11-27T17:09:40.182Z",
+  "serverHandlerSha": "77808143d710baeada222d069c0369f2fb5853e612396dd15b4e0453ffea5beb",
   "baseUrl": "http://127.0.0.1:3011",
   "personas": [
     "orgiq/admin",
@@ -5209,6 +5209,7 @@
         "candidate.applications[].interviews[].candidate.headline": "string",
         "candidate.applications[].interviews[].candidate.id": "string",
         "candidate.applications[].interviews[].candidate.name": "string",
+        "candidate.applications[].interviews[].cantMake": "null",
         "candidate.applications[].interviews[].declines": "array",
         "candidate.applications[].interviews[].id": "string",
         "candidate.applications[].interviews[].lead": "object",
@@ -5487,6 +5488,7 @@
         "items[].candidate.headline": "string",
         "items[].candidate.id": "string",
         "items[].candidate.name": "string",
+        "items[].cantMake": "null",
         "items[].declines": "array",
         "items[].id": "string",
         "items[].lead": "object",
@@ -5558,6 +5560,7 @@
         "interview.candidate.headline": "string",
         "interview.candidate.id": "string",
         "interview.candidate.name": "string",
+        "interview.cantMake": "null",
         "interview.competencies": "array",
         "interview.competencies[]": "object",
         "interview.competencies[].anchors": "object",
