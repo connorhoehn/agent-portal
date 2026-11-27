@@ -98,7 +98,7 @@ async function roundTitles(interview: Interview): Promise<{ openingTitle: string
 
 /**
  * A new waiting spell began (a knock that really changed the admission): ring each seat once. Resolves to who was
- * rung; never throws. Called without await on the knock's path.
+ * rung; never throws. The knock's route awaits it, so its own answer can say the seats were told.
  */
 export async function ringWaiting(interviewId: string, knockedAt: string | null): Promise<string[]> {
   try {

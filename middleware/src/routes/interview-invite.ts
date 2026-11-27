@@ -187,7 +187,9 @@ interviewInviteRouter.post('/knock', interviewsFlagGate, requireGuest(), asyncHa
     // The lead's room reads who is waiting now, not on its next poll. A repeated knock changes nothing and says nothing.
     if (written.changed) await publishInterviewHint(req.guest!.interviewId, 'knock');
     // A new waiting spell rings the seats' bells (lib/interviews/waiting-room.ts); a refresh's knock is the same spell.
-    if (written.changed && written.admission.state === 'waiting') void ringWaiting(req.guest!.interviewId, written.admission.knockedAt);
+    // Awaited, so the answer below can already say `told`: fired and forgotten, the candidate read "will be told" until
+    // the page's next poll although the bells had gone out (journey piece G1). ringWaiting never throws.
+    if (written.changed && written.admission.state === 'waiting') await ringWaiting(req.guest!.interviewId, written.admission.knockedAt);
     res.json({ admission: written.admission, told: await waitingTold(req.guest!.interviewId, written.admission) }); return;
   }
   if (written.reason === 'no-guest') { res.status(404).json(GUEST_REFUSAL); return; }

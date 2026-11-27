@@ -16,8 +16,8 @@ async function bundle(): Promise<{ render: Render }> {
   await build({
     stdin: {
       contents: `import { renderToStaticMarkup } from 'react-dom/server'; import { createElement } from 'react';
-        import { PadRunControl } from './src/pages/interviews/pad/PadRunControl.tsx';
-        export const render = (runner, busy) => renderToStaticMarkup(createElement(PadRunControl, { runner, busy: !!busy, onRun: () => {} }));`,
+        import { Fragment } from 'react'; import { PadRunControl, PadRunnerNote } from './src/pages/interviews/pad/PadRunControl.tsx';
+        export const render = (runner, busy) => renderToStaticMarkup(createElement(Fragment, null, createElement(PadRunControl, { runner, busy: !!busy, onRun: () => {} }), createElement(PadRunnerNote, { runner })));`,
       resolveDir: PORTAL, loader: 'tsx',
     },
     bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic', logLevel: 'error', outfile: `${OUT}/control.mjs`,
@@ -31,7 +31,7 @@ async function bundle(): Promise<{ render: Render }> {
 
 const runButton = (html: string) => /<button[^>]*data-testid="interview-pad-run"[^>]*>/.exec(html)?.[0] ?? '';
 
-test('a simulated runner says so beside Run, and Run stays enabled', async () => {
+test('a simulated runner says so over the output, and Run stays enabled', async () => {
   const { render } = await bundle();
   const html = render('simulated');
   assert.match(html, /Simulated runner: Run shows example output, it does not execute this code\./);

@@ -11,7 +11,7 @@ import { Button, Inline, InlineAlert, Stack, Switch, T, Tooltip } from '@connorh
 import { useFetch } from '../../../hooks/useFetch';
 import { miloSettingsPath, PAD_HELP_LABEL, PAD_HELP_TOOLTIP, setCandidateMayAsk, type MiloSettingsView } from '../../../lib/interviewsMilo';
 import { padLanguageOf } from '../../../lib/interviewsPad';
-import { PadRunControl } from './PadRunControl';
+import { PadRunControl, PadRunnerNote } from './PadRunControl';
 import { InterviewPad, type InterviewPadHandle, type PadQuestion, type PadSeat } from './InterviewPad';
 import { useInterviewRuns } from './useInterviewRuns';
 import { usePadLogReporter } from './usePadLogReporter';
@@ -73,6 +73,7 @@ export function RunnablePad({ interviewId, base, self, seat, questions }: Runnab
 
   const o = runs.output;
   const below = <Stack gap="none" className="h-1/3 min-h-40 shrink-0 border-t border-border" data-testid="interview-pad-output">
+    <PadRunnerNote runner={runs.runner} />
     {runs.refusal && <InlineAlert tone="warning" data-testid="interview-pad-refusal">{runs.refusal}</InlineAlert>}
     <CodeRunOutput variant="flush" className="min-h-0 flex-1" data-testid="interview-pad-run-output"
       status={o.status} stdout={o.stdout} stderr={o.stderr} compileOutput={o.compileOutput} truncated={o.truncated}

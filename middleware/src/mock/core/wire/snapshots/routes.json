@@ -2358,7 +2358,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:203"
+      "source": "src/routes/interview-invite.ts:205"
     },
     {
       "method": "GET",
@@ -2428,7 +2428,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:216"
+      "source": "src/routes/interview-invite.ts:218"
     },
     {
       "method": "GET",

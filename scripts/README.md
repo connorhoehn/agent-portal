@@ -36,6 +36,7 @@ The goal documents, journey logs and CLAUDE.md that the old judges read were rem
 
 | File | Decision | Why |
 |---|---|---|
+| merge-check.sh | new, 27 November | The check to run before merging a package: typecheck, portal tests, a snapshot recapture against its own mock server, the voice inventory and the full middleware suite. `--quick` skips the full suite. |
 | build.sh | kept | Image build and push. Pointer to a removed doc deleted. |
 | portal-publish.mjs | kept | S3 and CloudFront publish; `--dry-run` prints the plan. Comment fixed. |
 | check-tenant-manifest.mjs | kept | Now checks seeds, mounts, route trees, labels and generated files; the CLAUDE.md role check was dropped. Passes. |
