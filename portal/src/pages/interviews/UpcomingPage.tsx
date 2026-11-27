@@ -3,7 +3,8 @@
 // with the library's DateTimeField; the change is saved only after a confirm in the composer's prompt deck
 // (never a dialog), and the lead and panel are told. Times are kept in UTC and shown in the viewer's own zone,
 // named. A round with a time can have the candidate's invite link: made here, shown once with a copy control,
-// its status read from the invite routes, revoked through a prompt. The recruiter also sees a Consent column (row I2.5):
+// its status read from the invite routes, revoked through a prompt. Beside the link just made, a ready invitation message
+// to copy (lib/interviewsUpcoming.ts invitationMessage), built in the page and never stored. The recruiter also sees a Consent column (row I2.5):
 // not answered, all on, or what the round runs without, so they can arrange what replaces it; never why.
 
 import { DateTimeField } from '@connorhoehn/ui-components';
@@ -23,7 +24,7 @@ import {
   type InterviewRow, type ItemsResponse,
 } from '../../lib/interviews';
 import {
-  CONSENT_EFFECTS_PATH, consentColumnLabel, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
+  CONSENT_EFFECTS_PATH, consentColumnLabel, invitationMessage, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
 } from '../../lib/interviewsUpcoming';
 import { finishedCount, isLive, upcomingRows, type UpcomingShow } from '../../lib/interviewsDesk';
 import { conflictsLine } from '../../lib/interviewsAssign';
@@ -55,7 +56,17 @@ function InviteCell({ row, status, link }: { row: InterviewRow; status: InviteSt
           : <T size="xs" tone="tertiary">No link yet</T>}
         {link && <CopyIdButton value={link} label={`Copy the invite link for ${row.candidate.name}`} data-testid="interviews-upcoming-copy" />}
       </Inline>
-      {link && <T size="xs" tone="secondary" data-testid="interviews-upcoming-link-once">Link made. Copy it now: it is not shown again.</T>}
+      {link && (
+        <Inline gap="xs" align="center" wrap={false}>
+          <T size="xs" tone="secondary">Invitation message</T>
+          <CopyIdButton
+            value={invitationMessage({ candidateName: row.candidate.name, openingTitle: row.opening.title, roundName: row.round.name, roundType: row.round.type, scheduledAt: row.scheduledAt, minutes: row.round.minutes, link })}
+            label={`Copy an invitation message with the link for ${row.candidate.name}`}
+            data-testid="interviews-upcoming-copy-message"
+          />
+        </Inline>
+      )}
+      {link && <T size="xs" tone="secondary" data-testid="interviews-upcoming-link-once">Link made. Copy it, or the invitation message, now: it is not shown again.</T>}
     </Stack>
   );
 }

@@ -37,3 +37,25 @@ test('the lead\'s room control: copy the link made in this tab, else make one; a
   assert.equal(again.label, 'Make a new candidate link');
   assert.match(again.hint, /shown only once.*stops the old one/);
 });
+
+test('invitationMessage: first name, opening, round, the time in words with its zone, the length, the link, what to expect', async () => {
+  const { invitationMessage, firstNameOf } = await import('../interviewsUpcoming.ts');
+  const base = { candidateName: '  Avery Quill ', openingTitle: 'Backend Engineer', roundName: 'Technical round', roundType: 'technical' as const, scheduledAt: '2027-03-04T15:30:00.000Z', minutes: 60, link: 'https://example.com/join#abc' };
+  const text = invitationMessage(base, 'UTC');
+  assert.equal(text, [
+    'Hi Avery,',
+    '',
+    'Thank you for applying for Backend Engineer. Your Technical round is on Thursday 4 March 2027 at 15:30 UTC and lasts 1 hour.',
+    '',
+    'Join from this link when it is time: https://example.com/join#abc',
+    '',
+    'The interview is a video call in your browser, with a shared code pad or whiteboard for the technical part; there is nothing to install. The link is yours alone, so please do not share it. If you cannot make this time, open the link and tell us.',
+  ].join('\n'));
+  const behavioural = invitationMessage({ ...base, roundType: 'behavioural', minutes: 45, roundName: 'Culture chat' }, 'America/New_York');
+  assert.match(behavioural, /Your Culture chat is on Thursday 4 March 2027 at 10:30 GMT-5 and lasts 45 minutes\./);
+  assert.doesNotMatch(behavioural, /code pad/);
+  assert.match(invitationMessage({ ...base, minutes: 120 }, 'UTC'), /lasts 2 hours/);
+  assert.match(invitationMessage({ ...base, scheduledAt: null }, 'UTC'), /is on a time we will confirm with you/);
+  assert.equal(firstNameOf(''), 'there');
+  assert.ok(!invitationMessage(base, 'UTC').includes('Quill'), 'only the first name');
+});

@@ -102,3 +102,53 @@ export function consentColumnLabel(effect: (Pick<ConsentEffect, 'answered' | 'of
   if (effect.blocked) return `Cannot go ahead as set: ${text}`;
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+// ── The invitation message (gap audit 2026-11-20 §6): a ready message the recruiter copies with the link ──────────────────
+// The product sends nothing itself. Built here, in the page, from the row and the link just made; never stored, never
+// logged, and shown only where the link is shown (the once-at-creation rule above).
+
+export interface InvitationInput {
+  candidateName: string;
+  openingTitle: string;
+  roundName: string;
+  roundType: 'technical' | 'behavioural';
+  scheduledAt: string | null;
+  minutes: number;
+  link: string;
+}
+
+/** The first word of a name, or the whole name trimmed; "there" when the name is empty. */
+export function firstNameOf(name: string): string {
+  return name.trim().split(/\s+/)[0] || 'there';
+}
+
+/** "Thursday 4 March 2027 at 15:30 GMT", in the viewer's zone (or `timeZone`). */
+export function invitationWhen(iso: string, timeZone?: string): string {
+  const d = new Date(iso);
+  const day = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d).replace(',', '');
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  const zone = new Intl.DateTimeFormat('en-GB', { timeZone, timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? 'UTC';
+  return `${day} at ${time} ${zone}`;
+}
+
+const lengthWords = (minutes: number): string => {
+  if (minutes % 60 === 0 && minutes >= 60) return minutes === 60 ? '1 hour' : `${minutes / 60} hours`;
+  return `${minutes} minutes`;
+};
+
+/** The invitation, plain text, ready to paste into the recruiter's own mail. */
+export function invitationMessage(m: InvitationInput, timeZone?: string): string {
+  const when = m.scheduledAt && !Number.isNaN(Date.parse(m.scheduledAt)) ? invitationWhen(m.scheduledAt, timeZone) : 'a time we will confirm with you';
+  const expect = m.roundType === 'technical'
+    ? 'The interview is a video call in your browser, with a shared code pad or whiteboard for the technical part; there is nothing to install.'
+    : 'The interview is a video call in your browser; there is nothing to install.';
+  return [
+    `Hi ${firstNameOf(m.candidateName)},`,
+    '',
+    `Thank you for applying for ${m.openingTitle.trim()}. Your ${m.roundName.trim()} is on ${when} and lasts ${lengthWords(m.minutes)}.`,
+    '',
+    `Join from this link when it is time: ${m.link}`,
+    '',
+    `${expect} The link is yours alone, so please do not share it. If you cannot make this time, open the link and tell us.`,
+  ].join('\n');
+}
