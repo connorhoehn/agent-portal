@@ -606,13 +606,14 @@ export const V2_RULES = [
   [/^(PUT|DELETE) \/api\/calls\/:[^/]+\/page$/, 'never', null, 'page sharing is the live call\'s own control'],
   // Decks
   [/^POST \/api\/(initiative-decks\/projects\/:[^/]+|assessment\/teams\/:[^/]+\/decks|pipelines\/runs\/:[^/]+\/decks)$/, 'not-yet', 'queue_work', 'build a deck'],
-  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/revise$/, 'not-yet', 'queue_work', 'revise a deck'],
+  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/revise$/, 'never', null, 'a free-form rewrite is an instruction to an agent, which a voice note never is (docs/voice-navigator-spec.md §4); the editor\'s own revise box takes it, typed'],
   [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/(revisions|preview)$/, 'never', null, 'editor saves and previews'],
   [/^POST \/api\/chat\/decks\/:[^/]+\/post$/, 'not-yet', 'update', 'post a deck to the conversation (PostMessage)'],
-  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/operations$/, 'not-yet', 'update', 'typed deck edit operations (docs/deck-edit-operations.md); the voice wiring comes next'],
-  [/^GET \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/chart-reports$/, 'not-yet', 'list', 'the reports a deck chart may come from; the voice wiring comes next'],
-  [/^GET \/api\/(initiative-decks|assessment|pipelines|chat)\/deck-(templates(\/:[^/]+)?|layouts)$/, 'not-yet', 'list', 'deck templates and the layout gallery; the voice wiring comes next'],
-  [/^POST \/api\/chat\/decks$/, 'not-yet', 'create', 'a conversation deck from a template; the voice wiring comes next'],
+  // The operations write (update's deck kind), the orgiq chart reports and the template lists (list kinds deck-report and
+  // deck-template) are named by those tools' mapsTo, so they never reach this table. What is left:
+  [/^GET \/api\/(assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/chart-reports$/, 'n/a', null, 'every chart report belongs to the orgiq tenant; these decks are offered none ({ reports: [] })'],
+  [/^GET \/api\/(initiative-decks|assessment|pipelines|chat)\/deck-(templates\/:[^/]+|layouts)$/, 'never', null, 'a template\'s slides and the layout gallery are pictures: the voice opens the page that shows them (open page deck-templates, or tab layouts on the deck in view), never reads them out'],
+  [/^POST \/api\/chat\/decks$/, 'never', null, 'choosing an example deck is looking at it: the voice opens the new-deck page (open page deck-templates) and the person clicks Create'],
   // Access
   [/^POST \/api\/access\/requests\/preview$/, 'not-yet', 'create', 'the preview the card shows before filing'],
   [/^POST \/api\/access\/requests$/, 'not-yet', 'create', 'access request (RequestAccess)'],

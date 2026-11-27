@@ -60,6 +60,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "work-queue",
             "findings",
             "initiatives",
+            "deck-templates",
             "my-work",
             "decisions",
             "agent-library",
@@ -240,7 +241,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "List one kind of record through the same read its page uses, optionally filtered by words, status, scope or a time. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, channel, team, dm, room, recording, call.",
+    "description": "List one kind of record through the same read its page uses, optionally filtered by words, status, scope or a time. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, channel, team, dm, room, recording, call, deck-template, deck-report.",
     "name": "list",
     "parameters": {
       "additionalProperties": false,
@@ -348,6 +349,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "room",
             "recording",
             "call",
+            "deck-template",
+            "deck-report",
           ],
           "type": "string",
         },
@@ -1245,7 +1248,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The ref kinds here and their field: work-item (status or assignee or sprint); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
+    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The ref kinds here and their field: work-item (status or assignee or sprint); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read); deck (operations).",
     "name": "update",
     "parameters": {
       "additionalProperties": false,
@@ -1264,6 +1267,142 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               "description": "true joins it, false leaves it.",
               "type": [
                 "boolean",
+                "null",
+              ],
+            },
+            "operations": {
+              "description": "deck (the deck in view): typed edits, applied in order to its saved version.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "after": {
+                    "description": "add_slide, move_slide: after this position; "start" or "end".",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "kind": {
+                    "description": "set_chart: the chart.",
+                    "enum": [
+                      "bar",
+                      "line",
+                      "stacked-bar",
+                      "pie",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "layout": {
+                    "description": "add_slide: the layout.",
+                    "enum": [
+                      "title",
+                      "section",
+                      "bullets",
+                      "two-column",
+                      "chart",
+                      "quote",
+                      "image",
+                      "key-figures",
+                      "table",
+                      "comparison",
+                      "timeline",
+                      "agenda",
+                      "closing",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "op": {
+                    "description": "add_slide, set_title, move_slide, remove_slide, set_chart (from a report) or set_theme.",
+                    "enum": [
+                      "add_slide",
+                      "set_title",
+                      "move_slide",
+                      "remove_slide",
+                      "set_chart",
+                      "set_theme",
+                    ],
+                    "type": "string",
+                  },
+                  "period": {
+                    "description": "set_chart: month, 7d or 30d.",
+                    "enum": [
+                      "month",
+                      "7d",
+                      "30d",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "report": {
+                    "description": "set_chart: the report (list kind deck-report).",
+                    "enum": [
+                      "spend-by-initiative",
+                      "spend-by-model",
+                      "runs-by-outcome",
+                      "findings-by-severity",
+                      "jobs-by-status",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "slide": {
+                    "description": "The slide, by its position ("3"); "this" is the one selected.",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "theme": {
+                    "description": "set_theme: a built-in, or "workspace" for this workspace's own.",
+                    "enum": [
+                      "product",
+                      "engineering",
+                      "plain",
+                      "workspace",
+                      null,
+                    ],
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                  "title": {
+                    "description": "add_slide, set_title: the title, as said.",
+                    "type": [
+                      "string",
+                      "null",
+                    ],
+                  },
+                },
+                "required": [
+                  "op",
+                  "slide",
+                  "after",
+                  "layout",
+                  "title",
+                  "kind",
+                  "report",
+                  "period",
+                  "theme",
+                ],
+                "type": "object",
+              },
+              "type": [
+                "array",
                 "null",
               ],
             },
@@ -1353,6 +1492,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "member",
             "read",
             "publish",
+            "operations",
           ],
           "type": "object",
         },

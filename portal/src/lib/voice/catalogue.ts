@@ -224,10 +224,10 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
  * this list to the table).
  */
 export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
-  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
-  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
-  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call', 'deck-template', 'deck-report'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person', 'deck-template'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call', 'deck-template'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call', 'deck-template'],
   access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
 };
 
@@ -451,10 +451,12 @@ export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Rea
   orgiq: {
     'work-item': { status: 'DispatchAgentRun', assignee: 'DispatchAgentRun', sprint: 'ManageSprints' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
     job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
+    // The deck in view (its editor's context): the deck write rule's action (deckApi DECK_WRITE_ACTION).
+    deck: { operations: 'DispatchAgentRun' },
   },
-  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
-  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' } },
-  pipelines: { run: { status: 'CancelRun' } },
+  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' }, deck: { operations: 'PostMessage' } },
+  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' }, deck: { operations: 'RunAssessmentAgent' } },
+  pipelines: { run: { status: 'CancelRun' }, deck: { operations: 'RunPipeline' } },
   access: { request: { status: 'ViewAccess' }, delegation: { status: 'DecideAccess' } },
 };
 
@@ -504,6 +506,13 @@ const limit: JsonSchema = { type: 'integer', minimum: 1, maximum: 10, descriptio
 /** G33: list, search and get hand the model a count, three rows and `more` unless the user asked for everything. */
 const detail: JsonSchema = { type: 'boolean', description: 'True only when the user asked for every row.' };
 const searchScope = str('"workspace" (default) or one initiative id to search inside.', { minLength: 1, maxLength: 200 });
+
+/** The deck operations the voice may send (`update { ref: 'deck:<id>', fields: { operations } }`; docs/deck-edit-operations.md). */
+export const DECK_VOICE_OPS = ['add_slide', 'set_title', 'move_slide', 'remove_slide', 'set_chart', 'set_theme'] as const;
+/** The deck format's layouts (ui-components SLIDE_LAYOUTS, the engine's). */
+export const DECK_LAYOUTS = ['title', 'section', 'bullets', 'two-column', 'chart', 'quote', 'image', 'key-figures', 'table', 'comparison', 'timeline', 'agenda', 'closing'] as const;
+/** The chart reports (middleware lib/deck-shared/reports.ts DECK_REPORTS). */
+export const DECK_REPORT_IDS = ['spend-by-initiative', 'spend-by-model', 'runs-by-outcome', 'findings-by-severity', 'jobs-by-status'] as const;
 
 export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
@@ -723,9 +732,24 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         member: { type: 'boolean', description: 'true joins it, false leaves it.' },
         read: { type: 'boolean', description: 'true marks it read.' },
         publish: { type: 'boolean', description: 'true publishes the program report to its readers.' },
+        operations: {
+          type: 'array', minItems: 1, maxItems: 5,
+          description: 'deck (the deck in view): typed edits, applied in order to its saved version.',
+          items: obj({
+            op: str('add_slide, set_title, move_slide, remove_slide, set_chart (from a report) or set_theme.', { enum: DECK_VOICE_OPS }),
+            slide: str('The slide, by its position ("3"); "this" is the one selected.', { minLength: 1, maxLength: 40 }),
+            after: str('add_slide, move_slide: after this position; "start" or "end".', { minLength: 1, maxLength: 40 }),
+            layout: str('add_slide: the layout.', { enum: DECK_LAYOUTS }),
+            title: str('add_slide, set_title: the title, as said.', { minLength: 1, maxLength: 120 }),
+            kind: str('set_chart: the chart.', { enum: ['bar', 'line', 'stacked-bar', 'pie'] }),
+            report: str('set_chart: the report (list kind deck-report).', { enum: DECK_REPORT_IDS }),
+            period: str('set_chart: month, 7d or 30d.', { enum: ['month', '7d', '30d'] }),
+            theme: str('set_theme: a built-in, or "workspace" for this workspace\'s own.', { enum: ['product', 'engineering', 'plain', 'workspace'] }),
+          }, ['op']),
+        },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'] }, sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'], 'fields.operations.op': ['remove_slide'] }, sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'access_request_status',

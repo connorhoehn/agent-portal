@@ -34,6 +34,7 @@ import {
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { safeLabel } from './inbound.ts';
+import { planDeckOperations, runDeckOperations, type DeckOpsPlan } from './decks.ts';
 
 const enc = encodeURIComponent;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -1004,6 +1005,9 @@ async function planWorkItemUpdate(field: string, value: unknown, ref: string, ct
 
 const planUpdate: VoiceToolPlanner = async (args, ctx) => {
   let ref = String(args['ref']).trim();
+  // The deck in view (its editor's page context): typed operations, never a row the page lists (its slides).
+  const deckFields = (args['fields'] as Rec | undefined) ?? {};
+  if (deckFields['operations'] !== undefined || ref.startsWith('deck:')) return planDeckOperations(ref, deckFields, ctx);
   if (/^\d{1,2}$/.test(ref)) {
     const strict = positionRefusal(ctx, ref);
     if (strict) return { result: strict };
@@ -1038,6 +1042,7 @@ const planUpdate: VoiceToolPlanner = async (args, ctx) => {
 };
 
 const runUpdate: VoiceToolRunner = async (_args, ctx, planned) => {
+  if (planned && typeof planned === 'object' && 'operations' in planned && 'deckId' in planned) return runDeckOperations(ctx, planned as DeckOpsPlan);
   const plan = planned as ActPlan | undefined;
   if (!plan?.send) return refused('Nothing changes until the user confirms its card.');
   return act(ctx, plan, 'changed');

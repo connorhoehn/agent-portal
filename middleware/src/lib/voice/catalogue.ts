@@ -373,10 +373,10 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
  * this list to the table).
  */
 export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
-  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
-  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
-  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call', 'deck-template', 'deck-report'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person', 'deck-template'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call', 'deck-template'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call', 'deck-template'],
   access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
 };
 
@@ -666,10 +666,12 @@ export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Rea
     // Coverage (10 November): the item drawer's owner picker (PATCH assigneeId) and the sprint board's move (ManageSprints).
     'work-item': { status: 'DispatchAgentRun', assignee: 'DispatchAgentRun', sprint: 'ManageSprints' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
     job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
+    // The deck in view (its editor's context): the deck write rule's action (deckApi DECK_WRITE_ACTION).
+    deck: { operations: 'DispatchAgentRun' },
   },
-  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
-  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' } },
-  pipelines: { run: { status: 'CancelRun' } },
+  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' }, deck: { operations: 'PostMessage' } },
+  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' }, deck: { operations: 'RunAssessmentAgent' } },
+  pipelines: { run: { status: 'CancelRun' }, deck: { operations: 'RunPipeline' } },
   access: { request: { status: 'ViewAccess' }, delegation: { status: 'DecideAccess' } },
 };
 
@@ -717,6 +719,13 @@ export function navigatePageIds(tenant: string | null, role?: string): string[] 
 export const COMPUTER_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
   start: 'OperateDevbox', stop: 'OperateDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
 };
+
+/** The deck operations the voice may send (`update { ref: 'deck:<id>', fields: { operations } }`; docs/deck-edit-operations.md). */
+export const DECK_VOICE_OPS = ['add_slide', 'set_title', 'move_slide', 'remove_slide', 'set_chart', 'set_theme'] as const;
+/** The deck format's layouts (ui-components SLIDE_LAYOUTS, the engine's). */
+export const DECK_LAYOUTS = ['title', 'section', 'bullets', 'two-column', 'chart', 'quote', 'image', 'key-figures', 'table', 'comparison', 'timeline', 'agenda', 'closing'] as const;
+/** The chart reports (middleware lib/deck-shared/reports.ts DECK_REPORTS). */
+export const DECK_REPORT_IDS = ['spend-by-initiative', 'spend-by-model', 'runs-by-outcome', 'findings-by-severity', 'jobs-by-status'] as const;
 
 export const VOICE_TOOLS: readonly VoiceTool[] = [
   {
@@ -780,7 +789,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     kind: 'read', backing: 'search', confirm: false, action: null,
     gate: "per kind, the page's own gate: the route's Cedar action or its read tier (portal lib/voice/kinds.ts); Social kinds the Social grant", spend: 'none', idempotent: true,
     says: 'Looking up your initiatives.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/graph/projects, GET /api/graph/work, GET /api/graph/decisions, GET /api/designs, GET /api/work/jobs, GET /api/work/findings, GET /api/work/proposals, GET /api/observability/approvals, GET /api/lab/consults, GET /api/bots, GET /api/runs, GET /api/devbox/boxes, GET /api/environments, GET /api/runbooks, GET /api/runbooks/proposals, GET /api/sdlc/changes, GET /api/sprints, GET /api/initiative-decks, GET /api/agent-projects, GET /api/roster, GET /api/saved-searches, GET /api/library, GET /api/social/plane/channels, GET /api/social/plane/teams, GET /api/social/plane/dms, GET /api/social/plane/rooms, GET /api/social/plane/recordings, GET /api/social/plane/calls, GET /api/social/channels, GET /api/social/teams, GET /api/social/dms, GET /api/social/rooms, GET /api/social/recordings, GET /api/social/calls, GET /api/social/people, GET /api/assessment/teams, GET /api/assessment/runs, GET /api/assessment/feedback, GET /api/assessment/submissions, GET /api/assessment/decks, GET /api/assessment/recommendations, GET /api/pipelines/runs, GET /api/pipelines/definitions, GET /api/pipelines/runbooks, GET /api/pipelines/approvals, GET /api/pipelines/artifacts, GET /api/pipelines/decks, GET /api/access/requests, GET /api/access/approvals, GET /api/access/catalog, GET /api/access/reviews, GET /api/access/delegations, GET /api/access/policies, GET /api/access/audit',
+    mapsTo: 'GET /api/graph/projects, GET /api/graph/work, GET /api/graph/decisions, GET /api/designs, GET /api/work/jobs, GET /api/work/findings, GET /api/work/proposals, GET /api/observability/approvals, GET /api/lab/consults, GET /api/bots, GET /api/runs, GET /api/devbox/boxes, GET /api/environments, GET /api/runbooks, GET /api/runbooks/proposals, GET /api/sdlc/changes, GET /api/sprints, GET /api/initiative-decks, GET /api/agent-projects, GET /api/roster, GET /api/saved-searches, GET /api/library, GET /api/social/plane/channels, GET /api/social/plane/teams, GET /api/social/plane/dms, GET /api/social/plane/rooms, GET /api/social/plane/recordings, GET /api/social/plane/calls, GET /api/social/channels, GET /api/social/teams, GET /api/social/dms, GET /api/social/rooms, GET /api/social/recordings, GET /api/social/calls, GET /api/social/people, GET /api/assessment/teams, GET /api/assessment/runs, GET /api/assessment/feedback, GET /api/assessment/submissions, GET /api/assessment/decks, GET /api/assessment/recommendations, GET /api/pipelines/runs, GET /api/pipelines/definitions, GET /api/pipelines/runbooks, GET /api/pipelines/approvals, GET /api/pipelines/artifacts, GET /api/pipelines/decks, GET /api/access/requests, GET /api/access/approvals, GET /api/access/catalog, GET /api/access/reviews, GET /api/access/delegations, GET /api/access/policies, GET /api/access/audit, GET /api/initiative-decks/deck-templates, GET /api/assessment/deck-templates, GET /api/pipelines/deck-templates, GET /api/chat/deck-templates, GET /api/initiative-decks/:id/chart-reports',
   },
   {
     name: 'get',
@@ -1013,12 +1022,27 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         member: { type: 'boolean', description: 'true joins it, false leaves it.' },
         read: { type: 'boolean', description: 'true marks it read.' },
         publish: { type: 'boolean', description: 'true publishes the program report to its readers.' },
+        operations: {
+          type: 'array', minItems: 1, maxItems: 5,
+          description: 'deck (the deck in view): typed edits, applied in order to its saved version.',
+          items: obj({
+            op: str('add_slide, set_title, move_slide, remove_slide, set_chart (from a report) or set_theme.', { enum: DECK_VOICE_OPS }),
+            slide: str('The slide, by its position ("3"); "this" is the one selected.', { minLength: 1, maxLength: 40 }),
+            after: str('add_slide, move_slide: after this position; "start" or "end".', { minLength: 1, maxLength: 40 }),
+            layout: str('add_slide: the layout.', { enum: DECK_LAYOUTS }),
+            title: str('add_slide, set_title: the title, as said.', { minLength: 1, maxLength: 120 }),
+            kind: str('set_chart: the chart.', { enum: ['bar', 'line', 'stacked-bar', 'pie'] }),
+            report: str('set_chart: the report (list kind deck-report).', { enum: DECK_REPORT_IDS }),
+            period: str('set_chart: month, 7d or 30d.', { enum: ['month', '7d', '30d'] }),
+            theme: str('set_theme: a built-in, or "workspace" for this workspace\'s own.', { enum: ['product', 'engineering', 'plain', 'workspace'] }),
+          }, ['op']),
+        },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'] }, sayToConfirm: 'save it', action: null,
-    gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status and owner, ManageSprints + stewardship to move it between sprints, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end",
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'], 'fields.operations.op': ['remove_slide'] }, sayToConfirm: 'save it', action: null,
+    gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status and owner, ManageSprints + stewardship to move it between sprints, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end; a deck's operations the deck write rule's action (DispatchAgentRun, RunAssessmentAgent, RunPipeline, PostMessage), which the route asks again",
     spend: 'none', idempotent: false, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
-    mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status | assigneeId } (the owner from GET /api/graph/projects/:id contributors), GET /api/sprints, PATCH /api/sprints/:sprintId/items { workItemId }, DELETE /api/sprints/:sprintId/items/:itemId; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end",
+    mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status | assigneeId } (the owner from GET /api/graph/projects/:id contributors), GET /api/sprints, PATCH /api/sprints/:sprintId/items { workItemId }, DELETE /api/sprints/:sprintId/items/:itemId; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end; deck (the deck in view, its editor's page context): GET <deck>/:id/chart-reports for set_chart, then POST /api/initiative-decks/:id/operations, POST /api/assessment/decks/:id/operations, POST /api/pipelines/decks/:id/operations, POST /api/chat/decks/:id/operations { baseRevisionId, operations }",
   },
   {
     name: 'access_request_status',

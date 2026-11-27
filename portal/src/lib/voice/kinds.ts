@@ -402,9 +402,24 @@ const ORGIQ: readonly KindSpec[] = [
     subtitle: 'ownerName', href: (id) => `/iq/library/${enc(id)}`,
   },
   ...socialKinds('/api/social/plane', '/iq/communication', false),
+  // Example decks (docs/deck-edit-operations.md): a row opens the new-deck page with it chosen.
+  {
+    kind: 'deck-template', label: 'example decks', one: 'example deck',
+    list: { path: '/api/initiative-decks/deck-templates', key: 'templates' }, subtitle: 'description',
+    href: (id) => `/iq/decks/new?template=${enc(id)}`,
+  },
+  // The reports a chart on the deck in view may come from (its editor's page context names the deck: tools.ts list).
+  {
+    kind: 'deck-report', label: 'chart reports', one: 'chart report',
+    list: { path: '/api/initiative-decks/:id/chart-reports', key: 'reports' }, title: 'id', subtitle: 'description',
+  },
 ];
 
-const SOCIAL: readonly KindSpec[] = socialKinds('/api/social', '/social', true);
+const SOCIAL: readonly KindSpec[] = [...socialKinds('/api/social', '/social', true), {
+  kind: 'deck-template', label: 'example decks', one: 'example deck',
+  list: { path: '/api/chat/deck-templates', key: 'templates' }, subtitle: 'description',
+  href: (id) => `/social/decks/new?template=${enc(id)}`,
+}];
 
 const ASSESSMENT: readonly KindSpec[] = [
   {
@@ -445,6 +460,12 @@ const ASSESSMENT: readonly KindSpec[] = [
   },
   // Assessment has teams of its own, so Social's are `social-team` here.
   ...socialKinds('/api/social/plane', '/assessment/communication', false, 'social-team'),
+  // Example decks (docs/deck-edit-operations.md): a row opens the new-deck page with it chosen.
+  {
+    kind: 'deck-template', label: 'example decks', one: 'example deck',
+    list: { path: '/api/assessment/deck-templates', key: 'templates' }, subtitle: 'description',
+    href: (id) => `/assessment/decks/new?template=${enc(id)}`,
+  },
 ];
 
 const PIPELINES: readonly KindSpec[] = [
@@ -476,6 +497,12 @@ const PIPELINES: readonly KindSpec[] = [
     list: { path: '/api/pipelines/decks' }, get: { path: '/api/pipelines/decks/:id' }, href: (id) => `/pipelines/decks/${enc(id)}`,
   },
   ...socialKinds('/api/social/plane', '/pipelines/communication', false),
+  // Example decks (docs/deck-edit-operations.md): a row opens the new-deck page with it chosen.
+  {
+    kind: 'deck-template', label: 'example decks', one: 'example deck',
+    list: { path: '/api/pipelines/deck-templates', key: 'templates' }, subtitle: 'description',
+    href: (id) => `/pipelines/decks/new?template=${enc(id)}`,
+  },
 ];
 
 const requestFields: Pick<KindSpec, 'title' | 'subtitle' | 'at'> = {

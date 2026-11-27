@@ -1098,7 +1098,14 @@ const list: Runner = async (args, ctx) => {
   if (f.status && status) params[f.status] = status;
   if (f.scope && scope) params[f.scope] = scope;
   const query = qs(params);
-  const read = await readJson<unknown>(ctx, `${spec.list.path}${query ? `?${query}` : ''}`);
+  // A deck's chart reports are the deck in view's (its editor's page context), never a deck the model names.
+  let path = spec.list.path;
+  if (path.includes('/:id/')) {
+    const deck = ctx.page?.()?.deck;
+    if (!deck) return refused('Open a deck first: the chart reports are the open deck\'s.', { code: NOT_ON_PAGE });
+    path = path.replace(':id', encodeURIComponent(deck.id));
+  }
+  const read = await readJson<unknown>(ctx, `${path}${query ? `?${query}` : ''}`);
   if (!read.ok) return readFailure(spec.label, read.status);
   const needles = f.q ? [] : wordsOf(q);
   const all = collectionOf(read.body, spec.list.key).flatMap((raw) => {
@@ -2627,8 +2634,10 @@ export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequ
 export function confirmModeOf(call: PreparedCall): 'voice' | 'click' {
   if (call.spec.confirmBy === 'click') return 'click';
   // A dotted key names a nested argument (update's `fields.status`: a cancel is click-only).
-  const at = (path: string): unknown => path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Rec)[k] : undefined), call.args);
-  return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => values.includes(String(at(arg)))) ? 'click' : 'voice';
+  // Through an array, every element's value counts (update's `fields.operations.op`: removing a slide is click-only).
+  const at = (path: string): unknown[] => path.split('.').reduce<unknown[]>((vs, k) => vs.flatMap((o) => (Array.isArray(o) ? o : [o]))
+    .flatMap((o) => (o && typeof o === 'object' ? [(o as Rec)[k]] : [])), [call.args]);
+  return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => at(arg).some((v) => values.includes(String(v)))) ? 'click' : 'voice';
 }
 
 /**
