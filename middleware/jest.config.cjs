@@ -1,3 +1,7 @@
+// ES-module-only packages behind realtime-modules' ./deck/fonts, ./deck/paint-pdf
+// and ./deck/paint-png (the deck exports); jest.esm-transform.cjs makes them CommonJS.
+const DECK_ESM_PACKAGES = ['fontkit', 'restructure', 'unicode-properties', 'unicode-trie', 'dfa', 'brotli', 'linebreak', 'png-js', 'pdfkit', '@noble'].join('|');
+
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
@@ -23,7 +27,9 @@ module.exports = {
         tsconfig: './tsconfig.test.json',
       },
     ],
+    [`/node_modules/(${DECK_ESM_PACKAGES})/.+\\.m?js$`]: '<rootDir>/jest.esm-transform.cjs',
   },
+  transformIgnorePatterns: [`/node_modules/(?!(${DECK_ESM_PACKAGES})/)`, '\\.pnp\\.[^\\/]+$'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   // Map .js imports (NodeNext style) to .ts sources so ts-jest can resolve them.
   moduleNameMapper: {
