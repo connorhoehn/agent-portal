@@ -59,6 +59,7 @@ const SCOPED = [
   // Sweep 11: an initiative's deck is built and saved by its own people
   // (lib/deck-shared/authority.ts asks stewardsInitiative for orgiq).
   'initiative-decks POST /projects/:projectId', 'initiative-decks POST /:id/revisions', 'initiative-decks POST /:id/revise',
+  'initiative-decks POST /:id/operations',
   // DE-50: an initiative pause is its stewards' (ManageBudgets + requireInitiativeScope);
   // the fleet scope needs an org-wide role instead.
   'ops-switches PUT /switches/:scope',
