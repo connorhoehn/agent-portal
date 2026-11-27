@@ -78,8 +78,12 @@ export const saveDeckRun = (runId: string, doFetch?: Fetch): Promise<SavedDeck> 
 export const requestDeckPost = (deckId: string, doFetch?: Fetch): Promise<DeckPostMessage> => deckPost(socialDeckPaths.post(deckId), undefined, undefined, doFetch);
 
 /** From an example (docs/deck-edit-operations.md): Social's one direct create, on a conversation. */
+/** The chat channel id the create route wants (`social:ch:<slug>`), from a picker slug or an id already in that form. */
+export const socialChatChannel = (slugOrId: string): string => (slugOrId.startsWith('social:ch:') ? slugOrId : `social:ch:${slugOrId}`);
+/** A conversation's slug, from either form. */
+export const socialChannelSlug = (slugOrId: string): string => slugOrId.replace(/^social:ch:/, '');
 export const createSocialDeckFromTemplate = (channel: string, input: { templateId: string; title?: string }, doFetch?: Fetch): Promise<{ deckId: string; revisionId: string }> =>
-  deckPost(`${BASE}/decks`, { channel, ...input }, undefined, doFetch);
+  deckPost(`${BASE}/decks`, { channel: socialChatChannel(channel), ...input }, undefined, doFetch);
 /** The new-deck page, for one conversation (or none: the page asks). */
 export const socialNewDeckPage = (channel?: string) => `/social/decks/new${channel ? `?channel=${encodeURIComponent(channel)}` : ''}`;
 export const getSocialDeck = api.getDeck;

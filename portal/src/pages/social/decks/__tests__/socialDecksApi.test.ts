@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { DeckApiError, DeckRevisionConflictError } from '../../../../components/decks/deckApi.ts';
 import {
   canSave, deckRunStatusOf, fetchDeckFile, fetchDeckStatus, narrativeNotice, pollDelayMs, postMetadata, requestDeckPost, saveDeckRun,
-  reviseSocialDeck, saveSocialDeckRevision, savedDeckId, socialDeckCommand, socialDeckPaths, startDeck, wantsPreview, type DeckRunStatus,
+  createSocialDeckFromTemplate, reviseSocialDeck, saveSocialDeckRevision, socialChannelSlug, socialChatChannel, savedDeckId, socialDeckCommand, socialDeckPaths, startDeck, wantsPreview, type DeckRunStatus,
 } from '../socialDecksApi.ts';
 
 type Call = { url: string; init: RequestInit };
@@ -137,4 +137,18 @@ test('revise posts to the deck under /api/chat and returns the saved revision', 
     globalThis.fetch = stub(403, { error: 'Only the person who built this deck can edit it' }).fetch;
     await assert.rejects(reviseSocialDeck('sdeck-1', { instruction: 'x', baseRevisionId: 'srev-1' }), (e: unknown) => e instanceof DeckApiError && e.status === 403);
   } finally { globalThis.fetch = prior; }
+});
+
+test('the new-deck page posts the chat channel id (social:ch:<slug>) whether it was given the picker slug or the id', async () => {
+  assert.equal(socialChatChannel('general'), 'social:ch:general');
+  assert.equal(socialChatChannel('social:ch:general'), 'social:ch:general');
+  assert.equal(socialChannelSlug('social:ch:general'), 'general');
+  assert.equal(socialChannelSlug('general'), 'general');
+  for (const given of ['general', 'social:ch:general']) {
+    const s = stub(201, { deckId: 'sdeck-1', revisionId: 'r1' });
+    const out = await createSocialDeckFromTemplate(given, { templateId: 'status-update' }, s.fetch);
+    assert.equal(out.deckId, 'sdeck-1');
+    assert.equal(s.calls[0]!.url, '/api/chat/decks');
+    assert.deepEqual(JSON.parse(String(s.calls[0]!.init.body)), { channel: 'social:ch:general', templateId: 'status-update' });
+  }
 });

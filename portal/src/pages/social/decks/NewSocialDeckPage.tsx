@@ -7,13 +7,15 @@ import { FormField, Select, T } from '@connorhoehn/ui-components/shared';
 import { NewDeckPage } from '../../../components/decks/NewDeckPage';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
-import { createSocialDeckFromTemplate } from './socialDecksApi';
+import { createSocialDeckFromTemplate, socialChannelSlug } from './socialDecksApi';
 
 interface ChannelOption { slug: string; name?: string }
 
 export default function NewSocialDeckPage() {
   const [params, setParams] = useSearchParams();
-  const channel = params.get('channel') ?? '';
+  // `?channel=` may carry the picker's slug or the chat channel id; the picker and the names work on the slug,
+  // and the create call sends the id the server wants (socialChatChannel).
+  const channel = socialChannelSlug(params.get('channel') ?? '');
   const { can } = useCapabilities();
   const { data } = useFetch<ChannelOption[] | { channels?: ChannelOption[] }>('/api/social/channels');
   const channels = Array.isArray(data) ? data : data?.channels ?? [];
