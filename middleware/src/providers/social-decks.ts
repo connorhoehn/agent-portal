@@ -180,3 +180,10 @@ export async function createDeckFromTemplate(channel: string, body: { templateId
   if (out.ok) deckChanged(channel);
   return out;
 }
+
+/** Typed edit operations on a deck the caller owns (docs/deck-edit-operations.md); a written revision updates the work graph like a save. */
+export async function applyOperations(deckId: string, body: Record<string, unknown>, sub: string): Promise<Result<shared.OperationsOut>> {
+  const out = await shared.applyDeckOperations({ tenant: 'social', revisions: socialDeckRevisions, lookup: () => socialDeckStore.getDeck(deckId), deckId, body, sub });
+  if (out.ok) deckChanged((await socialDeckStore.getDeck(deckId).catch(() => null))?.channel);
+  return out;
+}
