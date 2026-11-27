@@ -1,6 +1,6 @@
 # Plan: the `interviews` tenant
 
-Status: a plan, written 16 November 2026 and audited the same day against the code (the audit's corrections are folded in; see "Audit" at the end). Nothing here is built. The ledger at the end is the list of work; each row says how it will be judged. The first row builds the judge, `scripts/validate-interviews.sh`, and from then on that script is the only judge, as `validate-learning-loop.sh` is for the learning loop.
+Status: built end to end in the mock world (27 November 2026); the tenant's pages, middleware routes, the candidate's invite flow and Milo in the interview call all exist. Open work is tracked in `docs/ledger.md` under the Candidates rows (C-1 to C-27), not here. This document stays as the design and decision record: it was written as a plan on 16 November 2026 and audited the same day, and the sections below keep the wording of the time, so some "not built" and "open" lines in them are history.
 
 ## What this is
 
@@ -211,10 +211,10 @@ Seed content, one coherent story: three openings (a backend engineer, an iOS eng
 
 **Open after the pass.**
 - The owner's: the notice wording and Milo's three prompts.
-- The deploy machine's: move the `socialSources` platform-api pin to the guest fixes (E2 O-094).
+- ~~The deploy machine's: move the `socialSources` platform-api pin to the guest fixes (E2 O-094).~~ (closed: the pin in `scripts/docker/document-workspace-sources.json` now names the platform-api head that has mid-call interview recording)
 - A realtime-modules release, then drop `portal/src/lib/callTileMerge.ts`.
 - The recording on the record page, proven 18 November on a local media stack (walk piece `I5.1-recording`, step I5.1r, run only when the walk is pointed at a platform-api and a media server). The media server tells platform-api about an interview's recording the way it does for a huddle; it only needs a webhook address it can reach. Two faults were in this repository and are fixed: in the mock world the record read only knew the seeded stand-ins, so the page never asked platform-api for a real recording (it now asks whenever a platform-api is configured for the browser), and a video still being saved read "There is no recording" (it now reads "Saving the video…" and asks again every 5 seconds, as a huddle's recording does). Still open, in other repositories:
-  - platform-api decides whether a call records once, when the call is made. The lead normally starts the call before the candidate has answered, so the decision is `interview-consent-missing` and the interview is not recorded. The walk piece has the candidate answer first.
+  - ~~platform-api decides whether a call records once, when the call is made. The lead normally starts the call before the candidate has answered, so the decision is `interview-consent-missing` and the interview is not recorded. The walk piece has the candidate answer first.~~ (closed: the ledger records mid-call interview recording in platform-api, D-5)
   - The candidate's media join is refused (404 `guest_out_of_scope`): realtime-modules' call sends the lobby again as `documentId`, and platform-api's guest rule refuses any request that carries it. In the walk the lead's call is recorded alone.
   - The social profile's platform-api image predates the interview recording rules (listing an interview's recordings answers 403), and its webhook address names the compose service, which a media server on the host cannot resolve.
 
@@ -806,9 +806,9 @@ Steps 1 and 2 of the whiteboard plan: a system design round is drawn on a shared
   board only when the lead reveals it (`POST /interviews/:id/board/reveal`: the lead, the live round, a chosen question
   with one), logged as a server-only `reveal` event in the interview's pad log; after that it is part of the board and
   its checkpoints. Red flags are for the lead's scorecard as an unchecked checklist, never auto-scored.
-- Open (master template): the room pane's "Provided design" tab and the lead's "Reveal to the candidate" button (the
+- ~~Open (master template): the room pane's "Provided design" tab and the lead's "Reveal to the candidate" button (the
   route is in), the reveal marker on the record's playback, the scorecard's "Red flags seen" checklist, and the kit
-  editor's canvas and forms for the answer key.
+  editor's canvas and forms for the answer key.~~ (closed: `ProvidedDesignTab.tsx`, the reveal marker in `interviewsPlayback.ts`, the scorecard's red flags and `AnswerKeyEditor.tsx` exist)
 - Open: Milo's board tools (step 4); the coach does not yet track which frames were covered (step 3).
 
 ## Call chat unread (19 November 2026)
