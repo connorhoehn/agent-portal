@@ -8,13 +8,15 @@ import { Button, Inline, InlineAlert, Stack, T } from '@connorhoehn/ui-component
 import { WrappedAudioVideoSettingsForm } from '@connorhoehn/ui-components/integrations/realtime-modules';
 import { CallNounProvider } from '@connorhoehn/ui-components/video';
 import { useAudioVideoSettings, useMediaDevices } from '@connorhoehn/realtime-modules/client/video';
+import { deviceCheckWords } from './deviceCheckWords.ts';
 
 export function DeviceCheckStep({ onContinue, onBack }: { onContinue: () => void; onBack: () => void }) {
   const [on, setOn] = useState(false);
   const devices = useMediaDevices();
   const settings = useAudioVideoSettings({ preview: on });
-  const blocked = devices.permission.camera === 'denied' || devices.permission.microphone === 'denied';
-  const missing = devices.permission.camera === 'unavailable' || devices.permission.microphone === 'unavailable';
+  // A blocked or missing microphone is said plainly, and Continue says what happens (deviceCheckWords.ts).
+  const words = deviceCheckWords(devices.permission);
+  const blocked = words.blocked !== null;
 
   const start = async () => {
     await devices.requestPermission(['audio', 'video']).catch(() => undefined);
@@ -36,21 +38,13 @@ export function DeviceCheckStep({ onContinue, onBack }: { onContinue: () => void
           <T size="xs" tone="secondary">Your browser will ask whether this page may use them.</T>
         </Inline>
       )}
-      {blocked && (
-        <InlineAlert tone="warning" data-testid="join-devices-blocked">
-          Your browser is not letting this page use your camera or microphone. Allow them in the browser&apos;s site settings, then turn them on again.
-        </InlineAlert>
-      )}
-      {missing && !blocked && (
-        <InlineAlert tone="info" data-testid="join-devices-missing">
-          No camera or microphone was found. Plug one in, then turn them on again.
-        </InlineAlert>
-      )}
+      {words.blocked && <InlineAlert tone="warning" data-testid="join-devices-blocked">{words.blocked}</InlineAlert>}
+      {words.missing && <InlineAlert tone="info" data-testid="join-devices-missing">{words.missing}</InlineAlert>}
       {settings.previewError && on && !blocked && (
         <InlineAlert tone="warning" data-testid="join-devices-error">{settings.previewError}</InlineAlert>
       )}
       <Inline gap="sm" align="center">
-        <Button variant="primary" onClick={onContinue} data-testid="join-devices-continue">Continue</Button>
+        <Button variant="primary" onClick={onContinue} data-testid="join-devices-continue">{words.continueLabel}</Button>
         <Button variant="ghost" onClick={onBack} data-testid="join-devices-back">Back to my answers</Button>
       </Inline>
     </Stack>
