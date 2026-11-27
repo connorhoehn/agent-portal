@@ -178,4 +178,16 @@ describe('the wire shapes', () => {
     // Wen's own is in, so the profile's rows carry the scorecards of the rounds she can read (her own round only here).
     expect(rec.applications[0]!.interviews[0]!.results.map((r) => r.interviewer.id)).toEqual(['u-wen']);
   });
+
+  it('the profile read gives each role exactly its candidate fields: an assigned interviewer never the contact details or notes', () => {
+    const full = ['createdAt', 'email', 'headline', 'id', 'location', 'name', 'notes', 'resumeFileId', 'source'];
+    const keysFor = (id: string, role: string) => Object.keys(index(id, role).candidateRecord(index(id, role).candidates.get('cand-qz63q3a3')!).candidate).sort();
+    expect(keysFor('u-wen', 'interviewer')).toEqual(['headline', 'id', 'location', 'name', 'source']);
+    expect(keysFor('u-greta', 'recruiter')).toEqual(full);
+    expect(keysFor('u-amara', 'hiring-manager')).toEqual(full);
+    expect(keysFor('u-admin', 'admin')).toEqual(full);
+    // The interviewer's stage history stays empty too (E4 #29).
+    const wen = index('u-wen', 'interviewer');
+    expect(wen.candidateRecord(wen.candidates.get('cand-qz63q3a3')!).applications.every((a) => a.history.length === 0)).toBe(true);
+  });
 });

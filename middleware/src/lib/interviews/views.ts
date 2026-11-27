@@ -6,7 +6,7 @@ import type {
   ApplicationStage, Candidate, InterviewState, InterviewsWorld, Interview, KitCompetency, KitQuestion, KitRound, Opening,
   OpeningState, Recommendation, RoundType, Scorecard, StageChange, CompetencyRating,
 } from './types.js';
-import { mayReadOpeningMoney, mayReadStageHistory, reachOf, type Viewer } from './scope.js';
+import { mayReadCandidateContact, mayReadOpeningMoney, mayReadStageHistory, reachOf, type Viewer } from './scope.js';
 import { hasAccepted, isAnswerable, seatOf } from './assign.js';
 import { isPreparable, mayChoose, MAX_QUESTIONS, missingLine, readyState } from './prepare.js';
 import type { CancelReason, Seat } from './types.js';
@@ -146,8 +146,24 @@ export interface InterviewRecord extends InterviewRow {
 /** What a candidate's record shows of their résumé (row I1.6): the file itself is read from its own route. */
 export interface ResumeSummary { fileName: string; sizeBytes: number; uploadedAt: string; uploadedBy: PersonRef }
 
+/** The candidate as an interviewer reads them on the profile: who they are, never how to reach them or the recruiter's notes. */
+export type InterviewerCandidateView = Pick<Candidate, 'id' | 'name' | 'headline' | 'location' | 'source'>;
+
+/** The whole record, for those who may read it (scope.ts mayReadCandidateContact). */
+export type FullCandidateView = Pick<Candidate, 'id' | 'name' | 'email' | 'headline' | 'location' | 'source' | 'resumeFileId' | 'notes' | 'createdAt'>;
+
+/** Each field is copied by name so a column added to the row never reaches a reader by default. */
+export function profileCandidate(c: Candidate, role: string): InterviewerCandidateView | FullCandidateView {
+  if (!mayReadCandidateContact(role)) return { id: c.id, name: c.name, headline: c.headline, location: c.location, source: c.source };
+  return {
+    id: c.id, name: c.name, email: c.email, headline: c.headline, location: c.location, source: c.source,
+    resumeFileId: c.resumeFileId, notes: c.notes, createdAt: c.createdAt,
+  };
+}
+
 export interface CandidateRecord {
-  candidate: Candidate;
+  /** Narrowed by role: an interviewer gets `InterviewerCandidateView` (no email, notes, résumé id or added date). */
+  candidate: InterviewerCandidateView | FullCandidateView;
   /** The current résumé, or null. */
   resume: ResumeSummary | null;
   applications: Array<{
@@ -384,7 +400,7 @@ export class WorldIndex {
 
   candidateRecord(c: Candidate, resume: { fileName: string; sizeBytes: number; uploadedAt: string; uploadedBy: string } | null = null): CandidateRecord {
     return {
-      candidate: c,
+      candidate: profileCandidate(c, this.viewer.role),
       resume: resume ? { fileName: resume.fileName, sizeBytes: resume.sizeBytes, uploadedAt: resume.uploadedAt, uploadedBy: this.people(resume.uploadedBy) } : null,
       applications: this.world.applications.filter((a) => a.candidateId === c.id).flatMap((a) => {
         const o = this.openings.get(a.openingId);

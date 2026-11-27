@@ -36,6 +36,13 @@ export const mayReadOpeningMoney = (role: string): boolean => MONEY_READERS.has(
  */
 export const mayReadStageHistory = (role: string): boolean => MONEY_READERS.has(role);
 
+/**
+ * Who reads a candidate's whole record on the profile (email, notes, the stored résumé id, when it was added): the
+ * recruiter, the opening's hiring manager (scope narrows them to their own openings) and the admin. An interviewer
+ * reads only what conducting their round needs: `profileCandidate` in views.ts.
+ */
+export const mayReadCandidateContact = (role: string): boolean => MONEY_READERS.has(role);
+
 export type Reach = 'everything' | 'assigned' | 'own-openings' | 'nothing';
 
 export function reachOf(role: string): Reach {
