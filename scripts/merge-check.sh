@@ -36,10 +36,6 @@ step "1. typecheck"
 (cd "$ROOT/middleware" && npx tsc --noEmit >$L/tsc-mw.log 2>&1) && ok "middleware typecheck" || { bad "middleware typecheck"; tail -n 15 $L/tsc-mw.log; }
 (cd "$ROOT/portal" && npx tsc --noEmit >$L/tsc-portal.log 2>&1) && ok "portal typecheck" || { bad "portal typecheck"; tail -n 15 $L/tsc-portal.log; }
 
-step "2. portal tests"
-(cd "$ROOT/portal" && npm test >$L/portal.log 2>&1) && ok "portal tests ($(grep -E '^ℹ pass' $L/portal.log | tr -d 'ℹ ' ))" \
-  || { bad "portal tests"; grep -E '^not ok|✖' $L/portal.log | head -15; }
-
 if [ "$CAPTURE" = 1 ]; then
   step "3. snapshots, recaptured against a private mock server on :$PORT"
   if [ -n "$(listening)" ]; then
@@ -71,6 +67,10 @@ fi
 step "4. voice inventory"
 (cd "$ROOT" && node scripts/voice/inventory.mjs >$L/inventory.log 2>&1; node scripts/voice/inventory.mjs --check >>$L/inventory.log 2>&1) \
   && ok "voice inventory" || { bad "voice inventory (a new route needs a decision row in scripts/voice/inventory.mjs)"; grep -vE '^(OK|FAIL|wrote)' $L/inventory.log | head -12; }
+
+step "4b. portal tests (after the inventory: one portal test reads it)"
+(cd "$ROOT/portal" && npm test >$L/portal.log 2>&1) && ok "portal tests ($(grep -E '^ℹ pass' $L/portal.log | tr -d 'ℹ ' ))" \
+  || { bad "portal tests"; grep -E '^not ok|✖' $L/portal.log | head -15; }
 
 if [ "$QUICK" = 1 ]; then
   step "5. the repo-wide check suites (--quick: not the full middleware suite)"
