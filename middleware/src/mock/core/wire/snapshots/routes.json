@@ -377,38 +377,63 @@
     },
     {
       "method": "GET",
+      "path": "/api/assessment/deck-layouts",
+      "source": "src/routes/assessment-decks.ts:68"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/deck-templates",
+      "source": "src/routes/assessment-decks.ts:66"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/deck-templates/:templateId",
+      "source": "src/routes/assessment-decks.ts:67"
+    },
+    {
+      "method": "GET",
       "path": "/api/assessment/decks",
-      "source": "src/routes/assessment-decks.ts:54"
+      "source": "src/routes/assessment-decks.ts:70"
     },
     {
       "method": "GET",
       "path": "/api/assessment/decks/:id",
-      "source": "src/routes/assessment-decks.ts:60"
+      "source": "src/routes/assessment-decks.ts:76"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assessment/decks/:id/chart-reports",
+      "source": "src/routes/assessment-decks.ts:81"
+    },
+    {
+      "method": "POST",
+      "path": "/api/assessment/decks/:id/operations",
+      "source": "src/routes/assessment-decks.ts:80"
     },
     {
       "method": "POST",
       "path": "/api/assessment/decks/:id/preview",
-      "source": "src/routes/assessment-decks.ts:63"
+      "source": "src/routes/assessment-decks.ts:79"
     },
     {
       "method": "POST",
       "path": "/api/assessment/decks/:id/revise",
-      "source": "src/routes/assessment-decks.ts:65"
+      "source": "src/routes/assessment-decks.ts:83"
     },
     {
       "method": "POST",
       "path": "/api/assessment/decks/:id/revisions",
-      "source": "src/routes/assessment-decks.ts:62"
+      "source": "src/routes/assessment-decks.ts:78"
     },
     {
       "method": "GET",
       "path": "/api/assessment/decks/:id/revisions/:rid/file",
-      "source": "src/routes/assessment-decks.ts:73"
+      "source": "src/routes/assessment-decks.ts:91"
     },
     {
       "method": "GET",
       "path": "/api/assessment/decks/:id/revisions/:rid/spec",
-      "source": "src/routes/assessment-decks.ts:61"
+      "source": "src/routes/assessment-decks.ts:77"
     },
     {
       "method": "GET",
@@ -898,7 +923,7 @@
     {
       "method": "POST",
       "path": "/api/assessment/teams/:teamId/decks",
-      "source": "src/routes/assessment-decks.ts:45"
+      "source": "src/routes/assessment-decks.ts:49"
     },
     {
       "method": "GET",
@@ -1452,43 +1477,73 @@
     },
     {
       "method": "GET",
-      "path": "/api/chat/decks",
-      "source": "src/routes/social-deck.ts:203"
+      "path": "/api/chat/deck-layouts",
+      "source": "src/routes/social-deck.ts:217"
     },
     {
       "method": "GET",
-      "path": "/api/chat/decks/:id",
-      "source": "src/routes/social-deck.ts:210"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/decks/:id/post",
-      "source": "src/routes/social-deck.ts:224"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/decks/:id/preview",
-      "source": "src/routes/social-deck.ts:214"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/decks/:id/revise",
-      "source": "src/routes/social-deck.ts:213"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/decks/:id/revisions",
-      "source": "src/routes/social-deck.ts:212"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/decks/:id/revisions/:rid/file",
+      "path": "/api/chat/deck-templates",
       "source": "src/routes/social-deck.ts:215"
     },
     {
       "method": "GET",
+      "path": "/api/chat/deck-templates/:templateId",
+      "source": "src/routes/social-deck.ts:216"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/decks",
+      "source": "src/routes/social-deck.ts:205"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks",
+      "source": "src/routes/social-deck.ts:220"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/decks/:id",
+      "source": "src/routes/social-deck.ts:229"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/decks/:id/chart-reports",
+      "source": "src/routes/social-deck.ts:235"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks/:id/operations",
+      "source": "src/routes/social-deck.ts:234"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks/:id/post",
+      "source": "src/routes/social-deck.ts:245"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks/:id/preview",
+      "source": "src/routes/social-deck.ts:233"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks/:id/revise",
+      "source": "src/routes/social-deck.ts:232"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat/decks/:id/revisions",
+      "source": "src/routes/social-deck.ts:231"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chat/decks/:id/revisions/:rid/file",
+      "source": "src/routes/social-deck.ts:236"
+    },
+    {
+      "method": "GET",
       "path": "/api/chat/decks/:id/revisions/:rid/spec",
-      "source": "src/routes/social-deck.ts:211"
+      "source": "src/routes/social-deck.ts:230"
     },
     {
       "method": "GET",
@@ -2308,42 +2363,67 @@
     {
       "method": "GET",
       "path": "/api/initiative-decks",
-      "source": "src/routes/initiative-decks.ts:68"
+      "source": "src/routes/initiative-decks.ts:89"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id",
-      "source": "src/routes/initiative-decks.ts:76"
+      "source": "src/routes/initiative-decks.ts:97"
+    },
+    {
+      "method": "GET",
+      "path": "/api/initiative-decks/:id/chart-reports",
+      "source": "src/routes/initiative-decks.ts:108"
+    },
+    {
+      "method": "POST",
+      "path": "/api/initiative-decks/:id/operations",
+      "source": "src/routes/initiative-decks.ts:107"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/preview",
-      "source": "src/routes/initiative-decks.ts:86"
+      "source": "src/routes/initiative-decks.ts:109"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/revise",
-      "source": "src/routes/initiative-decks.ts:85"
+      "source": "src/routes/initiative-decks.ts:106"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/revisions",
-      "source": "src/routes/initiative-decks.ts:84"
+      "source": "src/routes/initiative-decks.ts:105"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/file",
-      "source": "src/routes/initiative-decks.ts:87"
+      "source": "src/routes/initiative-decks.ts:110"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/spec",
-      "source": "src/routes/initiative-decks.ts:82"
+      "source": "src/routes/initiative-decks.ts:103"
+    },
+    {
+      "method": "GET",
+      "path": "/api/initiative-decks/deck-layouts",
+      "source": "src/routes/initiative-decks.ts:87"
+    },
+    {
+      "method": "GET",
+      "path": "/api/initiative-decks/deck-templates",
+      "source": "src/routes/initiative-decks.ts:85"
+    },
+    {
+      "method": "GET",
+      "path": "/api/initiative-decks/deck-templates/:templateId",
+      "source": "src/routes/initiative-decks.ts:86"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/projects/:projectId",
-      "source": "src/routes/initiative-decks.ts:60"
+      "source": "src/routes/initiative-decks.ts:72"
     },
     {
       "method": "GET",
@@ -3707,43 +3787,68 @@
     },
     {
       "method": "GET",
-      "path": "/api/pipelines/decks",
-      "source": "src/routes/pipeline-decks.ts:52"
+      "path": "/api/pipelines/deck-layouts",
+      "source": "src/routes/pipeline-decks.ts:62"
     },
     {
       "method": "GET",
-      "path": "/api/pipelines/decks/:id",
-      "source": "src/routes/pipeline-decks.ts:57"
-    },
-    {
-      "method": "POST",
-      "path": "/api/pipelines/decks/:id/preview",
+      "path": "/api/pipelines/deck-templates",
       "source": "src/routes/pipeline-decks.ts:60"
     },
     {
-      "method": "POST",
-      "path": "/api/pipelines/decks/:id/revise",
-      "source": "src/routes/pipeline-decks.ts:66"
-    },
-    {
-      "method": "POST",
-      "path": "/api/pipelines/decks/:id/revisions",
-      "source": "src/routes/pipeline-decks.ts:59"
-    },
-    {
       "method": "GET",
-      "path": "/api/pipelines/decks/:id/revisions/:rid/file",
+      "path": "/api/pipelines/deck-templates/:templateId",
       "source": "src/routes/pipeline-decks.ts:61"
     },
     {
       "method": "GET",
+      "path": "/api/pipelines/decks",
+      "source": "src/routes/pipeline-decks.ts:64"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/decks/:id",
+      "source": "src/routes/pipeline-decks.ts:69"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/decks/:id/chart-reports",
+      "source": "src/routes/pipeline-decks.ts:74"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/decks/:id/operations",
+      "source": "src/routes/pipeline-decks.ts:73"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/decks/:id/preview",
+      "source": "src/routes/pipeline-decks.ts:72"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/decks/:id/revise",
+      "source": "src/routes/pipeline-decks.ts:80"
+    },
+    {
+      "method": "POST",
+      "path": "/api/pipelines/decks/:id/revisions",
+      "source": "src/routes/pipeline-decks.ts:71"
+    },
+    {
+      "method": "GET",
+      "path": "/api/pipelines/decks/:id/revisions/:rid/file",
+      "source": "src/routes/pipeline-decks.ts:75"
+    },
+    {
+      "method": "GET",
       "path": "/api/pipelines/decks/:id/revisions/:rid/spec",
-      "source": "src/routes/pipeline-decks.ts:58"
+      "source": "src/routes/pipeline-decks.ts:70"
     },
     {
       "method": "GET",
       "path": "/api/pipelines/decks/:id/runs/:runId",
-      "source": "src/routes/pipeline-decks.ts:74"
+      "source": "src/routes/pipeline-decks.ts:88"
     },
     {
       "method": "GET",
@@ -3793,7 +3898,7 @@
     {
       "method": "POST",
       "path": "/api/pipelines/runs/:id/decks",
-      "source": "src/routes/pipeline-decks.ts:44"
+      "source": "src/routes/pipeline-decks.ts:48"
     },
     {
       "method": "GET",

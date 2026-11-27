@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T20:02:18.949Z",
-  "serverHandlerSha": "36fa77f290c7e7ed92770fbdfdb6bfb84fb37dd08fce61bbc99bbbd83f0f4efa",
+  "capturedAt": "2026-11-27T21:00:02.187Z",
+  "serverHandlerSha": "1f9ededd37ec7b4c871f7203537a81925c9b0faf10477ced02c6d0183e6faf22",
   "baseUrl": "http://127.0.0.1:3011",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -1447,6 +1447,12 @@
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: after the answer streams it calls `maybeGenerateTitle`, and lib/session-titles.ts sends a Bedrock ConverseCommand with no mock branch above it — unawaited, so the spend outlives the request."
       }
     },
+    "POST /api/assessment/decks/:id/operations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/assessment/decks/:id/preview": {
       "refused": {
         "rule": "unclassified",
@@ -2404,6 +2410,18 @@
         "reason": "A private /summarize run is readable only by the Social member who started it, from the conversation they may read, and posting needs that member's PostMessage grant plus a finished run of their own. The capture signs in without a Social grant and cannot own a run; isolated route tests (social-summarize.test.ts) and the headless spec cover these writes."
       }
     },
+    "POST /api/chat/decks": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/chat/decks/:id/operations": {
+      "refused": {
+        "rule": "social-deck",
+        "reason": "A /deck run is private to the Social member who started it and is built from the conversation they may read; saving writes a deck only that member owns, editing is owner-only with a compare-and-set revision, and posting needs PostMessage plus current membership of the source conversation. The capture signs in without a Social grant and can own neither a run nor a deck; isolated route tests (social-deck.test.ts, social-deck-channel.test.ts) and the headless spec cover these writes."
+      }
+    },
     "POST /api/chat/decks/:id/post": {
       "refused": {
         "rule": "social-deck",
@@ -3106,6 +3124,12 @@
       "refused": {
         "rule": "spends",
         "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes an uploaded object to S3."
+      }
+    },
+    "POST /api/initiative-decks/:id/operations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "POST /api/initiative-decks/:id/preview": {
@@ -3971,6 +3995,12 @@
       "sent": [
         "decision"
       ]
+    },
+    "POST /api/pipelines/decks/:id/operations": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/pipelines/decks/:id/preview": {
       "refused": {
