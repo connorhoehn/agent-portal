@@ -1,44 +1,59 @@
 # Ledger of open work
 
-Written 25 November 2026 after a read-only sweep of the portal and every repository in its dependency chain. This is the single list of what is open. Each row was checked that day against the code, the git history or the CI runs, not copied from older notes. [next-steps.md](next-steps.md) stays as history and as the record of decisions; where the two disagree, this file is the newer one.
+First written 25 November 2026 after a read-only sweep of the portal and every repository in its dependency chain, and brought up to date on 27 November after two days of working it. This is the single list of what is open. Each row was checked against the code, the git history or the CI runs when it was written, not copied from older notes. [next-steps.md](next-steps.md) stays as history and as the record of decisions; where the two disagree, this file is the newer one.
 
 Keeping it: when a row is done, delete it and name the row id in the commit message. When something new turns up, add a row with its evidence. Sizes are S (an hour or two), M (a day), L (several days).
 
-## How the sweep was run
+## Where things stand (27 November)
 
-- Every repository was fetched. ui-components was fast-forwarded to 2.546.0 and realtime-examples by two commits (interview guest isolation); the portal's local `main` moved to `aa0e6fcdf`. Everything else was already level with its remote.
-- The portal was read on the checked-out branch `codex/milo-coding-film`, which is two commits ahead of `main` and one behind.
-- Three lanes read in parallel: the Candidates tenant, the rest of the portal (Milo and the films first), and the dependency repositories with their pins, side work and CI.
-- Nothing was changed except this file and one pointer line in `next-steps.md`.
+- **`main` is green.** Four CI runs in a row passed on 27 November; before 26 November it had no green run in its last 60. Nothing is pushed while a run is in flight, because a push cancels it.
+- **Candidates tenant: the audit's blocker and three of its major gaps are built**: cancel, no-show and withdraw; the recruiter's stage moves; the simulated-runner label; the waiting-candidate bell and a panel member's admit. All of it passed the full middleware suite. None of it had been seen on a screen, so a headless walk (piece G1 of the interviews journey) was being written on 27 November.
+- **Unmerged work is down to two side worktrees**, in pipeline-runtime and ui-components (B-3, B-4), uncommitted and untouched since midday on 25 November. The film branch and the cloud branch are merged, and the pins are level: ui-components 2.546.0, and realtime-modules 0.151.0 in both the middleware and the frontend.
+- **No dependency repository has moved since 25 November**, and none of the private ones has executed a CI job since 11 November (CI-1).
+- **Milo's rebuild is half landed**, as before: phases 0 and 1 are on `main` and the text judge passes both sets, but the turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 and 8 are delivered.
+- **A deck builder is planned and not started** (K-1). Its research found two things worth fixing whether or not it is built: deck drafting is unmetered (P-12), and long bullets are silently dropped (K-2).
+- **100 rows are open:** Candidates 26, dependency repositories 14, Milo 14, platform and money 12, CI 9, meeting assistant 9, branches 4, documents 4, voice 4, UI library 2, planned 2.
 
-## Where things stand
+## Closed since the first sweep
 
-- **The Candidates tenant (code name `interviews`) works end to end in the mock world**: opening and kit, assign, accept, prepare, invite link, consent, room, pad or whiteboard, Milo's tools, scorecard, debrief, decision, record, retention and export. Typecheck is clean in the portal and the middleware. The portal's interview tests pass 269 of 269; the middleware's passed 2,385 with 1 failure (since fixed) and 35 skipped real-service tests. There are no stub markers in the tenant's code. Of the hiring-loop gaps from the 20 November audit, the blocker (cancel, no-show, withdraw) was built on 26 November; the rest are open.
+For orientation only; the commits name the row ids.
 
-- **The portal's four CI failures were fixed on 26 November** (the stale voice inventory, the demo director's settle race, the waiting-room assertion and the infra tenant list), and the film branch is merged into `main`. `next-steps.md` still says CI was green throughout; it had no green run in the 60 before.
-- **No private chain repository has executed a CI job since 11 November** (row CI-1). The pipeline-runtime 1.8.x releases, the realtime-examples guest-isolation commits and distributed-core 0.52.0 were verified locally only.
-- **Finished work is sitting uncommitted in two side worktrees**, in pipeline-runtime and ui-components (B-3, B-4). The cloud branch from the deploy machine was merged on 26 November, with one function now choosing among the mock, Docker, AgentCore and no code runner.
-- **Milo's rebuild is half landed.** Phases 0 and 1 are on `main` and the text judge passes both sets, but the new turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 (coding) and 8 (system design) are delivered.
-- **Closed and quiet:** the security work of 6 to 10 November, the learning loop, the value sweep and the voice navigator. The access tenant, described as unfinished in `next-steps.md`, is built.
-- **The portal's pins are level as of 26 November:** ui-components 2.546.0, and realtime-modules 0.151.0 in both the middleware and the frontend.
+- **26 November:** the film branch merged (B-1); the portal's four CI failures (CI-3 to CI-5 and the stale half of CI-2); both pin bumps (D-1, and the adoption half of D-2); the cloud branch merged, with one function choosing the code runner (B-2, C-19); cancel, no-show and withdraw (the built part of C-1).
+- **27 November:** the recruiter's stage moves and the no-hiring-manager warning (C-2); the runner label (C-3); the waiting-candidate bell and the panel member's admit (C-4); the demo director's real race, which exposed P-11.
 
-## Do first
+## Next, in order
 
-3. **CI-1** Owner: get Actions running again on the private repositories, then re-run the latest `main` run in each and cut realtime-examples 0.2.15 (D-7).
-4. **B-3, B-4** Commit and push the two side worktrees before anything else touches them. They hold about 3,600 lines of pipeline-runtime and eleven ui-components source files that exist nowhere else.
-7. **One browser walk** over everything built on 26 and 27 November in the Candidates tenant (C-1 to C-4): none of it has been seen on a screen.
-8. **M-1 to M-3** Milo: build the audio gate, make the turn owner the default, then do the phase-1 deletion in one commit.
-9. **P-8** One pass over the parked owner decisions: decide, record, implement.
-10. **P-9** Privacy cleanup in the public repository.
+### Finishing what is in flight
+
+1. **The browser walk over C-1 to C-4.** Read its screenshots, fix what they show, and merge the walk so the screens stay covered. The panel member's admit still needs one pass against a real gateway, because presence comes from live sockets.
+2. **CI-11, with CI-2.** Make the merge check one command before the next package. It was done by hand four times this week, and the one merge without it broke `main` five ways.
+
+### Then, work that needs nobody else
+
+3. **Privacy and money, smallest first.** C-18 (whether the candidate profile read hands the whole row to assigned interviewers), M-9 (the listening-side consent check is hard-wired true), K-2 (deck bullets silently dropped), P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
+4. **Candidates, second batch.** One package of five small rows (C-10, C-12, C-13, C-14, C-16); then C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
+5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
+6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
+7. **Documents (H-2, C-20, H-4, H-1).** A README section for the six tenants with a map of the documents, the interviews plan's stale status line, and the scripts README.
+8. **One ui-components batch (U-1, U-2, C-26, M-11, M-13)**, after B-4 has landed, since both would claim the next version number.
+
+### Needs the owner
+
+- **CI-1** Actions on the private repositories. It blocks D-7 and leaves four repositories verified locally only.
+- **B-3, B-4** The two side worktrees: commit and push them, or say that this lane may. About 3,600 lines of pipeline-runtime and eleven ui-components source files exist nowhere else.
+- **K-1** Read the deck plan and overrule any of its twelve decisions.
+- **P-8, P-9** The parked decisions. The standing rule is decide, record, implement, so one pass can make most of them; the commit address and any rewrite of history are the owner's own.
+- **C-27, C-15, C-1** The candidate notice wording, whether the panel confers in the product, and whether a round should start on first admit (the films rely on the lead's join starting it).
+- **The deploy machine.** Pull `main`: it holds the merged cloud branch, so `origin/infra-interviews-milo-cloud` can go. Write the deployed-state paragraph (P-1), build the social images from the new pins, and read the CDK package diff (D-3).
 
 ## Branches and unmerged work
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| B-3 | pipeline-runtime: a new `/local` subpath (a SQLite-backed local job queue with lanes, gates, leases and a supervisor; changelog entries 1.9.0 and 1.9.1) is uncommitted in a side worktree and already in use from a packed tarball. `main` is still 1.8.1. | Worktree branch `handbuilt-local-jobs`, no upstream: `src/local/`, `test/local/`, `CHANGELOG.md` "[1.9.1] — 2026-11-25" | In flight in another session | Commit and push the branch now, then merge and tag 1.9.1 so the consumer stops depending on a side tarball | M |
-| B-4 | ui-components: the Loops-page primitives are uncommitted in a side worktree: spacing fixes in `MarkdownView`, `MetaLine` and `ConnectionPill`, plus `StopCircleIcon` and `RelaunchIcon`. The work is based on 2.543.0 and labelled 2.544.0, a number `main` has since given to a different release; six of its files also changed on `main`. | Worktree branch `loops-page-primitives`, no upstream, base `d619f3581`; `main`'s 2.544.0 is `b5f2ac9bf` | In flight in another session | Rebase onto 2.546.0, renumber to 2.547.0, merge the six overlapping files, commit and release | M |
+| B-3 | pipeline-runtime: a new `/local` subpath (a SQLite-backed local job queue with lanes, gates, leases and a supervisor; changelog entries 1.9.0 and 1.9.1) is uncommitted in a side worktree and already in use from a packed tarball. `main` is still 1.8.1. | Worktree branch `handbuilt-local-jobs`, no upstream: `src/local/`, `test/local/`, `CHANGELOG.md` "[1.9.1] — 2026-11-25" | Uncommitted; untouched since midday on 25 November | Commit and push the branch now, then merge and tag 1.9.1 so the consumer stops depending on a side tarball | M |
+| B-4 | ui-components: the Loops-page primitives are uncommitted in a side worktree: spacing fixes in `MarkdownView`, `MetaLine` and `ConnectionPill`, plus `StopCircleIcon` and `RelaunchIcon`. The work is based on 2.543.0 and labelled 2.544.0, a number `main` has since given to a different release; six of its files also changed on `main`. | Worktree branch `loops-page-primitives`, no upstream, base `d619f3581`; `main`'s 2.544.0 is `b5f2ac9bf` | Uncommitted; untouched since midday on 25 November | Rebase onto 2.546.0, renumber to 2.547.0, merge the six overlapping files, commit and release | M |
 | B-5 | ui-components `main` has parked local changes: `.storybook/main.ts` points Storybook at an untracked `reference-sheets/` folder (728 files, 85 MB of design reference images). | Both dated 20 November; nothing upstream touches them | Parked | Decide: keep the sheets out of the public repository and revert the Storybook line, or commit the stories without the images | S |
-| B-6 | Finished leftovers: the portal worktree on `codex/interview-tenant-fixes` (it is `main`'s head), a ui-components release clone on `t49-second-release` (level with `main`), and three ui-components stashes from 2 November on `codex/huddle-prejoin-redesign`, one labelled as already integrated. | `git worktree list`, `git stash list` in each repository | Finished or stale | Each owner removes its own; nothing to merge | S |
+| B-6 | Finished leftovers: the portal worktree on `codex/interview-tenant-fixes` (contained in `main`); the remote branch `origin/infra-interviews-milo-cloud` (merged on 26 November); a ui-components release clone on `t49-second-release` (level with `main`); three ui-components stashes from 2 November on `codex/huddle-prejoin-redesign`, one labelled as already integrated. The portal's main checkout also still sits on a branch named `codex/milo-coding-film`, level with `main`. | `git worktree list`, `git branch -r`, `git stash list` in each repository | Finished or stale | Each owner removes its own; switch the checkout to `main`; nothing to merge | S |
 
 ## CI and checks
 
@@ -51,6 +66,8 @@ Keeping it: when a row is done, delete it and name the row id in the commit mess
 | CI-8 | `scripts/check-search-writers.mjs` fails with nine writers that never call the search hook (two on 7 November), among them the thread writers in `social-chat.ts` and `setBotEssential` in `bots.ts`. | Run on 25 November | Open | Hook or exempt each with a reason, then add the check to CI so the count cannot grow | S |
 | CI-9 | Three kept validators were failing on real debt on 7 November and were not re-run: route coverage (11 untested routes), component discipline (raw styled elements over budget), mock floor (stale wire snapshots). | `docs/next-steps.md:31-33` | Unverified | Run each with `--quick`, record the counts, then burn down or delete | M |
 | CI-10 | The Milo text judge is not in CI. | `.github/workflows/ci.yml`; `docs/milo-rebuild/REBUILD-PLAN.md:100` | Open | Add an offline judge job with the stand-in decide; the live run needs a key and stays manual | S |
+| CI-11 | The check that keeps `main` green after a package that adds a route, a column or an authority write is a hand procedure: the full middleware suite, a snapshot recapture against a private mock server, the voice inventory, then the mock-core suites. It was run by hand four times on 26 and 27 November; the one package merged without it broke `main` five ways. | `middleware/src/mock/core/wire/capture.ts`; `scripts/voice/inventory.mjs`; `scripts/validate-mock-floor.sh` | Open | One script that runs all of it on its own port and leaves nothing listening, named in the README and in every builder's brief; do CI-2 with it | S |
+| CI-12 | Failures seen once each on 26 and 27 November and not since: the portal's `npm ci` died compiling a native module inside a git dependency (the same failure as CI-6), and `json-body.test.ts` answered 404 for a board snapshot in one full local run. | CI run on `92071b525`, shard 1; a local full run of 27 November | Unverified | Record a second sighting here and fix it then | S |
 
 ## Candidates tenant
 
@@ -130,6 +147,7 @@ Cloud work happens on another machine, so the deploy rows could only be read fro
 | P-4 | The microVM runner's fixes from its first real deploy are merged, but its design document still reads as built and unproven in places. | `docs/microvm-runner-design.md` section 16 | Partly | Rewrite section 16 with what the deploy proved; the deploy machine knows | M |
 | P-5 | Budgets on real spend: `next-steps.md` says real metering of every model dollar is not built, but the spend ledger and agent usage emission have landed since. | `docs/next-steps.md:81`; `docs/spend-map.md` (last changed 8 November) | Unverified | Reconcile the spend map with the ledger code and state what is still unmetered; M-5 is a known gap | M |
 | P-11 | Answering an agent's question takes a second spend hold on the same sprint envelope, "held for visibility" because the run's own hold already covers the money. It still counts toward the envelope's hard cap, so a person's reply can make the next piece of work be refused (403) for money that is not really in flight twice. The demo director now answers only after the next pickup is judged, which hides it in the demo and not in real use. | `middleware/src/routes/devbox.ts:748-770`; `middleware/src/lib/spend-holds.ts:433`; `middleware/src/mock/demo-director.ts` | Open | Decide: exclude a covered reply's hold from the held sums, or hold it at zero; a money rule, so a deliberate change with tests | M |
+| P-12 | Deck drafting and revision call the agent with no spend hold and write no ledger row, in all four tenants. The only limit is a concurrency cap of three. | `middleware/src/lib/deck-shared/service.ts:123`, `:188`; `middleware/src/lib/social-deck.ts:120`; the pattern to copy is `middleware/src/lib/agent-invoke-spend.ts` | Open | Reserve before the call and record after, with a `deck` spend source. Independent of K-1, and the first item of its phase 0 | S |
 | P-6 | One 1-vCPU middleware task is CPU-bound near 100 calls and 1,000 sockets, and no option has been chosen. | `docs/next-steps.md:75` | Open | Decide between a larger task, a smaller advertised profile and the multi-node router; record it | S |
 | P-7 | `k8s/crds/middleware-workload.yaml` ships `REPLACE_ME` for the signing secret and policy store, and the media server's metrics scrape needs a token. | `k8s/crds/middleware-workload.yaml:30-38`; `docs/next-steps.md:458` | Open by design until a cluster exists | Leave; note it in the deploy runbook | S |
 | P-8 | Owner decisions parked on 10 November and never recorded as decided: history rewrite, the registry prefix default in `scripts/build.sh`, back-publishing old library versions, program-owner scope on budgets and grants, who edits SDLC policies, who sees the guardrail editor, the steward check on work-item comments, whether leaders may retry a failed run. | `docs/next-steps.md:67-73`, `:765`, `:810`, `:1042` | Open | One high-effort pass that writes each decision into section 9 of `next-steps.md`, then implements it | M |
@@ -178,7 +196,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 |---|---|---|---|---|---|
 | D-2 | ui-components 2.546.0 is adopted; its smaller `CatalogGrid` default gap (20px to 16px) has not been looked at on the two pages that use the default. | `portal/src/pages/ScoresCohortPage.tsx:43`; `portal/src/pages/SelectContextPage.tsx:426` | Open | Look at both pages once and re-run the DOM audit | S |
 | D-3 | The portal's vendored CDK construct package is 0.1.0; its source in realtime-examples is 0.2.0. | `infra/package.json:14`; realtime-examples `cdk/package.json` | Impact unverified | Read the diff before the next cloud deploy and re-vendor if the stacks need it | S |
-| D-4 | Local images for the `social` compose profile predate the 25 November pull, so the local gateway lacks the two guest-isolation commits. | `docker-compose.yml:136`; realtime-examples `18bff74f`, `3db0a544` | Open | Rebuild through `node scripts/social-documents.mjs up` | S |
+| D-4 | Local images for the `social` compose profile predate the 25 November pull, so the local gateway lacks the two guest-isolation commits; the three `document-workspace` images were also removed from the local machine on 25 November. | `docker-compose.yml:136`; realtime-examples `18bff74f`, `3db0a544` | Open | Rebuild through `node scripts/social-documents.mjs up` | S |
 | D-5 | platform-api has 17 commits since 0.1.8 with no version, including mid-call interview recording and the captions shared secret. | platform-api `CHANGELOG.md:6` "Unreleased"; head `e029313` | Open | Cut 0.1.9, or 0.2.0 because `refresh-token` stopped forwarding `role`; re-run CI | S |
 | D-6 | platform-api pins pipeline-runtime 1.5.3 and realtime-modules 0.146.5, so it lacks the 1.8.x approval fixes (a waiting run survives a restart and stays approvable). | platform-api `package.json:28-29` | Open | Move to 1.8.1 and 0.151.0, run the suite | M |
 | D-7 | realtime-examples has three guest-isolation security commits that are unreleased and have never run in CI. | realtime-examples `CHANGELOG.md:3` "Unreleased"; `cef92bfe`, `18bff74f`, `3db0a544` | Open | After CI-1, re-run CI and cut 0.2.15 | S |
@@ -205,6 +223,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
 | K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first | L |
+| K-2 | The deck drafting prompts ask for bullets of up to 300 characters, the agent's own check allows 400, and the middleware accepts 200. One longer bullet rejects the slide's whole draft, and the slide silently keeps its template text. | `agents/assessment-drafter/deck_narrative.py:41`; `agents/assessment-drafter/document_commands.py:127`, `:138`; `middleware/src/lib/deck-shared/narrative.ts:107` (`MAX_BULLET_CHARS` is 200 in the deck engine) | Open | Ask for 200 in both prompts and in the agent's check now; K-1 then generates that text from the engine | S |
 
 ## Documents that now mislead
 
