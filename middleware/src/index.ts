@@ -55,6 +55,7 @@ import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
 import { startInterviewsSoonSweep } from './lib/interviews/soon-sweep.js';
+import { startInterviewsOverdueSweep } from './lib/interviews/overdue-sweep.js';
 import { startInterviewsRetentionSweep } from './lib/interviews/retention/service.js';
 // Consent wires itself to the knock and to Milo's hearing of a guest on load (round 3, C8).
 import './lib/interviews/consent/index.js';
@@ -405,6 +406,8 @@ app.use('/api/meetings', meetingsRouter);
 startMeetingAssistantSweeps();
 // "Starting soon" bells for interviews (row I5.6); does nothing while the interviews flag is off.
 startInterviewsSoonSweep();
+// The one overdue-scorecard reminder, a day after a round ends (ledger row C-17); nothing while the flag is off.
+startInterviewsOverdueSweep();
 startInterviewsRetentionSweep(); // row I6.3: media and records past their periods, and deletions left to finish (nothing while the flag is off)
 if (meetingAssistantEnabled()) announceSinkSecret();
 app.use('/api/social', requireTenant('social'), socialRouter);

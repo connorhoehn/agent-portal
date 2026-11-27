@@ -93,7 +93,7 @@ Fourteen items in the plan and the audit have closed since they were written and
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
 | C-15 | The panel cannot confer in the product: discussions and huddle chat are off for the tenant. | `tenants/manifest.json:94-95` | Open | Decide; if yes, turn discussions on for the debrief only | S |
-| C-17 | Thin scheduling: no double-booking check, no "missed" label, no reminder. | `mw/lib/interviews/assign.ts`; `mw/lib/interviews/result-bells.ts` | Open | Add the three | M |
+| C-17 | Thin scheduling, built on 27 November: double-booking is a warning on assigning, re-seating and timing (the write still succeeds, the answer and the round's read list the clashing seats); a round whose window passed without starting reads Missed, computed from the tenant's clock and never stored; one overdue-scorecard reminder per seat a day after the end (`INTERVIEWS_SCORECARD_OVERDUE_HOURS`). Not yet seen by a walk. | `mw/lib/interviews/conflicts.ts`; `mw/lib/interviews/missed.ts`; `mw/lib/interviews/overdue-sweep.ts` | Built | Walk it; snapshots recaptured | M |
 | C-18 | Three small audit items, re-read on 27 November and still true: a new opening's kit starts empty with no way to copy another's, Milo has one setting per interview, and the candidate `notes` field is stored and shown nowhere. (The fourth, the profile read handing an interviewer the candidate's contact details, was fixed that day.) | `mw/routes/interviews/openings.ts:103`; `mw/lib/interviews/milo-settings.ts`; audit "Minor" | Open | Copy a kit from another opening; show or drop `notes` | S |
 
 ### Delivery and coverage

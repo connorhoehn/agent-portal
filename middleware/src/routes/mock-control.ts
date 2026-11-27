@@ -71,6 +71,7 @@ import { rehydrateMockSchedules } from '../lib/ingest-scheduler.js';
 import { rehydrateMockNotifications } from '../lib/notification-store.js';
 import { interviewsClockOffsetMs, interviewsNow, resetInterviewsClock, setInterviewsClockOffset } from '../lib/interviews/clock.js';
 import { runSoonTick } from '../lib/interviews/soon-sweep.js';
+import { runOverdueTick } from '../lib/interviews/overdue-sweep.js';
 import { resetMockResumeBytes } from '../lib/interviews/resume/service.js';
 import { sweep as runInterviewsRetentionSweep } from '../lib/interviews/retention/service.js';
 import { rehydrateMockSocialChat } from '../lib/social-chat.js';
@@ -555,7 +556,8 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
  * (lib/interviews/clock.ts says what reads it and what does not).
  *
  * `offsetMs`: how far ahead of the wall clock the interviews code now reads the time (0 puts it back; a full
- * reset does too). `sweep`: run one pass now, at that time: 'soon' (the starting-soon bells) or 'retention' (the
+ * reset does too). `sweep`: run one pass now, at that time: 'soon' (the starting-soon bells), 'overdue' (the overdue-scorecard
+ * reminders) or 'retention' (the
  * periods and the open deletion requests), instead of waiting for the minute's or the hour's tick. With neither,
  * it reads the clock. Answers { offsetMs, now, sweep? }.
  */
@@ -565,12 +567,12 @@ mockControlRouter.post('/api/__mock/interviews/clock', ...gate, async (req, res)
     res.status(400).json({ error: 'offsetMs must be a number of milliseconds within ten years either way.' });
     return;
   }
-  if (body.sweep !== undefined && body.sweep !== 'soon' && body.sweep !== 'retention') {
-    res.status(400).json({ error: "sweep must be 'soon' or 'retention'." });
+  if (body.sweep !== undefined && body.sweep !== 'soon' && body.sweep !== 'overdue' && body.sweep !== 'retention') {
+    res.status(400).json({ error: "sweep must be 'soon', 'overdue' or 'retention'." });
     return;
   }
   try {
-    const swept = body.sweep === 'soon' ? { rang: await runSoonTick() } : body.sweep === 'retention' ? await runInterviewsRetentionSweep() : undefined;
+    const swept = body.sweep === 'soon' ? { rang: await runSoonTick() } : body.sweep === 'overdue' ? { rang: await runOverdueTick() } : body.sweep === 'retention' ? await runInterviewsRetentionSweep() : undefined;
     res.json({ offsetMs: interviewsClockOffsetMs(), now: interviewsNow().toISOString(), ...(swept ? { sweep: swept } : {}) });
   } catch (err) {
     res.status(500).json({ error: `the ${String(body.sweep)} sweep failed: ${(err as Error).message}` });

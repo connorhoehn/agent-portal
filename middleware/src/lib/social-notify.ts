@@ -968,6 +968,46 @@ export async function notifyInterviewScorecardDue(ev: InterviewScorecardDueEvent
   }
 }
 
+export interface InterviewScorecardOverdueEvent {
+  interviewId: string;
+  openingTitle: string;
+  roundName: string;
+  /** How long after the end the reminder rings (lib/interviews/overdue.ts), for its words. */
+  hours: number;
+  /** The seats whose scorecard is still not in. */
+  userIds: readonly string[];
+}
+
+/**
+ * A round ended a while ago and a seat's scorecard is still not in (ledger row C-17) → that seat, once, a bell that opens
+ * the scorecard. Says the opening and the round, never the candidate. Idempotent in the store as the starting-soon bell
+ * is (O-043): the id names the round and the person, and one already in the person's inbox is not rung again.
+ */
+export async function notifyInterviewScorecardOverdue(ev: InterviewScorecardOverdueEvent): Promise<string[]> {
+  try {
+    if (!sink) return [];
+    const sent: string[] = [];
+    const inbox = notificationInbox();
+    const since = ev.hours === 24 ? 'a day' : ev.hours === 1 ? 'an hour' : ev.hours % 24 === 0 ? `${ev.hours / 24} days` : `${ev.hours} hours`;
+    for (const userId of new Set(ev.userIds)) {
+      const id = `interview-scorecard-overdue:${roundKey(ev.interviewId)}:${userId}`;
+      if (inbox && (await inbox.listForUser(userId).catch(() => [])).some((r) => r.id === id)) continue;
+      sent.push(...await notify([userId], {
+        id,
+        type: 'system',
+        title: `Your scorecard is overdue: ${snippet(ev.roundName, 60)} for ${snippet(ev.openingTitle, 80)}`,
+        body: `The interview ended more than ${since} ago and your scorecard is not in yet. Fill it in while the interview is fresh.`,
+        payload: { tenant: 'interviews', kind: 'interview-scorecard-overdue', audience: 'interviewer' },
+        action: { label: 'Open the scorecard', href: `/interviews/rounds/${encodeURIComponent(ev.interviewId)}/scorecard` },
+      }));
+    }
+    return sent;
+  } catch (err) {
+    console.warn(`[social-notify] interview-scorecard-overdue producer failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
 export interface InterviewCancelledEvent {
   interviewId: string;
   openingTitle: string;

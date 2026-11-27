@@ -10,6 +10,7 @@ import { interviewsEnabled } from './flag.js';
 import { guestRealtimeEnabled } from './invite/realtime.js';
 import { DEFAULT_PERIODS, DELETION_DAYS_SETTING, MEDIA_DAYS_SETTING, RECORD_YEARS_SETTING, retentionPeriods } from './retention/periods.js';
 import { SOON_MINUTES, SOON_MINUTES_SETTING, soonMinutes } from './soon.js';
+import { OVERDUE_HOURS, OVERDUE_HOURS_SETTING, overdueHours } from './overdue.js';
 import { REQUIRED_CONSENTS_SETTING, requiredConsents } from './consent/required.js';
 import { DEFAULT_INTERVIEW_CAP_USD, defaultInterviewCapUsd } from './spend.js';
 import { CODE_INTERPRETER_SETTING, RUN_BACKEND_SETTING, runBackend } from './runs/select.js';
@@ -49,6 +50,7 @@ export function interviewsSettings(env: NodeJS.ProcessEnv = process.env): Interv
     { name: RECORD_YEARS_SETTING, value: periods.recordYears, default: DEFAULT_PERIODS.recordYears, about: 'Years the scorecards, consents and Milo log are kept after the interview.' },
     { name: DELETION_DAYS_SETTING, value: periods.deletionDays, default: DEFAULT_PERIODS.deletionDays, about: 'Days a deletion request may take to finish.' },
     { name: SOON_MINUTES_SETTING, value: soonMinutes(env), default: SOON_MINUTES, about: 'Minutes before the start the starting-soon bell rings.' },
+    { name: OVERDUE_HOURS_SETTING, value: overdueHours(env), default: OVERDUE_HOURS, about: 'Hours after a round ends that a seat whose scorecard is not in is reminded, once.' },
     { name: REQUIRED_CONSENTS_SETTING, value: requiredConsents(env), default: requiredConsents({}, NO_WARN), about: 'Consents the call cannot start without (declining is still stored).' },
     { name: 'INTERVIEWS_INTERVIEW_CAP_USD', value: defaultInterviewCapUsd(env), default: DEFAULT_INTERVIEW_CAP_USD, about: 'Dollars an interview may spend when its opening sets no cap.' },
     { name: RUN_PRICE_SETTING, value: runPriceUsd(env), default: DEFAULT_RUN_PRICE_USD, about: 'Dollars held and booked for each run of the code pad (the mock executor\'s price).' },
