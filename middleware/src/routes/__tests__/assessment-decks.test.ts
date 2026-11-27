@@ -118,9 +118,12 @@ describe('review decks — generation and reads', () => {
     expect(res.body.slides[0]).toEqual({ id: 'title', svg: expect.stringMatching(/^<svg/), title: spec.slides[0]!.title });
     expect(res.body.slides.at(-1)).toMatchObject({ id: 'sources', generated: true });
     expect(Array.isArray(res.body.warnings)).toBe(true);
-    const bad = await request(app).post(`/api/assessment/decks/${deckId}/preview`).send({ spec: { title: 'x', slides: [{ id: 'a', layout: 'bullets', title: 't', bullets: ['b'], sources: [] }] } });
+    // An unfinished draft (a slide citing nothing) still previews, and says what it needs; save keeps the rule.
+    const draft = await request(app).post(`/api/assessment/decks/${deckId}/preview`).send({ spec: { title: 'x', slides: [{ id: 'a', layout: 'bullets', title: 't', bullets: ['b'], sources: [] }] } });
+    expect(draft.status).toBe(200);
+    expect(draft.body.warnings[0]).toMatch(/^Slide 1 \(a\) is unfinished: it needs a source\./);
+    const bad = await request(app).post(`/api/assessment/decks/${deckId}/preview`).send({ spec: { title: 'x', slides: [] } });
     expect(bad.status).toBe(400);
-    expect(bad.body.errors.join(' ')).toMatch(/cite at least one source/);
   });
 
   it('download is a .pptx attachment', async () => {
