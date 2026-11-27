@@ -30,7 +30,7 @@ For orientation only; the commits name the row ids.
 
 ### Then, work that needs nobody else
 
-3. **Privacy and money, smallest first.** C-18 (whether the candidate profile read hands the whole row to assigned interviewers), M-9 (the listening-side consent check is hard-wired true), P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
+3. **Privacy and money, smallest first.** P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
 4. **Candidates, second batch.** One package of five small rows (C-10, C-12, C-13, C-14, C-16); then C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
 5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
 6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
@@ -99,7 +99,7 @@ Fourteen items in the plan and the audit have closed since they were written and
 | C-15 | The panel cannot confer in the product: discussions and huddle chat are off for the tenant. | `tenants/manifest.json:94-95` | Open | Decide; if yes, turn discussions on for the debrief only | S |
 | C-16 | Settings are invisible: `interviewsSettings()` has no callers outside its file and tests. | `mw/lib/interviews/` | Open | A read-only view of retention periods and required consents | S |
 | C-17 | Thin scheduling: no double-booking check, no "missed" label, no reminder. | `mw/lib/interviews/assign.ts`; `mw/lib/interviews/result-bells.ts` | Open | Add the three | M |
-| C-18 | Four audit items not re-read: kits start empty, Milo has one setting, the candidate `notes` field is unused, and the profile read sends the whole row. | Audit "Minor" | Unverified | Re-check; fix the profile row first, because it reaches assigned interviewers | S |
+| C-18 | Three small audit items, re-read on 27 November and still true: a new opening's kit starts empty with no way to copy another's, Milo has one setting per interview, and the candidate `notes` field is stored and shown nowhere. (The fourth, the profile read handing an interviewer the candidate's contact details, was fixed that day.) | `mw/routes/interviews/openings.ts:103`; `mw/lib/interviews/milo-settings.ts`; audit "Minor" | Open | Copy a kit from another opening; show or drop `notes` | S |
 
 ### Delivery and coverage
 
@@ -128,7 +128,6 @@ Recorded and reported: the phase-1 board film, film 3 (board, name required), fi
 | M-6 | Phase 2: Work and Social on the turn owner (shared act, default policy, social policy), then delete the room-mix path; one Work huddle film and one Social room film. | `docs/milo-rebuild/REBUILD-PLAN.md:86-94`; only `interviews/milo-policy.ts` registers a turn policy | Open | Start after M-3; the largest remaining Milo package | L |
 | M-7 | Phase 3: split `orchestrator.ts` (2,886 lines), move `handsfree/*` into `turn/`, amend decision 9 in the interviews plan. | `docs/milo-rebuild/REBUILD-PLAN.md:96-102` | Open | After M-6 | M |
 | M-8 | A split request is acted on before its second half arrives; only the model's `keep_listening` prevents it. | `docs/milo-rebuild/DECIDE-BAKEOFF.md:88` | Open | Add the code rule: nothing is done until the asker has been quiet since the sentence ended | S |
-| M-9 | The listening-side consent check is hard-wired true; the intake is the only layer. | Audit finding F14; `middleware/src/lib/meeting-assistant/orchestrator.ts:2840` | Open | Wire it to the policy (privacy item) | S |
 | M-10 | The "talking to Milo" tile ring is missing on both seats during a hold. | `docs/milo-rebuild/FILM-3-REPORT.md:56`; wired at `portal/src/components/shell/ShellCallHost.tsx:206-209` | Open | Find why the floating gallery loses it; library first if the tile needs a prop | S |
 | M-11 | Library workarounds remain: the board fit strips a toolbar class inside the canvas library, and one test-id restyle is left. | Audit finding F12; `portal/src/lib/interviewsBoard.ts:168-173`; `portal/src/components/calls/RoomCallGallery.tsx` | Partly | Ship a `fit` prop on the canvas in ui-components, then delete the workaround | M |
 | M-12 | The delivered films and their handoff note live in a folder outside the repository, and two reports cite it by a home-relative path. | Film 7 and 8 reports on the film branch | Open | Decide where delivered films live (a release asset or a private bucket) and replace the paths | S |
