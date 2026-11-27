@@ -34,7 +34,7 @@ For orientation only; the commits name the row ids.
 4. **Candidates, second batch.** The five small rows were built on 27 November (a closed opening refuses candidates, red flags reach the debrief and export, the no-cap warning on assign and prepare, a Settings page, one record per email). Next: C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
 5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
 6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
-7. **Documents (H-2, C-20, H-4, H-1).** A README section for the six tenants with a map of the documents, the interviews plan's stale status line, and the scripts README.
+7. **Documents (H-1).** The README's tenants section and map of the documents, the scripts README and the interviews plan's status line were done on 27 November; what is left is striking the stale lines in `next-steps.md`.
 8. **One ui-components batch (U-1, U-2, C-26, M-11, M-13)**, after B-4 has landed, since both would claim the next version number.
 
 ### Needs the owner
@@ -100,7 +100,6 @@ Fourteen items in the plan and the audit have closed since they were written and
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| C-20 | `docs/interviews-tenant-plan.md` is stale: it opens with "Nothing here is built" and lists closed items as open. | Plan lines 3, 211-219, 787-790 | Open | Rewrite the status line, strike the closed items, point here | S |
 | C-21 | A workaround for media ids cut at a colon can probably go; the fix is in realtime-modules 0.151.0. | `pt/lib/callTileMerge.ts:1-8`; realtime-modules `d5d0f77` | Partly | Confirm the installed build keys remote media by the full id, then delete the file and its test | S |
 | C-22 | Milo's tools have a judge row and no judge piece. | No `I3.11` file in `scripts/validate-interviews.d/` | Open | Write the piece | S |
 | C-23 | The judge and walks do not cover the whiteboard round end to end (draw, checkpoint, reveal, playback), the call chat unread and call float walks (files exist, no rows), or `POST /interviews/:id/milo-intro` (no test). | `scripts/validate-interviews.sh`; walk files `C1`, `C3` | Open | One whiteboard walk and its row; add the two rows; one route test | M |
@@ -208,9 +207,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
 | H-1 | `docs/next-steps.md` is 1,101 lines of dated narrative with open items buried between closed ones. Its status table describes 6 November; it says CI is green, that the access tenant is unfinished and that the microVM runner has never run in the cloud. It has no Milo section. | `docs/next-steps.md:7-18`, `:20-45`, `:74`, `:455` | Partly (it now points here) | Strike the stale lines as their rows here are closed; keep section 9 as the decision record | S |
-| H-2 | The README, `docs/project-story.md` and `docs/demo-script.md` do not mention the Candidates tenant, the access tenant's current state, Milo or the meeting assistant. Nothing indexes `docs/milo-rebuild/`, `docs/interviews-tenant-plan.md` or `docs/audits/`. | `README.md` (four document links) | Open | One README section: the six tenants and a map of the documents | S |
 | H-3 | `scripts/audit-loop/run.sh` points at three files that no longer exist, so it cannot run. | Path check on 25 November | Open | Delete the folder or restore the prompts | S |
-| H-4 | `scripts/README.md` predates the interviews and learning-loop validators, the Milo judge and probe, the meeting assistant scripts, the voice harness and the film scripts. | Last changed 7 November | Open | Add a row per newer tool | S |
 
 ## Planned work
 
