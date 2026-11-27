@@ -67,9 +67,9 @@ const SCOPED = [
   // hr-admin and admin stay program-wide.
   'budgets PUT /:orgProjectId', 'budgets DELETE /:orgProjectId', 'budgets PUT /:orgProjectId/limits',
   'grants POST /', 'grants PATCH /:id', 'grants DELETE /:id',
-  // §9 item 8d: a comment needs ViewWorkItems plus membership of the item's
-  // initiative (requireInitiativeScope), not the DispatchAgentRun write gate.
-  'work-items POST /projects/:id/discussion/comments', 'work-items POST /work-items/:id/comments',
+  // §9 item 8d: a comment in the initiative's discussion needs ViewWorkItems
+  // plus membership of the initiative (requireInitiativeScope).
+  'work-items POST /projects/:id/discussion/comments',
   // A workspace document is edited and created by members of its initiative (requireInitiativeScope).
   'work-documents PUT /documents/:documentId', 'work-documents POST /projects/:projectId/workspace-documents',
   // The runbook library (learning loop): deciding a proposal or retiring a runbook needs review
@@ -93,9 +93,13 @@ const SCOPED = [
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
 // A route that MAKES an initiative has no initiative to check scope against yet. It is neither
-// SCOPED nor OPEN: it must carry its own authority, named here, on the route itself.
+// SCOPED nor OPEN: it must carry its own authority, named here, on the route itself. A comment
+// on a work item's own thread is held the same way: anyone who can read the item may comment
+// (docs/next-steps.md section 9, 28 November item 7), so it carries commentGate (ViewWorkItems)
+// and no scope; status, assignment and closing keep their steward checks.
 const CREATES: Record<string, RegExp> = {
   'projects POST /': /requireAction\('CreateInitiative'\)/,
+  'work-items POST /work-items/:id/comments': /commentGate/,
 };
 
 const OPEN: Record<string, string> = {

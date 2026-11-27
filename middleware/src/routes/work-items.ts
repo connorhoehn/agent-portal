@@ -148,10 +148,12 @@ async function parentAllowed(res: Response, initiativeId: string, parentId: unkn
   return true;
 }
 
-// A comment is discussion, not a state change (docs/next-steps.md §9 item 8d):
-// it needs ViewWorkItems plus membership of the item's initiative (owner,
-// contributor, or an org-wide role; requireInitiativeScope), not the
-// DispatchAgentRun write gate. Sprint, owner and status moves keep theirs.
+// A comment is discussion, not a state change: it needs ViewWorkItems, not the
+// DispatchAgentRun write gate. On a work item's own thread anyone who can read
+// the item may comment (docs/next-steps.md section 9, 28 November item 7), so
+// POST /work-items/:id/comments asks no initiative scope; the initiative's
+// discussion (POST /projects/:id/discussion/comments) still asks membership.
+// Sprint, owner and status moves keep their steward checks.
 const commentGate = requireAction('ViewWorkItems');
 
 // GET /api/graph/projects/:id/discussion — where the initiative's discussion
@@ -837,7 +839,8 @@ workItemsRouter.post(
 
     const item = await getWorkItem(id);
     if (!item) { res.status(404).json({ error: 'Work item not found' }); return; }
-    if (!await requireInitiativeScope(req, res, item.projectId, { action: 'comment' })) return;
+    // No initiative scope: a work item is readable by every orgiq session, and
+    // anyone who can read it may comment (28 November item 7).
 
     // commentGate already required a session (requireAction 401s otherwise),
     // so this is never null here — but resolveSession's return type is

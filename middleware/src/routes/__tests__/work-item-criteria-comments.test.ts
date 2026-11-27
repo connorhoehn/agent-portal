@@ -458,13 +458,14 @@ describe('criteria edits are the item\'s initiative\'s stewards\' call (DE-44 ro
     expect(deleteCriterionMock).not.toHaveBeenCalled();
   });
 
-  it('commenting needs membership of the item\'s initiative, not stewardship of its state (§9 item 8d)', async () => {
+  it('anyone who can read the item comments, off its initiative too; its state stays the stewards\' (28 November item 7)', async () => {
     scopeDeny.add('p-observability');
     getUserMock.mockResolvedValue({ id: 'u-nobody', displayName: 'Nobody', personId: 'p-999', grants: {}, epoch: 0, email: null });
     createCommentMock.mockResolvedValue({ id: 'cm-1', body: 'hi' });
-    const res = await request(buildApp({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' }))
-      .post('/api/graph/work-items/wi-obs-e1-s4/comments').send({ body: 'hi' });
-    expect(res.status).toBe(403);
-    expect(createCommentMock).not.toHaveBeenCalled();
+    const app = buildApp({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' });
+    const res = await request(app).post('/api/graph/work-items/wi-obs-e1-s4/comments').send({ body: 'hi' });
+    expect(res.status).toBe(201);
+    expect(createCommentMock).toHaveBeenCalled();
+    expect((await request(app).patch('/api/graph/work-items/wi-obs-e1-s4').send({ status: 'done' })).status).toBe(403);
   });
 });

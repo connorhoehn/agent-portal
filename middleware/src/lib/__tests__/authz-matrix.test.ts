@@ -140,7 +140,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // Reading what a run was told is open to everyone who can see work; deciding
       // a runbook proposal is not (ReviewRunbook, below).
       'ViewSessionBrief',
-      // Comment on work items of initiatives they are on (§9 item 8d).
+      // Comment on any work item they can read (28 November item 7).
       'ViewWorkItems',
       // Mint a voice navigator session (docs/voice-navigator-spec.md §6).
       'VoiceNavigate', 'InviteMeetingAssistant',
