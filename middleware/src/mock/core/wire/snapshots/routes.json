@@ -2358,7 +2358,7 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/admission",
-      "source": "src/routes/interview-invite.ts:208"
+      "source": "src/routes/interview-invite.ts:216"
     },
     {
       "method": "GET",
@@ -2373,7 +2373,12 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/cant-make",
-      "source": "src/routes/interview-invite.ts:245"
+      "source": "src/routes/interview-invite.ts:253"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interview-invite/captions",
+      "source": "src/routes/interview-invite.ts:285"
     },
     {
       "method": "GET",
@@ -2388,17 +2393,17 @@
     {
       "method": "POST",
       "path": "/api/interview-invite/exchange",
-      "source": "src/routes/interview-invite.ts:113"
+      "source": "src/routes/interview-invite.ts:121"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/interview",
-      "source": "src/routes/interview-invite.ts:148"
+      "source": "src/routes/interview-invite.ts:156"
     },
     {
       "method": "POST",
       "path": "/api/interview-invite/knock",
-      "source": "src/routes/interview-invite.ts:186"
+      "source": "src/routes/interview-invite.ts:194"
     },
     {
       "method": "POST",
@@ -2428,12 +2433,12 @@
     {
       "method": "GET",
       "path": "/api/interview-invite/realtime-token",
-      "source": "src/routes/interview-invite.ts:168"
+      "source": "src/routes/interview-invite.ts:176"
     },
     {
       "method": "GET",
       "path": "/api/interview-invite/room",
-      "source": "src/routes/interview-invite.ts:221"
+      "source": "src/routes/interview-invite.ts:229"
     },
     {
       "method": "GET",

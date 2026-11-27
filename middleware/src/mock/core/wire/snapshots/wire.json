@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T17:09:40.182Z",
-  "serverHandlerSha": "77808143d710baeada222d069c0369f2fb5853e612396dd15b4e0453ffea5beb",
+  "capturedAt": "2026-11-27T17:57:16.686Z",
+  "serverHandlerSha": "7028958d9dfdc46068b99d0034f24db007c97b29996c4ed3a891f17579996660",
   "baseUrl": "http://127.0.0.1:3011",
   "personas": [
     "orgiq/admin",
@@ -5023,6 +5023,9 @@
     "GET /api/interview-invite/calls/:callId/chat/reads": {
       "skipped": "no value found for :callId under /api/interview-invite/calls (orgiq/admin); no value found for :callId under /api/interview-invite/calls (assessment/admin); no value found for :callId under /api/interview-invite/calls (anonymous)"
     },
+    "GET /api/interview-invite/captions": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
     "GET /api/interview-invite/consents": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
@@ -7173,7 +7176,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
