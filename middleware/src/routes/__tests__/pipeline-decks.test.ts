@@ -44,6 +44,9 @@ import { agentcore } from '../../providers/index.js';
 import { flowRunsFixture } from '../../mock/flow-runs.js';
 import { flowRunStore, pendingFlowRuns } from '../../lib/flow-runs/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
+import { spendEntries } from '../../mock/spend-ledger.js';
+import { spendHolds } from '../../mock/spend-holds.js';
+import { mockHolds } from '../../providers/spend-holds.js';
 
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
@@ -343,6 +346,27 @@ describe('run report deck — agent revise', () => {
       expect(run.revisionId).toEqual(expect.any(String));
     });
 
+    it('a refused spend answers with the deterministic reviser and the reason, and books nothing (ledger P-12)', async () => {
+      const { deckId, revisionId } = await makeDeck(as('operator'));
+      spendEntries.reset(); spendHolds.reset();
+      process.env['SPEND_HOLDS_UNATTRIBUTED'] = 'refuse';
+      try {
+        const run = await live(async () => { throw new Error('the agent must not be called'); }, async () => {
+          const started = await request(as('operator')).post(reviseUrl(deckId)).send({ instruction: 'Add speaker notes', baseRevisionId: revisionId });
+          expect(started.status).toBe(202);
+          await settleRuns();
+          return (await request(as('operator')).get(runUrl(deckId, started.body.runId))).body;
+        });
+        // The fixture's run names no initiative, so the call is unattributed and `refuse` refuses it.
+        const deckRunId = pipelineDecksFixture.rows().find((d) => d.id === deckId)!.runId;
+        expect((await loadProjection()).runs.find((x) => x.id === deckRunId)!.context.projectId ?? null).toBeNull();
+        expect(run).toMatchObject({ status: 'completed', engine: 'fallback', reason: expect.stringMatching(/^spend refused: /) });
+        expect(run.revisionId).toEqual(expect.any(String));
+        expect(spendEntries.rows().filter((x) => (x.trigger ?? '').startsWith('deck:'))).toHaveLength(0);
+        expect(mockHolds().filter((h) => (h.sourceId ?? '').startsWith('deck-'))).toHaveLength(0);
+      } finally { delete process.env['SPEND_HOLDS_UNATTRIBUTED']; }
+    });
+
     it('asks for the pipelines-owned revise mode, with the tenant in auth', async () => {
       const app = as('operator');
       const { deckId, revisionId } = await makeDeck(app);
@@ -433,5 +457,16 @@ describe('run report deck — live drafter narrative', () => {
       expect(r.deck.status).toBe(201);
       expect(r.deck.body.narrative.status).toBe('unavailable');
     }
+  });
+
+  it('the drafter call is booked to the run\'s initiative when it has one, else unattributed (ledger P-12)', async () => {
+    spendEntries.reset(); spendHolds.reset();
+    const runId = await pickRun();
+    const projectId = (await loadProjection()).runs.find((x) => x.id === runId)!.context.projectId ?? null;
+    const r = await withAgent(async () => ({ text: '{}', raw: { usage: { inputTokens: 1_000, outputTokens: 100 } } }));
+    expect(r.deck.status).toBe(201);
+    expect(spendEntries.rows().filter((x) => (x.trigger ?? '').startsWith('deck:'))).toEqual([
+      expect.objectContaining({ source: 'agent_invoke', trigger: 'deck:pipelines:draft', actorId: 'u-author', initiativeId: projectId, costBasis: 'estimated' }),
+    ]);
   });
 });

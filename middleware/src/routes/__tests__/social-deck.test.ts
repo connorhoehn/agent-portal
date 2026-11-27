@@ -29,6 +29,9 @@ import { deckIdForRun } from '../../providers/social-decks.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import type { Session } from '../../lib/session.js';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
+import { spendEntries } from '../../mock/spend-ledger.js';
+import { spendHolds } from '../../mock/spend-holds.js';
+import { mockHolds } from '../../providers/spend-holds.js';
 
 const SECRET = 'deck-api-test-secret';
 const previousSecret = process.env['REALTIME_JWT_SECRET'];
@@ -423,6 +426,70 @@ describe('the real agent path', () => {
     const status = (await get('u-sana', started.body.runId)).body;
     expect(status.phase).toBe('completed');
     expect(status.result.narrative).toMatchObject({ status: 'unavailable', reason: 'forbidden' });
+  });
+});
+
+// Money on the drafter call (ledger P-12): held before it, booked after, to the requester and no initiative.
+describe('the drafter call\'s spend', () => {
+  const invoke = agentcore.invokeAgent as jest.Mock;
+  const deckRows = () => spendEntries.rows().filter(r => r.source === 'agent_invoke' && (r.trigger ?? '').startsWith('deck:'));
+  const deckHolds = () => mockHolds().filter(h => h.source === 'agent_invoke' && (h.sourceId ?? '').startsWith('deck-'));
+  beforeEach(() => { (config.mock as { agentcore: boolean }).agentcore = false; invoke.mockReset(); spendEntries.reset(); spendHolds.reset(); });
+  afterEach(() => { (config.mock as { agentcore: boolean }).agentcore = true; delete process.env['SPEND_HOLDS_UNATTRIBUTED']; });
+
+  it('a drafted deck books one unattributed row for the requester at the recorded cost, settling its hold', async () => {
+    invoke.mockResolvedValue({ text: JSON.stringify({ summary: 'x', narratives: [] }), raw: { usage: { inputTokens: 2_000, outputTokens: 300 } }, toolCalls: [] });
+    const started = await run('u-sana', CHANNEL, 'Review'); await settle();
+    expect((await get('u-sana', started.body.runId)).body.phase).toBe('completed');
+    const rows = deckRows();
+    expect(rows).toEqual([expect.objectContaining({ actorId: 'u-sana', initiativeId: null, trigger: 'deck:social:draft', costBasis: 'estimated' })]);
+    expect(rows[0]!.costUsd).toBeCloseTo(2 * 0.0008 + 0.3 * 0.0032, 6);
+    expect(deckHolds().filter(h => h.status === 'held')).toHaveLength(0);
+  });
+
+  it('an unreachable agent releases its hold and books nothing', async () => {
+    invoke.mockRejectedValue(new Error('runtime down'));
+    const started = await run('u-sana', CHANNEL, 'Review'); await settle();
+    expect((await get('u-sana', started.body.runId)).body.result.narrative).toMatchObject({ status: 'unavailable', reason: 'runtime down' });
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds().filter(h => h.status === 'held')).toHaveLength(0);
+  });
+
+  it('a refused spend keeps the template deck, says why, never calls the agent and books nothing', async () => {
+    process.env['SPEND_HOLDS_UNATTRIBUTED'] = 'refuse';
+    const started = await run('u-sana', CHANNEL, 'Review');
+    expect(started.status).toBe(202);
+    await settle();
+    const status = (await get('u-sana', started.body.runId)).body;
+    expect(status.phase).toBe('completed');
+    expect(status.deckId).toBeTruthy();
+    expect(status.result.narrative).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/^spend refused: .*unattributed/) });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds()).toHaveLength(0);
+  });
+
+  it('a refused revise answers as before with the deterministic reviser, and says why', async () => {
+    (config.mock as { agentcore: boolean }).agentcore = true;
+    const started = await run('u-sana', CHANNEL, 'Release review'); await settle();
+    const deckId = (await get('u-sana', started.body.runId)).body.deckId as string;
+    const revisionId = (await getDeck('u-sana', deckId)).body.activeRevisionId as string;
+    (config.mock as { agentcore: boolean }).agentcore = false;
+    process.env['SPEND_HOLDS_UNATTRIBUTED'] = 'refuse';
+    const res = await request(app).post(`/api/chat/decks/${deckId}/revise`).set(await auth('u-sana')).send({ instruction: 'Add speaker notes', baseRevisionId: revisionId });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ engine: 'fallback', replayed: false, reason: expect.stringMatching(/^spend refused: /) });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deckRows()).toHaveLength(0);
+  });
+
+  it('the offline writer (MOCK_AGENTCORE) holds and books nothing', async () => {
+    (config.mock as { agentcore: boolean }).agentcore = true;
+    const started = await run('u-sana', CHANNEL, 'Review'); await settle();
+    expect((await get('u-sana', started.body.runId)).body.phase).toBe('completed');
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds()).toHaveLength(0);
   });
 });
 

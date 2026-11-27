@@ -25,6 +25,7 @@ import { buildConversationDeckFacts, buildConversationDraftInput, type DeckPageF
 import { flowRunStore, kickFlowRun, registerFlowExecutor, type FlowExecutionContext, type FlowRunRow, type FlowRunStep } from './flow-runs/index.js';
 import type { TranscriptLine } from './social-summarize.js';
 import { RECORDING_SOURCE_PREFIX } from './recording-transcript.js';
+import { meteredDeckInvoke } from './deck-shared/spend.js';
 
 export const DECK_AGENT_ID = 'orgiq-assessment-drafter';
 export const DECK_MODE = SOCIAL_DECK_MODE;
@@ -117,11 +118,15 @@ async function draftNarrative(runId: string, input: ReturnType<typeof buildConve
   if (config.mock.agentcore) return { result: mockDraftResult(input, facts) };
   if (process.env['DEV_OFFLINE'] === 'true') return { unavailable: 'the drafter agent is offline' };
   try {
-    const res = await agentcore.invokeAgent(DECK_AGENT_ID, {
+    // Money (ledger P-12): held before the call, booked after. A conversation names no
+    // initiative, so the call is booked unattributed, to the requester; a refusal keeps the template prose.
+    const metered = await meteredDeckInvoke({ tenant: DECK_TENANT, action: 'draft', actorId: sub, initiativeId: null }, () => agentcore.invokeAgent(DECK_AGENT_ID, {
       message: `Execute social deck command ${DECK_MODE}`,
       structuredInput: { tenant: 'social', mode: DECK_MODE, run_id: runId, ...input, auth: { tenant: 'social', sub } },
       timeoutMs: 120_000,
-    });
+    }));
+    if (metered.kind === 'refused') return { unavailable: metered.reason };
+    const { res } = metered;
     if (res.raw && typeof res.raw === 'object' && 'error' in res.raw) return { unavailable: String((res.raw as { error: unknown }).error) };
     if (!res.text.trim()) return { unavailable: 'the drafter returned an empty result' };
     return { result: JSON.parse(res.text) };

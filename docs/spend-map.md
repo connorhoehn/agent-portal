@@ -49,7 +49,8 @@ counted by no budget. The figure itself is already real tokens at a list price
 | 15 | `lib/conversation-artifact.ts:243` (drafter) | same | no | no | same |
 | 16 | `lib/assessment-drafts.ts:222` (drafter) | same | no | no | same |
 | 17 | `lib/agent-loop/plan.ts:112` (drafter plan step; execution is row 22) | same | no | no | same |
-| 18 | `lib/social-deck.ts:120`, `lib/deck-shared/service.ts:123,188` (deck agents) | same | no | no | same |
+| 18 | `lib/social-deck.ts:120`, `lib/deck-shared/service.ts:123,188` (deck drafting and revision: orgiq initiative decks, pipeline run decks, Social decks) | same | yes (27 Nov, ledger P-12: `lib/deck-shared/spend.ts` `meteredDeckInvoke` → `holdAgentInvoke`, `agent_invoke`; only when a real call is made, never under MOCK_AGENTCORE or DEV_OFFLINE; charged to the initiative deck's initiative or the pipeline run's, else unattributed to the requester; a refusal keeps the template text and says why, the deck never fails) | yes (`agent_invoke`, trigger `deck:<tenant>:<draft\|revise>`; a thrown call releases its hold) | `out.raw` usage when present, else an unknown-cost row |
+| 18a | Assessment review decks (`providers/assessment-decks.ts` → `launchRun`, `providers/assessment.ts`) run as assessment runs, so they are row 19 | same | no | no | same as row 19 |
 | 19 | `lib/assessment-dispatcher.ts:67` (assessment runs) | same | no | no | same |
 | 20 | `lib/harness-runner.ts:268` (harness case invoke; judge is row 3) | same | no | no | `durationMs` only |
 | 21 | `routes/invocations.ts:874` (`/replay`) | same | no | no | `processTrace` with no tokens → `est_cost_usd` null |
@@ -130,10 +131,11 @@ The work is to put the other rows on the same rails.
 
 ## 3. Load model for the BFF at 1, 2 and 4 vCPU
 
-Source: `docs/realtime-validation/2026-10-05/capacity-progress.md`,
-`2026-10-06/capacity-{sizing,sockets,latency}/manifest.json` and
-`capacity-sockets/runs-summary.jsonl`, `2026-10-14/capacity-r6.md`,
-`docs/deployment-enhancements/DE-25-middleware-capacity.md`, all at `5b6b828c`.
+Source: the realtime-validation capacity notes (2026-10-05 capacity-progress,
+the 2026-10-06 capacity sizing, sockets and latency manifests and the sockets
+runs summary, 2026-10-14 capacity-r6) and the DE-25 middleware capacity note,
+all at `5b6b828c`; those files were removed in the 5 November handover sweep
+and live only in git history.
 Every run was local: two BFF containers with Redis peer routing, DynamoDB
 Local, 1,000 sockets, 100 calls, 800 paired chat senders. Targets
 (`2026-10-05/capacity-baseline-profile/manifest.json`): invite p95 < 250 ms,

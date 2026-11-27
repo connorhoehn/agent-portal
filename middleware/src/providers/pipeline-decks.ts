@@ -136,6 +136,7 @@ export async function createDeck(
   const requested = body.narrative === true;
   const { spec, outcome, summary } = await shared.applyNarrative(
     facts, buildRunDraftInput(facts), requested, sub, { tenant: 'pipelines', mode: PIPELINE_RUN_DECK_MODE, message: 'Execute pipeline run report command pipeline-run-deck', agentId: DRAFTER_AGENT_ID }, 'Run report built from the run projection.',
+    source.run.context.projectId ?? null,
   );
   const valid = validateDeckSpec(spec);
   if (!valid.ok) return { ok: false, status: 400, reason: 'the generated deck is not valid', details: { errors: valid.errors } };
@@ -200,6 +201,8 @@ export interface DeckReviseResult {
   changedSlideIds: string[];
   /** agent: the drafter answered · fallback: it was unavailable, the deterministic reviser answered · offline: MOCK_AGENTCORE. */
   engine: 'agent' | 'fallback' | 'offline';
+  /** Set only when the deterministic reviser answered because the spend was refused (ledger P-12). */
+  reason?: string;
 }
 
 export async function reviseDeck(
@@ -255,14 +258,15 @@ export async function reviseExecutor(ctx: FlowExecutionContext): Promise<{ resul
 
   steps = withStatus(withStatus(steps, 'load', 'completed'), 'revise', 'running');
   await ctx.report(steps);
-  const { answer, engine } = await shared.reviseWithAgent('pipelines', input, facts, run.requestedBy, DRAFTER_AGENT_ID);
+  const { answer, engine, reason } = await shared.reviseWithAgent('pipelines', input, facts, run.requestedBy, DRAFTER_AGENT_ID, source.run.context.projectId ?? null);
+  const why = reason !== undefined ? { reason } : {};
 
   steps = withStatus(withStatus(steps, 'revise', 'completed'), 'check', 'running');
   await ctx.report(steps);
   const merged = mergeRevise(base.spec, answer, facts, { instruction, ...(slideId ? { slideId } : {}), locked: base.lockedSlideIds });
   if (!merged.ok) throw new Error(merged.reason);
   const done = withStatus(steps, 'check', 'completed');
-  if (!merged.changed) return { result: { revisionId: null, summary: merged.summary, changedSlideIds: [], engine }, progress: done };
+  if (!merged.changed) return { result: { revisionId: null, summary: merged.summary, changedSlideIds: [], engine, ...why }, progress: done };
   // The head may have moved while the agent ran: the append is the CAS.
   const appended = await pipelineDeckStore.appendRevision({
     id: pipelineDeckRevisions.newRevisionId(), deckId, baseRevisionId: base.id,
@@ -271,7 +275,7 @@ export async function reviseExecutor(ctx: FlowExecutionContext): Promise<{ resul
   });
   if (!appended.ok) throw new Error(appended.reason === 'missing' ? 'deck not found' : 'the deck has a newer revision than the one this revise started from');
   return {
-    result: { revisionId: appended.revision.id, summary: `${merged.summary} Saved revision ${appended.revision.seq}.`, changedSlideIds: merged.changedSlideIds, engine },
+    result: { revisionId: appended.revision.id, summary: `${merged.summary} Saved revision ${appended.revision.seq}.`, changedSlideIds: merged.changedSlideIds, engine, ...why },
     progress: done,
   };
 }
@@ -281,6 +285,8 @@ registerFlowExecutor(PIPELINE_DECK_REVISE_KIND, reviseExecutor);
 export interface DeckReviseRunView {
   id: string; status: 'running' | 'completed' | 'failed'; summary: string | null; error: string | null;
   revisionId: string | null; changedSlideIds: string[]; engine: DeckReviseResult['engine'] | null;
+  /** Present only on a revise whose spend was refused: why the deterministic reviser answered. */
+  reason?: string;
   progress: { phase: string; detail: string } | null;
 }
 
@@ -293,6 +299,7 @@ export function reviseRunView(run: FlowRunRow): DeckReviseRunView {
     revisionId: typeof result?.revisionId === 'string' ? result.revisionId : null,
     changedSlideIds: Array.isArray(result?.changedSlideIds) ? result.changedSlideIds : [],
     engine: result?.engine ?? null,
+    ...(typeof result?.reason === 'string' ? { reason: result.reason } : {}),
     progress: run.status === 'completed' || run.status === 'failed' || !active ? null : { phase: active.label, detail: '' },
   };
 }

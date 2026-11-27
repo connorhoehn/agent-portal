@@ -15,6 +15,7 @@ import { mergeDraft, mockDraftResult, mockReviseResult, type ReviseDeckInput } f
 import { DECK_REVISE_MODE_BY_TENANT, narrativeModeAllowed, reviseModeAllowed, type DeckReviseTenant } from './narrative-modes.js';
 import { revisionLabel, type ArtifactRevision, type ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import type { DeckPreviewOut, DeckRevisionSummary, NarrativeOutcome, Result } from './types.js';
+import { meteredDeckInvoke } from './spend.js';
 
 export const summaryOf = (r: Omit<ArtifactRevision<DeckSpec>, 'spec'>): DeckRevisionSummary => ({
   id: r.id, label: r.label, createdAt: r.createdAt, producedBy: r.producedBy,
@@ -111,7 +112,7 @@ export interface NarrativeAgent { tenant: string; mode: string; message: string;
 
 /** Nova prose for the narrative slides, or the reason it was not used. */
 async function draftNarrative(
-  facts: DeckFacts, input: { slides: unknown[] }, sub: string | null, agent: NarrativeAgent,
+  facts: DeckFacts, input: { slides: unknown[] }, sub: string | null, agent: NarrativeAgent, initiativeId: string | null,
 ): Promise<{ result?: unknown; unavailable?: string }> {
   if (!input.slides.length) return { unavailable: 'no slide has evidence to narrate' };
   // The mode/tenant pair is checked here and again inside the agent; a mismatch
@@ -120,11 +121,14 @@ async function draftNarrative(
   if (config.mock.agentcore) return { result: mockDraftResult(input as never, facts) };
   if (process.env['DEV_OFFLINE'] === 'true') return { unavailable: 'the drafter agent is offline' };
   try {
-    const res = await agentcore.invokeAgent(agent.agentId, {
+    // Money (ledger P-12): held before the call, booked after; a refusal keeps the template prose.
+    const metered = await meteredDeckInvoke({ tenant: agent.tenant, action: 'draft', actorId: sub, initiativeId }, () => agentcore.invokeAgent(agent.agentId, {
       message: agent.message,
       structuredInput: { tenant: agent.tenant, mode: agent.mode, ...input, auth: { tenant: agent.tenant, sub } },
       timeoutMs: 120_000,
-    });
+    }));
+    if (metered.kind === 'refused') return { unavailable: metered.reason };
+    const { res } = metered;
     if (res.raw && typeof res.raw === 'object' && 'error' in res.raw) return { unavailable: String((res.raw as { error: unknown }).error) };
     if (!res.text.trim()) return { unavailable: 'the drafter returned an empty result' };
     return { result: JSON.parse(res.text) };
@@ -136,16 +140,18 @@ async function draftNarrative(
 /**
  * The facts deck, optionally with Nova prose merged over it (verbatim-grounded
  * by `mergeDraft`). `input` is the tenant's draft input built from the facts.
+ * `initiativeId` is the initiative the drafter call is charged to (null:
+ * unattributed, the requester's alone).
  */
 export async function applyNarrative(
   facts: DeckFacts, input: { slides: unknown[] }, requested: boolean, sub: string | null,
-  agent: NarrativeAgent, defaultSummary: string,
+  agent: NarrativeAgent, defaultSummary: string, initiativeId: string | null,
 ): Promise<{ spec: DeckSpec; outcome: NarrativeOutcome; summary: string }> {
   let spec = facts.spec;
   let outcome: NarrativeOutcome = { requested, status: 'none', templatedSlideIds: [] };
   let summary = defaultSummary;
   if (requested) {
-    const drafted = await draftNarrative(facts, input, sub, agent);
+    const drafted = await draftNarrative(facts, input, sub, agent, initiativeId);
     if (drafted.unavailable !== undefined) {
       outcome = { requested, status: 'unavailable', templatedSlideIds: [], reason: drafted.unavailable };
     } else {
@@ -167,6 +173,8 @@ export interface ReviseAnswer {
   answer: unknown;
   /** agent: the drafter answered · fallback: refused/unavailable, the deterministic reviser answered · offline: MOCK_AGENTCORE. */
   engine: 'agent' | 'fallback' | 'offline';
+  /** Set only when the fallback answered because the spend was refused (ledger P-12): the refusal's reason. */
+  reason?: string;
 }
 
 /**
@@ -178,18 +186,21 @@ export interface ReviseAnswer {
  * the same grounding and CAS rules as before.
  */
 export async function reviseWithAgent(
-  tenant: DeckReviseTenant, input: ReviseDeckInput, facts: DeckFacts, sub: string | null, agentId: string,
+  tenant: DeckReviseTenant, input: ReviseDeckInput, facts: DeckFacts, sub: string | null, agentId: string, initiativeId: string | null,
 ): Promise<ReviseAnswer> {
   const deterministic = (engine: ReviseAnswer['engine']): ReviseAnswer => ({ answer: mockReviseResult(input, facts), engine });
   if (config.mock.agentcore) return deterministic('offline');
   const mode = DECK_REVISE_MODE_BY_TENANT[tenant];
   if (!reviseModeAllowed(mode, tenant) || process.env['DEV_OFFLINE'] === 'true') return deterministic('fallback');
   try {
-    const res = await agentcore.invokeAgent(agentId, {
+    // Money (ledger P-12): held before the call, booked after; a refusal takes the deterministic reviser.
+    const metered = await meteredDeckInvoke({ tenant, action: 'revise', actorId: sub, initiativeId }, () => agentcore.invokeAgent(agentId, {
       message: `Execute deck command ${mode}`,
       structuredInput: { tenant, mode, ...input, auth: { tenant, sub } },
       timeoutMs: 120_000,
-    });
+    }));
+    if (metered.kind === 'refused') return { ...deterministic('fallback'), reason: metered.reason };
+    const { res } = metered;
     if (res.raw && typeof res.raw === 'object' && 'error' in res.raw) return deterministic('fallback');
     if (!res.text.trim()) return deterministic('fallback');
     return { answer: JSON.parse(res.text), engine: 'agent' };

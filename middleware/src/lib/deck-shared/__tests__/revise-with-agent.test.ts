@@ -25,7 +25,7 @@ describe('reviseWithAgent', () => {
   it.each(TENANTS)('%s asks its own mode with itself as the auth tenant', async (tenant, mode) => {
     setMock(false);
     const spy = jest.spyOn(agentcore, 'invokeAgent').mockResolvedValue({ text: JSON.stringify({ summary: 'ok', spec }) } as never);
-    const out = await reviseWithAgent(tenant, input, facts, 'u1', 'orgiq-assessment-drafter');
+    const out = await reviseWithAgent(tenant, input, facts, 'u1', 'orgiq-assessment-drafter', null);
     expect(out.engine).toBe('agent');
     expect(spy.mock.calls[0]?.[1]).toMatchObject({ structuredInput: { tenant, mode, auth: { tenant, sub: 'u1' }, instruction: 'make it shorter' } });
   });
@@ -33,7 +33,7 @@ describe('reviseWithAgent', () => {
   it('keeps the slide text, the instruction and the facts as separate context', async () => {
     setMock(false);
     const spy = jest.spyOn(agentcore, 'invokeAgent').mockResolvedValue({ text: '{}' } as never);
-    await reviseWithAgent('social', input, facts, null, 'a');
+    await reviseWithAgent('social', input, facts, 'u1', 'a', null);
     const sent = (spy.mock.calls[0]?.[1] as { structuredInput: Record<string, unknown> }).structuredInput;
     expect(sent['spec']).toEqual(spec);
     expect(sent['facts']).toEqual({ s1: { progress: '62%' } });
@@ -44,7 +44,7 @@ describe('reviseWithAgent', () => {
     setMock(false);
     for (const impl of [async () => ({ text: '', raw: { error: 'forbidden' } }), async () => { throw new Error('down'); }, async () => ({ text: ' ' })]) {
       jest.spyOn(agentcore, 'invokeAgent').mockImplementation(impl as never);
-      const out = await reviseWithAgent('orgiq', input, facts, 'u1', 'a');
+      const out = await reviseWithAgent('orgiq', input, facts, 'u1', 'a', null);
       expect(out.engine).toBe('fallback');
       expect((out.answer as { changedSlideIds: string[] }).changedSlideIds).toEqual(['s1']);
     }
@@ -53,8 +53,8 @@ describe('reviseWithAgent', () => {
   it('answers offline without calling the agent under MOCK_AGENTCORE, identically each time', async () => {
     setMock(true);
     const spy = jest.spyOn(agentcore, 'invokeAgent');
-    const a = await reviseWithAgent('pipelines', input, facts, 'u1', 'a');
-    const b = await reviseWithAgent('pipelines', input, facts, 'u1', 'a');
+    const a = await reviseWithAgent('pipelines', input, facts, 'u1', 'a', null);
+    const b = await reviseWithAgent('pipelines', input, facts, 'u1', 'a', null);
     expect(a.engine).toBe('offline');
     expect(a.answer).toEqual(b.answer);
     expect(spy).not.toHaveBeenCalled();

@@ -163,5 +163,7 @@ const reviseDeckRaw = (
 ): Promise<Result<shared.DeckReviseOut>> =>
   shared.reviseDeckSync<SocialDeckRow>({
     tenant: 'social', revisions: socialDeckRevisions, lookup: () => socialDeckStore.getDeck(deckId), deckId, revisionPrefix: 'srev',
-    facts: loadFacts, refresh: refreshPageSlides, agentId: 'orgiq-assessment-drafter', sub, body,
+    facts: loadFacts, refresh: refreshPageSlides, agentId: 'orgiq-assessment-drafter',
+    // A Social deck belongs to a conversation, not an initiative: booked unattributed, to the requester.
+    initiativeOf: () => null, sub, body,
   });

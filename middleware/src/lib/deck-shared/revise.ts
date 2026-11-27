@@ -31,6 +31,8 @@ export interface DeckReviseOut {
   engine: ReviseAnswer['engine'];
   /** True when this is the answer to an earlier request with the same requestId. */
   replayed: boolean;
+  /** Set only when the deterministic reviser answered because the spend was refused (ledger P-12). */
+  reason?: string;
 }
 
 /** `<prefix>-<uuid-shaped digest>` — a stable revision id for one (deck, base, requestId). */
@@ -56,6 +58,8 @@ export interface ReviseOptions<D extends DeckHead> {
    */
   refresh?: (base: DeckSpec, facts: DeckFacts, locked: readonly string[]) => DeckSpec;
   agentId: string;
+  /** The initiative the reviser call is charged to (null: unattributed, the requester's alone). */
+  initiativeOf: (deck: D) => string | null;
   sub: string | null;
   body: { instruction?: unknown; slideId?: unknown; baseRevisionId?: unknown; requestId?: unknown };
 }
@@ -100,7 +104,8 @@ export async function reviseDeckSync<D extends DeckHead>(o: ReviseOptions<D>): P
 
   const working = o.refresh ? o.refresh(base.spec, facts, base.lockedSlideIds) : base.spec;
   const input = buildReviseInput(working, facts, instruction, slideId);
-  const { answer, engine } = await reviseWithAgent(o.tenant, input, facts, o.sub, o.agentId);
+  const { answer, engine, reason } = await reviseWithAgent(o.tenant, input, facts, o.sub, o.agentId, o.initiativeOf(deck));
+  const why = reason !== undefined ? { reason } : {};
   const mergedRaw = mergeRevise(working, answer, facts, { instruction, ...(slideId ? { slideId } : {}), locked: base.lockedSlideIds });
   if (!mergedRaw.ok) return { ok: false, status: 400, reason: mergedRaw.reason };
   // A refresh that changed a slide is itself a change, even when the agent changed nothing.
@@ -111,7 +116,7 @@ export async function reviseDeckSync<D extends DeckHead>(o: ReviseOptions<D>): P
       ? { ...mergedRaw, changed: true as const, spec: working, changedSlideIds: working.slides.filter((s, i) => !sameJson(s, base.spec.slides[i])).map((s) => s.id),
           summary: 'Updated the cited pages to what you can read now.' }
       : mergedRaw;
-  if (!merged.changed) return { ok: true, value: { revisionId: null, summary: merged.summary, changedSlideIds: [], engine, replayed: false } };
+  if (!merged.changed) return { ok: true, value: { revisionId: null, summary: merged.summary, changedSlideIds: [], engine, replayed: false, ...why } };
   // The head may have moved while the agent ran: the append is the CAS.
   const appended = await revisions.append({
     id: revisionId ?? revisions.newRevisionId(), deckId, baseRevisionId: base.id,
@@ -123,5 +128,5 @@ export async function reviseDeckSync<D extends DeckHead>(o: ReviseOptions<D>): P
       ? { ok: false, status: 404, reason: 'deck not found' }
       : { ok: false, status: 409, reason: 'the deck has a newer revision', details: { activeRevisionId: appended.head } };
   }
-  return { ok: true, value: { revisionId: appended.revision.id, summary: `${merged.summary} Saved revision ${appended.revision.seq}.`, changedSlideIds: merged.changedSlideIds, engine, replayed: false } };
+  return { ok: true, value: { revisionId: appended.revision.id, summary: `${merged.summary} Saved revision ${appended.revision.seq}.`, changedSlideIds: merged.changedSlideIds, engine, replayed: false, ...why } };
 }

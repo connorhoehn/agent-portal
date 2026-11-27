@@ -55,6 +55,11 @@ import { config } from '../../config.js';
 import { agentcore } from '../../providers/index.js';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import { statusLabel } from '../../lib/initiative-deck/facts.js';
+import { spendEntries } from '../../mock/spend-ledger.js';
+import { spendHolds } from '../../mock/spend-holds.js';
+import { userBudgets } from '../../mock/user-budgets.js';
+import { mockHolds } from '../../providers/spend-holds.js';
+import { userSpendThisPeriod } from '../../providers/user-budgets.js';
 
 const PID = 'p-auth-migration';
 const BASE = '/api/initiative-decks';
@@ -338,6 +343,77 @@ describe('initiative status deck — live drafter narrative', () => {
       expect(r.deck.status).toBe(201);
       expect(r.deck.body.narrative.status).toBe('unavailable');
     }
+  });
+});
+
+// Money on the drafter call (ledger P-12): held before it against the deck's initiative, booked after.
+describe('initiative status deck — the drafter call\'s spend', () => {
+  const deckRows = () => spendEntries.rows().filter((r) => r.source === 'agent_invoke' && (r.trigger ?? '').startsWith('deck:'));
+  const deckHolds = () => mockHolds().filter((h) => h.source === 'agent_invoke' && (h.sourceId ?? '').startsWith('deck-'));
+  const live = async <T,>(answer: () => Promise<unknown>, fn: (spy: jest.SpyInstance) => Promise<T>): Promise<T> => {
+    (config.mock as { agentcore: boolean }).agentcore = false;
+    const spy = jest.spyOn(agentcore, 'invokeAgent').mockImplementation(answer as never);
+    try { return await fn(spy); } finally { spy.mockRestore(); (config.mock as { agentcore: boolean }).agentcore = true; }
+  };
+  beforeEach(() => { spendEntries.reset(); spendHolds.reset(); userBudgets.reset(); });
+  afterAll(() => { spendEntries.reset(); spendHolds.reset(); userBudgets.reset(); });
+
+  it('a drafted deck holds against its initiative, then books one row for the requester that settles the hold', async () => {
+    await live(async () => ({ text: '{}', raw: { usage: { inputTokens: 2_000, outputTokens: 300 } } }), async () => {
+      const res = await request(as('program-owner')).post(`${BASE}/projects/${PID}`).send({ narrative: true });
+      expect(res.status).toBe(201);
+    });
+    const rows = deckRows();
+    expect(rows).toEqual([expect.objectContaining({ initiativeId: PID, actorId: 'u-program-owner', trigger: 'deck:orgiq:draft', costBasis: 'estimated' })]);
+    expect(rows[0]!.costUsd).toBeCloseTo(2 * 0.0008 + 0.3 * 0.0032, 6);
+    const holds = deckHolds();
+    expect(holds).toEqual([expect.objectContaining({ initiativeId: PID, actorId: 'u-program-owner', sourceId: rows[0]!.sourceId })]);
+    expect(holds[0]!.status).not.toBe('held');
+  });
+
+  it('an agent that throws releases its hold and books nothing', async () => {
+    await live(async () => { throw new Error('runtime unreachable'); }, async () => {
+      const res = await request(as('program-owner')).post(`${BASE}/projects/${PID}`).send({ narrative: true });
+      expect(res.status).toBe(201);
+      expect(res.body.narrative).toMatchObject({ status: 'unavailable', reason: 'runtime unreachable' });
+    });
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds().map((h) => h.status)).toEqual(['released']);
+  });
+
+  it('a refused spend (the requester\'s hard cap) keeps the template deck with the reason, never calls the agent, books nothing', async () => {
+    const spent = (await userSpendThisPeriod('u-program-owner')).spentUsd;
+    userBudgets.rows().push({ userId: 'u-program-owner', allocatedUsd: spent, hardCapUsd: spent, note: null, setBy: 'u-release' });
+    await live(async () => ({ text: '{}' }), async (spy) => {
+      const app = as('program-owner');
+      const res = await request(app).post(`${BASE}/projects/${PID}`).send({ narrative: true });
+      expect(res.status).toBe(201);
+      expect(res.body.narrative).toMatchObject({ status: 'unavailable', reason: expect.stringMatching(/^spend refused: /) });
+      const revised = await request(app).post(`${BASE}/${res.body.deckId}/revise`).send({ instruction: 'Add speaker notes', baseRevisionId: res.body.revisionId });
+      expect(revised.status).toBe(201);
+      expect(revised.body).toMatchObject({ engine: 'fallback', reason: expect.stringMatching(/^spend refused: /) });
+      expect(spy).not.toHaveBeenCalled();
+    });
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds()).toHaveLength(0);
+  });
+
+  it('a revise the runtime answered (here with an error envelope) is booked against the deck\'s initiative, with no reason', async () => {
+    const app = as('program-owner');
+    const made = await build(app);
+    await live(async () => ({ text: '', raw: { error: 'forbidden' } }), async () => {
+      const res = await request(app).post(`${BASE}/${made.deckId}/revise`).send({ instruction: 'Add speaker notes', baseRevisionId: made.revisionId });
+      expect(res.status).toBe(201);
+      expect(res.body.engine).toBe('fallback');
+      expect(res.body.reason).toBeUndefined();
+    });
+    expect(deckRows()).toEqual([expect.objectContaining({ initiativeId: PID, actorId: 'u-program-owner', trigger: 'deck:orgiq:revise', costBasis: 'unknown', costUsd: null })]);
+  });
+
+  it('the offline writer (MOCK_AGENTCORE) holds and books nothing', async () => {
+    await build(as('program-owner'), { narrative: true });
+    expect(deckRows()).toHaveLength(0);
+    expect(deckHolds()).toHaveLength(0);
   });
 });
 

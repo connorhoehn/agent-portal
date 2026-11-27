@@ -209,6 +209,7 @@ export async function createDeck(
   const requested = body.narrative === true;
   const drafted = await shared.applyNarrative(
     facts, buildInitiativeDraftInput(facts, brief), requested, sub, { tenant: 'orgiq', mode: INITIATIVE_STATUS_DECK_MODE, message: 'Execute initiative status command initiative-status-deck', agentId: DRAFTER_AGENT_ID }, 'Status deck built from the initiative record.',
+    projectId,
   );
   const { spec, outcome } = drafted;
   const summary = brief ? `${drafted.summary} ${briefLine(brief)}` : drafted.summary;
@@ -268,5 +269,5 @@ export const reviseDeck = (
       const source = await loadInitiativeDeckSource(deck.projectId, deck.includesBudget);
       return source ? buildInitiativeDeckFacts(source, { title: base.title }) : null;
     },
-    agentId: DRAFTER_AGENT_ID, sub, body,
+    agentId: DRAFTER_AGENT_ID, initiativeOf: (deck) => deck.projectId, sub, body,
   });
