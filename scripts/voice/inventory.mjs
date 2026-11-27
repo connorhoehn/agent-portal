@@ -654,6 +654,7 @@ export const V2_RULES = [
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/recap\/ask$/, 'never', null, 'asking Milo where something was said is read on the scorecard page, never by voice'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/panel-notice$/, 'never', null, 'acknowledging the recording notice is the interviewer\'s own act on My interviews'],
   [/^POST \/api\/interviews\/candidates\/:[^/]+\/deletion$/, 'never', null, 'deleting a candidate\'s data is confirmed on the profile, never by voice'],
+  [/^(GET|PUT) \/api\/interviews\/interviews\/:[^/]+\/(my-notes|scorecard-draft)$/, 'never', null, 'an interviewer\'s private notes and scorecard draft are theirs alone; the voice navigator never reads them aloud or writes them'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/scorecard$/, 'never', null, 'a scorecard is the interviewer\'s own judgement; Milo never scores (decision 6)'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/suggestion\/:[^/]+\/answer$/, 'never', null, 'answering Milo\'s suggestion is the lead\'s act in the room'],
   [/^PUT \/api\/interviews\/interviews\/:[^/]+\/questions$/, 'not-yet', 'update', 'choose a round\'s questions (Prepare)'],

@@ -592,6 +592,32 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     mockId: (i: { id: string }) => i.id,
   },
   {
+    name: 'interview_private_notes',
+    fixture: 'interviews.private-notes',
+    describes: 'An interviewer\'s private notes on one round: none in the seed (a note is written on purpose, and only its author reads it).',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_private_notes',
+    // The seed holds none, so the shape is checked against one sample row of the kind the store writes.
+    mockRows: async () => [
+      ...(await import('../../interviews-private-notes.js')).interviewPrivateNotesFixture.rows('default'),
+      { interviewId: 'iv-sample', authorId: 'u-sample', body: 'Asked about the retry budget first.', revision: 2, updatedAt: '2026-11-16T10:00:00.000Z' },
+    ],
+    mockId: (n: { interviewId: string; authorId: string }) => `${n.interviewId}:${n.authorId}`,
+  },
+  {
+    name: 'interview_scorecard_drafts',
+    fixture: 'interviews.scorecard-drafts',
+    describes: 'A scorecard draft kept for its author before Submit: none in the seed (a draft is typed on purpose and goes on submit).',
+    sqlFile: 'interviews_schema.sql',
+    table: 'interview_scorecard_drafts',
+    // The seed holds none, so the shape is checked against one sample row of the kind the store writes.
+    mockRows: async () => [
+      ...(await import('../../interviews-private-notes.js')).interviewScorecardDraftsFixture.rows('default'),
+      { interviewId: 'iv-sample', authorId: 'u-sample', basedOn: 0, draft: { summary: '' }, revision: 1, updatedAt: '2026-11-16T10:00:00.000Z' },
+    ],
+    mockId: (d: { interviewId: string; authorId: string }) => `${d.interviewId}:${d.authorId}`,
+  },
+  {
     name: 'interview_deletions',
     fixture: 'interviews.deletions',
     describes: 'The deletion log: none in the seed (a deletion is asked for, or a period runs out); kinds and counts only, never content or a name.',

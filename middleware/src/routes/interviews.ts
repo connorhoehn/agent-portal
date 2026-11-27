@@ -26,6 +26,7 @@ import { recapRouter } from './interviews/recap.js';
 import { interviewsEnabled } from '../lib/interviews/flag.js';
 import { roomRouter } from './interviews/room.js';
 import { cancelRouter } from './interviews/cancel.js';
+import { privateNotesRouter } from './interviews/private-notes.js';
 import { stageMovesRouter } from './interviews/stage-moves.js';
 import { recordRouter } from './interviews/record.js';
 import { consentEffectsRouter } from './interviews/consent-effects.js';
@@ -117,6 +118,7 @@ interviewsRouter.use(prepareRouter); // lane PREPARE (row I1.7): the lead choose
 interviewsRouter.use(recordRouter); // lane RECORD-PAGE (row I5.1): the interview record, panel side of a finished interview only
 
 interviewsRouter.use(scorecardsRouter); // lane SCORE (row I5.3): the scorecard, D8
+interviewsRouter.use(privateNotesRouter); // gap audit 2026-11-20 §5: an interviewer's own notes on a round, and their scorecard draft
 interviewsRouter.use(recapRouter); // lane RECAP (row I5.2): Milo's recap, opened between the ratings and the recommendation, E3
 interviewsRouter.get('/interviews/:id', asyncHandler(async (req, res) => {
   const ix = await indexFor(req);

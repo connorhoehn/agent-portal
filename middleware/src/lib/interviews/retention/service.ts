@@ -29,7 +29,7 @@ import { INTERVIEWS_TENANT, type Interview, type InterviewsWorld } from '../type
 import { registerOwnErasers } from './erasers.js';
 import { retentionPeriods, type RetentionPeriods } from './periods.js';
 import { recordStatements, type RecordStatements } from './records.js';
-import { EraserBusy, EraserSkipped, erasersOf } from './registry.js';
+import { EraserBusy, EraserSkipped, eraserFor, erasersOf } from './registry.js';
 import { candidateRecordsDue, deletionDueByMs, dueAtMs, isDue, periodStartMs } from './rules.js';
 import { deletionStore, type DeletionReason, type DeletionRow, type DeletionStore, type LeftItem, type RemovedCount } from './store.js';
 import { overdueFirst, ringOverdue } from './overdue.js';
@@ -101,6 +101,9 @@ export function scopeOfRow(row: Pick<DeletionRow, 'id'>): DeletionScope {
 /** A finished or open row answers a request when it is for the same scope, or is the older both-in-one. */
 const covers = (row: Pick<DeletionRow, 'id'>, want: DeletionScope): boolean => scopeOfRow(row) === 'all' || scopeOfRow(row) === want;
 
+/** The media kinds a personal-data request also takes (erasers.ts privateNotesEraser, scorecardDraftsEraser). */
+const WORKING_MATERIAL = ['private-notes', 'scorecard-drafts'] as const;
+
 /** Every step a row of this reason runs. `withCandidate`: a record row also takes the résumé and contact details. */
 function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewIds'> & { id?: string }, d: RetentionDeps, by: string | null, withCandidate: boolean, scope: DeletionScope = row.id ? scopeOfRow({ id: row.id }) : 'all'): Step[] {
   const ids = row.interviewIds;
@@ -119,7 +122,10 @@ function stepsFor(row: Pick<DeletionRow, 'reason' | 'candidateId' | 'interviewId
     },
   };
   if (scope === 'recordings') return [...registered('media'), invite];
-  if (scope === 'personal') return [resume, contact, reasons];
+  // An interviewer's private notes and unsubmitted drafts are written about the person: a personal-data request takes them
+  // too (they are media otherwise, erasers.ts, so a recordings request and the media period take them as well).
+  const working = WORKING_MATERIAL.flatMap((kind) => { const e = eraserFor(kind); return e ? [{ kind: e.kind, run: () => e.erase(ids) }] : []; });
+  if (scope === 'personal') return [resume, contact, reasons, ...working];
   return [...registered('media'), invite, resume, contact, reasons];
 }
 

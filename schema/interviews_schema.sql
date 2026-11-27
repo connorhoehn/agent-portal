@@ -512,3 +512,25 @@ CREATE INDEX IF NOT EXISTS interview_runs_unfinished_idx ON interview_runs (queu
 -- that result; replace the rule by name (a re-run drops and re-adds the same rule).
 ALTER TABLE interview_runs DROP CONSTRAINT IF EXISTS interview_runs_status_check;
 ALTER TABLE interview_runs ADD CONSTRAINT interview_runs_status_check CHECK (status IN ('queued', 'compiling', 'running', 'succeeded', 'failed', 'compile_error', 'timed_out', 'runner_timeout', 'memory_exceeded', 'cancelled', 'internal_error'));
+
+-- An interviewer's private notes on one round, and their scorecard draft (gap audit 2026-11-20, section 5;
+-- lib/interviews/private-notes.ts). One row per seat per interview; only its author reads or writes it, decided above
+-- the store. Each save is a compare-and-set on `revision`. Media for retention (decision 17): removed with the
+-- recording, at once on a deletion request. A draft is deleted when its author submits.
+CREATE TABLE IF NOT EXISTS interview_private_notes (
+  interview_id  TEXT NOT NULL REFERENCES interviews(id),
+  author_id     TEXT NOT NULL,
+  body          TEXT NOT NULL CHECK (char_length(body) <= 10000),
+  revision      INTEGER NOT NULL CHECK (revision >= 1),
+  updated_at    TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (interview_id, author_id)
+);
+CREATE TABLE IF NOT EXISTS interview_scorecard_drafts (
+  interview_id  TEXT NOT NULL REFERENCES interviews(id),
+  author_id     TEXT NOT NULL,
+  based_on      INTEGER NOT NULL CHECK (based_on >= 0),
+  draft         JSONB NOT NULL,
+  revision      INTEGER NOT NULL CHECK (revision >= 1),
+  updated_at    TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (interview_id, author_id)
+);

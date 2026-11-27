@@ -15,6 +15,9 @@
 //                                   one, policy.ts `keepsOwnRetention`). One count per call that still held words. A call
 //                                   Milo is listening to cannot be erased: EraserBusy, retried.
 //   consents, scorecards    record  records.ts's own statements.
+//   private-notes,          media   the interviews store's own erase (store.ts PrivateNoteWrites): an interviewer's notes
+//   scorecard-drafts                and unsubmitted drafts are working material about the candidate, not the record,
+//                                   so they go with the media, and at once on a deletion request.
 // The suggestion log's eraser is the coach's (`eraseSuggestions`), registered by the integrator.
 //
 // The mock world has no media server and, for the seeded finished interviews, no stored call: their recording and words are
@@ -36,6 +39,8 @@ import { EraserBusy, EraserSkipped, registerEraser, type Eraser } from './regist
 import { recordStatements, type RecordStatements } from './records.js';
 import { interviewLobby } from './rules.js';
 import { interviewsNowMs } from '../clock.js';
+import { interviewsStore } from '../store-select.js';
+import type { InterviewsStore } from '../store.js';
 import { config } from '../../../config.js';
 import { interviewRecordLinesFixture, interviewRecordingsFixture } from '../../../mock/interviews-records.js';
 
@@ -178,6 +183,13 @@ export function scorecardsEraser(records: () => RecordStatements = recordStateme
   return { kind: 'scorecards', class: 'record', erase: (ids) => records().eraseScorecards(ids) };
 }
 
+export function privateNotesEraser(store: () => Pick<InterviewsStore, 'erasePrivateNotes'> = interviewsStore): Eraser {
+  return { kind: 'private-notes', class: 'media', erase: (ids) => store().erasePrivateNotes(ids) };
+}
+export function scorecardDraftsEraser(store: () => Pick<InterviewsStore, 'eraseScorecardDrafts'> = interviewsStore): Eraser {
+  return { kind: 'scorecard-drafts', class: 'media', erase: (ids) => store().eraseScorecardDrafts(ids) };
+}
+
 let registered = false;
 /** Register this module's erasers with their real dependencies. Safe to call twice. */
 export function registerOwnErasers(): void {
@@ -194,4 +206,6 @@ export function registerOwnErasers(): void {
   registerEraser({ kind: 'pad-log', class: 'media', erase: erasePadLog });
   registerEraser({ kind: 'board-snapshots', class: 'media', erase: eraseBoardSnapshots });
   registerEraser({ kind: 'runs', class: 'media', erase: eraseRuns });
+  registerEraser(privateNotesEraser());
+  registerEraser(scorecardDraftsEraser());
 }

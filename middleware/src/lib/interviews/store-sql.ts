@@ -15,6 +15,7 @@ import type {
 } from './types.js';
 import { DuplicateCandidateError, type InterviewsStore, type NewOpening, type WriteResult } from './store.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
+import type { PrivateNote, ScorecardDraft } from './private-notes.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -189,6 +190,50 @@ export function scorecardFromRow(r: Record<string, unknown>): Scorecard {
     ...(redFlagsSeenOf(r['red_flags_seen'])),
   };
 }
+
+export function privateNoteFromRow(r: Record<string, unknown>): PrivateNote {
+  return { interviewId: String(r['interview_id']), authorId: String(r['author_id']), body: String(r['body'] ?? ''), revision: Number(r['revision']), updatedAt: isoOf(r['updated_at']) };
+}
+export function scorecardDraftFromRow(r: Record<string, unknown>): ScorecardDraft {
+  return {
+    interviewId: String(r['interview_id']), authorId: String(r['author_id']), basedOn: Number(r['based_on']),
+    draft: json<Record<string, unknown>>(r['draft'], {}), revision: Number(r['revision']), updatedAt: isoOf(r['updated_at']),
+  };
+}
+
+const NOTE_COLUMNS = 'interview_id, author_id, body, revision, updated_at';
+const DRAFT_COLUMNS = 'interview_id, author_id, based_on, draft, revision, updated_at';
+const idList = (ids: readonly string[]): { sql: string; params: SqlParameter[] } => {
+  const params = ids.map((id, i) => textParam(`id${i}`, id));
+  return { sql: params.map((p) => `:${p.name}`).join(', '), params };
+};
+
+/** The private notes' and drafts' statements (store.ts PrivateNoteWrites): read by key, insert while none, update on the revision. */
+export const PRIVATE_NOTE_SQL = {
+  get: `SELECT ${NOTE_COLUMNS} FROM interview_private_notes WHERE interview_id = :interview_id AND author_id = :author_id`,
+  insert: `INSERT INTO interview_private_notes (${NOTE_COLUMNS})
+  VALUES (:interview_id, :author_id, :body, 1, CAST(:updated_at AS TIMESTAMPTZ))
+  ON CONFLICT DO NOTHING
+  RETURNING ${NOTE_COLUMNS}`,
+  update: `UPDATE interview_private_notes
+  SET body = :body, revision = revision + 1, updated_at = CAST(:updated_at AS TIMESTAMPTZ)
+  WHERE interview_id = :interview_id AND author_id = :author_id AND revision = :revision
+  RETURNING ${NOTE_COLUMNS}`,
+  erase: (list: string): string => `DELETE FROM interview_private_notes WHERE interview_id IN (${list}) RETURNING interview_id`,
+} as const;
+export const SCORECARD_DRAFT_SQL = {
+  get: `SELECT ${DRAFT_COLUMNS} FROM interview_scorecard_drafts WHERE interview_id = :interview_id AND author_id = :author_id`,
+  insert: `INSERT INTO interview_scorecard_drafts (${DRAFT_COLUMNS})
+  VALUES (:interview_id, :author_id, :based_on, CAST(:draft AS JSONB), 1, CAST(:updated_at AS TIMESTAMPTZ))
+  ON CONFLICT DO NOTHING
+  RETURNING ${DRAFT_COLUMNS}`,
+  update: `UPDATE interview_scorecard_drafts
+  SET based_on = :based_on, draft = CAST(:draft AS JSONB), revision = revision + 1, updated_at = CAST(:updated_at AS TIMESTAMPTZ)
+  WHERE interview_id = :interview_id AND author_id = :author_id AND revision = :revision
+  RETURNING ${DRAFT_COLUMNS}`,
+  delete: `DELETE FROM interview_scorecard_drafts WHERE interview_id = :interview_id AND author_id = :author_id RETURNING interview_id`,
+  erase: (list: string): string => `DELETE FROM interview_scorecard_drafts WHERE interview_id IN (${list}) RETURNING interview_id`,
+} as const;
 
 export class SqlInterviewsStore implements InterviewsStore {
   constructor(private readonly exec: SqlExec) {}
@@ -399,6 +444,48 @@ export class SqlInterviewsStore implements InterviewsStore {
       throw e;
     });
     return rows[0] ? applicationFromRow(rows[0]) : null;
+  }
+
+  async getPrivateNote(interviewId: string, authorId: string): Promise<PrivateNote | null> {
+    const r = (await this.exec(PRIVATE_NOTE_SQL.get, [textParam('interview_id', interviewId), textParam('author_id', authorId)]))[0];
+    return r ? privateNoteFromRow(r) : null;
+  }
+  async savePrivateNote(row: Omit<PrivateNote, 'revision'>, revision: number): Promise<WriteResult<PrivateNote>> {
+    const key = [textParam('interview_id', row.interviewId), textParam('author_id', row.authorId)];
+    const values = [...key, textParam('body', row.body), textParam('updated_at', row.updatedAt)];
+    const written = revision === 0
+      ? await this.exec(PRIVATE_NOTE_SQL.insert, values)
+      : await this.exec(PRIVATE_NOTE_SQL.update, [...values, intParam('revision', revision)]);
+    if (written[0]) return { ok: true, row: privateNoteFromRow(written[0]) };
+    const now = (await this.exec(PRIVATE_NOTE_SQL.get, key))[0];
+    return now ? { ok: false, reason: 'stale', row: privateNoteFromRow(now) } : { ok: false, reason: 'not-found' };
+  }
+  async erasePrivateNotes(interviewIds: readonly string[]): Promise<number> {
+    if (!interviewIds.length) return 0;
+    const l = idList(interviewIds);
+    return (await this.exec(PRIVATE_NOTE_SQL.erase(l.sql), l.params)).length;
+  }
+  async getScorecardDraft(interviewId: string, authorId: string): Promise<ScorecardDraft | null> {
+    const r = (await this.exec(SCORECARD_DRAFT_SQL.get, [textParam('interview_id', interviewId), textParam('author_id', authorId)]))[0];
+    return r ? scorecardDraftFromRow(r) : null;
+  }
+  async saveScorecardDraft(row: Omit<ScorecardDraft, 'revision'>, revision: number): Promise<WriteResult<ScorecardDraft>> {
+    const key = [textParam('interview_id', row.interviewId), textParam('author_id', row.authorId)];
+    const values = [...key, intParam('based_on', row.basedOn), textParam('draft', JSON.stringify(row.draft)), textParam('updated_at', row.updatedAt)];
+    const written = revision === 0
+      ? await this.exec(SCORECARD_DRAFT_SQL.insert, values)
+      : await this.exec(SCORECARD_DRAFT_SQL.update, [...values, intParam('revision', revision)]);
+    if (written[0]) return { ok: true, row: scorecardDraftFromRow(written[0]) };
+    const now = (await this.exec(SCORECARD_DRAFT_SQL.get, key))[0];
+    return now ? { ok: false, reason: 'stale', row: scorecardDraftFromRow(now) } : { ok: false, reason: 'not-found' };
+  }
+  async deleteScorecardDraft(interviewId: string, authorId: string): Promise<number> {
+    return (await this.exec(SCORECARD_DRAFT_SQL.delete, [textParam('interview_id', interviewId), textParam('author_id', authorId)])).length;
+  }
+  async eraseScorecardDrafts(interviewIds: readonly string[]): Promise<number> {
+    if (!interviewIds.length) return 0;
+    const l = idList(interviewIds);
+    return (await this.exec(SCORECARD_DRAFT_SQL.erase(l.sql), l.params)).length;
   }
 
   /** cas() for an interview. */

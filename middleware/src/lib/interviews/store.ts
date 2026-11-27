@@ -23,6 +23,8 @@
 import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture, interviewScorecardsFixture, interviewsFixture } from '../../mock/interviews.js';
 import type { Application, Cancellation, Candidate, Interview, InterviewState, InterviewsWorld, Opening, OpeningDetails, OpeningKit, Scorecard, StageChange } from './types.js';
 import type { Reassignment, SeatAnswerChange } from './assign.js';
+import type { PrivateNote, ScorecardDraft } from './private-notes.js';
+import { interviewPrivateNotesFixture, interviewScorecardDraftsFixture } from '../../mock/interviews-private-notes.js';
 
 /** What a compare-and-set write did. `stale` carries the row as it now is, so the editor can say who won. */
 /** The opening already holds a candidate with this address (case aside): the route answers 409 with its duplicate line. */
@@ -96,7 +98,25 @@ export interface ScorecardWrites {
   addScorecardVersion(row: Scorecard): Promise<WriteResult<Scorecard>>;
 }
 
-export interface InterviewsStore extends OpeningWrites, InterviewWrites, ScorecardWrites, ApplicationWrites {
+/**
+ * An interviewer's private notes and scorecard draft (private-notes.ts; gap audit 2026-11-20, section 5). Read by key
+ * only, never as a whole table: the key is the author, and nothing lists another person's. Each save is a
+ * compare-and-set on the row's own revision: `revision` 0 inserts at 1 while there is none; otherwise it applies only
+ * while the row is at `revision`. `stale` carries the row as it now is; `not-found` is a save against a revision of a
+ * row that is not there (erased meanwhile). Erasing by interview answers how many rows went, so a repeat answers 0.
+ */
+export interface PrivateNoteWrites {
+  getPrivateNote(interviewId: string, authorId: string): Promise<PrivateNote | null>;
+  savePrivateNote(row: Omit<PrivateNote, 'revision'>, revision: number): Promise<WriteResult<PrivateNote>>;
+  erasePrivateNotes(interviewIds: readonly string[]): Promise<number>;
+  getScorecardDraft(interviewId: string, authorId: string): Promise<ScorecardDraft | null>;
+  saveScorecardDraft(row: Omit<ScorecardDraft, 'revision'>, revision: number): Promise<WriteResult<ScorecardDraft>>;
+  /** The author's draft goes when they submit: 1 when there was one. */
+  deleteScorecardDraft(interviewId: string, authorId: string): Promise<number>;
+  eraseScorecardDrafts(interviewIds: readonly string[]): Promise<number>;
+}
+
+export interface InterviewsStore extends OpeningWrites, InterviewWrites, ScorecardWrites, ApplicationWrites, PrivateNoteWrites {
   listOpenings(): Promise<Opening[]>;
   listCandidates(): Promise<Candidate[]>;
   listApplications(): Promise<Application[]>;
@@ -245,6 +265,55 @@ export class MemoryInterviewsStore implements InterviewsStore {
     interviewApplicationsFixture.rows().push(structuredClone(application));
     return structuredClone(application);
   }
+
+  async getPrivateNote(interviewId: string, authorId: string): Promise<PrivateNote | null> {
+    return byAuthor(interviewPrivateNotesFixture.rows(), interviewId, authorId);
+  }
+  async savePrivateNote(row: Omit<PrivateNote, 'revision'>, revision: number): Promise<WriteResult<PrivateNote>> {
+    return casByAuthor(interviewPrivateNotesFixture.rows(), row, revision);
+  }
+  async erasePrivateNotes(interviewIds: readonly string[]): Promise<number> {
+    return spliceWhere(interviewPrivateNotesFixture.rows(), (r) => interviewIds.includes(r.interviewId));
+  }
+  async getScorecardDraft(interviewId: string, authorId: string): Promise<ScorecardDraft | null> {
+    return byAuthor(interviewScorecardDraftsFixture.rows(), interviewId, authorId);
+  }
+  async saveScorecardDraft(row: Omit<ScorecardDraft, 'revision'>, revision: number): Promise<WriteResult<ScorecardDraft>> {
+    return casByAuthor(interviewScorecardDraftsFixture.rows(), row, revision);
+  }
+  async deleteScorecardDraft(interviewId: string, authorId: string): Promise<number> {
+    return spliceWhere(interviewScorecardDraftsFixture.rows(), (r) => r.interviewId === interviewId && r.authorId === authorId);
+  }
+  async eraseScorecardDrafts(interviewIds: readonly string[]): Promise<number> {
+    return spliceWhere(interviewScorecardDraftsFixture.rows(), (r) => interviewIds.includes(r.interviewId));
+  }
+}
+
+type Keyed = { interviewId: string; authorId: string; revision: number };
+
+function byAuthor<T extends Keyed>(rows: T[], interviewId: string, authorId: string): T | null {
+  const row = rows.find((r) => r.interviewId === interviewId && r.authorId === authorId);
+  return row ? structuredClone(row) : null;
+}
+
+/** The SQL statements' insert-while-none or `WHERE revision = :revision`, in one tick. */
+function casByAuthor<T extends Keyed>(rows: T[], next: Omit<T, 'revision'>, revision: number): WriteResult<T> {
+  const row = rows.find((r) => r.interviewId === next.interviewId && r.authorId === next.authorId);
+  if (!row) {
+    if (revision !== 0) return { ok: false, reason: 'not-found' };
+    const made = { ...structuredClone(next), revision: 1 } as T;
+    rows.push(made);
+    return { ok: true, row: structuredClone(made) };
+  }
+  if (row.revision !== revision) return { ok: false, reason: 'stale', row: structuredClone(row) };
+  Object.assign(row, structuredClone(next), { revision: revision + 1 });
+  return { ok: true, row: structuredClone(row) };
+}
+
+function spliceWhere<T>(rows: T[], drop: (r: T) => boolean): number {
+  let n = 0;
+  for (let i = rows.length - 1; i >= 0; i -= 1) if (drop(rows[i]!)) { rows.splice(i, 1); n += 1; }
+  return n;
 }
 
 /** casOpening's twin for interviews. */

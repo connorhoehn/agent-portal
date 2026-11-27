@@ -45,7 +45,7 @@ const SCHEMA_FILES = MANIFEST.entries.filter((e) => e.kind === 'repeatable').map
   .flatMap((f) => (f === 'identity_schema.sql' ? [f, 'seed_demo_identities.sql'] : [f]));
 const INTERVIEW_TABLES = [
   'interview_runs', 'interview_pad_events', 'interview_board_snapshots', 'interview_panel_notices', 'interview_deletions', 'interview_invites', 'interview_said_log', 'interview_milo_settings',
-  'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recap_attempts', 'interview_recaps', 'interview_suggestions', 'interview_consents',
+  'interview_coach_log', 'interview_scorecards', 'interview_recap_opens', 'interview_recap_attempts', 'interview_recaps', 'interview_suggestions', 'interview_consents', 'interview_private_notes', 'interview_scorecard_drafts',
   'interviews', 'interview_applications', 'interview_resumes', 'interview_candidates', 'interview_openings',
 ];
 

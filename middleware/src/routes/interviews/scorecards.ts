@@ -177,6 +177,8 @@ scorecardsRouter.post('/interviews/:id/scorecard', conduct, asyncHandler(async (
     res.status(409).json({ error: 'Your scorecard was submitted from another window. The page now shows what was saved.', scorecard: await readPage(req, id) });
     return;
   }
+  // The draft has become the scorecard: it goes now (routes/interviews/private-notes.ts).
+  await store.deleteScorecardDraft(i.id, session.sub);
   await scoreIfComplete(i.id);
   void scorecardSubmitted(i.id, session.sub, move.version); // the submitted / every-scorecard-in bells (I5.6)
   res.status(201).json({ scorecard: await readPage(req, id) });

@@ -503,6 +503,17 @@ describe('capability boundaries that must not regress', () => {
     expect(role('interviews/recruiter').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ConductInterview"[\s\S]*principal\.role == "recruiter"/);
   });
 
+  test('interviews private notes and scorecard drafts (gap audit 2026-11-20 §5): no new action, ConductInterview and the seat', () => {
+    // routes/interviews/private-notes.ts gates GET/PUT /interviews/:id/my-notes and /scorecard-draft on ConductInterview
+    // through the tenant's not-found gate, then the session's own seat on that round; no route names another author. So
+    // the interviewer reads and writes only their own, and the recruiter, the hiring manager and every other tenant's role
+    // read nothing (the admin's blanket grant passes the action but holds no seat, so reads the not-found too).
+    expect(has('interviews/interviewer', 'ConductInterview')).toBe(true);
+    expect([has('interviews/recruiter', 'ConductInterview'), has('interviews/hiring-manager', 'ConductInterview')]).toEqual([false, false]);
+    expect(has('access/access-admin', 'ConductInterview')).toBe(false);
+    expect(role('interviews/recruiter').cedar).toMatch(/forbid[\s\S]*OrgIQ::Action::"ConductInterview"[\s\S]*principal\.role == "recruiter"/);
+  });
+
   test('interviews stage moves (gap audit 2026-11-20 §2): no new action, ManageCandidates', () => {
     // routes/interviews/stage-moves.ts gates POST /applications/:id/move (start screening, mark hired, offer declined,
     // reopen) on ManageCandidates, as withdraw is. So the recruiter moves the stage; the interviewer does not; the
