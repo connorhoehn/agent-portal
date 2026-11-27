@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCORECARD_STEPS, SCORECARD_STEP_LABELS, recommendationVerdict, allRated, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, hasScorecard, loadDraft, missingFrom, recapSourceOf, roundCompetencies, nextStep, openBodyOf, othersLine,
-  previousStep, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, scorecardPath,
+  previousStep, showsMiloRecommendation, recapAskOutcome, recapAskPath, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, scorecardPath,
   type DraftStore, type ScorecardView,
 } from '../interviewsScorecard.ts';
 
@@ -184,4 +184,16 @@ test('the red flags seen go with the scorecard when some are ticked, and a corre
   assert.deepEqual(bodyOf({ ...d, redFlagsSeen: ['Vague names.'] }, KIT, 0, ['Vague names.'])['redFlagsSeen'], ['Vague names.']);
   const card = { id: 'sc', interviewer: { id: 'u', name: 'U' }, recommendation: 'no' as const, summary: 's', submittedAt: '', version: 1, correctionReason: null, ratings: [], earlier: [], redFlagsSeen: ['Vague names.'] };
   assert.deepEqual(draftFrom(card).redFlagsSeen, ['Vague names.']);
+});
+
+test('Milo\'s recommendation block shows only when the server says it is on', () => {
+  assert.equal(showsMiloRecommendation({ miloRecommends: true }), true);
+  assert.equal(showsMiloRecommendation({ miloRecommends: false }), false);
+  assert.equal(showsMiloRecommendation({}), false);
+});
+
+test('Milo\'s recommendation block shows only when the server says it is on', () => {
+  assert.equal(showsMiloRecommendation({ miloRecommends: true }), true);
+  assert.equal(showsMiloRecommendation({ miloRecommends: false }), false);
+  assert.equal(showsMiloRecommendation({}), false);
 });

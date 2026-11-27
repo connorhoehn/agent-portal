@@ -14,6 +14,7 @@ import { OVERDUE_HOURS, OVERDUE_HOURS_SETTING, overdueHours } from './overdue.js
 import { REQUIRED_CONSENTS_SETTING, requiredConsents } from './consent/required.js';
 import { DEFAULT_INTERVIEW_CAP_USD, defaultInterviewCapUsd } from './spend.js';
 import { CODE_INTERPRETER_SETTING, RUN_BACKEND_SETTING, runBackend } from './runs/select.js';
+import { MILO_RECOMMENDATION_SETTING, miloRecommendationShown } from './milo-recommendation.js';
 import { DEFAULT_RUN_PRICE_USD, RUN_PRICE_SETTING, runPriceUsd } from './runs/service.js';
 
 export type SettingValue = boolean | number | string[] | string;
@@ -54,6 +55,7 @@ export function interviewsSettings(env: NodeJS.ProcessEnv = process.env): Interv
     { name: REQUIRED_CONSENTS_SETTING, value: requiredConsents(env), default: requiredConsents({}, NO_WARN), about: 'Consents the call cannot start without (declining is still stored).' },
     { name: 'INTERVIEWS_INTERVIEW_CAP_USD', value: defaultInterviewCapUsd(env), default: DEFAULT_INTERVIEW_CAP_USD, about: 'Dollars an interview may spend when its opening sets no cap.' },
     { name: RUN_PRICE_SETTING, value: runPriceUsd(env), default: DEFAULT_RUN_PRICE_USD, about: 'Dollars held and booked for each run of the code pad (the mock executor\'s price).' },
+    { name: MILO_RECOMMENDATION_SETTING, value: miloRecommendationShown(env), default: miloRecommendationShown({}), about: 'The scorecard page shows the assistant\'s recommendation (off until a stored, exported version exists and the notice covers it); read-only here.' },
     { name: 'INTERVIEWS_GUEST_REALTIME', value: guestRealtimeEnabled(env), default: guestRealtimeEnabled({}), about: 'A candidate may hold a realtime token for the call.' },
     { name: RUN_BACKEND_SETTING, value: backendOf(env), default: backendOf({}), about: 'Who runs the code pad: mock (scripted example output, the pad says "simulated"), docker (a developer\'s machine only) or agentcore (the Code Interpreter below); read-only here.' },
     { name: CODE_INTERPRETER_SETTING, value: String(env[CODE_INTERPRETER_SETTING] ?? '').trim(), default: '', about: 'The AgentCore Code Interpreter the agentcore runner uses; read-only here.' },

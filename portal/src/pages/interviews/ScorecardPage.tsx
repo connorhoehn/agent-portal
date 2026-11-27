@@ -40,7 +40,7 @@ import type { KitCompetency } from '../../lib/interviewsKit';
 import { adviceWords, draftRatings, evidenceRow, leadCardIn, miloAdvice, pooledRatings, ratingWords, starsOf, type MiloAdvice } from '../../lib/interviewsMiloAdvice';
 import {
   RECOMMENDATION_CHOICES, allRated, askFromRecap, bodyOf, clearDraft, draftFrom, emptyDraft, evidenceFor, loadDraft, missingFrom, normalizeDraft, nextStep, openBodyOf, openRecap,
-  SCORECARD_STEP_LABELS, SCORECARD_STEPS, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
+  SCORECARD_STEP_LABELS, SCORECARD_STEPS, showsMiloRecommendation, othersLine, recapSourceOf, roundCompetencies, previousStep, recommendationVerdict, recapStateLine, recapUrl, reviewedLine, saveDraft, scaleOf, submitScorecard,
   type Draft, type Rating, type RecapBody, type RecapClaim, type ScorecardPageView, type ScorecardStep, type ScorecardVersion,
 } from '../../lib/interviewsScorecard';
 
@@ -128,14 +128,16 @@ function ScorecardWorkspace({ view, trail, onChanged }: { view: ScorecardPageVie
   const recapNow = recap ?? recapRead.data?.recap ?? null;
   const thisRound = view.others.filter((o) => o.interviewId === interview.id);
   const cards = [...(mine ? [mine] : []), ...thisRound];
-  const advice = miloAdvice({
-    required: round.required,
-    ratings: editing ? draftRatings(draft.ratings) : pooledRatings(cards),
-    recap: recapNow,
-    // Nothing is recommended until the lead's scorecard is in (or the lead is the one rating now).
-    leadIn: leadCardIn({ leadId: interview.leadId, draftingSeat: editing ? interview.seat : null, cards }),
-  });
-  const advicePill = interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404 ? <MiloAdvicePill advice={advice} /> : null;
+  // Off by default (ledger C-9): with it off no advice is computed and nothing of the section renders.
+  const advicePill = showsMiloRecommendation(view) && interview.endedAt !== null && pastRating && recapRead.failure?.status !== 404
+    ? <MiloAdvicePill advice={miloAdvice({
+      required: round.required,
+      ratings: editing ? draftRatings(draft.ratings) : pooledRatings(cards),
+      recap: recapNow,
+      // Nothing is recommended until the lead's scorecard is in (or the lead is the one rating now).
+      leadIn: leadCardIn({ leadId: interview.leadId, draftingSeat: editing ? interview.seat : null, cards }),
+    })} />
+    : null;
   const missing = missingFrom(draft, competencies, limits, basedOn > 0, round.required);
   const status = roundStatus(interview.state);
 

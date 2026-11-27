@@ -135,6 +135,16 @@ describe('reading the scorecard', () => {
     expect((await HUGO.post(`/interviews/${MATEO_DESIGN}/scorecard`, await complete(HUGO, MATEO_DESIGN))).status).toBe(409);
   });
 
+  it('says whether the page shows Milo\'s recommendation: off unless the setting is on (ledger C-9)', async () => {
+    const was = process.env.INTERVIEWS_MILO_RECOMMENDATION;
+    try {
+      delete process.env.INTERVIEWS_MILO_RECOMMENDATION;
+      expect((await read(WEN, NADIA)).body.scorecard.miloRecommends).toBe(false);
+      process.env.INTERVIEWS_MILO_RECOMMENDATION = 'on';
+      expect((await read(WEN, NADIA)).body.scorecard.miloRecommends).toBe(true);
+    } finally { if (was === undefined) delete process.env.INTERVIEWS_MILO_RECOMMENDATION; else process.env.INTERVIEWS_MILO_RECOMMENDATION = was; }
+  });
+
   it('never carries the candidate\'s consent answers or contact details', async () => {
     await submit(WEN, NADIA);
     const text = JSON.stringify((await read(GRETA, NADIA)).body);

@@ -17,6 +17,7 @@
 // refused at the action (403). A stale submit is 409 with the scorecard as it now reads. When every seated
 // person's scorecard is in, the interview moves to `scored` (one compare-and-set write).
 
+import { miloRecommendationShown } from '../../lib/interviews/milo-recommendation.js';
 import { scorecardSubmitted } from '../../lib/interviews/result-bells.js';
 import { randomUUID } from 'node:crypto';
 import { Router, type Request } from 'express';
@@ -72,6 +73,8 @@ export interface ScorecardPageView {
   /** The others' scorecards on this candidate's application that the viewer may read, this round first. */
   others: OtherScorecard[];
   limits: typeof SCORECARD_LIMITS;
+  /** Whether the page shows Milo's recommendation: off unless INTERVIEWS_MILO_RECOMMENDATION is `on` (ledger C-9). */
+  miloRecommends: boolean;
 }
 
 const READ_ONLY = 'Only the interviewers on this round fill in its scorecard.';
@@ -114,6 +117,7 @@ function pageView(ix: WorldIndex, interviews: readonly Interview[], id: string):
     othersHidden,
     others,
     limits: SCORECARD_LIMITS,
+    miloRecommends: miloRecommendationShown(),
   };
 }
 

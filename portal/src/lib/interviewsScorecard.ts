@@ -55,7 +55,12 @@ export interface ScorecardPageView {
   othersHidden: boolean;
   others: OtherScorecard[];
   limits: { noteChars: number; summaryChars: number; reasonChars: number };
+  /** Whether the page shows Milo's recommendation (off by default; missing from an older server, which reads as off). */
+  miloRecommends?: boolean;
 }
+
+/** Milo's recommendation block (and its empty state) shows only when the server says so. */
+export const showsMiloRecommendation = (view: Pick<ScorecardPageView, 'miloRecommends'>): boolean => view.miloRecommends === true;
 
 export const scorecardPath = (id: string): string => `/interviews/rounds/${encodeURIComponent(id)}/scorecard`;
 
