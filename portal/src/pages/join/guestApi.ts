@@ -1,5 +1,6 @@
 // The guest's calls (docs/interviews-tenant-plan.md row I2.3): the consents (C4) and the waiting room (C2), all
 // under /api/interview-invite, on the guest cookie only. No Referer, nothing cached.
+import type { CaptionsRead } from './guestCaptionLines.ts';
 import type { Admission, ConsentChoices, GuestConsents, GuestRoom, KnockOutcome, RoomRead } from './steps.ts';
 
 export const GUEST_API = '/api/interview-invite';
@@ -100,4 +101,15 @@ export async function sendCantMake(note: string): Promise<CantMakeOutcome> {
   } catch {
     return { kind: 'refused', message: 'That did not go through. Check your connection and try again.' };
   }
+}
+
+/**
+ * The candidate's own live captions after `after` (gap audit 2026-11-20 §11). Null for not-found (not offered, not live, not let
+ * in, the transcript declined, a dead link: the room's own read tells those apart) and for a failed read.
+ */
+export async function readCaptions(after: number): Promise<CaptionsRead | null> {
+  const res = await fetch(`${GUEST_API}/captions?after=${Math.max(0, Math.floor(after))}`, INIT).catch(() => null);
+  if (!res || !res.ok) return null;
+  const body = (await res.json().catch(() => null)) as { captions?: CaptionsRead } | null;
+  return body?.captions ?? null;
 }

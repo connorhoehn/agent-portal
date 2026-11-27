@@ -154,7 +154,7 @@ export default function JoinPage() {
 
   const { interview, consents, step } = view;
   // The room fills the window (row I2.4, decision 21): no page frame around the call.
-  if (step === 'admitted') return <JoinRoom interview={interview} onEnded={onEnded} />;
+  if (step === 'admitted') return <JoinRoom interview={interview} onEnded={onEnded} transcriptAccepted={consents.answers.transcription} />;
   return (
     <GuestStepFrame title={STEP_TITLES[step]} description={`${interview.opening.title} · ${interview.round.name}`} {...(step === 'ended' ? {} : { step })} fill={step === 'consents'} role={interview.opening.title}>
       {step === 'landing' && (

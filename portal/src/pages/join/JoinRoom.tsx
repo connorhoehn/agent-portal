@@ -36,6 +36,7 @@ import type { RealtimeToken } from '../../lib/realtimeToken';
 import { GuestCallHost } from './GuestCallHost';
 import { GuestShell, GuestStepFrame } from './GuestFrame';
 import { GuestMiloRequests, GuestMiloVoice, useGuestFloorRing, type MiloRequestAnswer } from './GuestMiloVoice';
+import { GuestCaptions } from './GuestCaptions';
 import { GuestRoomPane, GuestRoomWorkspace, type GuestPaneTab } from './GuestRoomPane';
 import { useGuestMediaBinding } from './guestMedia.ts';
 import { readRoom } from './guestApi.ts';
@@ -55,7 +56,11 @@ export interface GuestInterview {
 
 type TokenState = { kind: 'loading' } | { kind: 'ready'; token: RealtimeToken } | { kind: 'off' } | { kind: 'failed' };
 
-export default function JoinRoom({ interview, onEnded }: { interview: GuestInterview; onEnded(): void }) {
+export default function JoinRoom({ interview, onEnded, transcriptAccepted = null }: {
+  interview: GuestInterview; onEnded(): void;
+  /** The candidate's answer to the transcript question (null: unanswered or unknown): whether captions can show (gap audit §11). */
+  transcriptAccepted?: boolean | null;
+}) {
   const [room, setRoom] = useState<GuestRoom | null>(null);
   const [over, setOver] = useState(false);
   const [token, setToken] = useState<TokenState>({ kind: 'loading' });
@@ -118,7 +123,7 @@ export default function JoinRoom({ interview, onEnded }: { interview: GuestInter
 
   return <GuestCallHost token={token.token} tokens={guestTokenSource} self={room.self} panel={interview.panel ?? null} leadCallId={room.leadCallId ?? null}>
     <InterviewHintListener interviewId={room.interviewId} onHint={onHint} />
-    <GuestRoomCall room={room} role={interview.opening.title} panel={interview.panel ?? null} over={over} onEnded={finish} />
+    <GuestRoomCall room={room} role={interview.opening.title} panel={interview.panel ?? null} over={over} onEnded={finish} transcriptAccepted={transcriptAccepted} />
   </GuestCallHost>;
 }
 
@@ -150,7 +155,7 @@ function useNow(stepMs: number): number {
 }
 
 /** The call, inside the guest's call host: tiles, the chat pane, and the bar. */
-function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; role: string; panel: GuestPanel | null; over: boolean; onEnded(): void }) {
+function GuestRoomCall({ room, role, panel, over, onEnded, transcriptAccepted }: { room: GuestRoom; role: string; panel: GuestPanel | null; over: boolean; onEnded(): void; transcriptAccepted: boolean | null }) {
   const lobbyName = room.lobbyName;
   const title = room.round.name;
   // The interview's lobby, bound as the panel's page binds it: the bar's Join walks into the call that is on.
@@ -236,6 +241,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
             <Stack gap="none" className="h-full min-h-0 min-w-0 flex-1" data-testid="join-room-stage-column">
               <GuestRoomWorkspace room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} header={header} inset={inset} />
               <GuestMiloVoice room={room} answer={miloAnswer} />
+              <GuestCaptions room={room} transcriptAccepted={transcriptAccepted} />
             </Stack>
           </SidePaneSplit>
           {drawn && callMode !== 'docked' && <RoomCallGallery mode={callMode} onMode={setCallMode} positionKey="join.room.call-gallery.position.v2"
@@ -258,6 +264,7 @@ function GuestRoomCall({ room, role, panel, over, onEnded }: { room: GuestRoom; 
               ? <CallBlock placement="pane" fit="contain" className="min-h-0 min-w-0 flex-1 justify-center bg-surface" />
               : <EmptyState title={idle.title} body={idle.body} className="min-h-0 flex-1" testId={idle.testId} />}
             <GuestMiloVoice room={room} answer={miloAnswer} />
+            <GuestCaptions room={room} transcriptAccepted={transcriptAccepted} />
           </Stack>
         </SidePaneSplit>
         {paneShown && <GuestRoomPane room={room} callId={joined ? callId : null} tab={tab} onTab={setTab} onClose={() => setPaneOpen(false)} />}
