@@ -123,8 +123,11 @@ async function errorBody(res: Response): Promise<{ message: string; activeRevisi
   let message = res.status === 403 ? 'You do not have permission for this action.' : `HTTP ${res.status}`;
   let activeRevisionId: string | undefined;
   try {
-    const body = (await res.json()) as { error?: unknown; errors?: unknown; activeRevisionId?: unknown };
-    if (typeof body.error === 'string' && body.error.trim()) message = body.error;
+    const body = (await res.json()) as { error?: unknown; errors?: unknown; activeRevisionId?: unknown; message?: unknown; reason?: unknown };
+    // The server's sentence, wherever its error shape puts it ({ error }, { error: { message } }, { message }, { reason }).
+    const nested = body.error && typeof body.error === 'object' ? (body.error as { message?: unknown }).message : undefined;
+    const sentence = [body.error, nested, body.message, body.reason].find((v): v is string => typeof v === 'string' && !!v.trim());
+    if (sentence) message = sentence.trim();
     if (Array.isArray(body.errors) && body.errors.length > 0) {
       message = `${message}: ${body.errors.filter((e) => typeof e === 'string').join('; ')}`;
     }

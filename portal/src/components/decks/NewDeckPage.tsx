@@ -88,7 +88,8 @@ export function NewDeckPage(props: NewDeckPageProps) {
       const id = source === 'facts' && facts ? await facts.create(title.trim()) : await props.createFromTemplate(chosen!.id, title.trim());
       navigate(props.deckHref(id));
     } catch (err) {
-      toastError(null, 'Could not create the deck', err instanceof Error ? err.message : 'Try again.');
+      // The server's own sentence (a 403 says why: not on the initiative); never an empty toast.
+      toastError(null, 'Could not create the deck', err instanceof Error && err.message.trim() ? err.message : 'Try again.');
     } finally {
       setBusy(false);
     }
@@ -109,7 +110,7 @@ export function NewDeckPage(props: NewDeckPageProps) {
                 <SegmentedControl aria-label="How to start" value={source} onChange={(v) => setSource(v as NewDeckSource)}
                   options={[{ value: 'facts', label: facts.label }, { value: 'example', label: 'From an example' }]} />
               )}
-              <FormField label="Title">
+              <FormField label="Title" className="w-full min-w-0 sm:w-auto sm:min-w-80">
                 {({ id }) => <Input id={id} value={title} placeholder={props.titlePlaceholder} onChange={(e) => setTitle(e.target.value)} data-testid={`${testIdPrefix}-new-title`} />}
               </FormField>
             </Inline>
@@ -121,7 +122,7 @@ export function NewDeckPage(props: NewDeckPageProps) {
                 </Stack>
               </DetailSection>
             ) : (
-              <DetailSection title="From an example" as="h2" hint={props.exampleNote ?? EXAMPLE_NOTE}>
+              <DetailSection title="From an example" as="h2" description={props.exampleNote ?? EXAMPLE_NOTE}>
                 {templatesError ? (
                   <InlineAlert tone="error">The examples could not be read: {templatesError} <Button size="sm" variant="link" onClick={() => setAttempt((n) => n + 1)}>Retry</Button></InlineAlert>
                 ) : (
