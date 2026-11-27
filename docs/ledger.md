@@ -7,19 +7,19 @@ Keeping it: when a row is done, delete it and name the row id in the commit mess
 ## Where things stand (27 November)
 
 - **`main` is green.** Four CI runs in a row passed on 27 November; before 26 November it had no green run in its last 60. Nothing is pushed while a run is in flight, because a push cancels it.
-- **Candidates tenant: the audit's blocker and three of its major gaps are built**: cancel, no-show and withdraw; the recruiter's stage moves; the simulated-runner label; the waiting-candidate bell and a panel member's admit. All of it passed the full middleware suite. None of it had been seen on a screen, so a headless walk (piece G1 of the interviews journey) was being written on 27 November.
+- **Candidates tenant: the audit's blocker and most of its major gaps are built and seen on a screen.** Cancel, no-show and withdraw; the recruiter's stage moves; the runner note; the waiting-candidate bell and a panel member's admit; private notes and server-side drafts; scheduling warnings, the Missed label and the overdue reminder; five smaller fixes. Two headless walks (journey pieces G1 and G2) cover them and found three defects, all fixed. Not yet walked: the scheduling screens, and the panel member's admit, which needs a real gateway.
 - **Unmerged work is down to two side worktrees**, in pipeline-runtime and ui-components (B-3, B-4), uncommitted and untouched since midday on 25 November. The film branch and the cloud branch are merged, and the pins are level: ui-components 2.546.0, and realtime-modules 0.151.0 in both the middleware and the frontend.
 - **No dependency repository has moved since 25 November**, and none of the private ones has executed a CI job since 11 November (CI-1).
 - **Milo's rebuild is half landed**, as before: phases 0 and 1 are on `main` and the text judge passes both sets, but the turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 and 8 are delivered.
 - **A deck builder is planned and not started** (K-1). Its research found two things worth fixing whether or not it is built: deck drafting was unmetered (fixed on 27 November for three tenants; P-12 holds the fourth) (the second, bullets over 200 characters being silently dropped, was fixed on 27 November).
-- **About 100 rows are open:** Candidates 26, dependency repositories 14, Milo 14, platform and money 12, CI 9, meeting assistant 9, branches 4, documents 4, voice 4, UI library 2, planned 2.
+- **91 rows are open:** Candidates 20, dependency repositories 14, Milo 13, platform and money 12, CI 9, meeting assistant 9, branches 4, voice 4, UI library 3, documents 2, planned 1.
 
 ## Closed since the first sweep
 
 For orientation only; the commits name the row ids.
 
 - **26 November:** the film branch merged (B-1); the portal's four CI failures (CI-3 to CI-5 and the stale half of CI-2); both pin bumps (D-1, and the adoption half of D-2); the cloud branch merged, with one function choosing the code runner (B-2, C-19); cancel, no-show and withdraw (the built part of C-1).
-- **27 November:** the recruiter's stage moves and the no-hiring-manager warning (C-2); the runner label (C-3); the waiting-candidate bell and the panel member's admit (C-4); the demo director's real race, which exposed P-11.
+- **27 November:** the recruiter's stage moves and the no-hiring-manager warning (C-2); the runner label (C-3); the waiting-candidate bell and the panel member's admit (C-4); the demo director's real race, which exposed P-11. Overnight into the 28th, in seven pushes that each passed the merge check and CI: the merge check as one command (CI-11); the two walks and their fixes; deck bullets (K-2); an interviewer no longer receives a candidate's contact details, and Milo's listening side checks consent on every frame (C-18's first item, M-9); deck drafting holds spend in three tenants (most of P-12); five small Candidates rows (C-10, C-12, C-13, C-14, C-16); the README's tenants and document map (H-2, H-4, C-20); notes and drafts (most of C-5); scheduling (most of C-17).
 
 ## Next, in order
 
@@ -30,8 +30,8 @@ For orientation only; the commits name the row ids.
 
 ### Then, work that needs nobody else
 
-3. **Privacy and money, smallest first.** P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
-4. **Candidates, second batch.** The five small rows were built on 27 November (a closed opening refuses candidates, red flags reach the debrief and export, the no-cap warning on assign and prepare, a Settings page, one record per email). Notes in the call (C-5) followed the same day. Scheduling (C-17) too. Next: C-6 (reaching the candidate), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
+3. **Money.** P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered), then the assessment half of P-12. P-11 changes a money rule and was left for the owner to see first.
+4. **Candidates, what is left of the audit.** C-6 (reaching the candidate), C-11 (candidate accessibility) and C-7 (one role per person); C-8 and C-9 wait for the notice wording (C-27). A walk for the scheduling screens, and judge rows for the week's work (C-22 to C-24).
 5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
 6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
 7. **Documents (H-1).** The README's tenants section and map of the documents, the scripts README and the interviews plan's status line were done on 27 November; what is left is striking the stale lines in `next-steps.md`.
