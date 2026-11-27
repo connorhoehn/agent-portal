@@ -338,6 +338,32 @@ describe('PUT /interviews/:id/time (row I1.5)', () => {
   });
 });
 
+describe('double-booking is a warning (ledger row C-17)', () => {
+  it('a time that overlaps another round of the lead still saves, and the answer and the read name the clash without the candidate', async () => {
+    const id = (await assign()).body.interview.id;
+    const other = await rowOf(GRETA, 'iv-m8t3h6ng'); // Hugo leads it, 60 minutes
+    const set = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: new Date(Date.parse(other.scheduledAt) + 30 * 60_000).toISOString() });
+    expect(set.status).toBe(200);
+    expect(set.body.interview.scheduledAt).not.toBeNull();
+    expect(set.body.conflicts).toEqual([{ person: { id: 'u-hugo', name: 'Hugo Marchetti' }, interviewId: 'iv-m8t3h6ng', scheduledAt: other.scheduledAt, minutes: 60 }]);
+    expect(JSON.stringify(set.body.conflicts)).not.toContain(other.candidate.name);
+    expect((await rowOf(GRETA, id)).conflicts).toEqual(set.body.conflicts);
+    // Re-seating: Ola leads instead, nobody is booked elsewhere then; the write answers an empty list.
+    const moved = await GRETA.put(`/interviews/${id}/panel`, { revision: 2, leadId: 'u-third', panelIds: ['u-wen'] });
+    expect(moved.status).toBe(200);
+    expect(moved.body.conflicts).toEqual([]);
+    // Assigning answers the list too: a new round has no time, so it is always empty.
+    expect((await assign({ ...LUCIA, roundId: 'rd-design' })).body.conflicts).toEqual([]);
+  });
+  it('a time that only touches the other round is no conflict', async () => {
+    const id = (await assign()).body.interview.id;
+    const other = await rowOf(GRETA, 'iv-m8t3h6ng');
+    const set = await GRETA.put(`/interviews/${id}/time`, { revision: 1, scheduledAt: new Date(Date.parse(other.scheduledAt) + 60 * 60_000).toISOString() });
+    expect(set.status).toBe(200);
+    expect(set.body.conflicts).toEqual([]);
+  });
+});
+
 describe('the bell is shown only while the role is held', () => {
   it('an interviews bell reaches its audience\'s holders, and nobody who lost the role', async () => {
     const bell = { payload: { tenant: 'interviews', audience: 'interviewer' } };

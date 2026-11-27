@@ -26,6 +26,7 @@ import {
   CONSENT_EFFECTS_PATH, consentColumnLabel, inviteLine, issueInvite, revokeInvite, setRoundTime, showsConsentColumn, type ConsentEffect, type InviteStatus,
 } from '../../lib/interviewsUpcoming';
 import { finishedCount, isLive, upcomingRows, type UpcomingShow } from '../../lib/interviewsDesk';
+import { conflictsLine } from '../../lib/interviewsAssign';
 import { roomEntryLabel, roomHref } from '../../lib/interviewsRoom';
 import { useJoinedInterviewCall } from '../../components/shell/InterviewRoomFooter';
 import { PanelCell, PersonCell } from './interviewsCells';
@@ -156,9 +157,11 @@ function UpcomingWorkspace() {
           const out = await setRoundTime(row.id, row.revision, next);
           if (!out.ok) { if (out.stale) refresh(); return { error: out.error }; }
           setPending(null); setEditing(null);
-          setSaved((m) => new Map(m).set(row.id, next ? `Saved: ${whenWithZone(next)}.` : 'The time was cleared.'));
+          // Double-booking is a warning (ledger row C-17): the time is saved, and the clash is said in the same words.
+          const clash = out.conflicts.length ? ` ${conflictsLine(out.conflicts)}` : '';
+          setSaved((m) => new Map(m).set(row.id, next ? `Saved: ${whenWithZone(next)}.${clash}` : 'The time was cleared.'));
           refresh();
-          return { receipt: next ? 'The time is set.' : 'The time is cleared.' };
+          return { receipt: next ? `The time is set.${clash}` : 'The time is cleared.' };
         },
       }];
     }

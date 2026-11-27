@@ -27,13 +27,19 @@ export const canReassign = (state: InterviewState): boolean => REASSIGNABLE.has(
  */
 export interface PanelNotice { version: string; title: string; text: string; panelLine: string }
 
+/**
+ * A seat already booked on another round at an overlapping time (middleware lib/interviews/conflicts.ts, ledger row C-17):
+ * a warning, never a refusal. Who, and the other round's id and window; never its candidate.
+ */
+export interface SeatConflict { person: PersonRef; interviewId: string; scheduledAt: string; minutes: number }
+
 export type WriteOutcome =
-  | { ok: true; interview: InterviewRow | null }
+  | { ok: true; interview: InterviewRow | null; conflicts: SeatConflict[] }
   | { ok: false; error: string; fields: FieldProblem[]; stale: boolean; interview: InterviewRow | null; needsNotice?: PanelNotice };
 
 async function send(path: string, method: 'POST' | 'PUT', body: unknown, fallback: string): Promise<WriteOutcome> {
-  const r = await writeJson<{ interview?: InterviewRow | null; fields?: FieldProblem[]; needsNotice?: PanelNotice }>(`${INTERVIEWS_API}${path}`, method, body);
-  if (r.ok) return { ok: true, interview: r.data?.interview ?? null };
+  const r = await writeJson<{ interview?: InterviewRow | null; fields?: FieldProblem[]; needsNotice?: PanelNotice; conflicts?: SeatConflict[] }>(`${INTERVIEWS_API}${path}`, method, body);
+  if (r.ok) return { ok: true, interview: r.data?.interview ?? null, conflicts: r.data?.conflicts ?? [] };
   const needsNotice = r.data?.needsNotice;
   // A 409 that asks for the notice is not a stale page: nothing changed, the person reads and accepts.
   return { ok: false, error: r.error ?? fallback, fields: r.data?.fields ?? [], stale: r.status === 409 && !needsNotice, interview: r.data?.interview ?? null, ...(needsNotice ? { needsNotice } : {}) };
@@ -143,3 +149,48 @@ export function seatsOfRow(row: Pick<InterviewRow, 'lead' | 'panel'> | null): { 
 /** The href that opens the assign form for an application, or the reassign form for a round. */
 export const assignHref = (candidateId: string, q: { application: string } | { round: string }): string =>
   `/interviews/candidates/${encodeURIComponent(candidateId)}/assign?${'application' in q ? `application=${encodeURIComponent(q.application)}` : `round=${encodeURIComponent(q.round)}`}`;
+
+// ── Double-booking (ledger row C-17) ────────────────────────────────────────────────────────────────────────
+
+/** The rounds that hold their seats' time: still to run, or live. The server's rule (conflicts.ts). */
+const HOLDING: ReadonlySet<InterviewState> = new Set(['assigned', 'accepted', 'ready', 'live']);
+
+const windowOf = (scheduledAt: string | null, minutes: number): [number, number] | null => {
+  const start = scheduledAt ? Date.parse(scheduledAt) : NaN;
+  return Number.isFinite(start) ? [start, start + Math.max(minutes, 0) * 60_000] : null;
+};
+
+/**
+ * The form's check while a person is picked, before anything is saved: each chosen seat already on another round whose
+ * window overlaps this round's (touching ends do not), among the rounds the page has read. The server answers the same
+ * list after the save, and that one is the one shown then.
+ */
+export function pickedConflicts(
+  round: Pick<InterviewRow, 'id' | 'scheduledAt' | 'state'> & { round: { minutes: number } },
+  seats: Seating,
+  rows: ReadonlyArray<Pick<InterviewRow, 'id' | 'scheduledAt' | 'state' | 'lead' | 'panel'> & { round: { minutes: number } }>,
+  people: readonly PersonRef[],
+): SeatConflict[] {
+  const mine = windowOf(round.scheduledAt, round.round.minutes);
+  if (!mine || !HOLDING.has(round.state)) return [];
+  const out: SeatConflict[] = [];
+  for (const userId of new Set([seats.leadId, ...seats.panelIds].filter(Boolean))) {
+    const name = people.find((p) => p.id === userId)?.name ?? userId;
+    const clashes = rows.filter((o) => {
+      if (o.id === round.id || !HOLDING.has(o.state) || (o.lead.id !== userId && !o.panel.some((p) => p.id === userId))) return false;
+      const w = windowOf(o.scheduledAt, o.round.minutes);
+      return !!w && w[0] < mine[1] && mine[0] < w[1];
+    }).sort((a, b) => a.scheduledAt!.localeCompare(b.scheduledAt!));
+    for (const o of clashes) out.push({ person: { id: userId, name }, interviewId: o.id, scheduledAt: o.scheduledAt!, minutes: o.round.minutes });
+  }
+  return out;
+}
+
+/** "Hugo Marchetti is also on a round from 14:00 to 15:00 that day." One sentence per clash, in the viewer's zone. */
+export function conflictsLine(conflicts: readonly SeatConflict[], timeZone?: string): string {
+  const hm = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false });
+  return conflicts.map((c) => {
+    const start = Date.parse(c.scheduledAt);
+    return `${c.person.name} is also on a round from ${hm.format(new Date(start))} to ${hm.format(new Date(start + c.minutes * 60_000))} that day.`;
+  }).join(' ');
+}

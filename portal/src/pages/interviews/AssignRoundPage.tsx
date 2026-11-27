@@ -3,8 +3,10 @@
 // row I1.4; decision 20: one lead and up to two panel members). The server checks everything
 // (middleware lib/interviews/assign.ts) and answers each problem on its field. A new round has no time:
 // that is row I1.5. Each person newly seated is rung and accepts or declines from My interviews.
+// Double-booking is a warning (ledger row C-17): a round with a time says, as a person is picked and again after the
+// save, who is already on another round then; the save goes ahead and the page stays open to show it.
 
-import { Button, FormField, Inline, LoadingState, PageFrame, Select, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, FormField, InlineAlert, Inline, LoadingState, PageFrame, Select, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
@@ -12,10 +14,10 @@ import { candidateCrumbLabel } from '../../lib/interviewsCandidateRail';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { INTERVIEWS_API, ROUND_TYPE_LABELS, candidateHref, whenLabel, type CandidateProfile, type ItemsResponse, type PersonRef } from '../../lib/interviews';
+import { INTERVIEWS_API, ROUND_TYPE_LABELS, candidateHref, whenLabel, type CandidateProfile, type InterviewRow, type ItemsResponse, type PersonRef } from '../../lib/interviews';
 import type { OpeningRecord } from '../../lib/interviewsKit';
 import {
-  PANEL_SEATS, assignRound, canReassign, declineLines, panelChoices, reassignRound, seatingOf, seatsOfRow, type FieldProblem,
+  PANEL_SEATS, assignRound, canReassign, conflictsLine, declineLines, panelChoices, pickedConflicts, reassignRound, seatingOf, seatsOfRow, type FieldProblem, type SeatConflict,
 } from '../../lib/interviewsAssign';
 import { NoHiringManagerAlert, NoSpendingCapAlert } from './interviewsCells';
 
@@ -35,6 +37,8 @@ export default function AssignRoundPage() {
   const round = roundId ? record?.applications.flatMap((a) => a.interviews).find((r) => r.id === roundId) ?? null : null;
   const app = record?.applications.find((a) => a.applicationId === (round?.applicationId ?? params.get('application'))) ?? record?.applications[0];
   const opening = useFetch<{ opening: OpeningRecord }>(app ? `${INTERVIEWS_API}/openings/${encodeURIComponent(app.opening.id)}` : null);
+  // Only a round with a time can clash with another: the rounds the recruiter reads, for the check while a person is picked.
+  const rounds = useFetch<ItemsResponse<InterviewRow>>(round?.scheduledAt ? `${INTERVIEWS_API}/interviews` : null);
 
   const [kitRound, setKitRound] = useState('');
   const [leadId, setLeadId] = useState(NOBODY);
@@ -42,6 +46,8 @@ export default function AssignRoundPage() {
   const [problems, setProblems] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** The clashes the server answered with a save that went ahead; null until then, and again once a seat changes. */
+  const [savedConflicts, setSavedConflicts] = useState<SeatConflict[] | null>(null);
 
   // A reassignment starts from the round's seats as they are.
   useEffect(() => {
@@ -78,11 +84,17 @@ export default function AssignRoundPage() {
       ? await reassignRound(round.id, round.revision, seats)
       : await assignRound({ applicationId: app.applicationId, roundId: kitRound, ...seats });
     setSaving(false);
+    if (out.ok && out.conflicts.length) { setSavedConflicts(out.conflicts); void profile.refresh(); void rounds.refresh(); return; }
     if (out.ok) { back(); return; }
     setError(out.error);
     setProblems(new Map(out.fields.map((f: FieldProblem) => [f.path === 'panelIds' ? 'panelIds.0' : f.path, f.message])));
     if (out.stale) void profile.refresh();
   };
+
+  const picked = round ? pickedConflicts(round, seatingOf(leadId, panel), rounds.data?.items ?? [], interviewers) : [];
+  const conflicts = savedConflicts ?? picked;
+  const pickLead = (v: string) => { setSavedConflicts(null); setLeadId(v); setPanel((p) => p.map((x) => (x === v ? NOBODY : x))); };
+  const pickPanel = (i: number, v: string) => { setSavedConflicts(null); setPanel((p) => p.map((x, j) => (j === i ? v : x))); };
 
   const personOptions = (list: readonly PersonRef[], empty: string) => [{ value: NOBODY, label: empty }, ...list.map((p) => ({ value: p.id, label: p.name }))];
 
@@ -94,7 +106,7 @@ export default function AssignRoundPage() {
           : `A round of ${app.opening.title} for ${record.candidate.name}. Each person you seat is asked to accept it. You set the time later.`}
         actions={(
           <Inline gap="xs" wrap={false}>
-            <Button size="sm" variant="ghost" onClick={back} data-testid="interviews-assign-cancel">Cancel</Button>
+            <Button size="sm" variant="ghost" onClick={back} data-testid="interviews-assign-cancel">{savedConflicts ? 'Done' : 'Cancel'}</Button>
             <Button size="sm" variant="primary" disabled={saving || locked || !leadId || (!round && !kitRound)} onClick={() => { void submit(); }}
               data-testid="interviews-assign-submit">{round ? 'Reassign' : 'Assign'}</Button>
           </Inline>
@@ -103,6 +115,11 @@ export default function AssignRoundPage() {
           {opening.data && !opening.data.opening.hiringManager && <NoHiringManagerAlert openingId={app.opening.id} canEdit />}
           {opening.data && opening.data.opening.budgetCapUsd === null && <NoSpendingCapAlert openingId={app.opening.id} canEdit />}
           {error && <T size="sm" tone="danger" data-testid="interviews-assign-error">{error}</T>}
+          {conflicts.length > 0 && (
+            <InlineAlert tone="warning" data-testid="interviews-assign-conflicts">
+              {`${savedConflicts ? 'Saved. ' : ''}${conflictsLine(conflicts)}`}
+            </InlineAlert>
+          )}
           {locked && <T size="sm" tone="secondary">This round has already started, so who sits on it can no longer change.</T>}
           {round && round.declines.length > 0 && (
             <Stack gap="xs" data-testid="interviews-assign-declines">
@@ -127,7 +144,7 @@ export default function AssignRoundPage() {
             <FormField label="Lead" required error={problems.get('leadId')} className="min-w-[16rem] flex-1" hint="Runs the interview and gets Milo's prompts.">
               {(w) => <Select {...w} size="sm" value={leadId} data-testid="interviews-assign-lead"
                 options={personOptions(interviewers, 'Choose who leads')}
-                onChange={(e) => { const v = e.target.value; setLeadId(v); setPanel((p) => p.map((x) => (x === v ? NOBODY : x))); }} />}
+                onChange={(e) => pickLead(e.target.value)} />}
             </FormField>
           </Inline>
           <Inline gap="sm" align="start">
@@ -136,7 +153,7 @@ export default function AssignRoundPage() {
                 hint={i === 0 ? 'Optional. Panel members join the call and write their own scorecard.' : 'Optional.'}>
                 {(w) => <Select {...w} size="sm" value={seat} data-testid={`interviews-assign-panel-${i}`}
                   options={personOptions(panelChoices(interviewers, leadId, panel[1 - i] ?? NOBODY), 'Nobody')}
-                  onChange={(e) => setPanel((p) => p.map((x, j) => (j === i ? e.target.value : x)))} />}
+                  onChange={(e) => pickPanel(i, e.target.value)} />}
               </FormField>
             ))}
           </Inline>

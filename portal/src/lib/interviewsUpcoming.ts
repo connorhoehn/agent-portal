@@ -4,6 +4,7 @@
 
 import { INTERVIEWS_API } from './interviews.ts';
 import { writeJson } from './writeJson.ts';
+import type { SeatConflict } from './interviewsAssign.ts';
 
 export type InviteState = 'none' | 'live' | 'revoked' | 'expired' | 'closed' | 'other-interview';
 export interface InviteStatus {
@@ -17,12 +18,13 @@ export interface InviteStatus {
   openCount: number;
 }
 
-export type TimeOutcome = { ok: true } | { ok: false; error: string; stale: boolean };
+/** A saved time answers the seats already booked elsewhere then (ledger row C-17): a warning, the time is saved all the same. */
+export type TimeOutcome = { ok: true; conflicts: SeatConflict[] } | { ok: false; error: string; stale: boolean };
 
 /** Set (an ISO instant) or clear (`null`) a round's time against the revision the page loaded. */
 export async function setRoundTime(id: string, revision: number, scheduledAt: string | null): Promise<TimeOutcome> {
-  const r = await writeJson<{ fields?: Array<{ message: string }> }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/time`, 'PUT', { revision, scheduledAt });
-  if (r.ok) return { ok: true };
+  const r = await writeJson<{ fields?: Array<{ message: string }>; conflicts?: SeatConflict[] }>(`${INTERVIEWS_API}/interviews/${encodeURIComponent(id)}/time`, 'PUT', { revision, scheduledAt });
+  if (r.ok) return { ok: true, conflicts: r.data?.conflicts ?? [] };
   return { ok: false, error: r.data?.fields?.[0]?.message ?? r.error ?? 'The time could not be saved. Try again.', stale: r.status === 409 };
 }
 

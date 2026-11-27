@@ -13,6 +13,7 @@ import type { CancelReason, Seat } from './types.js';
 import { CANCEL_REASON_LABEL } from './cancel.js';
 import { latestByAuthor } from './scorecard.js';
 import { competenciesOfRound, competencyIdsOfRound, questionsOfRound } from './kit.js';
+import { seatConflicts, type SeatConflict } from './conflicts.js';
 
 export interface PersonRef { id: string; name: string }
 export type People = (id: string) => PersonRef;
@@ -146,6 +147,11 @@ export interface InterviewRecord extends InterviewRow {
    * round (spend.ts), so the prepare page warns. Only whether one is set, never the amount: the amount stays the money readers'.
    */
   spendingCapSet: boolean;
+  /**
+   * The seats already booked on another round at an overlapping time (lib/interviews/conflicts.ts): a warning, never a
+   * refusal. Drawn from the viewer's own world, so it names no round they could not open, and never a candidate.
+   */
+  conflicts: SeatConflict[];
 }
 
 /** What a candidate's record shows of their résumé (row I1.6): the file itself is read from its own route. */
@@ -377,6 +383,11 @@ export class WorldIndex {
     };
   }
 
+  /** The seats of `i` already booked elsewhere at that time, among the rounds this viewer may read. */
+  conflictsOf(i: Interview): SeatConflict[] {
+    return seatConflicts(i, this.world.interviews, (id) => this.people(id).name);
+  }
+
   interviewRows(): InterviewRow[] {
     return this.world.interviews.map((i) => this.interviewRow(i)).filter((r): r is InterviewRow => r !== null);
   }
@@ -401,6 +412,7 @@ export class WorldIndex {
         .map((q) => ({ id: q.id, prompt: q.prompt, competencyId: q.competencyId })),
       competencies: competenciesOfRound(o.kit, i.roundId),
       scorecards: this.scorecardViews(i.id, o.kit.competencies),
+      conflicts: this.conflictsOf(i),
     };
   }
 

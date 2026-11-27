@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  NOTICE_LATER, NOTICE_READ, answerPanelNotice, assignHref, canReassign, declineLines, noticeParagraphs, panelChoices, reasonProblem, seatingOf, seatsOfRow,
+  NOTICE_LATER, NOTICE_READ, answerPanelNotice, assignHref, canReassign, conflictsLine, declineLines, pickedConflicts, noticeParagraphs, panelChoices, reasonProblem, seatingOf, seatsOfRow,
   type PanelNotice, type WriteOutcome,
 } from '../interviewsAssign.ts';
 
@@ -36,7 +36,7 @@ test('who declined and why, the latest first; who sits may change until the call
 // The panel's notice at Accept (decision 5, its last sentence): the prompt's two answers.
 
 const NOTICE: PanelNotice = { version: 'v2', title: 'Before your interview', text: 'First paragraph.\n\nSecond paragraph.', panelLine: 'This applies to you too.' };
-const recorder = (ack: Awaited<ReturnType<Parameters<typeof answerPanelNotice>[2]['acknowledge']>> = { ok: true }, accepted: WriteOutcome = { ok: true, interview: null }) => {
+const recorder = (ack: Awaited<ReturnType<Parameters<typeof answerPanelNotice>[2]['acknowledge']>> = { ok: true }, accepted: WriteOutcome = { ok: true, interview: null, conflicts: [] }) => {
   const calls: string[] = [];
   return { calls, writes: {
     acknowledge: async (v: string) => { calls.push(`ack:${v}`); return ack; },
@@ -96,4 +96,22 @@ test('answerChangedNotice: read acknowledges the version shown; not now changes 
   assert.deepEqual(versions, ['v2']);
   const v3 = { ...NOTICE_V2, version: 'v3' };
   assert.deepEqual(await answerChangedNotice(NOTICE_READ, NOTICE_V2, async () => ({ ok: false, error: 'changed', needsNotice: v3 })), { error: 'changed', renotice: v3 });
+});
+
+// Double-booking (ledger row C-17): the form's check while a person is picked, and the words.
+test('a picked person already on an overlapping round is named; touching, closed and own rounds are not', () => {
+  const T0 = Date.parse('2031-03-04T14:00:00.000Z');
+  const at = (min: number) => new Date(T0 + min * 60_000).toISOString();
+  const people = [{ id: 'u-hugo', name: 'Hugo Marchetti' }, { id: 'u-wen', name: 'Wen Zhao' }];
+  const row = (id: string, start: number, minutes: number, lead: string, state: 'accepted' | 'cancelled' | 'ended' | 'live' = 'accepted', panel: string[] = []) =>
+    ({ id, scheduledAt: at(start), state, round: { minutes }, lead: { id: lead, name: lead }, panel: panel.map((p) => ({ id: p, name: p })) });
+  const mine = row('iv-this', 0, 60, 'u-hugo');
+  const rows = [mine, row('iv-touch', 60, 60, 'u-hugo'), row('iv-gone', 10, 30, 'u-hugo', 'cancelled'), row('iv-done', 10, 30, 'u-hugo', 'ended'),
+    row('iv-clash', 30, 60, 'u-ola', 'live', ['u-wen'])];
+  assert.deepEqual(pickedConflicts(mine, { leadId: 'u-hugo', panelIds: ['u-wen'] }, rows, people),
+    [{ person: { id: 'u-wen', name: 'Wen Zhao' }, interviewId: 'iv-clash', scheduledAt: at(30), minutes: 60 }]);
+  assert.deepEqual(pickedConflicts(mine, { leadId: 'u-hugo', panelIds: [] }, rows, people), []);
+  assert.deepEqual(pickedConflicts({ ...mine, scheduledAt: null }, { leadId: 'u-hugo', panelIds: ['u-wen'] }, rows, people), []);
+  assert.equal(conflictsLine([{ person: { id: 'u-hugo', name: 'Hugo Marchetti' }, interviewId: 'iv-x', scheduledAt: at(0), minutes: 60 }], 'UTC'),
+    'Hugo Marchetti is also on a round from 14:00 to 15:00 that day.');
 });

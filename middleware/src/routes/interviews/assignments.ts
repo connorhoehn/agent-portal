@@ -19,7 +19,9 @@
 //   5. the write        a compare-and-set against the revision the page loaded (store.ts InterviewWrites): 409
 //                       with the row as it now is when someone else wrote first.
 //   6. the answer       the row as the read route shapes it, from a fresh read; then the bell (lib/social-notify.ts),
-//                       never awaited by the answer and never carrying anything about the candidate.
+//                       never awaited by the answer and never carrying anything about the candidate. Assigning,
+//                       re-seating and timing also answer `conflicts`: the seats already booked on another round
+//                       at an overlapping time (lib/interviews/conflicts.ts, ledger row C-17), a warning only.
 //
 // The panel's notice (decision 5, its last sentence; lib/interviews/consent/panel-notice.ts): accepting a seat, lead or
 // panel, is refused with 409 `{ needsNotice }` and changes nothing until the session's own person has acknowledged the
@@ -82,15 +84,19 @@ function bellWords(ix: WorldIndex, i: Interview): { openingTitle: string; roundN
   return { openingTitle: opening?.title ?? 'an opening', roundName: opening?.kit.rounds.find((r) => r.id === i.roundId)?.name ?? UNKNOWN_ROUND };
 }
 
-/** Steps 5 and 6: the row as the viewer now reads it (null when the write took it out of their scope). */
-async function answerWrite(req: Request, res: Response, result: WriteResult<Interview>, status = 200): Promise<WorldIndex | null> {
+/**
+ * Steps 5 and 6: the row as the viewer now reads it (null when the write took it out of their scope). A write that
+ * seats people or sets a time (`withConflicts`) also answers the seats already booked elsewhere then (conflicts.ts):
+ * the write has succeeded all the same.
+ */
+async function answerWrite(req: Request, res: Response, result: WriteResult<Interview>, status = 200, withConflicts = false): Promise<WorldIndex | null> {
   if (!result.ok && result.reason === 'not-found') throw new NotFoundError(NO_INTERVIEW);
   const ix = await indexFor(req);
   const now = ix.world.interviews.find((i) => i.id === result.row.id);
   const row = now ? ix.interviewRow(now) : null;
   res.setHeader('Cache-Control', 'no-store');
   if (!result.ok) { res.status(409).json({ error: STALE, interview: row }); return null; }
-  res.status(status).json({ interview: row });
+  res.status(status).json(withConflicts ? { interview: row, conflicts: now ? ix.conflictsOf(now) : [] } : { interview: row });
   return ix;
 }
 
@@ -116,7 +122,7 @@ assignmentsRouter.post('/interviews', assign, asyncHandler(async (req, res) => {
   if (app.stage === 'applied' || app.stage === 'screening') {
     await store.decideStage(app.id, { stage: 'interviewing', at: interviewsNow().toISOString(), by: session.sub, reason: 'A round was assigned.' }, app.history.length).catch(() => undefined);
   }
-  const after = await answerWrite(req, res, { ok: true, row: created }, 201);
+  const after = await answerWrite(req, res, { ok: true, row: created }, 201, true);
   if (after) void notifyInterviewSeated({ interviewId: created.id, ...bellWords(after, created), userIds: [created.leadId, ...created.panelIds], actorId: session.sub, reassigned: false });
 }));
 
@@ -206,7 +212,7 @@ assignmentsRouter.put('/interviews/:id/panel', assign, asyncHandler(async (req, 
   const checked = checkReassignment(req.body, i, new Set((await interviewers()).map((p) => p.id)));
   if (!checked.ok) { refuse(res, 'reassign', checked.problems); return; }
   const written = await interviewsStore().reassign(i.id, applyReassignment(i, checked.value), revision);
-  const after = await answerWrite(req, res, written);
+  const after = await answerWrite(req, res, written, 200, true);
   if (after && written.ok) {
     void notifyInterviewSeated({ interviewId: i.id, ...bellWords(after, i), userIds: newlySeated(i, checked.value), actorId: session.sub, reassigned: true });
   }
@@ -224,7 +230,7 @@ assignmentsRouter.put('/interviews/:id/time', assign, asyncHandler(async (req, r
   const checked = checkTime(req.body, i);
   if (!checked.ok) { res.status(400).json({ error: timeProblemsLine(checked.problems.length), fields: checked.problems }); return; }
   const written = await interviewsStore().setTime(i.id, checked.value.scheduledAt, revision);
-  const after = await answerWrite(req, res, written);
+  const after = await answerWrite(req, res, written, 200, true);
   if (after && written.ok && checked.value.scheduledAt !== i.scheduledAt && (checked.value.scheduledAt !== null || i.scheduledAt !== null)) {
     void notifyInterviewTimed({ interviewId: i.id, ...bellWords(after, i), userIds: [i.leadId, ...i.panelIds], actorId: session.sub, changed: i.scheduledAt !== null, cleared: checked.value.scheduledAt === null });
   }
