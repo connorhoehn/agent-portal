@@ -456,14 +456,30 @@ export const startRun = (base: string, body: RunRequestBody, fetcher: typeof fet
 export const cancelRun = (base: string, runId: string, fetcher: typeof fetch = fetch): Promise<RunWrite> =>
   runWrite(`${base}/runs/${encodeURIComponent(runId)}/cancel`, {}, CANCEL_FAILED_SENTENCE, fetcher);
 
-/** The interview's runs, newest first; null when there is no answer (not live, not let in, no reply). */
-export async function readRuns(base: string, fetcher: typeof fetch = fetch): Promise<RunView[] | null> {
+/** Which runner the pad has (the server's `runner.kind`): `real` runs the code, `simulated` prints example output, `unavailable` runs nothing. */
+export type RunnerKind = 'real' | 'simulated' | 'unavailable';
+export const SIMULATED_RUNNER_LABEL = 'Simulated runner: Run shows example output, it does not execute this code.';
+export const UNAVAILABLE_RUNNER_LABEL = 'Running code is not set up here.';
+/** The plain sentence the pad shows beside Run for this runner; null when there is nothing to say (real, or not yet known). */
+export function runnerLabel(kind: RunnerKind | null): string | null {
+  return kind === 'simulated' ? SIMULATED_RUNNER_LABEL : kind === 'unavailable' ? UNAVAILABLE_RUNNER_LABEL : null;
+}
+const RUNNER_KINDS: readonly string[] = ['real', 'simulated', 'unavailable'];
+
+/** The interview's runs, newest first, and the runner; null when there is no answer (not live, not let in, no reply). */
+export async function readRunsAndRunner(base: string, fetcher: typeof fetch = fetch): Promise<{ runs: RunView[]; runner: RunnerKind | null } | null> {
   try {
     const res = await fetcher(`${base}/runs`, WIRE);
     if (!res.ok) return null;
-    const json = (await res.json()) as { runs?: RunView[] };
-    return Array.isArray(json.runs) ? json.runs : null;
+    const json = (await res.json()) as { runs?: RunView[]; runner?: { kind?: unknown } };
+    if (!Array.isArray(json.runs)) return null;
+    const kind = json.runner?.kind;
+    return { runs: json.runs, runner: typeof kind === 'string' && RUNNER_KINDS.includes(kind) ? (kind as RunnerKind) : null };
   } catch { return null; }
+}
+/** The interview's runs, newest first; null when there is no answer (not live, not let in, no reply). */
+export async function readRuns(base: string, fetcher: typeof fetch = fetch): Promise<RunView[] | null> {
+  return (await readRunsAndRunner(base, fetcher))?.runs ?? null;
 }
 export async function readRun(base: string, runId: string, fetcher: typeof fetch = fetch): Promise<RunView | null> {
   try {

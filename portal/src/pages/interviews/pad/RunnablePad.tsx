@@ -11,6 +11,7 @@ import { Button, Inline, InlineAlert, Stack, Switch, T, Tooltip } from '@connorh
 import { useFetch } from '../../../hooks/useFetch';
 import { miloSettingsPath, PAD_HELP_LABEL, PAD_HELP_TOOLTIP, setCandidateMayAsk, type MiloSettingsView } from '../../../lib/interviewsMilo';
 import { padLanguageOf } from '../../../lib/interviewsPad';
+import { PadRunControl } from './PadRunControl';
 import { InterviewPad, type InterviewPadHandle, type PadQuestion, type PadSeat } from './InterviewPad';
 import { useInterviewRuns } from './useInterviewRuns';
 import { usePadLogReporter } from './usePadLogReporter';
@@ -67,7 +68,7 @@ export function RunnablePad({ interviewId, base, self, seat, questions }: Runnab
   const toolbarEnd = <Inline gap="xs" align="center" wrap={false} className="shrink-0">
     {seat === 'lead' && <PadHelpSwitch interviewId={interviewId} />}
     {runs.canCancel && <Button size="sm" variant="secondary" onClick={() => void runs.cancel()} disabled={runs.cancelling} data-testid="interview-pad-cancel">Cancel</Button>}
-    <Button size="sm" variant="primary" onClick={run} disabled={runs.starting} data-testid="interview-pad-run">Run</Button>
+    <PadRunControl runner={runs.runner} busy={runs.starting} onRun={run} />
   </Inline>;
 
   const o = runs.output;

@@ -228,3 +228,14 @@ test('every event the reporter makes passes the server\'s check (a candidate\'s 
   assert.ok(checked, 'the server takes the post whole');
   assert.deepEqual(checked![1], { kind: 'paste', clientAt: '2026-11-17T10:00:00.000Z', from: 120, inserted: 240, lines: 9, via: 'paste' });
 });
+
+test('the runs read carries the runner kind, and an unknown one is null', async () => {
+  const { readRunsAndRunner, readRuns, runnerLabel } = await import('../interviewsPad.ts');
+  const answer = (body: unknown) => (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;
+  assert.deepEqual(await readRunsAndRunner('/b', answer({ runs: [], runner: { kind: 'simulated' } })), { runs: [], runner: 'simulated' });
+  assert.deepEqual(await readRunsAndRunner('/b', answer({ runs: [], runner: { kind: 'bogus' } })), { runs: [], runner: null });
+  assert.deepEqual(await readRuns('/b', answer({ runs: [] })), []);
+  assert.equal(runnerLabel('real'), null);
+  assert.match(runnerLabel('simulated')!, /^Simulated runner: Run shows example output, it does not execute this code\.$/);
+  assert.equal(runnerLabel('unavailable'), 'Running code is not set up here.');
+});

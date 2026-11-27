@@ -7,8 +7,8 @@
 // it ends) is read when the stream first names it and again when it ends, a bounded number of times.
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
-  EMPTY_RUNS, cancelRun, cancellableRun, entryStatus, latestRun, newRunId, parseRunEvent, readRun, readRuns, runNeedsRead,
-  runOutputModel, runRequest, runsEventsUrl, runsReducer, startRun, type RunEntry, type RunOutputModel,
+  EMPTY_RUNS, cancelRun, cancellableRun, entryStatus, latestRun, newRunId, parseRunEvent, readRun, readRunsAndRunner, runNeedsRead,
+  runOutputModel, runRequest, runsEventsUrl, runsReducer, startRun, type RunEntry, type RunnerKind, type RunOutputModel,
 } from '../../../lib/interviewsPad';
 import type { PadLanguage } from '../../../lib/interviewsKit';
 
@@ -18,6 +18,8 @@ const READS_PER_STATUS = 4;
 const READ_RETRY_MS = 600;
 
 export interface InterviewRuns {
+  /** Which runner this pad has, once the runs read has said; null before that. */
+  runner: RunnerKind | null;
   latest: RunEntry | null;
   output: RunOutputModel;
   /** A run of this interview is queued, compiling or running: Cancel stops the newest. */
@@ -35,6 +37,7 @@ export function useInterviewRuns(base: string | null, selfId: string | null): In
   const [starting, setStarting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [runner, setRunner] = useState<RunnerKind | null>(null);
 
   // The stream, and the runs so far.
   useEffect(() => {
@@ -64,7 +67,7 @@ export function useInterviewRuns(base: string | null, selfId: string | null): In
       };
     };
     open();
-    void readRuns(base).then((runs) => { if (!stopped && runs) dispatch({ type: 'list', runs }); });
+    void readRunsAndRunner(base).then((read) => { if (stopped || !read) return; setRunner(read.runner); dispatch({ type: 'list', runs: read.runs }); });
     return () => { stopped = true; if (timer) clearTimeout(timer); source?.close(); };
   }, [base]);
 
@@ -116,5 +119,5 @@ export function useInterviewRuns(base: string | null, selfId: string | null): In
   }, [base, targetId]);
 
   const latest = latestRun(state);
-  return { latest, output: runOutputModel(latest, selfId), canCancel: !!target, starting, cancelling, refusal, start, cancel };
+  return { runner, latest, output: runOutputModel(latest, selfId), canCancel: !!target, starting, cancelling, refusal, start, cancel };
 }
