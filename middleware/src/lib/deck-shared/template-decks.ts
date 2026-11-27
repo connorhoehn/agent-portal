@@ -167,16 +167,16 @@ const RUN = deck('run-report', 'Run report', {
       figures: [
         { value: '7 of 7', label: 'Nights that finished' },
         { value: '41,200', label: 'Addresses checked' },
-        { value: '1.8%', label: 'Addresses corrected', delta: '-0.4 pts' },
+        { value: '1.7%', label: 'Addresses changed', delta: '-0.4 pts' },
       ],
     },
     {
-      id: 'stacked', layout: 'chart', title: 'Addresses by result, per night',
+      id: 'stacked', layout: 'chart', title: 'Addresses changed, per night',
       chart: {
         kind: 'stacked-bar', labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         series: [
-          { name: 'Already correct', values: [5800, 5900, 5750, 5850, 6000, 5300, 5100] },
-          { name: 'Corrected', values: [110, 105, 98, 120, 102, 95, 90] },
+          { name: 'Postcode fixed', values: [52, 48, 45, 58, 50, 44, 41] },
+          { name: 'Street name fixed', values: [46, 45, 41, 50, 40, 42, 38] },
           { name: 'Needs a person', values: [12, 9, 14, 11, 10, 8, 7] },
         ],
       },
