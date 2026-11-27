@@ -88,7 +88,12 @@ async function step(name, fn) {
   saveFacts();
 }
 
-const dialogsIn = (page) => page.evaluate(() => [...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')].map((e) => e.getAttribute('aria-label') || e.getAttribute('data-testid') || e.tagName));
+// The two dialogs the owner allows are not counted: the voice dock's own confirm card (identified by its test id,
+// `voice-confirm-card`, on the element or inside it) and the library's ConfirmDialog for a destructive confirmation
+// (identified by its `confirm-dialog-confirm` button). Every other role=dialog or aria-modal element counts.
+const dialogsIn = (page) => page.evaluate(() => [...document.querySelectorAll('[role="dialog"],[aria-modal="true"]')]
+  .filter((e) => !e.closest('[data-testid="voice-confirm-card"]') && !e.querySelector('[data-testid="voice-confirm-card"], [data-testid="confirm-dialog-confirm"]'))
+  .map((e) => e.getAttribute('aria-label') || e.getAttribute('data-testid') || e.tagName));
 
 /** One screenshot per width; `sel` is the element under test (a test id), judged for clipped text. */
 async function snap(page, name, widths, sel) {
@@ -115,8 +120,8 @@ async function snap(page, name, widths, sel) {
 }
 const fmt = (rows) => rows.map((r) => `@${r.width}${r.horizontalScroll ? ' HSCROLL' : ''}${r.elementClipped ? ' CLIPPED' : ''}${r.dialogs.length ? ` DIALOG(${r.dialogs.join(',')})` : ''}`).join(' ');
 const noDialogs = (rows) => rows.every((r) => r.dialogs.length === 0);
-// The voice dock's own confirm card carries role=dialog ("Confirm: ..."); it is the dock's, not a deck screen's modal, and is reported in the line.
-const noDeckDialogs = (rows) => rows.every((r) => r.dialogs.every((d) => /^Confirm:/.test(d)));
+// The voice steps hold the dock's confirm card open; dialogsIn already leaves it (and only it, with ConfirmDialog) out.
+const noDeckDialogs = noDialogs;
 
 async function go(page, p) {
   await page.goto(`${PORTAL}${p}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
@@ -156,6 +161,14 @@ const waitSrcChange = async (page, p, before, ms = 15000) => {
 const stageSrc = (page, p) => page.evaluate((t) => document.querySelector(`[data-testid="${t}"]`)?.getAttribute('src') ?? '', `${p}-editor-stage-image`);
 
 const IP = 'initiative-deck';
+/** The findings line's full text: opens its disclosure (as a reader would) when it is closed. */
+async function findingsText(page, p = IP) {
+  const root = page.getByTestId(`${p}-preview-warnings`);
+  if (!(await root.count())) return '';
+  const open = await root.evaluate((e) => (e.tagName === 'DETAILS' ? e : e.querySelector('details'))?.open ?? true);
+  if (!open) await root.locator('summary').first().click().catch(() => undefined);
+  return squash(await root.innerText().catch(() => ''));
+}
 const E = `${IP}-editor`;
 const deckIdOf = (page) => decodeURIComponent((page.url().match(/\/decks\/([^/?#]+)/) ?? [])[1] ?? '');
 async function headSpec(ctx, deckId) {
@@ -224,7 +237,7 @@ await step('D1 new deck from a template', async () => {
 await step('D2 the editor on the new engine', async () => {
   const w = await stageLoaded(page, IP);
   const thumbs = await imagesLoaded(page, `[data-testid="${E}-slide-list"]`);
-  const warn = squash(await page.getByTestId(`${IP}-preview-warnings`).innerText().catch(() => ''));
+  const warn = await findingsText(page);
   const geo = await page.evaluate((p) => {
     const img = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
     const ban = document.querySelector(`[data-testid="${p}-preview-warnings"]`)?.getBoundingClientRect();
@@ -279,8 +292,8 @@ await step('D3 the layout gallery, in place', async () => {
 
 // D4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 await step('D4 overflow is reported', async () => {
-  const countOf = (w) => Number((w.match(/found (\d+|one) thing/) ?? [])[1] === 'one' ? 1 : (w.match(/found (\d+) things/) ?? [])[1] ?? 0);
-  const warnBefore = squash(await page.getByTestId(`${IP}-preview-warnings`).innerText().catch(() => ''));
+  const countOf = (w) => (/^One thing to check/.test(w) ? 1 : Number((w.match(/^(\d+) things to check/) ?? [])[1] ?? 0));
+  const warnBefore = await findingsText(page);
   const slidesBefore = await page.locator(`[data-testid^="${E}-slide-select-"]`).count();
   await openLayoutGallery(page);
   await page.getByTestId(`${E}-layout-gallery-bullets`).click();
@@ -298,7 +311,7 @@ await step('D4 overflow is reported', async () => {
     for (let i = 1; i < 8; i++) { await page.locator(`[data-testid^="${E}-slide-bullet"][data-testid$="add"]`).first().click(); await page.locator(`[data-testid^="${E}-slide-bullet"] input`).nth(i).fill(eight[i]); }
   }
   await sleep(3500);
-  const warn = squash(await page.getByTestId(`${IP}-preview-warnings`).innerText().catch(() => ''));
+  const warn = await findingsText(page);
   const position = squash(await page.getByTestId(`${E}-position`).innerText().catch(() => ''));
   const slideNo = (position.match(/Slide (\d+)/) ?? [])[1];
   const overflow = (warn.match(/[^.]*(overflow|too long|does not fit|doesn't fit|too many|too much)[^.]*\./i) ?? [])[0] ?? '';
@@ -310,7 +323,7 @@ await step('D4 overflow is reported', async () => {
   const short = ['One', 'Two', 'Three'];
   if (await area.count()) await area.fill(short.join('\n'));
   await sleep(3500);
-  const warn2 = squash(await page.getByTestId(`${IP}-preview-warnings`).innerText().catch(() => ''));
+  const warn2 = await findingsText(page);
   const cleared = !/(overflow|too long|does not fit|doesn't fit|too many|too much)/i.test(warn2) || !new RegExp(`Slide ${slideNo} \\([^)]*\\)[^.]*(overflow|does not fit|too)`, 'i').test(warn2);
   const s2 = await snap(page, 'D4b-shortened', [1440], `${IP}-preview-warnings`);
   return { ok: !!overflow && !!named && cleared && noDialogs([...shots, ...s2]), detail: `warning count ${countOf(warnBefore)} before and ${countOf(warn)} after adding ${slidesAfter - slidesBefore} slide(s) (the list is ${countOf(warnBefore) === countOf(warn) ? 'UNCHANGED, so it does not follow the edits' : 'updated'}); overflow sentence ${overflow ? `"${squash(overflow).slice(0, 160)}"` : 'NOT PRESENT (warnings: ' + warn.slice(0, 200) + ')'}; names slide ${slideNo}: ${!!named}; cleared after shortening: ${cleared}; ${fmt(shots)}` };
@@ -371,7 +384,8 @@ await step('D5b a persona without the budget read tier', async () => {
 await step('D6 theme', async () => {
   const themeIds = await ids(page, 'theme');
   const accent = () => page.evaluate((p) => { const i = document.querySelector(`[data-testid="${p}-editor-stage-image"]`); return i?.getAttribute('src') ?? ''; }, IP);
-  const colours = (src) => { const t = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, '')); return [...new Set(t.match(/#[0-9a-fA-F]{6}\b/g) ?? [])].slice(0, 12); };
+  // The stage image is an SVG wrapping one PNG painted with the bundled fonts: compare the painted image itself.
+  const colours = (src) => { const t = decodeURIComponent(src.replace(/^data:image\/svg\+xml;charset=utf-8,/, '')); const png = (t.match(/data:image\/png;base64,([A-Za-z0-9+/=]+)/) ?? [])[1]; return png ? [`png:${png.length}:${png.slice(-64)}`] : [...new Set(t.match(/#[0-9a-fA-F]{6}\b/g) ?? [])].slice(0, 12); };
   const before = await accent();
   const s1 = await snap(page, 'D6a-theme-before', [1440], `${E}-stage`);
   // the toolbar's theme control: a menu or select named for the theme
@@ -379,15 +393,30 @@ await step('D6 theme', async () => {
   let how = '';
   if (await control.count()) { await control.click(); how = `toolbar control ${await control.getAttribute('data-testid')}`; }
   else { await page.getByTestId(`${E}-toolbar-more`).click(); how = 'More menu'; }
-  const items = await page.evaluate(() => [...document.querySelectorAll('[role=menuitem],[role=option],[role=menuitemradio]')].map((e) => [e.getAttribute('data-testid'), (e.textContent || '').trim()]));
-  const pick = items.find(([tid, t]) => /theme/i.test(`${tid} ${t}`) && !/product/i.test(t) && /engineering|plain|work/i.test(t));
+  const items = await page.evaluate(() => [...document.querySelectorAll('[role=menuitem],[role=option],[role=menuitemradio],[role=menuitemcheckbox]')].map((e) => [e.getAttribute('data-testid'), (e.textContent || '').trim(), e.getAttribute('aria-checked') === 'true']));
+  // A fresh template deck already wears the tenant theme: move it to an unchecked built-in first, then back to the tenant's.
+  const pick = items.find(([tid, , on]) => /-theme-ref-/.test(tid ?? '') && !on) ?? items.find(([tid, t, on]) => !on && /-theme-(?!ref-)/.test(tid ?? '') && !/product/i.test(t));
   if (!pick) { await page.keyboard.press('Escape'); return { ok: false, detail: `no theme choice found in ${how}; theme test ids: [${themeIds.join(', ')}]; menu items ${JSON.stringify(items.map((i) => i[1]))}; toolbar buttons ${JSON.stringify(await page.locator(`[data-testid="${E}-toolbar"] button`).evaluateAll((l) => l.map((b) => b.getAttribute('aria-label') || b.innerText.trim())))}` }; }
-  await page.getByRole('menuitem', { name: new RegExp(pick[1].slice(0, 20)) }).first().click().catch(() => page.locator(`[data-testid="${pick[0]}"]`).click());
+  if (pick[0]) await page.locator(`[data-testid="${pick[0]}"]`).click();
+  else await page.getByRole('menuitem', { name: new RegExp(pick[1].slice(0, 20)) }).first().click();
   await sleep(3500); await stageLoaded(page, IP);
   const after = await accent();
   const s2 = await snap(page, 'D6b-theme-after', [1440], `${E}-stage`);
   const cb = colours(before); const ca = colours(after);
-  return { ok: before !== after && JSON.stringify(cb) !== JSON.stringify(ca), detail: `chose "${pick[1]}" from ${how}; svg colours before ${cb.join(' ')} after ${ca.join(' ')}; ${fmt(s2)}` };
+  // Then the tenant theme (a `{ ref }`), which must change the slide again and be written into the spec.
+  let back = { ok: true, line: 'tenant theme was already chosen' };
+  if (!/-theme-ref-/.test(pick[0] ?? '')) {
+    if (await control.count()) await control.click(); else await page.getByTestId(`${E}-toolbar-more`).click();
+    const ref = page.locator('[data-testid*="-theme-ref-"]').first();
+    if (!(await ref.count())) back = { ok: false, line: 'no tenant theme row offered' };
+    else {
+      const name = squash(await ref.innerText());
+      await ref.click(); await sleep(3500); await stageLoaded(page, IP);
+      const third = await accent();
+      back = { ok: third !== after, line: `then chose the tenant theme "${name}": slide changed again ${third !== after}` };
+    }
+  }
+  return { ok: before !== after && JSON.stringify(cb) !== JSON.stringify(ca) && back.ok, detail: `chose "${pick[1]}" from ${how}; slide image before ${cb.join(' ')} after ${ca.join(' ')}; ${back.line}; ${fmt(s2)}` };
 });
 
 // D7 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -417,9 +446,11 @@ await step('D7 present in place', async () => {
   await page.keyboard.press('Escape'); await sleep(2500);
   const gone = (await page.getByTestId(`${E}-present`).count()) === 0;
   const after = await widths();
-  const folded = Object.keys(before).filter((k) => before[k] > 100).every((k) => (during[k] ?? 0) <= 4);
+  const shotsAfter = await snap(page, 'D7b-after-exit', [1440], `${E}`);
+  // Folded is the shell's own folded state: a rail gone, or down to its icon strip (48px or less), never open.
+  const folded = Object.keys(before).filter((k) => before[k] > 100).every((k) => (during[k] ?? 0) <= 48);
   const restored = JSON.stringify(before) === JSON.stringify(after);
-  return { ok: folded && restored && dlg.length === 0 && gone && !!p1 && p1 !== p0 && p2 === p0, detail: `sidebars before ${JSON.stringify(before)}, while presenting ${JSON.stringify(during)}, after exit ${JSON.stringify(after)} (every open one folded: ${folded}; restored exactly: ${restored}); dialogs while presenting: ${dlg.length}; position ${p0 || 'none'} -> ArrowRight ${p1 || 'none'} -> ArrowLeft ${p2 || 'none'}; Escape exited: ${gone}; ${fmt(shots)}` };
+  return { ok: folded && restored && dlg.length === 0 && gone && !!p1 && p1 !== p0 && p2 === p0, detail: `sidebars before ${JSON.stringify(before)}, while presenting ${JSON.stringify(during)}, after exit ${JSON.stringify(after)} (every open one folded: ${folded}; restored exactly: ${restored}); dialogs while presenting: ${dlg.length}; position ${p0 || 'none'} -> ArrowRight ${p1 || 'none'} -> ArrowLeft ${p2 || 'none'}; Escape exited: ${gone}; ${fmt(shots)}; after exit ${fmt(shotsAfter)}` };
 });
 
 // D8 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -462,15 +493,17 @@ await step('D8 exports', async () => {
   return { ok: !!ok, detail: `${slideCount} slides (+ Sources = ${want}); ${out.join('; ')}; checks ${JSON.stringify(checks)}` };
 });
 
-// D11 (Share to Social, a known modal) ─────────────────────────────────────────────────────────────────────────
-await step('D11 Share to Social is still a modal (known defect)', async () => {
+// D11 (Share to Social, inline) ───────────────────────────────────────────────────────────────────────────────
+await step('D11 Share to Social opens inline, not as a modal', async () => {
   await page.getByTestId('deck-share-open').click();
   await sleep(1200);
   const d = await dialogsIn(page);
-  await snap(page, 'D11-share-picker', [1440], null);
-  await page.keyboard.press('Escape'); await sleep(500);
-  const left = await dialogsIn(page);
-  return { ok: d.length === 0, detail: `dialog elements while the picker is open: ${d.length} (${d.join(',')}); after Escape: ${left.length}. Recorded as the known defect.` };
+  const rect = await page.getByTestId('deck-share-panel').evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height), vh: innerHeight }; }).catch(() => null);
+  const onScreen = !!rect && rect.height > 40 && rect.top >= 0 && rect.top < rect.vh - 40;
+  const shots = await snap(page, 'D11-share-picker', [1440], 'deck-share-panel');
+  await page.getByTestId('deck-share-close').click().catch(() => undefined); await sleep(500);
+  const closed = (await page.getByTestId('deck-share-panel').count()) === 0;
+  return { ok: d.length === 0 && onScreen && closed && noDialogs(shots), detail: `dialog elements while the picker is open: ${d.length} (${d.join(',')}); inline panel ${rect ? `at y ${rect.top}-${rect.bottom} of ${rect.vh}px` : 'NOT FOUND'} (on screen: ${onScreen}); closed by its Close: ${closed}; ${fmt(shots)}` };
 });
 
 // D9 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
