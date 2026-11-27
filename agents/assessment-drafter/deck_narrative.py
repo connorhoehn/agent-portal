@@ -38,7 +38,7 @@ date, dollar figure or percentage that is not present in that slide's facts or
 evidence excerpts. Copy source_spans text VERBATIM from the excerpt whose id you
 cite as evidenceId. Return {summary, narratives:[{slideId, bullets:[string],
 notes?:string, source_spans:[{evidenceId, text}]}]} with one narrative per input
-slide, using only the input slideIds; 1 to 4 bullets of at most 300 characters.
+slide, using only the input slideIds; 1 to 4 bullets of at most 200 characters.
 mode = initiative-status-deck (an orgiq initiative status deck): an initiative-summary
 slide says where the initiative stands (status, progress, owner, what is blocked or
 at risk) in plain delivery language; an initiative-decisions slide says what was

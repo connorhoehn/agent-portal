@@ -11,8 +11,8 @@ Keeping it: when a row is done, delete it and name the row id in the commit mess
 - **Unmerged work is down to two side worktrees**, in pipeline-runtime and ui-components (B-3, B-4), uncommitted and untouched since midday on 25 November. The film branch and the cloud branch are merged, and the pins are level: ui-components 2.546.0, and realtime-modules 0.151.0 in both the middleware and the frontend.
 - **No dependency repository has moved since 25 November**, and none of the private ones has executed a CI job since 11 November (CI-1).
 - **Milo's rebuild is half landed**, as before: phases 0 and 1 are on `main` and the text judge passes both sets, but the turn owner is off by default, none of the planned deletions happened, and phases 2 and 3 have not started. Films 7 and 8 are delivered.
-- **A deck builder is planned and not started** (K-1). Its research found two things worth fixing whether or not it is built: deck drafting is unmetered (P-12), and long bullets are silently dropped (K-2).
-- **100 rows are open:** Candidates 26, dependency repositories 14, Milo 14, platform and money 12, CI 9, meeting assistant 9, branches 4, documents 4, voice 4, UI library 2, planned 2.
+- **A deck builder is planned and not started** (K-1). Its research found two things worth fixing whether or not it is built: deck drafting is unmetered (P-12) (the second, bullets over 200 characters being silently dropped, was fixed on 27 November).
+- **About 100 rows are open:** Candidates 26, dependency repositories 14, Milo 14, platform and money 12, CI 9, meeting assistant 9, branches 4, documents 4, voice 4, UI library 2, planned 2.
 
 ## Closed since the first sweep
 
@@ -30,7 +30,7 @@ For orientation only; the commits name the row ids.
 
 ### Then, work that needs nobody else
 
-3. **Privacy and money, smallest first.** C-18 (whether the candidate profile read hands the whole row to assigned interviewers), M-9 (the listening-side consent check is hard-wired true), K-2 (deck bullets silently dropped), P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
+3. **Privacy and money, smallest first.** C-18 (whether the candidate profile read hands the whole row to assigned interviewers), M-9 (the listening-side consent check is hard-wired true), P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
 4. **Candidates, second batch.** One package of five small rows (C-10, C-12, C-13, C-14, C-16); then C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
 5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
 6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
@@ -223,7 +223,6 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
 | K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first | L |
-| K-2 | The deck drafting prompts ask for bullets of up to 300 characters, the agent's own check allows 400, and the middleware accepts 200. One longer bullet rejects the slide's whole draft, and the slide silently keeps its template text. | `agents/assessment-drafter/deck_narrative.py:41`; `agents/assessment-drafter/document_commands.py:127`, `:138`; `middleware/src/lib/deck-shared/narrative.ts:107` (`MAX_BULLET_CHARS` is 200 in the deck engine) | Open | Ask for 200 in both prompts and in the agent's check now; K-1 then generates that text from the engine | S |
 
 ## Documents that now mislead
 

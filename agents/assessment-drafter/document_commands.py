@@ -124,7 +124,7 @@ narrative per input slide, using only the input slideIds. By kind: an executive
 summary gives the overall position; a dimension slide says what the evidence
 shows, why verified and claimed levels differ (if facts show they do) and what
 reaching the next level needs; an overall summary contrasts strengths and gaps;
-next steps lists concrete actions. 2 to 5 bullets of at most 300 characters each.
+next steps lists concrete actions. 2 to 5 bullets of at most 200 characters each.
 For revise-review-deck the input is {spec, instruction, slideId?, facts:{slideId:
 {name: string|number}}, evidence:[{id, excerpt}]}. Return {summary, spec, changedSlideIds, source_spans:[{evidenceId,
 text}]}. spec is the complete deck spec with only the edits the instruction asks
@@ -135,7 +135,7 @@ facts, the evidence or the slide's existing text.
 
 MAX_DECK_SUMMARY = 800
 MAX_BULLETS = 6
-MAX_BULLET = 400
+MAX_BULLET = 200  # the deck engine's MAX_BULLET_CHARS: the middleware drops a slide's whole draft over it
 MAX_NOTES = 1200
 MAX_SPANS = 10
 MAX_SPEC_BYTES = 1_000_000
