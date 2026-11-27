@@ -1,4 +1,5 @@
-// Piece E3-door: the candidate's pages and both live rooms, measured in every state at 1440 and 1280 (rows E3, O-279).
+// Piece E3-door: the candidate's pages and both live rooms, measured in every state at 1440 and 1280 (rows E3, O-279), and each
+// candidate's state again at 768 and 390 as its own `.narrow` step (gap audit 2026-11-20 §11).
 // It was a scratch script in UI round 4 (audit-door); this is the same measure on the harness. One step per state, E3.a, E3.b, ...:
 // it passes when the state has no sideways scroll, nothing cut by its container or the window, and every bar on one line.
 // The other measures (overlap, sizes off the type scale, heading skips, controls with no name, staff words on a candidate's page) are
@@ -17,28 +18,44 @@ export default async function run(ctx) {
   let n = 0;
   const contexts = [];
 
-  /** Measure one state at both widths and record it as the next step. */
+  /** The widths every state is measured at, and the narrower ones a candidate's page is measured at too (gap audit 2026-11-20 §11). */
+  const DESKTOP = [[1440, 900], [1280, 800]];
+  const NARROW = [[768, 1024], [390, 844]];
+
+  /** The same three assertions at each width; the notes are printed, never failed on. */
+  async function measureAt(page, widths, opts, bad, notes) {
+    for (const [w, h] of widths) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.waitForTimeout(900);
+      const res = await page.evaluate(measureAll, { bars: [], boxes: [], ...opts });
+      if (res.sideways > 0) bad.push(`${w}: sideways scroll ${res.sideways}px`);
+      if (res.cut?.length) bad.push(`${w}: cut ${res.cut.join('; ')}`);
+      for (const [k, v] of Object.entries(res.bars ?? {})) if (v.spreadCentre > 2) bad.push(`${w}: ${k} is not one line (${v.spreadCentre}px)`);
+      if (res.overlap?.length) notes.push(`${w} overlap ${res.overlap.length}`);
+      if (res.offScale?.length) notes.push(`${w} off-scale ${res.offScale.join(', ')}`);
+      if (res.headingSkips?.length) notes.push(`${w} heading skip ${res.headingSkips.join(', ')}`);
+      if (res.noName?.length) notes.push(`${w} unnamed ${res.noName.join(', ')}`);
+      if (res.staffWords?.length) notes.push(`${w} staff words ${res.staffWords.length}`);
+    }
+  }
+
+  /**
+   * Measure one state at the desktop widths and record it as the next step. A candidate's state (GUEST) is measured again at
+   * 768 and 390 and recorded as its own step, `<id>.narrow`, with the same assertions, so a phone-width failure is named on
+   * its own and never hidden in, or excused by, the desktop step.
+   */
   async function state(page, label, opts) {
     const id = `E3.${letters(n++)}`;
-    try {
-      const notes = [];
-      const bad = [];
-      for (const [w, h] of [[1440, 900], [1280, 800]]) {
-        await page.setViewportSize({ width: w, height: h });
-        await page.waitForTimeout(900);
-        const res = await page.evaluate(measureAll, { bars: [], boxes: [], ...opts });
-        if (res.sideways > 0) bad.push(`${w}: sideways scroll ${res.sideways}px`);
-        if (res.cut?.length) bad.push(`${w}: cut ${res.cut.join('; ')}`);
-        for (const [k, v] of Object.entries(res.bars ?? {})) if (v.spreadCentre > 2) bad.push(`${w}: ${k} is not one line (${v.spreadCentre}px)`);
-        if (res.overlap?.length) notes.push(`${w} overlap ${res.overlap.length}`);
-        if (res.offScale?.length) notes.push(`${w} off-scale ${res.offScale.join(', ')}`);
-        if (res.headingSkips?.length) notes.push(`${w} heading skip ${res.headingSkips.join(', ')}`);
-        if (res.noName?.length) notes.push(`${w} unnamed ${res.noName.join(', ')}`);
-        if (res.staffWords?.length) notes.push(`${w} staff words ${res.staffWords.length}`);
-      }
-      await page.setViewportSize({ width: 1440, height: 900 });
-      record(id, bad.length === 0, `${label}: ${bad.length ? bad.join(' | ') : 'no sideways scroll, nothing cut, bars on one line'}${notes.length ? ` (notes: ${notes.join('; ')})` : ''}`);
-    } catch (e) { record(id, false, `${label}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`); }
+    const widths = [[DESKTOP, id, '']].concat(opts?.guest ? [[NARROW, `${id}.narrow`, ' at 768 and 390']] : []);
+    for (const [list, stepId, suffix] of widths) {
+      try {
+        const notes = [];
+        const bad = [];
+        await measureAt(page, list, opts, bad, notes);
+        record(stepId, bad.length === 0, `${label}${suffix}: ${bad.length ? bad.join(' | ') : 'no sideways scroll, nothing cut, bars on one line'}${notes.length ? ` (notes: ${notes.join('; ')})` : ''}`);
+      } catch (e) { record(stepId, false, `${label}${suffix}: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`); }
+    }
+    await page.setViewportSize({ width: 1440, height: 900 }).catch(() => undefined);
   }
 
   /** A context whose media calls are stubbed (the walk stack has no media service) and whose pre-join choice is remembered. */

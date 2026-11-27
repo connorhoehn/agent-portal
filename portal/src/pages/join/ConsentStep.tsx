@@ -79,15 +79,16 @@ export function ConsentStep({ consents, onSaved, onLinkDead, onBack, onAdmitted 
     }
   };
 
+  // Side by side from 768 wide; below it (a phone) the notice sits over the questions, each scrolling in its own share.
   return (
-    <Inline gap="lg" align="stretch" wrap={false} className="min-h-0 flex-1" data-testid="join-consents">
-      <Card padding="lg" className="min-h-0 min-w-0 flex-1 overflow-y-auto" data-testid="join-notice" tabIndex={0} aria-label={notice.title}>
+    <Inline gap="lg" align="stretch" wrap={false} className="min-h-0 flex-1 max-md:flex-col" data-testid="join-consents">
+      <Card padding="lg" className="min-h-0 min-w-0 flex-1 overflow-y-auto max-md:min-h-[12rem]" data-testid="join-notice" tabIndex={0} aria-label={notice.title}>
         <Stack gap="sm">
           <T size="base" weight="semibold" as="p">{notice.title}</T>
           {notice.paragraphs.map((p) => <T key={p} size="sm" as="p">{p}</T>)}
         </Stack>
       </Card>
-      <Stack gap="md" className="min-h-0 w-[26rem] shrink-0 overflow-y-auto" data-testid="join-questions">
+      <Stack gap="md" className="min-h-0 w-[26rem] shrink-0 overflow-y-auto max-md:w-full max-md:shrink" data-testid="join-questions">
         <Card padding="lg">
           <Stack gap="md">
             {QUESTIONS.map(({ part, question, ifNo }, i) => {
