@@ -4,10 +4,14 @@
 // its API, its test-id prefix, who may edit and its breadcrumbs; only
 // capability, extra notices and the share rule vary between them.
 
-import { useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
-import { Banner, Button, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, T, VisuallyHidden, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
-import { canSaveDeck, DeckPresentationDialog, DeckReader, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehn/ui-components/doc-editor';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Banner, Button, DetailSection, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
+import { addSlide, canSaveDeck, DeckReader, EditorShell, LayoutGallery, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext, type SlideLayout } from '@connorhoehn/ui-components/doc-editor';
+import { usePublishPageContext, usePublishPageTabs } from '../../lib/voice/pageContext';
+import { DeckReportChartPanel, SAVE_FIRST_LINE } from './DeckReportChartPanel';
+import { DECK_REVISED_EVENT, DECK_TENANT_THEME_NAMES, layoutPreviewMap, listChartReports, listDeckLayouts, type DeckChartReport } from './deckApi';
+import { deckVoiceContext, DECK_LAYOUTS_TAB, DECK_TABS } from './deckVoiceContext';
 import { DeckConflictBanner } from './DeckConflictBanner';
 import { deckSaveState } from './deckDocumentModel';
 import { useDeckCollaboration } from './useDeckCollaboration';
@@ -94,9 +98,14 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const [warnings, setWarnings] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [presenting, setPresenting] = useState(false);
-  const [presentSlideId, setPresentSlideId] = useState<string | null>(null);
+  const [reportPanel, setReportPanel] = useState(false);
   const savingNow = useRef(false);
+  const focus = useShellFocusMode();
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  // `?tab=layouts` (the voice's `open { scope: 'this-page', tab: 'layouts' }`, or a link) shows the example layouts in place of the stage.
+  const showLayouts = params.get('tab') === DECK_LAYOUTS_TAB;
+  const closeLayouts = () => setParams(prev => { const next = new URLSearchParams(prev); next.delete('tab'); return next; }, { replace: true });
   const composerFocus = useComposerFocus();
   // The library reader/presentation take the page's conversation as a callback; absent, their Chat & agent control is disabled.
   const focusConversation = composerFocus.present ? () => composerFocus.request({ mode: 'agent' }) : undefined;
@@ -117,6 +126,31 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const extras = useExtras?.({ deckId, deck, revisionId, specRevisionId, setRevisionId, spec, dirtyRef, reload, setConflict }) ?? NO_EXTRAS;
   const huddlePage = huddle?.channel.startsWith('orgiq:initiative:') ? { kind: 'initiative' as const, id: huddle.channel.slice('orgiq:initiative:'.length) } : undefined;
   const { preview, renderedKey, request } = useDeckPreview(deckId, setWarnings, previewDeck);
+  const [layoutPreviews, setLayoutPreviews] = useState<Record<string, string>>({});
+  const [reports, setReports] = useState<DeckChartReport[]>([]);
+  useEffect(() => {
+    const ctl = new AbortController();
+    // Previews only make the gallery nicer: without them it draws the library's schematics.
+    listDeckLayouts(tenant, ctl.signal).then(out => setLayoutPreviews(layoutPreviewMap(out.layouts ?? []))).catch(() => undefined);
+    listChartReports(tenant, deckId, ctl.signal).then(out => setReports(out.reports ?? [])).catch(() => undefined);
+    return () => ctl.abort();
+  }, [tenant, deckId]);
+  // A revision written outside the editor (the voice's deck operations): reload and open it, unless edits are unsaved.
+  useEffect(() => {
+    const onRevised = (event: Event) => {
+      const detail = (event as CustomEvent<{ deckId?: string; revisionId?: string }>).detail;
+      if (detail?.deckId !== deckId || !detail.revisionId || dirtyRef.current) return;
+      void reload().then(next => { if (next) setRevisionId(detail.revisionId!); });
+    };
+    window.addEventListener(DECK_REVISED_EVENT, onRevised);
+    return () => window.removeEventListener(DECK_REVISED_EVENT, onRevised);
+  }, [deckId, dirtyRef, reload, setRevisionId]);
+  const cannotEditNow = deck ? (typeof readOnly === 'function' ? readOnly(deck) : readOnly) : true;
+  usePublishPageContext(deck && spec ? deckVoiceContext({
+    path: location.pathname, tenant, deckId, title: deck.title, spec, headRevisionId: deck.activeRevisionId,
+    viewedRevisionId: revisionId, selectedSlideId: collab.selectedSlideId ?? null, dirty, readOnly: cannotEditNow,
+  }) : null);
+  usePublishPageTabs(deck && spec ? { path: location.pathname, tabs: DECK_TABS, tab: showLayouts ? DECK_LAYOUTS_TAB : 'slides' } : null);
   const sourceOptions = useMemo(() => (extras.sourceOptions ? deckSourceOptions(spec) : []), [spec, extras.sourceOptions]);
   const slideTitle = useDeckSlideTitle(spec);
   const { download, downloading, error: downloadError } = useDeckDownload(fileUrl, deckId, revisionId,
@@ -155,6 +189,11 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       )}
       {conflict && <DeckConflictBanner noun={noun} onReload={loadLatest} testId={`${testIdPrefix}-conflict`} />}
       {extraNotices?.(deck)}
+      {warnings.length > 0 && (
+        <Banner variant="warning" title={warnings.length === 1 ? 'The preview found one thing to fix' : `The preview found ${warnings.length} things to fix`} data-testid={`${testIdPrefix}-preview-warnings`}>
+          <Stack gap="xs">{warnings.map((w, i) => <T key={i} size="xs" wrap>{w}</T>)}</Stack>
+        </Banner>
+      )}
     </>
   );
 
@@ -171,14 +210,30 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   }
 
   const previewCurrent = renderedKey === deckRenderKey(spec);
-  const presentationError = !hasSources ? 'Add a source to each slide before presenting.'
-    : typeof preview === 'object' && 'error' in preview ? preview.error : undefined;
-  const presentationSlides = previewCurrent && typeof preview === 'object' && 'slides' in preview ? preview.slides.map(slide => ({
-    ...slide, title: spec.slides.find(own => own.id === slide.id)?.title ?? slide.title,
-  })) : [];
-  const presentSlideIndex = Math.max(0, presentationSlides.findIndex(slide => slide.id === presentSlideId));
+  const selectedIndex = Math.max(0, spec.slides.findIndex(slide => slide.id === collab.selectedSlideId));
+  const selectedSlide = spec.slides[selectedIndex] ?? null;
+  const onHead = !!revisionId && revisionId === deck.activeRevisionId;
+  // The operations route works on the saved head: no unsaved edits, and the head in view (useDeckAgentRun's rule).
+  const reportBlocked = dirty ? SAVE_FIRST_LINE : !onHead ? 'Open the newest version first: a report fills the saved head.' : null;
+  const themes = [{ id: tenant, name: DECK_TENANT_THEME_NAMES[tenant] }];
+  const addLayout = (layout: SlideLayout) => {
+    const next = addSlide(spec, selectedIndex, layout);
+    setSpec(next);
+    const added = next.slides[selectedIndex + 1];
+    closeLayouts();
+    if (added) collab.selectSlide(added.id);
+  };
+  const layoutsPanel = (
+    <DetailSection title="Example layouts" hint={`Choosing one adds it after slide ${selectedIndex + 1}`}
+      actions={<Button size="sm" variant="ghost" onClick={closeLayouts} data-testid={`${testIdPrefix}-layouts-back`}>Back to the slides</Button>}
+      data-testid={`${testIdPrefix}-layouts`}>
+      <LayoutGallery onSelect={addLayout} previews={layoutPreviews} label="Slide layouts" testIdPrefix={`${testIdPrefix}-layout`} />
+    </DetailSection>
+  );
   const fileActions = (
     <Inline gap="xs" align="center" wrap={false} className="deck-document-actions" role={compactReview && cannotEdit ? undefined : 'toolbar'} aria-label="Presentation file actions">
+      {!cannotEdit && reports.length > 0 && <Button size="sm" variant="ghost" aria-pressed={reportPanel} onClick={() => setReportPanel(open => !open)}
+        title={selectedSlide?.layout === 'chart' ? 'Fill this chart from a report' : 'Turn this slide into a chart from a report'} data-testid={`${testIdPrefix}-report-open`}>Fill from a report</Button>}
       {!cannotEdit && extras.footer && <Button size="sm" variant="ghost" disabled={!composerFocus.present}
         onClick={() => composerFocus.request({ mode: 'agent' })} title="Focus the presentation conversation">Chat & agent</Button>}
       <DropdownMenu trigger={<Inline gap="xs" align="center" wrap={false}><HistoryIcon size={14} /><T size="xs" weight="medium">{currentVersion}</T></Inline>}
@@ -223,7 +278,13 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     >
       {notices}
       {collab.followBar}
-      {parts.surface}
+      {!cannotEdit && reportPanel && (
+        <DeckReportChartPanel tenant={tenant} deckId={deckId} headRevisionId={deck.activeRevisionId} reports={reports} blockedReason={reportBlocked}
+          slide={selectedSlide ? { id: selectedSlide.id, index: selectedIndex, title: selectedSlide.title, isChart: selectedSlide.layout === 'chart' } : null}
+          onApplied={out => { setReportPanel(false); void reload().then(next => { if (next) setRevisionId(out.revision.id); }); }}
+          onClose={() => setReportPanel(false)} testIdPrefix={testIdPrefix} />
+      )}
+      {showLayouts && !cannotEdit ? layoutsPanel : parts.surface}
     </EditorShell>
   );
 
@@ -231,7 +292,7 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     <>
       <DeckPresenceSource deckId={deckId} tenant={tenant} selectedSlideId={collab.selectedSlideId} slideTitle={slideTitle} editing={dirty} onChange={collab.setPresence} />
       {extras.assistant}
-      {cannotEdit ? <DeckReader onFocusConversation={focusConversation} compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
+      {cannotEdit ? <DeckReader onFocusModeChange={focus.request} onFocusConversation={focusConversation} compactReview={compactReview} fileActions={compactReview ? fileActions : null} spec={spec} preview={preview} previewCurrent={previewCurrent} onRequestPreview={request}
         slideViewers={collab.presence.slideViewers} selectSlideRequest={collab.selectSlideRequest}
         onSelectedSlideChange={collab.setSelectedSlideId} onNavigateSlide={collab.selectSlide} renderFrame={frame}
         footer={ctx => extras.footer ? extras.footer(ctx) : <HuddleComposerDock dock={call.block} page={huddlePage} />}
@@ -241,10 +302,13 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         onSelectRevision={selectRevision}
         sources={sourceOptions}
         {...(revisionId ? { onDownload: download } : {})}
-        onOpenPresentationView={at => {
-          setPresentSlideId(at?.slideId ?? collab.selectedSlideId ?? presentationSlides[0]?.id ?? null);
-          setPresenting(true);
-        }}
+        // Presents in place (ui-components 2.548.0): the editor's regions give way to the slide, and focus mode folds both left rails.
+        previewCurrent={previewCurrent}
+        showNotes
+        onFocusModeChange={focus.request}
+        // The tenant theme after the three built-ins; choosing it writes `theme: { ref: <tenant> }` through onChange.
+        themes={themes}
+        layoutPreviews={layoutPreviews}
         readOnly={cannotEdit}
         slideViewers={collab.presence.slideViewers}
         selectSlideRequest={collab.selectSlideRequest}
@@ -255,14 +319,6 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         className="min-h-0 flex-1" data-testid={`${testIdPrefix}-editor`}
         {...(warnings.length > 0 ? { 'data-warnings': String(warnings.length) } : {})}
       />}
-      {!cannotEdit && <DeckPresentationDialog onFocusConversation={focusConversation} title={spec.title} slides={presentationSlides}
-        open={presenting} onClose={() => setPresenting(false)} slideIndex={presentSlideIndex}
-        loading={!previewCurrent && !presentationError} error={presentationError}
-        {...(hasSources && presentationError ? { onRetry: () => request(spec) } : {})}
-        onSlideChange={index => {
-          const slide = presentationSlides[index];
-          if (slide) { setPresentSlideId(slide.id); collab.selectSlide(slide.id); }
-        }} testId={`${testIdPrefix}-present`} />}
     </>
   );
 }

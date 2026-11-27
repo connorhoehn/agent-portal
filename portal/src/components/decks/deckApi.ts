@@ -262,3 +262,77 @@ export function makeNarrativeNotice(record: string, wording: Partial<NarrativeWo
     }
   };
 }
+
+// ── templates, layouts, chart reports and edit operations (docs/deck-edit-operations.md) ──
+
+/** Each tenant's deck prefix (`<deck>` in the contract): where `/:id/operations` and `/:id/chart-reports` sit. */
+export const DECK_ROOTS: Readonly<Record<DeckTenantId, string>> = {
+  orgiq: '/api/initiative-decks', assessment: '/api/assessment/decks', pipelines: '/api/pipelines/decks', social: '/api/chat/decks',
+};
+/** Each tenant's prefix for the template and layout reads (`<tenant>` in the contract). */
+export const DECK_TENANT_BASES: Readonly<Record<DeckTenantId, string>> = {
+  orgiq: '/api/initiative-decks', assessment: '/api/assessment', pipelines: '/api/pipelines', social: '/api/chat',
+};
+/** The tenant's own theme, as `SlidesToolbar themes` lists it after the three built-ins (`{ ref: '<tenant>' }`). */
+export const DECK_TENANT_THEME_NAMES: Readonly<Record<DeckTenantId, string>> = {
+  orgiq: 'Work', assessment: 'Assessment', pipelines: 'Pipelines', social: 'Social',
+};
+
+export const deckOpPaths = {
+  operations: (tenant: DeckTenantId, deckId: string) => `${DECK_ROOTS[tenant]}/${enc(deckId)}/operations`,
+  chartReports: (tenant: DeckTenantId, deckId: string) => `${DECK_ROOTS[tenant]}/${enc(deckId)}/chart-reports`,
+  templates: (tenant: DeckTenantId) => `${DECK_TENANT_BASES[tenant]}/deck-templates`,
+  layouts: (tenant: DeckTenantId) => `${DECK_TENANT_BASES[tenant]}/deck-layouts`,
+} as const;
+
+export interface DeckTemplateSummary {
+  id: string; title: string; description: string; audience?: string; slideCount: number; layouts: string[];
+  preview: Array<{ id: string; title: string; svg: string }>;
+}
+export interface DeckLayoutExample { layout: string; useFor: string; capacity?: unknown; example?: { templateId: string; slideId: string; svg: string } | null }
+export interface DeckChartReport { id: string; description: string; params: Array<{ name: string; required?: boolean; description?: string }>; money?: boolean }
+
+export type DeckChartKindId = 'bar' | 'line' | 'stacked-bar' | 'pie';
+export type DeckOperation =
+  | { op: 'add_slide'; layout: string; after?: string; title?: string }
+  | { op: 'remove_slide'; slideId: string }
+  | { op: 'move_slide'; slideId: string; after?: string; to?: 'start' }
+  | { op: 'set_title'; slideId: string; title: string }
+  | { op: 'set_theme'; theme: 'product' | 'engineering' | 'plain' | { ref: string } }
+  | { op: 'set_chart'; slideId: string; kind: DeckChartKindId; report: { report: string; params?: Record<string, string> } };
+
+export interface DeckOperationsResult {
+  revision: { id: string; label: string; createdAt: string; producedBy: string };
+  touchedSlideIds: string[]; findings: unknown[]; summary: string; exampleSourceSlideIds: string[];
+}
+
+export const listDeckTemplates = (tenant: DeckTenantId, signal?: AbortSignal): Promise<{ templates: DeckTemplateSummary[] }> =>
+  deckCall(deckOpPaths.templates(tenant), signal ? { signal } : {});
+export const listDeckLayouts = (tenant: DeckTenantId, signal?: AbortSignal): Promise<{ layouts: DeckLayoutExample[] }> =>
+  deckCall(deckOpPaths.layouts(tenant), signal ? { signal } : {});
+export const listChartReports = (tenant: DeckTenantId, deckId: string, signal?: AbortSignal): Promise<{ reports: DeckChartReport[] }> =>
+  deckCall(deckOpPaths.chartReports(tenant, deckId), signal ? { signal } : {});
+/** All or none, on the saved head. A stale base rejects with `DeckRevisionConflictError`; any other refusal with the server's sentence. */
+export const applyDeckOperations = (tenant: DeckTenantId, deckId: string, body: { baseRevisionId: string; operations: DeckOperation[]; label?: string }): Promise<DeckOperationsResult> =>
+  deckPost(deckOpPaths.operations(tenant, deckId), body);
+
+/** The layout previews `PresentationEditor layoutPreviews` / `LayoutGallery previews` take: layout → SVG source. */
+export function layoutPreviewMap(layouts: readonly DeckLayoutExample[]): Record<string, string> {
+  return Object.fromEntries(layouts.filter((l) => typeof l.example?.svg === 'string' && l.example.svg).map((l) => [l.layout, l.example!.svg]));
+}
+
+/** Whether a report takes a period (its params name one): the panel offers the choice only then. */
+export function reportTakesPeriod(r: DeckChartReport): boolean {
+  return Array.isArray(r.params) && r.params.some((p) => p?.name === 'period');
+}
+
+/**
+ * The voice (or any caller outside the editor) wrote a revision of an open deck: the editor reloads and opens it.
+ * `detail: { deckId, revisionId }` on `window`.
+ */
+export const DECK_REVISED_EVENT = 'portal:deck-revised';
+export function announceDeckRevision(deckId: string, revisionId: string): void {
+  const target = globalThis as unknown as { dispatchEvent?: (e: Event) => boolean };
+  if (typeof target.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+  try { target.dispatchEvent(new CustomEvent(DECK_REVISED_EVENT, { detail: { deckId, revisionId } })); } catch { /* nothing listens */ }
+}

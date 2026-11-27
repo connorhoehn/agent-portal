@@ -24,6 +24,7 @@ import {
   RailBandProvider,
   railBand,
   railDepth,
+  ShellFocusModeProvider,
   useRailFold,
   useViewportWidth,
   type RailDepthSpec,
@@ -330,9 +331,18 @@ const SHELL_RAIL_DEPTH: RailDepthSpec = {
   ],
 };
 
-/** The shell's right pane host (library `SidePaneProvider`) sits above the rails, so the rail rule can read it. */
+/**
+ * The shell's right pane host (library `SidePaneProvider`) sits above the rails, so the rail rule can read it.
+ * Focus mode (library `ShellFocusModeProvider`, 2.548.0) sits above both: while a page asks for it (a deck
+ * presenting in place) every `useRailFold` under it reads folded — the primary rail here and a page's own
+ * list rail — without writing their storage, so each returns to exactly where it was when the page lets go.
+ */
 export function Layout() {
-  return <SidePaneProvider storageKey="shell.conversation-pane" bounds={{ minSecondaryPx: 480, fitPrimaryPx: 640 }}><ShellLayout /></SidePaneProvider>;
+  return (
+    <ShellFocusModeProvider>
+      <SidePaneProvider storageKey="shell.conversation-pane" bounds={{ minSecondaryPx: 480, fitPrimaryPx: 640 }}><ShellLayout /></SidePaneProvider>
+    </ShellFocusModeProvider>
+  );
 }
 
 function ShellLayout() {

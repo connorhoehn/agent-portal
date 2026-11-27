@@ -79,6 +79,25 @@ export interface PublishedPage {
    * the page's own notice (leftovers 2).
    */
   channel?: { slug: string; noAccessReason?: string } | null;
+  /**
+   * The deck editor (components/decks/deckVoiceContext.ts): the open deck the voice's deck operations
+   * (`update { ref: 'deck:<id>', fields: { operations } }`) resolve against. `slides` is the whole deck (the rows
+   * are capped); `dirty`: unsaved edits, so operations, which apply to the saved head, wait for a save.
+   */
+  deck?: PageDeck | null;
+}
+
+export interface PageDeck {
+  tenant: 'orgiq' | 'assessment' | 'pipelines' | 'social';
+  id: string;
+  headRevisionId: string | null;
+  viewedRevisionId: string | null;
+  selectedSlideId: string | null;
+  /** 1-based. */
+  selectedPosition: number;
+  dirty: boolean;
+  readOnly: boolean;
+  slides: ReadonlyArray<{ id: string; title: string; layout: string }>;
 }
 
 export const PAGE_CHOICES_MAX = 9;
@@ -187,6 +206,7 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
   const lines = [head];
   if (tabsLine) lines.push(tabsLine);
   if (p.record) lines.push(`In view: ${field(p.record.ref)} "${field(p.record.title)}".`);
+  if (p.deck) lines.push(`Deck: ${p.deck.slides.length} slides, slide ${p.deck.selectedPosition} selected${p.deck.readOnly ? '; view only' : p.deck.dirty ? '; unsaved edits (save before changing it by voice)' : ''}. Slides are named by position.`);
   if (p.channel?.slug && p.channel.noAccessReason) lines.push(`Its discussion is the channel #${field(p.channel.slug)} in Social, which this viewer cannot reach (no Social access); there is no separate thread, so a message about it cannot be sent from here.`);
   else if (p.channel?.slug) lines.push(`Its discussion is the channel #${field(p.channel.slug)}: a message about it goes there (message target kind channel, name ${field(p.channel.slug)}); there is no separate thread.`);
   if (p.offer) {
