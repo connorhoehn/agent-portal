@@ -646,6 +646,8 @@ export const V2_RULES = [
   [/^POST \/api\/interviews\/candidates$/, 'never', null, 'hiring setup (ManageCandidates): adding a candidate is done on the form'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],
   [/^POST \/api\/interviews\/applications\/:[^/]+\/stage$/, 'never', null, 'the stage decision is the hiring manager\'s, with a reason, on the debrief'],
+  [/^POST \/api\/interviews\/interviews\/:[^/]+\/(cancel|not-held)$/, 'never', null, 'cancelling a round, or saying it did not take place, is confirmed with a reason in its dialog, never by voice'],
+  [/^POST \/api\/interviews\/applications\/:[^/]+\/withdraw$/, 'never', null, 'marking a candidate withdrawn cancels their rounds; it is confirmed on the profile, never by voice'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(milo-ask|plan-draft|recap\/open)$/, 'never', null, 'Milo\'s private answers, plan drafts and the recap are read on their pages, never by voice'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/recap\/ask$/, 'never', null, 'asking Milo where something was said is read on the scorecard page, never by voice'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/panel-notice$/, 'never', null, 'acknowledging the recording notice is the interviewer\'s own act on My interviews'],

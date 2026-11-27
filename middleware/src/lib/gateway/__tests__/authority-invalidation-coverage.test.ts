@@ -107,7 +107,16 @@ const SURFACES: Surface[] = [
   {
     file: 'src/routes/interviews/room.ts',
     sites: /\.endInterview\(/,
-    calls: /\bforgetInterviewGuest\(/,
+    calls: /\bcloseRoom\(/,
+    helpers: { closeRoom: /\bforgetInterviewGuest\(/ },
+    known: [],
+  },
+  {
+    // Cancelling a round (and withdrawing an application, which cancels its rounds) kills the candidate's link:
+    // every such write closes the room, which is room.ts closeRoom, checked above to forget the guest.
+    file: 'src/routes/interviews/cancel.ts',
+    sites: /\.cancelInterview\(/,
+    calls: /\bcloseRoom\(/,
     known: [],
   },
   {

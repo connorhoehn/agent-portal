@@ -85,7 +85,9 @@ function cancelWrite(kind: 'cancel' | 'not-held') {
     }
     if (i.revision !== revision) { await answerWrite(req, res, { ok: false, reason: 'stale', row: i }); return; }
     const written = await interviewsStore().cancelInterview(i.id, cancellationOf(checked.value, session.sub, now.toISOString()), revision);
-    if (written.ok && out.closesRoom) await closeRoom(i.id);
+    // Every cancel closes the room, live or not: a candidate already waiting at the door holds a subscription and a
+    // cached yes at the gateway, and both must go with the link.
+    if (written.ok) await closeRoom(i.id);
     if (await answerWrite(req, res, written)) void interviewCancelled(i.id, session.sub);
   });
 }
@@ -119,7 +121,7 @@ cancelRouter.post('/applications/:id/withdraw', manage, asyncHandler(async (req,
     if (!r.ok && r.reason === 'stale' && isNotYetLive(r.row.state)) {
       r = await store.cancelInterview(i.id, cancellation, r.row.revision);
     }
-    if (r.ok) cancelled.push(i.id);
+    if (r.ok) { cancelled.push(i.id); await closeRoom(i.id); }
   }
   res.json({ application: { id: app.id, stage: decided.row.stage }, cancelled });
   for (const id of cancelled) void interviewCancelled(id, session.sub);

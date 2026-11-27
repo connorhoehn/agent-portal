@@ -572,6 +572,9 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     table: 'interviews',
     mockRows: async () => (await import('../../interviews.js')).interviewsFixture.rows('default'),
     mockId: (i: { id: string }) => i.id,
+    unmodelledColumns: {
+      cancellation: 'Written only when a round is cancelled (lib/interviews/cancel.ts), and absent from the row otherwise, in both stores. The seed holds no cancelled round: a seeded one would have to name who cancelled it and why, for an act nobody performed.',
+    },
   },
   {
     name: 'interview_invites',
