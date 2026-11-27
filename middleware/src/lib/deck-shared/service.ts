@@ -91,10 +91,22 @@ export function previewSpec(spec: unknown, tenant: DeckHostTenant): Result<DeckP
       slides: preview.slides.map((s) => ({
         id: s.id, svg: s.svg, title: s.title, ...(s.id === SOURCES_SLIDE_ID ? { generated: true } : {}),
       })),
-      warnings: preview.warnings,
+      warnings: [...preview.warnings, ...exampleSourceWarnings(valid.spec)],
       findings: preview.findings,
     },
   };
+}
+
+/**
+ * One sentence per slide whose only citations are placeholders (`example:`
+ * documentIds: a template's example source, or a slide an edit operation added
+ * without sources). Advisory, like the layout findings: the save rule is the
+ * format's, which a placeholder satisfies.
+ */
+export function exampleSourceWarnings(spec: DeckSpec): string[] {
+  return spec.slides.flatMap((s, i) => s.sources.length && s.sources.every((src) => src.documentId.startsWith('example:'))
+    ? [`Slide ${i + 1} (${s.id}) cites only ${s.sources[0]!.documentId.startsWith('example:template:') ? "the template's example source" : 'a placeholder'}; replace it with the document it draws from.`]
+    : []);
 }
 
 /** Preview of a spec, for a deck the caller may open (404 otherwise). */

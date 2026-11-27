@@ -25,7 +25,7 @@
 
 import { Router, type Request } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
-import { deckWriteAuthority, makeDeckHandlers, sendFail as fail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail as fail } from '../lib/deck-shared/index.js';
 import { canonicalCallPage } from '../lib/call-pages.js';
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import type { DeckFacts } from '../lib/deck-shared/plan.js';
@@ -198,6 +198,10 @@ const h = makeDeckHandlers<DeckAccess>({
   }),
   preview: (_id, spec) => Promise.resolve(decks.previewSpec(spec)),
   file: (_id, rid, access, format) => decks.renderRevisionFile(access.deck.id, rid, format),
+  operations: (_id, body, access) => applyDeckOperations({
+    tenant: 'social', revisions: decks.socialDeckRevisions, lookup: () => decks.socialDeckStore.getDeck(access.deck.id), deckId: access.deck.id, body, sub: access.userId,
+  }),
+  chartReports: () => Promise.resolve({ reports: [] }),
 });
 
 socialDeckRouter.get('/decks', asyncHandler(async (req, res) => {
@@ -212,6 +216,8 @@ socialDeckRouter.get('/decks/:id/revisions/:rid/spec', h.spec);
 socialDeckRouter.post('/decks/:id/revisions', h.save);
 socialDeckRouter.post('/decks/:id/revise', h.revise);
 socialDeckRouter.post('/decks/:id/preview', h.preview);
+socialDeckRouter.post('/decks/:id/operations', h.operations);
+socialDeckRouter.get('/decks/:id/chart-reports', h.chartReports);
 socialDeckRouter.get('/decks/:id/revisions/:rid/file', h.file);
 
 /**

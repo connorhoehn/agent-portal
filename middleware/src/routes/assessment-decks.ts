@@ -17,7 +17,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/assessment-decks.js';
 import { isValidTeamId } from '../providers/assessment.js';
 
@@ -40,6 +40,10 @@ const h = makeDeckHandlers({
   save: (id, body, _ctx, req) => decks.savePersonRevision(id, body, req.session?.sub ?? null),
   preview: (id, spec) => decks.previewDeck(id, spec),
   file: (id, rid, _ctx, format) => decks.renderRevisionFile(id, rid, format),
+  operations: (id, body, _ctx, req) => applyDeckOperations({
+    tenant: 'assessment', revisions: decks.deckRevisions, lookup: () => decks.deckStore.getDeck(id), deckId: id, body, sub: req.session?.sub ?? null,
+  }),
+  chartReports: async (id) => (await decks.deckStore.getDeck(id)) ? { reports: [] } : null,
 });
 
 assessmentDecksRouter.post('/teams/:teamId/decks', asyncHandler(async (req, res) => {
@@ -61,6 +65,8 @@ assessmentDecksRouter.get('/decks/:id', viewGate, h.detail);
 assessmentDecksRouter.get('/decks/:id/revisions/:rid/spec', viewGate, h.spec);
 assessmentDecksRouter.post('/decks/:id/revisions', h.save);
 assessmentDecksRouter.post('/decks/:id/preview', viewGate, h.preview);
+assessmentDecksRouter.post('/decks/:id/operations', h.operations); // writeDeck → deckWriteAuthority
+assessmentDecksRouter.get('/decks/:id/chart-reports', viewGate, h.chartReports);
 
 assessmentDecksRouter.post('/decks/:id/revise', asyncHandler(async (req, res) => {
   const id = h.deckId(req.params['id']);

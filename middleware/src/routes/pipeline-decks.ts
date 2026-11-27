@@ -16,7 +16,7 @@
 import { Router, type Request } from 'express';
 import { AppError, NotFoundError, asyncHandler } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/pipeline-decks.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 
@@ -39,6 +39,10 @@ const h = makeDeckHandlers({
   save: (id, body, _ctx, req) => decks.savePersonRevision(id, body, req.session?.sub ?? null),
   preview: (id, spec) => decks.previewDeck(id, spec),
   file: (id, rid, _ctx, format) => decks.renderRevisionFile(id, rid, format),
+  operations: (id, body, _ctx, req) => applyDeckOperations({
+    tenant: 'pipelines', revisions: decks.pipelineDeckRevisions, lookup: () => decks.pipelineDeckStore.getDeck(id), deckId: id, body, sub: req.session?.sub ?? null,
+  }),
+  chartReports: async (id) => (await decks.pipelineDeckStore.getDeck(id)) ? { reports: [] } : null,
 });
 
 pipelineDecksRouter.post('/runs/:id/decks', asyncHandler(async (req, res) => {
@@ -58,6 +62,8 @@ pipelineDecksRouter.get('/decks/:id', viewGate, h.detail);
 pipelineDecksRouter.get('/decks/:id/revisions/:rid/spec', viewGate, h.spec);
 pipelineDecksRouter.post('/decks/:id/revisions', h.save);
 pipelineDecksRouter.post('/decks/:id/preview', viewGate, h.preview);
+pipelineDecksRouter.post('/decks/:id/operations', h.operations); // writeDeck → deckWriteAuthority
+pipelineDecksRouter.get('/decks/:id/chart-reports', viewGate, h.chartReports);
 pipelineDecksRouter.get('/decks/:id/revisions/:rid/file', viewGate, h.file);
 
 // Agent revise: a requester-private durable flow run (`pdr-…`, lib/flow-runs).

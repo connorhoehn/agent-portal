@@ -15,6 +15,7 @@ import type { DeckReviseOut } from './revise.js';
 import type { DeckRevisionFile } from './service.js';
 import { DECK_FILE_FORMATS, DeckRenderBudgetError, isDeckFileFormat, type DeckFileFormat } from './render.js';
 import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
+import type { OperationsOut } from './operations.js';
 
 export function sendFail(res: Response, result: { status: number; reason: string; details?: Record<string, unknown> }): void {
   res.status(result.status).json({ error: result.reason, ...(result.details ?? {}) });
@@ -52,6 +53,10 @@ export interface DeckHandlerOptions<Ctx> {
   /** Agent revise (`POST /:id/revise`); omit for a tenant whose revise is a flow run of its own. Gated by `saveGuard` like a save. */
   revise?: (deckId: string, body: Record<string, unknown>, ctx: Ctx, req: Request) => Promise<Result<DeckReviseOut>>;
   preview: (deckId: string, spec: unknown, ctx: Ctx) => Promise<Result<DeckPreviewOut>>;
+  /** Typed edit operations (`POST /:id/operations`, lib/deck-shared/operations.ts). Gated by `saveGuard` like a save. */
+  operations?: (deckId: string, body: Record<string, unknown>, ctx: Ctx, req: Request) => Promise<Result<OperationsOut>>;
+  /** The reports a chart on this deck may come from, for this caller (`GET /:id/chart-reports`). */
+  chartReports?: (deckId: string, ctx: Ctx, req: Request) => Promise<unknown>;
   /** One revision as `format` (`?format=`: pptx by default, pdf, or png for a zip of slide images). */
   file: (deckId: string, revisionId: string, ctx: Ctx, format: DeckFileFormat) => Promise<DeckRevisionFile | null>;
 }
@@ -132,5 +137,25 @@ export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>)
     sendDeckFile(res, out);
   });
 
-  return { detail, spec, save, revise, preview, file, deckId, revisionId, ctxFor };
+  /** 201 with the new revision, the touched slides and their layout findings; 409 on a stale base or a locked slide. */
+  const operations: RequestHandler = asyncHandler(async (req, res) => {
+    if (!opts.operations) throw new NotFoundError('edit operations are not available for this deck');
+    const id = deckId(req.params['id']);
+    const ctx = await ctxFor(req, id);
+    if (opts.saveGuard) await opts.saveGuard(req, ctx, id);
+    const result = await opts.operations(id, (req.body ?? {}) as Record<string, unknown>, ctx, req);
+    if (!result.ok) { sendFail(res, result); return; }
+    res.status(201).json(result.value);
+  });
+
+  const chartReports: RequestHandler = asyncHandler(async (req, res) => {
+    if (!opts.chartReports) throw new NotFoundError('chart reports are not available for this deck');
+    const id = deckId(req.params['id']);
+    const ctx = await ctxFor(req, id);
+    const out = await opts.chartReports(id, ctx, req);
+    if (out === null) throw new NotFoundError('deck not found');
+    res.json(out);
+  });
+
+  return { detail, spec, save, revise, preview, file, operations, chartReports, deckId, revisionId, ctxFor };
 }
