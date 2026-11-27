@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T06:36:15.632Z",
-  "serverHandlerSha": "6653cf9577dfc7aa40c36c82f521c6c4e4b2930865690693a386522b7d4ff0d5",
+  "capturedAt": "2026-11-27T07:23:52.080Z",
+  "serverHandlerSha": "4081384367d4a17fbd9ec13dbed6c88e6a4e8014417c6c326548925a74b904c3",
   "baseUrl": "http://127.0.0.1:3011",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -5365,6 +5365,12 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "PUT /api/interviews/interviews/:id/my-notes": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "PUT /api/interviews/interviews/:id/panel": {
       "refused": {
         "rule": "unclassified",
@@ -5372,6 +5378,12 @@
       }
     },
     "PUT /api/interviews/interviews/:id/questions": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "PUT /api/interviews/interviews/:id/scorecard-draft": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
