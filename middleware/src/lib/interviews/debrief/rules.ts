@@ -10,10 +10,13 @@
 //   debrief         offer (*)            on-hold              rejected
 //   on-hold         offer (*)            refused (already)    rejected
 //   applied,        refused: nobody has interviewed them yet; the recruiter moves them until then
-//   screening
-//   offer, hired,   refused: the decision is made or the application is closed; what follows is the recruiter's
-//   rejected,
+//   screening       (Start screening, then Assign a round)
+//   offer           refused: the decision is made; what follows is the recruiter's (Mark hired, Offer declined)
+//   rejected,       refused: the application is closed; the recruiter may Reopen it
 //   withdrawn
+//   hired           refused: final
+//
+//   The recruiter's moves (Move stage on the profile) are lib/interviews/stage-moves.ts.
 //
 //   (*) advance also needs every round to have been held: none still assigned, accepted, ready or live.
 //   Every decision needs at least one submitted scorecard on the application: a decision is made on what people wrote.
@@ -66,16 +69,20 @@ export function scorecardsMissing(interviews: readonly Interview[], cards: reado
   }, 0);
 }
 
+/** Why a stage takes no decision, naming the recruiter's step (lib/interviews/stage-moves.ts STAGE_MOVE_LABEL) where there is one. */
+const CLOSED_FOR_DECISION: Partial<Record<ApplicationStage, string>> = {
+  offer: 'This candidate has already been advanced to an offer. What follows is the recruiter\'s: Mark hired or Offer declined, under Move stage on the candidate\'s profile.',
+  rejected: 'This application is closed. The recruiter can bring it back with Reopen, under Move stage on the candidate\'s profile.',
+  withdrawn: 'This candidate withdrew. The recruiter can bring the application back with Reopen, under Move stage on the candidate\'s profile.',
+  hired: 'This candidate was hired, so the stage does not change any more.',
+};
+
 export type DecisionMove = { ok: true; to: ApplicationStage } | { ok: false; message: string };
 
 /** May `decision` be made on an application at `stage` with these rounds and scorecards, and where does it move it? */
 export function decisionMove(stage: ApplicationStage, decision: Decision, interviews: readonly Interview[], cards: readonly Scorecard[]): DecisionMove {
-  if (NOT_YET.has(stage)) return { ok: false, message: 'Nobody has interviewed this candidate yet. The recruiter moves them until the first round is in.' };
-  if (!DECIDABLE.has(stage)) {
-    return { ok: false, message: stage === 'offer'
-      ? 'This candidate has already been advanced to an offer. What follows is the recruiter\'s.'
-      : 'This application is closed, so its stage does not change any more.' };
-  }
+  if (NOT_YET.has(stage)) return { ok: false, message: 'Nobody has interviewed this candidate yet. The recruiter moves them until the first round is in: Start screening under Move stage, then Assign a round.' };
+  if (!DECIDABLE.has(stage)) return { ok: false, message: CLOSED_FOR_DECISION[stage] ?? 'This application is closed, so its stage does not change any more.' };
   if (decision === 'hold' && stage === 'on-hold') return { ok: false, message: 'This candidate is already on hold.' };
   const ids = new Set(interviews.map((i) => i.id));
   if (!cards.some((s) => ids.has(s.interviewId))) return { ok: false, message: 'No scorecard is in yet. Decide once at least one interviewer has written theirs.' };

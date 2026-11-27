@@ -85,6 +85,24 @@ export interface DebriefApplication {
   rounds: DebriefRound[];
   /** Only for the opening's hiring manager; null for everyone else (they read and do not decide). */
   decide: DebriefDecide | null;
+  /** Why there is no decision control here, and who can change that; null exactly when `decide` is set. */
+  noDecision: DebriefNoDecision | null;
+}
+
+/**
+ * Why the viewer has no decision control (gap audit 2026-11-20 §2). `no-hiring-manager`: the opening names nobody, so
+ * nobody can decide; the recruiter sets one on the opening's details. `not-the-hiring-manager`: someone else decides.
+ */
+export interface DebriefNoDecision {
+  reason: 'no-hiring-manager' | 'not-the-hiring-manager';
+  message: string;
+}
+
+export const NO_HIRING_MANAGER_LINE = 'Nobody can decide on this candidate yet: the opening has no hiring manager. The recruiter sets one on the opening\'s details.';
+
+function noDecisionOf(hiringManagerId: string | null, hiringManagerName: string | null): DebriefNoDecision {
+  if (!hiringManagerId) return { reason: 'no-hiring-manager', message: NO_HIRING_MANAGER_LINE };
+  return { reason: 'not-the-hiring-manager', message: `The decision is ${hiringManagerName ?? 'the hiring manager'}'s, as this opening's hiring manager. You read the debrief.` };
 }
 
 export interface DebriefView {
@@ -155,6 +173,7 @@ export function debriefView(ix: WorldIndex, candidateId: string): DebriefView | 
         scorecardsMissing: scorecardsMissing(interviews, cards),
         limits: DECISION_LIMITS,
       } : null,
+      noDecision: decides ? null : noDecisionOf(o.hiringManagerId, o.hiringManagerId ? ix.people(o.hiringManagerId).name : null),
     }];
   });
   if (!applications.length) return null;

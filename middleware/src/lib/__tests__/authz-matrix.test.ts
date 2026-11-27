@@ -492,6 +492,17 @@ describe('capability boundaries that must not regress', () => {
     expect([has('interviews/hiring-manager', 'ConductInterview'), has('interviews/hiring-manager', 'AssignInterviews'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false, false]);
   });
 
+  test('interviews stage moves (gap audit 2026-11-20 §2): no new action, ManageCandidates', () => {
+    // routes/interviews/stage-moves.ts gates POST /applications/:id/move (start screening, mark hired, offer declined,
+    // reopen) on ManageCandidates, as withdraw is. So the recruiter moves the stage; the interviewer does not; the
+    // hiring manager keeps only their decision on the debrief (DecideCandidate) and is forbidden ManageCandidates; no
+    // other tenant's role holds it.
+    expect([has('interviews/recruiter', 'ManageCandidates'), has('interviews/recruiter', 'DecideCandidate')]).toEqual([true, false]);
+    expect([has('interviews/interviewer', 'ManageCandidates'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false]);
+    expect(has('interviews/hiring-manager', 'DecideCandidate')).toBe(true);
+    expect(has('access/access-admin', 'ManageCandidates')).toBe(false);
+  });
+
   test('an orgiq member cannot view the assessment tenant', () => {
     expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });
