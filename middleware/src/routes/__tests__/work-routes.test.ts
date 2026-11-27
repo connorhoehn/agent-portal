@@ -46,6 +46,7 @@ jest.mock('../../lib/authz.js', () => ({
     return (_req: unknown, _res: unknown, next: () => void) => next();
   },
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  isAllowed: async () => true,
 }));
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
@@ -488,12 +489,13 @@ describe('job lifecycle verbs', () => {
 
   it('POST /jobs/:id/requeue clones the dead job and answers 201', async () => {
     m(requeueJob).mockResolvedValue({ id: 'job-2', status: 'queued' });
+    m(getJob).mockResolvedValue({ id: 'job-1', status: 'failed', createdBy: 'u-someone', payload: {} });
     const res = await request(buildApp()).post('/api/work/jobs/job-1/requeue').send({});
     expect(res.status).toBe(201);
     expect(res.body.id).toBe('job-2');
     // Attributed to the requester, not to the original author.
     expect(requeueJob).toHaveBeenCalledWith('job-1', 'u-nora');
-    // One read, for the job's initiative (DE-44 row 7) — not the 404/409 fallback.
+    // One read, for the job's requester and initiative (DE-44 row 7; 28 November item 8).
     expect(getJob).toHaveBeenCalledTimes(1);
   });
 

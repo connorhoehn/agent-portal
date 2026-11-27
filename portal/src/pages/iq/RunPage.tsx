@@ -76,8 +76,11 @@ export default function RunPage() {
   }
 
   const hasSteps = facade.steps.length > 0;
-  // Retry is the Findings failed view's requeue: same route, same capability.
-  const canRetry = ready && can('ManageDevbox') && ref !== null && canRetryRun(report?.outcome, facade.run?.context.table, facade.run?.status);
+  // Retry is the Findings failed view's requeue route. It is offered to the roles that start
+  // runs (DispatchAgentRun: an initiative's stewards, org leaders; admin passes) and to the
+  // lab operators who could always requeue; the server decides the initiative and the spend
+  // (routes/work.ts; docs/next-steps.md section 9, 28 November item 8).
+  const canRetry = ready && (can('DispatchAgentRun') || can('ManageDevbox')) && ref !== null && canRetryRun(report?.outcome, facade.run?.context.table, facade.run?.status);
   async function retry() {
     if (!ref) return;
     setRetrying(true);

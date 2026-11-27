@@ -9,7 +9,7 @@
 
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { resolveSession, requireAction, requireSession, readForRolesElseAction } from '../lib/authz.js';
+import { resolveSession, requireAction, requireSession, readForRolesElseAction, isAllowed } from '../lib/authz.js';
 import { type Session } from '../lib/session.js';
 import { userNameFor } from '../lib/user-names.js';
 import { getUser } from '../providers/identity.js';
@@ -323,8 +323,12 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
 async function jobInitiative(id: string): Promise<{ found: boolean; initiativeId: string | null }> {
   const job = await getJob(id);
   if (!job) return { found: false, initiativeId: null };
+  return { found: true, initiativeId: initiativeOfJob(job) };
+}
+
+function initiativeOfJob(job: { payload?: unknown }): string | null {
   const raw = (job.payload as { initiativeId?: unknown } | null | undefined)?.initiativeId;
-  return { found: true, initiativeId: typeof raw === 'string' && raw ? raw : null };
+  return typeof raw === 'string' && raw ? raw : null;
 }
 
 workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
@@ -342,19 +346,45 @@ workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(
   res.json(job);
 }));
 
-// Requeue a dead-lettered job — the DLQ's one verb. The server clones the
-// original (kind/title/payload) so the caller never has to re-supply a prompt;
-// 409 when the job is not in a terminal failed/cancelled state.
-workRouter.post('/jobs/:id/requeue', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+/** Whether `sub` asked for this job: its creator, or the person whose requeue made it (`<sub> (requeue of <id>)`). */
+export function requestedJob(createdBy: string | null | undefined, sub: string): boolean {
+  return !!createdBy && !!sub && (createdBy === sub || createdBy.startsWith(`${sub} (requeue of `));
+}
+
+// Requeue a dead-lettered job — the DLQ's one verb, and the run page's Retry.
+// The server clones the original (kind/title/payload) so the caller never has
+// to re-supply a prompt; 409 when the job is not in a terminal failed/cancelled
+// state. Who may retry (docs/next-steps.md section 9, 28 November item 8): a
+// steward of the job's initiative holding DispatchAgentRun, the authority that
+// starts a run (an org-leader, and admin by override, steward every
+// initiative); the person who asked for the job, always. A job with no
+// initiative keeps today's holders (ManageDevbox) plus org-leader. Every
+// retry with an initiative meets the same spend verdict a first dispatch does
+// (grantScopedDispatchVerdict, DE-44 row 7); the requester skips only the
+// steward check, never the money.
+workRouter.post('/jobs/:id/requeue', asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const session = resolveSession(req);
-  // A requeue spends again on the job's initiative (DE-44 row 7).
-  const served = await jobInitiative(id);
-  if (served.found && !await requireInitiativeScope(req, res, served.initiativeId, { spend: true, action: 'requeue jobs' })) return;
-  const job = await requeueJob(id, session?.sub);
+  if (!session) { res.status(401).json({ error: 'Unauthenticated', code: 'SESSION_INVALID' }); return; }
+  const dead = await getJob(id);
+  if (!dead) { res.status(404).json({ error: 'job not found' }); return; }
+  const initiativeId = initiativeOfJob(dead);
+  if (requestedJob(dead.createdBy, session.sub)) {
+    if (initiativeId) {
+      const verdict = await grantScopedDispatchVerdict(initiativeId, session);
+      if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason, initiativeId }); return; }
+      if (verdict.kind === 'unavailable') { res.status(503).json({ error: verdict.reason, gate: 'grant-authorization' }); return; }
+    }
+  } else if (initiativeId) {
+    if (!await isAllowed(session, 'DispatchAgentRun')) {
+      res.status(403).json({ error: 'Forbidden', action: 'DispatchAgentRun', role: session.role, tenant: session.tenant }); return;
+    }
+    if (!await requireInitiativeScope(req, res, initiativeId, { spend: true, action: 'requeue jobs' })) return;
+  } else if (session.role !== 'org-leader' && !await isAllowed(session, 'ManageDevbox')) {
+    res.status(403).json({ error: 'Forbidden', action: 'ManageDevbox', role: session.role, tenant: session.tenant }); return;
+  }
+  const job = await requeueJob(id, session.sub);
   if (!job) {
-    const dead = await getJob(id);
-    if (!dead) { res.status(404).json({ error: 'job not found' }); return; }
     res.status(409).json({ error: `only failed or cancelled jobs can be requeued (this one is ${dead.status})` });
     return;
   }
