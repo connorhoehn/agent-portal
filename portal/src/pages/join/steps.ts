@@ -124,7 +124,7 @@ export function waitingView(admission: Admission | null): 'waiting' | 'turned-aw
  * was taken back. `failed`: no answer at all (the network, a 5xx); the server may not hold the knock.
  */
 export type KnockOutcome =
-  | { kind: 'knocked'; admission: Admission }
+  | { kind: 'knocked'; admission: Admission; told?: boolean }
   | { kind: 'held' } | { kind: 'refused' } | { kind: 'dead' } | { kind: 'failed' };
 
 /**
@@ -152,6 +152,17 @@ export function waitingAfterKnock(outcome: KnockOutcome): WaitingNext {
     case 'dead': return { kind: 'dead' };
     case 'failed': return { kind: 'wait', knocked: false };
   }
+}
+
+/**
+ * The waiting page's first line (gap audit 2026-11-20 §4). `telling`: the server does not hold the knock yet. `will-tell`:
+ * it does, but no seat has been told (no bell went out and nobody is in the call), so the page says they will be.
+ * `told`: the server says a bell went out or a seat is in the call.
+ */
+export type WaitingLine = 'telling' | 'will-tell' | 'told';
+export function waitingLine(knocked: boolean, told: boolean): WaitingLine {
+  if (!knocked) return 'telling';
+  return told ? 'told' : 'will-tell';
 }
 
 /**

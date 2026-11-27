@@ -40,6 +40,17 @@ export async function readAdmission(): Promise<Admission | null> {
   return ((await res.json()) as { admission: Admission }).admission;
 }
 
+/**
+ * C2 with `told` (gap audit 2026-11-20 §4): the admission and whether the seats know the candidate is waiting (a bell
+ * went out, or a seat is in the call). One boolean; the server says nothing about who. Null when there is no answer.
+ */
+export async function readWaiting(): Promise<{ admission: Admission; told: boolean } | null> {
+  const res = await fetch(`${GUEST_API}/admission`, INIT);
+  if (!res.ok) return null;
+  const body = (await res.json()) as { admission?: Admission; told?: unknown };
+  return body.admission ? { admission: body.admission, told: body.told === true } : null;
+}
+
 /** C2. A 409 is `held` when the server says a required part was declined, else `refused`; not-found is a dead link. */
 export async function knock(): Promise<KnockOutcome> {
   try {
@@ -50,8 +61,10 @@ export async function knock(): Promise<KnockOutcome> {
       return body.reason === 'declined-required' ? { kind: 'held' } : { kind: 'refused' };
     }
     if (!res.ok) return { kind: 'failed' };
-    const admission = ((await res.json()) as { admission?: Admission }).admission;
-    return admission ? { kind: 'knocked', admission } : { kind: 'failed' };
+    const body = (await res.json()) as { admission?: Admission; told?: unknown };
+    const admission = body.admission;
+    if (!admission) return { kind: 'failed' };
+    return typeof body.told === 'boolean' ? { kind: 'knocked', admission, told: body.told } : { kind: 'knocked', admission };
   } catch {
     return { kind: 'failed' };
   }

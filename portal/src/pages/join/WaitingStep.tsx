@@ -1,6 +1,7 @@
 // The waiting page (docs/interviews-tenant-plan.md row I2.3; contract C2). Knocks on arrival, then asks for the
 // admission every few seconds, for at most half an hour, and stops when the page leaves this step. It says the
-// interviewer has been told only once the server's answer holds the knock; until then each tick of the same poll
+// interviewer has been told only once the server says so (a bell went out or a seat is in the call; gap audit
+// 2026-11-20 §4), and that they will be told while the server holds the knock but nobody knows yet; until then each tick of the same poll
 // knocks again (the knock is idempotent), so a knock lost on the way is made good without a retry of its own
 // (steps.ts waitingAfterKnock, waitingAfterRead). A link taken back goes to the dead-link page. Turned away: one
 // plain line and a way to knock again. While waiting the candidate may go back and change an answer. It says who the
@@ -8,8 +9,8 @@
 // nothing else of the panel's.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Card, Inline, InlineAlert, KeyValue, Stack, T } from '@connorhoehn/ui-components/shared';
-import { knock, readAdmission } from './guestApi.ts';
-import { ADMISSION_MAX_POLLS, ADMISSION_POLL_MS, waitingAfterKnock, waitingAfterRead } from './steps.ts';
+import { knock, readWaiting } from './guestApi.ts';
+import { ADMISSION_MAX_POLLS, ADMISSION_POLL_MS, waitingAfterKnock, waitingAfterRead, waitingLine } from './steps.ts';
 
 export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswers, onAnswersNeeded, onHeld, onLinkDead }: {
   /** "You are meeting Hugo Marchetti and one other interviewer."; null says nothing. */
@@ -29,6 +30,8 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
   const [view, setView] = useState<'waiting' | 'turned-away'>('waiting');
   /** The server's last answer holds the knock. */
   const [knocked, setKnocked] = useState(false);
+  /** The server says the seats know (a bell went out, or a seat is in the call). */
+  const [told, setTold] = useState(false);
   const [stalled, setStalled] = useState(false);
   const [round, setRound] = useState(0);
   // The callbacks are read through a ref, so a parent's re-render never re-runs the knock.
@@ -44,10 +47,19 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
     const tick = async () => {
       if (stopped) return;
       ticks += 1;
-      const next = holds
-        ? waitingAfterRead(await readAdmission().catch(() => null))
-        : waitingAfterKnock(await knock());
+      let heard: boolean | null = null;
+      let next;
+      if (holds) {
+        const read = await readWaiting().catch(() => null);
+        if (read) heard = read.told;
+        next = waitingAfterRead(read?.admission ?? null);
+      } else {
+        const outcome = await knock();
+        if (outcome.kind === 'knocked') heard = outcome.told ?? false;
+        next = waitingAfterKnock(outcome);
+      }
       if (stopped) return;
+      if (heard !== null) setTold(heard);
       switch (next.kind) {
         case 'admitted': on.current.onAdmitted(); return;
         case 'held': on.current.onHeld(); return;
@@ -64,11 +76,13 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
     setStalled(false);
     setView('waiting');
     setKnocked(false);
+    setTold(false);
     void tick();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [round]);
 
   const again = useCallback(() => setRound((r) => r + 1), []);
+  const line = waitingLine(knocked, told);
 
   return (
     <Stack gap="md" data-testid="join-waiting">
@@ -78,9 +92,9 @@ export function WaitingStep({ meeting, when, minutes, onAdmitted, onChangeAnswer
         ) : (
           <Stack gap="md">
             <Stack gap="sm">
-              {knocked
-                ? <T size="base" weight="semibold" as="p" data-testid="join-waiting-told">The interviewer has been told you are here.</T>
-                : <T size="base" weight="semibold" as="p" data-testid="join-waiting-telling">Letting the interviewer know you are here.</T>}
+              {line === 'told' && <T size="base" weight="semibold" as="p" data-testid="join-waiting-told">The interviewer has been told you are here.</T>}
+              {line === 'will-tell' && <T size="base" weight="semibold" as="p" data-testid="join-waiting-will-tell">You are in the waiting room. The interviewer will be told you are here.</T>}
+              {line === 'telling' && <T size="base" weight="semibold" as="p" data-testid="join-waiting-telling">Letting the interviewer know you are here.</T>}
               {meeting && <T size="sm" as="p" data-testid="join-waiting-meeting">{meeting}</T>}
               <T size="sm" tone="secondary" as="p">Keep this page open. It moves on by itself when you are let in.</T>
             </Stack>

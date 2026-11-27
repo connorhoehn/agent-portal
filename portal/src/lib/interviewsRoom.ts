@@ -57,6 +57,8 @@ export interface RoomView {
   endedAt: string | null;
   state: RoomState;
   seat: 'lead' | 'panel';
+  /** Whether this seat may let the candidate in now, as the server decides it (the lead; a panel member in the call while the lead is not). Missing from an older server: false for the panel. */
+  mayAdmit?: boolean;
   seats: Array<{ person: RoomPerson; seat: 'lead' | 'panel' }>;
   questions: RoomQuestion[];
   competencies: KitCompetency[];
@@ -140,19 +142,37 @@ export function hintsAfter(events: ReadonlyArray<{ eventType: string; detail?: R
 export const pollsWaiting = (seat: 'lead' | 'panel' | null, admission: Admission | null, state: RoomState | null): boolean =>
   seat !== null && admission?.state !== 'admitted' && state !== null && ['accepted', 'ready', 'live'].includes(state);
 
+/** One read of C3's waiting route: the admission, and whether this seat may let the candidate in now (the server's `mayAdmit`). */
+export interface WaitingRead { admission: Admission | null; mayAdmit: boolean }
+
 /**
  * One read of C3's waiting route. Not found (SEAT's routes absent, or nothing to admit) and any failure read
- * as "nobody waiting": the room never shows an error for it.
+ * as "nobody waiting" and "may not admit": the room never shows an error for it.
  */
-export async function readAdmission(interviewId: string, fetcher: typeof fetch = fetch): Promise<Admission | null> {
+export async function readWaitingRoom(interviewId: string, fetcher: typeof fetch = fetch): Promise<WaitingRead> {
   try {
     const res = await fetcher(waitingPath(interviewId), { credentials: 'include' });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { admission?: Admission };
-    return body.admission ?? null;
+    if (!res.ok) return { admission: null, mayAdmit: false };
+    const body = (await res.json()) as { admission?: Admission; mayAdmit?: unknown };
+    return { admission: body.admission ?? null, mayAdmit: body.mayAdmit === true };
   } catch {
-    return null;
+    return { admission: null, mayAdmit: false };
   }
+}
+
+/** The admission alone (readWaitingRoom's). */
+export async function readAdmission(interviewId: string, fetcher: typeof fetch = fetch): Promise<Admission | null> {
+  return (await readWaitingRoom(interviewId, fetcher)).admission;
+}
+
+/**
+ * Whether the knock prompt shows for this seat, and with which answers: the lead decides (Admit, Not yet); a panel
+ * member the server lets admit may only let the candidate in (turning them away is the lead's). Null: no prompt.
+ */
+export function knockAnswersFor(lead: boolean, mayAdmit: boolean, admission: Admission | null): 'lead' | 'panel' | null {
+  if (admission?.state !== 'waiting') return null;
+  if (lead) return 'lead';
+  return mayAdmit ? 'panel' : null;
 }
 
 export async function answerKnock(interviewId: string, admit: boolean): Promise<RoomWrite> {

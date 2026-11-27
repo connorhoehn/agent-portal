@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockPromptId, pollsWaiting, readAdmission,
+  codeBlockLanguage, consentOffLine, offForFact, interviewLobbyName, interviewOfLobby, isInterviewLobby, knockAnswersFor, knockPromptId, pollsWaiting, readAdmission, readWaitingRoom,
   SUGGESTION_RECEIPTS, SUGGESTIONS_PAUSED_LINE, SUGGESTIONS_MODEL_PAUSED_LINE, pausedLine, pollsSuggestion, readSuggestion, readsConsents, suggestionPath, suggestionPromptId,
   suggestionReadBudgetMs, suggestionWaitMs, startSuggestionPoll, suggestionForPrompt, NO_SUGGESTION, escSkipsSuggestion, askButtonLabel, pollsConsents,
   INTERVIEW_HINT_ENDED, INTERVIEW_HINT_KNOCK, hintsAfter, WAITING_FALLBACK_MS,
@@ -353,4 +353,22 @@ test('hintsAfter: another interview\'s hint, a foreign event and a shorter list 
 
 test('the fallback poll is slow now that hints carry the news', () => {
   assert.equal(WAITING_FALLBACK_MS, 15_000);
+});
+
+test('the waiting read carries the server\'s mayAdmit; anything but true, a failure or a missing route is false', async () => {
+  const answer = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
+  const waiting = { state: 'waiting' as const, knockedAt: 'k', decidedAt: null };
+  assert.deepEqual(await readWaitingRoom('iv-1', answer({ admission: waiting, mayAdmit: true })), { admission: waiting, mayAdmit: true });
+  assert.deepEqual(await readWaitingRoom('iv-1', answer({ admission: waiting, mayAdmit: 'yes' })), { admission: waiting, mayAdmit: false });
+  assert.deepEqual(await readWaitingRoom('iv-1', answer({ admission: waiting })), { admission: waiting, mayAdmit: false });
+  assert.deepEqual(await readWaitingRoom('iv-1', answer({ error: 'x' }, 404)), { admission: null, mayAdmit: false });
+});
+
+test('the knock prompt: the lead on every knock; a panel member only when the server says they may, and only to let in', () => {
+  const waiting = { state: 'waiting' as const, knockedAt: 'k', decidedAt: null };
+  assert.equal(knockAnswersFor(true, false, waiting), 'lead');
+  assert.equal(knockAnswersFor(false, true, waiting), 'panel');
+  assert.equal(knockAnswersFor(false, false, waiting), null);
+  assert.equal(knockAnswersFor(true, true, { ...waiting, state: 'admitted' }), null);
+  assert.equal(knockAnswersFor(false, true, null), null);
 });

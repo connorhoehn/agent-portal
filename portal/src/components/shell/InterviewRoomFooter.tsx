@@ -12,7 +12,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { Button, Chip, Inline, InlinePopover, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import type { HuddleBarAction } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
-import { SUGGESTION_RECEIPTS, askButtonLabel, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type InterviewAskKind, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
+import { SUGGESTION_RECEIPTS, askButtonLabel, callTimeLabel, escSkipsSuggestion, joinedInterviewOf, roomHref, staffRoomNameFor, knockAnswersFor, knockPromptId, miloAskReceipt, suggestionForPrompt, suggestionPromptId, timeLeftTone, type Admission, type ConsentChip, type InterviewAskKind, type MiloAsked, type MiloAskWhy, type SuggestionAnswerId, type SuggestionView } from '../../lib/interviewsRoom';
 import { useCallHost } from '../../lib/conversationCall';
 import { useFetch } from '../../hooks/useFetch';
 import { INTERVIEWS_API } from '../../lib/interviews';
@@ -24,6 +24,8 @@ export interface InterviewRoomFooterState {
   interviewId: string;
   lobbyName: string;
   lead: boolean;
+  /** The server's word that this seat may let the candidate in now (the lead; a panel member in the call while the lead is not). */
+  mayAdmit?: boolean;
   /** The candidate's name, for the call's tiles (the call knows them only by the invite's id). */
   candidateName: string;
   minutes: number;
@@ -268,7 +270,9 @@ function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined 
   const room = useRoomFor(lobbyName);
   const asked = useSyncExternalStore(subscribe, askedSnapshot, askedSnapshot);
   const scope = room ? `interview-room:${room.interviewId}` : null;
-  const knock = room?.lead && room.admission?.state === 'waiting' ? room.admission : null;
+  // The lead answers every knock; a panel member only when the server says they may (they may only let the candidate in).
+  const knockSeat = room ? knockAnswersFor(room.lead, room.mayAdmit === true, room.admission) : null;
+  const knock = knockSeat ? room!.admission : null;
   // `self`: it opened by itself (a knock, the End question) and takes no focus; `hand`: the lead opened it from the button.
   const [open, setOpen] = useState<'no' | 'self' | 'hand'>('no');
   const byHand = open === 'hand';
@@ -294,10 +298,14 @@ function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined 
     });
     if (knock) list.push({
       ...base, id: knockPromptId(room.interviewId, knock), kind: 'choice', eyebrow: 'Interview', title: `${room.candidateName} is waiting`,
-      question: 'Let them in?',
-      options: [{ id: 'admit', label: 'Admit', emphasis: 'primary' }, { id: 'not-yet', label: 'Not yet' }],
+      question: knockSeat === 'panel' ? 'The lead is not in the call. Let them in?' : 'Let them in?',
+      options: knockSeat === 'panel'
+        ? [{ id: 'admit', label: 'Admit', emphasis: 'primary' }, { id: 'leave', label: 'Leave it to the lead' }]
+        : [{ id: 'admit', label: 'Admit', emphasis: 'primary' }, { id: 'not-yet', label: 'Not yet' }],
       onAnswer: async (a) => {
         const admit = 'optionId' in a && a.optionId === 'admit';
+        // The panel's other answer writes nothing: turning the candidate away is the lead's.
+        if (!admit && knockSeat === 'panel') return { receipt: 'Left to the lead' };
         const out = await room.answerKnock(admit);
         if (out.error) return { error: out.error };
         return { receipt: admit ? 'Admitted' : 'Not yet' };
@@ -332,7 +340,7 @@ function InterviewRoomAsk({ lobbyName }: { lobbyName: string | null | undefined 
       },
     });
     return list;
-  }, [room, scope, asked, knock, room?.suggestion, room?.padConfirm, byHand, skipped]);
+  }, [room, scope, asked, knock, knockSeat, room?.suggestion, room?.padConfirm, byHand, skipped]);
   const deck = useComposerPromptDeck(prompts, { scope });
   const activeId = deck.active?.id ?? null;
   const endId = scope ? `${scope}:end` : null;

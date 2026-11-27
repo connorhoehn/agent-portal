@@ -1,7 +1,7 @@
 // The candidate's step model (pages/join/steps.ts; docs/interviews-tenant-plan.md row I2.3).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NOTHING_ANSWERED, allAnswered, choose, landingStep, miloLocked, stepAfterConsents, waitingAfterKnock, waitingAfterRead, waitingView, type Admission, type ConsentChoices } from '../steps.ts';
+import { NOTHING_ANSWERED, allAnswered, choose, landingStep, miloLocked, stepAfterConsents, waitingAfterKnock, waitingAfterRead, waitingLine, waitingView, type Admission, type ConsentChoices } from '../steps.ts';
 
 const ALL: ConsentChoices = { recording: true, transcription: true, milo: true };
 const adm = (state: Admission['state']): Admission => ({ state, knockedAt: null, decidedAt: null });
@@ -188,4 +188,11 @@ test('an admission read after the knock: no answer changes nothing; not-knocked 
 
 test("the candidate room read is only a slow fallback: the lead end arrives as a live hint (lib/interviewsRoom.ts hintsAfter)", () => {
   assert.equal(ROOM_POLL_MS, 15_000);
+});
+
+test('the waiting line says "told" only when the server says so, and "will be told" while it holds the knock but nobody knows', () => {
+  assert.equal(waitingLine(false, false), 'telling');
+  assert.equal(waitingLine(false, true), 'telling');
+  assert.equal(waitingLine(true, false), 'will-tell');
+  assert.equal(waitingLine(true, true), 'told');
 });

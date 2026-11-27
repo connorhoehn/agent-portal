@@ -53,7 +53,7 @@ import { useInterviewCallLoss } from '../../lib/useInterviewCallLoss';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
   MY_INTERVIEWS_HREF, WAITING_POLL_MS, WAITING_FALLBACK_MS, answerKnock, answerSuggestion, pausedLine, pollsSuggestion, readSuggestion, readsConsents, pollsConsents,
-  suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readAdmission,
+  suggestionReadBudgetMs, startSuggestionPoll, type SuggestionAnswerId, type SuggestionPause, type SuggestionView, consentChip, consentsPath, endInterview, pollsWaiting, readWaitingRoom,
   roomCallTitle, roomPath, startInterview, startsOnJoin, type Admission, type ConsentPart, type RoomQuestion, type RoomView,
   MILO_NOTES_POLL_MS, MILO_QUESTION_MAX, TRANSCRIPT_POLL_MS, askMilo, askedByLabel, asksMilo, keepExchange, liveTranscriptSegments, mergeTranscript,
   pollsMilo, readLiveTranscript, readMiloNotes, type LiveTranscriptLine, type MiloExchange, type MiloNotes,
@@ -118,6 +118,9 @@ function InterviewRoom({ id }: { id: string }) {
 
   // C3: the lead's room asks whether the candidate is waiting, every few seconds, until they are in.
   const [admission, setAdmission] = useState<Admission | null>(null);
+  // Whether this seat may let the candidate in now: the server's answer (the room read, then each waiting read), never the page's.
+  const [mayAdmit, setMayAdmit] = useState(false);
+  useEffect(() => { if (room) setMayAdmit(room.mayAdmit === true); }, [room?.mayAdmit]); // eslint-disable-line react-hooks/exhaustive-deps
   const polling = pollsWaiting(room?.seat ?? null, admission, room?.state ?? null);
   // A knock reaches the room as a live hint (InterviewHintListener below); this poll is only the slow fallback under it.
   const readNow = useRef<() => void>(() => undefined);
@@ -127,10 +130,10 @@ function InterviewRoom({ id }: { id: string }) {
     let reads = 0;
     const read = () => {
       if (!live || reads++ >= WAITING_FALLBACK_MAX_READS) { window.clearInterval(timer); return; }
-      void readAdmission(id).then((a) => { if (live) setAdmission(a); });
+      void readWaitingRoom(id).then((w) => { if (live) { setAdmission(w.admission); setMayAdmit(w.mayAdmit); } });
     };
     const timer = window.setInterval(read, WAITING_FALLBACK_MS);
-    readNow.current = () => { if (live) void readAdmission(id).then((a) => { if (live) setAdmission(a); }); };
+    readNow.current = () => { if (live) void readWaitingRoom(id).then((w) => { if (live) { setAdmission(w.admission); setMayAdmit(w.mayAdmit); } }); };
     read();
     return () => { live = false; readNow.current = () => undefined; window.clearInterval(timer); };
   }, [polling, id]);
@@ -227,13 +230,13 @@ function InterviewRoom({ id }: { id: string }) {
     return {};
   }, [id]);
   const footer = useMemo<InterviewRoomFooterState | null>(() => (room && lobbyName ? {
-    interviewId: room.id, lobbyName, lead: room.seat === 'lead', candidateName: room.candidate.name, minutes: room.round.minutes,
+    interviewId: room.id, lobbyName, lead: room.seat === 'lead', mayAdmit, candidateName: room.candidate.name, minutes: room.round.minutes,
     consent, miloBlock, admission, end, answerKnock: knock,
     suggestion: room.seat === 'lead' && room.state === 'live' ? suggestion : null,
     pausedLine: room.state === 'live' ? pausedLine(room.seat, paused) : null,
     answerSuggestion: answerAsk,
     padConfirm: room.seat === 'lead' ? padConfirm : null, answerPadConfirm: answerPad,
-  } : null), [room, lobbyName, consent?.label, consent?.tooltip, miloBlock?.label, admission, end, knock, suggestion, paused, answerAsk, padConfirm, answerPad]); // eslint-disable-line react-hooks/exhaustive-deps
+  } : null), [room, lobbyName, mayAdmit, consent?.label, consent?.tooltip, miloBlock?.label, admission, end, knock, suggestion, paused, answerAsk, padConfirm, answerPad]); // eslint-disable-line react-hooks/exhaustive-deps
   useRegisterInterviewRoomFooter(footer);
 
   if (error && !room) {

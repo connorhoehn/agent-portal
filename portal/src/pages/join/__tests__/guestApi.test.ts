@@ -2,7 +2,7 @@
 // apart from answers that no longer stand.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { knock } from '../guestApi.ts';
+import { knock, readWaiting } from '../guestApi.ts';
 
 const answering = (status: number, body: unknown) => {
   globalThis.fetch = (async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })) as typeof fetch;
@@ -26,6 +26,25 @@ test('knock: a 409 with the required-part reason is held; any other 409 asks for
     assert.deepEqual(await knock(), { kind: 'failed' }, 'a 200 without an admission does not say the knock was taken');
     globalThis.fetch = (async () => { throw new TypeError('network'); }) as typeof fetch;
     assert.deepEqual(await knock(), { kind: 'failed' });
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('the knock and the waiting read carry the server\'s told, one boolean; anything else in its place is false', async () => {
+  const real = globalThis.fetch;
+  try {
+    const admission = { state: 'waiting', knockedAt: '2026-11-17T10:00:00.000Z', decidedAt: null };
+    answering(200, { admission, told: true });
+    assert.deepEqual(await knock(), { kind: 'knocked', admission, told: true });
+    answering(200, { admission, told: false });
+    assert.deepEqual(await readWaiting(), { admission, told: false });
+    answering(200, { admission, told: 'yes' });
+    assert.deepEqual(await readWaiting(), { admission, told: false });
+    answering(200, { admission, told: true });
+    assert.deepEqual(await readWaiting(), { admission, told: true });
+    answering(404, { error: 'gone' });
+    assert.equal(await readWaiting(), null);
   } finally {
     globalThis.fetch = real;
   }
