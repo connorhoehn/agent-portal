@@ -347,6 +347,11 @@ async function tell(baseUrl: string, signal: { cancelled: boolean }): Promise<vo
   await until(() => state.milestones.running3, 40, signal, 'all three computers to start');
 
   // ── B's question: a person answers, or the director does for Nora ───────
+  // The director's own answer waits for C's second pickup to be judged. A reply into a computer a run holds takes a
+  // second hold on the same envelope (routes/devbox.ts: held for visibility, never refused), and with it in flight
+  // the pickup crosses the envelope's hard cap (403) instead of stopping at the money gate (409) the story shows.
+  // On a slow machine the answer used to land first.
+  let secondPickupJudged = false;
   const answering = (async () => {
     await until(() => state.milestones.questionAsked, 80, signal, `${b.name} to ask its question`);
     const patience = options.autoAnswer === false ? 0
@@ -356,6 +361,12 @@ async function tell(baseUrl: string, signal: { cancelled: boolean }): Promise<vo
     while (!signal.cancelled && !state.milestones.questionAnswered && performance.now() < waitedUntil) {
       await sleepBeats(0.25, signal);
       if (demoBeatMs() === 0) break;
+      observe();
+    }
+    const pickupBy = performance.now() + Math.max(200 * demoBeatMs(), 30_000);
+    while (!signal.cancelled && !state.milestones.questionAnswered && !secondPickupJudged && performance.now() < pickupBy) {
+      await sleepBeats(0.25, signal);
+      if (demoBeatMs() === 0) await new Promise<void>((r) => { const t = setTimeout(r, 25); t.unref?.(); });
       observe();
     }
     if (signal.cancelled || state.milestones.questionAnswered || !b.sessionId) return;
@@ -384,6 +395,7 @@ async function tell(baseUrl: string, signal: { cancelled: boolean }): Promise<vo
   await sleepBeats(1, signal);
   if (signal.cancelled) return;
   const next = await nora.send('POST', '/api/bots/dispatch-work', { workItemId: DEMO_NEXT_ITEM, model: DEMO_MODEL });
+  secondPickupJudged = true;
   if (signal.cancelled) return;
   if (next.status === 409 && typeof next.body['gate'] === 'string') {
     state.gate = next.body;
