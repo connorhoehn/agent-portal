@@ -37,6 +37,13 @@ export const sdlcRouter: Router = Router();
 // ManageDevbox holders who could read before the split.
 const readGate = requireAction('ManageDevbox');
 
+// The policies themselves (GET /policies and /policy-sets*) are read more
+// widely than the change queue (docs/next-steps.md section 9, 28 November
+// item 5): their editors (org-leader, admin) and program owners read them
+// besides the ManageDevbox holders (sme, hr-admin). Only reads; every write
+// is still editGate.
+const policyReadGate = readForRolesElseAction(['org-leader', 'program-owner'], 'ManageDevbox');
+
 /** The session, or a 401 answered. No session never decides anything (DE-43). */
 function sessionOr401(req: Request, res: Response): Session | null {
   const session = resolveSession(req);
@@ -104,7 +111,7 @@ function clampPoliciesLimit(raw: unknown): number {
   return Number.isFinite(n) && n > 0 ? Math.min(n, 1000) : 200;
 }
 
-sdlcRouter.get('/policies', readGate, asyncHandler(async (req, res) => {
+sdlcRouter.get('/policies', policyReadGate, asyncHandler(async (req, res) => {
   // The org set's current version — bootstrapped once, so a fresh environment
   // is governed rather than wide open the moment this surface is opened.
   const { effective } = await effectivePolicySet(ORG_SCOPE);
@@ -155,18 +162,18 @@ sdlcRouter.delete('/policies/:id', asyncHandler(async (req, res) => {
 // `scope` is `org` or an initiative id. A read of an initiative with no set of
 // its own returns the org set it inherits (`inherited: true`).
 
-sdlcRouter.get('/policy-sets/:scope', readGate, asyncHandler(async (req, res) => {
+sdlcRouter.get('/policy-sets/:scope', policyReadGate, asyncHandler(async (req, res) => {
   const scope = String(req.params['scope'] ?? '');
   const { own, effective } = await effectivePolicySet(scope);
   res.json({ scope, inherited: own === null, set: effective });
 }));
 
-sdlcRouter.get('/policy-sets/:scope/versions', readGate, asyncHandler(async (req, res) => {
+sdlcRouter.get('/policy-sets/:scope/versions', policyReadGate, asyncHandler(async (req, res) => {
   const scope = String(req.params['scope'] ?? '');
   res.json({ scope, versions: await listPolicySetVersions(scope) });
 }));
 
-sdlcRouter.get('/policy-sets/:scope/versions/:version', readGate, asyncHandler(async (req, res) => {
+sdlcRouter.get('/policy-sets/:scope/versions/:version', policyReadGate, asyncHandler(async (req, res) => {
   const v = await getPolicySetVersion(String(req.params['scope'] ?? ''), parseInt(String(req.params['version'] ?? ''), 10));
   if (!v) throw new NotFoundError('No such policy set version');
   res.json({ set: v });

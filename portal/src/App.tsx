@@ -861,8 +861,9 @@ export function App() {
             </Gate>
           } />
           {/* The governance queue for code agents wrote — review, approve, deliver. */}
+          {/* org-leader and sme come for the Policies tab (they edit and read the SDLC policies); the queue keeps its own read. */}
           <Route path="changes" element={
-            <Gate roles={['hr-admin', 'program-owner']}>
+            <Gate roles={['hr-admin', 'program-owner', 'org-leader', 'sme']}>
               <Page element={<ChangesPage />} />
             </Gate>
           } />

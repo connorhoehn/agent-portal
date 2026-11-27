@@ -70,7 +70,7 @@ const PLATFORM = ['org-leader', 'hr-admin'];
 const BUILD = ['hr-admin'];
 const BUDGETS = ['program-owner', 'org-leader', 'hr-admin'];   // ManageBudgets
 const BOTS = ['sme', 'program-owner', 'org-leader', 'hr-admin']; // ManageBots
-const CHANGES = ['program-owner', 'hr-admin'];
+const CHANGES = ['program-owner', 'hr-admin', 'org-leader', 'sme']; // the queue, or its Policies tab
 
 // Rail group order per tenant (top → bottom): the org tenant reads along its
 // SDLC arc; the assessment tenant top-down through its own programme. The

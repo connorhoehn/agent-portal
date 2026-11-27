@@ -94,6 +94,11 @@ export default function ChangesPage() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
   const canEditPolicy = ready && can('ManageSdlcPolicies');
+  // Who reads the policies is wider than who reads the queue (routes/sdlc.ts
+  // `policyReadGate`; docs/next-steps.md section 9, 28 November item 5): their
+  // editors, the ManageDevbox holders, and program owners.
+  const { session: viewer } = useSession();
+  const canReadPolicies = canManage || canEditPolicy || (ready && viewer?.role === 'program-owner');
   const { data, error, isLoading, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
   // A denial and an outage are different facts and get different words. The
   // one thing neither may be reported as is "no changes yet".
@@ -153,14 +158,14 @@ export default function ChangesPage() {
     setQuery, refresh, rows: shown, open: (id) => navigate(`/admin/changes/${id}`),
   });
 
-  const tabItems = canManage
+  const tabItems = canReadPolicies
     ? [
         { id: 'queue', label: `Review queue${allNeedsYou.length ? ` (${allNeedsYou.length})` : ''}` },
         { id: 'policies', label: 'Policies' },
       ]
     : [{ id: 'queue', label: `Review queue${allNeedsYou.length ? ` (${allNeedsYou.length})` : ''}` }];
 
-  const onQueue = !(tab === 'policies' && canManage);
+  const onQueue = !(tab === 'policies' && canReadPolicies);
 
   return (
     <CollectionCommandPage

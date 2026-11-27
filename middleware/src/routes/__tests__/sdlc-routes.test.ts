@@ -175,6 +175,21 @@ describe('GET /policies', () => {
   it('is a ManageDevbox read: a member gets 403', async () => {
     expect((await request(buildApp(MEMBER)).get('/api/sdlc/policies')).status).toBe(403);
   });
+
+  // §9, 28 November item 5: org-leaders and admins edit; program owners and
+  // SMEs read. The change queue keeps its ManageDevbox read.
+  it('the policies are read by org-leader, program-owner, sme, hr-admin and admin; the queue is not widened', async () => {
+    const OWNER = { sub: 'u-po', role: 'program-owner', tenant: 'orgiq' };
+    for (const who of [LEADER, OWNER, SME, HR, ADMIN]) {
+      expect([who.role, (await request(buildApp(who)).get('/api/sdlc/policies')).status]).toEqual([who.role, 200]);
+      expect([who.role, (await request(buildApp(who)).get('/api/sdlc/policy-sets/org')).status]).toEqual([who.role, 200]);
+      expect([who.role, (await request(buildApp(who)).get('/api/sdlc/policy-sets/org/versions')).status]).toEqual([who.role, 200]);
+    }
+    expect((await request(buildApp(MEMBER)).get('/api/sdlc/policy-sets/org')).status).toBe(403);
+    m(listChangeRequests).mockResolvedValue([]);
+    expect((await request(buildApp(OWNER)).get('/api/sdlc/changes')).status).toBe(403);
+    expect((await request(buildApp(LEADER)).get('/api/sdlc/changes')).status).toBe(403);
+  });
 });
 
 describe('POST /policies (legacy, writes a new org version)', () => {
