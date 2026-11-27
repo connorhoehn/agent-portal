@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-27T05:45:19.350Z",
-  "serverHandlerSha": "f6c2b990058f9355d2dabd55ead519f1be0ff5913086c0025d10bb90d8fd8d10",
+  "capturedAt": "2026-11-27T06:36:04.567Z",
+  "serverHandlerSha": "6653cf9577dfc7aa40c36c82f521c6c4e4b2930865690693a386522b7d4ff0d5",
   "baseUrl": "http://127.0.0.1:3011",
   "personas": [
     "orgiq/admin",
@@ -5366,6 +5366,7 @@
         "debrief.applications[].rounds[].panel": "array",
         "debrief.applications[].rounds[].recapPath": "string",
         "debrief.applications[].rounds[].recordPath": "string",
+        "debrief.applications[].rounds[].redFlags": "array",
         "debrief.applications[].rounds[].scheduledAt": "string",
         "debrief.applications[].rounds[].scorecards": "array",
         "debrief.applications[].rounds[].scorecards[]": "object",
@@ -5626,6 +5627,7 @@
         "interview.seats[].person.id": "string",
         "interview.seats[].person.name": "string",
         "interview.seats[].seat": "string",
+        "interview.spendingCapSet": "boolean",
         "interview.state": "string"
       },
       "values": {
@@ -6053,6 +6055,21 @@
         "spend.leftUsd": "number",
         "spend.spentUsd": "number",
         "spend.unknownCount": "number"
+      },
+      "values": {}
+    },
+    "GET /api/interviews/settings": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "items": "array",
+        "items[]": "object",
+        "items[].about": "string",
+        "items[].default": "array|boolean|number|string",
+        "items[].group": "string",
+        "items[].name": "string",
+        "items[].value": "array|boolean|number|string"
       },
       "values": {}
     },

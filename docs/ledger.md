@@ -31,7 +31,7 @@ For orientation only; the commits name the row ids.
 ### Then, work that needs nobody else
 
 3. **Privacy and money, smallest first.** P-12 (deck drafting unmetered), then P-11 (a reply's hold counted twice) and M-5 (Milo's transcription, speech and Decide spend unmetered).
-4. **Candidates, second batch.** One package of five small rows (C-10, C-12, C-13, C-14, C-16); then C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
+4. **Candidates, second batch.** The five small rows were built on 27 November (a closed opening refuses candidates, red flags reach the debrief and export, the no-cap warning on assign and prepare, a Settings page, one record per email). Next: C-5 (notes in the call), C-6 (reaching the candidate), C-17 (scheduling), C-11 (candidate accessibility) and C-7 (one role per person). C-8 and C-9 wait for the notice wording (C-27). Judge rows for what was built this week go with them (C-22 to C-24).
 5. **Deck builder (K-1).** The two-day PDF spike that opens its phase 1 can start now, since it only produces knowledge. Phase 0 starts once the plan's decisions have been read.
 6. **Milo (M-1 to M-3).** The audio gate, then the turn owner as the default, then the phase-1 deletion, which also stops paying for the unused speech-to-speech session. CI-10 alongside.
 7. **Documents (H-2, C-20, H-4, H-1).** A README section for the six tenants with a map of the documents, the interviews plan's stale status line, and the scripts README.
@@ -86,18 +86,13 @@ Fourteen items in the plan and the audit have closed since they were written and
 | C-7 | One role per person at a time: only holders of `interviewer` can be seated. | `mw/routes/interviews/assignments.ts:57-62`; audit section 7 | Open | Derive reach from all of a person's grants in the tenant, or let a hiring manager or recruiter hold a seat | M |
 | C-8 | Milo reads speech only. The recap, coach and plan see no résumé, pad or run results; one question has expected values; there is no tool to set the pad language, run code, move to the next question or write on the board. Since the audit he reads the board as text and his probes join the recap timeline. | `mw/lib/interviews/recap/prompt.ts:13`; `mw/lib/interviews/coach/prompt.ts:19`; `mw/lib/interviews/milo-tools/references.ts:46`; audit section 8 | Partly | Give the recap the final pad snapshot, run results and board text as citable sources; extract résumé text at upload; add a reference solution to kit questions; then the missing tools | L |
 | C-9 | "Milo recommends" is computed in the browser only, is not stored or exported, and contradicts the one published notice version. | `pt/lib/interviewsMiloAdvice.ts`; `mw/lib/interviews/consent/notice.ts:21,27`; audit section 9 | Open | Compute it on the server, store what was shown with each scorecard version, show it on the debrief and the export, publish a matching notice version (C-27) | M |
-| C-10 | A new opening has no spending cap, and the warning shows only on the opening page. | `pt/lib/interviewsKit.ts:258`, `:103`; audit section 10 | Open | Default a cap at creation, or warn on Assign, Prepare and the idle room | S |
 | C-11 | Candidate accessibility: no transcript or captions for the candidate, and the door is walked at two desktop widths only. | `pt/pages/join/JoinRoom.tsx:8`; `scripts/journeys/interviews/E3-door.mjs:26`; audit section 11 | Open | Offer live captions when the candidate accepted the transcript; walk the door at phone width and by keyboard | M |
 
 ### Smaller gaps
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| C-12 | A paused or closed opening accepts candidates. | `mw/routes/interviews/candidates.ts:59-62` | Open | Refuse unless the opening is open | S |
-| C-13 | One person applying to two openings becomes two records. | `mw/routes/interviews/candidates.ts:77-80` | Open | Match on email and add an application | S |
-| C-14 | Red flags stop at the scorecard. | Nothing in `mw/lib/interviews/debrief`, `export` or `pt/pages/interviews/DebriefPage.tsx` | Open | Carry ticked flags to the debrief and the export | S |
 | C-15 | The panel cannot confer in the product: discussions and huddle chat are off for the tenant. | `tenants/manifest.json:94-95` | Open | Decide; if yes, turn discussions on for the debrief only | S |
-| C-16 | Settings are invisible: `interviewsSettings()` has no callers outside its file and tests. | `mw/lib/interviews/` | Open | A read-only view of retention periods and required consents | S |
 | C-17 | Thin scheduling: no double-booking check, no "missed" label, no reminder. | `mw/lib/interviews/assign.ts`; `mw/lib/interviews/result-bells.ts` | Open | Add the three | M |
 | C-18 | Three small audit items, re-read on 27 November and still true: a new opening's kit starts empty with no way to copy another's, Milo has one setting per interview, and the candidate `notes` field is stored and shown nowhere. (The fourth, the profile read handing an interviewer the candidate's contact details, was fixed that day.) | `mw/routes/interviews/openings.ts:103`; `mw/lib/interviews/milo-settings.ts`; audit "Minor" | Open | Copy a kit from another opening; show or drop `notes` | S |
 

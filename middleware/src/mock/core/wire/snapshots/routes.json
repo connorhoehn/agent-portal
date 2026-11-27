@@ -2478,22 +2478,22 @@
     {
       "method": "GET",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews.ts:83"
+      "source": "src/routes/interviews.ts:85"
     },
     {
       "method": "POST",
       "path": "/api/interviews/candidates",
-      "source": "src/routes/interviews/candidates.ts:56"
+      "source": "src/routes/interviews/candidates.ts:61"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id",
-      "source": "src/routes/interviews.ts:92"
+      "source": "src/routes/interviews.ts:94"
     },
     {
       "method": "GET",
       "path": "/api/interviews/candidates/:id/consents",
-      "source": "src/routes/interviews/records.ts:44"
+      "source": "src/routes/interviews/records.ts:45"
     },
     {
       "method": "GET",
@@ -2548,7 +2548,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews",
-      "source": "src/routes/interviews.ts:108"
+      "source": "src/routes/interviews.ts:110"
     },
     {
       "method": "POST",
@@ -2558,7 +2558,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id",
-      "source": "src/routes/interviews.ts:119"
+      "source": "src/routes/interviews.ts:121"
     },
     {
       "method": "POST",
@@ -2633,7 +2633,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/interviews/:id/milo-export",
-      "source": "src/routes/interviews/records.ts:74"
+      "source": "src/routes/interviews/records.ts:75"
     },
     {
       "method": "POST",
@@ -2803,7 +2803,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings",
-      "source": "src/routes/interviews.ts:62"
+      "source": "src/routes/interviews.ts:63"
     },
     {
       "method": "POST",
@@ -2813,7 +2813,7 @@
     {
       "method": "GET",
       "path": "/api/interviews/openings/:id",
-      "source": "src/routes/interviews.ts:70"
+      "source": "src/routes/interviews.ts:71"
     },
     {
       "method": "PUT",
@@ -2829,6 +2829,11 @@
       "method": "GET",
       "path": "/api/interviews/openings/:id/spend",
       "source": "src/routes/interviews/openings.ts:113"
+    },
+    {
+      "method": "GET",
+      "path": "/api/interviews/settings",
+      "source": "src/routes/interviews/settings.ts:37"
     },
     {
       "method": "POST",
