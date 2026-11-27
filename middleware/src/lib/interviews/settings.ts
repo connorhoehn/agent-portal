@@ -1,5 +1,5 @@
 // Every interviews setting this deployment runs with (docs/interviews-tenant-plan.md row I6.4; contract F3), for the
-// hardening pass and the deploy checklist. No route, no page. Each entry calls the reader that already exists, so a
+// hardening pass, the deploy checklist and the tenant's read-only Settings page (routes/interviews/settings.ts). Each entry calls the reader that already exists, so a
 // value here is exactly the value the code uses; nothing is parsed twice and no reader moved.
 //
 // `value` is what the reader answers with the deployment's environment; `default` is what it answers with the setting
@@ -30,6 +30,15 @@ export interface InterviewsSetting {
 const backendOf = (env: NodeJS.ProcessEnv): string => { try { return runBackend(env); } catch { return 'none'; } };
 
 const NO_WARN = (): void => undefined;
+
+export type SettingGroup = 'retention' | 'consent' | 'runner' | 'other';
+const GROUPS: Readonly<Record<string, SettingGroup>> = {
+  [MEDIA_DAYS_SETTING]: 'retention', [RECORD_YEARS_SETTING]: 'retention', [DELETION_DAYS_SETTING]: 'retention',
+  [REQUIRED_CONSENTS_SETTING]: 'consent',
+  [RUN_BACKEND_SETTING]: 'runner', [CODE_INTERPRETER_SETTING]: 'runner', [RUN_PRICE_SETTING]: 'runner',
+};
+/** Which part of the Settings page a setting reads under. */
+export const settingGroupOf = (name: string): SettingGroup => GROUPS[name] ?? 'other';
 
 /** The settings, in a fixed order. Never throws. */
 export function interviewsSettings(env: NodeJS.ProcessEnv = process.env): InterviewsSetting[] {

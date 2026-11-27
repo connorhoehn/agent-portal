@@ -7,7 +7,7 @@
 import { collectionCommandAdapter, type CollectionControls, type CollectionGrammar } from '../../components/collections/collectionCommands.ts';
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 
-export type InterviewsCollection = 'candidates' | 'my-interviews' | 'my-openings' | 'openings' | 'upcoming';
+export type InterviewsCollection = 'candidates' | 'my-interviews' | 'my-openings' | 'openings' | 'upcoming' | 'settings';
 
 /** Explicit phrase → the toolbar filter value it sets (never a mutation). */
 export const INTERVIEWS_GRAMMARS: Readonly<Record<InterviewsCollection, CollectionGrammar>> = {
@@ -16,6 +16,7 @@ export const INTERVIEWS_GRAMMARS: Readonly<Record<InterviewsCollection, Collecti
   'my-openings': { noun: 'candidates', filters: { applied: 'applied', screening: 'screening', interviewing: 'interviewing', debrief: 'debrief' } },
   openings: { noun: 'openings', filters: { open: 'open', paused: 'paused', closed: 'closed' } },
   upcoming: { noun: 'rounds', filters: { 'no time': 'no-time', 'with a time': 'timed', finished: 'finished' } },
+  settings: { noun: 'settings', filters: { retention: 'retention', consent: 'consent', runner: 'runner', other: 'other' } },
 };
 
 /** What each page's help popover says the commands touch, and never do. */
@@ -25,6 +26,7 @@ export const INTERVIEWS_SCOPE_NOTES: Readonly<Record<InterviewsCollection, strin
   'my-openings': 'Search and the stage filter apply to the candidates on your openings. Commands never decide a candidate\'s stage.',
   openings: 'Search and the state filter apply to the openings shown. Commands never create an opening or change a kit; that is done on the opening.',
   upcoming: 'Search and the time filter apply to the rounds shown. Commands never set a time or send a link; that is done on the row.',
+  settings: 'Search and the group filter apply to the settings shown. Nothing here changes a setting; they are set in the deployment\'s environment.',
 };
 
 export function interviewsCollectionAdapter(collection: InterviewsCollection, controls: Omit<CollectionControls, 'scopeNote' | 'id'>): CollectionCommandAdapter {

@@ -3,7 +3,7 @@
 // manager) as one dense row — title, team, hiring manager, candidates by stage and the kit at a glance.
 // A row opens the opening and its kit; the recruiter's "New opening" starts one.
 
-import { Button, CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, CollectionToolbar, DataTable, Inline, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
@@ -15,6 +15,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { ofTotal } from '../../lib/plural';
 import { INTERVIEWS_API, byStageLine, matches, type ItemsResponse } from '../../lib/interviews';
 import { OPENING_STATE_LABELS, kitLine, kitTitle, type OpeningListRow, type OpeningState } from '../../lib/interviewsKit';
+import { SETTINGS_HREF } from '../../lib/interviewsSettings';
 import { Dash, PersonCell } from './interviewsCells';
 import { interviewsCollectionAdapter } from './interviewsCollectionCommands';
 
@@ -61,7 +62,12 @@ function OpeningsWorkspace() {
     <CollectionCommandPage data-testid="interviews-openings" title="Openings"
       description="Every opening you hire for: who decides, where the candidates stand and the interview kit."
       headerActions={can('ManageCandidates')
-        ? <Button size="sm" variant="secondary" data-testid="interviews-new-opening" onClick={() => void navigate('/interviews/openings/new')}>New opening</Button>
+        ? (
+          <Inline gap="xs" wrap={false}>
+            <Button size="sm" variant="ghost" data-testid="interviews-settings-link" onClick={() => void navigate(SETTINGS_HREF)}>Settings</Button>
+            <Button size="sm" variant="secondary" data-testid="interviews-new-opening" onClick={() => void navigate('/interviews/openings/new')}>New opening</Button>
+          </Inline>
+        )
         : undefined}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">

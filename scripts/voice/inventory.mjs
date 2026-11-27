@@ -644,6 +644,7 @@ export const V2_RULES = [
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/milo-pad-confirm$/, 'never', null, 'Confirming a candidate\'s pad request is the lead\'s Confirm / Decline in the room (or "Milo, go ahead" in the call), never the voice navigator\'s'],
   [/^PUT \/api\/interviews\/interviews\/:[^/]+\/milo-settings$/, 'never', null, 'whether the candidate may ask Milo to change the pad is the lead\'s switch in the room'],
   [/^POST \/api\/interviews\/candidates$/, 'never', null, 'hiring setup (ManageCandidates): adding a candidate is done on the form'],
+  [/^GET \/api\/interviews\/settings$/, 'never', null, 'the deployment\'s interviews settings are a read-only page for the recruiter and the admin; they change in the environment, never by voice'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(admit|start|end)$/, 'never', null, 'letting the candidate in, starting and ending the interview are the lead\'s acts in the room'],
   [/^POST \/api\/interviews\/applications\/:[^/]+\/stage$/, 'never', null, 'the stage decision is the hiring manager\'s, with a reason, on the debrief'],
   [/^POST \/api\/interviews\/interviews\/:[^/]+\/(cancel|not-held)$/, 'never', null, 'cancelling a round, or saying it did not take place, is confirmed with a reason in its dialog, never by voice'],

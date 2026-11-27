@@ -71,6 +71,7 @@ const INTERVIEWS_GROUPS: Record<string, string> = {
   // slot 2: a lane adds its entries just below this line
   openings: 'Hire',
   // slot 3: a lane adds its entries just below this line
+  settings: 'Hire',
   rounds: 'Hire',
   // slot 4: a lane adds its entries just below this line
   upcoming: 'Hire',
@@ -88,6 +89,7 @@ const INTERVIEWS_LABELS: Record<string, string> = {
   // slot 2: a lane adds its entries just below this line
   openings: 'Openings',
   // slot 3: a lane adds its entries just below this line
+  settings: 'Settings',
   rounds: 'Round',
   // slot 4: a lane adds its entries just below this line
   upcoming: 'Upcoming',
@@ -364,6 +366,8 @@ export function resolveBreadcrumbs(pathname: string, role?: string | null): Crum
         ? [...trail, opening, { label: shortId(b), path: `/interviews/openings/${encodeURIComponent(b)}`, id: b }, { label: 'Edit' }]
         : [...trail, opening, { label: shortId(b), id: b }];
     }
+    // The tenant's read-only settings, reached from the Openings header (no rail entry): Hire › Openings › Settings.
+    if (page === 'settings') return [...trail, { label: INTERVIEWS_LABELS.openings!, path: '/interviews/openings' }, { label: INTERVIEWS_LABELS.settings! }];
     // A round's page (U6): the viewer's group and home, the round (its page registers "candidate, round"), then the page.
     if (page === 'rounds' && b && c && INTERVIEWS_LABELS[`round:${c}`]) return interviewsRoundTrail(b, INTERVIEWS_LABELS[`round:${c}`]!, role, c === 'record' || c === 'scorecard');
     return [...trail, { label: INTERVIEWS_LABELS[page] ?? page }];

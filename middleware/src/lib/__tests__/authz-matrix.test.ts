@@ -514,6 +514,16 @@ describe('capability boundaries that must not regress', () => {
     expect(has('access/access-admin', 'ManageCandidates')).toBe(false);
   });
 
+  test('interviews settings, read only (gap audit 2026-11-20, minor): no new action, ManageCandidates', () => {
+    // routes/interviews/settings.ts gates GET /settings on ManageCandidates through the tenant's not-found gate
+    // (lib/interviews/gate.ts). So the recruiter (and the admin, by its blanket grant) reads the deployment's settings;
+    // the interviewer and the hiring manager read the not-found; no other tenant's role holds the action.
+    expect(has('interviews/recruiter', 'ManageCandidates')).toBe(true);
+    expect([has('interviews/interviewer', 'ManageCandidates'), has('interviews/hiring-manager', 'ManageCandidates')]).toEqual([false, false]);
+    expect(has('access/access-admin', 'ManageCandidates')).toBe(false);
+    expect(role('*/admin').granted).toEqual(['*']);
+  });
+
   test('an orgiq member cannot view the assessment tenant', () => {
     expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });

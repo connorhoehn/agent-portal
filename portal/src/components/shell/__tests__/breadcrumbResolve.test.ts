@@ -160,6 +160,11 @@ test('an opening beside the Openings rail has Hire, Openings and its own crumb, 
     [{ label: 'Hire' }, open, { label: 'op-backend', path: '/interviews/openings/op-backend', id: 'op-backend' }, { label: 'Edit' }]);
 });
 
+test('the tenant\'s read-only settings sit under Openings, which links to them', () => {
+  assert.deepEqual(resolveBreadcrumbs('/interviews/settings', 'recruiter'),
+    [{ label: 'Hire' }, { label: 'Openings', path: '/interviews/openings' }, { label: 'Settings' }]);
+});
+
 test('a candidate page reads its home by the viewer’s role, and assign / debrief end the trail', () => {
   const id = 'cand-qz63q3a3';
   // An id-shaped segment shows shortened until the page names it (as the random interview ids do).
