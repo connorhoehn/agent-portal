@@ -229,7 +229,7 @@ Since 11 November only ui-components (2.546.0), realtime-modules (0.151.0), plat
 
 | Id | Item | Evidence | Status | Next action | Size |
 |---|---|---|---|---|---|
-| K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. | `docs/deck-builder-plan.md` | Planned, nothing built | Phase 0 first | L |
+| K-1 | A deck builder: one engine, a layout model with PowerPoint, PDF and image output, themes and kits from the design system, a staged agent pipeline and a deck skill. The spike of 28 November proved the layout model and the PDF and image painters; it could not check how any program renders the PowerPoint file, and it found that today's limits (8 bullets of 200 characters) always overflow a slide and that the current preview draws text at 75% of PowerPoint's size. | `docs/deck-builder-plan.md`; `docs/deck-spike-report.md` | Started | Build the layout model and painters in realtime-modules (phase 1), with a conformance check that opens the PowerPoint file; then phase 0's engine move | L |
 
 ## Documents that now mislead
 
