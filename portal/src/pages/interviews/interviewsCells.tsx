@@ -3,12 +3,13 @@
 // their portrait where the cast has one (lib/demoPortraits.json), else the
 // library's initials; candidates are records and carry no portrait.
 
-import { Avatar, AvatarGroup, Button, Chip, Inline, Link, T } from '@connorhoehn/ui-components/shared';
+import { Avatar, AvatarGroup, Button, Chip, Inline, InlineAlert, Link, T } from '@connorhoehn/ui-components/shared';
 import { useNavigate } from 'react-router';
 import type { ReactNode } from 'react';
 import demoPortraits from '../../lib/demoPortraits.json';
 import { useSession } from '../../lib/auth';
 import { debriefHref, readsDebrief } from '../../lib/interviewsDebrief';
+import { NO_HIRING_MANAGER_WARNING, noHiringManagerFix, openingEditHref } from '../../lib/interviewsStageMoves';
 import {
   RECOMMENDATION_LABELS, STAGE_LABELS, lastResultLine, recommendationTone, stageTone,
   type ApplicationStage, type ResultBrief,
@@ -87,4 +88,17 @@ export function DebriefResultCell({ candidateId, result, due = false, ready = fa
   const chip = ready ? <Chip tone="accent" size="sm" title="Every round that went ahead is scored">Ready to decide</Chip> : <ResultChip result={result} due={due} />;
   if (!readsDebrief(session?.role) || !(result || due || ready)) return chip;
   return <AppLink to={debriefHref(candidateId)} data-testid="interviews-result-debrief">{chip}</AppLink>;
+}
+
+/**
+ * An opening with no hiring manager (gap audit 2026-11-20 §2): nobody can decide on its candidates. Nothing is refused;
+ * the opening's page and the assign form say so once, with the way to set one (the recruiter, on the editor's Details tab).
+ */
+export function NoHiringManagerAlert({ openingId, canEdit, linked = true }: { openingId: string; canEdit: boolean; /** false inside the editor itself */ linked?: boolean }) {
+  return (
+    <InlineAlert tone="warning" data-testid="interviews-no-hiring-manager">
+      {`${NO_HIRING_MANAGER_WARNING} ${noHiringManagerFix(canEdit)} `}
+      {canEdit && linked && <AppLink to={openingEditHref(openingId)} data-testid="interviews-no-hiring-manager-edit">Edit the opening</AppLink>}
+    </InlineAlert>
+  );
 }

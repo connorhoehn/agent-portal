@@ -30,6 +30,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { canAssignAgain, canWithdraw, cancelledLine, withdrawApplication } from '../../lib/interviewsCancel';
 import { RoundCloseDialog, roundCloseItems, type RoundCloseMode } from './RoundCloseDialog';
+import { StageMoveAction } from './StageMoveDialog';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
@@ -269,7 +270,6 @@ type ProfileTab = 'rounds' | 'resume' | 'recordings' | 'activity';
 /** Stages that take no more rounds (the server refuses them too). */
 const CLOSED_STAGES = new Set(['rejected', 'withdrawn', 'hired']);
 
-/** The stage tracker, above the tabs: where the application stands and the way to its debrief. */
 /** The recruiter's "Mark withdrawn": asks once in place, then cancels the application's rounds not yet live (server side). */
 function WithdrawAction({ app, onDone }: { app: ProfileApplication; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
@@ -287,10 +287,11 @@ function WithdrawAction({ app, onDone }: { app: ProfileApplication; onDone: () =
   );
 }
 
+/** The stage tracker, above the tabs: where the application stands, the recruiter's "Move stage" and "Mark withdrawn", and the way to its debrief. */
 function StageSection({ app, several, candidateId, manages, onChanged }: { app: ProfileApplication; several: boolean; candidateId: string; manages: boolean; onChanged: () => void }) {
   const steps = stageSteps(app.stage, app.history, dateLabel);
   return (
-    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={manages ? <Inline gap="sm"><WithdrawAction app={app} onDone={onChanged} /><DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} /></Inline> : <DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} />}>
+    <DetailSection variant="heading" as="h2" title={several ? `Stage, ${app.opening.title}` : 'Stage'} hint={STAGE_LABELS[app.stage]} data-testid="interviews-profile-stage" actions={manages ? <Inline gap="sm"><StageMoveAction app={app} onDone={onChanged} /><WithdrawAction app={app} onDone={onChanged} /><DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} /></Inline> : <DebriefLink candidateId={candidateId} show={app.interviews.some((r) => isFinishedRound(r))} />}>
       <WorkflowStepper size="compact" steps={steps} aria-label={`${app.opening.title}: ${STAGE_LABELS[app.stage]}`} data-testid="interviews-profile-tracker" />
     </DetailSection>
   );

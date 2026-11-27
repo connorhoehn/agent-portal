@@ -15,7 +15,7 @@
 // this resolves the round to its candidate's debrief.
 
 import {
-  Button, Chip, DataTable, DetailPage, DetailSection, Disclosure, Inline, LoadingState, MetaLine, Stack, T, type DataTableColumn, type DataTableColumnGroup,
+  Button, Chip, DataTable, DetailPage, DetailSection, Disclosure, Inline, InlineAlert, LoadingState, MetaLine, Stack, T, type DataTableColumn, type DataTableColumnGroup,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useState } from 'react';
@@ -169,6 +169,8 @@ function ApplicationRounds({ app, several }: { app: DebriefApplication; several:
           {blocked ?? [missingLine(app.decide.scorecardsMissing, 'now'), 'Your decision waits in the box at the bottom of the page.'].filter(Boolean).join('. ')}
         </T>
       )}
+      {app.noDecision?.reason === 'no-hiring-manager' && <InlineAlert tone="warning" data-testid="interviews-debrief-no-decision">{app.noDecision.message}</InlineAlert>}
+      {app.noDecision?.reason === 'not-the-hiring-manager' && <T size="sm" tone="secondary" data-testid="interviews-debrief-no-decision">{app.noDecision.message}</T>}
       {app.rounds.length === 0 && <T size="sm" tone="secondary">No round has been assigned yet.</T>}
       {columns.length > 0 && (
         <DataTable rowHeight="content" stickyFirstColumn columnGroups={columnGroups} data-testid="interviews-debrief-side-by-side" aria-label={`${app.opening.title}: scorecards side by side`} data={rows} columns={tableColumns}

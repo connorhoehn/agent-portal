@@ -68,6 +68,8 @@ export interface DebriefApplication {
   competencies: Array<{ id: string; name: string; anchors: Anchors }>;
   rounds: DebriefRound[];
   decide: DebriefDecide | null;
+  /** Why there is no decision control, and who can change that (middleware debrief/view.ts); null exactly when `decide` is set. */
+  noDecision?: { reason: 'no-hiring-manager' | 'not-the-hiring-manager'; message: string } | null;
 }
 
 export interface DebriefView {

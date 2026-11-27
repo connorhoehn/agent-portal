@@ -27,7 +27,7 @@ import {
   OPENING_STATE_LABELS, PAD_LANGUAGES, PAD_LANGUAGE_LABELS, changesLine, detailsChanged, detailsOf, kitChanges, kitOf, padLine, problemsByPath,
   moneyLine, openingMoneyPath, readsOpeningMoney, saveDetails, saveKit, starterLine, type OpeningMoney, type KitCompetency, type KitQuestion, type KitRound, type OpeningDetails, type OpeningKit, type OpeningRecord, type OpeningListRow,
 } from '../../lib/interviewsKit';
-import { Dash, PersonCell, ResultChip, StageChip } from './interviewsCells';
+import { Dash, NoHiringManagerAlert, PersonCell, ResultChip, StageChip } from './interviewsCells';
 import { KitEditor, type OpenRow } from './KitEditor';
 import { OpeningDetailsForm } from './OpeningDetailsForm';
 
@@ -144,15 +144,17 @@ function OpeningWorkspace({ id, editing }: { id: string; editing: boolean }) {
     : <OpeningView opening={o} money={spend} trail={trail} />;
 }
 
-function OpeningMeta({ o, money }: { o: OpeningRecord; money?: OpeningMoney | null }) {
+function OpeningMeta({ o, money, canEdit = false, inEditor = false }: { o: OpeningRecord; money?: OpeningMoney | null; canEdit?: boolean; inEditor?: boolean }) {
   const people = <MetaLine size="sm" data-testid="interviews-opening-meta" items={[
     o.team, o.level, o.location, o.hiringManager ? `Hiring manager ${o.hiringManager.name}` : 'No hiring manager named yet', `Recruiter ${o.recruiter.name}`,
   ]} />;
-  if (!money) return people;
+  const warning = o.hiringManager ? null : <NoHiringManagerAlert openingId={o.id} canEdit={canEdit} linked={!inEditor} />;
+  if (!money && !warning) return people;
   return (
     <Stack gap="xs">
       {people}
-      <MetaLine size="sm" data-testid="interviews-opening-money" items={moneyLine(money)} />
+      {money && <MetaLine size="sm" data-testid="interviews-opening-money" items={moneyLine(money)} />}
+      {warning}
     </Stack>
   );
 }
@@ -171,7 +173,7 @@ function OpeningView({ opening: o, money, trail }: { opening: OpeningRecord; mon
     <OpeningFrame id={o.id} title={o.title} head={{ badge, actions }}>
     <OpeningHeadTabs testId="interviews-opening" title={o.title} trail={trail}
       badge={badge}
-      meta={<OpeningMeta o={o} money={money} />}
+      meta={<OpeningMeta o={o} money={money} canEdit={editable} />}
       actions={actions}
       tabs={[
         { id: 'kit', label: 'Kit', testId: 'interviews-opening-tab-kit', content: <KitView o={o} /> },
@@ -402,7 +404,7 @@ function OpeningEditor({ opening, money, trail, onSaved }: { opening: OpeningRec
     <OpeningFrame id={base.id} title={base.title} head={{ badge, actions }} guard={guard} footer={<CollectionCommandHost adapter={adapter} prompts={prompts} />}>
       <OpeningHeadTabs testId="interviews-opening-editor" title={base.title} trail={trail}
         badge={badge}
-        meta={<OpeningMeta o={base} money={money} />}
+        meta={<OpeningMeta o={base} money={money} canEdit inEditor />}
         actions={actions}
         activeTab={tab} onTabChange={setTab}
         tabs={[

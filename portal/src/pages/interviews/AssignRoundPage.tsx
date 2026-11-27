@@ -17,6 +17,7 @@ import type { OpeningRecord } from '../../lib/interviewsKit';
 import {
   PANEL_SEATS, assignRound, canReassign, declineLines, panelChoices, reassignRound, seatingOf, seatsOfRow, type FieldProblem,
 } from '../../lib/interviewsAssign';
+import { NoHiringManagerAlert } from './interviewsCells';
 
 const NOBODY = '';
 
@@ -99,6 +100,7 @@ export default function AssignRoundPage() {
           </Inline>
         )}>
         <Stack gap="md" data-testid="interviews-assign-form">
+          {opening.data && !opening.data.opening.hiringManager && <NoHiringManagerAlert openingId={app.opening.id} canEdit />}
           {error && <T size="sm" tone="danger" data-testid="interviews-assign-error">{error}</T>}
           {locked && <T size="sm" tone="secondary">This round has already started, so who sits on it can no longer change.</T>}
           {round && round.declines.length > 0 && (
