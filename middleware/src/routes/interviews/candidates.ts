@@ -2,7 +2,9 @@
 // The write pattern is openings.ts's: the mount gate, ManageCandidates (a guest and every other role is refused), the
 // opening in the viewer's scope (404), the input (400, one sentence per field), an opening that is not open (409), the
 // duplicate (409), then the write.
-// The route checks; the store only writes. The new candidate has no résumé yet; it is uploaded on the profile.
+// The route checks; the store only writes. The new candidate has no résumé yet; it is uploaded on the profile. An address
+// already on a candidate (not erased) adds an application to that candidate instead of a second record, and the answer
+// is that candidate: the caller holds ManageCandidates and already reads every candidate, so nothing new is revealed.
 
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
@@ -13,6 +15,7 @@ import type { FieldProblem } from '../../lib/interviews/kit.js';
 import { indexFor } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import { DuplicateCandidateError } from '../../lib/interviews/store.js';
+import { isRedacted } from '../../lib/interviews/retention/rules.js';
 import type { Application, Candidate } from '../../lib/interviews/types.js';
 
 export const candidatesRouter = Router();
@@ -79,15 +82,33 @@ candidatesRouter.post('/candidates', manage, asyncHandler(async (req, res) => {
     return;
   }
   const at = interviewsNow().toISOString();
-  const candidate: Candidate = { id: newId('cand'), name: v.name, email: v.email, headline: v.headline, location: v.location, source: v.source, resumeFileId: null, notes: '', createdAt: at };
-  const application: Application = {
-    id: newId('app'), candidateId: candidate.id, openingId: v.openingId, stage: 'applied', appliedAt: at,
+  const application = (candidateId: string): Application => ({
+    id: newId('app'), candidateId, openingId: v.openingId, stage: 'applied', appliedAt: at,
     history: [{ stage: 'applied', at, by: session.sub, reason: null }],
-  };
+  });
+  // One person, one record: the address already on a candidate (case and spaces aside) adds an application to them
+  // rather than a second record. Never a candidate without an address, and never an erased one (retention/rules.ts).
+  // The oldest record wins where earlier adds left two; nothing stored is merged or changed.
+  const known = candidates.filter((c) => !isRedacted(c) && c.email.trim() !== '' && c.email.trim().toLowerCase() === v.email)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0];
+  if (known) {
+    let added: Application | null;
+    try {
+      added = await store.createApplication(application(known.id));
+    } catch (e) {
+      if (e instanceof DuplicateCandidateError) { res.status(409).json({ error: DUPLICATE }); return; }
+      throw e;
+    }
+    if (!added) { res.status(409).json({ error: 'The candidate was being added at the same moment. Try again.' }); return; }
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json({ candidate: known, application: added });
+    return;
+  }
+  const candidate: Candidate = { id: newId('cand'), name: v.name, email: v.email, headline: v.headline, location: v.location, source: v.source, resumeFileId: null, notes: '', createdAt: at };
   // The check above answers the usual case; two adds at once both pass it, and the schema's unique rule stops the second.
   let written: Awaited<ReturnType<typeof store.createCandidate>>;
   try {
-    written = await store.createCandidate(candidate, application);
+    written = await store.createCandidate(candidate, application(candidate.id));
   } catch (e) {
     if (e instanceof DuplicateCandidateError) { res.status(409).json({ error: DUPLICATE }); return; }
     throw e;

@@ -109,6 +109,12 @@ export interface InterviewsStore extends OpeningWrites, InterviewWrites, Scoreca
    * The SQL store throws DuplicateCandidateError when the opening already holds this address (case aside), which the schema's unique rule enforces.
    */
   createCandidate(candidate: Candidate, application: Application): Promise<{ candidate: Candidate; application: Application } | null>;
+  /**
+   * Add an application for a candidate who is already on record (one person applying to a second opening; gap audit
+   * 2026-11-20, minor). `null` when the id is taken, or the candidate is not there or has no address (an erased candidate
+   * has none, so is never given a new application). DuplicateCandidateError when the opening already holds this address.
+   */
+  createApplication(application: Application): Promise<Application | null>;
 }
 
 /** The order every store returns: the SQL statements' ORDER BY clauses, in code. */
@@ -225,6 +231,19 @@ export class MemoryInterviewsStore implements InterviewsStore {
     interviewCandidatesFixture.rows().push(structuredClone(candidate));
     interviewApplicationsFixture.rows().push(structuredClone(application));
     return { candidate: structuredClone(candidate), application: structuredClone(application) };
+  }
+
+  async createApplication(application: Application): Promise<Application | null> {
+    const emailKey = (c: Candidate | undefined): string => (c?.email ?? '').trim().toLowerCase();
+    const candidates = interviewCandidatesFixture.rows();
+    const key = emailKey(candidates.find((c) => c.id === application.candidateId));
+    if (!key || interviewApplicationsFixture.rows().some((a) => a.id === application.id)) return null;
+    // The schema's unique index on (opening, address), in code.
+    if (interviewApplicationsFixture.rows().some((a) => a.openingId === application.openingId && emailKey(candidates.find((c) => c.id === a.candidateId)) === key)) {
+      throw new DuplicateCandidateError();
+    }
+    interviewApplicationsFixture.rows().push(structuredClone(application));
+    return structuredClone(application);
   }
 }
 

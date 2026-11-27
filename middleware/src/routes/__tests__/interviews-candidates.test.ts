@@ -35,7 +35,8 @@ import { requireTenant } from '../../lib/authz.js';
 import { listUsers, type UserInfo } from '../../providers/identity.js';
 import { interviewsFlagGate, interviewsRouter } from '../interviews.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
-import { interviewOpeningsFixture } from '../../mock/interviews.js';
+import { interviewApplicationsFixture, interviewCandidatesFixture, interviewOpeningsFixture } from '../../mock/interviews.js';
+import { REDACTED_CONTACT } from '../../lib/interviews/retention/rules.js';
 import { DuplicateCandidateError, MemoryInterviewsStore } from '../../lib/interviews/store.js';
 import type { Session } from '../../lib/session.js';
 
@@ -86,14 +87,14 @@ beforeEach(() => {
 });
 
 
-const BODY = { name: 'Nadia Petrova', email: 'Nadia.Petrova@mail.example', headline: 'Staff engineer, payments', location: 'Prague', source: 'Referral', openingId: 'op-backend' };
+const BODY = { name: 'Ilse Marwood', email: 'Ilse.Marwood@mail.example', headline: 'Staff engineer, payments', location: 'Prague', source: 'Referral', openingId: 'op-backend' };
 
 describe('add a candidate', () => {
   it('creates the candidate and an application at the first stage with one history entry, and the list shows them', async () => {
     const res = await GRETA.post('/candidates', BODY);
     expect(res.status).toBe(201);
     expect(res.headers['cache-control']).toBe('no-store');
-    expect(res.body.candidate).toMatchObject({ name: 'Nadia Petrova', email: 'nadia.petrova@mail.example', headline: 'Staff engineer, payments', location: 'Prague', source: 'Referral', resumeFileId: null });
+    expect(res.body.candidate).toMatchObject({ name: 'Ilse Marwood', email: 'ilse.marwood@mail.example', headline: 'Staff engineer, payments', location: 'Prague', source: 'Referral', resumeFileId: null });
     expect(res.body.application).toMatchObject({ candidateId: res.body.candidate.id, openingId: 'op-backend', stage: 'applied' });
     expect(res.body.application.history).toEqual([{ stage: 'applied', at: res.body.application.appliedAt, by: 'u-greta', reason: null }]);
     const list = (await GRETA.get('/candidates')).body.items as Array<{ candidate: { id: string }; opening: { id: string }; stage: string }>;
@@ -113,11 +114,88 @@ describe('add a candidate', () => {
 
   it('refuses the same email on the same opening with a 409, whatever its case, and allows it on another opening', async () => {
     expect((await GRETA.post('/candidates', BODY)).status).toBe(201);
-    const again = await GRETA.post('/candidates', { ...BODY, email: 'NADIA.PETROVA@mail.example' });
+    const again = await GRETA.post('/candidates', { ...BODY, email: 'ILSE.MARWOOD@mail.example' });
     expect(again.status).toBe(409);
     expect(again.body.error).toBe('This person is already a candidate for this opening.');
     expect((await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' })).status).toBe(201);
   });
+});
+
+// Gap audit 2026-11-20 (minor): one person applying to two openings stays one candidate.
+describe('the same person on a second opening', () => {
+  const candidateRows = () => interviewCandidatesFixture.rows().filter((c) => c.email.trim().toLowerCase() === 'ilse.marwood@mail.example');
+
+  it('adds an application to the existing candidate, whatever the case and spaces of the address, and answers with that candidate', async () => {
+    const first = (await GRETA.post('/candidates', BODY)).body;
+    const second = await GRETA.post('/candidates', { ...BODY, name: 'Ilse M.', email: '  ILSE.Marwood@Mail.Example ', openingId: 'op-ios' });
+    expect(second.status).toBe(201);
+    expect(second.body.candidate).toEqual(first.candidate);
+    expect(second.body.application).toMatchObject({ candidateId: first.candidate.id, openingId: 'op-ios', stage: 'applied' });
+    expect(second.body.application.history).toEqual([{ stage: 'applied', at: second.body.application.appliedAt, by: 'u-greta', reason: null }]);
+    expect(candidateRows()).toHaveLength(1);
+    const apps = interviewApplicationsFixture.rows().filter((a) => a.candidateId === first.candidate.id).map((a) => a.openingId).sort();
+    expect(apps).toEqual(['op-backend', 'op-ios']);
+  });
+
+  it('refuses a second application to an opening the candidate is already on with the 409, and writes nothing', async () => {
+    const first = (await GRETA.post('/candidates', BODY)).body;
+    const before = interviewApplicationsFixture.rows().length;
+    const again = await GRETA.post('/candidates', { ...BODY, email: BODY.email.toUpperCase() });
+    expect(again.status).toBe(409);
+    expect(again.body.error).toBe('This person is already a candidate for this opening.');
+    expect(interviewApplicationsFixture.rows().length).toBe(before);
+    expect(candidateRows().map((c) => c.id)).toEqual([first.candidate.id]);
+  });
+
+  it('answers the same 409 when the store\'s unique rule stops a matched add that passed the check at the same moment', async () => {
+    await GRETA.post('/candidates', BODY);
+    const spy = jest.spyOn(MemoryInterviewsStore.prototype, 'createApplication').mockRejectedValueOnce(new DuplicateCandidateError());
+    try {
+      const raced = await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' });
+      expect(raced.status).toBe(409);
+      expect(raced.body.error).toBe('This person is already a candidate for this opening.');
+    } finally { spy.mockRestore(); }
+  });
+
+  it('never matches an erased candidate: a new record is made and the erased one stays as it is', async () => {
+    const first = (await GRETA.post('/candidates', BODY)).body.candidate.id as string;
+    const row = interviewCandidatesFixture.rows().find((c) => c.id === first)!;
+    Object.assign(row, REDACTED_CONTACT);
+    const erased = structuredClone(row);
+    const res = await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' });
+    expect(res.status).toBe(201);
+    expect(res.body.candidate.id).not.toBe(first);
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === first)).toEqual(erased);
+    expect(interviewApplicationsFixture.rows().filter((a) => a.candidateId === first).map((a) => a.openingId)).toEqual(['op-backend']);
+  });
+
+  it('never matches a candidate on record without an address', async () => {
+    const first = (await GRETA.post('/candidates', BODY)).body.candidate.id as string;
+    interviewCandidatesFixture.rows().find((c) => c.id === first)!.email = '';
+    const res = await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' });
+    expect(res.status).toBe(201);
+    expect(res.body.candidate.id).not.toBe(first);
+  });
+
+  it('leaves records that already share an address as they are, and adds to the oldest of them', async () => {
+    const first = (await GRETA.post('/candidates', BODY)).body.candidate;
+    const twin = { ...structuredClone(first), id: 'cand-twin', createdAt: '2099-01-01T00:00:00.000Z' };
+    interviewCandidatesFixture.rows().push(twin);
+    const res = await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' });
+    expect(res.body.candidate.id).toBe(first.id);
+    expect(interviewCandidatesFixture.rows().find((c) => c.id === 'cand-twin')).toEqual(twin);
+  });
+
+  it('a matched add on a paused opening is still refused as not open, and the hiring manager and interviewer are still refused first', async () => {
+    await GRETA.post('/candidates', BODY);
+    interviewOpeningsFixture.rows().find((o) => o.id === 'op-ios')!.state = 'paused';
+    expect((await GRETA.post('/candidates', { ...BODY, openingId: 'op-ios' })).status).toBe(409);
+    expect((await AMARA.post('/candidates', { ...BODY, openingId: 'op-ios' })).status).toBe(403);
+    expect((await HUGO.post('/candidates', { ...BODY, openingId: 'op-ios' })).status).toBe(403);
+  });
+});
+
+describe('add a candidate, continued', () => {
 
   it('answers the same 409 when the store\'s unique rule stops a second add that passed the check at the same moment (hardening H5)', async () => {
     const spy = jest.spyOn(MemoryInterviewsStore.prototype, 'createCandidate').mockRejectedValueOnce(new DuplicateCandidateError());

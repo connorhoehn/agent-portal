@@ -383,6 +383,24 @@ export class SqlInterviewsStore implements InterviewsStore {
     return rows[0] ? { candidate: structuredClone(candidate), application: applicationFromRow(rows[0]) } : null;
   }
 
+  /** One more application for a candidate on record; the address key is the candidate's own, and an address-less (erased) candidate gets none. */
+  static readonly CREATE_APPLICATION_SQL = `INSERT INTO interview_applications (id, candidate_id, opening_id, stage, applied_at, history, email_key)
+  SELECT :application_id, c.id, :opening_id, :stage, CAST(:applied_at AS TIMESTAMPTZ), CAST(:history AS JSONB), lower(btrim(c.email))
+  FROM interview_candidates c WHERE c.id = :candidate_id AND btrim(c.email) <> ''
+  ON CONFLICT (id) DO NOTHING
+  RETURNING ${SqlInterviewsStore.APPLICATION_COLUMNS}`;
+
+  async createApplication(application: Application): Promise<Application | null> {
+    const rows = await this.exec(SqlInterviewsStore.CREATE_APPLICATION_SQL, [
+      textParam('application_id', application.id), textParam('candidate_id', application.candidateId), textParam('opening_id', application.openingId),
+      textParam('stage', application.stage), textParam('applied_at', application.appliedAt), textParam('history', JSON.stringify(application.history)),
+    ]).catch((e: unknown) => {
+      if (/interview_applications_opening_email_key/.test(String((e as Error)?.message ?? e))) throw new DuplicateCandidateError();
+      throw e;
+    });
+    return rows[0] ? applicationFromRow(rows[0]) : null;
+  }
+
   /** cas() for an interview. */
   private async casInterview(id: string, written: Record<string, unknown>[]): Promise<WriteResult<Interview>> {
     if (written[0]) return { ok: true, row: interviewFromRow(written[0]) };

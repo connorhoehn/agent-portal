@@ -12,6 +12,7 @@ import type { Application, Candidate } from '../types.js';
 function tablesExec(): SqlExec {
   const candidates: Array<Record<string, unknown>> = [];
   const apps: Array<Record<string, unknown>> = [];
+  const keys = new Map<string, string>(); // the email_key column, by application id
   return async (sql, params: SqlParameter[] = []) => {
     const b = new Map(params.map((p) => [p.name!, p.value!.isNull ? null : p.value!.stringValue ?? p.value!.longValue ?? null]));
     if (sql === LIST_CANDIDATES_SQL) return [...candidates];
@@ -23,6 +24,19 @@ function tablesExec(): SqlExec {
       const row = { id: b.get('application_id'), candidate_id: b.get('candidate_id'), opening_id: b.get('opening_id'), stage: b.get('stage'),
         applied_at: String(b.get('applied_at')).replace('T', ' ').replace('Z', ''), history: b.get('history') };
       apps.push(row);
+      keys.set(String(row.id), `${String(b.get('opening_id'))}\u0000${String(b.get('email')).trim().toLowerCase()}`);
+      return [row];
+    }
+    if (sql === SqlInterviewsStore.CREATE_APPLICATION_SQL) {
+      // INSERT … SELECT FROM interview_candidates WHERE id = :candidate_id AND btrim(email) <> '', then the unique index.
+      const c = candidates.find((x) => x['id'] === b.get('candidate_id') && String(x['email']).trim() !== '');
+      if (!c || apps.some((a) => a['id'] === b.get('application_id'))) return [];
+      const key = `${String(b.get('opening_id'))}\u0000${String(c['email']).trim().toLowerCase()}`;
+      if ([...keys.values()].includes(key)) throw new Error('duplicate key value violates unique constraint "interview_applications_opening_email_key"');
+      const row = { id: b.get('application_id'), candidate_id: c['id'], opening_id: b.get('opening_id'), stage: b.get('stage'),
+        applied_at: String(b.get('applied_at')).replace('T', ' ').replace('Z', ''), history: b.get('history') };
+      apps.push(row);
+      keys.set(String(row.id), key);
       return [row];
     }
     throw new Error(`unexpected statement: ${sql}`);
@@ -59,12 +73,54 @@ describe.each([
   });
 });
 
+// Gap audit 2026-11-20 (minor): a second opening for a candidate on record is one more application, never a second record.
+describe.each([
+  ['memory', () => new MemoryInterviewsStore() as InterviewsStore],
+  ['sql', () => new SqlInterviewsStore(tablesExec()) as InterviewsStore],
+])('the %s store\'s createApplication', (_name, make) => {
+  const second = (id = 'app-new2', candidateId = 'cand-new1', openingId = 'op-ios'): Application => ({ ...application(id, candidateId), openingId });
+
+  it('adds the application to the candidate on record and the list shows it; no candidate is added', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    const before = (await store.listCandidates()).length;
+    expect(await store.createApplication(second())).toEqual(second());
+    expect((await store.listApplications()).filter((a) => a.candidateId === 'cand-new1').map((a) => a.openingId).sort()).toEqual(['op-backend', 'op-ios']);
+    expect((await store.listCandidates()).length).toBe(before);
+  });
+
+  it('a taken id, an unknown candidate and a candidate without an address write nothing and answer null', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    await store.createCandidate({ ...candidate('cand-blank'), email: '' }, application('app-blank', 'cand-blank'));
+    const apps = (await store.listApplications()).length;
+    expect(await store.createApplication(second('app-new1'))).toBeNull();
+    expect(await store.createApplication(second('app-new3', 'cand-nobody'))).toBeNull();
+    expect(await store.createApplication(second('app-new4', 'cand-blank'))).toBeNull();
+    expect((await store.listApplications()).length).toBe(apps);
+  });
+
+  it('the opening already holding the address throws DuplicateCandidateError and writes nothing', async () => {
+    const store = make();
+    await store.createCandidate(candidate(), application());
+    const apps = (await store.listApplications()).length;
+    await expect(store.createApplication(second('app-new5', 'cand-new1', 'op-backend'))).rejects.toBeInstanceOf(DuplicateCandidateError);
+    expect((await store.listApplications()).length).toBe(apps);
+  });
+});
+
 describe('the statement and the schema', () => {
   const schema = readFileSync(join(__dirname, '..', '..', '..', '..', '..', 'schema', 'interviews_schema.sql'), 'utf8');
   it('names only declared columns', () => {
     const cols = /INSERT INTO interview_candidates \(([^)]+)\)/.exec(SqlInterviewsStore.CREATE_CANDIDATE_SQL)![1]!.split(',').map((c) => c.trim());
     for (const col of cols) expect(schema).toMatch(new RegExp(`\\n  ${col}\\s`));
     expect(SqlInterviewsStore.CREATE_CANDIDATE_SQL).toContain('FROM c');
+  });
+  it('the application add names only declared columns, keys on the candidate\'s own address and skips one without', () => {
+    const cols = /INSERT INTO interview_applications \(([^)]+)\)/.exec(SqlInterviewsStore.CREATE_APPLICATION_SQL)![1]!.split(',').map((c) => c.trim());
+    for (const col of cols.filter((c) => c !== 'email_key')) expect(schema).toMatch(new RegExp(`\\n  ${col}\\s`));
+    expect(SqlInterviewsStore.CREATE_APPLICATION_SQL).toContain('lower(btrim(c.email))');
+    expect(SqlInterviewsStore.CREATE_APPLICATION_SQL).toContain("btrim(c.email) <> ''");
   });
 });
 
