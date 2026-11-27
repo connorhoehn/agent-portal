@@ -13,11 +13,20 @@ describe('interviewsSettings', () => {
     expect(all.map((s) => s.name)).toEqual([
       'INTERVIEWS_ENABLED', 'INTERVIEWS_MEDIA_RETENTION_DAYS', 'INTERVIEWS_RECORD_RETENTION_YEARS', 'INTERVIEWS_DELETION_WITHIN_DAYS',
       'INTERVIEWS_SOON_MINUTES', 'INTERVIEWS_REQUIRED_CONSENTS', 'INTERVIEWS_INTERVIEW_CAP_USD', 'INTERVIEWS_RUN_PRICE_USD', 'INTERVIEWS_GUEST_REALTIME',
+      'INTERVIEWS_RUN_BACKEND', 'INTERVIEWS_CODE_INTERPRETER_ID',
     ]);
     for (const s of all) expect([s.name, s.value]).toEqual([s.name, s.default]);
     expect(byName({})['INTERVIEWS_SOON_MINUTES']!.default).toBe(15);
     expect(byName({})['INTERVIEWS_REQUIRED_CONSENTS']!.default).toEqual([]);
     expect(byName({})['INTERVIEWS_MEDIA_RETENTION_DAYS']!.default).toBe(90);
+  });
+
+  it('lists the runner choice read-only, as the selector reads it', () => {
+    expect(byName({})['INTERVIEWS_RUN_BACKEND']).toMatchObject({ value: 'mock', default: 'mock' });
+    const s = byName({ INTERVIEWS_RUN_BACKEND: 'agentcore', INTERVIEWS_CODE_INTERPRETER_ID: ' ci-1 ' });
+    expect(s['INTERVIEWS_RUN_BACKEND']!.value).toBe('agentcore');
+    expect(s['INTERVIEWS_CODE_INTERPRETER_ID']).toMatchObject({ value: 'ci-1', default: '' });
+    expect(byName({ INTERVIEWS_RUN_BACKEND: 'lambda' })['INTERVIEWS_RUN_BACKEND']!.value).toBe('none');
   });
 
   it('shows the values the readers use, a bad one as the reader\'s fallback', () => {

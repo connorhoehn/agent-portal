@@ -241,7 +241,8 @@ describe('the panel side', () => {
 
   it('/interviews/:id/runs is the runs list, not the interview read', async () => {
     const res = await HUGO.get(`${API}/${IV}/runs`);
-    expect(Object.keys(res.body)).toEqual(['runs']);
+    expect(Object.keys(res.body)).toEqual(['runs', 'runner']);
+    expect(res.body.runner).toEqual({ kind: 'simulated' });
   });
 
   it('a guest cookie is no session on the panel\'s routes', async () => {
@@ -300,7 +301,7 @@ describe('the guest side', () => {
     await runsSettled(OTHER);
     const cookie = await guestOf();
     expect((await guest(cookie).get(`${G}/run-00001`)).status).toBe(404);
-    expect((await guest(cookie).get(G)).body).toEqual({ runs: [] });
+    expect((await guest(cookie).get(G)).body).toEqual({ runs: [], runner: { kind: 'simulated' } });
   });
 
   it('with the flag off every guest route is the ordinary not-found', async () => {

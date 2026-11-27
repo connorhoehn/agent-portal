@@ -17,6 +17,7 @@ export { createMockExecutor, MockExecutor, MOCK_MARKERS, MOCK_RUNTIME_VERSIONS, 
 export { createDockerExecutor, DockerExecutor, DOCKER_BACKEND, DOCKER_RUNTIME_VERSIONS, DOCKER_SENTENCES } from './docker-executor.js';
 export { DOCKER_RUNTIMES, DOCKER_IMAGES } from './docker-runtimes.js';
 export { createExecutor, runBackend, RUN_BACKEND_SETTING, CODE_INTERPRETER_SETTING, type RunBackend } from './select.js';
+export { runnerKindOf, runnerView, type RunnerKind, type RunnerView } from './runner-kind.js';
 export { runStore, setRunStore, MemoryRunStore, type RunPerson, type RunRecord, type RunSide, type RunStore, type StoredRunEvent } from './store.js';
 export {
   MAX_RUNS_PER_INTERVIEW, DEFAULT_RUN_PRICE_USD, RUN_PRICE_SETTING, runPriceUsd, checkRunBody, startRun, listRuns, getRun, cancelRun, openRunEvents,

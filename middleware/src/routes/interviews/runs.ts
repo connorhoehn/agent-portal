@@ -24,7 +24,7 @@ import { indexFor, param } from '../../lib/interviews/request.js';
 import { interviewsStore } from '../../lib/interviews/store-select.js';
 import type { Interview } from '../../lib/interviews/types.js';
 import {
-  cancelRun, checkRunBody, eventId, getRun, listRuns, MAX_RUNS_PER_INTERVIEW, openRunEvents, runView, startRun,
+  cancelRun, checkRunBody, eventId, getRun, listRuns, MAX_RUNS_PER_INTERVIEW, openRunEvents, runnerView, runView, startRun,
   type RunPerson, type RunRecord, type RunView,
 } from '../../lib/interviews/runs/index.js';
 import { endSSE, initSSE, writeSSE } from '../../lib/sse.js';
@@ -120,7 +120,7 @@ runsRouter.post('/interviews/:id/runs', asyncHandler(async (req, res) => {
 runsRouter.get('/interviews/:id/runs', asyncHandler(async (req, res) => {
   const { interview } = await seatOrThrow(req);
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ runs: (await listRuns(interview.id)).map(runView) });
+  res.json({ runs: (await listRuns(interview.id)).map(runView), runner: runnerView() });
 }));
 
 runsRouter.get('/interviews/:id/runs/events', asyncHandler(async (req, res) => {

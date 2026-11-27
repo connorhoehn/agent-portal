@@ -12,9 +12,10 @@ import { DEFAULT_PERIODS, DELETION_DAYS_SETTING, MEDIA_DAYS_SETTING, RECORD_YEAR
 import { SOON_MINUTES, SOON_MINUTES_SETTING, soonMinutes } from './soon.js';
 import { REQUIRED_CONSENTS_SETTING, requiredConsents } from './consent/required.js';
 import { DEFAULT_INTERVIEW_CAP_USD, defaultInterviewCapUsd } from './spend.js';
+import { CODE_INTERPRETER_SETTING, RUN_BACKEND_SETTING, runBackend } from './runs/select.js';
 import { DEFAULT_RUN_PRICE_USD, RUN_PRICE_SETTING, runPriceUsd } from './runs/service.js';
 
-export type SettingValue = boolean | number | string[];
+export type SettingValue = boolean | number | string[] | string;
 
 export interface InterviewsSetting {
   name: string;
@@ -23,6 +24,10 @@ export interface InterviewsSetting {
   /** What it governs, in one line, for a checklist. */
   about: string;
 }
+
+// The backend the selector picks, as the pad's runner label is derived from it. The selector throws on a value it refuses;
+// no executor can be built then, so it reads as `none`, which is what the pad shows.
+const backendOf = (env: NodeJS.ProcessEnv): string => { try { return runBackend(env); } catch { return 'none'; } };
 
 const NO_WARN = (): void => undefined;
 
@@ -39,5 +44,7 @@ export function interviewsSettings(env: NodeJS.ProcessEnv = process.env): Interv
     { name: 'INTERVIEWS_INTERVIEW_CAP_USD', value: defaultInterviewCapUsd(env), default: DEFAULT_INTERVIEW_CAP_USD, about: 'Dollars an interview may spend when its opening sets no cap.' },
     { name: RUN_PRICE_SETTING, value: runPriceUsd(env), default: DEFAULT_RUN_PRICE_USD, about: 'Dollars held and booked for each run of the code pad (the mock executor\'s price).' },
     { name: 'INTERVIEWS_GUEST_REALTIME', value: guestRealtimeEnabled(env), default: guestRealtimeEnabled({}), about: 'A candidate may hold a realtime token for the call.' },
+    { name: RUN_BACKEND_SETTING, value: backendOf(env), default: backendOf({}), about: 'Who runs the code pad: mock (scripted example output, the pad says "simulated"), docker (a developer\'s machine only) or agentcore (the Code Interpreter below); read-only here.' },
+    { name: CODE_INTERPRETER_SETTING, value: String(env[CODE_INTERPRETER_SETTING] ?? '').trim(), default: '', about: 'The AgentCore Code Interpreter the agentcore runner uses; read-only here.' },
   ];
 }

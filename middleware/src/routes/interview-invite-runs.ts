@@ -22,7 +22,7 @@ import { GUEST_DISPLAY_NAME, guestSubject } from '../lib/interviews/invite/realt
 import { inviteStore } from '../lib/interviews/invite/store.js';
 import { interviewsStore } from '../lib/interviews/store-select.js';
 import type { Interview } from '../lib/interviews/types.js';
-import { cancelRun, getRun, guestRunView, listRuns, type RunPerson } from '../lib/interviews/runs/index.js';
+import { cancelRun, getRun, guestRunView, listRuns, runnerView, type RunPerson } from '../lib/interviews/runs/index.js';
 import { interviewsFlagGate } from './interviews.js';
 import { answerStart, serveRunStream, STREAM_GRACE_MS } from './interviews/runs.js';
 
@@ -49,7 +49,7 @@ runsGuestRouter.post('/runs', interviewsFlagGate, requireGuest(), asyncHandler(a
 runsGuestRouter.get('/runs', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
   const seat = await guestRunSeat(req);
   if (!seat) { res.status(404).json(GUEST_REFUSAL); return; }
-  res.json({ runs: (await listRuns(seat.interview.id)).map(guestRunView) });
+  res.json({ runs: (await listRuns(seat.interview.id)).map(guestRunView), runner: runnerView() });
 }));
 
 runsGuestRouter.get('/runs/events', interviewsFlagGate, requireGuest(), asyncHandler(async (req, res) => {
