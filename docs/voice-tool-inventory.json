@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-27T23:28:32.973Z",
-  "serverHandlerSha": "5c1e8edd031297a73699df16864b1c03bbb4fc3863a5cfc6c565235639237615"
+  "capturedAt": "2026-11-28T01:08:39.794Z",
+  "serverHandlerSha": "452221ce187a5ee0fe49f7075ffba5a5b1d83765c76cc236c890aaad19979bc9"
  },
  "summary": {
   "routes": 1014,
