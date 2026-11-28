@@ -414,9 +414,6 @@ try {
   report.requests.push(ex);
   mark(`after "examples": on ${ex.landedOn}, example tiles visible ${ex.examplesVisible}`);
   if (!/\/iq\/decks\/new/.test(page.url())) { note(`the assistant's "examples" left the new-deck page for ${ex.landedOn}; Vera goes back by hand`); await sleep(3000); await page.goBack({ waitUntil: 'domcontentloaded' }).catch(() => undefined); await page.getByTestId(`${IP}-new-submit`).waitFor({ timeout: 15_000 }).catch(() => undefined); }
-  if (!(await page.locator(`button[data-testid^="${IP}-template-"]`).first().isVisible().catch(() => false))) {
-    await press(page.getByText('From an example', { exact: true }).first());
-  }
   await page.locator(`button[data-testid^="${IP}-template-"]`).first().waitFor({ timeout: 15_000 });
   await sleep(2000);
   await press(page.getByTestId(`${IP}-template-status-update`));
@@ -424,7 +421,7 @@ try {
   await press(page.getByTestId(`${IP}-new-title`));
   await page.getByTestId(`${IP}-new-title`).pressSequentially('Auth migration: November status', { delay: 45 });
   await sleep(600);
-  await press(page.getByTestId(`${IP}-new-submit`));
+  await press(page.getByTestId(`${IP}-new-template-submit`));
   await page.waitForURL(/\/iq\/decks\/(?!new)[^/?#]+$/, { timeout: 30_000 });
   deck.id = deckIdOf(); deck.url = new URL(page.url()).pathname;
   await stageLoaded();
@@ -503,7 +500,9 @@ try {
   await sleep(1200);
   report.api.formIds = await testIds(`^${E}-slide-`);
   const newId = (await testIds(`^${E}-slide-select-`)).find((i) => !idsBefore.includes(i))?.replace(`${E}-slide-select-`, '') ?? null;
-  const thumbOf = () => page.evaluate((t) => document.querySelector(`[data-testid="${t}"]`)?.innerText ?? '', `${E}-slide-thumb-${newId}`).catch(() => '');
+  // The thumbnail is a painted image with no text to read: compare its image source (the element's, or its img's).
+  const thumbOf = () => page.evaluate((t) => { const el = document.querySelector(`[data-testid="${t}"]`); const img = el?.tagName === 'IMG' ? el : el?.querySelector('img'); return img?.getAttribute('src') ?? el?.innerHTML ?? ''; }, `${E}-slide-thumb-${newId}`).catch(() => '');
+  await sleep(1500); // the first preview of the new slide lands after the editor's debounce
   const thumbBefore = await thumbOf();
   const title = page.getByTestId(`${E}-slide-title`);
   if (await title.count()) { await press(title); await title.fill(''); await title.pressSequentially('Two numbers that matter', { delay: 45 }); await sleep(400); }
@@ -515,7 +514,8 @@ try {
     if (await labels.nth(i).count()) { await press(labels.nth(i)); await labels.nth(i).fill(''); await labels.nth(i).pressSequentially(l, { delay: 45 }); typed.push(l); }
     await sleep(500);
   }
-  const previewed = await until(async () => ((await thumbOf()) !== thumbBefore ? Date.now() : null), 15_000, 200);
+  // The preview is debounced: wait for the thumbnail's source to change after the last keystroke.
+  const previewed = await until(async () => { const now = await thumbOf(); return now && now !== thumbBefore ? Date.now() : null; }, 15_000, 250);
   step('key-figures', typed.length >= 2 && !!previewed, `typed ${JSON.stringify(typed)}; new slide ${newId}; its preview changed: ${!!previewed}${typed.length < 2 ? `; form ids ${JSON.stringify(report.api.formIds)}` : ''}`);
   await sleep(2500);
   const saveBtn = page.getByTestId(`${IP}-save`);
