@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, DetailSection, FormField, InlineAlert, Inline, Input, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, Disclosure, FormField, InlineAlert, Inline, Input, PageFrame, PageSection, Stack, T, useViewportWidth } from '@connorhoehn/ui-components/shared';
 import { TemplateGallery, type DeckTemplate } from '@connorhoehn/ui-components/doc-editor';
 import { useFlushTrailItems } from '../shell/FlushPage';
 import { listDeckTemplates, type DeckTemplateSummary, type DeckTenantId } from './deckApi';
@@ -48,6 +48,9 @@ export interface NewDeckPageProps {
   exampleNote?: string;
 }
 
+/** Below this window width the facts choice is one row (its name and its button) with its options folded under it. */
+const COMPACT_FACTS_BELOW = 640;
+
 const EXAMPLE_NOTE = 'The example slides are about an invented organisation and cite it as their source; the editor marks each slide until you replace its content and sources with your own.';
 
 export const templateTiles = (templates: readonly DeckTemplateSummary[]): DeckTemplate[] => templates.map((t) => ({
@@ -67,6 +70,7 @@ export function NewDeckPage(props: NewDeckPageProps) {
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState<NewDeckSource | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const compactFacts = useViewportWidth() < COMPACT_FACTS_BELOW;
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -94,9 +98,16 @@ export function NewDeckPage(props: NewDeckPageProps) {
     }
   }
 
-  // No action in the header: beside the title it truncated the heading at phone width. Each choice carries its own button.
+  const factsBody = facts ? (
+    <Stack gap="xs">
+      <Inline gap="md" align="end" wrap>{facts.fields}</Inline>
+      {facts.note && <T size="xs" tone="secondary" wrap>{facts.note}</T>}
+    </Stack>
+  ) : null;
+  // Each choice carries its own button; the header has none, and its title wraps rather than truncating at phone width.
+  // The sections are PageSection, h2 under the frame's h1 (ui-components 2.549.0).
   return (
-    <PageFrame title={props.title} description={props.description} breadcrumbs={breadcrumbs} data-testid={`${testIdPrefix}-new`}>
+    <PageFrame title={props.title} titleOverflow="wrap" description={props.description} breadcrumbs={breadcrumbs} data-testid={`${testIdPrefix}-new`}>
       <Stack gap="lg">
         {props.subject}
         {denied ? <InlineAlert tone="info" data-testid={`${testIdPrefix}-new-denied`}>{denied}</InlineAlert> : (
@@ -105,16 +116,14 @@ export function NewDeckPage(props: NewDeckPageProps) {
               {({ id }) => <Input id={id} value={title} placeholder={props.titlePlaceholder} onChange={(e) => setTitle(e.target.value)} data-testid={`${testIdPrefix}-new-title`} />}
             </FormField>
             {facts && (
-              <DetailSection title={facts.label} as="h2" data-testid={`${testIdPrefix}-new-facts`}
+              <PageSection size="sm" title={facts.label} data-testid={`${testIdPrefix}-new-facts`}
                 actions={<Button variant="primary" size="sm" disabled={!canStart} onClick={() => { void go('facts'); }} data-testid={`${testIdPrefix}-new-submit`}>
                   {busy === 'facts' ? facts.busyLabel : facts.submitLabel}</Button>}>
-                <Stack gap="xs">
-                  <Inline gap="md" align="end" wrap>{facts.fields}</Inline>
-                  {facts.note && <T size="xs" tone="secondary" wrap>{facts.note}</T>}
-                </Stack>
-              </DetailSection>
+                {/* At phone width the options fold away, so the examples show on arrival; every option stays one tap away. */}
+                {compactFacts ? <Disclosure density="compact" summary={<T as="span" size="xs" weight="medium">Options</T>} data-testid={`${testIdPrefix}-new-facts-options`}>{factsBody}</Disclosure> : factsBody}
+              </PageSection>
             )}
-            <DetailSection title="From an example" as="h2" data-testid={`${testIdPrefix}-new-examples`}
+            <PageSection size="sm" title="From an example" data-testid={`${testIdPrefix}-new-examples`}
               actions={<Button variant={facts ? 'secondary' : 'primary'} size="sm" disabled={!canStart || !chosen} onClick={() => { void go('example'); }}
                 data-testid={`${testIdPrefix}-new-template-submit`}>{busy === 'example' ? 'Creating…' : chosen ? `Create from ${chosen.title}` : 'Choose an example'}</Button>}>
               {/* The note on its own wrapping line: as a hint beside the title it truncated at phone width. */}
@@ -127,7 +136,7 @@ export function NewDeckPage(props: NewDeckPageProps) {
                   testIdPrefix={`${testIdPrefix}-template`} />
               )}
               {chosen && <T size="xs" tone="secondary" wrap>{chosen.title}: {chosen.slideCount} slides, {chosen.layouts.length} layouts.</T>}
-            </DetailSection>
+            </PageSection>
           </>
         )}
       </Stack>
