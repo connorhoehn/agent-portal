@@ -489,7 +489,8 @@ try {
   const lastReal = page.locator(`[data-testid^="${E}-slide-select-"]:not([data-testid$="-sources"])`).last();
   await press(lastReal); await sleep(1200);
   const idsBefore = await testIds(`^${E}-slide-select-`);
-  await press(page.getByTestId(`${E}-toolbar-more`));
+  // "All layouts…" is the last row of the toolbar's Insert menu (ui-components 2.549.0 has no ⋯ menu there).
+  await press(page.getByTestId(`${E}-toolbar-insert`));
   await press(page.getByTestId(`${E}-toolbar-insert-all`));
   await page.getByTestId(`${E}-layout-panel`).waitFor({ timeout: 10_000 });
   report.api.galleryIds = await testIds(`^${E}-layout-gallery-`);
