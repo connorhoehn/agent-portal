@@ -30,3 +30,12 @@ test('apply posts the base and the operations; a stale base is a conflict; a ref
     await assert.rejects(applyDeckOperations('orgiq', 'd1', { baseRevisionId: 'r1', operations: [] }), (e: unknown) => e instanceof DeckApiError && e.status === 403 && /budgets read tier/.test(e.message));
   } finally { globalThis.fetch = orig; }
 });
+
+test('filling a chart from a report says the slide is renamed, on the panel and on the voice card', async () => {
+  const { reportTitleNote, reportRenameClause } = await import('../deckApi.ts');
+  assert.equal(reportTitleNote('Depots live by week', 'spend-by-initiative', '30d'), 'The slide\'s title "Depots live by week" becomes "Spend by initiative, the last 30 days".');
+  assert.equal(reportTitleNote('Spend by initiative, this month', 'spend-by-initiative'), 'The slide keeps its title, "Spend by initiative, this month".');
+  assert.equal(reportTitleNote('Plan', 'runs-by-outcome'), 'The slide\'s title "Plan" becomes the report\'s title.');
+  assert.equal(reportRenameClause('Depots live by week', 'jobs-by-status'), ', renaming it from "Depots live by week" to "Agent jobs by status"');
+  assert.equal(reportRenameClause('', 'jobs-by-status'), ', titling it "Agent jobs by status"');
+});

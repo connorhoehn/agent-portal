@@ -13,7 +13,7 @@
 import { UPDATE_ACTIONS } from './catalogue.ts';
 import { done, failed, once, refused, NOT_ON_PAGE, type ConfirmPlan, type ToolContext, type ToolResult } from './tools.ts';
 import type { PageDeck } from './pageContext.ts';
-import { announceDeckRevision, deckOpPaths, type DeckOperation } from '../../components/decks/deckApi.ts';
+import { announceDeckRevision, deckOpPaths, reportRenameClause, type DeckOperation } from '../../components/decks/deckApi.ts';
 import { plainDeckRefusal } from '../../components/decks/deckRefusal.ts';
 
 type Rec = Record<string, unknown>;
@@ -129,7 +129,8 @@ function planOne(op: Rec, deck: PageDeck, tenant: string): { op: DeckOperation; 
       const label = REPORT_LABELS[report] ?? report;
       return {
         op: { op: 'set_chart', slideId: deck.slides[s.index]!.id, kind: kind as 'bar', report: { report, ...(period ? { params: { period } } : {}) } },
-        line: `Fill ${pos(s.index)} with ${article(CHART_WORDS[kind] ?? kind)} ${CHART_WORDS[kind] ?? kind} chart from ${label}${period ? ` (${period === 'month' ? 'this month' : `the last ${period === '7d' ? '7' : '30'} days`})` : ''}`,
+        // The report names the slide (docs/deck-edit-operations.md, set_chart): the card says the rename before it happens.
+        line: `Fill ${pos(s.index)} with ${article(CHART_WORDS[kind] ?? kind)} ${CHART_WORDS[kind] ?? kind} chart from ${label}${period ? ` (${period === 'month' ? 'this month' : `the last ${period === '7d' ? '7' : '30'} days`})` : ''}${reportRenameClause(deck.slides[s.index]!.title, report, period)}`,
       };
     }
     case 'set_theme': {

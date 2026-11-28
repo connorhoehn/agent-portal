@@ -46,6 +46,7 @@ import { initiativeDecksFixture, initiativeDeckRevisionsFixture } from '../../mo
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import { trimForChart, MAX_DECK_OPERATIONS } from '../../lib/deck-shared/index.js';
+import { figuresReadAt, REPORT_NOTE_LINE } from '../../lib/deck-shared/reports.js';
 import { getSpendReport } from '../../providers/spend-report.js';
 import { queueStats } from '../../providers/agent-jobs.js';
 import { findingStats } from '../../providers/org-sweeps.js';
@@ -239,8 +240,25 @@ describe('charts from reports', () => {
     expect(slide.layout).toBe('chart');
     expect(slide.chart).toEqual({ kind: 'pie', labels: expected.labels.map((l) => l.slice(0, 40)), series: expected.series });
     expect(slide.sources[0]).toMatchObject({ documentId: 'report:spend-by-initiative', title: expect.stringContaining(report.periodStart.slice(0, 10)) });
-    expect(slide.notes).toMatch(/Chart data read from the spend-by-initiative report at \d{4}-\d{2}-\d{2}T/);
+    // Read aloud: a plain date and time, never a machine timestamp.
+    expect(slide.notes).toMatch(/^Figures read \d{1,2} [A-Z][a-z]+ \d{4}, \d{2}:\d{2} UTC from the report "Spend by initiative, /m);
+    expect(slide.notes).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
     if (groups.length > 6) expect(res.body.summary).toContain('top 5 and Other');
+    // The slide takes the report's title, and the summary names the old and the new one.
+    expect(slide.title).toMatch(/^Spend by initiative, /);
+    expect(res.body.summary).toContain(`renamed it from "${made.spec.slides[1]!.title}" to "${slide.title}"`);
+    // Filled again: still one "Figures read" line; a title passed with the operation wins over the report's.
+    const again = await ops(app, made.deckId, res.body.revision.id, [{ op: 'set_chart', slideId, kind: 'pie', title: 'Where the money went', report: { report: 'spend-by-initiative', params: { period: '7d' } } }]);
+    expect(again.status).toBe(201);
+    const after = (await specOf(app, made.deckId, again.body.revision.id)).slides.find((s) => s.id === slideId)!;
+    expect(after.notes!.split('\n').filter((l) => l.startsWith('Figures read '))).toHaveLength(1);
+    expect(after.title).toBe('Where the money went');
+    expect(again.body.summary).toContain('titled "Where the money went"');
+  });
+
+  it('figuresReadAt says the time in words a presenter reads', () => {
+    expect(figuresReadAt(new Date('2026-11-29T14:05:07.951Z'))).toBe('Figures read 29 November 2026, 14:05 UTC');
+    expect(REPORT_NOTE_LINE.test('Chart data read from the spend-by-initiative report at 2026-11-28T00:05:07.951Z.')).toBe(true);
   });
 
   it('a money report below the budget tier is refused (403), never charted without dollars', async () => {

@@ -68,8 +68,8 @@ test('add_slide: the card says what changes in words, and the request is the con
 
 test('every operation reads as a sentence on the card, and each maps to its typed operation', async () => {
   const cases: Array<[Record<string, unknown>, string, Record<string, unknown>]> = [
-    [{ op: 'set_chart', slide: '4', kind: 'pie', report: 'spend-by-initiative' }, 'Fill slide 4 with a pie chart from Spend by initiative.', { op: 'set_chart', slideId: 'work-status', kind: 'pie', report: { report: 'spend-by-initiative' } }],
-    [{ op: 'set_chart', slide: 'this', kind: 'stacked-bar', report: 'runs-by-outcome', period: '7d' }, 'Fill slide 3 with a stacked bar chart from Runs by outcome (the last 7 days).', { op: 'set_chart', slideId: 'summary', kind: 'stacked-bar', report: { report: 'runs-by-outcome', params: { period: '7d' } } }],
+    [{ op: 'set_chart', slide: '4', kind: 'pie', report: 'spend-by-initiative' }, 'Fill slide 4 with a pie chart from Spend by initiative, renaming it from "Work status" to "Spend by initiative, this month".', { op: 'set_chart', slideId: 'work-status', kind: 'pie', report: { report: 'spend-by-initiative' } }],
+    [{ op: 'set_chart', slide: 'this', kind: 'stacked-bar', report: 'runs-by-outcome', period: '7d' }, 'Fill slide 3 with a stacked bar chart from Runs by outcome (the last 7 days), renaming it from "Where we are" to the report\'s title.', { op: 'set_chart', slideId: 'summary', kind: 'stacked-bar', report: { report: 'runs-by-outcome', params: { period: '7d' } } }],
     [{ op: 'set_title', slide: '2', title: 'What we cover' }, 'Rename slide 2 to "What we cover".', { op: 'set_title', slideId: 'agenda', title: 'What we cover' }],
     [{ op: 'move_slide', slide: '5', after: '1' }, 'Move slide 5 after slide 1.', { op: 'move_slide', slideId: 'closing', after: 'title' }],
     [{ op: 'move_slide', slide: '3', after: 'start' }, 'Move slide 3 to the start.', { op: 'move_slide', slideId: 'summary', to: 'start' }],
@@ -223,6 +223,6 @@ test('the voice says what was done in words: slide numbers and the report\'s nam
   assert.equal(spokenDone('3 changes to Auth'), 'Made 3 changes to Auth.');
   const r = await update({ operations: [{ op: 'set_chart', slide: '4', kind: 'pie', report: 'runs-by-outcome' }] });
   const say = String(r.result.output['say']);
-  assert.match(say, /^Filled slide 4 with a pie chart from Runs by outcome\./);
+  assert.match(say, /^Filled slide 4 with a pie chart from Runs by outcome, renaming it from "Work status" to the report's title\./);
   assert.doesNotMatch(say, /s-[0-9a-f]{8}|runs-by-outcome|work-status/);
 });

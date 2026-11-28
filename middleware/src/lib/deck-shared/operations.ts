@@ -18,6 +18,7 @@ import {
 import { BUILTIN_THEMES } from '@connorhoehn/realtime-modules/deck/layout';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { layoutSpec } from './render.js';
+import { REPORT_NOTE_LINE } from './reports.js';
 import { LAYOUT_PAYLOAD, LAYOUT_TITLE, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE } from './slide-starters.js';
 
 export { LAYOUT_PAYLOAD, SLIDE_LAYOUTS, UNSOURCED_SOURCE };
@@ -67,7 +68,7 @@ export interface ResolvedChart {
   note: string;
   /** One phrase for the revision summary ("Spend by initiative, this month, top 5 and Other"). */
   summary: string;
-  /** The report title, used as the slide title when the slide had a placeholder one. */
+  /** The report title: the slide takes it unless the operation gave a title. */
   title: string;
 }
 
@@ -187,7 +188,6 @@ function explicitChart(kind: DeckChart['kind'], raw: unknown): DeckChart {
   return structuredClone(chart);
 }
 
-const PLACEHOLDER_TITLES = new Set(Object.values(LAYOUT_TITLE));
 
 /**
  * Applies `body.operations` to the deck's head and saves the result as a new
@@ -343,7 +343,8 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             break;
           }
           case 'set_chart': {
-            only(op, ['slideId', 'kind', 'data', 'report']);
+            only(op, ['slideId', 'kind', 'data', 'report', 'title']);
+            const givenTitle = op['title'] === undefined ? undefined : str(op, 'title');
             const slide = editable(op);
             const kind = op['kind'];
             if (kind !== 'bar' && kind !== 'line' && kind !== 'stacked-bar' && kind !== 'pie') throw new OpError(400, 'kind must be bar, line, stacked-bar or pie');
@@ -362,9 +363,19 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
               chart = resolved.value.chart;
               // The report is the slide's source; any earlier placeholder goes.
               slide.sources = [resolved.value.source, ...slide.sources.filter((s) => !isExampleSource(s) && s.documentId !== resolved.value.source.documentId)].slice(0, 10);
-              slide.notes = [slide.notes, resolved.value.note].filter(Boolean).join('\n').slice(-2000);
-              if (PLACEHOLDER_TITLES.has(slide.title)) slide.title = resolved.value.title;
+              // One "Figures read …" line: an earlier one on this slide is replaced, never stacked.
+              const kept = (slide.notes ?? '').split('\n').filter((line) => line.trim() && !REPORT_NOTE_LINE.test(line.trim()));
+              slide.notes = [...kept, resolved.value.note].join('\n').slice(-2000);
               phrase = `set a ${kind} chart on ${named(slide)} from ${resolved.value.summary}`;
+              // The report names the slide unless the caller gave a title; the summary says the rename (the confirm card and the page do too).
+              if (givenTitle === undefined && slide.title !== resolved.value.title) {
+                phrase += slide.title.trim() ? ` and renamed it from "${slide.title}" to "${resolved.value.title}"` : ` titled "${resolved.value.title}"`;
+                slide.title = resolved.value.title;
+              }
+            }
+            if (givenTitle !== undefined && slide.title !== givenTitle) {
+              phrase += ` titled "${givenTitle}"`;
+              slide.title = givenTitle;
             }
             if (slide.layout !== 'chart') changeSlideLayout(slide, 'chart');
             slide.chart = chart;

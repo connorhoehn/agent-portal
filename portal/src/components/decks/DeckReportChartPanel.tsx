@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import { Button, DetailSection, FormField, InlineAlert, Inline, SegmentedControl, Select, Stack, T } from '@connorhoehn/ui-components/shared';
 import { DECK_CHART_KIND_LABELS, DECK_CHART_KINDS } from '@connorhoehn/ui-components/doc-editor';
-import { applyDeckOperations, reportTakesPeriod, type DeckChartKindId, type DeckChartReport, type DeckOperationsResult, type DeckTenantId } from './deckApi';
+import { applyDeckOperations, reportTakesPeriod, reportTitleNote, type DeckChartKindId, type DeckChartReport, type DeckOperationsResult, type DeckTenantId } from './deckApi';
 
 export const SAVE_FIRST_LINE = 'Save your changes first: a report fills the saved version.';
 const PERIODS = [{ value: '30d', label: 'Last 30 days' }, { value: '7d', label: 'Last 7 days' }, { value: 'month', label: 'This month' }];
@@ -79,6 +79,7 @@ export function DeckReportChartPanel({ tenant, deckId, headRevisionId, slide, re
               </Button>
             </Inline>
             <T size="xs" tone="secondary" wrap>The numbers are read from the app's own data under your role; the slide cites the report.</T>
+            {slide && report && <T size="xs" tone="secondary" wrap data-testid={`${testIdPrefix}-report-title-note`}>{reportTitleNote(slide.title, report.id, reportTakesPeriod(report) ? period : undefined)}</T>}
           </>
         )}
         {blockedReason && <InlineAlert tone="info" data-testid={`${testIdPrefix}-report-save-first`}>{blockedReason}</InlineAlert>}

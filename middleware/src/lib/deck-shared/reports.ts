@@ -156,6 +156,15 @@ export async function listDeckReports(req: Request, tenant: DeckHostTenant): Pro
   return own.filter((r) => !r.money || dollars).map((r) => ({ id: r.id, description: r.description, params: r.params, money: r.money }));
 }
 
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+/** When the figures were read, as a presenter reads it aloud: "Figures read 29 November 2026, 14:05 UTC". */
+export function figuresReadAt(at: Date): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `Figures read ${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}, ${two(at.getUTCHours())}:${two(at.getUTCMinutes())} UTC`;
+}
+/** A speaker-notes line a report-filled chart wrote (this wording, or the earlier ISO one): replaced, never stacked. */
+export const REPORT_NOTE_LINE = /^(Figures read |Chart data read from the )/;
+
 /** Trims to what `kind` can show, folding the rest into "Other". Never invents a value. */
 export function trimForChart(data: Pick<ReportData, 'labels' | 'series'>, kind: DeckChart['kind']): { labels: string[]; series: ReportData['series']; trimmed: string | null } {
   const cap = kind === 'pie' ? MAX_PIE_SLICES : MAX_CHART_LABELS;
@@ -203,13 +212,13 @@ export function deckChartResolver(req: Request, tenant: DeckHostTenant, ctx: Rep
     }
     const fit = trimForChart(data, kind);
     const series = kind === 'pie' ? fit.series.slice(0, 1) : fit.series;
-    const readAt = (ctx.now ?? (() => new Date()))().toISOString();
+    const readAt = figuresReadAt((ctx.now ?? (() => new Date()))());
     return {
       ok: true,
       value: {
         chart: { kind, labels: fit.labels, series },
         source: { documentId: `report:${def.id}`, anchor: data.period.slice(0, 60), title: `${data.sourceTitle} (${data.period})`.slice(0, 200) },
-        note: `Chart data read from the ${def.id} report at ${readAt}${fit.trimmed ? `, trimmed to the ${fit.trimmed}` : ''}.`,
+        note: `${readAt} from the report "${data.title}"${fit.trimmed ? `, the ${fit.trimmed}` : ''}.`,
         summary: `${data.title} (${data.period}${fit.trimmed ? `, ${fit.trimmed}` : ''})`,
         title: data.title.slice(0, 120),
       },

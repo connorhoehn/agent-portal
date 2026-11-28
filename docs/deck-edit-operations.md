@@ -31,7 +31,7 @@ Body: `{ baseRevisionId, operations: [...], label? }`. At most 10 operations; th
 | `change_layout` | `slideId`, `layout`, `fields?` | carries what fits (bullets to agenda items or closing steps and back, two columns to the two sides of a comparison and back), drops the rest and says so in the summary |
 | `set_notes` | `slideId`, `notes` (string, or `null` to clear) | |
 | `set_theme` | `theme`: `'product'`, `'engineering'`, `'plain'` or `{ ref: '<this tenant>' }` | deck level, touches no slide |
-| `set_chart` | `slideId`, `kind` (`bar`, `line`, `stacked-bar`, `pie`), and `data: { labels, series }` or `report: { report, params? }` | turns the slide into a `chart` slide. Explicit data past the limits (24 labels, 6 series, a pie's 6 slices and one series) is refused. |
+| `set_chart` | `slideId`, `kind` (`bar`, `line`, `stacked-bar`, `pie`), `data: { labels, series }` or `report: { report, params? }`, and `title?` | turns the slide into a `chart` slide. Explicit data past the limits (24 labels, 6 series, a pie's 6 slices and one series) is refused. With `title` the slide takes it. Filled from a report without `title`, the slide takes the report's title ("Spend by initiative, the last 30 days") whatever it was called before, and the summary names the old and the new title (`and renamed it from "Depots live by week" to "…"`); the voice's confirm card and the report panel say the rename before it is made. |
 
 ## Reports
 
@@ -45,7 +45,7 @@ A report reads through the provider its own route calls, under the caller's own 
 | `findings-by-severity` | none | open findings from `findingStats` | any signed-in orgiq session |
 | `jobs-by-status` | none | `queueStats` | any signed-in orgiq session |
 
-Values are never invented. A report with nothing to chart answers 409. Past the kind's limit the tail folds into one `Other` value (a pie keeps the top 5; the others keep 23) and the summary says `top 5 and Other`. The slide cites `{ documentId: 'report:<id>', anchor: <period>, title: '<report> (<period>)' }`, and the speaker notes gain `Chart data read from the <id> report at <ISO time>.`
+Values are never invented. A report with nothing to chart answers 409. Past the kind's limit the tail folds into one `Other` value (a pie keeps the top 5; the others keep 23) and the summary says `top 5 and Other`. The slide cites `{ documentId: 'report:<id>', anchor: <period>, title: '<report> (<period>)' }`, and the speaker notes gain one line a presenter can read, `Figures read 29 November 2026, 14:05 UTC from the report "<report title>".` (with `, the top 5 and Other` when trimmed). Filling the slide again replaces that line, and an older `Chart data read from …` line, rather than adding another.
 
 ## Templates and example sources
 
@@ -73,7 +73,7 @@ A pie of spend by initiative on slide `work-status`:
   { "op": "set_chart", "slideId": "work-status", "kind": "pie", "report": { "report": "spend-by-initiative", "params": { "period": "30d" } } } ] }
 
 201 { "revision": { "id": "irev-b2...", ... }, "touchedSlideIds": ["work-status"], "findings": [],
-      "summary": "Set a pie chart on work-status from spend-by-initiative (2026-10-28 to 2026-11-27, top 5 and Other).",
+      "summary": "Set a pie chart on slide 2 from Spend by initiative, the last 30 days (2026-10-28 to 2026-11-27, top 5 and Other) and renamed it from \"Work status\" to \"Spend by initiative, the last 30 days\".",
       "exampleSourceSlideIds": [] }
 ```
 

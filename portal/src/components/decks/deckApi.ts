@@ -332,6 +332,36 @@ export function reportTakesPeriod(r: DeckChartReport): boolean {
   return Array.isArray(r.params) && r.params.some((p) => p?.name === 'period');
 }
 
+const REPORT_PERIOD_WORDS: Readonly<Record<string, string>> = { month: 'this month', '7d': 'the last 7 days', '30d': 'the last 30 days' };
+/**
+ * The title a report gives the slide it fills (middleware lib/deck-shared/reports.ts), or null when only the server
+ * knows it (runs by outcome names the initiative). `period` absent is the report's default, this month.
+ */
+export function reportSlideTitle(reportId: string, period?: string): string | null {
+  const words = REPORT_PERIOD_WORDS[period ?? 'month'] ?? REPORT_PERIOD_WORDS['month'];
+  if (reportId === 'spend-by-initiative') return `Spend by initiative, ${words}`;
+  if (reportId === 'spend-by-model') return `Spend by model, ${words}`;
+  if (reportId === 'findings-by-severity') return 'Open findings by severity';
+  if (reportId === 'jobs-by-status') return 'Agent jobs by status';
+  return null;
+}
+
+/** The report panel's line about the title: filling from a report renames the slide (set_chart's rule). */
+export function reportTitleNote(currentTitle: string, reportId: string, period?: string): string {
+  const next = reportSlideTitle(reportId, period);
+  if (next && next === currentTitle) return `The slide keeps its title, "${currentTitle}".`;
+  const to = next ? `"${next}"` : "the report's title";
+  return currentTitle.trim() ? `The slide's title "${currentTitle}" becomes ${to}.` : `The slide is titled ${to}.`;
+}
+
+/** What filling a chart from a report does to the slide's title, as a clause: ", renaming it from "Old" to "New"" ('' when unchanged). */
+export function reportRenameClause(currentTitle: string, reportId: string, period?: string): string {
+  const next = reportSlideTitle(reportId, period);
+  if (next && next === currentTitle) return '';
+  const to = next ? `"${next}"` : "the report's title";
+  return currentTitle.trim() ? `, renaming it from "${currentTitle.replace(/["“”]/g, "'").slice(0, 80)}" to ${to}` : `, titling it ${to}`;
+}
+
 /**
  * The voice (or any caller outside the editor) wrote a revision of an open deck: the editor reloads and opens it.
  * `detail: { deckId, revisionId }` on `window`.
