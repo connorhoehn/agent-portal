@@ -227,6 +227,12 @@ async function openLayoutGallery(page) {
   await page.getByTestId(`${E}-toolbar-insert-all`).click();
   await page.getByTestId(`${E}-layout-panel`).waitFor({ timeout: 10000 });
 }
+/** The slide form now lives in the side pane's "Edit as outline" (collapsed): open it before typing into the form. */
+async function openOutline(page) {
+  const open = await page.evaluate((e) => { const d = document.querySelector(`[data-testid="${e}-outline"]`); return !d ? null : d.tagName === 'DETAILS' ? d.open : d.querySelector('[aria-expanded]')?.getAttribute('aria-expanded') === 'true'; }, E);
+  if (open === false) { await page.getByTestId(`${E}-outline-summary`).click(); await sleep(300); }
+  await page.getByTestId(`${E}-slide-form`).waitFor({ state: 'visible', timeout: 10000 });
+}
 /** Fill every empty text input of the slide form (except title, eyebrow, source search) with a short word. */
 async function fillForm(page, scope = '') {
   const inputs = page.locator(`[data-testid="${E}-slide-form"] input:not([data-testid$="-slide-source-search"]):not([data-testid$="-slide-eyebrow"]), [data-testid="${E}-slide-form"] textarea`);
@@ -296,7 +302,7 @@ await step('D1 new deck from a template', async () => {
   await page.getByTestId(`${IP}-new-template-submit`).click();
   await page.waitForURL(/\/iq\/decks\/(?!new)[^/?#]+$/, { timeout: 30000 });
   deckId = deckIdOf(page); deckUrl = new URL(page.url()).pathname;
-  const ok = tiles.length === 5 && allLoaded && choice > 0 && onArrival && fullTile && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
+  const ok = tiles.length === 8 && allLoaded && choice > 0 && onArrival && fullTile && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
   return { ok, detail: `${tiles.length} templates, every tile preview loaded: ${allLoaded} (images per tile ${tiles.map((t) => t.imgs.length).join('/')}); "from this initiative's facts" choice shown: ${choice > 0}; on arrival ${arrival.map((a) => `@${a.width}: facts row y ${a.facts}, gallery y ${a.examples}, facts ${a.factsHeight}px tall, first tile y ${a.tileTop}-${a.tileBottom} of ${a.vh}, heading "${a.heading}" truncated ${a.headingCut}`).join('; ')} (both visible without a click: ${onArrival}; a whole tile at 390: ${fullTile}); landed on ${deckUrl}; ${fmt(shots)}` };
 });
 
@@ -350,13 +356,16 @@ await step('D3 the layout gallery, in place', async () => {
   // timeline
   const before = srcBefore;
   await page.getByTestId(`${E}-layout-gallery-timeline`).click();
-  await page.getByTestId(`${E}-slide-timeline-date-2`).waitFor({ timeout: 10000 });
-  // The new slide starts with its layout's title, selected so typing replaces it; Save stays on.
+  // The new slide opens its title's in-place editor on the stage, holding the layout's title; Save stays on.
+  await page.getByTestId(`${E}-regions-editor`).waitFor({ timeout: 10000 }).catch(() => undefined);
   await sleep(400);
   const added = await page.evaluate((e) => {
-    const t = document.querySelector(`[data-testid="${e}-slide-title"]`);
-    return { title: t?.value ?? null, focused: document.activeElement === t, selected: t ? t.selectionStart === 0 && t.selectionEnd === t.value.length && t.value.length > 0 : false };
+    const t = document.querySelector(`[data-testid="${e}-regions-editor"]`);
+    return { title: t?.value ?? null, focused: !!t && document.activeElement === t, selected: true };
   }, E);
+  await page.keyboard.press('Escape'); await sleep(300);
+  await openOutline(page);
+  await page.getByTestId(`${E}-slide-timeline-date-2`).waitFor({ timeout: 10000 });
   const saveOnAdded = await page.getByTestId(`${IP}-save`).isEnabled().catch(() => false);
   await stageLoaded(page, IP);
   const a2 = await snap(page, 'D3a2-added-from-gallery', [1440], `${E}-stage`);
@@ -392,7 +401,8 @@ await step('D3 the layout gallery, in place', async () => {
     const b = await stageSrc(page, IP);
     await openLayoutGallery(page);
     await page.getByTestId(`${E}-layout-gallery-${layout}`).click();
-    await page.getByTestId(`${E}-slide-form`).waitFor({ timeout: 10000 });
+    await sleep(500); await page.keyboard.press('Escape');
+    await openOutline(page);
     const n = await fillForm(page, layout === 'table' ? 'Cell ' : 'Fig ');
     await waitSrcChange(page, IP, b, 8000);
     await stageLoaded(page, IP);
@@ -407,7 +417,7 @@ await step('D3 the layout gallery, in place', async () => {
 });
 
 // The slide being edited stays in view while its form is filled (measured in D3 after typing the timeline).
-await step('D3s the stage while typing in the form', async () => {
+await step('D3s the stage while typing in the outline', async () => {
   const v = stageWhileTyping;
   if (!v) return { ok: false, detail: 'D3 did not reach the form' };
   // The whole editor scrolling (its shell's scroller or the page), not the editor's own regions (the form, the slide list).
@@ -424,7 +434,8 @@ await step('D4 overflow is reported', async () => {
   const slidesBefore = await page.locator(`[data-testid^="${E}-slide-select-"]`).count();
   await openLayoutGallery(page);
   await page.getByTestId(`${E}-layout-gallery-bullets`).click();
-  await page.getByTestId(`${E}-slide-form`).waitFor({ timeout: 10000 });
+  await sleep(500); await page.keyboard.press('Escape');
+  await openOutline(page);
   await page.getByTestId(`${E}-slide-title`).fill('Overflow check');
   const bulletIds = await ids(page, 'bullet');
   const area = page.locator(`[data-testid="${E}-slide-form"] textarea`).first();
@@ -508,13 +519,17 @@ await step('D5a save, then fill a chart from a report', async () => {
   const saved = await saveDeck(page);
   const saveEnabled = saved.ok;
   const note = saved.line;
-  const titleBefore = (await headSpec(vera, deckId)).spec?.slides?.find((s) => s.id === 'chart')?.title ?? '';
+  // The template's chart slide: a chart layout, else the slide that carries a chart (kpi), by its id.
+  const chartId = ((await headSpec(vera, deckId)).spec?.slides ?? []).reduce((found, s) => found ?? (s.layout === 'chart' ? s.id : null), null)
+    ?? ((await headSpec(vera, deckId)).spec?.slides ?? []).find((s) => s.chart)?.id ?? 'chart';
+  const titleRaw = (await headSpec(vera, deckId)).spec?.slides?.find((s) => s.id === chartId)?.title ?? '';
+  const titleBefore = typeof titleRaw === 'string' ? titleRaw : titleRaw.map((r) => r.text).join('');
   // Without a saved head the report panel cannot run; reload to the saved head and go on from there.
   await go(page, deckUrl);
   await stageLoaded(page, IP);
   const rep = await jget(vera, `/api/initiative-decks/${encodeURIComponent(deckId)}/chart-reports`);
   const offered = (rep.body?.reports ?? []).map((r) => r.id);
-  await page.getByTestId(`${E}-slide-select-chart`).click();
+  await page.getByTestId(`${E}-slide-select-${chartId}`).click();
   await page.getByTestId(`${IP}-report-open`).click();
   await page.getByTestId(`${IP}-report-panel`).waitFor({ timeout: 10000 });
   const panelRect = await page.getByTestId(`${IP}-report-panel`).evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: Math.round(r.height), vh: innerHeight }; });
@@ -533,7 +548,7 @@ await step('D5a save, then fill a chart from a report', async () => {
   await stageLoaded(page, IP);
   const shotsB = await snap(page, 'D5b-pie-applied', [1440], `${E}-stage`);
   const h = await headSpec(vera, deckId);
-  const chartSlide = (h.spec?.slides ?? []).find((s) => s.id === 'chart');
+  const chartSlide = (h.spec?.slides ?? []).find((s) => s.id === chartId);
   const cites = JSON.stringify(chartSlide?.sources ?? []);
   const ok = !!chartSlide?.chart && chartSlide.chart.kind === 'pie' && /report:spend-by-initiative/.test(cites);
   // The title follows the report, and the panel said so before Apply.
@@ -866,6 +881,236 @@ await step('D10 pipelines deck list', async () => {
     const shots = await snap(p, 'D10-pipelines-list', [1440], null);
     return { ok: g.top !== null && g.top < g.vh && noDialogs(shots), detail: `first row top ${g.top} of ${g.vh} (tables ${g.tables}); ${fmt(shots)}` };
   } finally { await ctx.close(); }
+});
+
+// D12 (edit in place) ─────────────────────────────────────────────────────────────────────────────────────────
+// Every edit here is made on the slide or in the side pane, never in a form under the stage; each one saves through the
+// deck's operations route as the person (one version per edit).
+const R = `${E}-regions`;
+const region = (path) => page.getByTestId(`${R}-region-${path}`);
+const rectOf = (loc) => loc.evaluate((e) => { const r = e.getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height), bottom: Math.round(r.bottom) }; });
+const opsPost = (ms = 20000) => page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/initiative-decks\/[^/]+\/operations(\?|$)/.test(r.url()), { timeout: ms });
+const opsOf = async (res) => { try { return JSON.parse(res.request().postData() ?? '{}').operations ?? []; } catch { return []; } };
+const allDialogs = [];
+const noteDialogs = async () => { const d = await dialogsIn(page); allDialogs.push(...d.map((x) => `${currentStep}: ${x}`)); return d; };
+async function openSlide(layout) {
+  await page.getByTestId(`${E}-slide-row-${layout}`).click().catch(async () => { await page.locator(`[data-testid^="${E}-slide-row-"]`).filter({ hasText: new RegExp(layout, 'i') }).first().click(); });
+  await sleep(800); await stageLoaded(page, IP);
+}
+async function slideOf(id) { const h = await headSpec(vera, deckId); return { ...h, slide: (h.spec?.slides ?? []).find((s) => s.id === id) ?? null }; }
+const slideIds = async () => (await headSpec(vera, deckId)).spec?.slides?.map((s) => ({ id: s.id, layout: s.layout })) ?? [];
+
+let firstId = '';
+await step('D12a clicking a slide title opens an editor on its box', async () => {
+  await go(page, deckUrl); await stageLoaded(page, IP); await sleep(1500);
+  firstId = (await slideIds())[0]?.id ?? '';
+  await page.getByTestId(`${E}-slide-row-${firstId}`).click().catch(() => undefined); await sleep(600);
+  const box = await rectOf(region('title'));
+  await region('title').click();
+  const ed = page.getByTestId(`${R}-editor`);
+  await ed.waitFor({ timeout: 8000 });
+  const eb = await rectOf(ed);
+  const off = Math.max(Math.abs(eb.x - box.x), Math.abs(eb.y - box.y), Math.abs(eb.w - box.w));
+  const shots = await snap(page, 'D12a-title-editor', [1440], `${R}-editor`);
+  await noteDialogs();
+  return { ok: off <= 6 && noDialogs(shots), detail: `title region at ${JSON.stringify(box)}, editor at ${JSON.stringify(eb)} (largest offset ${off}px, within 6: ${off <= 6}); ${fmt(shots)}` };
+});
+
+await step('D12b typing and Enter saves, and the preview updates', async () => {
+  const ed = page.getByTestId(`${R}-editor`);
+  if (!(await ed.count())) { await region('title').click(); await ed.waitFor({ timeout: 8000 }); }
+  const before = await stageSrc(page, IP);
+  await ed.fill('Auth migration, in place');
+  const posted = opsPost();
+  await page.keyboard.press('Enter');
+  const res = await posted.catch(() => null);
+  const ops = res ? await opsOf(res) : [];
+  const changed = await waitSrcChange(page, IP, before, 15000);
+  await stageLoaded(page, IP); await sleep(1500);
+  const { slide } = await slideOf(firstId);
+  const title = typeof slide?.title === 'string' ? slide.title : (slide?.title ?? []).map((r) => r.text).join('');
+  const saveOff = !(await page.getByTestId(`${IP}-save`).isEnabled().catch(() => true));
+  const shots = await snap(page, 'D12b-title-saved', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: !!res && res.ok() && ops[0]?.op === 'set_path' && title === 'Auth migration, in place' && changed && saveOff && noDialogs(shots), detail: `operations POST ${res ? res.status() : 'none'} ${JSON.stringify(ops).slice(0, 160)}; saved title "${title}"; preview changed ${changed}; nothing left unsaved (Save off) ${saveOff}; ${fmt(shots)}` };
+});
+
+await step('D12c Esc cancels', async () => {
+  await region('title').click();
+  const ed = page.getByTestId(`${R}-editor`); await ed.waitFor({ timeout: 8000 });
+  let posted = false; const on = (q) => { if (q.method() === "POST" && /\/operations(\?|$)/.test(q.url())) posted = true; };
+  page.on('request', on);
+  await ed.fill('This should not stick');
+  await page.keyboard.press('Escape'); await sleep(2500);
+  page.off('request', on);
+  const gone = (await ed.count()) === 0;
+  const { slide } = await slideOf(firstId);
+  const title = typeof slide?.title === 'string' ? slide.title : (slide?.title ?? []).map((r) => r.text).join('');
+  const dirty = await page.getByTestId(`${IP}-save`).isEnabled().catch(() => false);
+  return { ok: gone && !posted && title === 'Auth migration, in place' && !dirty, detail: `editor closed ${gone}; an operation was sent ${posted}; saved title still "${title}"; draft dirty ${dirty}` };
+});
+
+await step('D12d select a word, then Highlight, renders emphasis', async () => {
+  await region('title').click();
+  const ed = page.getByTestId(`${R}-editor`); await ed.waitFor({ timeout: 8000 });
+  await ed.evaluate((e) => { e.focus(); e.setSelectionRange(0, 4); e.dispatchEvent(new Event('select', { bubbles: true })); document.dispatchEvent(new Event('selectionchange')); });
+  await sleep(400);
+  const hl = page.getByRole('button', { name: /^Highlight/ }).first();
+  const shown = await hl.isVisible().catch(() => false);
+  const shots = await snap(page, 'D12d-emphasis-toolbar', [1440], `${E}-stage`);
+  const before = await stageSrc(page, IP);
+  const posted = opsPost();
+  if (shown) await hl.click();
+  await sleep(300);
+  if (await ed.count()) { await ed.focus().catch(() => undefined); await page.keyboard.press('Enter'); }
+  const res = await posted.catch(() => null);
+  const changed = await waitSrcChange(page, IP, before, 15000);
+  await stageLoaded(page, IP); await sleep(1200);
+  const { slide } = await slideOf(firstId);
+  const runs = Array.isArray(slide?.title) ? slide.title : null;
+  const marked = !!runs && runs.some((r) => r.emphasis === 'highlight' && /Auth/.test(r.text));
+  const after = await snap(page, 'D12d-emphasis-saved', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: shown && !!res && res.ok() && marked && changed && noDialogs([...shots, ...after]), detail: `Highlight shown above the box ${shown}; operations POST ${res ? res.status() : 'none'}; saved title ${JSON.stringify(slide?.title)}; preview changed ${changed}; ${fmt(after)}` };
+});
+
+let cardsId = '';
+await step('D12e a card icon opens DeckIconPicker in the side pane; choosing one updates the slide', async () => {
+  const list = await slideIds();
+  const withIcons = (await headSpec(vera, deckId)).spec.slides.find((s) => Array.isArray(s.items) && s.items.length);
+  cardsId = withIcons?.id ?? '';
+  if (!cardsId) return { ok: false, detail: `no slide with items in ${list.map((s) => s.layout).join(',')}` };
+  await page.getByTestId(`${E}-slide-row-${cardsId}`).click(); await sleep(800); await stageLoaded(page, IP);
+  const icon = region('items[0].icon');
+  if (!(await icon.count())) return { ok: false, detail: `no icon region on the ${withIcons.layout} slide (${(await ids(page, `^${R}-region-`)).join(', ')})` };
+  await icon.click();
+  const picker = page.getByTestId(`${E}-icon-picker`);
+  await picker.waitFor({ timeout: 8000 });
+  const inPane = await picker.evaluate((e, p) => !!e.closest(`[data-testid="${p}-side-pane"]`), E);
+  const was = withIcons.items[0].icon ?? null;
+  const choices = picker.locator('button[aria-pressed], [role="option"], [role="radio"], button[data-icon]');
+  const n = await choices.count();
+  const shots = await snap(page, 'D12e-icon-picker', [1440], `${E}-icon-picker`);
+  let picked = null;
+  for (let i = 0; i < Math.min(n, 30); i++) {
+    const c = choices.nth(i); const lbl = (await c.getAttribute('aria-label')) ?? (await c.innerText().catch(() => ''));
+    if (!/none|no icon/i.test(lbl) && (await c.getAttribute('aria-pressed')) !== 'true' && (await c.getAttribute('aria-checked')) !== 'true' && (await c.getAttribute('aria-selected')) !== 'true') { picked = lbl; const posted = opsPost(); await c.click(); await posted.catch(() => null); break; }
+  }
+  await sleep(2500); await stageLoaded(page, IP);
+  const { slide } = await slideOf(cardsId);
+  const now = slide?.items?.[0]?.icon ?? null;
+  const after = await snap(page, 'D12e-icon-saved', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: inPane && !!picked && now !== was && !!now && noDialogs([...shots, ...after]), detail: `${withIcons.layout} slide; picker in the side pane ${inPane}; ${n} choices; picked "${picked}"; icon ${was} -> ${now}; ${fmt(shots)}` };
+});
+
+await step('D12f adding a card row and removing it', async () => {
+  if (!cardsId) return { ok: false, detail: 'no cards slide' };
+  const count = async () => (await slideOf(cardsId)).slide?.items?.length ?? 0;
+  const n0 = await count();
+  const lead = region('items[0].title');
+  await lead.hover(); await sleep(300);
+  const add = page.getByTestId(`${R}-row-add-items[0].title`);
+  const addShown = await add.isVisible().catch(() => false);
+  const p1 = opsPost(); await add.click(); const r1 = await p1.catch(() => null);
+  await sleep(2500); await stageLoaded(page, IP);
+  const n1 = await count();
+  const s1 = await snap(page, 'D12f-row-added', [1440], `${E}-stage`);
+  const lead2 = region('items[1].title'); await lead2.hover(); await sleep(300);
+  const p2 = opsPost(); await page.getByTestId(`${R}-row-remove-items[1].title`).click(); const r2 = await p2.catch(() => null);
+  await sleep(1000);
+  const confirm = await page.locator('[data-testid="confirm-dialog-confirm"]').count();
+  await sleep(1500); await stageLoaded(page, IP);
+  const n2 = await count();
+  await noteDialogs();
+  return { ok: addShown && !!r1 && r1.ok() && n1 === n0 + 1 && !!r2 && r2.ok() && n2 === n0 && confirm === 0 && noDialogs(s1), detail: `row buttons on hover ${addShown}; items ${n0} -> add ${n1} (POST ${r1 ? r1.status() : 'none'}) -> remove ${n2} (POST ${r2 ? r2.status() : 'none'}); a confirm asked ${confirm > 0}; ${fmt(s1)}` };
+});
+
+await step('D12g changing the style with DeckStylePicker re-renders the stage', async () => {
+  // The icon picker from D12e holds the side pane; Done gives it back to the slide settings.
+  if (await page.getByTestId(`${E}-pick-close`).isVisible().catch(() => false)) { await page.getByTestId(`${E}-pick-close`).click(); await sleep(400); }
+  const summary = page.getByTestId(`${E}-style-summary`);
+  if (await summary.count() && !(await page.getByTestId(`${E}-style-picker-editorial`).isVisible().catch(() => false))) await summary.click();
+  await sleep(300);
+  const before = await stageSrc(page, IP);
+  const posted = opsPost();
+  await page.getByTestId(`${E}-style-picker-playful`).click();
+  const res = await posted.catch(() => null);
+  const changed = await waitSrcChange(page, IP, before, 15000);
+  await stageLoaded(page, IP); await sleep(1500);
+  const { spec } = await headSpec(vera, deckId);
+  const ref = spec?.theme?.ref ?? JSON.stringify(spec?.theme);
+  const shots = await snap(page, 'D12g-style-playful', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: !!res && res.ok() && /-playful$/.test(String(ref)) && changed && noDialogs(shots), detail: `operations POST ${res ? res.status() : 'none'}; theme ${ref}; stage re-rendered ${changed}; ${fmt(shots)}` };
+});
+
+await step('D12h choosing a decoration', async () => {
+  // The side pane's Graphic row: its toggle reads "Done" while the GraphicPicker under it is open.
+  if (await page.getByTestId(`${E}-pick-close`).isVisible().catch(() => false)) { await page.getByTestId(`${E}-pick-close`).click(); await sleep(400); }
+  const toggle = page.getByTestId(`${E}-decoration-toggle`);
+  if (!/done/i.test(await toggle.innerText().catch(() => ''))) { await toggle.click(); await sleep(500); }
+  const picker = page.getByTestId(`${E}-decoration`);
+  const choices = picker.locator('button:not([data-testid$="-toggle"]):not([role="tab"]), [role="radio"], [role="option"]');
+  const target = cardsId || (await slideIds())[0]?.id;
+  const n = await choices.count();
+  let picked = null;
+  const before = await stageSrc(page, IP);
+  for (let i = 0; i < n; i++) {
+    const c = choices.nth(i); const lbl = squash((await c.getAttribute('aria-label')) ?? (await c.innerText().catch(() => '')));
+    if (lbl && !/style default|^none|no graphic|default|corner|background|beside/i.test(lbl) && (await c.getAttribute('aria-checked')) !== 'true' && (await c.getAttribute('aria-pressed')) !== 'true') { picked = lbl; const posted = opsPost(); await c.click(); await posted.catch(() => null); break; }
+  }
+  const changed = await waitSrcChange(page, IP, before, 15000);
+  await stageLoaded(page, IP); await sleep(1200);
+  const { slide } = await slideOf(target);
+  const shots = await snap(page, 'D12h-decoration', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: !!picked && !!slide?.decoration?.graphic && changed && noDialogs(shots), detail: `${n} choices; picked "${picked}"; saved decoration ${JSON.stringify(slide?.decoration)}; stage changed ${changed}; ${fmt(shots)}` };
+});
+
+await step('D12i no form fields below the stage, and the stage fills the column', async () => {
+  await page.setViewportSize({ width: 1440, height: 900 }); await sleep(600);
+  const g = await page.evaluate((e) => {
+    const img = document.querySelector(`[data-testid="${e}-stage-image"]`)?.getBoundingClientRect();
+    const main = document.querySelector(`[data-testid="${e}-main"]`)?.getBoundingClientRect();
+    const region = document.querySelector(`[data-testid="${e}-stage-region"]`)?.getBoundingClientRect();
+    const pane = document.querySelector(`[data-testid="${e}-side-pane"]`)?.getBoundingClientRect();
+    const fields = [...document.querySelectorAll(`[data-testid="${e}-main"] input, [data-testid="${e}-main"] textarea, [data-testid="${e}-main"] select`)]
+      .filter((f) => f.offsetParent !== null && !f.closest(`[data-testid="${e}-side-pane"]`)).map((f) => ({ id: f.getAttribute('data-testid') ?? f.tagName, top: Math.round(f.getBoundingClientRect().top) }))
+      .filter((f) => img && f.top >= img.bottom - 1);
+    const column = main && pane ? main.width - pane.width : main?.width ?? 0;
+    return { stageW: img ? Math.round(img.width) : 0, column: Math.round(column), regionW: region ? Math.round(region.width) : 0, mainW: main ? Math.round(main.width) : 0, paneW: pane ? Math.round(pane.width) : 0, form: !!document.querySelector(`[data-testid="${e}-form-region"]`), fields };
+  }, E);
+  const share = g.column ? g.stageW / g.column : 0;
+  const shots = await snap(page, 'D12i-editor-1440', [1440], `${E}-stage`);
+  await noteDialogs();
+  return { ok: g.fields.length === 0 && !g.form && share >= 0.8 && noDialogs(shots), detail: `fields below the stage ${JSON.stringify(g.fields)}; form region ${g.form}; stage ${g.stageW}px of a ${g.column}px editor column (main ${g.mainW}, side pane ${g.paneW}, stage region ${g.regionW}) = ${Math.round(share * 100)}%; ${fmt(shots)}` };
+});
+
+await step('D12j the composer Edit "switch to the editorial style" shows the card; Apply changes the style', async () => {
+  // The composer opens in Ask on a selected slide; its action menu switches it to Edit.
+  const action = page.getByRole('button', { name: /Presentation agent action/ });
+  if (await action.count()) { await action.click(); await page.getByRole('menuitem', { name: /Edit saved slides/ }).click(); await sleep(300); }
+  const input = page.getByRole('textbox', { name: /Presentation message/ }).first();
+  await input.click(); await input.fill('switch to the editorial style');
+  await page.keyboard.press('Enter');
+  const card = page.getByTestId('deck-composer-proposal');
+  await card.waitFor({ timeout: 30000 });
+  const text = squash(await card.innerText());
+  const shots = await snap(page, 'D12j-proposal-card', [1440], 'deck-composer-proposal');
+  const before = await stageSrc(page, IP);
+  await card.getByRole('button', { name: 'Apply' }).click();
+  const changed = await waitSrcChange(page, IP, before, 20000);
+  await stageLoaded(page, IP); await sleep(1500);
+  const { spec } = await headSpec(vera, deckId);
+  const ref = String(spec?.theme?.ref ?? '');
+  await noteDialogs();
+  return { ok: /editorial/i.test(text) && /-editorial$/.test(ref) && changed && noDialogs(shots), detail: `card "${text.slice(0, 160)}"; theme after Apply ${ref}; stage re-rendered ${changed}; ${fmt(shots)}` };
+});
+
+await step('D12k no dialogs or modals anywhere in the in-place walk', async () => {
+  await noteDialogs();
+  return { ok: allDialogs.length === 0, detail: allDialogs.length ? `dialogs: ${allDialogs.join('; ')}` : 'none at any D12 step (the library ConfirmDialog and the voice card are the only ones allowed)' };
 });
 
 await resetMock();
