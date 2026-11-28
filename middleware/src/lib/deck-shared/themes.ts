@@ -9,9 +9,17 @@
 // tenant's brand from tenants/manifest.json (`TENANT_BRANDS`). Whatever the
 // generator had to change for contrast is logged once at startup
 // (`logDeckThemeAdjustments`), never per request.
+//
+// A deck's composition style (bold, editorial, minimal, playful, corporate) rides
+// on the same reference, because the deck format has no style field and the
+// style must be part of the revision (undo, versions): `{ ref: '<base>-<style>' }`,
+// where the base is a built-in name or the deck's tenant. The engine's
+// `styledTheme` applies it over the resolved theme, so the tenant brand's
+// colours, logo and footer stay. A plain built-in name or `{ ref: '<tenant>' }`
+// keeps the theme's own style, exactly as before.
 
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
-import { BUILTIN_THEMES, builtinTheme, deckThemeFromTokens, type DeckThemeSpec } from '@connorhoehn/realtime-modules/deck/layout';
+import { BUILTIN_THEMES, DECK_STYLES, builtinTheme, deckThemeFromTokens, styledTheme, type DeckStyle, type DeckThemeSpec } from '@connorhoehn/realtime-modules/deck/layout';
 import { TENANT_BRANDS, TENANT_MANIFEST } from '../tenants.generated.js';
 import { DECK_BASE_TOKENS } from './deck-tokens.js';
 
@@ -85,9 +93,31 @@ export function logDeckThemeAdjustments(log: (line: string) => void = console.lo
   }
 }
 
+export const isDeckStyle = (v: unknown): v is DeckStyle => typeof v === 'string' && (DECK_STYLES as readonly string[]).includes(v);
+
+/** A deck theme choice split into its base (a built-in name or a tenant ref) and its style, when one is named. */
+export function themeChoice(theme: DeckSpec['theme']): { base: string | undefined; builtin: boolean; style?: DeckStyle } {
+  if (theme === undefined) return { base: undefined, builtin: true };
+  if (typeof theme === 'string') return { base: theme, builtin: isBuiltin(theme) };
+  const m = /^(.+)-([a-z]+)$/.exec(theme.ref);
+  if (m && isDeckStyle(m[2])) return { base: m[1], builtin: isBuiltin(m[1]!), style: m[2] };
+  return { base: theme.ref, builtin: isBuiltin(theme.ref) };
+}
+
+/** The style a deck is composed in: the one its reference names, else its theme's own (bold, or minimal for `plain`). */
+export function deckStyleOf(theme: DeckSpec['theme'], tenant: DeckHostTenant): DeckStyle {
+  return themeChoice(theme).style ?? resolveDeckTheme(theme, tenant).style ?? 'bold';
+}
+
+/** The same theme choice composed in `style`: `{ ref: '<base>-<style>' }`. */
+export function withDeckStyle(theme: DeckSpec['theme'], style: DeckStyle, tenant: DeckHostTenant): NonNullable<DeckSpec['theme']> {
+  const { base, builtin } = themeChoice(theme);
+  return { ref: `${base && (builtin || base === tenant) ? base : base === undefined ? 'product' : tenant}-${style}` };
+}
+
 /** The theme to lay a deck out with, for a deck of `tenant`. */
 export function resolveDeckTheme(theme: DeckSpec['theme'], tenant: DeckHostTenant): DeckThemeSpec {
-  if (theme === undefined) return builtinTheme();
-  if (typeof theme === 'string' && isBuiltin(theme)) return builtinTheme(theme);
-  return tenantDeckTheme(tenant);
+  const { base, builtin, style } = themeChoice(theme);
+  const resolved = base === undefined ? builtinTheme() : builtin ? builtinTheme(base as BuiltinName) : tenantDeckTheme(tenant);
+  return style ? styledTheme(resolved, style) : resolved;
 }

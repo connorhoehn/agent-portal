@@ -11,7 +11,7 @@ import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { deckFonts, renderPreview, type DeckPreviewRender } from './render.js';
 import { exampleSourceSlideIds, SLIDE_LAYOUTS } from './operations.js';
 import { summaryOf } from './service.js';
-import { tenantDeckTheme, type DeckHostTenant } from './themes.js';
+import { resolveDeckTheme, tenantDeckTheme, withDeckStyle, type DeckHostTenant } from './themes.js';
 import { DECK_TEMPLATES, type DeckTemplate } from './template-decks.js';
 import type { DeckRevisionSummary, Result } from './types.js';
 
@@ -32,6 +32,16 @@ export const LAYOUT_USE_FOR: Readonly<Record<SlideLayout, string>> = {
   timeline: 'Three to six dated steps in order.',
   agenda: 'The numbered parts of the talk, with the current one marked.',
   closing: 'The last word: a closing line, up to three next steps, a contact.',
+  'big-quote': 'One quote, large, as the whole slide.',
+  process: 'Three to five steps in order, each with a short line and an icon.',
+  cards: 'Three or four ideas side by side, each with an icon and a sentence.',
+  matrix: 'Four quadrants on two axes, such as effort against value.',
+  'big-number': 'One number, very large, with what it is measured against and up to three lines of story.',
+  'image-text': 'A picture beside its words (shows a placeholder until pictures can be uploaded).',
+  'image-full': 'A picture across the whole slide with words over it (placeholder until pictures can be uploaded).',
+  people: 'Two to eight people with their roles.',
+  funnel: 'Three to five stages that narrow, each with its count.',
+  kpi: 'Headline figures above the chart that explains them.',
 };
 
 const PREVIEW_SLIDES_IN_LIST = 3;
@@ -40,8 +50,9 @@ const PREVIEW_SLIDES_IN_LIST = 3;
 const previews = new Map<string, DeckPreviewRender>();
 export const templatePreviewStats = { renders: 0 };
 
+/** A template in the tenant's brand, composed in the template's own style. */
 function themed(template: DeckTemplate, tenant: DeckHostTenant): DeckSpec {
-  return { ...structuredClone(template.spec), theme: { ref: tenant } };
+  return { ...structuredClone(template.spec), theme: withDeckStyle({ ref: tenant }, template.style, tenant) };
 }
 
 function previewOf(template: DeckTemplate, tenant: DeckHostTenant): DeckPreviewRender {
@@ -49,13 +60,14 @@ function previewOf(template: DeckTemplate, tenant: DeckHostTenant): DeckPreviewR
   let hit = previews.get(key);
   if (!hit) {
     templatePreviewStats.renders += 1;
-    hit = renderPreview(themed(template, tenant), tenantDeckTheme(tenant));
+    const spec = themed(template, tenant);
+    hit = renderPreview(spec, resolveDeckTheme(spec.theme, tenant));
     previews.set(key, hit);
   }
   return hit;
 }
 
-const meta = (t: DeckTemplate) => ({ id: t.id, title: t.title, description: t.description, audience: t.audience, slideCount: t.spec.slides.length });
+const meta = (t: DeckTemplate) => ({ id: t.id, title: t.title, description: t.description, audience: t.audience, style: t.style, slideCount: t.spec.slides.length });
 
 /** Every template's metadata and its first three slides' preview SVGs, in the tenant's theme. */
 export function listTemplates(tenant: DeckHostTenant) {

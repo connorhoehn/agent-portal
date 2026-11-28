@@ -42,6 +42,7 @@ import { assessmentDecksFixture, assessmentDeckRevisionsFixture } from '../../mo
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { hidePptxNodeDetection } from '../../test-support/pptxTestEnv.js';
 import { expectDeckExports } from '../../test-support/deck-exports.js';
+import { DECK_TEMPLATES, SLIDE_LAYOUTS } from '../../lib/deck-shared/index.js';
 
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
@@ -263,13 +264,13 @@ describe('assessment deck — from a template and by edit operations', () => {
     const url = '/api/assessment/teams/TEAM-002/decks';
     expect((await request(as('assessment-reader')).post(url).send({ templateId: 'review' })).status).toBe(403);
     const app = as('assessor');
-    expect((await request(app).get('/api/assessment/deck-layouts')).body.layouts).toHaveLength(13);
+    expect((await request(app).get('/api/assessment/deck-layouts')).body.layouts).toHaveLength(SLIDE_LAYOUTS.length);
     expect((await request(app).post('/api/assessment/teams/TEAM-NOPE/decks').send({ templateId: 'review' })).status).toBe(404);
     const made = await request(app).post(url).send({ templateId: 'review' });
     expect(made.status).toBe(201);
     expect(made.body).toMatchObject({ templateId: 'review', revision: { producedBy: 'template:review' } });
     const spec = (await request(app).get(`/api/assessment/decks/${made.body.deckId}/revisions/${made.body.revisionId}/spec`)).body;
-    expect(spec.theme).toEqual({ ref: 'assessment' });
+    expect(spec.theme).toEqual({ ref: 'assessment-editorial' }); // the review template's style
     const ops = (who: express.Express) => request(who).post(`/api/assessment/decks/${made.body.deckId}/operations`)
       .send({ baseRevisionId: made.body.revisionId, operations: [{ op: 'remove_slide', slideId: 'quote' }] });
     expect((await ops(as('assessment-reader'))).status).toBe(403);

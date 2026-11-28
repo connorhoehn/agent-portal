@@ -12,34 +12,46 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  MAX_CHART_LABELS, MAX_CHART_SERIES, MAX_PIE_SLICES, MAX_SLIDES, SLIDE_ID_PATTERN, THEME_REF_PATTERN, validateDeckSpec,
-  type DeckChart, type DeckSlide, type DeckSource, type DeckSpec, type SlideLayout,
+  DECK_DECORATION_PLACEMENTS, DECK_EMPHASES, MAX_BULLET_CHARS, MAX_CHART_LABELS, MAX_CHART_SERIES, MAX_ITEM_TEXT_CHARS, MAX_ITEM_TITLE_CHARS,
+  MAX_PIE_SLICES, MAX_SLIDES, MAX_STORY_BULLETS, SLIDE_ID_PATTERN, THEME_REF_PATTERN, plainText, textRuns, validateDeckSpec,
+  type DeckChart, type DeckDecorationPlacement, type DeckEmphasis, type DeckRun, type DeckSlide, type DeckSource, type DeckSpec, type DeckText, type SlideLayout,
 } from '@connorhoehn/realtime-modules/deck';
-import { BUILTIN_THEMES } from '@connorhoehn/realtime-modules/deck/layout';
+import { BUILTIN_THEMES, DECK_STYLES, GRAPHIC_NAMES, isGraphicName } from '@connorhoehn/realtime-modules/deck/layout';
 import type { ArtifactRevisionStore } from '../flow-artifacts/index.js';
 import { layoutSpec } from './render.js';
 import { REPORT_NOTE_LINE } from './reports.js';
-import { LAYOUT_PAYLOAD, LAYOUT_TITLE, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE } from './slide-starters.js';
+import {
+  BULLET_LAYOUTS, LAYOUT_PAYLOAD, LAYOUT_PAYLOADS, LAYOUT_TITLE, PAYLOAD_FIELDS, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE,
+} from './slide-starters.js';
 
-export { LAYOUT_PAYLOAD, SLIDE_LAYOUTS, UNSOURCED_SOURCE };
+export { LAYOUT_PAYLOAD, LAYOUT_PAYLOADS, SLIDE_LAYOUTS, UNSOURCED_SOURCE };
 import { summaryOf, type DeckLookup, type DeckHead } from './service.js';
-import { resolveDeckTheme, type DeckHostTenant } from './themes.js';
+import { isDeckStyle, resolveDeckTheme, themeChoice, withDeckStyle, type DeckHostTenant } from './themes.js';
 import type { DeckRevisionSummary, Result } from './types.js';
 
 export const MAX_DECK_OPERATIONS = 10;
 
 export const DECK_OPERATION_KINDS = [
   'add_slide', 'remove_slide', 'move_slide', 'set_title', 'set_fields', 'change_layout', 'set_notes', 'set_theme', 'set_chart',
+  'set_style', 'set_decoration', 'set_emphasis',
 ] as const;
 export type DeckOperationKind = typeof DECK_OPERATION_KINDS[number];
 
 
-const PAYLOAD_FIELDS = Object.values(LAYOUT_PAYLOAD) as string[];
-
-/** The fields `set_fields` and `add_slide.fields` may name on a slide of `layout`. */
+/** The fields `set_fields` and `add_slide.fields` may name on a slide of `layout`: bullets only where the layout draws them. */
 export function layoutFields(layout: SlideLayout): string[] {
-  const own = LAYOUT_PAYLOAD[layout];
-  return ['eyebrow', 'bullets', ...(own ? [own] : [])];
+  return ['eyebrow', ...(BULLET_LAYOUTS.includes(layout) ? ['bullets'] : []), ...LAYOUT_PAYLOADS[layout]];
+}
+
+/**
+ * Host rules on top of the format (docs/deck-edit-operations.md, "Pictures"): the
+ * server never fetches a picture from an address (no server-side fetching of
+ * arbitrary URLs), so an image `url` is refused; an `assetId` is kept but
+ * resolves to nothing until an asset store exists, so the slide shows the
+ * engine's placeholder and its image-missing finding.
+ */
+export function hostSpecErrors(spec: { slides: Array<{ id: string; image?: { url?: string } }> }): string[] {
+  return spec.slides.filter((s) => s.image?.url !== undefined).map((s) => `slide ${s.id}: image.url is not accepted; the server does not fetch pictures from addresses. Give image.assetId once pictures can be uploaded, or describe the picture in image.alt`);
 }
 
 /**
@@ -84,6 +96,12 @@ export interface ApplyOperationsInput {
   sub: string | null;
   /** Absent: `set_chart` takes explicit data only. */
   resolveChart?: DeckChartResolver;
+  /**
+   * The record a new slide cites when the operation names no sources: an
+   * initiative deck's own initiative (`initiative:<id>`). Absent: the
+   * `example:unsourced` placeholder, which the page flags until it is replaced.
+   */
+  recordSource?: DeckSource;
   /** Ids for new slides; tests pass a deterministic one. */
   mintSlideId?: () => string;
 }
@@ -121,8 +139,44 @@ function str(op: Record<string, unknown>, key: string): string {
 function fieldErrors(layout: SlideLayout, field: string, value: unknown): string[] {
   const probe = { title: 'probe', slides: [{ id: 'probe', layout, title: 'probe', [field]: value, sources: [{ documentId: 'probe', title: 'probe' }] }] };
   const out = validateDeckSpec(probe);
-  return out.ok ? [] : out.errors.filter((e) => e.includes(`].${field}`) || e.includes(`]: a '${layout}' slide needs`) && field === LAYOUT_PAYLOAD[layout]);
+  const errors = out.ok ? [] : out.errors.filter((e) => e.includes(`].${field}`) || e.includes(`]: a '${layout}' slide needs`) && e.includes(field));
+  if (field === 'image' && isObj(value) && value['url'] !== undefined) errors.push(...hostSpecErrors({ slides: [{ id: 'probe', image: { url: String(value['url']) } }] }).map((e) => e.replace(/^slide probe: /, 'deck.slides[0].')));
+  return errors;
 }
+
+/** A title or a bullet: a non-empty string or a list of runs (`{ text, emphasis? }`) the format accepts. */
+function deckText(op: Record<string, unknown>, key: string): DeckText {
+  const v = op[key];
+  if (typeof v === 'string') return str(op, key);
+  if (!Array.isArray(v) || !v.length) throw new OpError(400, `${key} must be a non-empty string or a list of { text, emphasis? } runs`);
+  const out = validateDeckSpec({ title: 'probe', slides: [{ id: 'probe', layout: 'bullets', title: v, bullets: ['probe'], sources: [{ documentId: 'probe', title: 'probe' }] }] });
+  if (!out.ok) throw new OpError(400, `${key} is not valid`, out.errors.map((e) => e.replace(/^(deck\.)?slides\[0\]\.title/, key)));
+  return structuredClone(v) as DeckRun[];
+}
+
+/** The words of `text` from `from` to `to` (1-based, inclusive) given `emphasis`, or plain when it is null; other runs keep theirs. */
+export function emphasiseWords(text: DeckText, from: number, to: number, emphasis: DeckEmphasis | null): DeckText {
+  const runs = textRuns(text) ?? [{ text: String(text) }];
+  const raw = runs.map((r) => r.text).join('');
+  const marks: Array<DeckEmphasis | undefined> = runs.flatMap((r) => [...r.text].map(() => r.emphasis));
+  const chars = [...raw];
+  const words = [...raw.matchAll(/\S+/gu)];
+  if (from < 1 || to < from || to > words.length) throw new OpError(400, `words ${from} to ${to}: the text has ${words.length} word${words.length === 1 ? '' : 's'}`);
+  // Positions in code points, so an accented or emoji character counts once.
+  const cp = (index: number): number => [...raw.slice(0, index)].length;
+  const start = cp(words[from - 1]!.index!);
+  const end = cp(words[to - 1]!.index! + words[to - 1]![0].length);
+  for (let i = start; i < end; i += 1) marks[i] = emphasis ?? undefined;
+  const out: DeckRun[] = [];
+  for (const [i, ch] of chars.entries()) {
+    const last = out[out.length - 1];
+    if (last && last.emphasis === marks[i]) last.text += ch;
+    else out.push(marks[i] ? { text: ch, emphasis: marks[i] } : { text: ch });
+  }
+  return out.every((r) => !r.emphasis) ? raw : out;
+}
+
+const clipAt = (s: string, n: number): string => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
 
 function setField(slide: DeckSlide, field: string, value: unknown): void {
   if (!layoutFields(slide.layout).includes(field)) {
@@ -130,12 +184,12 @@ function setField(slide: DeckSlide, field: string, value: unknown): void {
   }
   const rec = slide as unknown as Record<string, unknown>;
   if (value === null) {
-    if (field === LAYOUT_PAYLOAD[slide.layout]) throw new OpError(400, `${field} is what a '${slide.layout}' slide shows; it cannot be removed`);
+    if ((LAYOUT_PAYLOADS[slide.layout] as readonly string[]).includes(field)) throw new OpError(400, `${field} is what a '${slide.layout}' slide shows; it cannot be removed`);
     delete rec[field];
     return;
   }
   const errors = fieldErrors(slide.layout, field, value);
-  if (errors.length) throw new OpError(400, `${field} is not valid`, errors.map((e) => e.replace(/^deck\.slides\[0\]/, `slide ${slide.id}`)));
+  if (errors.length) throw new OpError(400, `${field} is not valid`, errors.map((e) => e.replace(/^(deck\.)?slides\[0\]/, `slide ${slide.id}`)));
   rec[field] = structuredClone(value);
 }
 
@@ -144,13 +198,23 @@ export function changeSlideLayout(slide: DeckSlide, layout: SlideLayout): string
   if (slide.layout === layout) return [];
   const rec = slide as unknown as Record<string, unknown>;
   const dropped: string[] = [];
-  // What carries over: a list of points becomes the agenda or the next steps and back,
-  // and two columns become the two sides of a comparison and back.
-  if (layout === 'agenda' && !slide.agenda && slide.bullets?.length) {
-    slide.agenda = { items: slide.bullets.slice(0, 6).map((b) => b.slice(0, 80)) };
+  const owns = (l: SlideLayout, f: string): boolean => (LAYOUT_PAYLOADS[l] as readonly string[]).includes(f);
+  const points = (slide.bullets ?? []).map((b) => plainText(b));
+  // What carries over: a list of points becomes the agenda, the next steps, cards or
+  // process steps and back; two columns become the two sides of a comparison and back.
+  if (layout === 'agenda' && !slide.agenda && points.length) {
+    slide.agenda = { items: points.slice(0, 6).map((b) => clipAt(b, 80)) };
     delete slide.bullets;
+  } else if ((layout === 'cards' || layout === 'process') && !slide.items && points.length >= 3) {
+    slide.items = points.slice(0, layout === 'cards' ? 4 : 5).map((b) => (b.length <= MAX_ITEM_TITLE_CHARS ? { title: b } : { title: clipAt(b, MAX_ITEM_TITLE_CHARS), text: clipAt(b, MAX_ITEM_TEXT_CHARS) }));
+    delete slide.bullets;
+  } else if (layout === 'cards' && slide.items && slide.items.length > 4) {
+    slide.items = slide.items.slice(0, 4);
+    dropped.push('the fifth step');
   } else if (layout === 'bullets' && slide.agenda) {
     slide.bullets = [...slide.agenda.items];
+  } else if (layout === 'bullets' && slide.items?.length) {
+    slide.bullets = slide.items.map((i) => clipAt(i.text ? `${i.title}: ${i.text}` : i.title, MAX_BULLET_CHARS));
   } else if (layout === 'bullets' && slide.closing?.nextSteps?.length) {
     slide.bullets = [...slide.closing.nextSteps];
   } else if (layout === 'comparison' && slide.columns) {
@@ -160,18 +224,31 @@ export function changeSlideLayout(slide: DeckSlide, layout: SlideLayout): string
     };
   } else if (layout === 'two-column' && slide.comparison) {
     slide.columns = [[...slide.comparison.left.points], [...slide.comparison.right.points]];
-  } else if (layout === 'closing' && !slide.closing && slide.bullets?.length) {
-    slide.closing = { line: slide.title.slice(0, 100), nextSteps: slide.bullets.slice(0, 3).map((b) => b.slice(0, 120)) };
+  } else if (layout === 'closing' && !slide.closing && points.length) {
+    slide.closing = { line: clipAt(plainText(slide.title), 100), nextSteps: points.slice(0, 3).map((b) => clipAt(b, 120)) };
     delete slide.bullets;
   }
   for (const field of PAYLOAD_FIELDS) {
-    if (rec[field] !== undefined && field !== LAYOUT_PAYLOAD[layout]) { delete rec[field]; dropped.push(field); }
+    if (rec[field] !== undefined && !owns(layout, field)) { delete rec[field]; dropped.push(field); }
   }
+  // Bullets stay only where the new layout draws them; a big number's story takes three.
+  if (slide.bullets !== undefined && !BULLET_LAYOUTS.includes(layout)) { delete slide.bullets; dropped.push('bullets'); }
+  if (layout === 'big-number' && slide.bullets && slide.bullets.length > MAX_STORY_BULLETS) {
+    slide.bullets = slide.bullets.slice(0, MAX_STORY_BULLETS);
+    dropped.push(`bullets after the ${MAX_STORY_BULLETS === 3 ? 'third' : `${MAX_STORY_BULLETS}th`}`);
+  }
+  if (layout === 'big-number' && slide.figures && slide.figures.length > 1) { slide.figures = slide.figures.slice(0, 1); dropped.push('figures after the first'); }
   slide.layout = layout;
-  const own = LAYOUT_PAYLOAD[layout];
-  if (own && rec[own] === undefined && STARTERS[layout]) Object.assign(slide, structuredClone(STARTERS[layout]));
-  if (layout === 'bullets' && !slide.bullets?.length) slide.bullets = [...STARTERS.bullets!.bullets!];
+  fillStarters(slide);
   return dropped;
+}
+
+/** Gives a slide its layout's starter words for every owned field it lacks (and bullets on an empty bullets slide). */
+function fillStarters(slide: DeckSlide): void {
+  const rec = slide as unknown as Record<string, unknown>;
+  const starter = STARTERS[slide.layout] ?? (slide.layout === 'kpi' ? { figures: STARTERS['key-figures']!.figures } : {});
+  for (const [k, v] of Object.entries(starter)) if (rec[k] === undefined) rec[k] = structuredClone(v);
+  if (slide.layout === 'bullets' && !slide.bullets?.length) slide.bullets = [...STARTERS.bullets!.bullets!];
 }
 
 /** Explicit chart data, checked against the format's limits before it touches a slide. */
@@ -184,7 +261,7 @@ function explicitChart(kind: DeckChart['kind'], raw: unknown): DeckChart {
   if (kind === 'pie' && labels.length > MAX_PIE_SLICES) throw new OpError(400, `data.labels: a pie takes at most ${MAX_PIE_SLICES} slices`);
   const chart = { kind, labels, series } as DeckChart;
   const errors = fieldErrors('chart', 'chart', chart);
-  if (errors.length) throw new OpError(400, 'data is not a valid chart', errors.map((e) => e.replace(/^deck\.slides\[0\]\./, '')));
+  if (errors.length) throw new OpError(400, 'data is not a valid chart', errors.map((e) => e.replace(/^(deck\.)?slides\[0\]\./, '')));
   return structuredClone(chart);
 }
 
@@ -248,8 +325,12 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             if (spec.slides.length >= MAX_SLIDES) throw new OpError(400, `a deck holds at most ${MAX_SLIDES} slides`);
             const layout = op['layout'];
             const at = op['after'] === undefined || op['after'] === 'end' ? spec.slides.length : indexOf(op['after'], 'after') + 1;
-            const title = op['title'] === undefined ? LAYOUT_TITLE[layout] : str(op, 'title');
-            const slide: DeckSlide = { id: newId(), layout, title, sources: [{ ...UNSOURCED_SOURCE }] };
+            const title = op['title'] === undefined ? LAYOUT_TITLE[layout] : deckText(op, 'title');
+            // A deck about a record cites it by default (the deck's own copy of that source when a slide has one).
+            const record = input.recordSource
+              ? spec.slides.flatMap((s) => s.sources).find((s) => s.documentId === input.recordSource!.documentId) ?? input.recordSource
+              : UNSOURCED_SOURCE;
+            const slide: DeckSlide = { id: newId(), layout, title, sources: [{ ...record }] };
             if (op['sources'] !== undefined) {
               if (!Array.isArray(op['sources']) || !op['sources'].length) throw new OpError(400, 'sources must be a non-empty list of { documentId, title, anchor? }');
               slide.sources = structuredClone(op['sources']) as DeckSource[];
@@ -258,9 +339,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
               if (!isObj(op['fields'])) throw new OpError(400, 'fields must be an object');
               for (const [k, v] of Object.entries(op['fields'])) setField(slide, k, v);
             }
-            const own = LAYOUT_PAYLOAD[layout];
-            if (own && (slide as unknown as Record<string, unknown>)[own] === undefined && STARTERS[layout]) Object.assign(slide, structuredClone(STARTERS[layout]));
-            if (layout === 'bullets' && !slide.bullets?.length) slide.bullets = [...STARTERS.bullets!.bullets!];
+            fillStarters(slide);
             spec.slides.splice(at, 0, slide);
             touched.add(slide.id);
             phrases.push(`added a ${layout} slide at ${position(at)}`);
@@ -273,7 +352,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
             const was = named(slide);
             spec.slides.splice(spec.slides.indexOf(slide), 1);
             touched.delete(slide.id);
-            phrases.push(`removed ${was} ("${slide.title}")`);
+            phrases.push(`removed ${was} ("${plainText(slide.title)}")`);
             break;
           }
           case 'move_slide': {
@@ -293,7 +372,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
           case 'set_title': {
             only(op, ['slideId', 'title']);
             const slide = editable(op);
-            slide.title = str(op, 'title');
+            slide.title = deckText(op, 'title');
             touched.add(slide.id);
             phrases.push(`retitled ${named(slide)}`);
             break;
@@ -334,12 +413,17 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
           case 'set_theme': {
             only(op, ['theme']);
             const theme = op['theme'];
-            if (typeof theme === 'string' && Object.prototype.hasOwnProperty.call(BUILTIN_THEMES, theme)) spec.theme = theme as keyof typeof BUILTIN_THEMES;
+            // The deck's style (when it names one) stays: a theme change only swaps the colours and brand.
+            const style = themeChoice(spec.theme).style;
+            let name: string;
+            if (typeof theme === 'string' && Object.prototype.hasOwnProperty.call(BUILTIN_THEMES, theme)) { spec.theme = theme as keyof typeof BUILTIN_THEMES; name = theme; }
             else if (isObj(theme) && Object.keys(theme).length === 1 && typeof theme['ref'] === 'string' && THEME_REF_PATTERN.test(theme['ref'])) {
               if (theme['ref'] !== input.tenant) throw new OpError(400, `theme ref must be '${input.tenant}', this tenant's theme`);
               spec.theme = { ref: theme['ref'] };
+              name = theme['ref'];
             } else throw new OpError(400, `theme must be one of ${Object.keys(BUILTIN_THEMES).join(', ')} or { ref: '${input.tenant}' }`);
-            phrases.push(`set the theme to ${typeof spec.theme === 'string' ? spec.theme : spec.theme.ref}`);
+            if (style) spec.theme = withDeckStyle(spec.theme, style, input.tenant);
+            phrases.push(`set the theme to ${name}`);
             break;
           }
           case 'set_chart': {
@@ -368,19 +452,78 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
               slide.notes = [...kept, resolved.value.note].join('\n').slice(-2000);
               phrase = `set a ${kind} chart on ${named(slide)} from ${resolved.value.summary}`;
               // The report names the slide unless the caller gave a title; the summary says the rename (the confirm card and the page do too).
-              if (givenTitle === undefined && slide.title !== resolved.value.title) {
-                phrase += slide.title.trim() ? ` and renamed it from "${slide.title}" to "${resolved.value.title}"` : ` titled "${resolved.value.title}"`;
+              if (givenTitle === undefined && plainText(slide.title) !== resolved.value.title) {
+                phrase += plainText(slide.title) ? ` and renamed it from "${plainText(slide.title)}" to "${resolved.value.title}"` : ` titled "${resolved.value.title}"`;
                 slide.title = resolved.value.title;
               }
             }
-            if (givenTitle !== undefined && slide.title !== givenTitle) {
+            if (givenTitle !== undefined && plainText(slide.title) !== givenTitle) {
               phrase += ` titled "${givenTitle}"`;
               slide.title = givenTitle;
             }
-            if (slide.layout !== 'chart') changeSlideLayout(slide, 'chart');
+            // A chart put on a slide that cannot show one turns it into a chart slide; what a chart slide does not
+            // draw (old bullets, another layout's payload) is dropped and the summary says so (finding 2 of the tour film).
+            if (!(LAYOUT_PAYLOADS[slide.layout] as readonly string[]).includes('chart')) {
+              const from = slide.layout;
+              const dropped = changeSlideLayout(slide, 'chart');
+              phrase += ` (it was a ${from} slide${dropped.length ? `; dropped ${dropped.join(', ')}` : ''})`;
+            }
             slide.chart = chart;
             touched.add(slide.id);
             phrases.push(phrase);
+            break;
+          }
+          case 'set_style': {
+            only(op, ['style']);
+            if (!isDeckStyle(op['style'])) throw new OpError(400, `style must be one of ${DECK_STYLES.join(', ')}`);
+            spec.theme = withDeckStyle(spec.theme, op['style'], input.tenant);
+            phrases.push(`set the style to ${op['style']}`);
+            break;
+          }
+          case 'set_decoration': {
+            only(op, ['slideId', 'decoration']);
+            const slide = editable(op);
+            const d = op['decoration'];
+            if (d === null) { delete slide.decoration; phrases.push(`gave ${named(slide)} its style's own decoration`); }
+            else if (d === 'none') { slide.decoration = 'none'; phrases.push(`removed the decoration from ${named(slide)}`); }
+            else {
+              if (!isObj(d) || !isGraphicName(d['graphic'])) {
+                throw new OpError(400, "decoration must be 'none', null (the style's own) or { graphic, placement? } with a graphic name from the catalogue (such as blob, waves, dots, badge-seal, rocket)");
+              }
+              const extra = Object.keys(d).filter((k) => k !== 'graphic' && k !== 'placement');
+              if (extra.length) throw new OpError(400, `decoration: unknown field ${extra.join(', ')}`);
+              const placement = d['placement'];
+              if (placement !== undefined && !(DECK_DECORATION_PLACEMENTS as readonly unknown[]).includes(placement)) {
+                throw new OpError(400, `decoration.placement must be one of ${DECK_DECORATION_PLACEMENTS.join(', ')}`);
+              }
+              slide.decoration = { graphic: d['graphic'], ...(placement !== undefined ? { placement: placement as DeckDecorationPlacement } : {}) };
+              phrases.push(`put a ${String(d['graphic']).replace(/-/g, ' ')} on ${named(slide)}`);
+            }
+            touched.add(slide.id);
+            break;
+          }
+          case 'set_emphasis': {
+            only(op, ['slideId', 'target', 'from', 'to', 'emphasis']);
+            const slide = editable(op);
+            const target = op['target'];
+            const bullet = isObj(target) && Object.keys(target).length === 1 && Number.isInteger(target['bullet']) ? Number(target['bullet']) : null;
+            if (target !== 'title' && bullet === null) throw new OpError(400, "target must be 'title' or { bullet: <1-based number> }");
+            if (bullet !== null && (bullet < 1 || bullet > (slide.bullets?.length ?? 0))) {
+              throw new OpError(400, `slide ${slide.id} has ${slide.bullets?.length ?? 0} bullets; there is no bullet ${bullet}`);
+            }
+            const from = op['from'];
+            const to = op['to'] ?? from;
+            if (!Number.isInteger(from) || !Number.isInteger(to)) throw new OpError(400, 'from and to must be word numbers (1-based); to defaults to from');
+            const emphasis = op['emphasis'];
+            if (emphasis !== null && !(DECK_EMPHASES as readonly unknown[]).includes(emphasis)) {
+              throw new OpError(400, `emphasis must be one of ${DECK_EMPHASES.join(', ')}, or null to clear it`);
+            }
+            const e = emphasis as DeckEmphasis | null;
+            if (bullet === null) slide.title = emphasiseWords(slide.title, from as number, to as number, e);
+            else slide.bullets![bullet - 1] = emphasiseWords(slide.bullets![bullet - 1]!, from as number, to as number, e);
+            touched.add(slide.id);
+            const words = from === to ? `word ${String(from)}` : `words ${String(from)} to ${String(to)}`;
+            phrases.push(`${e === null ? 'cleared the emphasis on' : `gave ${e} emphasis to`} ${words} of the ${bullet === null ? 'title' : `bullet ${bullet}`} on ${named(slide)}`);
             break;
           }
         }
@@ -399,6 +542,8 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
 
   const valid = validateDeckSpec(spec);
   if (!valid.ok) return { ok: false, status: 400, reason: 'the edited deck is not valid', details: { errors: valid.errors } };
+  const hostErrors = hostSpecErrors(valid.spec);
+  if (hostErrors.length) return { ok: false, status: 400, reason: 'the edited deck is not valid', details: { errors: hostErrors } };
   const touchedIds = valid.spec.slides.map((s) => s.id).filter((id) => touched.has(id));
   const layout = layoutSpec(valid.spec, resolveDeckTheme(valid.spec.theme, input.tenant));
   const findings = layout.findings.filter((f) => touched.has(f.slideId));

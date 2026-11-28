@@ -8,11 +8,10 @@
 // Nothing here is saved: save validates the real spec, unchanged.
 
 import { validateDeckSpec, type DeckSpec, type SlideLayout } from '@connorhoehn/realtime-modules/deck';
-import { LAYOUT_PAYLOAD, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE } from './slide-starters.js';
+import { LAYOUT_PAYLOADS, PAYLOAD_FIELDS, SLIDE_LAYOUTS, STARTERS, UNSOURCED_SOURCE } from './slide-starters.js';
 
 export const DRAFT_TITLE = 'Untitled slide';
 const BLANK = '…';
-const PAYLOAD_FIELDS = Object.values(LAYOUT_PAYLOAD) as string[];
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const blank = (v: unknown): boolean => typeof v === 'string' && !v.trim();
@@ -32,7 +31,7 @@ const probeErrors = (slide: Record<string, unknown>): string[] => {
 
 /** What to tell the author about a slide's own errors, in a few words. */
 function missing(errors: string[]): string {
-  const words = errors.map((e) => (/^title: required/.test(e) ? 'a title'
+  const words = errors.map((e) => (/(^|\.)title: (required|must be a non-empty string)/.test(e) ? 'a title'
     : /must cite/.test(e) ? 'a source'
     : /must be a non-empty string|non-empty/.test(e) ? 'its blank fields'
       : /needs (at least one )?(\w[\w -]*)$/.exec(e)?.[0]?.replace(/^needs /, '') ?? e));
@@ -57,18 +56,18 @@ export function previewableDraft(raw: unknown): PreviewableDraft | null {
   for (const [index, entry] of raw.slides.entries()) {
     if (!isObj(entry) || typeof entry.id !== 'string' || !(SLIDE_LAYOUTS as readonly unknown[]).includes(entry.layout)) return null;
     const layout = entry.layout as SlideLayout;
-    const own = LAYOUT_PAYLOAD[layout];
+    const own = LAYOUT_PAYLOADS[layout] as readonly string[];
     const before = probeErrors(entry);
     if (before.length === 0) { slides.push(entry); continue; }
     const slide: Record<string, unknown> = { ...entry };
-    for (const field of PAYLOAD_FIELDS) if (field !== own) delete slide[field];
+    for (const field of PAYLOAD_FIELDS) if (!own.includes(field)) delete slide[field];
     if (typeof slide.title !== 'string' || !slide.title.trim()) slide.title = DRAFT_TITLE;
     if (!Array.isArray(slide.sources) || slide.sources.length === 0) slide.sources = [UNSOURCED_SOURCE];
-    for (const key of ['bullets', 'eyebrow', ...(own ? [own] : [])]) if (slide[key] !== undefined) slide[key] = fillBlanks(slide[key]);
+    for (const key of ['bullets', 'eyebrow', ...own]) if (slide[key] !== undefined) slide[key] = fillBlanks(slide[key]);
     if (Array.isArray(slide.bullets) && slide.bullets.length === 0) delete slide.bullets;
     if (probeErrors(slide).length > 0) {
       // The payload itself does not pass (too few steps, a leftover shape): show the layout's starter.
-      if (own) delete slide[own];
+      for (const field of own) delete slide[field];
       if (layout === 'bullets') delete slide.bullets;
       Object.assign(slide, structuredClone(STARTERS[layout] ?? {}));
       if (probeErrors(slide).length > 0) return null;

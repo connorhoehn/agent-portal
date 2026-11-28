@@ -8,7 +8,8 @@ jest.mock('../../../config.js', () => ({
 }));
 
 import { validateDeckSpec, type DeckSpec } from '@connorhoehn/realtime-modules/deck';
-import { builtinTheme } from '@connorhoehn/realtime-modules/deck/layout';
+import { builtinTheme, styledTheme } from '@connorhoehn/realtime-modules/deck/layout';
+import { IMAGE_LAYOUTS } from '../slide-starters.js';
 import {
   DECK_HOST_TENANTS, DECK_TEMPLATES, LAYOUT_USE_FOR, SLIDE_LAYOUTS, exampleSourceSlideIds, exampleSourceWarnings,
   layoutSpec, listLayouts, listTemplates, readTemplate, templateDeckSpec, templatePreviewStats, tenantDeckTheme,
@@ -20,8 +21,9 @@ const THEMES = [
 ];
 
 describe('deck templates', () => {
-  it('there are five, each valid, with id, title, description, audience and every slide citing the template as its example', () => {
-    expect(DECK_TEMPLATES.map((t) => t.id)).toEqual(['status-update', 'proposal', 'review', 'interview-debrief', 'run-report']);
+  it('there are eight, each valid, in one of the five styles, with id, title, description, audience and every slide citing the template as its example', () => {
+    expect(DECK_TEMPLATES.map((t) => t.id)).toEqual(['status-update', 'proposal', 'review', 'interview-debrief', 'run-report', 'quarterly-business-review', 'project-kickoff', 'customer-story']);
+    expect(new Set(DECK_TEMPLATES.map((t) => t.style))).toEqual(new Set(['bold', 'editorial', 'minimal', 'playful', 'corporate']));
     for (const t of DECK_TEMPLATES) {
       const valid = validateDeckSpec(t.spec);
       expect(valid.ok ? [] : valid.errors).toEqual([]);
@@ -33,9 +35,9 @@ describe('deck templates', () => {
     }
   });
 
-  it.each(DECK_TEMPLATES.map((t) => [t.id, t] as const))('%s lays out with zero findings in every theme', (_id, t) => {
+  it.each(DECK_TEMPLATES.map((t) => [t.id, t] as const))('%s lays out with zero findings in every theme, in its own style', (_id, t) => {
     for (const [name, theme] of THEMES) {
-      const findings = layoutSpec({ ...t.spec, theme: name === 'product' || name === 'engineering' || name === 'plain' ? name : { ref: name } }, theme).findings;
+      const findings = layoutSpec({ ...t.spec, theme: name === 'product' || name === 'engineering' || name === 'plain' ? name : { ref: name } }, styledTheme(theme, t.style)).findings;
       expect({ theme: name, findings }).toEqual({ theme: name, findings: [] });
     }
   });
@@ -49,15 +51,16 @@ describe('deck templates', () => {
     expect(layoutSpec(spec, tenantDeckTheme('orgiq')).findings.length).toBeGreaterThan(0);
   });
 
-  it('between them the templates show every layout, so the gallery has an example for each', () => {
+  it('between them the templates show every layout but the picture ones, so the gallery has an example for each', () => {
     const used = new Set(DECK_TEMPLATES.flatMap((t) => t.spec.slides.map((s) => s.layout)));
-    expect([...SLIDE_LAYOUTS].filter((l) => !used.has(l))).toEqual([]);
+    expect([...SLIDE_LAYOUTS].filter((l) => !used.has(l))).toEqual([...IMAGE_LAYOUTS]);
     const { layouts } = listLayouts('orgiq');
     expect(layouts.map((l) => l.layout)).toEqual([...SLIDE_LAYOUTS]);
     for (const l of layouts) {
       expect(l.useFor).toBe(LAYOUT_USE_FOR[l.layout]);
       expect(l.capacity.length).toBeGreaterThan(0);
-      expect(l.example?.svg).toMatch(/^<svg/);
+      if (IMAGE_LAYOUTS.includes(l.layout)) expect(l.example).toBeNull();
+      else expect(l.example?.svg).toMatch(/^<svg/);
     }
   });
 
@@ -75,14 +78,14 @@ describe('deck templates', () => {
       expect(t.preview[0]!.svg).toMatch(/^<svg/);
     }
     const one = readTemplate('social', 'review')!;
-    expect(one.spec.theme).toEqual({ ref: 'social' });
+    expect(one.spec.theme).toEqual({ ref: 'social-editorial' });
     expect(one.preview.slides).toHaveLength(DECK_TEMPLATES[2]!.spec.slides.length + 1); // and the Sources slide
     expect(readTemplate('social', 'nope')).toBeNull();
   });
 
   it('a deck from a template takes the caller title and the tenant theme; bad input is 400', () => {
     const made = templateDeckSpec({ templateId: 'run-report', title: 'Our run' }, 'pipelines');
-    expect(made.ok && made.value.spec).toMatchObject({ title: 'Our run', theme: { ref: 'pipelines' } });
+    expect(made.ok && made.value.spec).toMatchObject({ title: 'Our run', theme: { ref: 'pipelines-minimal' } });
     expect(templateDeckSpec({ templateId: 'nope' }, 'pipelines')).toMatchObject({ ok: false, status: 400 });
     expect(templateDeckSpec({ templateId: 'review', title: '' }, 'pipelines')).toMatchObject({ ok: false, status: 400 });
   });

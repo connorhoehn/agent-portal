@@ -48,6 +48,7 @@ import { expectDeckExports } from '../../test-support/deck-exports.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { mockHolds } from '../../providers/spend-holds.js';
+import { DECK_TEMPLATES, SLIDE_LAYOUTS } from '../../lib/deck-shared/index.js';
 
 let restoreRelease: () => void;
 beforeAll(() => { restoreRelease = hidePptxNodeDetection(); });
@@ -403,7 +404,7 @@ describe('run report deck — agent revise', () => {
       const { deckId, revisionId, spec } = await makeDeck(app);
       const forged: DeckSpec = JSON.parse(JSON.stringify(spec));
       const summary = forged.slides.find((s) => s.id === 'summary')!;
-      summary.bullets = summary.bullets!.map((b) => b.replace(/Steps: \d+/, 'Steps: 9999'));
+      summary.bullets = summary.bullets!.map((b) => String(b).replace(/Steps: \d+/, 'Steps: 9999'));
       summary.notes = 'Reworded.';
       const run = await live(async () => ({ text: JSON.stringify({ summary: 'Reworded.', spec: forged, changedSlideIds: ['summary'] }) }), async () => {
         const started = (await request(app).post(reviseUrl(deckId)).send({ instruction: 'Reword the notes', baseRevisionId: revisionId, slideId: 'summary' })).body;
@@ -481,7 +482,7 @@ describe('run report deck — from a template and by edit operations', () => {
     const url = `/api/pipelines/runs/${encodeURIComponent(runId)}/decks`;
     expect((await request(as('pipeline-reader')).post(url).send({ templateId: 'run-report' })).status).toBe(403);
     const app = as('operator');
-    expect((await request(app).get('/api/pipelines/deck-templates')).body.templates).toHaveLength(5);
+    expect((await request(app).get('/api/pipelines/deck-templates')).body.templates).toHaveLength(DECK_TEMPLATES.length);
     const made = await request(app).post(url).send({ templateId: 'run-report', title: 'Run review' });
     expect(made.status).toBe(201);
     expect(made.body.revision.producedBy).toBe('template:run-report');
