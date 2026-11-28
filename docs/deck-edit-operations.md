@@ -10,12 +10,12 @@ The contract the deck editor page and the voice wiring code against. Code: `midd
 | --- | --- | --- |
 | `POST <deck>/:id/operations` | the deck's save rule (`deckWriteAuthority`) | 201 `{ revision, touchedSlideIds, findings, summary, exampleSourceSlideIds }` |
 | `GET <deck>/:id/chart-reports` | whoever may read the deck | `{ reports: [{ id, description, params, money }] }` |
-| `GET <tenant>/deck-templates` | the tenant's deck readers | `{ templates: [{ id, title, description, audience, slideCount, layouts, preview: [{ id, title, svg }] x3 }] }` |
+| `GET <tenant>/deck-templates` | the tenant's deck readers | `{ templates: [{ id, title, description, audience, style, slideCount, layouts, preview: [{ id, title, svg }] x3 }] }` |
 | `GET <tenant>/deck-templates/:templateId` | the same | `{ id, ..., spec, preview: { slides, warnings, findings } }`; 404 unknown |
 | `GET <tenant>/deck-layouts` | the same | `{ layouts: [{ layout, useFor, capacity, example: { templateId, slideId, svg } }] }` |
 | create from a template | the tenant's build rule | 201 `{ deckId, revisionId, revision, templateId, exampleSourceSlideIds }` |
 
-Create from a template uses each tenant's existing create path with `{ templateId, title? }` in the body: `POST /api/initiative-decks/projects/:projectId`, `POST /api/assessment/teams/:teamId/decks`, `POST /api/pipelines/runs/:id/decks`, and for Social, which had no direct create, `POST /api/chat/decks` with `{ channel, templateId, title? }`. The deck takes the tenant's theme (`{ ref: '<tenant>' }`), revision 1 is produced by `template:<id>`, and an initiative deck made this way never carries budget figures.
+Create from a template uses each tenant's existing create path with `{ templateId, title? }` in the body: `POST /api/initiative-decks/projects/:projectId`, `POST /api/assessment/teams/:teamId/decks`, `POST /api/pipelines/runs/:id/decks`, and for Social, which had no direct create, `POST /api/chat/decks` with `{ channel, templateId, title? }`. The deck takes the tenant's theme in the template's style (`{ ref: '<tenant>-<style>' }`), revision 1 is produced by `template:<id>`, and an initiative deck made this way never carries budget figures.
 
 ## Operations
 
@@ -23,15 +23,30 @@ Body: `{ baseRevisionId, operations: [...], label? }`. At most 10 operations; th
 
 | op | fields | notes |
 | --- | --- | --- |
-| `add_slide` | `layout`, `after?` (slide id, or `'end'`; absent is the end), `title?`, `fields?`, `sources?` | id minted by the server (`s-xxxxxxxx`). Without `fields` the layout gets placeholder words, never numbers; a `chart` slide needs `fields.chart` or a later `set_chart`. Without `sources` it cites `example:unsourced`. |
+| `add_slide` | `layout`, `after?` (slide id, or `'end'`; absent is the end), `title?`, `fields?`, `sources?` | id minted by the server (`s-xxxxxxxx`). Without `fields` the layout gets placeholder words, never numbers; a `chart` slide needs `fields.chart` or a later `set_chart`. Without `sources` it cites `example:unsourced`, or on an initiative's deck the initiative record (`initiative:<projectId>`, the deck's own copy when a slide already cites it). `title` takes a string or text runs. |
 | `remove_slide` | `slideId` | a deck keeps one slide |
 | `move_slide` | `slideId`, and `after` (slide id) or `to: 'start'` | |
-| `set_title` | `slideId`, `title` | |
-| `set_fields` | `slideId`, `fields` | only the slide's own fields: `eyebrow`, `bullets`, and its layout's payload (`columns`, `chart`, `quote`, `image`, `figures`, `table`, `comparison`, `timeline`, `agenda`, `closing`). Each field is validated alone; `null` removes an optional field. |
-| `change_layout` | `slideId`, `layout`, `fields?` | carries what fits (bullets to agenda items or closing steps and back, two columns to the two sides of a comparison and back), drops the rest and says so in the summary |
+| `set_title` | `slideId`, `title` (a string or `[{ text, emphasis? }]` runs) | |
+| `set_fields` | `slideId`, `fields` | only the slide's own fields: `eyebrow`, `bullets`, and its layout's payload (see the layouts below). Bullets only on the layouts that draw them. Icons inside `items`, `figures`, a comparison's sides and a matrix's quadrants must be catalogue names, checked by the engine. Each field is validated alone; `null` removes an optional field. |
+| `change_layout` | `slideId`, `layout`, `fields?` | carries what fits (bullets to agenda items, closing steps, cards or process steps and back, two columns to the two sides of a comparison and back), drops the rest, including bullets on a layout that does not draw them, and says so in the summary |
 | `set_notes` | `slideId`, `notes` (string, or `null` to clear) | |
-| `set_theme` | `theme`: `'product'`, `'engineering'`, `'plain'` or `{ ref: '<this tenant>' }` | deck level, touches no slide |
-| `set_chart` | `slideId`, `kind` (`bar`, `line`, `stacked-bar`, `pie`), `data: { labels, series }` or `report: { report, params? }`, and `title?` | turns the slide into a `chart` slide. Explicit data past the limits (24 labels, 6 series, a pie's 6 slices and one series) is refused. With `title` the slide takes it. Filled from a report without `title`, the slide takes the report's title ("Spend by initiative, the last 30 days") whatever it was called before, and the summary names the old and the new title (`and renamed it from "Depots live by week" to "…"`); the voice's confirm card and the report panel say the rename before it is made. |
+| `set_theme` | `theme`: `'product'`, `'engineering'`, `'plain'` or `{ ref: '<this tenant>' }` | deck level, touches no slide; keeps the deck's style |
+| `set_chart` | `slideId`, `kind` (`bar`, `line`, `stacked-bar`, `pie`), `data: { labels, series }` or `report: { report, params? }`, and `title?` | a slide that cannot hold a chart becomes a `chart` slide, and what a chart slide does not draw (old bullets, another payload) is dropped and named in the summary (`(it was a bullets slide; dropped bullets)`); a `kpi` slide keeps its layout and takes the chart beside its figures. Explicit data past the limits (24 labels, 6 series, a pie's 6 slices and one series) is refused. With `title` the slide takes it. Filled from a report without `title`, the slide takes the report's title ("Spend by initiative, the last 30 days") whatever it was called before, and the summary names the old and the new title (`and renamed it from "Depots live by week" to "…"`); the voice's confirm card and the report panel say the rename before it is made. |
+| `set_style` | `style`: `bold`, `editorial`, `minimal`, `playful`, `corporate` | deck level |
+| `set_decoration` | `slideId`, `decoration`: `{ graphic, placement? }`, `'none'`, or `null` | `graphic` is a catalogue name (blob, waves, dots, badge-seal, timeline, rocket, …); `placement` is `corner`, `background` or `title`. `'none'` removes the style's own decoration from the slide; `null` gives it back. |
+| `set_emphasis` | `slideId`, `target`: `'title'` or `{ bullet: n }`, `from`, `to?`, `emphasis` (`highlight`, `accent`, `bold`, `underline`, `outline`, `gradient`) or `null` | words counted from 1, `to` defaults to `from`; the other runs keep their emphasis; `null` clears; a space between two marked words joins the run before it |
+
+### Layouts
+
+23 layouts, each with the fields it owns: `title`, `section`, `bullets` (bullets only); `two-column` (`columns`), `chart` (`chart`), `quote` and `big-quote` (`quote`), `key-figures` and `big-number` (`figures`), `table`, `comparison`, `timeline`, `agenda`, `closing`; `process` and `cards` (`items: [{ title, text?, icon? }]`), `matrix` (`{ x, y, quadrants: 4 items }`), `people` (`[{ name, role, detail?, assetId? }]`), `funnel` (`[{ label, value, detail? }]`), `kpi` (`figures` and `chart`); and the image layouts `image`, `image-text`, `image-full` (`image`). Bullets are drawn by `title`, `section`, `bullets`, `two-column`, `big-number`, `image-text` and `image-full`. A layout added without its payload gets starter words.
+
+### Style rides on the theme reference
+
+`DeckSpec` has no style key, and a style must survive revisions, diffs and the two stores without a new column. So the style is stored in the theme reference: `{ ref: '<base>-<style>' }`, where the base is a built-in theme or this tenant (`{ ref: 'orgiq-editorial' }`, `{ ref: 'plain-minimal' }`). `themeChoice` splits it, `withDeckStyle` writes it, `deckStyleOf` reads it (a reference without a style uses the theme's own, bold, or minimal for `plain`), and `resolveDeckTheme` applies the engine's `styledTheme` over the tenant brand, which is never changed by a style. `set_theme` keeps the style; `set_style` keeps the base.
+
+### Pictures
+
+The server never fetches an arbitrary address. An image `url` is refused, in operations and in a person's save alike (`host-rules.ts`); an image is an `assetId`. The painters are given no images yet, so an asset draws as the engine's placeholder and the image-missing finding shows. The templates and sample decks use no image layouts.
 
 ## Reports
 
@@ -49,7 +64,7 @@ Values are never invented. A report with nothing to chart answers 409. Past the 
 
 ## Templates and example sources
 
-Template ids: `status-update`, `proposal`, `review`, `interview-debrief`, `run-report`. They are about one invented organisation and between them show all 13 layouts. Every template slide cites `{ documentId: 'example:template:<id>', title: 'Example content from the <Title> template' }`. The format's rule is only that each slide cites at least one source, and that rule is unchanged, so a deck made from a template saves as it is. The server names the gap instead: a preview's `warnings` has one sentence per slide that cites only an `example:` source, and the operations and create answers list those slides in `exampleSourceSlideIds`. Replacing the sources with `set_fields` is not possible (sources are not a field); a page replaces them with a save.
+Template ids: `status-update`, `proposal`, `review`, `interview-debrief`, `run-report`, `quarterly-business-review`, `project-kickoff`, `customer-story`. They are about one invented organisation; each has a `style`, between them they use all five, and they show every layout but the three image ones, with icons, emphasis and a decoration. Every template slide cites `{ documentId: 'example:template:<id>', title: 'Example content from the <Title> template' }`. The format's rule is only that each slide cites at least one source, and that rule is unchanged, so a deck made from a template saves as it is. The server names the gap instead: a preview's `warnings` has one sentence per slide that cites only an `example:` source, and the operations and create answers list those slides in `exampleSourceSlideIds`. Replacing the sources with `set_fields` is not possible (sources are not a field); a page replaces them with a save.
 
 ## Examples
 
