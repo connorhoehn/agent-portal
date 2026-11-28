@@ -1,12 +1,13 @@
 // Assessment review decks under MOCK_AURORA (docs/assessment-deck-goal.md,
-// "Storage"). Rows mirror schema/assessment_deck_schema.sql. The seed is
-// empty on purpose: a deck's slides are facts read from the assessment
-// fixtures at generation time, so a seeded spec would be a second copy of
-// numbers that could disagree with the scorecard. POST /api/__mock/reset
-// clears every deck and revision created during a session.
+// "Storage"). Rows mirror schema/assessment_deck_schema.sql. No stored spec
+// is seeded: a stored copy could disagree with the scorecard. The default
+// scenario carries one sample readout from ./sample-decks.ts, BUILT from the
+// scores each time the fixture is read. The empty scenario is empty.
+// POST /api/__mock/reset puts the sample back and clears every other deck.
 
 import type { DeckSpec } from '@connorhoehn/realtime-modules/deck';
 import { defineFixture } from './core/fixture.js';
+import { buildSampleDeck, sampleDeckId, sampleRevisionId, SAMPLE_ASSESSMENT_DECKS, SAMPLE_SUMMARY } from './sample-decks.js';
 
 export interface AssessmentDeckRow {
   id: string;
@@ -40,10 +41,22 @@ export interface AssessmentDeckRevisionRow {
 
 export const assessmentDecksFixture = defineFixture<AssessmentDeckRow>({
   key: 'assessment.decks',
-  scenarios: { default: () => [], empty: () => [] },
+  scenarios: {
+    default: () => SAMPLE_ASSESSMENT_DECKS.map(({ key, teamId, n }) => {
+      const d = buildSampleDeck(key, n);
+      return { id: sampleDeckId('deck', n), teamId, title: d.spec.title, audience: 'The team and its assessment lead', dimensionIds: [], createdBy: null, createdAt: d.createdAt, updatedAt: d.createdAt, headRevisionId: sampleRevisionId('rev', n), lastRunId: null };
+    }),
+    empty: () => [],
+  },
 });
 
 export const assessmentDeckRevisionsFixture = defineFixture<AssessmentDeckRevisionRow>({
   key: 'assessment.deck-revisions',
-  scenarios: { default: () => [], empty: () => [] },
+  scenarios: {
+    default: () => SAMPLE_ASSESSMENT_DECKS.map(({ key, n }) => {
+      const d = buildSampleDeck(key, n);
+      return { id: sampleRevisionId('rev', n), deckId: sampleDeckId('deck', n), seq: 1, baseRevisionId: null, label: 'Sample deck', spec: d.spec, lockedSlideIds: [], producedBy: `sample:${key}`, createdBy: null, summary: SAMPLE_SUMMARY, createdAt: d.createdAt };
+    }),
+    empty: () => [],
+  },
 });

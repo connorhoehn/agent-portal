@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { archivedDeckHistoryFixture, initializeInitiativeDeckDurability, recoverArchivedInitiativeDeck, mergeDurableInitiativeDecks, validateDurableInitiativeDecks } from '../initiative-deck-durability.js';
 import { initiativeDecksFixture, initiativeDeckRevisionsFixture } from '../initiative-decks.js';
+import { isSampleDeckId } from '../sample-decks.js';
 import { initiativeDeckRevisions, initiativeDeckStore, getDeck, getRevisionSpec, createDeck } from '../../providers/initiative-decks.js';
 
 const raw = readFileSync(join(__dirname, 'fixtures/initiative-deck-archive.json'));
@@ -15,12 +16,18 @@ const expectedSha = '4dd2d77c981c21d4af36a69f049b1f946f26fdff6620a11c9f929d63ff0
 const archive = recoverArchivedInitiativeDeck(raw, expectedSha);
 const empty = () => ({ schema: 'orgiq-local-initiative-decks/v1' as const, decks: [], revisions: [], archivedHistory: [], provenance: [] });
 let dir: string;
+// The default world seeds sample decks (sample-decks.ts) that the durable file
+// never holds; this suite is about the decks people make, so it starts without them.
+function withoutSamples() {
+  initiativeDecksFixture.rows().splice(0, initiativeDecksFixture.rows().length);
+  initiativeDeckRevisionsFixture.rows().splice(0, initiativeDeckRevisionsFixture.rows().length);
+}
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'initiative-deck-durability-'));
   process.env['NODE_ENV'] = 'development'; process.env['DEV_OFFLINE'] = 'true';
   process.env['MOCK_INITIATIVE_DECKS_PATH'] = join(dir, 'decks.json');
   delete process.env['MOCK_INITIATIVE_DECK_ARCHIVE']; delete process.env['MOCK_INITIATIVE_DECK_ARCHIVE_SHA256'];
-  initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); archivedDeckHistoryFixture.reset();
+  initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); archivedDeckHistoryFixture.reset(); withoutSamples();
 });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); delete process.env['MOCK_INITIATIVE_DECKS_PATH']; delete process.env['MOCK_INITIATIVE_DECK_ARCHIVE']; delete process.env['MOCK_INITIATIVE_DECK_ARCHIVE_SHA256']; });
 function restore() {
@@ -131,7 +138,11 @@ it('a real CAS append persists v8 and its authentic authorship, then reloads wit
   expect((await initiativeDeckRevisions.append({ ...next, id: initiativeDeckRevisions.newRevisionId() })).ok).toBe(false);
   expect(readFileSync(process.env['MOCK_INITIATIVE_DECKS_PATH']!, 'utf8')).toBe(before);
   initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); archivedDeckHistoryFixture.reset(); initializeInitiativeDeckDurability();
-  expect(initiativeDecksFixture.rows()[0]!.headRevisionId).toBe(id); expect(initiativeDeckRevisionsFixture.rows().map(r => r.seq)).toEqual([7, 8]);
+  // A boot seeds the samples, then adopts the saved deck beside them; the samples never reach the file.
+  const saved = initiativeDecksFixture.rows().filter(d => !isSampleDeckId(d.id)), savedRevisions = initiativeDeckRevisionsFixture.rows().filter(r => !isSampleDeckId(r.deckId));
+  expect(initiativeDecksFixture.rows().filter(d => isSampleDeckId(d.id))).toHaveLength(4);
+  expect(saved[0]!.headRevisionId).toBe(id); expect(savedRevisions.map(r => r.seq)).toEqual([7, 8]);
+  expect(validateDurableInitiativeDecks(JSON.parse(readFileSync(process.env['MOCK_INITIATIVE_DECKS_PATH']!, 'utf8'))).decks.map(d => d.id)).toEqual([saved[0]!.id]);
 });
 it('failed atomic persistence rolls the CAS change back and preserves the prior head/body', async () => {
   restore(); const head = archive.revisions[0]!, before = structuredClone(initiativeDeckRevisionsFixture.rows());
@@ -140,7 +151,7 @@ it('failed atomic persistence rolls the CAS change back and preserves the prior 
   expect(initiativeDecksFixture.rows()[0]!.headRevisionId).toBe(head.id); expect(initiativeDeckRevisionsFixture.rows()).toEqual(before);
 });
 it('explicit reset can persist empty state; the one-time archive does not reappear from an existing destination', () => {
-  restore(); initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); archivedDeckHistoryFixture.reset();
+  restore(); initiativeDecksFixture.reset(); initiativeDeckRevisionsFixture.reset(); archivedDeckHistoryFixture.reset(); withoutSamples();
   // The control plane calls this same persistence seam after explicit reset.
   const { persistInitiativeDecks } = require('../initiative-deck-durability.js'); persistInitiativeDecks(); initializeInitiativeDeckDurability();
   expect(initiativeDecksFixture.rows()).toEqual([]); expect(initiativeDeckRevisionsFixture.rows()).toEqual([]); expect(archivedDeckHistoryFixture.rows()).toEqual([]);

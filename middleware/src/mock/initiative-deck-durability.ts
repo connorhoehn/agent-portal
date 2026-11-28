@@ -8,6 +8,7 @@ import { config } from '../config.js';
 import { mockRestartArchive } from './restart-state.js';
 import { defineFixture } from './core/fixture.js';
 import { initiativeDecksFixture, initiativeDeckRevisionsFixture, type InitiativeDeckRow, type InitiativeDeckRevisionRow } from './initiative-decks.js';
+import { isSampleDeckId } from './sample-decks.js';
 
 export interface ArchivedRevisionMetadata { deckId: string; id: string; seq: number; label: string; createdAt: string; producedBy: string; specAvailable: false; unavailabilityReason: string }
 export const archivedDeckHistoryFixture = defineFixture<ArchivedRevisionMetadata>({ key: 'orgiq.deck-archive-history', scenarios: { default: () => [], empty: () => [] } });
@@ -106,8 +107,11 @@ const localPath = () => {
 };
 export const initiativeDeckDurabilityEnabled = (): boolean => !!localPath();
 export const initiativeDeckRelationalFixtures: readonly string[] = ['orgiq.decks', 'orgiq.deck-revisions', 'orgiq.deck-archive-history'];
-function current(): DurableInitiativeDecks { return { schema: 'orgiq-local-initiative-decks/v1', decks: initiativeDecksFixture.rows(), revisions: initiativeDeckRevisionsFixture.rows(), archivedHistory: archivedDeckHistoryFixture.rows(), provenance: provenance.filter(p => initiativeDecksFixture.rows().some(d => d.id === p.deckId)) }; }
-function adopt(v: DurableInitiativeDecks): void { initiativeDecksFixture.rows().splice(0, initiativeDecksFixture.rows().length, ...v.decks); initiativeDeckRevisionsFixture.rows().splice(0, initiativeDeckRevisionsFixture.rows().length, ...v.revisions); archivedDeckHistoryFixture.rows().splice(0, archivedDeckHistoryFixture.rows().length, ...v.archivedHistory); provenance = v.provenance; }
+// The seed's sample decks (sample-decks.ts) are rebuilt from the rows on every
+// boot, so they are never written to the durable file nor merged from it.
+const own = <R extends { id?: string; deckId?: string }>(rows: R[]): R[] => rows.filter((r) => !isSampleDeckId(r.deckId ?? r.id ?? ''));
+function current(): DurableInitiativeDecks { return { schema: 'orgiq-local-initiative-decks/v1', decks: own(initiativeDecksFixture.rows()), revisions: own(initiativeDeckRevisionsFixture.rows()), archivedHistory: archivedDeckHistoryFixture.rows(), provenance: provenance.filter(p => initiativeDecksFixture.rows().some(d => d.id === p.deckId)) }; }
+function adopt(v: DurableInitiativeDecks): void { const samples = initiativeDecksFixture.rows().filter((d) => isSampleDeckId(d.id)), sampleRevisions = initiativeDeckRevisionsFixture.rows().filter((r) => isSampleDeckId(r.deckId)); initiativeDecksFixture.rows().splice(0, initiativeDecksFixture.rows().length, ...samples, ...v.decks); initiativeDeckRevisionsFixture.rows().splice(0, initiativeDeckRevisionsFixture.rows().length, ...sampleRevisions, ...v.revisions); archivedDeckHistoryFixture.rows().splice(0, archivedDeckHistoryFixture.rows().length, ...v.archivedHistory); provenance = v.provenance; }
 export function persistInitiativeDecks(): void {
   const path = localPath(); if (!path) return;
   const live = current();
