@@ -199,6 +199,7 @@ const h = makeDeckHandlers<DeckAccess>({
   preview: (_id, spec) => Promise.resolve(decks.previewSpec(spec)),
   file: (_id, rid, access, format) => decks.renderRevisionFile(access.deck.id, rid, format),
   operations: (_id, body, access) => decks.applyOperations(access.deck.id, body, access.userId),
+  propose: (_id, body, access) => decks.proposeOperations(access.deck.id, body, access.userId),
   chartReports: () => Promise.resolve({ reports: [] }),
 });
 
@@ -232,6 +233,7 @@ socialDeckRouter.post('/decks/:id/revisions', h.save);
 socialDeckRouter.post('/decks/:id/revise', h.revise);
 socialDeckRouter.post('/decks/:id/preview', h.preview);
 socialDeckRouter.post('/decks/:id/operations', h.operations);
+socialDeckRouter.post('/decks/:id/operations/proposal', h.propose); // saveGuard (the owner); checked, never saved
 socialDeckRouter.get('/decks/:id/chart-reports', h.chartReports);
 socialDeckRouter.get('/decks/:id/revisions/:rid/file', h.file);
 

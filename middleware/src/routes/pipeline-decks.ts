@@ -16,7 +16,7 @@
 import { Router, type Request } from 'express';
 import { AppError, NotFoundError, asyncHandler } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, proposeDeckOperations, sendFail, type ApplyOperationsInput } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/pipeline-decks.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 
@@ -31,6 +31,11 @@ async function writeDeck(req: Request, deckId: string, op: 'save' | 'revise'): P
   return (await deckWriteAuthority('pipelines', { tenant: 'pipelines', runId: deck.runId }, req, op)).sub;
 }
 
+/** What the operations route and its proposal both check a list against. */
+const opsInput = (id: string, req: Request): Omit<ApplyOperationsInput, 'body'> => ({
+  tenant: 'pipelines', revisions: decks.pipelineDeckRevisions, lookup: () => decks.pipelineDeckStore.getDeck(id), deckId: id, sub: req.session?.sub ?? null,
+});
+
 const h = makeDeckHandlers({
   saveGuard: async (req, _ctx, id) => { await writeDeck(req, id, 'save'); },
   isDeckId: decks.isDeckId, isRevisionId: decks.isRevisionId,
@@ -39,9 +44,9 @@ const h = makeDeckHandlers({
   save: (id, body, _ctx, req) => decks.savePersonRevision(id, body, req.session?.sub ?? null),
   preview: (id, spec) => decks.previewDeck(id, spec),
   file: (id, rid, _ctx, format) => decks.renderRevisionFile(id, rid, format),
-  operations: (id, body, _ctx, req) => applyDeckOperations({
-    tenant: 'pipelines', revisions: decks.pipelineDeckRevisions, lookup: () => decks.pipelineDeckStore.getDeck(id), deckId: id, body, sub: req.session?.sub ?? null,
-  }),
+  operations: (id, body, _ctx, req) => applyDeckOperations({ ...opsInput(id, req), body }),
+  // No chart reports on these decks; the call is booked unattributed, to the requester.
+  propose: (id, body, _ctx, req) => proposeDeckOperations({ apply: opsInput(id, req), agentId: 'orgiq-assessment-drafter', initiativeId: null, body }),
   chartReports: async (id) => (await decks.pipelineDeckStore.getDeck(id)) ? { reports: [] } : null,
 });
 
@@ -71,6 +76,7 @@ pipelineDecksRouter.get('/decks/:id/revisions/:rid/spec', viewGate, h.spec);
 pipelineDecksRouter.post('/decks/:id/revisions', h.save);
 pipelineDecksRouter.post('/decks/:id/preview', viewGate, h.preview);
 pipelineDecksRouter.post('/decks/:id/operations', h.operations); // writeDeck → deckWriteAuthority
+pipelineDecksRouter.post('/decks/:id/operations/proposal', h.propose); // writeDeck → deckWriteAuthority; checked, never saved
 pipelineDecksRouter.get('/decks/:id/chart-reports', viewGate, h.chartReports);
 pipelineDecksRouter.get('/decks/:id/revisions/:rid/file', viewGate, h.file);
 

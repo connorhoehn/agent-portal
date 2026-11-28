@@ -17,7 +17,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
-import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckWriteAuthority, makeDeckHandlers, makeTemplateHandlers, proposeDeckOperations, sendFail, type ApplyOperationsInput } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/assessment-decks.js';
 import { isValidTeamId } from '../providers/assessment.js';
 
@@ -32,6 +32,11 @@ async function writeDeck(req: Request, deckId: string, op: 'save' | 'revise'): P
   await deckWriteAuthority('assessment', { tenant: 'assessment', teamId: deck.teamId }, req, op);
 }
 
+/** What the operations route and its proposal both check a list against. */
+const opsInput = (id: string, req: Request): Omit<ApplyOperationsInput, 'body'> => ({
+  tenant: 'assessment', revisions: decks.deckRevisions, lookup: () => decks.deckStore.getDeck(id), deckId: id, sub: req.session?.sub ?? null,
+});
+
 const h = makeDeckHandlers({
   saveGuard: (req, _ctx, id) => writeDeck(req, id, 'save'),
   isDeckId: decks.isDeckId, isRevisionId: decks.isRevisionId,
@@ -40,9 +45,9 @@ const h = makeDeckHandlers({
   save: (id, body, _ctx, req) => decks.savePersonRevision(id, body, req.session?.sub ?? null),
   preview: (id, spec) => decks.previewDeck(id, spec),
   file: (id, rid, _ctx, format) => decks.renderRevisionFile(id, rid, format),
-  operations: (id, body, _ctx, req) => applyDeckOperations({
-    tenant: 'assessment', revisions: decks.deckRevisions, lookup: () => decks.deckStore.getDeck(id), deckId: id, body, sub: req.session?.sub ?? null,
-  }),
+  operations: (id, body, _ctx, req) => applyDeckOperations({ ...opsInput(id, req), body }),
+  // No chart reports on these decks; the call is booked unattributed, to the requester.
+  propose: (id, body, _ctx, req) => proposeDeckOperations({ apply: opsInput(id, req), agentId: 'orgiq-assessment-drafter', initiativeId: null, body }),
   chartReports: async (id) => (await decks.deckStore.getDeck(id)) ? { reports: [] } : null,
 });
 
@@ -78,6 +83,7 @@ assessmentDecksRouter.get('/decks/:id/revisions/:rid/spec', viewGate, h.spec);
 assessmentDecksRouter.post('/decks/:id/revisions', h.save);
 assessmentDecksRouter.post('/decks/:id/preview', viewGate, h.preview);
 assessmentDecksRouter.post('/decks/:id/operations', h.operations); // writeDeck → deckWriteAuthority
+assessmentDecksRouter.post('/decks/:id/operations/proposal', h.propose); // writeDeck → deckWriteAuthority; checked, never saved
 assessmentDecksRouter.get('/decks/:id/chart-reports', viewGate, h.chartReports);
 
 assessmentDecksRouter.post('/decks/:id/revise', asyncHandler(async (req, res) => {

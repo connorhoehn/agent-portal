@@ -37,3 +37,20 @@ export type DeckReviseTenant = keyof typeof DECK_REVISE_MODE_BY_TENANT;
 export function reviseModeAllowed(mode: string, tenant: string): boolean {
   return (DECK_REVISE_MODE_BY_TENANT as Record<string, string>)[tenant] === mode;
 }
+
+// The operations modes (the composer's Edit when the request changes structure,
+// layout, style, decoration, emphasis or charts): the drafter proposes typed
+// operations (docs/deck-edit-operations.md) from the deck's outline and the BFF
+// validates them without saving (lib/deck-shared/propose.ts). One per tenant,
+// guarded like the revise modes.
+export const DECK_OPERATIONS_MODE_BY_TENANT = {
+  assessment: 'operate-review-deck',
+  orgiq: 'operate-initiative-status-deck',
+  pipelines: 'operate-pipeline-run-deck',
+  social: 'operate-social-deck',
+} as const;
+
+/** True only when `mode` is the operations mode that `tenant` owns. */
+export function operationsModeAllowed(mode: string, tenant: string): boolean {
+  return (DECK_OPERATIONS_MODE_BY_TENANT as Record<string, string>)[tenant] === mode;
+}

@@ -181,6 +181,13 @@ export async function createDeckFromTemplate(channel: string, body: { templateId
   return out;
 }
 
+/** The composer's proposal for a deck the caller owns: checked like `applyOperations`, never saved; booked unattributed, to the requester. */
+export const proposeOperations = (deckId: string, body: Record<string, unknown>, sub: string): Promise<Result<shared.ProposeOut>> =>
+  shared.proposeDeckOperations({
+    apply: { tenant: 'social', revisions: socialDeckRevisions, lookup: () => socialDeckStore.getDeck(deckId), deckId, sub },
+    agentId: 'orgiq-assessment-drafter', initiativeId: null, body,
+  });
+
 /** Typed edit operations on a deck the caller owns (docs/deck-edit-operations.md); a written revision updates the work graph like a save. */
 export async function applyOperations(deckId: string, body: Record<string, unknown>, sub: string): Promise<Result<shared.OperationsOut>> {
   const out = await shared.applyDeckOperations({ tenant: 'social', revisions: socialDeckRevisions, lookup: () => socialDeckStore.getDeck(deckId), deckId, body, sub });

@@ -25,7 +25,7 @@
 import { Router, type Request } from 'express';
 import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { requireSession, resolveSession } from '../lib/authz.js';
-import { applyDeckOperations, deckChartResolver, deckWriteAuthority, listDeckReports, makeDeckHandlers, makeTemplateHandlers, sendFail } from '../lib/deck-shared/index.js';
+import { applyDeckOperations, deckChartResolver, deckWriteAuthority, listDeckReports, makeDeckHandlers, makeTemplateHandlers, proposeDeckOperations, sendFail, type ApplyOperationsInput } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/initiative-decks.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 
@@ -49,6 +49,18 @@ async function writeDeck(req: Request, deckId: string, op: 'save' | 'revise'): P
   if (!await decks.visibleDeck(deckId, await viewerOf(req))) throw new NotFoundError('deck not found');
 }
 
+/** What the operations route and its proposal both check a list against. */
+async function opsInput(id: string, viewer: decks.DeckViewer, req: Request) {
+  const deck = await decks.visibleDeck(id, viewer);
+  const input: Omit<ApplyOperationsInput, 'body'> = {
+    tenant: 'orgiq', revisions: decks.initiativeDeckRevisions, lookup: () => decks.visibleDeck(id, viewer), deckId: id,
+    sub: req.session?.sub ?? null, resolveChart: deckChartResolver(req, 'orgiq', { initiativeId: deck?.projectId ?? null }),
+    // A slide added to an initiative's deck cites that initiative's record (finding 3 of the tour film).
+    ...(deck?.projectId ? { recordSource: { documentId: `initiative:${deck.projectId}`, title: 'The initiative record' } } : {}),
+  };
+  return { input, projectId: deck?.projectId ?? null };
+}
+
 const h = makeDeckHandlers<decks.DeckViewer>({
   saveGuard: (req, _ctx, id) => writeDeck(req, id, 'save'),
   isDeckId: decks.isDeckId, isRevisionId: decks.isRevisionId,
@@ -59,14 +71,10 @@ const h = makeDeckHandlers<decks.DeckViewer>({
   revise: (id, body, viewer, req) => decks.reviseDeck(id, body, viewer, req.session?.sub ?? null),
   preview: (id, spec, viewer) => decks.previewDeck(id, spec, viewer),
   file: (id, rid, viewer, format) => decks.renderRevisionFile(id, rid, viewer, format),
-  operations: async (id, body, viewer, req) => {
-    const deck = await decks.visibleDeck(id, viewer);
-    return applyDeckOperations({
-      tenant: 'orgiq', revisions: decks.initiativeDeckRevisions, lookup: () => decks.visibleDeck(id, viewer), deckId: id, body,
-      sub: req.session?.sub ?? null, resolveChart: deckChartResolver(req, 'orgiq', { initiativeId: deck?.projectId ?? null }),
-      // A slide added to an initiative's deck cites that initiative's record (finding 3 of the tour film).
-      ...(deck?.projectId ? { recordSource: { documentId: `initiative:${deck.projectId}`, title: 'The initiative record' } } : {}),
-    });
+  operations: async (id, body, viewer, req) => applyDeckOperations({ ...(await opsInput(id, viewer, req)).input, body }),
+  propose: async (id, body, viewer, req) => {
+    const { input, projectId } = await opsInput(id, viewer, req);
+    return proposeDeckOperations({ apply: input, agentId: 'orgiq-assessment-drafter', initiativeId: projectId, reports: await listDeckReports(req, 'orgiq'), body });
   },
   chartReports: async (id, viewer, req) => (await decks.visibleDeck(id, viewer)) ? { reports: await listDeckReports(req, 'orgiq') } : null,
 });
@@ -107,6 +115,7 @@ initiativeDecksRouter.get('/:id/revisions/:rid/spec', readGate, h.spec);
 initiativeDecksRouter.post('/:id/revisions', h.save); // writeDeck → stewardsInitiative
 initiativeDecksRouter.post('/:id/revise', h.revise); // writeDeck → stewardsInitiative
 initiativeDecksRouter.post('/:id/operations', h.operations); // writeDeck → stewardsInitiative
+initiativeDecksRouter.post('/:id/operations/proposal', h.propose); // writeDeck → stewardsInitiative; checked, never saved
 initiativeDecksRouter.get('/:id/chart-reports', readGate, h.chartReports);
 initiativeDecksRouter.post('/:id/preview', readGate, h.preview);
 initiativeDecksRouter.get('/:id/revisions/:rid/file', readGate, h.file);

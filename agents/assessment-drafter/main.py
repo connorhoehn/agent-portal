@@ -5,6 +5,7 @@ from document_commands import (
 from evidence_commands import EVIDENCE_MODES, EVIDENCE_PROMPT, validate_evidence_output
 from agent_plan import AGENT_PLAN_MODES, AGENT_PLAN_PROMPT, validate_agent_plan
 from deck_narrative import DECK_NARRATIVE_MODES, DECK_REVISE_MODES, DECK_NARRATIVE_PROMPT, DECK_NARRATIVE_TENANTS, validate_deck_narrative_output
+from deck_operations import DECK_OPERATIONS_MODES, DECK_OPERATIONS_PROMPT, DECK_OPERATIONS_TENANTS, validate_deck_operations_output
 import logging
 import os
 import sys
@@ -77,7 +78,7 @@ EXPECTED_TENANT = "assessment"
 # deck-narrative and deck-revise modes belong to exactly one other tenant each,
 # so an assessment session cannot run them and orgiq/pipelines/social sessions
 # cannot run any assessment mode.
-MODE_TENANTS = dict(DECK_NARRATIVE_TENANTS)
+MODE_TENANTS = {**DECK_NARRATIVE_TENANTS, **DECK_OPERATIONS_TENANTS}
 
 
 @tool
@@ -276,12 +277,17 @@ _agent = RegistryAgent(
 def _validate_payload(payload: dict) -> str | None:
     """None if payload is well-formed for its mode; else an error string."""
     mode = payload.get("mode")
-    if mode not in ("story", "context") and mode not in DOCUMENT_MODES and mode not in DECK_MODES and mode not in EVIDENCE_MODES and mode not in AGENT_PLAN_MODES and mode not in DECK_NARRATIVE_MODES:
+    if mode not in ("story", "context") and mode not in DOCUMENT_MODES and mode not in DECK_MODES and mode not in EVIDENCE_MODES and mode not in AGENT_PLAN_MODES and mode not in DECK_NARRATIVE_MODES and mode not in DECK_OPERATIONS_MODES:
         return "mode must be story, context, or a supported document or deck command"
     if mode in EVIDENCE_MODES:
         dim = payload.get("dimension")
         if not isinstance(dim, dict) or not isinstance(dim.get("id"), str) or not isinstance(dim.get("evidence"), list):
             return f"{mode} requires dimension: {{id, facts, criteria, evidence}}"
+        return None
+    if mode in DECK_OPERATIONS_MODES:
+        outline = payload.get("outline")
+        if not isinstance(outline, dict) or not isinstance(outline.get("slides"), list) or not isinstance(payload.get("instruction"), str):
+            return f"{mode} requires outline: {{slides}} and instruction"
         return None
     if mode in DECK_REVISE_MODES:
         if not isinstance(payload.get("spec"), dict) or not isinstance(payload.get("instruction"), str):
@@ -394,7 +400,7 @@ async def _handle_sync(payload: dict) -> dict:
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
 
-    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + _fenced_input(fields)
+    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else DECK_OPERATIONS_PROMPT + "\n" if mode in DECK_OPERATIONS_MODES else "") + _fenced_input(fields)
 
     log.info(
         "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",
@@ -427,6 +433,8 @@ async def _handle_sync(payload: dict) -> dict:
         response_text = validate_evidence_output(mode, response_text, fields)
     elif mode in DECK_NARRATIVE_MODES:
         response_text = validate_deck_narrative_output(mode, response_text, fields)
+    elif mode in DECK_OPERATIONS_MODES:
+        response_text = validate_deck_operations_output(mode, response_text)
     elif mode in AGENT_PLAN_MODES:
         response_text = validate_agent_plan(mode, response_text, fields)
     elif mode in DECK_MODES:

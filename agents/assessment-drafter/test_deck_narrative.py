@@ -61,7 +61,7 @@ class ModeTenantTable(unittest.TestCase):
 
     def test_main_wires_the_table(self):
         src = (Path(__file__).parent / 'main.py').read_text()
-        self.assertIn('MODE_TENANTS = dict(DECK_NARRATIVE_TENANTS)', src)
+        self.assertIn('MODE_TENANTS = {**DECK_NARRATIVE_TENANTS, **DECK_OPERATIONS_TENANTS}', src)
         self.assertIn('mode_tenants=MODE_TENANTS', src)
         self.assertNotIn('reject_wrong_tenant(', src)
 

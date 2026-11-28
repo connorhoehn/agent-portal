@@ -8,5 +8,6 @@ export * from './authority.js';
 export * from './render.js';
 export * from './themes.js';
 export * from './operations.js';
+export * from './propose.js';
 export * from './reports.js';
 export * from './templates.js';

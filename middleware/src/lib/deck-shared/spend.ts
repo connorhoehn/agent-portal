@@ -1,10 +1,10 @@
 // Money on the deck drafter calls (ledger P-12, docs/spend-map.md row 18).
 //
 // Deck drafting (`applyNarrative`, the Social `/deck` run) and deck revision
-// (`reviseWithAgent`) call the drafter agent, which spends Bedrock tokens. Each
+// (`reviseWithAgent`) and the operations proposal (`proposeDeckOperations`) call the drafter agent, which spends Bedrock tokens. Each
 // such call now goes through the agent-invoke chokepoint
 // (lib/agent-invoke-spend.ts): a hold is judged and taken before the call, and
-// one `agent_invoke` ledger row (trigger `deck:<tenant>:<draft|revise>`) is
+// one `agent_invoke` ledger row (trigger `deck:<tenant>:<draft|revise|propose>`) is
 // written after it, which settles the hold when its cost is known.
 //
 // A refusal (a cap, a budget, a kill switch, an unattributed call refused)
@@ -22,7 +22,7 @@ import { holdAgentInvoke, recordAgentInvoke, releaseAgentInvokeHold, usageFromEv
 
 export interface DeckSpendCall {
   tenant: string;
-  action: 'draft' | 'revise';
+  action: 'draft' | 'revise' | 'propose';
   /** The person who asked. */
   actorId: string | null;
   /** The deck's initiative, when it has one; null books the call unattributed. */

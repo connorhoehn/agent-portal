@@ -271,7 +271,24 @@ function explicitChart(kind: DeckChart['kind'], raw: unknown): DeckChart {
  * revision when `body.baseRevisionId` is still the head (409 with the current
  * head otherwise, exactly as a save answers).
  */
-export async function applyDeckOperations(input: ApplyOperationsInput): Promise<Result<OperationsOut>> {
+/** A list that passed every check, not yet saved: what `applyDeckOperations` appends and a proposal shows. */
+export interface PlannedOperations {
+  base: { id: string; lockedSlideIds: string[] };
+  spec: DeckSpec;
+  /** One plain phrase per operation, in order ("changed slide 3 from bullets to kpi"). */
+  phrases: string[];
+  touchedSlideIds: string[];
+  findings: OperationsOut['findings'];
+  /** The phrases as one sentence, capitalised, as the revision summary reads. */
+  summary: string;
+}
+
+/**
+ * Every check `applyDeckOperations` makes (the shape of each operation, the head,
+ * locked slides, the engine's validator, the host rules, the layout), without
+ * saving anything. The proposal route (lib/deck-shared/propose.ts) asks this.
+ */
+export async function planDeckOperations(input: ApplyOperationsInput): Promise<Result<PlannedOperations>> {
   const { body, revisions, deckId } = input;
   if (!revisions.isRevisionId(body.baseRevisionId)) return { ok: false, status: 400, reason: 'baseRevisionId must name a revision' };
   if (!Array.isArray(body.operations) || body.operations.length === 0) return { ok: false, status: 400, reason: 'operations must be a non-empty list' };
@@ -547,12 +564,26 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
   const touchedIds = valid.spec.slides.map((s) => s.id).filter((id) => touched.has(id));
   const layout = layoutSpec(valid.spec, resolveDeckTheme(valid.spec.theme, input.tenant));
   const findings = layout.findings.filter((f) => touched.has(f.slideId));
-  const summary = clipLine(`${phrases.join('; ')}.`);
+  const line = clipLine(`${phrases.join('; ')}.`);
+  return {
+    ok: true,
+    value: {
+      base: { id: base.id, lockedSlideIds: base.lockedSlideIds }, spec: valid.spec, phrases, touchedSlideIds: touchedIds, findings,
+      summary: line.charAt(0).toUpperCase() + line.slice(1),
+    },
+  };
+}
+
+export async function applyDeckOperations(input: ApplyOperationsInput): Promise<Result<OperationsOut>> {
+  const { body, revisions, deckId } = input;
+  const planned = await planDeckOperations(input);
+  if (!planned.ok) return planned;
+  const { base, spec, touchedSlideIds: touchedIds, findings, summary } = planned.value;
   const appended = await revisions.append({
     id: revisions.newRevisionId(), deckId, baseRevisionId: base.id,
     label: typeof body.label === 'string' ? body.label.trim() : 'Edited by operations',
-    spec: valid.spec, lockedSlideIds: base.lockedSlideIds.filter((id) => valid.spec.slides.some((s) => s.id === id)),
-    producedBy: `operations:${input.sub ?? 'unknown'}`, createdBy: input.sub, summary: summary.charAt(0).toUpperCase() + summary.slice(1),
+    spec, lockedSlideIds: base.lockedSlideIds.filter((id) => spec.slides.some((s) => s.id === id)),
+    producedBy: `operations:${input.sub ?? 'unknown'}`, createdBy: input.sub, summary,
   });
   if (!appended.ok) {
     return appended.reason === 'missing'
@@ -563,7 +594,7 @@ export async function applyDeckOperations(input: ApplyOperationsInput): Promise<
     ok: true,
     value: {
       revision: summaryOf(appended.revision), touchedSlideIds: touchedIds, findings,
-      summary: appended.revision.summary ?? summary, exampleSourceSlideIds: exampleSourceSlideIds(valid.spec),
+      summary: appended.revision.summary ?? summary, exampleSourceSlideIds: exampleSourceSlideIds(spec),
     },
   };
 }

@@ -16,6 +16,7 @@ import type { DeckRevisionFile } from './service.js';
 import { DECK_FILE_FORMATS, DeckRenderBudgetError, isDeckFileFormat, type DeckFileFormat } from './render.js';
 import type { DeckPreviewOut, DeckRevisionSummary, Result } from './types.js';
 import type { OperationsOut } from './operations.js';
+import type { ProposeOut } from './propose.js';
 import { listLayouts, listTemplates, readTemplate } from './templates.js';
 import type { DeckHostTenant } from './themes.js';
 
@@ -57,6 +58,8 @@ export interface DeckHandlerOptions<Ctx> {
   preview: (deckId: string, spec: unknown, ctx: Ctx) => Promise<Result<DeckPreviewOut>>;
   /** Typed edit operations (`POST /:id/operations`, lib/deck-shared/operations.ts). Gated by `saveGuard` like a save. */
   operations?: (deckId: string, body: Record<string, unknown>, ctx: Ctx, req: Request) => Promise<Result<OperationsOut>>;
+  /** The composer's operations mode (`POST /:id/operations/proposal`, lib/deck-shared/propose.ts): checked, never saved. Gated by `saveGuard`. */
+  propose?: (deckId: string, body: Record<string, unknown>, ctx: Ctx, req: Request) => Promise<Result<ProposeOut>>;
   /** The reports a chart on this deck may come from, for this caller (`GET /:id/chart-reports`). */
   chartReports?: (deckId: string, ctx: Ctx, req: Request) => Promise<unknown>;
   /** One revision as `format` (`?format=`: pptx by default, pdf, or png for a zip of slide images). */
@@ -150,6 +153,17 @@ export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>)
     res.status(201).json(result.value);
   });
 
+  /** 200 with the reply and the proposed operations, checked but not saved; a refused list carries `refusal`. */
+  const propose: RequestHandler = asyncHandler(async (req, res) => {
+    if (!opts.propose) throw new NotFoundError('edit proposals are not available for this deck');
+    const id = deckId(req.params['id']);
+    const ctx = await ctxFor(req, id);
+    if (opts.saveGuard) await opts.saveGuard(req, ctx, id);
+    const result = await opts.propose(id, (req.body ?? {}) as Record<string, unknown>, ctx, req);
+    if (!result.ok) { sendFail(res, result); return; }
+    res.status(200).json(result.value);
+  });
+
   const chartReports: RequestHandler = asyncHandler(async (req, res) => {
     if (!opts.chartReports) throw new NotFoundError('chart reports are not available for this deck');
     const id = deckId(req.params['id']);
@@ -159,7 +173,7 @@ export function makeDeckHandlers<Ctx = undefined>(opts: DeckHandlerOptions<Ctx>)
     res.json(out);
   });
 
-  return { detail, spec, save, revise, preview, file, operations, chartReports, deckId, revisionId, ctxFor };
+  return { detail, spec, save, revise, preview, file, operations, propose, chartReports, deckId, revisionId, ctxFor };
 }
 
 /**
