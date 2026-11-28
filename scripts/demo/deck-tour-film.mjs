@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-// "Build a deck by hand": a recorded tour of the deck builder, every feature in the order a person reaches it. One Chromium
-// (1440 by 900), one person (Vera Green, u-vera, org-leader on the initiative p-auth-migration: she may edit its decks and read the
-// spend report), no voice (the provider account is out of credit, so the voice navigator is never started).
+// "Edit on the slide, or ask": a recorded tour of the deck builder the way its owner uses it. Nothing is typed into a form: a seeded
+// sample deck shows the designed layouts, a new deck starts from a template, then every edit is made by clicking on the slide (title in
+// place, emphasis bar, icon and graphic pickers in the side pane, cards added and removed on the slide, the style picker) or by asking
+// the composer's agent mode (the mock's deterministic proposer: add a kpi slide, put a report's chart on it, emphasise words, switch
+// style) and pressing Apply on its card. Then present (both rails fold) and download the .pptx, which is opened and checked.
+// One Chromium (1440 by 900), one person (Vera Green, u-vera, org-leader on p-auth-migration), no voice (the provider account is out
+// of credit, so the voice navigator is never started).
 //
 //   node scripts/demo/deck-tour-film.mjs --out <dir>                  a take: record, then compose <dir>/deck-tour.mp4
 //   node scripts/demo/deck-tour-film.mjs --out <dir> --probe          no film: build a deck, add each layout, print its form's fields
@@ -38,7 +42,7 @@ function compose() {
   // (its caption is read) and its last second; the rest of the scene (the hand at work) plays at FAST x. The opening, the examples,
   // present mode and the ending play at 1x throughout.
   const READ = 4.5; const k = tl.fastFactor ?? 2.5;
-  const whole = /^(A new presentation|Example decks|Present|Done)$/;
+  const whole = /^(A sample deck|Designed layouts|Present|Done)$/;
   const sec = (ms) => (ms - tl.video.startMs) / 1000;
   const fast = [];
   tl.scenes.forEach((sc, i) => {
@@ -304,304 +308,191 @@ try {
     console.log(JSON.stringify(report.api, null, 1));
     throw Object.assign(new Error('probe done'), { probe: true });
   }
-  // ── 1. The new-deck page: the examples, then the facts ──
+  // ── 1. A sample deck: the rich look, before anything is built ──
+  const R = `${E}-regions`;
+  const region = (p) => page.getByTestId(`${R}-region-${p}`);
+  const selectSlide = async (id, pause = 350) => { await press(page.getByTestId(`${E}-slide-select-${id}`), { pause }); await stageLoaded(); };
+  const opsPost = (ms = 20_000) => page.waitForResponse((r) => r.request().method() === 'POST' && /\/operations(\?|$)/.test(r.url()), { timeout: ms }).catch(() => null);
+  const SAMPLE = 'idk-5a301e00-0000-4000-8000-000000000001';
   await go(`/iq/projects/${P}?tab=docs`);
   await page.getByTestId('initiative-files-new').waitFor({ timeout: 20_000 });
   await sleep(1000);
   timeline.film.fromMs = Date.now() - 400;
-  await caption('A new presentation', 'Vera owns the Auth Migration initiative. Her steering review is Friday: she starts a deck from the initiative.', 'bottom-right', 3200);
-  await press(page.getByTestId('initiative-files-new'));
-  await press(page.getByRole('menuitem', { name: /Presentation/ }));
-  await page.waitForURL(/\/iq\/decks\/new/, { timeout: 15_000 });
-  await page.getByTestId(`${IP}-new-submit`).waitFor({ timeout: 15_000 });
-  await caption('Example decks', 'Five worked examples to start from: a status update, a proposal, a review, an interview debrief, a run report.', 'top-right', 1200);
-  const tiles = page.locator(`button[data-testid^="${IP}-template-"]`);
-  for (let i = 0; i < Math.min(5, await tiles.count()); i++) { await point(tiles.nth(i), 650); }
-  await sleep(800);
-  await caption('Build from the initiative\'s facts', 'Counts, story points, sprints, budget and decisions are read from the initiative record, not invented.', 'top-right', 1500);
-  await typeKeys(page.getByTestId(`${IP}-new-title`), 'Auth Migration: December steering review');
-  await sleep(700);
-  await press(page.getByTestId(`${IP}-new-submit`), { pause: 600 });
+  await caption('A sample deck', 'Vera owns the Auth Migration initiative. Its steering update is already a deck, drawn by the deck engine.', 'bottom-right', 3000);
+  const row = page.getByText(/steering update/i).first();
+  if (await row.isVisible().catch(() => false)) { await press(row, { pause: 500 }); await page.waitForURL(/\/iq\/decks\/[^/?#]+/, { timeout: 15_000 }).catch(() => undefined); }
+  if (!page.url().includes(SAMPLE)) await go(`/iq/decks/${SAMPLE}`);
+  await stageLoaded(10_000); await sleep(1500);
+  const sampleIds = await slideIds();
+  step('sample deck', sampleIds.length >= 6, `${sampleIds.length} slides: ${sampleIds.join(', ')}`);
+  await caption('Designed layouts', 'Cover, agenda, KPIs over a chart, icon cards, a timeline: layouts with real structure, in the corporate style.', 'bottom-left', 1500);
+  for (const id of sampleIds.slice(1, 5)) { await selectSlide(id, 250); await sleep(1700); }
+
+  // ── 2. A new deck from a template ──
+  await go(`/iq/decks/new?projectId=${P}`);
+  await page.getByTestId(`${IP}-new-template-submit`).waitFor({ timeout: 20_000 });
+  await caption('Start from a template', 'Eight templates, each a finished deck to rework: status update, proposal, review and more.', 'bottom-right', 400);
+  const tiles = page.locator(`button[data-testid^="${IP}-template-"]:not([data-testid$="-strip"]):not([data-testid$="-facts"])`);
+  const nTiles = await tiles.count();
+  for (let i = 0; i < Math.min(4, nTiles); i++) await point(tiles.nth(i), 350, 450);
+  await press(page.getByTestId(`${IP}-template-status-update`), { pause: 500 });
+  const titleField = page.getByTestId(`${IP}-new-title`);
+  if (!(await titleField.inputValue().catch(() => ''))) await titleField.fill('Auth Migration: December status');
+  await press(page.getByTestId(`${IP}-new-template-submit`), { pause: 400 });
   await page.waitForURL(/\/iq\/decks\/(?!new)[^/?#]+$/, { timeout: 60_000 });
   deck.id = deckIdOf(); deck.url = new URL(page.url()).pathname;
-  await stageLoaded();
+  await stageLoaded(10_000); await sleep(1200);
   const h0 = await headSpec(deck.id);
-  report.api.facts = (h0.spec?.slides ?? []).map((s) => `${s.id}:${s.layout}:${s.title}`);
-  step('built from facts', (h0.spec?.slides ?? []).length >= 6, report.api.facts.join(' | '));
-  await caption('The editor', 'Eight slides built from the record: the filmstrip on the left, the slide in the middle, its form below.', 'side', 3000);
+  report.api.template = (h0.spec?.slides ?? []).map((x) => `${x.id}:${x.layout}`);
+  step('template deck', (h0.spec?.slides ?? []).length >= 5, report.api.template.join(' | '));
+  const ids = await slideIds();
+  const first = ids[0];
 
-  // ── 2. Things to check before sharing: an overflow, then the fix ──
-  await until(async () => /overflow/i.test(await findings()) || null, 8000, 300);
-  const warn0 = await findings();
-  report.api.findingsAtStart = warn0;
-  await caption('Things to check before sharing', 'The preview measures every slide. Slide 1 overflows, and its thumbnail carries a warning marker.', 'side', 600);
-  await point(page.getByTestId(`${IP}-preview-warnings`), 900);
-  await press(page.getByTestId(`${IP}-preview-warnings-summary`)).catch(() => undefined);
-  await sleep(2200);
-  const ids0 = await slideIds();
-  await point(page.getByTestId(`${E}-slide-findings-${ids0[0]}`).or(page.getByTestId(`${E}-slide-select-${ids0[0]}`)).first(), 1600);
-  await press(page.getByTestId(`${E}-slide-select-${ids0[0]}`));
-  await stageLoaded();
-  await sleep(800);
-  report.api.titleForm = await formFields();
-  // The title slide carries five lines from the record (its standfirst), but the Title layout's form has no field for them
-  // (a finding): under the Bullets layout they are editable, so Vera trims two there and switches the layout back.
-  await caption('Fixing it', 'The title layout\'s form has no field for those five lines, so Vera trims two under Bullets and switches back.', 'side', 1200);
-  await press(page.getByTestId(`${TB}-layout`)); await sleep(700);
-  await press(page.getByTestId(`${TB}-layout-bullets`), { pause: 500 });
-  await sleep(1400);
-  let fixed = false;
-  for (const re of [/^As of/i, /^Repository/i]) {
-    const inputs = page.locator(`input[data-testid^="${E}-slide-bullets-"]`);
-    const n = await inputs.count();
-    for (let i = n - 1; i >= 0; i--) {
-      if (re.test(await inputs.nth(i).inputValue().catch(() => ''))) {
-        const rm = page.getByTestId(`${E}-slide-bullets-remove-${i}`);
-        if (await rm.count()) { await press(rm, { pause: 500 }); fixed = true; await sleep(900); }
-        break;
-      }
-    }
-  }
-  await press(page.getByTestId(`${TB}-layout`)); await sleep(700);
-  await press(page.getByTestId(`${TB}-layout-title`), { pause: 500 });
-  await stageLoaded();
-  await caption('Fixed', 'Three lines fit the title slide, and the overflow leaves the list of things to check.', 'side', 200);
-  const cleared = await until(async () => (!/overflow/i.test(await findings()) ? true : null), 10_000, 300);
-  step('overflow fixed', fixed && !!cleared, `before "${warn0}"; after "${await findings()}"; bullets removed ${fixed}${fixed ? '' : `; title form ${JSON.stringify(report.api.titleForm)}`}`);
-  await sleep(2000);
-  await press(page.getByTestId(`${IP}-preview-warnings-summary`)).catch(() => undefined); // fold the list again
-  await sleep(800);
-
-  // ── 3. Slides from the layout gallery, typed with the stage pinned ──
-  await caption('The layout gallery', 'Insert, then All layouts: thirteen layouts open in place of the editor, no dialog.', 'side', 200);
-  const agenda = await addSlide('agenda', { after: ids0[0], look: 1600 });
-  await caption('Typing into a slide', 'Each slide is a form. The stage stays pinned in view and redraws as Vera types.', 'side', 300);
-  await typeKeys(field('title'), 'What we will cover');
-  for (let i = 0; i < 2; i++) await press(field('agenda-items-add'), { pause: 150 });
-  const agendaItems = ['Where the migration stands', 'Work and budget', 'The cutover decision', 'The plan to January'];
-  for (let i = 0; i < agendaItems.length; i++) await type(field(`agenda-items-${i}`), agendaItems[i], i < 2);
-  await stageLoaded(); await sleep(1500);
-
-  await caption('Key figures', 'Three headline numbers from the record, each with a label.', 'side', 200);
-  const kf = await addSlide('key-figures', { after: 'summary' });
-  await typeKeys(field('title'), 'December at a glance');
-  fastOn();
-  await press(field('figures-add'), { pause: 150 });
-  const figs = [['16 of 31', 'Story points done', '+16 this month'], ['$66.93', 'Budget left this period', 'of $75.00'], ['1', 'Decision escalated', 'needs an org leader']];
-  for (let i = 0; i < figs.length; i++) { await type(field(`figures-value-${i}`), figs[i][0]); await type(field(`figures-label-${i}`), figs[i][1]); }
-  fastOff();
-  await stageLoaded(); await sleep(1500);
-
-  await caption('A stacked bar chart', 'Open and done work by type, from the same record: nine items, six still open.', 'side', 200);
-  const stacked = await addSlide('chart', { after: 'work-status' });
-  await typeKeys(field('title'), 'Open and done work, by type');
-  fastOn();
-  const kind = field('chart-kind');
-  const native = await kind.evaluate((e) => e.tagName === 'SELECT').catch(() => false);
-  if (native) { await point(kind); await kind.selectOption('stacked-bar'); } else { await press(kind); await press(page.getByRole('option', { name: /Stacked bar/i }).first()); }
-  await sleep(600);
-  await press(field('chart-add-label'), { pause: 150 });
-  await press(field('chart-add-series'), { pause: 150 });
-  for (const [i, l] of ['Epics', 'Stories', 'Bugs'].entries()) await type(field(`chart-label-${i}`), l);
-  await type(field('chart-series-name-0'), 'Open'); await type(field('chart-series-name-1'), 'Done');
-  for (const [s, vals] of [[0, [2, 2, 2]], [1, [0, 3, 0]]]) for (const [i, v] of vals.entries()) await type(field(`chart-value-${s}-${i}`), String(v));
-  fastOff();
-  await stageLoaded(); await sleep(2000);
-
-  await caption('A table', 'The two sprints as a small grid; the bullet slide it replaces is deleted from its menu.', 'side', 200);
-  const table = await addSlide('table', { after: 'sprints' });
-  await typeKeys(field('title'), 'Sprints');
-  fastOn();
-  await press(field('table-add-column'), { pause: 150 });
-  await press(field('table-add-row'), { pause: 150 });
-  for (const [i, h] of ['Sprint', 'Focus', 'Points done'].entries()) await type(field(`table-header-${i}`), h);
-  const rows = [['Sprint 9', 'OIDC core', '16 of 16'], ['Sprint 10', 'Session hygiene', '0 of 15']];
-  for (const [r, row] of rows.entries()) for (const [c, v] of row.entries()) await type(field(`table-cell-${r}-${c}`), v);
-  fastOff();
-  await stageLoaded(); await sleep(1200);
-  await press(page.getByTestId(`${E}-slide-menu-sprints`));
-  await sleep(700);
-  await press(page.getByTestId(`${E}-slide-delete-sprints`), { pause: 600 });
-  await sleep(1500);
-
-  await caption('A comparison', 'The escalated decision, both options weighed, and the line that settles it.', 'side', 200);
-  const cmp = await addSlide('comparison', { after: 'decisions' });
-  await typeKeys(field('title'), 'Cutover order for legacy SSO tenants');
-  fastOn();
-  await type(field('comparison-left-title'), 'Largest tenants first');
-  await press(field('comparison-left-points-add'), { pause: 150 });
-  await type(field('comparison-left-points-0'), 'Retires most legacy sessions early');
-  await type(field('comparison-left-points-1'), 'A rollback would hit the most people');
-  await type(field('comparison-right-title'), 'Smallest tenants first');
-  await press(field('comparison-right-points-add'), { pause: 150 });
-  await type(field('comparison-right-points-0'), 'Rehearses the cutover on low traffic');
-  await type(field('comparison-right-points-1'), 'Legacy service runs two weeks longer');
-  await type(field('comparison-verdict'), 'Recommend smallest first: a rehearsed rollback is worth two weeks of overlap.');
-  fastOff();
-  await stageLoaded(); await sleep(1200);
-  await caption('Speaker notes', 'What to say while the slide is up. Notes go into the .pptx notes pane, not onto the slide.', 'top-right', 200);
-  await type(field('notes'), 'Ask for the decision here. We need an org leader to sign off before Sprint 11 planning on 4 December.', true);
-  await sleep(1800);
-
-  await caption('A timeline', 'The cutover plan, three dated steps.', 'side', 200);
-  const tl = await addSlide('timeline', { after: cmp });
-  await typeKeys(field('title'), 'Cutover plan');
-  fastOn();
-  const steps = [['8 Dec', 'Pilot tenants move'], ['15 Dec', 'Remaining tenants move'], ['12 Jan', 'Legacy auth service off']];
-  for (const [i, st] of steps.entries()) { await type(field(`timeline-date-${i}`), st[0]); await type(field(`timeline-label-${i}`), st[1]); }
-  fastOff();
-  await stageLoaded(); await sleep(1500);
-
-  await caption('A closing slide', 'The ask, the next steps and who to contact.', 'side', 200);
-  const closing = await addSlide('closing', { after: tl });
-  await typeKeys(field('title'), 'The ask');
-  fastOn();
-  await type(field('closing-line'), 'One decision keeps the January date.');
-  await press(field('closing-steps-add'), { pause: 150 });
-  const stepInputs = page.locator(`input[data-testid^="${E}-slide-closing-steps-"]`);
-  const ns = ['An org leader approves smallest-first by 5 December'];
-  for (let i = 0; i < Math.min(1, await stepInputs.count()); i++) await type(stepInputs.nth(i), ns[i]);
-  await type(field('closing-contact'), 'Vera Green, Auth Migration owner');
-  fastOff();
-  await stageLoaded(); await sleep(1500);
-  await caption('A chart slide for a report', 'One more chart after the budget slide; its figures will come from a report, not by hand.', 'side', 200);
-  const spend = await addSlide('chart', { after: 'budget', look: 500 });
-  await typeKeys(field('title'), 'Where the money goes');
-  await stageLoaded(); await sleep(1000);
-  report.api.added = { agenda, kf, stacked, table, cmp, tl, closing, spend };
-
-  // ── 4. Reorder, then save ──
-  await caption('Reordering', 'Lead with the numbers: the key figures slide moves up from its menu (or Alt+Up).', 'side', 200);
-  await press(page.getByTestId(`${E}-slide-menu-${kf}`));
-  await sleep(700);
-  await press(page.getByTestId(`${E}-slide-up-${kf}`), { pause: 600 });
-  await sleep(1500);
-  const order1 = await slideIds();
-  step('reordered', order1.indexOf(kf) < order1.indexOf('summary'), `order ${order1.join(', ')}`);
-  await caption('Save', 'Each save is a new version of the deck.', 'side', 200);
-  await press(page.getByTestId(`${IP}-save`), { pause: 500 });
-  const saved1 = await until(async () => (!(await page.getByTestId(`${IP}-save`).isEnabled().catch(() => true)) ? true : null), 15_000, 300);
-  step('saved v2', !!saved1, `findings "${await findings()}"`);
-  await sleep(1500);
-
-  // ── 5. Fill from a report: a pie on the sprint envelopes slide ──
-  await caption('Fill from a report', 'Spend by initiative, run under Vera\'s own access, as a pie on the slide she picks.', 'side', 200);
-  await press(page.getByTestId(`${E}-slide-select-${spend}`));
-  await stageLoaded(); await sleep(800);
-  await press(page.getByTestId(`${IP}-report-open`));
-  await page.getByTestId(`${IP}-report-panel`).waitFor({ timeout: 10_000 });
-  await sleep(1200);
-  const sel = page.getByTestId(`${IP}-report-select`);
-  const selNative = await sel.evaluate((e) => (e.tagName === 'SELECT' ? 'self' : e.querySelector('select') ? 'inner' : '')).catch(() => '');
-  if (selNative) { await point(sel); await (selNative === 'self' ? sel : sel.locator('select')).selectOption('spend-by-initiative'); }
-  else { await press(sel); await press(page.getByRole('option', { name: /spend per initiative|spend by initiative/i }).first()); }
-  await sleep(1000);
-  await press(page.getByTestId(`${IP}-report-panel`).getByText('Pie', { exact: true }).first());
-  await sleep(1500);
-  const srcBeforePie = await stageSrc();
-  await press(page.getByTestId(`${IP}-report-apply`), { pause: 600 });
-  // The report fills the saved head through the operations route; wait for the head to carry the pie, then for the stage.
-  await until(async () => ((await headSpec(deck.id)).spec?.slides ?? []).some((x) => x.chart?.kind === 'pie') || null, 20_000, 400);
-  await stageChanged(srcBeforePie, 5000);
-  await sleep(3500);
-  const hPie = await headSpec(deck.id);
-  const pie = (hPie.spec?.slides ?? []).find((s) => s.chart?.kind === 'pie');
-  report.api.findingsAfterPie = await findings();
-  step('pie from report', !!pie, pie ? `"${pie.title}" labels ${JSON.stringify(pie.chart.labels)}; findings "${report.api.findingsAfterPie}"` : 'no pie in the head');
-  // The report's pie keeps the slide's old bullets beside it; if the preview says the slide overflows, the leftovers come off.
-  if (/overflow/i.test(report.api.findingsAfterPie)) {
-    await caption('A second overflow', 'The report\'s pie does not fit its slide.', 'side', 1800);
-    for (let k = 0; k < 6; k++) {
-      const rm = page.locator(`[data-testid^="${E}-slide-bullets-remove-"]`);
-      if (!(await rm.count())) break;
-      await press(rm.last(), { pause: 300, ms: 400 }); await sleep(500);
-    }
-    const ok = await until(async () => (!/overflow/i.test(await findings()) ? true : null), 8000, 300);
-    step('pie overflow fixed', !!ok, `findings "${await findings()}"; pie slide form ${JSON.stringify((await formFields()).filter((f) => !/source|eyebrow/.test(f)).slice(0, 12))}`);
-    if (await page.getByTestId(`${IP}-save`).isEnabled().catch(() => false)) await press(page.getByTestId(`${IP}-save`), { pause: 400 });
-    await until(async () => (!(await page.getByTestId(`${IP}-save`).isEnabled().catch(() => true)) ? true : null), 15_000, 300);
-    await sleep(1500);
-  }
-
-  // ── 6. Theme, undo, redo ──
-  await caption('Theme', 'The deck\'s look is one choice: Product, Engineering, Plain or the tenant\'s own.', 'side', 200);
-  const firstId = (await slideIds())[0];
-  await press(page.getByTestId(`${E}-slide-select-${firstId}`)); await stageLoaded(); await sleep(600);
-  let src = await stageSrc();
-  const themeLabel = () => page.getByTestId(`${TB}-theme`).innerText().then(squash).catch(() => '');
-  const themeIs = async (re) => !!(await until(async () => (re.test(await themeLabel()) ? true : null), 5000, 150));
-  await press(page.getByTestId(`${TB}-theme`));
+  // ── 3. Edit on the slide ──
+  await caption('Edit in place', 'Click the title on the slide: the editor opens on its box, in the slide\'s own font, size and colour.', 'bottom-right', 600);
+  await selectSlide(first);
+  await press(region('title'), { pause: 400 });
+  const ed = page.getByTestId(`${R}-editor`);
+  await ed.waitFor({ timeout: 8000 });
   await sleep(900);
-  await press(page.getByTestId(`${TB}-theme-engineering`), { pause: 600 });
-  const themed = await themeIs(/Engineering/); await stageLoaded(); await sleep(2200);
-  await caption('Undo and redo', 'Every edit can be taken back, and put back.', 'side', 200);
-  src = await stageSrc();
-  await press(page.getByTestId(`${TB}-undo`), { pause: 600 });
-  const undone = await themeIs(/Work/); await stageLoaded(); await sleep(1800);
-  src = await stageSrc();
-  await press(page.getByTestId(`${TB}-redo`), { pause: 600 });
-  const redone = await themeIs(/Engineering/); await stageLoaded(); await sleep(1800);
-  step('theme, undo, redo', themed && undone && redone, `theme changed ${themed}, undo ${undone}, redo ${redone}; label now "${await themeLabel()}"`);
-  if (await page.getByTestId(`${IP}-save`).isEnabled().catch(() => false)) await press(page.getByTestId(`${IP}-save`), { pause: 400 });
-  await until(async () => (!(await page.getByTestId(`${IP}-save`).isEnabled().catch(() => true)) ? true : null), 15_000, 300);
-  await sleep(1200);
+  await ed.press('ControlOrMeta+a');
+  await ed.pressSequentially('Auth migration: one login path', { delay: 45 });
+  await sleep(500);
+  let posted = opsPost();
+  await page.keyboard.press('Enter');
+  const r1 = await posted; await stageLoaded(); await sleep(1600);
+  step('retitle in place', !!r1 && r1.ok(), `operations ${r1 ? r1.status() : 'none'}`);
 
-  // ── 7. Version history ──
-  await caption('Version history', 'Every saved version is kept. v1 is the deck as the facts built it.', 'bottom-left', 200);
-  const versions = page.getByRole('button', { name: /Presentation versions/ });
-  await press(versions); await sleep(1400);
-  src = await stageSrc();
-  const v1 = page.getByRole('menuitem', { name: /^v1\b/ }).or(page.getByRole('menuitemradio', { name: /^v1\b/ })).or(page.getByRole('menuitemcheckbox', { name: /^v1\b/ })).first();
-  await press(v1, { pause: 700 });
-  const finalCount = (await slideIds()).length;
-  const onV1 = !!(await until(async () => ((await slideIds()).length !== finalCount ? true : null), 8000, 200)); await stageLoaded(); await sleep(2200);
-  const v1Count = (await slideIds()).length;
-  await point(page.getByTestId(`${E}-slide-list`), 1500);
-  await press(versions); await sleep(1000);
-  const items = page.locator('[role^="menuitem"]');
-  src = await stageSrc();
-  await press(items.first(), { pause: 600 });
-  await until(async () => ((await slideIds()).length === finalCount ? true : null), 8000, 200); await stageLoaded(); await sleep(1500);
-  step('version history', v1Count < (await slideIds()).length, `stage changed on v1 ${onV1}; v1 shows ${v1Count} slides; back on the newest with ${(await slideIds()).length}`);
+  await caption('Emphasis', 'Select words and the emphasis bar sits beside the box: highlight, accent, gradient, underline. Vera picks Highlight.', 'bottom-right', 400);
+  await press(region('title'), { pause: 300 });
+  await ed.waitFor({ timeout: 8000 });
+  await ed.evaluate((e) => { const v = e.value; const at = v.indexOf('one login'); e.focus(); e.setSelectionRange(at < 0 ? 0 : at, at < 0 ? 4 : at + 'one login path'.length); e.dispatchEvent(new Event('select', { bubbles: true })); document.dispatchEvent(new Event('selectionchange')); });
+  await sleep(900);
+  const hl = page.getByRole('button', { name: /^Highlight/ }).first();
+  const hlShown = await hl.isVisible().catch(() => false);
+  posted = opsPost();
+  if (hlShown) await press(hl, { pause: 500 });
+  await sleep(400);
+  if (await ed.count()) { await ed.focus().catch(() => undefined); await page.keyboard.press('Enter'); }
+  const r2 = await posted; await stageLoaded(); await sleep(1800);
+  step('highlight', hlShown && !!r2 && r2.ok(), `bar shown ${hlShown}; operations ${r2 ? r2.status() : 'none'}`);
 
-  // ── 8. Present: both rails fold, no dialog ──
-  await caption('Present', 'Present folds both left rails and fills the page with the slide: no dialog, Escape to leave.', 'bottom-left', 200);
-  await press(page.getByTestId(`${E}-slide-select-${(await slideIds())[0]}`)); await sleep(600);
-  await press(page.getByTestId(`${TB}-present`), { pause: 500 });
+  const cardsId = (h0.spec?.slides ?? []).find((x) => Array.isArray(x.items) && x.items.length && x.items[0].icon)?.id ?? '';
+  await caption('Icons', 'Click a card\'s icon: the icon picker opens in the side pane, and the slide redraws with the new one.', 'top-right', 400);
+  await selectSlide(cardsId); await sleep(700);
+  await press(region('items[0].icon'), { pause: 400 });
+  const picker = page.getByTestId(`${E}-icon-picker`);
+  await picker.waitFor({ timeout: 8000 }); await sleep(700);
+  const choice = picker.locator('button[aria-pressed="false"], [role="option"][aria-selected="false"], [role="radio"][aria-checked="false"]').nth(5);
+  posted = opsPost();
+  await press(choice, { pause: 500 });
+  const r3 = await posted; await stageLoaded(); await sleep(1600);
+  step('icon swap', !!r3 && r3.ok(), `operations ${r3 ? r3.status() : 'none'}`);
+  if (await page.getByTestId(`${E}-pick-close`).isVisible().catch(() => false)) { await press(page.getByTestId(`${E}-pick-close`), { pause: 200 }); }
+
+  await caption('Cards on the slide', 'Hover a card for its plus and minus: add a card, the row reflows; remove it again. No dialog.', 'top-right', 400);
+  await point(region('items[0].title'), 500); await page.getByTestId(`${R}-region-items[0].title`).hover(); await sleep(400);
+  posted = opsPost();
+  await press(page.getByTestId(`${R}-row-add-items[0].title`), { pause: 400 });
+  const r4 = await posted; await stageLoaded(); await sleep(2000);
+  await page.getByTestId(`${R}-region-items[1].title`).hover(); await sleep(400);
+  posted = opsPost();
+  await press(page.getByTestId(`${R}-row-remove-items[1].title`), { pause: 400 });
+  const r5 = await posted; await stageLoaded(); await sleep(1600);
+  step('card add and remove', !!r4 && r4.ok() && !!r5 && r5.ok(), `add ${r4 ? r4.status() : 'none'}, remove ${r5 ? r5.status() : 'none'}`);
+
+  await caption('Graphics', 'A decoration from the graphic picker: each tile is the artwork itself, in the deck\'s colours.', 'top-left', 400);
+  await selectSlide(first); await sleep(500);
+  const toggle = page.getByTestId(`${E}-decoration-toggle`);
+  if (!/done/i.test(await toggle.innerText().catch(() => ''))) await press(toggle, { pause: 400 });
+  const deco = page.getByTestId(`${E}-decoration`);
+  await deco.waitFor({ timeout: 8000 }); await sleep(1200);
+  const decoChoices = deco.locator('button:not([data-testid$="-toggle"]):not([role="tab"]), [role="radio"], [role="option"]');
+  let picked = null;
+  for (let i = 0, n = await decoChoices.count(); i < n && !picked; i++) {
+    const c = decoChoices.nth(i); const lbl = squash((await c.getAttribute('aria-label')) ?? (await c.innerText().catch(() => '')));
+    if (lbl && !/style default|^none|no graphic|default|corner|background|beside/i.test(lbl) && (await c.getAttribute('aria-checked')) !== 'true' && (await c.getAttribute('aria-pressed')) !== 'true' && i >= 3) { picked = lbl; posted = opsPost(); await press(c, { pause: 500 }); }
+  }
+  const r6 = await posted; await stageLoaded(); await sleep(2000);
+  step('decoration', !!picked && !!r6 && r6.ok(), `picked "${picked}"; operations ${r6 ? r6.status() : 'none'}`);
+  if (await page.getByTestId(`${E}-pick-close`).isVisible().catch(() => false)) await press(page.getByTestId(`${E}-pick-close`), { pause: 200 });
+  if (/done/i.test(await toggle.innerText().catch(() => ''))) await press(toggle, { pause: 200 });
+
+  // ── 4. Styles: the whole deck restyles ──
+  await caption('Styles', 'One choice restyles every slide: bold, then editorial, then playful. Same words, new design.', 'top-left', 400);
+  await selectSlide(cardsId); await sleep(400);
+  const summary = page.getByTestId(`${E}-style-summary`);
+  if (await summary.count() && !(await page.getByTestId(`${E}-style-picker-editorial`).isVisible().catch(() => false))) await press(summary, { pause: 300 });
+  const styled = [];
+  for (const st of ['bold', 'editorial', 'playful']) {
+    const before = await stageSrc();
+    posted = opsPost();
+    await press(page.getByTestId(`${E}-style-picker-${st}`), { pause: 300 });
+    const r = await posted; styled.push(`${st} ${r ? r.status() : 'none'}`);
+    await stageChanged(before, 8000); await sleep(2200);
+  }
+  step('styles', styled.every((x) => /20\d$/.test(x)), styled.join(', '));
+
+  // ── 5. The agent does the rest ──
+  await caption('Ask the agent', 'Agent mode in the composer: "put the spend by initiative pie on slide 3". Read the card, Apply: a chart from the report.', 'top-left', 400);
+  const action = page.getByRole('button', { name: /Presentation agent action/ });
+  if (await action.count()) { await press(action, { pause: 300 }); await press(page.getByRole('menuitem', { name: /Edit saved slides/ }), { pause: 300 }); }
+  const input = page.getByRole('textbox', { name: /Presentation message/ }).first();
+  const ask = async (text, sceneTitle, line) => {
+    if (sceneTitle) await caption(sceneTitle, line, 'top-left', 300);
+    await press(input, { pause: 200 });
+    await input.pressSequentially(text, { delay: 28 });
+    await sleep(300);
+    await page.keyboard.press('Enter');
+    const card = page.getByTestId('deck-composer-proposal').last();
+    if (!(await card.waitFor({ timeout: 30_000 }).then(() => true).catch(() => false))) { step(`agent: ${text}`, false, 'no proposal card'); return; }
+    await sleep(1600);
+    const words = squash(await card.innerText()).slice(0, 160);
+    const before = await stageSrc();
+    const p = opsPost(30_000);
+    await press(card.getByRole('button', { name: 'Apply' }), { pause: 500 });
+    const r = await p;
+    await stageChanged(before, 10_000); await sleep(1800);
+    step(`agent: ${text}`, !!r && r.ok(), `card "${words}"; operations ${r ? r.status() : 'none'}`);
+  };
+  // "add a kpi slide after the agenda" is refused by the mock's proposer: a new kpi slide needs its chart in the same list, and
+  // set_chart cannot name a slide add_slide has not made yet (docs/deck-tour-film-report.md). The kpi slide the template has takes it.
+  await selectSlide(ids[2]); await sleep(300);
+  await ask('put the spend by initiative pie on slide 3', null, null);
+  const tlId = (await headSpec(deck.id)).spec?.slides?.find((x) => x.layout === 'timeline')?.id;
+  if (tlId) await selectSlide(tlId);
+  await ask('emphasise "comes next" in the title', 'Emphasis by asking', 'The same highlight as the toolbar, on the selected slide\'s title.');
+  await ask('switch to the corporate style', 'Style by asking', 'And back to corporate for the steering group.');
+
+  // ── 6. Present ──
+  await caption('Present', 'Present folds both left rails and fills the page with the slide: no dialog, Escape to leave.', 'bottom-left', 400);
+  await selectSlide((await slideIds())[0]);
+  await press(page.getByTestId(`${TB}-present`), { pause: 400 });
   await page.getByTestId(`${E}-present`).waitFor({ timeout: 10_000 });
-  await moveTo(VIEW.width * 0.62, VIEW.height * 0.93, 700); // off the slide and off Exit
-  await sleep(1500);
+  await moveTo(VIEW.width * 0.62, VIEW.height * 0.93, 600);
+  await sleep(1400);
   await page.evaluate(() => window.__filmCaption?.(null));
-  await sleep(1500);
   const pos = async () => squash(await page.getByTestId(`${E}-present-position`).innerText().catch(() => ''));
   const seen = [await pos()];
-  for (let i = 0; i < 6; i++) { await page.keyboard.press('ArrowRight'); await sleep(2100); seen.push(await pos()); }
-  await page.keyboard.press('Escape'); await sleep(1800);
+  for (let i = 0; i < 6; i++) { await page.keyboard.press('ArrowRight'); await sleep(1900); seen.push(await pos()); }
+  await page.keyboard.press('Escape'); await sleep(1500);
   step('present', (await page.getByTestId(`${E}-present`).count()) === 0, `positions ${seen.join(' -> ')}`);
 
-  // ── 9. Download ──
-  await caption('Download', 'The saved version as PowerPoint, with native charts and the speaker notes, or as a PDF.', 'side', 200);
-  const download = async (testId, name) => {
-    await press(page.getByTestId(`${IP}-download-menu`)); await sleep(1100);
-    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), press(page.getByTestId(testId), { pause: 600 })]);
-    const file = path.join(OUT, name.replace('{}', dl.suggestedFilename()));
-    await dl.saveAs(file); await sleep(1800);
-    return { file, suggested: dl.suggestedFilename(), bytes: fs.statSync(file).size };
-  };
-  const pptx = await download(`${IP}-download`, '{}');
-  const pdf = await download(`${IP}-download-pdf`, '{}');
-  report.api.downloads = { pptx: { name: pptx.suggested, bytes: pptx.bytes }, pdf: { name: pdf.suggested, bytes: pdf.bytes } };
-  report.pptxFile = path.basename(pptx.file);
-  step('downloads', pptx.bytes > 10_000 && fs.readFileSync(pdf.file).subarray(0, 4).toString('latin1') === '%PDF', JSON.stringify(report.api.downloads));
-
-  // ── 10. Share: not shown. A deck with budget figures cannot be shared to a channel (the page says so above the findings line). ──
-  report.api.shareOffered = (await page.getByTestId('deck-share-open').count()) > 0;
-  await caption('Done', 'A fifteen-slide steering deck, built from the record, checked, versioned and downloaded.', 'side', 200);
-  await moveTo(VIEW.width * 0.6, VIEW.height * 0.45, 900);
-  await sleep(3500);
+  // ── 7. Download ──
+  await caption('Download', 'The saved version as PowerPoint: native shapes, icons, gradients and charts, editable in PowerPoint.', 'side', 400);
+  await press(page.getByTestId(`${IP}-download-menu`)); await sleep(900);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 60_000 }), press(page.getByTestId(`${IP}-download`), { pause: 500 })]);
+  const file = path.join(OUT, dl.suggestedFilename());
+  await dl.saveAs(file); await sleep(1500);
+  report.api.downloads = { pptx: { name: dl.suggestedFilename(), bytes: fs.statSync(file).size } };
+  report.pptxFile = path.basename(file);
+  step('download', fs.statSync(file).size > 10_000, JSON.stringify(report.api.downloads));
+  await caption('Done', 'A status deck from a template, edited on the slide and by asking, presented and downloaded. Nothing typed into a form.', 'side', 400);
+  await moveTo(VIEW.width * 0.6, VIEW.height * 0.45, 800);
+  await sleep(3000);
 
   const hEnd = await headSpec(deck.id);
-  report.api.final = (hEnd.spec?.slides ?? []).map((s) => ({ layout: s.layout, title: s.title, chart: s.chart?.kind, notes: !!s.notes, theme: undefined }));
+  report.api.final = (hEnd.spec?.slides ?? []).map((x) => ({ layout: x.layout, title: x.title, chart: x.chart?.kind, decoration: x.decoration }));
   report.api.finalTheme = hEnd.spec?.theme;
   report.api.revisions = hEnd.revisions.length;
 } catch (e) {
@@ -628,7 +519,13 @@ if (!PROBE && report.pptxFile) {
   const charts = parts.filter((p) => /^ppt\/charts\/chart\d+\.xml$/.test(p));
   const kinds = charts.map((c) => { const x = spawnSync('unzip', ['-p', file, c], { encoding: 'utf8' }).stdout ?? ''; const k = /<c:(pieChart|barChart|lineChart|areaChart|doughnutChart)/.exec(x)?.[1] ?? '?'; const g = /<c:grouping val="(\w+)"/.exec(x)?.[1]; return g && k === 'barChart' ? `${k}/${g}` : k; });
   const notes = parts.filter((p) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(p)).length;
-  report.pptx = { zipOk: list.status === 0, slides, charts: kinds, notesSlides: notes };
+  // Native drawing: icons as custom geometry, gradients as gradFill, counted over the slide parts.
+  let custGeom = 0; let gradFill = 0;
+  for (const sp of parts.filter((p) => /^ppt\/slides\/slide\d+\.xml$/.test(p))) {
+    const x = spawnSync('unzip', ['-p', file, sp], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout ?? '';
+    custGeom += (x.match(/<a:custGeom[ >]/g) ?? []).length; gradFill += (x.match(/<a:gradFill/g) ?? []).length;
+  }
+  report.pptx = { zipOk: list.status === 0, slides, charts: kinds, notesSlides: notes, custGeom, gradFill };
   console.log(`pptx: ${JSON.stringify(report.pptx)}`);
   save();
 }
