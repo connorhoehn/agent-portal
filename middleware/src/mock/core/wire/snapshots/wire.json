@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-28T01:08:28.338Z",
+  "capturedAt": "2026-11-28T02:02:50.988Z",
   "serverHandlerSha": "452221ce187a5ee0fe49f7075ffba5a5b1d83765c76cc236c890aaad19979bc9",
   "baseUrl": "http://127.0.0.1:3011",
   "personas": [
@@ -7542,7 +7542,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
