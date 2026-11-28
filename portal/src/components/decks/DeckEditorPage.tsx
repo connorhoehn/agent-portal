@@ -6,8 +6,8 @@
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Banner, Button, DetailSection, InlineAlert, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
-import { addSlide, canSaveDeck, DeckReader, validateDeckSpec, EditorShell, LayoutGallery, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext, type SlideLayout } from '@connorhoehn/ui-components/doc-editor';
+import { Banner, Button, InlineAlert, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, Stack, T, VisuallyHidden, useShellFocusMode, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
+import { canSaveDeck, DeckReader, validateDeckSpec, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehn/ui-components/doc-editor';
 import { usePublishPageContext, usePublishPageTabs } from '../../lib/voice/pageContext';
 import { DeckReportChartPanel, SAVE_FIRST_LINE } from './DeckReportChartPanel';
 import { DECK_REVISED_EVENT, DECK_TENANT_THEME_NAMES, layoutPreviewMap, listChartReports, listDeckLayouts, type DeckChartReport } from './deckApi';
@@ -21,8 +21,8 @@ import { ShareToSocialAction, ShareToSocialPanel } from './ShareToSocialAction';
 import { DeckPresenceSource } from './useDeckPresence';
 import { useDeckPreview } from './useDeckPreview';
 import { DeckFindingsLine } from './DeckFindingsLine';
-import { withPlaceholderSources } from './deckFindings';
-import { draftRefusal, newSlideIds, withPlaceholderTitles } from './deckRefusal';
+import { deckSlideFindings, withPlaceholderSources } from './deckFindings';
+import { draftRefusal, withPlaceholderTitles } from './deckRefusal';
 import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
@@ -104,16 +104,20 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reportPanel, setReportPanel] = useState(false);
   const [sharePanel, setSharePanel] = useState(false);
-  const [titleToSelect, setTitleToSelect] = useState<string | null>(null);
   const savingNow = useRef(false);
   const focus = useShellFocusMode();
   // Presenting in place holds focus mode: the page's own chrome (findings, assistant pane, head actions) steps aside with the rails.
   const presenting = focus.active;
   const location = useLocation();
   const [params, setParams] = useSearchParams();
-  // `?tab=layouts` (the voice's `open { scope: 'this-page', tab: 'layouts' }`, or a link) shows the example layouts in place of the stage.
+  // `?tab=layouts` (the voice's `open { scope: 'this-page', tab: 'layouts' }`, or a link) holds the editor's own in-place
+  // layout gallery open (`layoutGalleryOpen`); the editor's Insert › All layouts…, Back and Escape ask through the URL.
   const showLayouts = params.get('tab') === DECK_LAYOUTS_TAB;
-  const closeLayouts = () => setParams(prev => { const next = new URLSearchParams(prev); next.delete('tab'); return next; }, { replace: true });
+  const setLayoutsOpen = (open: boolean) => setParams(prev => {
+    const next = new URLSearchParams(prev);
+    if (open) next.set('tab', DECK_LAYOUTS_TAB); else next.delete('tab');
+    return next;
+  }, { replace: true });
   const composerFocus = useComposerFocus();
   // The library reader/presentation take the page's conversation as a callback; absent, their Chat & agent control is disabled.
   const focusConversation = composerFocus.present ? () => composerFocus.request({ mode: 'agent' }) : undefined;
@@ -153,16 +157,6 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
     window.addEventListener(DECK_REVISED_EVENT, onRevised);
     return () => window.removeEventListener(DECK_REVISED_EVENT, onRevised);
   }, [deckId, dirtyRef, reload, setRevisionId]);
-  // The library's slide form has no focus API (docs/ui-components-queue.md): once the new slide's form shows, select its title.
-  useEffect(() => {
-    if (!titleToSelect || collab.selectedSlideId !== titleToSelect) return;
-    const timer = window.setTimeout(() => {
-      const input = document.querySelector<HTMLInputElement>(`[data-testid="${testIdPrefix}-editor-slide-title"]`);
-      if (input) { input.focus({ preventScroll: true }); input.select(); }
-      setTitleToSelect(null);
-    }, 80);
-    return () => window.clearTimeout(timer);
-  }, [titleToSelect, collab.selectedSlideId, testIdPrefix]);
   const cannotEditNow = deck ? (typeof readOnly === 'function' ? readOnly(deck) : readOnly) : true;
   usePublishPageContext(deck && spec ? deckVoiceContext({
     path: location.pathname, tenant, deckId, title: deck.title, spec, headRevisionId: deck.activeRevisionId,
@@ -211,13 +205,13 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       {conflict && <DeckConflictBanner noun={noun} onReload={loadLatest} testId={`${testIdPrefix}-conflict`} />}
       {extraNotices?.(deck)}
       {warnings.length > 0 && <DeckFindingsLine warnings={warnings} slideCount={spec?.slides.length ?? 0} testId={`${testIdPrefix}-preview-warnings`} />}
+      {collab.followBar}
     </>
   );
 
   if (!spec) {
     return (
-      <EditorShell title={deck.title} surface="plain" className="min-h-0 flex-1" data-testid={`${testIdPrefix}-shell`}>
-        {notices}
+      <EditorShell title={deck.title} surface="plain" notices={notices} className="min-h-0 flex-1" data-testid={`${testIdPrefix}-shell`}>
         {specError ? <ErrorState title="This version cannot be opened" description={specError} />
           : extras.busy ? null
             : deck.revisions.length === 0 ? <EmptyState title="No versions yet" body={`The ${noun} has no saved version.`} />
@@ -235,27 +229,10 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
   const themes = [{ id: tenant, name: DECK_TENANT_THEME_NAMES[tenant] }];
   // A slide added in the editor cites the server's placeholder (`example:unsourced`), as `add_slide` does:
   // Save stays on, the preview draws it, and the findings line asks for the real source.
-  // A new slide also starts with its layout's placeholder title ("Timeline", "Key figures"), selected for typing over.
-  const withNewSlideDefaults = (next: DeckSpec) => withPlaceholderTitles(spec, withPlaceholderSources(spec, next));
-  const editSpec = (next: DeckSpec) => {
-    const added = newSlideIds(spec, next);
-    setSpec(withNewSlideDefaults(next));
-    if (added.length === 1) setTitleToSelect(added[0]!);
-  };
-  const addLayout = (layout: SlideLayout) => {
-    const next = withNewSlideDefaults(addSlide(spec, selectedIndex, layout));
-    setSpec(next);
-    const added = next.slides[selectedIndex + 1];
-    closeLayouts();
-    if (added) { collab.selectSlide(added.id); setTitleToSelect(added.id); }
-  };
-  const layoutsPanel = (
-    <DetailSection title="Example layouts" hint={`Choosing one adds it after slide ${selectedIndex + 1}`}
-      actions={<Button size="sm" variant="ghost" onClick={closeLayouts} data-testid={`${testIdPrefix}-layouts-back`}>Back to the slides</Button>}
-      data-testid={`${testIdPrefix}-layouts`}>
-      <LayoutGallery onSelect={addLayout} previews={layoutPreviews} label="Slide layouts" testIdPrefix={`${testIdPrefix}-layout`} />
-    </DetailSection>
-  );
+  // A new slide also starts with its layout's placeholder title ("Timeline", "Key figures"); the editor focuses and selects it.
+  const editSpec = (next: DeckSpec) => setSpec(withPlaceholderTitles(spec, withPlaceholderSources(spec, next)));
+  // The preview's findings marked on each slide's thumbnail: overflow and unfinished as warnings, example sources as info.
+  const slideFindings = deckSlideFindings(warnings, spec);
   const fileActions = (
     <Inline gap="xs" align="center" wrap={false} className="deck-document-actions" role={compactReview && cannotEdit ? undefined : 'toolbar'} aria-label="Presentation file actions">
       {!cannotEdit && reports.length > 0 && <Button size="sm" variant="ghost" aria-pressed={reportPanel} onClick={() => { setReportPanel(open => !open); setSharePanel(false); }}
@@ -312,16 +289,14 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       headActions={presenting || (compactReview && cannotEdit) ? null : fileActions}
       // Fill from a report (or Share) opens under the toolbar, above the stage: the toolbar row does not scroll, so selecting a
       // slide (which scrolls the surface to its stage) never carries the panel out of view.
-      // The notices stay in the scroller: moved up beside the toolbar they cost the stage about 80px of height and pushed
-      // Theme into the toolbar's overflow menu (deck polish walk). The stage scrolling away while the form is filled is the
-      // library's (docs/ui-components-queue.md).
+      // The notices (warnings line, banners, Follow bar) sit in the shell's own row between the toolbar and the scroller,
+      // so the stage region fills the scroller exactly and never carries them under the toolbar.
       surface="workspace" toolbar={toolbarPanel ? <Stack gap="sm">{parts.toolbar}{toolbarPanel}</Stack> : parts.toolbar}
       {...(parts.footer ? { footer: parts.footer } : {})}
+      notices={presenting ? null : notices}
       className={`min-h-0 flex-1 deck-review-workspace${compactReview ? ' deck-review-compact' : ''}`} data-testid={`${testIdPrefix}-shell`}
     >
-      {!presenting && notices}
-      {!presenting && collab.followBar}
-      {showLayouts && !cannotEdit ? layoutsPanel : parts.surface}
+      {parts.surface}
     </EditorShell>
   );
 
@@ -346,6 +321,9 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
         // The tenant theme after the three built-ins; choosing it writes `theme: { ref: <tenant> }` through onChange.
         themes={themes}
         layoutPreviews={layoutPreviews}
+        layoutGalleryOpen={showLayouts}
+        onLayoutGalleryOpenChange={setLayoutsOpen}
+        slideFindings={slideFindings}
         readOnly={cannotEdit}
         slideViewers={collab.presence.slideViewers}
         selectSlideRequest={collab.selectSlideRequest}

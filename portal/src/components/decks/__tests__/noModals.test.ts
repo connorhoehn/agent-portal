@@ -87,7 +87,7 @@ test('the deck editor page, its reader, its layouts tab and its loading and empt
   const pages = await bundle();
   const states: Array<[string, string, Record<string, unknown>, RegExp]> = [
     ['editor', '/iq/decks/idk-1', {}, /data-testid="initiative-deck-editor"/],
-    ['editor', '/iq/decks/idk-1?tab=layouts', {}, /data-testid="initiative-deck-layouts"/],
+    ['editor', '/iq/decks/idk-1?tab=layouts', {}, /data-testid="initiative-deck-editor-layout-panel"/],
     ['editor', '/iq/decks/idk-1', { dirty: true, dirtyRef: { current: true } }, /data-testid="initiative-deck-editor"/],
     ['reader', '/iq/decks/idk-1', {}, /data-testid="initiative-deck-reader"/],
     ['editor', '/iq/decks/idk-1', { deck: null }, /Opening the deck/],

@@ -81,6 +81,24 @@ export function groupDeckWarnings(warnings: readonly string[]): DeckFindings {
   return { count, groups: ordered, bySlide };
 }
 
+const SLIDE_FINDING_TONE: Partial<Record<DeckFindingKind, 'warning' | 'info'>> = { overflow: 'warning', unfinished: 'warning', 'example-sources': 'info' };
+
+/**
+ * The findings each slide's thumbnail is marked with (`PresentationEditor slideFindings`): overflow and unfinished as
+ * warnings, an example or placeholder source as info. Speaker notes and style advice stay in the findings line only.
+ * Keyed by slide id; a slide number the spec no longer has is dropped.
+ */
+export function deckSlideFindings(warnings: readonly string[], spec: Pick<DeckSpec, 'slides'>): Record<string, { tone: 'warning' | 'info'; label: string }[]> {
+  const out: Record<string, { tone: 'warning' | 'info'; label: string }[]> = {};
+  for (const [n, kinds] of groupDeckWarnings(warnings).bySlide) {
+    const id = spec.slides[n - 1]?.id;
+    if (!id) continue;
+    const marks = ORDER.filter(k => kinds.includes(k) && SLIDE_FINDING_TONE[k]).map(k => ({ tone: SLIDE_FINDING_TONE[k]!, label: LABEL[k] }));
+    if (marks.length) out[id] = marks;
+  }
+  return out;
+}
+
 /** "slide 4", "slides 2 and 5", "slides 2 to 7", "slides 1, 3 and 6"; "every slide" when it is all of them. */
 export function slideRange(slides: readonly number[], slideCount?: number): string {
   if (slides.length === 0) return '';

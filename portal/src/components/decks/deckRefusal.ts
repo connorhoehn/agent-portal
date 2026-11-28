@@ -35,7 +35,7 @@ const blank = (v: unknown): boolean => (typeof v === 'string' ? !v.trim() : Arra
   : v && typeof v === 'object' ? Object.values(v).every(blank) : v === undefined || v === null);
 
 /** Ids of the slides in `next` that are new since `prev` (added from the gallery, the toolbar or a duplicate). */
-export function newSlideIds(prev: DeckSpec | null, next: DeckSpec): string[] {
+function newSlideIds(prev: DeckSpec | null, next: DeckSpec): string[] {
   const before = new Set((prev?.slides ?? []).map(s => s.id));
   return next.slides.filter(s => !before.has(s.id)).map(s => s.id);
 }

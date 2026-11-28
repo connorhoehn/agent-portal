@@ -273,7 +273,8 @@ await step('D1 new deck from a template', async () => {
       const tile = document.querySelector(`button[data-testid^="${p}-template-"]`)?.getBoundingClientRect();
       const h1 = [...document.querySelectorAll('h1')].find((h) => h.offsetParent !== null && h.textContent.trim());
       const cut = h1 ? (h1.scrollWidth > h1.clientWidth + 1 || [h1, ...h1.querySelectorAll('*')].some((e) => getComputedStyle(e).textOverflow === 'ellipsis' && e.scrollWidth > e.clientWidth + 1)) : null;
-      return { width: innerWidth, facts: top(`${p}-new-facts`), examples: top(`${p}-new-examples`), tileTop: tile ? Math.round(tile.top) : null, vh: innerHeight, heading: h1?.textContent.trim() ?? null, headingCut: cut };
+      const facts = document.querySelector(`[data-testid="${p}-new-facts"]`)?.getBoundingClientRect();
+      return { width: innerWidth, facts: top(`${p}-new-facts`), factsHeight: facts ? Math.round(facts.height) : null, examples: top(`${p}-new-examples`), tileTop: tile ? Math.round(tile.top) : null, tileBottom: tile ? Math.round(tile.bottom) : null, vh: innerHeight, heading: h1?.textContent.trim() ?? null, headingCut: cut };
     }, IP));
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -284,6 +285,9 @@ await step('D1 new deck from a template', async () => {
   await imagesLoaded(page, `[data-testid="${IP}-template"]`);
   await page.evaluate(() => window.scrollTo(0, 0));
   const onArrival = arrival.every((a) => a.facts !== null && a.examples !== null && a.facts < a.examples && a.examples < a.vh && a.tileTop !== null && a.tileTop < a.vh && a.headingCut === false);
+  // At 390 at least one whole example tile shows on arrival (the facts choice is one compact row there).
+  const phone = arrival.find((a) => a.width === 390);
+  const fullTile = !!phone && phone.tileBottom !== null && phone.tileTop >= 0 && phone.tileBottom <= phone.vh;
   const tiles = await page.evaluate((p) => [...document.querySelectorAll(`button[data-testid^="${p}-template-"]`)].filter((b) => !/-(strip|facts)$/.test(b.getAttribute('data-testid'))).map((b) => ({ id: b.getAttribute('data-testid'), imgs: [...b.querySelectorAll('img')].map((i) => i.complete && i.naturalWidth > 0) })), IP);
   const shots = await snap(page, 'D1b-new-examples', [1440, 900, 390], `${IP}-new`);
   const allLoaded = tiles.length > 0 && tiles.every((t) => t.imgs.length > 0 && t.imgs.every(Boolean));
@@ -292,8 +296,8 @@ await step('D1 new deck from a template', async () => {
   await page.getByTestId(`${IP}-new-template-submit`).click();
   await page.waitForURL(/\/iq\/decks\/(?!new)[^/?#]+$/, { timeout: 30000 });
   deckId = deckIdOf(page); deckUrl = new URL(page.url()).pathname;
-  const ok = tiles.length === 5 && allLoaded && choice > 0 && onArrival && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
-  return { ok, detail: `${tiles.length} templates, every tile preview loaded: ${allLoaded} (images per tile ${tiles.map((t) => t.imgs.length).join('/')}); "from this initiative's facts" choice shown: ${choice > 0}; on arrival ${arrival.map((a) => `@${a.width}: facts row y ${a.facts}, gallery y ${a.examples}, first tile y ${a.tileTop} of ${a.vh}, heading "${a.heading}" truncated ${a.headingCut}`).join('; ')} (both visible without a click: ${onArrival}); landed on ${deckUrl}; ${fmt(shots)}` };
+  const ok = tiles.length === 5 && allLoaded && choice > 0 && onArrival && fullTile && noDialogs([...facts1, ...shots]) && !shots.some((r) => r.horizontalScroll);
+  return { ok, detail: `${tiles.length} templates, every tile preview loaded: ${allLoaded} (images per tile ${tiles.map((t) => t.imgs.length).join('/')}); "from this initiative's facts" choice shown: ${choice > 0}; on arrival ${arrival.map((a) => `@${a.width}: facts row y ${a.facts}, gallery y ${a.examples}, facts ${a.factsHeight}px tall, first tile y ${a.tileTop}-${a.tileBottom} of ${a.vh}, heading "${a.heading}" truncated ${a.headingCut}`).join('; ')} (both visible without a click: ${onArrival}; a whole tile at 390: ${fullTile}); landed on ${deckUrl}; ${fmt(shots)}` };
 });
 
 // D2 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -303,8 +307,14 @@ await step('D2 the editor on the new engine', async () => {
   const warn = await findingsText(page);
   const geo = await page.evaluate((p) => {
     const img = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
-    const ban = document.querySelector(`[data-testid="${p}-preview-warnings"]`)?.getBoundingClientRect();
-    return { stageTop: img ? Math.round(img.top) : null, stageBottom: img ? Math.round(img.bottom) : null, bannerHeight: ban ? Math.round(ban.height) : null, vh: innerHeight };
+    const banEl = document.querySelector(`[data-testid="${p}-preview-warnings"]`);
+    const ban = banEl?.getBoundingClientRect();
+    const bar = document.querySelector(`[data-testid="${p}-editor-toolbar"]`)?.getBoundingClientRect();
+    // Fully visible: inside the viewport, below the toolbar, and what is drawn at its top-left and centre is the line itself.
+    const hit = (x, y) => { const e = document.elementFromPoint(x, y); return !!e && !!banEl && banEl.contains(e); };
+    const warnSeen = !!ban && ban.height > 0 && ban.top >= 0 && ban.bottom <= innerHeight && (!bar || ban.top >= bar.bottom - 1)
+      && hit(ban.left + 8, ban.top + 4) && hit(ban.left + ban.width / 2, ban.top + ban.height / 2);
+    return { warnSeen, warnTop: ban ? Math.round(ban.top) : null, toolbarBottom: bar ? Math.round(bar.bottom) : null, stageTop: img ? Math.round(img.top) : null, stageBottom: img ? Math.round(img.bottom) : null, bannerHeight: ban ? Math.round(ban.height) : null, vh: innerHeight };
   }, IP);
   const shots = await snap(page, 'D2-editor', [1440, 900], `${E}`);
   // The slide is the main thing: the assistant pane opens folded away, so the toolbar keeps Theme inline even at 900.
@@ -318,12 +328,12 @@ await step('D2 the editor on the new engine', async () => {
     }, E));
   }
   await page.setViewportSize({ width: 1440, height: 900 }); await sleep(400);
-  // At 1440 the closed pane gives the toolbar its room; a 900 window is under the library's own 900px toolbar breakpoint (queued).
-  const roomOk = room.every((r) => !r.pane) && !!room.find((r) => r.width === 1440)?.theme;
+  // Theme stays inline at 1440 and at 900 (ui-components 2.549.0 keeps it out of ⋯ down to a 640px bar).
+  const roomOk = room.every((r) => !r.pane && !!r.theme);
   facts.push({ step: 'D2', geo, warn, room });
   const exampleWarn = /example/i.test(warn);
   const visible = geo.stageTop !== null && geo.stageBottom !== null && (Math.min(geo.stageBottom, geo.vh) - Math.max(geo.stageTop, 0)) >= 0.5 * (geo.stageBottom - geo.stageTop);
-  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && roomOk && noDialogs(shots), detail: `${room.map((r) => `@${r.width}: Theme in the toolbar ${r.theme ?? `no, in the overflow menu${r.width < 1000 ? ' (library breakpoint, queued)' : ''}`}, assistant pane open ${r.pane}`).join('; ')}; stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
+  return { ok: w > 0 && thumbs.n > 0 && thumbs.loaded === thumbs.n && exampleWarn && visible && geo.warnSeen && roomOk && noDialogs(shots), detail: `warnings line at y ${geo.warnTop}, toolbar ends at y ${geo.toolbarBottom}, fully visible and not under the toolbar: ${geo.warnSeen}; ${room.map((r) => `@${r.width}: Theme in the toolbar ${r.theme ?? 'no, in the overflow menu'}, assistant pane open ${r.pane}`).join('; ')}; stage image natural width ${w}; thumbnails ${thumbs.loaded}/${thumbs.n} loaded; warnings: "${warn.slice(0, 160)}"; warning banner ${geo.bannerHeight}px tall, stage spans y ${geo.stageTop}-${geo.stageBottom} of a ${geo.vh}px viewport (at least half visible: ${visible}); ${fmt(shots)}` };
 });
 
 // D3 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -360,13 +370,14 @@ await step('D3 the layout gallery, in place', async () => {
   const inView = await page.evaluate((p) => {
     const r = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
     if (!r || r.height === 0) return { fraction: 0 };
-    // Seen means inside the viewport AND inside the editor's own scrolling region (what clips the stage).
-    const m = document.querySelector(`[data-testid="${p}-editor-main"]`)?.getBoundingClientRect();
+    // Seen means inside the viewport AND inside the editor's pinned stage region (what clips the stage).
+    const m = document.querySelector(`[data-testid="${p}-editor-stage-region"]`)?.getBoundingClientRect();
     const seen = Math.max(0, Math.min(r.bottom, innerHeight, m ? m.bottom : innerHeight) - Math.max(r.top, 0, m ? m.top : 0));
     const scrolled = [...document.querySelectorAll('*')].filter((e) => e.scrollTop > 0).map((e) => `${e.getAttribute('data-testid') ?? e.tagName.toLowerCase()}:${Math.round(e.scrollTop)}`).slice(0, 6);
     const box = (sel) => { const el = document.querySelector(sel); if (!el) return null; return { ch: el.clientHeight, sh: el.scrollHeight, kids: [...el.children].map((k) => `${k.getAttribute('data-testid') ?? k.className.toString().slice(0, 40)}=${Math.round(k.getBoundingClientRect().height)}`) }; };
     return { fraction: Math.round((seen / r.height) * 100) / 100, top: Math.round(r.top), bottom: Math.round(r.bottom), vh: innerHeight, scrolled, pageScroll: Math.round(document.scrollingElement?.scrollTop ?? 0),
-      shellScroller: box(`[data-testid="${p}-shell-scroller"]`), main: box(`[data-testid="${p}-editor-main"]`) };
+      shellScroller: box(`[data-testid="${p}-shell-scroller"]`), stageRegion: box(`[data-testid="${p}-editor-stage-region"]`), formRegion: box(`[data-testid="${p}-editor-form-region"]`),
+      formScroll: Math.round(document.querySelector(`[data-testid="${p}-editor-form-region"]`)?.scrollTop ?? 0) };
   }, IP);
   facts.push({ step: 'D3', added, saveOnAdded, inView });
   const t = await snap(page, 'D3b-timeline', [1440], `${E}-stage`);
@@ -396,8 +407,8 @@ await step('D3s the stage while typing in the form', async () => {
   if (!v) return { ok: false, detail: 'D3 did not reach the form' };
   // The whole editor scrolling (its shell's scroller or the page), not the editor's own regions (the form, the slide list).
   const outer = [...(v.scrolled ?? []).filter((x) => /-shell-scroller:|^(html|body|main):/.test(x)), ...(v.pageScroll ? [`page:${v.pageScroll}`] : [])];
-  // Judged on the stage alone: the shell's scroller moving by the notices' height (about 20px) is reported, not failed.
-  return { ok: v.fraction >= 0.5, detail: `after typing the stage is ${Math.round(v.fraction * 100)}% in view inside the editor's region (y ${v.top}-${v.bottom} of ${v.vh}); scrolled: ${(v.scrolled ?? []).join(' ') || 'nothing'} (anything but the editor's own region scrolling: ${outer.join(' ') || 'none'}); region ${JSON.stringify(v.main)}` };
+  // The stage is pinned (ui-components 2.549.0): at least 90% of it in view, and nothing outside the editor's own regions scrolled.
+  return { ok: v.fraction >= 0.9 && outer.length === 0, detail: `after typing the stage is ${Math.round(v.fraction * 100)}% in view inside its pinned region (y ${v.top}-${v.bottom} of ${v.vh}); form region scrolled ${v.formScroll}px; scrolled: ${(v.scrolled ?? []).join(' ') || 'nothing'} (anything but the editor's own regions scrolling: ${outer.join(' ') || 'none'}); stage region ${JSON.stringify(v.stageRegion)}; form region ${JSON.stringify(v.formRegion)}` };
 });
 
 // D4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -429,6 +440,20 @@ await step('D4 overflow is reported', async () => {
   const slidesAfter = await page.locator(`[data-testid^="${E}-slide-select-"]`).count();
   facts.push({ step: 'D4', warnBefore, warnDuring: warn, slidesBefore, slidesAfter, countBefore: countOf(warnBefore), countDuring: countOf(warn) });
   const named = overflow && new RegExp(`Slide ${slideNo}\\b`).test(overflow);
+  // The overflowing slide's thumbnail carries the editor's findings marker (slideFindings), visible in the slide list.
+  const marker = await page.evaluate(({ e, n }) => {
+    const list = document.querySelector(`[data-testid="${e}-slide-list"]`);
+    const marks = list ? [...list.querySelectorAll('[role="img"][data-testid*="-findings-"]')] : [];
+    const thumbs = list ? [...list.querySelectorAll(`button[data-testid^="${e}-slide-select-"]`)] : [];
+    const thumb = thumbs[Number(n) - 1];
+    const tip = thumb?.closest('[data-testid*="-findings-tip-"]');
+    const mark = tip?.querySelector('[role="img"][data-testid*="-findings-"]');
+    const r = mark?.getBoundingClientRect(); const lr = list?.getBoundingClientRect();
+    const seen = !!r && !!lr && r.width > 0 && r.top >= lr.top - 1 && r.bottom <= lr.bottom + 1 && r.bottom <= innerHeight;
+    return { marks: marks.length, label: mark?.getAttribute('aria-label') ?? null, tone: mark?.getAttribute('data-tone') ?? null, seen };
+  }, { e: E, n: slideNo });
+  const s1 = await snap(page, 'D4m-slide-list-marker', [1440], `${E}-slide-list`);
+  const marked = /Overflow/.test(marker.label ?? '') && marker.tone === 'warning' && marker.seen;
   // shorten
   const short = ['One', 'Two', 'Three'];
   if (await area.count()) await area.fill(short.join('\n'));
@@ -436,7 +461,7 @@ await step('D4 overflow is reported', async () => {
   const warn2 = await findingsText(page);
   const cleared = !/(overflow|too long|does not fit|doesn't fit|too many|too much)/i.test(warn2) || !new RegExp(`Slide ${slideNo} \\([^)]*\\)[^.]*(overflow|does not fit|too)`, 'i').test(warn2);
   const s2 = await snap(page, 'D4b-shortened', [1440], `${IP}-preview-warnings`);
-  return { ok: !!overflow && !!named && cleared && noDialogs([...shots, ...s2]), detail: `warning count ${countOf(warnBefore)} before and ${countOf(warn)} after adding ${slidesAfter - slidesBefore} slide(s) (the list is ${countOf(warnBefore) === countOf(warn) ? 'UNCHANGED, so it does not follow the edits' : 'updated'}); overflow sentence ${overflow ? `"${squash(overflow).slice(0, 160)}"` : 'NOT PRESENT (warnings: ' + warn.slice(0, 200) + ')'}; names slide ${slideNo}: ${!!named}; cleared after shortening: ${cleared}; ${fmt(shots)}` };
+  return { ok: !!overflow && !!named && marked && cleared && noDialogs([...shots, ...s1, ...s2]), detail: `slide ${slideNo}'s thumbnail marker: ${JSON.stringify(marker)} (${marker.marks} slides marked in all); `+`warning count ${countOf(warnBefore)} before and ${countOf(warn)} after adding ${slidesAfter - slidesBefore} slide(s) (the list is ${countOf(warnBefore) === countOf(warn) ? 'UNCHANGED, so it does not follow the edits' : 'updated'}); overflow sentence ${overflow ? `"${squash(overflow).slice(0, 160)}"` : 'NOT PRESENT (warnings: ' + warn.slice(0, 200) + ')'}; names slide ${slideNo}: ${!!named}; cleared after shortening: ${cleared}; ${fmt(shots)}` };
 });
 
 await step('D4c a draft the server would refuse says so plainly', async () => {
@@ -685,16 +710,21 @@ await step('D9b voice: "open example slides"', async () => {
   const o = await nth(page, 1);
   await sleep(2500);
   const url = new URL(page.url());
-  const panel = (await page.getByTestId(`${IP}-layouts`).count()) > 0;
-  const shots = await snap(page, 'D9b-voice-layouts-tab', [1440], `${IP}-layouts`);
+  // The editor's own in-place gallery (layoutGalleryOpen), in place of the stage, with the editor's Back control.
+  const panel = await page.getByTestId(`${E}-layout-panel`).isVisible().catch(() => false);
+  const stageGone = (await page.getByTestId(`${E}-stage-image`).count()) === 0;
+  const shots = await snap(page, 'D9b-voice-layouts-tab', [1440], `${E}-layout-panel`);
   await stopVoice(page);
+  await page.getByTestId(`${E}-layout-back`).click().catch(() => undefined);
+  await sleep(800);
+  const backed = !new URL(page.url()).searchParams.has('tab') && (await page.getByTestId(`${E}-layout-panel`).count()) === 0;
   await freshDeck(page);
   await startVoice(page, [{ said: 'Open the example decks.', call: { name: 'open', arguments: { ...OPEN, page: 'deck-templates' } } }]);
   const o2 = await nth(page, 1);
   await sleep(2500);
   const url2 = new URL(page.url());
   await stopVoice(page);
-  return { ok: (url.searchParams.get('tab') === 'layouts' && panel) && /\/decks\/new/.test(url2.pathname) && noDialogs(shots), detail: `open tab layouts: say ${JSON.stringify(o.say ?? o.reason)}, url ${url.pathname}${url.search}, layouts panel (${IP}-layouts) shown: ${panel}; open page deck-templates: say ${JSON.stringify(o2.say ?? o2.reason)}, url ${url2.pathname}${url2.search}; ${fmt(shots)}` };
+  return { ok: (url.searchParams.get('tab') === 'layouts' && panel && stageGone && backed) && /\/decks\/new/.test(url2.pathname) && noDialogs(shots), detail: `open tab layouts: say ${JSON.stringify(o.say ?? o.reason)}, url ${url.pathname}${url.search}, the editor's in-place gallery (${E}-layout-panel) shown: ${panel}, stage replaced: ${stageGone}, Back closes it and drops the tab: ${backed}; open page deck-templates: say ${JSON.stringify(o2.say ?? o2.reason)}, url ${url2.pathname}${url2.search}; ${fmt(shots)}` };
 });
 
 /** One deck operation by voice in two passes: the card (words and a screenshot), then the same spoken and confirmed. */

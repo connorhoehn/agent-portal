@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { findingsSummary, groupDeckWarnings, slideRange, withPlaceholderSources, UNSOURCED_SOURCE } from '../deckFindings.ts';
+import { deckSlideFindings, findingsSummary, groupDeckWarnings, slideRange, withPlaceholderSources, UNSOURCED_SOURCE } from '../deckFindings.ts';
 import type { DeckSpec } from '../deckApi.ts';
 
 // The fresh status-update template's fourteen sentences, as the server answers them.
@@ -50,4 +50,19 @@ test('a slide added in the editor cites the placeholder; slides already there ke
   assert.deepEqual(out.slides[1]!.sources, []);
   assert.equal(withPlaceholderSources(prev, prev), prev);
   assert.equal(UNSOURCED_SOURCE.documentId, 'example:unsourced');
+});
+
+test('each slide is marked by id: overflow and unfinished as warnings, example sources as info, notes and advice left out', () => {
+  const spec = { slides: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] } as unknown as DeckSpec;
+  const marks = deckSlideFindings([
+    'Slide 1 (a) cites only the template\'s example source; replace it with the document it draws from.',
+    'Slide 2 (b) body: 9 lines need 7.2in, the region has 4.8in',
+    'Slide 2 (b) is unfinished: it needs a title.',
+    'Slide 3 (c) has no speaker notes.',
+    'Slide 9 (z) body: 9 lines need 7.2in, the region has 4.8in',
+  ], spec);
+  assert.deepEqual(marks, {
+    a: [{ tone: 'info', label: 'Example sources' }],
+    b: [{ tone: 'warning', label: 'Overflow' }, { tone: 'warning', label: 'Unfinished' }],
+  });
 });
