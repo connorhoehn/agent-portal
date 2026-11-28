@@ -1,13 +1,13 @@
 // "New deck" as a page in its own tenant (no dialog): the library PageFrame with the shell's trail, the tenant's
-// subject (an initiative, a team, a run, a conversation) inline, then two ways to start, the tenant's own generate
-// path first ("From this initiative's facts") beside "From an example": the library TemplateGallery fed by
-// GET <tenant>/deck-templates. Confirming creates the deck through the tenant's existing create route (with
+// subject (an initiative, a team, a run, a conversation) inline, then both ways to start at once, no click to reveal
+// either: the tenant's own generate path as one compact row ("From this initiative's facts", its fields and its
+// button) and, directly under it, "From an example": the library TemplateGallery fed by GET <tenant>/deck-templates. Confirming creates the deck through the tenant's existing create route (with
 // `templateId` for an example) and opens the editor. Each tenant page supplies the subject, the facts form and
 // the two create calls; this frame owns the choice, the title and the gallery.
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, DetailSection, FormField, InlineAlert, Inline, Input, PageFrame, SegmentedControl, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, DetailSection, FormField, InlineAlert, Inline, Input, PageFrame, Stack, T } from '@connorhoehn/ui-components/shared';
 import { TemplateGallery, type DeckTemplate } from '@connorhoehn/ui-components/doc-editor';
 import { useFlushTrailItems } from '../shell/FlushPage';
 import { listDeckTemplates, type DeckTemplateSummary, type DeckTenantId } from './deckApi';
@@ -61,12 +61,11 @@ export function NewDeckPage(props: NewDeckPageProps) {
   const [params] = useSearchParams();
   const breadcrumbs = useFlushTrailItems();
   const preset = params.get('template');
-  const [source, setSource] = useState<NewDeckSource>(facts && !preset ? 'facts' : 'example');
   const [templates, setTemplates] = useState<DeckTemplateSummary[] | null>(null);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(preset);
   const [title, setTitle] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<NewDeckSource | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -79,11 +78,11 @@ export function NewDeckPage(props: NewDeckPageProps) {
   }, [tenant, attempt]);
 
   const chosen = templates?.find((t) => t.id === templateId) ?? null;
-  const canGo = ready && !busy && !denied && (source === 'facts' ? !!facts : !!chosen);
+  const canStart = ready && !busy && !denied;
 
-  async function go() {
-    if (!canGo) return;
-    setBusy(true);
+  async function go(source: NewDeckSource) {
+    if (!canStart || (source === 'facts' ? !facts : !chosen)) return;
+    setBusy(source);
     try {
       const id = source === 'facts' && facts ? await facts.create(title.trim()) : await props.createFromTemplate(chosen!.id, title.trim());
       navigate(props.deckHref(id));
@@ -91,50 +90,44 @@ export function NewDeckPage(props: NewDeckPageProps) {
       // The server's own sentence (a 403 says why: not on the initiative); never an empty toast.
       toastError(null, 'Could not create the deck', err instanceof Error && err.message.trim() ? err.message : 'Try again.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  const submitLabel = busy ? (source === 'facts' && facts ? facts.busyLabel : 'Creating…')
-    : source === 'facts' && facts ? facts.submitLabel : chosen ? `Create from ${chosen.title}` : 'Choose an example';
-
+  // No action in the header: beside the title it truncated the heading at phone width. Each choice carries its own button.
   return (
-    <PageFrame title={props.title} description={props.description} breadcrumbs={breadcrumbs} data-testid={`${testIdPrefix}-new`}
-      actions={denied ? undefined : <Button variant="primary" disabled={!canGo} onClick={() => { void go(); }} data-testid={`${testIdPrefix}-new-submit`}>{submitLabel}</Button>}>
+    <PageFrame title={props.title} description={props.description} breadcrumbs={breadcrumbs} data-testid={`${testIdPrefix}-new`}>
       <Stack gap="lg">
         {props.subject}
         {denied ? <InlineAlert tone="info" data-testid={`${testIdPrefix}-new-denied`}>{denied}</InlineAlert> : (
           <>
-            <Inline gap="md" align="end" wrap>
-              {facts && (
-                <SegmentedControl aria-label="How to start" value={source} onChange={(v) => setSource(v as NewDeckSource)}
-                  options={[{ value: 'facts', label: facts.label }, { value: 'example', label: 'From an example' }]} />
-              )}
-              <FormField label="Title" className="w-full min-w-0 sm:w-auto sm:min-w-80">
-                {({ id }) => <Input id={id} value={title} placeholder={props.titlePlaceholder} onChange={(e) => setTitle(e.target.value)} data-testid={`${testIdPrefix}-new-title`} />}
-              </FormField>
-            </Inline>
-            {source === 'facts' && facts ? (
-              <DetailSection title={facts.label} as="h2">
-                <Stack gap="md">
-                  {facts.fields}
-                  {facts.note && <InlineAlert tone="info">{facts.note}</InlineAlert>}
+            <FormField label="Title" className="w-full min-w-0 sm:w-auto sm:max-w-md">
+              {({ id }) => <Input id={id} value={title} placeholder={props.titlePlaceholder} onChange={(e) => setTitle(e.target.value)} data-testid={`${testIdPrefix}-new-title`} />}
+            </FormField>
+            {facts && (
+              <DetailSection title={facts.label} as="h2" data-testid={`${testIdPrefix}-new-facts`}
+                actions={<Button variant="primary" size="sm" disabled={!canStart} onClick={() => { void go('facts'); }} data-testid={`${testIdPrefix}-new-submit`}>
+                  {busy === 'facts' ? facts.busyLabel : facts.submitLabel}</Button>}>
+                <Stack gap="xs">
+                  <Inline gap="md" align="end" wrap>{facts.fields}</Inline>
+                  {facts.note && <T size="xs" tone="secondary" wrap>{facts.note}</T>}
                 </Stack>
               </DetailSection>
-            ) : (
-              <DetailSection title="From an example" as="h2">
-                {/* The note on its own wrapping line: as a hint beside the title it truncated at phone width. */}
-                <T size="xs" tone="secondary" wrap>{props.exampleNote ?? EXAMPLE_NOTE}</T>
-                {templatesError ? (
-                  <InlineAlert tone="error">The examples could not be read: {templatesError} <Button size="sm" variant="link" onClick={() => setAttempt((n) => n + 1)}>Retry</Button></InlineAlert>
-                ) : (
-                  <TemplateGallery templates={templates ? templateTiles(templates) : []} loading={templates === null} selectedId={templateId ?? undefined}
-                    onSelect={setTemplateId} label="Example decks" emptyTitle="No examples here" emptyDescription="This workspace offers no example decks yet."
-                    testIdPrefix={`${testIdPrefix}-template`} />
-                )}
-                {chosen && <T size="xs" tone="secondary" wrap>{chosen.title}: {chosen.slideCount} slides, {chosen.layouts.length} layouts.</T>}
-              </DetailSection>
             )}
+            <DetailSection title="From an example" as="h2" data-testid={`${testIdPrefix}-new-examples`}
+              actions={<Button variant={facts ? 'secondary' : 'primary'} size="sm" disabled={!canStart || !chosen} onClick={() => { void go('example'); }}
+                data-testid={`${testIdPrefix}-new-template-submit`}>{busy === 'example' ? 'Creating…' : chosen ? `Create from ${chosen.title}` : 'Choose an example'}</Button>}>
+              {/* The note on its own wrapping line: as a hint beside the title it truncated at phone width. */}
+              <T size="xs" tone="secondary" wrap>{props.exampleNote ?? EXAMPLE_NOTE}</T>
+              {templatesError ? (
+                <InlineAlert tone="error">The examples could not be read: {templatesError} <Button size="sm" variant="link" onClick={() => setAttempt((n) => n + 1)}>Retry</Button></InlineAlert>
+              ) : (
+                <TemplateGallery templates={templates ? templateTiles(templates) : []} loading={templates === null} selectedId={templateId ?? undefined}
+                  onSelect={setTemplateId} label="Example decks" emptyTitle="No examples here" emptyDescription="This workspace offers no example decks yet."
+                  testIdPrefix={`${testIdPrefix}-template`} />
+              )}
+              {chosen && <T size="xs" tone="secondary" wrap>{chosen.title}: {chosen.slideCount} slides, {chosen.layouts.length} layouts.</T>}
+            </DetailSection>
           </>
         )}
       </Stack>
