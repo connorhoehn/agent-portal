@@ -608,6 +608,7 @@ export const V2_RULES = [
   [/^POST \/api\/(initiative-decks\/projects\/:[^/]+|assessment\/teams\/:[^/]+\/decks|pipelines\/runs\/:[^/]+\/decks)$/, 'not-yet', 'queue_work', 'build a deck'],
   [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/revise$/, 'never', null, 'a free-form rewrite is an instruction to an agent, which a voice note never is (docs/voice-navigator-spec.md §4); the editor\'s own revise box takes it, typed'],
   [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/(revisions|preview)$/, 'never', null, 'editor saves and previews'],
+  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/operations\/proposal$/, 'never', null, 'the typed composer asks the agent for a proposal; the voice already speaks the operations itself (update\'s deck kind), so it never asks an agent to propose them'],
   [/^POST \/api\/chat\/decks\/:[^/]+\/post$/, 'not-yet', 'update', 'post a deck to the conversation (PostMessage)'],
   // The operations write (update's deck kind), the orgiq chart reports and the template lists (list kinds deck-report and
   // deck-template) are named by those tools' mapsTo, so they never reach this table. What is left:

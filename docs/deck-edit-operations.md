@@ -9,6 +9,7 @@ The contract the deck editor page and the voice wiring code against. Code: `midd
 | Method and path | Who | Answer |
 | --- | --- | --- |
 | `POST <deck>/:id/operations` | the deck's save rule (`deckWriteAuthority`) | 201 `{ revision, touchedSlideIds, findings, summary, exampleSourceSlideIds }` |
+| `POST <deck>/:id/operations/proposal` | the same save rule | 200 `{ reply, baseRevisionId, operations, lines, destructive, touchedSlideIds, findings, refusal?, engine, reason? }`; nothing is saved |
 | `GET <deck>/:id/chart-reports` | whoever may read the deck | `{ reports: [{ id, description, params, money }] }` |
 | `GET <tenant>/deck-templates` | the tenant's deck readers | `{ templates: [{ id, title, description, audience, style, slideCount, layouts, preview: [{ id, title, svg }] x3 }] }` |
 | `GET <tenant>/deck-templates/:templateId` | the same | `{ id, ..., spec, preview: { slides, warnings, findings } }`; 404 unknown |
@@ -47,6 +48,19 @@ Body: `{ baseRevisionId, operations: [...], label? }`. At most 10 operations; th
 ### Pictures
 
 The server never fetches an arbitrary address. An image `url` is refused, in operations and in a person's save alike (`host-rules.ts`); an image is an `assetId`. The painters are given no images yet, so an asset draws as the engine's placeholder and the image-missing finding shows. The templates and sample decks use no image layouts.
+
+## Proposals
+
+The deck editor's composer (Edit) asks for a proposal when the request changes the deck's structure, a slide's layout, the style or theme, a decoration, an emphasis or a chart (`portal/src/components/decks/deckEditIntent.ts`). Rewording goes to `/revise`, which keeps the slide list and the theme by design.
+
+`POST <deck>/:id/operations/proposal` takes `{ instruction, baseRevisionId, slideId? }`. The drafter agent is sent the deck's outline (positions, slide ids, layouts, titles and bullets as plain text) and this schema, in the tenant's operations mode (`operate-review-deck`, `operate-initiative-status-deck`, `operate-pipeline-run-deck`, `operate-social-deck`), and answers with a short reply and at most ten operations. The call is held and booked like a revise (trigger `deck:<tenant>:propose`). The list then gets every check `POST <deck>/:id/operations` makes (`planDeckOperations`), and nothing is saved:
+
+- `lines` has one plain line per operation, in the validator's words ("Change slide 3 from bullets to kpi").
+- `refusal: { reason, errors? }` means the validator refused the list; the composer says why and offers no Apply.
+- `destructive` is true when the list removes a slide.
+- `engine` is `agent`, or `offline` under the local mock, or `fallback` when the agent was unavailable or the spend was refused (`reason` then says why). Both of the last two use a small deterministic proposer.
+
+The composer shows the proposal as the voice's confirm card above its input, with Apply and Discard. Apply sends `{ baseRevisionId, operations }` unchanged to `POST <deck>/:id/operations` as the person, with their own authority. Decision for the first version: every proposal waits for Apply, not only a removal, and a removal also says so on the card.
 
 ## Reports
 
