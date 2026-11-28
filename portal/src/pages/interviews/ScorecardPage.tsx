@@ -410,7 +410,8 @@ function RedFlagsSeen({ flags, seen, onToggle }: { flags: readonly KitRedFlag[];
           <Stack key={g.group} gap="xs" data-testid="interviews-scorecard-red-flag-group">
             <T size="xs" weight="medium" tone="secondary">{g.label}</T>
             {g.items.map((text) => (onToggle
-              ? <FormField key={text} label={text} layout="inline">
+              // The box first, its label beside it (a native label: clicking the words ticks the box).
+              ? <FormField key={text} label={text} layout="inline-start">
                   {({ id, labelId }) => <Checkbox id={id} aria-labelledby={labelId} checked={seen.includes(text)} onChange={() => onToggle(text)} />}
                 </FormField>
               : <T key={text} size="sm" wrap>{`• ${text}`}</T>))}

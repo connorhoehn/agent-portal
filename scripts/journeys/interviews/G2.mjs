@@ -171,8 +171,22 @@ export default async function run(ctx) {
     const boxes = flagsBox.getByRole('checkbox');
     const total = await boxes.count();
     const flagText = squash(await flagsBox.locator('label').first().innerText());
-    await boxes.first().check();
+    // Each box sits beside its label (FormField layout="inline-start"): within 24px of where the label's words start.
+    const beside = await flagsBox.evaluate((root) => [...root.querySelectorAll('[role="checkbox"], input[type="checkbox"]')].map((cb) => {
+      let r = cb.getBoundingClientRect();
+      if (r.width < 2 && cb.parentElement) r = cb.parentElement.getBoundingClientRect();
+      const label = (cb.id && root.querySelector(`label[for="${CSS.escape(cb.id)}"]`)) || document.getElementById((cb.getAttribute('aria-labelledby') ?? '').split(' ')[0]);
+      if (!label) return { gap: null, sameLine: false };
+      const range = document.createRange(); range.selectNodeContents(label);
+      const t = range.getClientRects()[0] ?? label.getBoundingClientRect();
+      return { gap: Math.round(t.left - r.right), sameLine: t.top < r.bottom && t.bottom > r.top };
+    }));
+    const besideOk = beside.length === total && beside.every((b) => b.gap !== null && b.gap >= 0 && b.gap <= 24 && b.sameLine);
+    // Clicking the label's words ticks the box (a native label).
+    await flagsBox.locator('label').first().click();
     await page.waitForTimeout(300);
+    const labelTicks = await boxes.first().isChecked();
+    if (!labelTicks) await boxes.first().check();
     const formShot = await snap(page, 'G2c-red-flags-form', [1440], 'interviews-scorecard-red-flags');
     // Continue to the recap, then the decision, and submit (rated already; summary is the notes).
     await page.getByTestId('interviews-scorecard-to-recap').click();
@@ -216,8 +230,8 @@ export default async function run(ctx) {
     const wenShot = await snap(wp, 'G2c-second-interviewer-view', [1440], null);
     const wenPageShows = /ticked by|Hugo Marchetti, .*coding|Red flag:/i.test(wenPageText) && /Red flag/i.test(wenPageText);
     await ap.close(); await wp.close();
-    const ok = submitted && onDebrief && lines.some((l) => /ticked by Hugo Marchetti/.test(l)) && !wenHasFlags && !wenPageShows && wenDebrief.status !== 200;
-    return { ok, detail: `form: ${groups} groups, ${total} flags, ticked "${flagText.slice(0, 70)}" ${fmt(formShot)}; submitted ${submitted}, own scorecard lists the flag ${mineFlags > 0} ${fmt(mineShot)}; debrief lines ${JSON.stringify(lines)} ${fmt(debShot)}; Wen (not submitted): scorecard route ${wenCard.status} carries ticked flags ${wenHasFlags} ${JSON.stringify(ticked)} (othersHidden ${wenCard.body?.scorecard?.othersHidden}), page shows flags ${wenPageShows}, debrief route ${wenDebrief.status} ${fmt(wenShot)}` };
+    const ok = besideOk && labelTicks && submitted && onDebrief && lines.some((l) => /ticked by Hugo Marchetti/.test(l)) && !wenHasFlags && !wenPageShows && wenDebrief.status !== 200;
+    return { ok, detail: `form: ${groups} groups, ${total} flags, box-to-label gaps ${JSON.stringify(beside.map((b) => b.gap))}px all within 24 on one line: ${besideOk}, clicking the label ticked the box: ${labelTicks}; ticked "${flagText.slice(0, 70)}" ${fmt(formShot)}; submitted ${submitted}, own scorecard lists the flag ${mineFlags > 0} ${fmt(mineShot)}; debrief lines ${JSON.stringify(lines)} ${fmt(debShot)}; Wen (not submitted): scorecard route ${wenCard.status} carries ticked flags ${wenHasFlags} ${JSON.stringify(ticked)} (othersHidden ${wenCard.body?.scorecard?.othersHidden}), page shows flags ${wenPageShows}, debrief route ${wenDebrief.status} ${fmt(wenShot)}` };
   });
   save();
 
