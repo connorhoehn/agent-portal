@@ -312,12 +312,14 @@ function DeckEditorDocumentPage<D extends DeckDocumentShape & { title: string }>
       headActions={presenting || (compactReview && cannotEdit) ? null : fileActions}
       // Fill from a report (or Share) opens under the toolbar, above the stage: the toolbar row does not scroll, so selecting a
       // slide (which scrolls the surface to its stage) never carries the panel out of view.
-      // The notices (findings line, banners) sit with the toolbar, above the scroller: in the scroller they made it taller than
-      // its frame, so the whole editor scrolled a little as well as the editor's own region whenever the form took focus.
-      surface="workspace" toolbar={toolbarPanel || !presenting ? <Stack gap="sm">{parts.toolbar}{toolbarPanel}{!presenting && notices}</Stack> : parts.toolbar}
+      // The notices stay in the scroller: moved up beside the toolbar they cost the stage about 80px of height and pushed
+      // Theme into the toolbar's overflow menu (deck polish walk). The stage scrolling away while the form is filled is the
+      // library's (docs/ui-components-queue.md).
+      surface="workspace" toolbar={toolbarPanel ? <Stack gap="sm">{parts.toolbar}{toolbarPanel}</Stack> : parts.toolbar}
       {...(parts.footer ? { footer: parts.footer } : {})}
       className={`min-h-0 flex-1 deck-review-workspace${compactReview ? ' deck-review-compact' : ''}`} data-testid={`${testIdPrefix}-shell`}
     >
+      {!presenting && notices}
       {!presenting && collab.followBar}
       {showLayouts && !cannotEdit ? layoutsPanel : parts.surface}
     </EditorShell>
