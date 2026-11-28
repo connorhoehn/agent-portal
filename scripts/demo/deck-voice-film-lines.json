@@ -1,0 +1,66 @@
+{
+ "voices": {
+  "vera": {
+   "speaker": "serena",
+   "instruct": "A calm, friendly programme lead in her forties, talking to a voice assistant at her desk: clear, unhurried, natural and conversational, at a steady pitch."
+  }
+ },
+ "lines": {
+  "examples": [
+   "vera",
+   "Show me a few example slides."
+  ],
+  "examples_b": [
+   "vera",
+   "Open the example slides, please."
+  ],
+  "timeline": [
+   "vera",
+   "Add a timeline slide after slide three."
+  ],
+  "timeline_b": [
+   "vera",
+   "Please add a new timeline slide right after slide three."
+  ],
+  "confirm": [
+   "vera",
+   "Yes, confirm."
+  ],
+  "rename": [
+   "vera",
+   "Rename slide two to: Where we are this month."
+  ],
+  "rename_b": [
+   "vera",
+   "Change the title of the second slide to: Where we are this month."
+  ],
+  "chart": [
+   "vera",
+   "Run the spend by initiative report, and put a pie chart on slide five."
+  ],
+  "chart_b": [
+   "vera",
+   "Fill slide five with a pie chart from the spend by initiative report."
+  ],
+  "reports": [
+   "vera",
+   "What reports can I use?"
+  ],
+  "reports_b": [
+   "vera",
+   "Which reports can I chart on a slide?"
+  ],
+  "remove": [
+   "vera",
+   "Remove slide seven."
+  ],
+  "remove_b": [
+   "vera",
+   "Delete slide seven, please."
+  ],
+  "thanks": [
+   "vera",
+   "Thanks, that's all for now."
+  ]
+ }
+}
