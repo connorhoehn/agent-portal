@@ -29,10 +29,43 @@ function derive(tenant: DeckHostTenant): { theme: DeckThemeSpec; adjustments: st
   if (!hit) {
     const brand = TENANT_BRANDS[tenant];
     const { theme, adjustments } = deckThemeFromTokens({ ...DECK_BASE_TOKENS }, brand ? { ...brand } : undefined);
-    hit = { theme: { ...theme, id: tenant, name: TENANT_MANIFEST[tenant].displayName }, adjustments };
+    const series = distinctSeries(theme.colors.series, theme.colors.muted);
+    if (series.join() !== theme.colors.series.join()) adjustments.push(`series: ${theme.colors.series.join(' ')} had colours too close to tell apart; used ${series.join(' ')}`);
+    hit = { theme: { ...theme, colors: { ...theme.colors, series }, id: tenant, name: TENANT_MANIFEST[tenant].displayName }, adjustments };
     derived.set(tenant, hit);
   }
   return hit;
+}
+
+const rgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+/**
+ * Below this distance two chart colours read as one. The distance is the "redmean" weighted RGB distance (0 to about
+ * 765), which tracks the eye better than plain RGB: the orgiq accent #4F46E5 and its primaryDark #4F55FF are 52 apart,
+ * #2563EB and #4F55FF 76, while #4F46E5 and #2563EB (told apart easily) are 86.
+ */
+export const MIN_SERIES_DISTANCE = 80;
+const distance = (a: string, b: string): number => {
+  const [x, y] = [rgb(a), rgb(b)];
+  const r = (x[0] + y[0]) / 2;
+  return Math.sqrt((2 + r / 256) * (x[0] - y[0]) ** 2 + 4 * (x[1] - y[1]) ** 2 + (2 + (255 - r) / 256) * (x[2] - y[2]) ** 2);
+};
+/** The smallest distance between any two colours of a list (for tests and the walk). */
+export const closestPair = (colors: readonly string[]): number => Math.min(...colors.flatMap((a, i) => colors.slice(i + 1).map((b) => distance(a, b))));
+
+/**
+ * The derived series with every colour distinguishable from the ones before it. The generator drops only exact
+ * duplicates, so a brand whose dark primary is a shade of its accent drew a pie's sixth slice ("Other", the last
+ * one) in the first slice's colour. A near-duplicate is dropped and the list refilled from the product theme's
+ * series, then the muted colour, keeping the count the engine expects (six to eight; one per pie slice).
+ */
+export function distinctSeries(series: readonly string[], muted: string): string[] {
+  const want = Math.max(6, Math.min(8, series.length));
+  const out: string[] = [];
+  for (const c of [...series, ...BUILTIN_THEMES.product.colors.series, muted, '#8E8E93', '#111111']) {
+    if (out.length >= want) break;
+    if (/^#[0-9A-Fa-f]{6}$/.test(c) && out.every((o) => distance(o, c) >= MIN_SERIES_DISTANCE)) out.push(c);
+  }
+  return out.length >= 6 ? out : [...series];
 }
 
 /** The theme a tenant's own decks use (`{ ref: '<tenant id>' }`), derived once per process. */
