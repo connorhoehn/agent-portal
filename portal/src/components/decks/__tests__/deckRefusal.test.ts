@@ -45,4 +45,11 @@ test('a new slide with no title takes its layout placeholder; an existing slide 
   const out = withPlaceholderTitles(prev, next);
   assert.deepEqual(out.slides.map(s => s.title), ['', 'Timeline', 'Mine']);
   assert.equal(withPlaceholderTitles(next, next), next);
+  // The library's empty fields take the server's starter words, so the new slide saves at once; typed values stay.
+  const lib = { ...prev, slides: [...prev.slides,
+    { id: 's4', layout: 'timeline', title: '', sources: [], timeline: [{ date: '', label: '' }, { date: '', label: '' }, { date: '', label: '' }] },
+    { id: 's5', layout: 'key-figures', title: 'Two', sources: [], figures: [{ value: '$41k', label: '' }, { value: '', label: '' }] }] } as unknown as DeckSpec;
+  const filled = withPlaceholderTitles(prev, lib).slides as unknown as Array<Record<string, unknown>>;
+  assert.deepEqual(filled[1]!['timeline'], [{ date: 'Start', label: 'First step' }, { date: 'Next', label: 'Second step' }, { date: 'Then', label: 'Third step' }]);
+  assert.deepEqual(filled[2]!['figures'], [{ value: '$41k', label: '' }, { value: '', label: '' }]);
 });

@@ -13,17 +13,53 @@ export const LAYOUT_PLACEHOLDER_TITLE: Readonly<Record<string, string>> = {
   agenda: 'Agenda', closing: 'Next steps',
 };
 
+/**
+ * The server's `STARTERS` (middleware lib/deck-shared/slide-starters.ts): words that read as placeholders, never numbers.
+ * The library's new slide leaves these fields empty, which the format refuses; `add_slide` gives these instead.
+ */
+const LAYOUT_STARTERS: Readonly<Record<string, Record<string, unknown>>> = {
+  bullets: { bullets: ['First point'] },
+  'two-column': { columns: [['Left point'], ['Right point']] },
+  quote: { quote: { text: 'The quote goes here.', by: 'Who said it' } },
+  image: { image: { alt: 'Describe the image' } },
+  'key-figures': { figures: [{ value: 'TBD', label: 'First figure' }, { value: 'TBD', label: 'Second figure' }] },
+  table: { table: { header: ['Item', 'Detail'], rows: [['First row', 'To fill in']] } },
+  comparison: { comparison: { left: { title: 'Option A', points: ['First point'] }, right: { title: 'Option B', points: ['First point'] } } },
+  timeline: { timeline: [{ date: 'Start', label: 'First step' }, { date: 'Next', label: 'Second step' }, { date: 'Then', label: 'Third step' }] },
+  agenda: { agenda: { items: ['First item', 'Second item'] } },
+  closing: { closing: { line: 'Thank you.' } },
+};
+
+/** Every string in it is empty: the library's untouched default for a new slide. */
+const blank = (v: unknown): boolean => (typeof v === 'string' ? !v.trim() : Array.isArray(v) ? v.every(blank)
+  : v && typeof v === 'object' ? Object.values(v).every(blank) : v === undefined || v === null);
+
 /** Ids of the slides in `next` that are new since `prev` (added from the gallery, the toolbar or a duplicate). */
 export function newSlideIds(prev: DeckSpec | null, next: DeckSpec): string[] {
   const before = new Set((prev?.slides ?? []).map(s => s.id));
   return next.slides.filter(s => !before.has(s.id)).map(s => s.id);
 }
 
-/** `next` with every new slide that has no title given its layout's placeholder title; a slide already there keeps what its author left. */
+/**
+ * `next` with every new slide made saveable as `add_slide` makes it: no title gets its layout's placeholder title, and
+ * a layout's fields the library left empty get the server's starter words. A slide already there keeps what its author left.
+ */
 export function withPlaceholderTitles(prev: DeckSpec | null, next: DeckSpec): DeckSpec {
   const fresh = new Set(newSlideIds(prev, next));
-  if (!next.slides.some(s => fresh.has(s.id) && !s.title.trim())) return next;
-  return { ...next, slides: next.slides.map(s => (fresh.has(s.id) && !s.title.trim() ? { ...s, title: LAYOUT_PLACEHOLDER_TITLE[s.layout] ?? 'New slide' } : s)) };
+  let changed = false;
+  const slides = next.slides.map(s => {
+    if (!fresh.has(s.id)) return s;
+    let out = s;
+    if (!s.title.trim()) out = { ...out, title: LAYOUT_PLACEHOLDER_TITLE[s.layout] ?? 'New slide' };
+    const starter = LAYOUT_STARTERS[s.layout];
+    if (starter) {
+      const empty = Object.keys(starter).filter(k => blank((s as unknown as Record<string, unknown>)[k]));
+      if (empty.length) out = { ...out, ...Object.fromEntries(empty.map(k => [k, structuredClone(starter[k])])) };
+    }
+    if (out !== s) changed = true;
+    return out;
+  });
+  return changed ? { ...next, slides } : next;
 }
 
 const FIELD_WORDS: Readonly<Record<string, string>> = {
