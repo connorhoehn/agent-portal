@@ -155,8 +155,12 @@ const REVIEW = deck('review', 'Review', {
       chart: { kind: 'pie', labels: ['Late delivery', 'Damaged parcel', 'Wrong address', 'Billing', 'Other'], series: [{ name: 'Complaints', values: [520, 240, 190, 130, 100] }] },
     },
     {
-      id: 'two', layout: 'two-column', title: 'Keep and change',
-      columns: [['Keep the delivery text updates', 'Keep the callback promise'], ['Add weekend answer cover', 'Show the delivery window on the label']],
+      id: 'keep', layout: 'comparison', title: 'Keep and change',
+      comparison: {
+        left: { title: 'Keep', icon: 'thumbs-up', points: ['The delivery text updates', 'The callback promise'] },
+        right: { title: 'Change', icon: 'refresh-cw', points: ['Add weekend answer cover', 'Show the delivery window on the label'] },
+        verdict: 'Weekend cover first: it is the slowest answer we give.',
+      },
     },
     { id: 'quote', layout: 'quote', title: 'In a customer\'s words', quote: { text: 'The text telling me the van was ten minutes away made all the difference.', by: 'A customer survey answer, February' } },
   ],
@@ -175,6 +179,10 @@ const DEBRIEF = deck('interview-debrief', 'Interview debrief', {
         { name: 'Tom Lindqvist', role: 'Eastgate depot manager', detail: 'Ran the floor walk' },
         { name: 'Grace Mbeki', role: 'People partner', detail: 'Led the values questions' },
       ],
+    },
+    {
+      id: 'questions', layout: 'two-column', title: 'What we asked both finalists',
+      columns: [['Walk us through a shift that went wrong', 'How do you plan a peak week?', 'Tell us about a driver you coached'], ['What would you change in your first month?', 'How do you check a safety record?', 'When did you push back on a plan?']],
     },
     {
       id: 'compare', layout: 'comparison', title: 'The two finalists',
@@ -357,7 +365,7 @@ export const DECK_TEMPLATES: readonly DeckTemplate[] = [
   { id: 'status-update', title: 'Status update', description: 'Where a piece of work stands: headline figures over a progress chart, how the work moves, what comes next and the decisions needed.', audience: 'Sponsors and steering groups', style: 'corporate', spec: STATUS },
   { id: 'proposal', title: 'Proposal', description: 'A choice laid out for a decision: why now, the options side by side, where to start, the costs, a plan and the ask.', audience: 'Decision makers and budget holders', style: 'bold', spec: PROPOSAL },
   { id: 'review', title: 'Review', description: 'A look back over a period: the figures, what was learned, a breakdown, what to keep or change, and a voice from outside.', audience: 'Teams and their leads', style: 'editorial', spec: REVIEW },
-  { id: 'interview-debrief', title: 'Interview debrief', description: 'A hiring panel\'s summary: who sat on the panel, the finalists compared, scores by area and a recommendation.', audience: 'Hiring panels and managers', style: 'minimal', spec: DEBRIEF },
+  { id: 'interview-debrief', title: 'Interview debrief', description: 'A hiring panel\'s summary: who sat on the panel, what was asked, the finalists compared, scores by area and a recommendation.', audience: 'Hiring panels and managers', style: 'minimal', spec: DEBRIEF },
   { id: 'run-report', title: 'Run report', description: 'How a recurring job ran: the headline figures, what it caught at each stage, results per run and step timings.', audience: 'Operators and engineers', style: 'minimal', spec: RUN },
   { id: 'quarterly-business-review', title: 'Quarterly business review', description: 'A quarter for the leadership team: the headline number, volume and cost by month, next quarter\'s priorities and the decision needed.', audience: 'Leadership teams', style: 'corporate', spec: QBR },
   { id: 'project-kickoff', title: 'Project kickoff', description: 'The start of a piece of work: what is being built, who is on the team, how the weeks run and how success is measured.', audience: 'A new project team and its sponsor', style: 'playful', spec: KICKOFF },

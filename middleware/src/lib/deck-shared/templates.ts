@@ -22,7 +22,7 @@ export const LAYOUT_USE_FOR: Readonly<Record<SlideLayout, string>> = {
   title: 'The opening slide: the deck title and a short line above it.',
   section: 'A divider that names the next part of the talk.',
   bullets: 'A few short points, one idea each.',
-  'two-column': 'Two lists side by side, such as keep and change.',
+  'two-column': 'One list split into two columns, with no column headings (use comparison for two titled sides).',
   chart: 'Numbers over categories or time: bar, line, stacked bar or pie.',
   quote: 'Someone\'s words, attributed.',
   image: 'A picture with its caption (described by alt text until assets exist).',
