@@ -445,12 +445,12 @@ await step('D4 overflow is reported', async () => {
     const list = document.querySelector(`[data-testid="${e}-slide-list"]`);
     const marks = list ? [...list.querySelectorAll('[role="img"][data-testid*="-findings-"]')] : [];
     const thumbs = list ? [...list.querySelectorAll(`button[data-testid^="${e}-slide-select-"]`)] : [];
-    const thumb = thumbs[Number(n) - 1];
-    const tip = thumb?.closest('[data-testid*="-findings-tip-"]');
-    const mark = tip?.querySelector('[role="img"][data-testid*="-findings-"]');
+    // The thumbnail's button is `<e>-slide-select-<slide id>`; its marker is `<e>-slide-findings-<slide id>`.
+    const slideId = thumbs[Number(n) - 1]?.getAttribute('data-testid')?.slice(`${e}-slide-select-`.length) ?? '';
+    const mark = slideId ? list.querySelector(`[data-testid="${e}-slide-findings-${CSS.escape(slideId)}"]`) : null;
     const r = mark?.getBoundingClientRect(); const lr = list?.getBoundingClientRect();
     const seen = !!r && !!lr && r.width > 0 && r.top >= lr.top - 1 && r.bottom <= lr.bottom + 1 && r.bottom <= innerHeight;
-    return { marks: marks.length, label: mark?.getAttribute('aria-label') ?? null, tone: mark?.getAttribute('data-tone') ?? null, seen };
+    return { marks: marks.length, slideId, label: mark?.getAttribute('aria-label') ?? null, tone: mark?.getAttribute('data-tone') ?? null, seen };
   }, { e: E, n: slideNo });
   const s1 = await snap(page, 'D4m-slide-list-marker', [1440], `${E}-slide-list`);
   const marked = /Overflow/.test(marker.label ?? '') && marker.tone === 'warning' && marker.seen;
