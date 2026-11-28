@@ -93,13 +93,13 @@ describe('typed edit operations', () => {
     expect(id).toMatch(/^s-[0-9a-f]{8}$/);
     expect(res.body.revision.producedBy).toBe('operations:u-sme');
     expect(res.body.summary).toMatch(/^Added a timeline slide at slide 3\.$/);
-    expect(res.body.exampleSourceSlideIds).toEqual([id]);
+    // A slide added to an initiative's deck cites the initiative record (finding 3), not a placeholder.
+    expect(res.body.exampleSourceSlideIds).toEqual([]);
     expect(Array.isArray(res.body.findings)).toBe(true);
     const spec = await specOf(app, made.deckId, res.body.revision.id);
-    expect(spec.slides[2]).toMatchObject({ id, layout: 'timeline', title: 'Plan', timeline: TIMELINE, sources: [{ documentId: 'example:unsourced' }] });
-    // The placeholder citation is named in a preview's warnings.
+    expect(spec.slides[2]).toMatchObject({ id, layout: 'timeline', title: 'Plan', timeline: TIMELINE, sources: [{ documentId: `initiative:${PID}` }] });
     const preview = await request(app).post(`${BASE}/${made.deckId}/preview`).send({ spec });
-    expect(preview.body.warnings.join('\n')).toContain(`Slide 3 (${id}) cites only a placeholder`);
+    expect(preview.body.warnings.join('\n')).not.toContain(`Slide 3 (${id}) cites only a placeholder`);
   });
 
   it('add_slide at the end with starter content; remove, move, retitle, notes, fields, layout and theme each apply', async () => {
@@ -114,7 +114,7 @@ describe('typed edit operations', () => {
       return { res, spec: await specOf(app, made.deckId, rid) };
     };
     let r = await step({ op: 'add_slide', layout: 'agenda' });
-    expect(r.spec.slides.at(-1)).toMatchObject({ layout: 'agenda', title: 'Agenda', agenda: { items: ['First item', 'Second item'] } });
+    expect(r.spec.slides.at(-1)).toMatchObject({ layout: 'agenda', title: 'Agenda', agenda: { items: ['Where we are', 'What comes next'] } });
     r = await step({ op: 'remove_slide', slideId: ids[1] });
     expect(r.spec.slides.map((s) => s.id)).not.toContain(ids[1]);
     expect(r.res.body.touchedSlideIds).toEqual([]);
@@ -213,6 +213,156 @@ describe('typed edit operations', () => {
     const other = appAs({ role: 'sme' as Session['role'], tenant: 'assessment', sub: 'u-sme' });
     expect((await ops(other, made.deckId, made.revisionId, op)).status).toBe(403);
     expect((await ops(as('sme'), 'adk-00000000-0000-0000-0000-000000000000', made.revisionId, op)).status).toBe(404);
+  });
+});
+
+describe('styles, decorations, emphasis and the designed layouts', () => {
+  it('set_style rides on the theme reference; set_theme keeps it; an unknown style is refused', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const styled = await ops(app, made.deckId, made.revisionId, [{ op: 'set_style', style: 'editorial' }]);
+    expect(styled.status).toBe(201);
+    expect(styled.body.summary).toBe('Set the style to editorial.');
+    expect((await specOf(app, made.deckId, styled.body.revision.id)).theme).toEqual({ ref: 'orgiq-editorial' });
+    const themed = await ops(app, made.deckId, styled.body.revision.id, [{ op: 'set_theme', theme: 'plain' }]);
+    expect((await specOf(app, made.deckId, themed.body.revision.id)).theme).toEqual({ ref: 'plain-editorial' });
+    const bad = await ops(app, made.deckId, themed.body.revision.id, [{ op: 'set_style', style: 'baroque' }]);
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/operation 1 \(set_style\): style must be one of bold, editorial, minimal, playful, corporate/);
+  });
+
+  it("set_decoration puts a graphic on a slide, removes it with 'none', returns to the style's own with null", async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const id = made.spec.slides[1]!.id;
+    let res = await ops(app, made.deckId, made.revisionId, [{ op: 'set_decoration', slideId: id, decoration: { graphic: 'badge-seal', placement: 'corner' } }]);
+    expect(res.status).toBe(201);
+    expect(res.body.summary).toBe('Put a badge seal on slide 2.');
+    expect((await specOf(app, made.deckId, res.body.revision.id)).slides[1]!.decoration).toEqual({ graphic: 'badge-seal', placement: 'corner' });
+    res = await ops(app, made.deckId, res.body.revision.id, [{ op: 'set_decoration', slideId: id, decoration: 'none' }]);
+    expect((await specOf(app, made.deckId, res.body.revision.id)).slides[1]!.decoration).toBe('none');
+    res = await ops(app, made.deckId, res.body.revision.id, [{ op: 'set_decoration', slideId: id, decoration: null }]);
+    expect((await specOf(app, made.deckId, res.body.revision.id)).slides[1]!.decoration).toBeUndefined();
+    const rid = res.body.revision.id;
+    expect((await ops(app, made.deckId, rid, [{ op: 'set_decoration', slideId: id, decoration: { graphic: 'unicorn' } }])).status).toBe(400);
+    const placed = await ops(app, made.deckId, rid, [{ op: 'set_decoration', slideId: id, decoration: { graphic: 'dots', placement: 'footer' } }]);
+    expect(placed.body.error).toMatch(/decoration\.placement must be one of corner, background, title/);
+  });
+
+  it('set_emphasis marks words of a title or a bullet, keeps the other runs, clears with null, and counts words', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const slide = made.spec.slides.find((s) => s.layout === 'bullets' && (s.bullets?.length ?? 0) > 0)!;
+    const add = await ops(app, made.deckId, made.revisionId, [{ op: 'set_title', slideId: slide.id, title: 'Three quick wins' }]);
+    let rid = add.body.revision.id;
+    let res = await ops(app, made.deckId, rid, [
+      { op: 'set_emphasis', slideId: slide.id, target: 'title', from: 2, to: 3, emphasis: 'highlight' },
+      { op: 'set_emphasis', slideId: slide.id, target: 'title', from: 1, emphasis: 'bold' },
+      { op: 'set_emphasis', slideId: slide.id, target: { bullet: 1 }, from: 1, emphasis: 'accent' },
+    ]);
+    expect(res.status).toBe(201);
+    expect(res.body.summary).toMatch(/^Gave highlight emphasis to words 2 to 3 of the title on slide \d+; gave bold emphasis to word 1/);
+    let after = (await specOf(app, made.deckId, res.body.revision.id)).slides.find((s) => s.id === slide.id)!;
+    // The space between two marked runs joins the run before it (the engine refuses a run of only spaces).
+    expect(after.title).toEqual([{ text: 'Three ', emphasis: 'bold' }, { text: 'quick wins', emphasis: 'highlight' }]);
+    expect(Array.isArray(after.bullets![0])).toBe(true);
+    expect((after.bullets![0] as Array<{ emphasis?: string }>)[0]!.emphasis).toBe('accent');
+    rid = res.body.revision.id;
+    res = await ops(app, made.deckId, rid, [{ op: 'set_emphasis', slideId: slide.id, target: 'title', from: 1, to: 3, emphasis: null }]);
+    after = (await specOf(app, made.deckId, res.body.revision.id)).slides.find((s) => s.id === slide.id)!;
+    expect(after.title).toBe('Three quick wins');
+    rid = res.body.revision.id;
+    const far = await ops(app, made.deckId, rid, [{ op: 'set_emphasis', slideId: slide.id, target: 'title', from: 4, emphasis: 'bold' }]);
+    expect(far.body.error).toMatch(/words 4 to 4: the text has 3 words/);
+    const bullet = await ops(app, made.deckId, rid, [{ op: 'set_emphasis', slideId: slide.id, target: { bullet: 99 }, from: 1, emphasis: 'bold' }]);
+    expect(bullet.body.error).toMatch(/there is no bullet 99/);
+    const kind = await ops(app, made.deckId, rid, [{ op: 'set_emphasis', slideId: slide.id, target: 'title', from: 1, emphasis: 'sparkle' }]);
+    expect(kind.body.error).toMatch(/emphasis must be one of highlight, accent, bold, underline, outline, gradient/);
+  });
+
+  it('the designed layouts through add_slide, set_fields and change_layout, with icons checked by the engine', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const items = [{ title: 'Faster', text: 'Logins in under a second', icon: 'zap' }, { title: 'Safer', text: 'Keys rotate weekly', icon: 'shield-check' }, { title: 'Cheaper', icon: 'piggy-bank' }];
+    const matrix = { x: ['Low effort', 'High effort'], y: ['Low value', 'High value'], quadrants: [{ title: 'Later' }, { title: 'Avoid' }, { title: 'Quick wins', icon: 'trophy' }, { title: 'Big bets' }] };
+    const funnel = [{ label: 'Invited', value: '120' }, { label: 'Signed in', value: '84' }, { label: 'Migrated', value: '61' }];
+    const res = await ops(app, made.deckId, made.revisionId, [
+      { op: 'add_slide', layout: 'cards', title: 'What changes', fields: { items } },
+      { op: 'add_slide', layout: 'matrix', title: 'Where to start', fields: { matrix } },
+      { op: 'add_slide', layout: 'funnel', title: 'Who has moved', fields: { funnel } },
+      { op: 'add_slide', layout: 'big-number', title: [{ text: 'Logins ' }, { text: 'doubled', emphasis: 'gradient' }], fields: { figures: [{ value: '2x', label: 'logins per day', icon: 'trending-up' }] } },
+      { op: 'add_slide', layout: 'process' },
+      { op: 'add_slide', layout: 'people' },
+    ]);
+    expect(res.status).toBe(201);
+    const spec = await specOf(app, made.deckId, res.body.revision.id);
+    const added = spec.slides.slice(-6);
+    expect(added.map((s) => s.layout)).toEqual(['cards', 'matrix', 'funnel', 'big-number', 'process', 'people']);
+    expect(added[0]).toMatchObject({ items });
+    expect(added[1]).toMatchObject({ matrix });
+    expect(added[2]).toMatchObject({ funnel });
+    expect(added[3]!.title).toEqual([{ text: 'Logins ' }, { text: 'doubled', emphasis: 'gradient' }]);
+    // Starter words fill a designed layout added without its payload.
+    expect(added[4]!.items!.length).toBeGreaterThan(1);
+    expect(added[5]!.people!.length).toBeGreaterThan(0);
+    const rid = res.body.revision.id;
+    // set_fields edits a card's icon; an icon outside the catalogue is refused, naming the field.
+    const edited = await ops(app, made.deckId, rid, [{ op: 'set_fields', slideId: added[0]!.id, fields: { items: [{ ...items[0], icon: 'rocket' }, ...items.slice(1)] } }]);
+    expect(edited.status).toBe(201);
+    expect((await specOf(app, made.deckId, edited.body.revision.id)).slides.find((s) => s.id === added[0]!.id)!.items![0]!.icon).toBe('rocket');
+    const badIcon = await ops(app, made.deckId, edited.body.revision.id, [{ op: 'set_fields', slideId: added[0]!.id, fields: { items: [{ title: 'x', icon: 'not-an-icon' }, ...items.slice(1)] } }]);
+    expect(badIcon.status).toBe(400);
+    expect(badIcon.body.error).toMatch(/items is not valid/);
+    // bullets carry into cards; a matrix does not draw bullets, so moving there drops them.
+    const bullets = spec.slides.find((s) => s.layout === 'bullets' && (s.bullets?.length ?? 0) > 1)!;
+    const toCards = await ops(app, made.deckId, edited.body.revision.id, [{ op: 'change_layout', slideId: bullets.id, layout: 'cards' }]);
+    expect(toCards.status).toBe(201);
+    const carded = (await specOf(app, made.deckId, toCards.body.revision.id)).slides.find((s) => s.id === bullets.id)!;
+    expect(carded.items!.length).toBe(Math.min(bullets.bullets!.length, carded.items!.length));
+    expect(carded.bullets).toBeUndefined();
+    const other = await build(app);
+    const otherBullets = other.spec.slides.find((s) => s.layout === 'bullets' && (s.bullets?.length ?? 0) > 1)!;
+    const toMatrix = await ops(app, other.deckId, other.revisionId, [{ op: 'change_layout', slideId: otherBullets.id, layout: 'matrix' }]);
+    expect(toMatrix.status).toBe(201);
+    const moved = (await specOf(app, other.deckId, toMatrix.body.revision.id)).slides.find((s) => s.id === otherBullets.id)!;
+    expect(moved).toMatchObject({ layout: 'matrix', matrix: expect.any(Object) });
+    expect(moved.bullets).toBeUndefined();
+  });
+
+  it('an image url is refused in operations and in a person save; an assetId is accepted', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const byUrl = await ops(app, made.deckId, made.revisionId, [{ op: 'add_slide', layout: 'image-text', fields: { image: { alt: 'A chart', url: 'https://example.com/a.png' } } }]);
+    expect(byUrl.status).toBe(400);
+    expect(byUrl.body.errors.join('\n')).toMatch(/url/i);
+    const byAsset = await ops(app, made.deckId, made.revisionId, [{ op: 'add_slide', layout: 'image-text', fields: { image: { alt: 'A chart', assetId: 'asset-1' } } }]);
+    expect(byAsset.status).toBe(201);
+    const spec = await specOf(app, made.deckId, byAsset.body.revision.id);
+    const imaged = spec.slides.at(-1)!;
+    imaged.image = { alt: 'A chart', url: 'https://example.com/a.png' };
+    const saved = await request(app).post(`${BASE}/${made.deckId}/revisions`).send({ spec, baseRevisionId: byAsset.body.revision.id });
+    expect(saved.status).toBe(400);
+    expect(JSON.stringify(saved.body)).toMatch(/url/i);
+  });
+
+  it('a chart on a bullets slide makes it a chart slide and drops the bullets, saying so; a kpi slide keeps its layout', async () => {
+    const app = as('sme');
+    const made = await build(app);
+    const slide = made.spec.slides.find((s) => s.layout === 'bullets' && (s.bullets?.length ?? 0) > 0)!;
+    const data = { labels: ['A', 'B'], series: [{ name: 'Count', values: [3, 4] }] };
+    const res = await ops(app, made.deckId, made.revisionId, [{ op: 'set_chart', slideId: slide.id, kind: 'bar', data }]);
+    expect(res.status).toBe(201);
+    expect(res.body.summary).toMatch(/\(it was a bullets slide; dropped bullets\)\.$/);
+    const after = (await specOf(app, made.deckId, res.body.revision.id)).slides.find((s) => s.id === slide.id)!;
+    expect(after).toMatchObject({ layout: 'chart', chart: { kind: 'bar', ...data } });
+    expect(after.bullets).toBeUndefined();
+    const kpiRes = await ops(app, made.deckId, res.body.revision.id, [{ op: 'add_slide', layout: 'kpi', title: 'Logins', fields: { figures: [{ value: '61', label: 'migrated' }, { value: '84', label: 'signed in' }], chart: { kind: 'line', ...data } } }]);
+    expect(kpiRes.status).toBe(201);
+    const kpiId = kpiRes.body.touchedSlideIds[0] as string;
+    const again = await ops(app, made.deckId, kpiRes.body.revision.id, [{ op: 'set_chart', slideId: kpiId, kind: 'bar', data }]);
+    expect(again.status).toBe(201);
+    expect(again.body.summary).not.toMatch(/it was a/);
+    expect((await specOf(app, made.deckId, again.body.revision.id)).slides.find((s) => s.id === kpiId)).toMatchObject({ layout: 'kpi', chart: { kind: 'bar' } });
   });
 });
 
@@ -322,14 +472,14 @@ describe('templates on the initiative deck routes', () => {
     const app = as('member');
     const list = await request(app).get(`${BASE}/deck-templates`);
     expect(list.status).toBe(200);
-    expect(list.body.templates.map((t: { id: string }) => t.id)).toEqual(['status-update', 'proposal', 'review', 'interview-debrief', 'run-report']);
-    expect(list.body.templates[0]).toMatchObject({ title: 'Status update', audience: expect.any(String), slideCount: 7 });
+    expect(list.body.templates.map((t: { id: string }) => t.id)).toEqual(['status-update', 'proposal', 'review', 'interview-debrief', 'run-report', 'quarterly-business-review', 'project-kickoff', 'customer-story']);
+    expect(list.body.templates[0]).toMatchObject({ title: 'Status update', audience: expect.any(String), style: 'corporate', slideCount: 6 });
     expect(list.body.templates[0].preview).toHaveLength(3);
     const one = await request(app).get(`${BASE}/deck-templates/proposal`);
-    expect(one.body.spec.theme).toEqual({ ref: 'orgiq' });
+    expect(one.body.spec.theme).toEqual({ ref: 'orgiq-bold' });
     expect((await request(app).get(`${BASE}/deck-templates/nope`)).status).toBe(404);
     const layouts = await request(app).get(`${BASE}/deck-layouts`);
-    expect(layouts.body.layouts).toHaveLength(13);
+    expect(layouts.body.layouts).toHaveLength(23);
     expect(layouts.body.layouts.find((l: { layout: string }) => l.layout === 'timeline')).toMatchObject({ useFor: expect.any(String), example: { templateId: 'status-update' } });
     const other = appAs({ role: 'sme' as Session['role'], tenant: 'assessment', sub: 'u-sme' });
     expect((await request(other).get(`${BASE}/deck-templates`)).status).toBe(403);
@@ -345,17 +495,18 @@ describe('templates on the initiative deck routes', () => {
     const made = await request(app).post(`${BASE}/projects/${PID}`).send(body);
     expect(made.status).toBe(201);
     expect(made.body).toMatchObject({ templateId: 'status-update', revision: { producedBy: 'template:status-update' } });
-    expect(made.body.exampleSourceSlideIds).toHaveLength(7);
+    expect(made.body.exampleSourceSlideIds).toHaveLength(6);
     const spec = await specOf(app, made.body.deckId, made.body.revisionId);
-    expect(spec).toMatchObject({ title: 'Auth migration: status', theme: { ref: 'orgiq' } });
+    expect(spec).toMatchObject({ title: 'Auth migration: status', theme: { ref: 'orgiq-corporate' } });
     // The save rule is the format's: a placeholder source satisfies it, so the save succeeds; the preview names each slide.
     const preview = await request(app).post(`${BASE}/${made.body.deckId}/preview`).send({ spec });
-    expect(preview.body.warnings.filter((w: string) => w.includes("the template's example source"))).toHaveLength(7);
+    expect(preview.body.warnings.filter((w: string) => w.includes("the template's example source"))).toHaveLength(6);
     const saved = await request(app).post(`${BASE}/${made.body.deckId}/revisions`).send({ spec, baseRevisionId: made.body.revisionId });
     expect(saved.status).toBe(201);
     const themed = await ops(app, made.body.deckId, saved.body.id, [{ op: 'set_theme', theme: 'engineering' }]);
     expect(themed.status).toBe(201);
-    expect(themed.body.exampleSourceSlideIds).toHaveLength(7);
-    expect((await specOf(app, made.body.deckId, themed.body.revision.id)).theme).toBe('engineering');
+    expect(themed.body.exampleSourceSlideIds).toHaveLength(6);
+    // A theme change keeps the template's style.
+    expect((await specOf(app, made.body.deckId, themed.body.revision.id)).theme).toEqual({ ref: 'engineering-corporate' });
   });
 });

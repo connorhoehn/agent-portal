@@ -22,6 +22,7 @@
 import {
   MAX_BULLETS_PER_SLIDE, MAX_SOURCES_PER_SLIDE, MAX_TITLE_CHARS, type DeckSource,
 } from '@connorhoehn/realtime-modules/deck';
+import { wordedDate } from '../deck-shared/reports.js';
 import { clip, makePlan, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from '../deck-shared/plan.js';
 import type { DraftDeckInput } from '../deck-shared/narrative.js';
 import { briefLine, windowLabel, type DeckBrief } from './brief.js';
@@ -119,13 +120,9 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
     slideId: 'title', kind: 'initiative-title',
     facts: { initiative: project.id, status: statusLabel(project.status, 'not set'), asOf: src.asOf },
     evidence: [], prose: 'none', maxProse: 0,
-    factBullets: [
-      `Status: ${statusLabel(project.status, 'not set')}`,
-      `Owner: ${project.ownerName ?? 'not assigned'}`,
-      ...(project.sponsorName ? [`Sponsor: ${project.sponsorName}`] : []),
-      ...(project.repoFullName ? [`Repository: ${project.repoFullName}`] : []),
-      `As of: ${src.asOf}`,
-    ],
+    // The cover is the title, the eyebrow and the subtitle (status and a worded date): its old five standfirst lines overflowed
+    // (finding 1 of the tour film). Who leads it opens the next slide; the repository stays in the record.
+    factBullets: [],
     templateProse: [], templateNotes: `Status deck for ${project.name}, prepared from the initiative's work items, sprints and decisions.${brief ? ` ${briefLine(brief)}` : ''}`,
   }, { id: 'title', layout: 'title', title: clip(project.name, MAX_TITLE_CHARS), eyebrow: 'Initiative status', sources: [initSrc] }));
 
@@ -142,6 +139,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       } : {}),
     };
     const factBullets = [
+      `Owner: ${project.ownerName ?? 'not assigned'}${project.sponsorName ? ` · Sponsor: ${project.sponsorName}` : ''}`,
       `Work items: ${items.length} total · ${open.length} open · ${byStatus('done').length} done`,
       `Story points: ${pointsDone} of ${pointsTotal} done`,
       `Estimated cost of open work: ${money(openEstimate)}`,
@@ -255,7 +253,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
   }
 
   const title = clip(options.title?.trim() || `${project.name} — status`, MAX_TITLE_CHARS);
-  const subtitle = clip(`${statusLabel(project.status, 'Status not set')} · as of ${src.asOf}${brief?.window ? ` · focus: ${windowLabel(brief.window)}` : ''}`, 200);
+  const subtitle = clip(`${statusLabel(project.status, 'Status not set')} · as of ${wordedDate(src.asOf)}${brief?.window ? ` · focus: ${windowLabel(brief.window)}` : ''}`, 200);
   return { teamId: project.id, slides, spec: { title, subtitle, theme: { ref: 'orgiq' }, slides: slides.map((s) => s.base) } };
 }
 

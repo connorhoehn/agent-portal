@@ -21,6 +21,7 @@ import {
   NARRATIVE_KINDS, clip, makePlan, slideFrame, slideWithProse,
   type DeckEvidence, type DeckFacts, type DeckSlideKind, type FactValue, type SlidePlan,
 } from '../deck-shared/plan.js';
+import { wordedDate } from '../deck-shared/reports.js';
 import type { TeamDeckSource, DimensionOut, Recommendation, RecommendationKind } from '../../providers/assessment.js';
 
 export { NARRATIVE_KINDS, clip, makePlan, slideFrame, slideWithProse };
@@ -89,7 +90,8 @@ export function buildDeckFacts(source: TeamDeckSource, options: DeckFactsOptions
   const cert = detail.team.certification;
   const teamId = team.id;
   const allSource = teamSource(teamId, team.name);
-  const date = options.asOf.slice(0, 10);
+  // A worded day ("5 October 2026"), never ISO, on the cover and the subtitle (finding 4 of the tour film).
+  const date = wordedDate(options.asOf);
 
   const assessedAll = detail.dimensions.filter((d) => !d.is_na && d.certification.verified_level !== null);
   const wanted = options.dimensionIds?.length ? new Set(options.dimensionIds) : null;

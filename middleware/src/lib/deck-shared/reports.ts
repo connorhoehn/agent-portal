@@ -162,6 +162,12 @@ export function figuresReadAt(at: Date): string {
   const two = (n: number) => String(n).padStart(2, '0');
   return `Figures read ${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}, ${two(at.getUTCHours())}:${two(at.getUTCMinutes())} UTC`;
 }
+/** A day as a presenter says it ("28 November 2026") from an ISO date or timestamp; the input unchanged when it is not one. */
+export function wordedDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return iso;
+  return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
+}
 /** A speaker-notes line a report-filled chart wrote (this wording, or the earlier ISO one): replaced, never stacked. */
 export const REPORT_NOTE_LINE = /^(Figures read |Chart data read from the )/;
 

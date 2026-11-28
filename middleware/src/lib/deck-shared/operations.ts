@@ -166,6 +166,13 @@ export function emphasiseWords(text: DeckText, from: number, to: number, emphasi
     if (last && last.emphasis === marks[i]) last.text += ch;
     else out.push(marks[i] ? { text: ch, emphasis: marks[i] } : { text: ch });
   }
+  // The engine refuses a run of only spaces (two marked words side by side leave one between them): it joins a neighbour.
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    if (out[i]!.text.trim() || out.length === 1) continue;
+    if (i > 0) out[i - 1]!.text += out[i]!.text;
+    else out[1]!.text = out[0]!.text + out[1]!.text;
+    out.splice(i, 1);
+  }
   return out.every((r) => !r.emphasis) ? raw : out;
 }
 
