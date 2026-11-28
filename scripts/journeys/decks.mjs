@@ -367,7 +367,7 @@ await step('D3 the layout gallery, in place', async () => {
   const changed = await waitSrcChange(page, IP, before);
   await stageLoaded(page, IP);
   // The slide being edited stays in view while its form is filled.
-  const inView = await page.evaluate((p) => {
+  const measureStage = () => page.evaluate((p) => {
     const r = document.querySelector(`[data-testid="${p}-editor-stage-image"]`)?.getBoundingClientRect();
     if (!r || r.height === 0) return { fraction: 0 };
     // Seen means inside the viewport AND inside the editor's pinned stage region (what clips the stage).
@@ -379,8 +379,13 @@ await step('D3 the layout gallery, in place', async () => {
       shellScroller: box(`[data-testid="${p}-shell-scroller"]`), stageRegion: box(`[data-testid="${p}-editor-stage-region"]`), formRegion: box(`[data-testid="${p}-editor-form-region"]`),
       formScroll: Math.round(document.querySelector(`[data-testid="${p}-editor-form-region"]`)?.scrollTop ?? 0) };
   }, IP);
+  const inView = await measureStage();
+  // The same at 900 wide, the form still scrolled to the step being typed.
+  await page.setViewportSize({ width: 900, height: 900 }); await sleep(600);
+  inView.at900 = await measureStage();
+  await page.setViewportSize({ width: 1440, height: 900 }); await sleep(400);
   facts.push({ step: 'D3', added, saveOnAdded, inView });
-  const t = await snap(page, 'D3b-timeline', [1440], `${E}-stage`);
+  const t = await snap(page, 'D3b-timeline', [1440, 900], `${E}-stage`);
   // key figures and table
   const more = [];
   for (const layout of ['key-figures', 'table']) {
@@ -408,7 +413,8 @@ await step('D3s the stage while typing in the form', async () => {
   // The whole editor scrolling (its shell's scroller or the page), not the editor's own regions (the form, the slide list).
   const outer = [...(v.scrolled ?? []).filter((x) => /-shell-scroller:|^(html|body|main):/.test(x)), ...(v.pageScroll ? [`page:${v.pageScroll}`] : [])];
   // The stage is pinned (ui-components 2.549.0): at least 90% of it in view, and nothing outside the editor's own regions scrolled.
-  return { ok: v.fraction >= 0.9 && outer.length === 0, detail: `after typing the stage is ${Math.round(v.fraction * 100)}% in view inside its pinned region (y ${v.top}-${v.bottom} of ${v.vh}); form region scrolled ${v.formScroll}px; scrolled: ${(v.scrolled ?? []).join(' ') || 'nothing'} (anything but the editor's own regions scrolling: ${outer.join(' ') || 'none'}); stage region ${JSON.stringify(v.stageRegion)}; form region ${JSON.stringify(v.formRegion)}` };
+  const at900 = v.at900?.fraction ?? 0;
+  return { ok: v.fraction >= 0.9 && at900 >= 0.9 && outer.length === 0, detail: `at 900 wide ${Math.round(at900 * 100)}% in view (y ${v.at900?.top}-${v.at900?.bottom}); at 1440 after typing the stage is ${Math.round(v.fraction * 100)}% in view inside its pinned region (y ${v.top}-${v.bottom} of ${v.vh}); form region scrolled ${v.formScroll}px; scrolled: ${(v.scrolled ?? []).join(' ') || 'nothing'} (anything but the editor's own regions scrolling: ${outer.join(' ') || 'none'}); stage region ${JSON.stringify(v.stageRegion)}; form region ${JSON.stringify(v.formRegion)}` };
 });
 
 // D4 ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -441,17 +447,31 @@ await step('D4 overflow is reported', async () => {
   facts.push({ step: 'D4', warnBefore, warnDuring: warn, slidesBefore, slidesAfter, countBefore: countOf(warnBefore), countDuring: countOf(warn) });
   const named = overflow && new RegExp(`Slide ${slideNo}\\b`).test(overflow);
   // The overflowing slide's thumbnail carries the editor's findings marker (slideFindings), visible in the slide list.
-  const marker = await page.evaluate(({ e, n }) => {
+  // Seen means drawn: inside the viewport and every scrolling ancestor that clips it (the slide list scrolls on its own).
+  const readMarker = () => page.evaluate(({ e, n }) => {
     const list = document.querySelector(`[data-testid="${e}-slide-list"]`);
     const marks = list ? [...list.querySelectorAll('[role="img"][data-testid*="-findings-"]')] : [];
     const thumbs = list ? [...list.querySelectorAll(`button[data-testid^="${e}-slide-select-"]`)] : [];
     // The thumbnail's button is `<e>-slide-select-<slide id>`; its marker is `<e>-slide-findings-<slide id>`.
     const slideId = thumbs[Number(n) - 1]?.getAttribute('data-testid')?.slice(`${e}-slide-select-`.length) ?? '';
     const mark = slideId ? list.querySelector(`[data-testid="${e}-slide-findings-${CSS.escape(slideId)}"]`) : null;
-    const r = mark?.getBoundingClientRect(); const lr = list?.getBoundingClientRect();
-    const seen = !!r && !!lr && r.width > 0 && r.top >= lr.top - 1 && r.bottom <= lr.bottom + 1 && r.bottom <= innerHeight;
-    return { marks: marks.length, slideId, label: mark?.getAttribute('aria-label') ?? null, tone: mark?.getAttribute('data-tone') ?? null, seen };
+    const r = mark?.getBoundingClientRect();
+    let clip = { top: 0, bottom: innerHeight, left: 0, right: innerWidth };
+    for (let a = mark?.parentElement; a; a = a.parentElement) {
+      const st = getComputedStyle(a);
+      if (/(auto|scroll|hidden|clip)/.test(`${st.overflowX} ${st.overflowY}`)) {
+        const q = a.getBoundingClientRect();
+        clip = { top: Math.max(clip.top, q.top), bottom: Math.min(clip.bottom, q.bottom), left: Math.max(clip.left, q.left), right: Math.min(clip.right, q.right) };
+      }
+    }
+    const seen = !!r && r.width > 0 && r.top >= clip.top - 1 && r.bottom <= clip.bottom + 1 && r.left >= clip.left - 1 && r.right <= clip.right + 1;
+    return { marks: marks.length, slideId, label: mark?.getAttribute('aria-label') ?? null, tone: mark?.getAttribute('data-tone') ?? null, seen, y: r ? Math.round(r.top) : null, clipBottom: Math.round(clip.bottom) };
   }, { e: E, n: slideNo });
+  const before = await readMarker();
+  // Bring the slide's thumbnail into the list's view (the filmstrip does not follow a slide added at its end), then judge.
+  if (before.slideId) await page.getByTestId(`${E}-slide-select-${before.slideId}`).scrollIntoViewIfNeeded().catch(() => undefined);
+  await sleep(300);
+  const marker = { ...(await readMarker()), seenBeforeScroll: before.seen };
   const s1 = await snap(page, 'D4m-slide-list-marker', [1440], `${E}-slide-list`);
   const marked = /Overflow/.test(marker.label ?? '') && marker.tone === 'warning' && marker.seen;
   // shorten

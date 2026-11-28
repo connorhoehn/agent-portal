@@ -4,6 +4,7 @@ Gaps found while building pages. Each row is a workaround in this repository and
 
 | Found in | Gap | Worked round with |
 |---|---|---|
+| `portal/src/components/decks/DeckEditorPage.tsx` (ui-components 2.549.0 adoption) | `PresentationEditor`'s filmstrip does not bring the selected slide's whole thumbnail into view: a slide added at the end of a long deck is selected with its thumbnail cut at the list's bottom edge, so its findings marker (lower-left) is not seen until the list is scrolled. | Nothing on the page; the decks walk scrolls the thumbnail into view before judging the marker and reports whether it was visible before. Wanted: the filmstrip scrolls the selected thumbnail fully into view (`block: 'nearest'`) when the selection changes. |
 | `portal/src/pages/iq/RunPage.tsx` (lane E1) | A "Demo data" mark: a small labelled badge for rows and sections that come from a hand-written fixture. | A neutral `Chip` reading "Demo data". |
 | `portal/src/pages/iq/RunPage.tsx` (lane E1) | `DataTable` cells do not wrap long prose; a column of sentences runs off the table at 1280 wide. A column option such as `wrap` (with a max width) would do it. | `T` with `block max-w-[26rem] whitespace-normal` in the cell. |
 | `portal/src/pages/iq/RunsPage.tsx` (lane E2) | `CollectionPage`'s `table` prop loses its row type through `ComponentProps` in the app's `CollectionCommandPage`, so a typed table cannot be passed. The page passes a `DataTable` as the body instead. | `DataTable` as `children`. |
